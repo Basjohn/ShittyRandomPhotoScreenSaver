@@ -13,14 +13,14 @@
 [Setup]
 AppId={{31A3E38F-0A6C-46CF-8934-9EB8A42F0463}
 AppName=SRPSS - Media Center
-AppVersion=4.6.8
+AppVersion=4.6.9
 AppPublisher=Jayde Ver Elst
 AppPublisherURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
 AppSupportURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
 AppUpdatesURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
 DefaultDirName={localappdata}\SRPSS Media Center
 DefaultGroupName=SRPSS - Media Center
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 DisableDirPage=no
 DisableProgramGroupPage=yes
 OutputDir=..\release\installers
@@ -31,7 +31,7 @@ ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
 WizardSmallImageFile=..\images\LogoBMP.bmp
-VersionInfoVersion=4.6.8
+VersionInfoVersion=4.6.9
 AllowUNCPath=False
 
 [Languages]
@@ -59,7 +59,7 @@ Source: "..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\SRPSS - Media Center"; Filename: "{app}\SRPSS_Media_Center.exe"; Tasks: startmenu
-Name: "{commondesktop}\SRPSS - Media Center"; Filename: "{app}\SRPSS_Media_Center.exe"; Tasks: desktop
+Name: "{userdesktop}\SRPSS - Media Center"; Filename: "{app}\SRPSS_Media_Center.exe"; Tasks: desktop
 
 [Run]
 Filename: "{app}\SRPSS_Media_Center.exe"; Description: "Launch SRPSS - Media Center"; Flags: nowait postinstall skipifsilent; Tasks: runafter

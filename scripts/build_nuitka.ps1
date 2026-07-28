@@ -1,4 +1,4 @@
-<# 
+﻿<# 
 Build script for Nuitka (single-file) with AV-friendly defaults.
 
 Legacy no-venv version:
@@ -61,6 +61,16 @@ if (-not (Test-Path -LiteralPath $BuildLayoutScript -PathType Leaf)) {
     throw "Shared build layout helper not found: $BuildLayoutScript"
 }
 . $BuildLayoutScript
+
+foreach ($RequiredBuildCommand in @(
+    'Reset-SRPSSBuildDirectory',
+    'Remove-SRPSSBuildDirectory',
+    'Publish-SRPSSDirectory'
+)) {
+    if (-not (Get-Command $RequiredBuildCommand -CommandType Function -ErrorAction SilentlyContinue)) {
+        throw "Shared build layout did not load required function: $RequiredBuildCommand"
+    }
+}
 
 Reset-SRPSSBuildDirectory -Path $BuildDir -BuildRoot $BuildRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $BuildOutputDir | Out-Null
@@ -134,6 +144,7 @@ if ($Console) { $consoleArg = "--windows-console-mode=force" }
 
 $argsList = @(
     "-m", "nuitka",
+    "--mingw64",
     "--onefile",
     "--standalone",
     "--remove-output",
@@ -172,12 +183,43 @@ $argsList += $EntryPath
 Write-Host "[BUILD-N] Starting Nuitka..."
 Write-Host ("python " + ($argsList -join ' '))
 
-Push-Location $Root
+$CompilerTempDir = Join-Path $BuildDir 'compiler-temp'
+New-Item -ItemType Directory -Force -Path $CompilerTempDir | Out-Null
+
+# Keep GCC/ld response files out of C:\WINDOWS\TEMP. This remains local
+# to this worker and does not require any new build_layout.ps1 functions.
+$PreviousCompilerTempEnvironment = [ordered]@{}
+foreach ($EnvironmentName in @('TEMP', 'TMP', 'TMPDIR')) {
+    $PreviousCompilerTempEnvironment[$EnvironmentName] =
+        [System.Environment]::GetEnvironmentVariable(
+            $EnvironmentName,
+            [System.EnvironmentVariableTarget]::Process
+        )
+    [System.Environment]::SetEnvironmentVariable(
+        $EnvironmentName,
+        $CompilerTempDir,
+        [System.EnvironmentVariableTarget]::Process
+    )
+}
+Write-Host "[BUILD-N] Compiler temporary directory: $CompilerTempDir"
+
+$BuildExit = 1
 try {
-    python @argsList *>&1 | Tee-Object -FilePath $LogFile
-    $BuildExit = $LASTEXITCODE
+    Push-Location $Root
+    try {
+        python @argsList *>&1 | Tee-Object -FilePath $LogFile
+        $BuildExit = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
 } finally {
-    Pop-Location
+    foreach ($EnvironmentName in @('TEMP', 'TMP', 'TMPDIR')) {
+        [System.Environment]::SetEnvironmentVariable(
+            $EnvironmentName,
+            $PreviousCompilerTempEnvironment[$EnvironmentName],
+            [System.EnvironmentVariableTarget]::Process
+        )
+    }
 }
 
 if ($BuildExit -ne 0) {

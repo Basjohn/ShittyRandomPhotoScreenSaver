@@ -1,4 +1,4 @@
-<# 
+﻿<# 
 Experimental venv build script for SRPSS Media Center one-dir build.
 
 Intended location:
@@ -215,6 +215,16 @@ if (-not (Test-Path -LiteralPath $BuildLayoutScript -PathType Leaf)) {
 }
 . $BuildLayoutScript
 
+foreach ($RequiredBuildCommand in @(
+    'Reset-SRPSSBuildDirectory',
+    'Remove-SRPSSBuildDirectory',
+    'Publish-SRPSSDirectory'
+)) {
+    if (-not (Get-Command $RequiredBuildCommand -CommandType Function -ErrorAction SilentlyContinue)) {
+        throw "Shared build layout did not load required function: $RequiredBuildCommand"
+    }
+}
+
 Reset-SRPSSBuildDirectory -Path $BuildDir -BuildRoot $BuildRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $BuildOutputDir | Out-Null
 New-Item -ItemType Directory -Force -Path $ReleaseRoot | Out-Null
@@ -271,6 +281,7 @@ if ($Console) { $consoleArg = "--windows-console-mode=force" }
 
 $argsList = @(
     "-m", "nuitka",
+    "--mingw64",
     "--standalone",
     "--remove-output",
     "--output-dir=$BuildOutputDir",
@@ -312,12 +323,43 @@ $argsList += $EntryPath
 Write-Host "[BUILD-VENV] Starting Nuitka..."
 Write-Host ("`"$VenvPython`" " + ($argsList -join ' '))
 
-Push-Location $Root
+$CompilerTempDir = Join-Path $BuildDir 'compiler-temp'
+New-Item -ItemType Directory -Force -Path $CompilerTempDir | Out-Null
+
+# Keep GCC/ld response files out of C:\WINDOWS\TEMP. This is deliberately
+# local to the worker so it does not depend on a newer build_layout.ps1.
+$PreviousCompilerTempEnvironment = [ordered]@{}
+foreach ($EnvironmentName in @('TEMP', 'TMP', 'TMPDIR')) {
+    $PreviousCompilerTempEnvironment[$EnvironmentName] =
+        [System.Environment]::GetEnvironmentVariable(
+            $EnvironmentName,
+            [System.EnvironmentVariableTarget]::Process
+        )
+    [System.Environment]::SetEnvironmentVariable(
+        $EnvironmentName,
+        $CompilerTempDir,
+        [System.EnvironmentVariableTarget]::Process
+    )
+}
+Write-Host "[BUILD-VENV] Compiler temporary directory: $CompilerTempDir"
+
+$BuildExit = 1
 try {
-    & $VenvPython @argsList *>&1 | Tee-Object -FilePath $LogFile
-    $BuildExit = $LASTEXITCODE
+    Push-Location $Root
+    try {
+        & $VenvPython @argsList *>&1 | Tee-Object -FilePath $LogFile
+        $BuildExit = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
 } finally {
-    Pop-Location
+    foreach ($EnvironmentName in @('TEMP', 'TMP', 'TMPDIR')) {
+        [System.Environment]::SetEnvironmentVariable(
+            $EnvironmentName,
+            $PreviousCompilerTempEnvironment[$EnvironmentName],
+            [System.EnvironmentVariableTarget]::Process
+        )
+    }
 }
 
 if ($BuildExit -ne 0) {

@@ -14,6 +14,7 @@ their existing ownership: normal mode uses ``scripts/*.ps1`` and venv mode uses
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -71,6 +72,7 @@ ISCC_CANDIDATES = (
 
 COLORS = {
     "root": "#0d181e",
+    "shell_border": "#ffffff",
     "titlebar": "#0c0c0c",
     "panel": "#10191b",
     "panel_alt": "#1f2626",
@@ -86,6 +88,62 @@ COLORS = {
     "red": "#ef7f7f",
     "close_hover": "#e81123",
 }
+
+
+WINDOWS_APP_ID = "JaydeVerElst.SRPSS.BuildFoundry"
+TASKBAR_TITLE = "Build Foundry"
+BASE_WINDOW_SIZE = (820, 670)
+BASE_MINIMUM_SIZE = (760, 640)
+OUTER_BORDER_DIP = 1.5
+PROGRESS_TICK_MS = 24
+RUNNER_LOGS_PER_JOB = 10
+WINDOW_STYLE_REFRESH_MS = 120
+
+
+def enable_windows_dpi_awareness() -> str:
+    """Enable the strongest DPI mode available before Tk creates any windows."""
+    if sys.platform != "win32":
+        return "non-windows"
+
+    try:
+        user32 = ctypes.windll.user32
+        set_context = user32.SetProcessDpiAwarenessContext
+        set_context.argtypes = [ctypes.c_void_p]
+        set_context.restype = ctypes.c_bool
+        # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 == (HANDLE)-4
+        if set_context(ctypes.c_void_p(-4)):
+            return "per-monitor-v2"
+    except (AttributeError, OSError, ValueError):
+        pass
+
+    try:
+        shcore = ctypes.windll.shcore
+        set_awareness = shcore.SetProcessDpiAwareness
+        set_awareness.argtypes = [ctypes.c_int]
+        set_awareness.restype = ctypes.c_long
+        # PROCESS_PER_MONITOR_DPI_AWARE == 2. S_OK and E_ACCESSDENIED both
+        # mean the process already has an awareness mode and must not retry.
+        if set_awareness(2) in (0, -2147024891):
+            return "per-monitor-v1"
+    except (AttributeError, OSError, ValueError):
+        pass
+
+    try:
+        if ctypes.windll.user32.SetProcessDPIAware():
+            return "system-aware"
+    except (AttributeError, OSError, ValueError):
+        pass
+    return "unavailable"
+
+
+def set_windows_app_user_model_id(app_id: str = WINDOWS_APP_ID) -> None:
+    """Give the taskbar button a stable SRPSS identity and icon grouping."""
+    if sys.platform != "win32":
+        return
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+    except (AttributeError, OSError, ValueError):
+        pass
 
 
 @dataclass(frozen=True)
@@ -477,8 +535,60 @@ def _safe_slug(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "job"
 
 
+def prune_build_runner_logs(
+    log_dir: Path = LOG_DIR,
+    *,
+    job_key: str | None = None,
+    keep: int = RUNNER_LOGS_PER_JOB,
+) -> None:
+    """Keep a bounded number of runner-owned logs per build job."""
+    if keep < 0 or not log_dir.is_dir():
+        return
+
+    matcher = re.compile(
+        r"^build_runner_(?P<job>.+)_\d{8}_\d{6}\.log$",
+        flags=re.IGNORECASE,
+    )
+    requested_job = _safe_slug(job_key) if job_key is not None else None
+    grouped: dict[str, list[Path]] = {}
+    try:
+        candidates = tuple(log_dir.glob("build_runner_*.log"))
+    except OSError:
+        return
+
+    for path in candidates:
+        match = matcher.match(path.name)
+        if match is None:
+            continue
+        group = match.group("job").casefold()
+        if requested_job is not None and group != requested_job.casefold():
+            continue
+        grouped.setdefault(group, []).append(path)
+
+    for paths in grouped.values():
+        def modified(path: Path) -> float:
+            try:
+                return path.stat().st_mtime
+            except OSError:
+                return 0.0
+
+        paths.sort(key=modified, reverse=True)
+        for stale_path in paths[keep:]:
+            try:
+                stale_path.unlink()
+            except OSError:
+                pass
+
+
 def run_job(job: Job, preflight: PreflightResult, log_dir: Path = LOG_DIR) -> JobResult:
     log_dir.mkdir(parents=True, exist_ok=True)
+    # Leave room for the log about to be created, yielding ten retained logs
+    # for each runner job rather than ten old logs plus the current one.
+    prune_build_runner_logs(
+        log_dir,
+        job_key=job.key,
+        keep=max(0, RUNNER_LOGS_PER_JOB - 1),
+    )
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_path = log_dir / f"build_runner_{_safe_slug(job.key)}_{timestamp}.log"
 
@@ -594,13 +704,16 @@ class BuildRunnerApp:
         self._events: queue.Queue[tuple] = queue.Queue()
         self._running = False
         self._auto_close_after_id: str | None = None
-        self._drag_origin: tuple[int, int] | None = None
+        self._drag_state: tuple[int, int, int, int] | None = None
         self._preflight = PreflightResult()
         self._jobs: tuple[Job, ...] = ()
         self._job_widgets: dict[str, JobWidgets] = {}
         self._progress_total = 0
         self._progress_completed = 0
         self._preferences = load_preferences()
+        self._dpi_scale = self._initial_dpi_scale()
+        self._shell: tk.Frame | None = None
+        self._initial_show_complete = False
         selected_mode = initial_mode or self._preferences.mode
         self._mode_var = tk.StringVar(value=selected_mode)
         self._auto_close_var = tk.BooleanVar(value=self._preferences.auto_close)
@@ -610,16 +723,148 @@ class BuildRunnerApp:
         self._build_ui()
         self._apply_mode(selected_mode, persist=False)
         self._poll_events()
+        self._root.after_idle(self._show_initial_window)
+
+    def _initial_dpi_scale(self) -> float:
+        try:
+            return max(1.0, float(self._root.winfo_fpixels("1i")) / 96.0)
+        except (tk.TclError, ValueError, TypeError):
+            return 1.0
+
+    def _dip(self, value: float) -> int:
+        return max(1, int(round(value * self._dpi_scale)))
 
     def _configure_window(self) -> None:
-        self._root.title(f"SRPSS Build Foundry — {APP_VERSION}")
-        self._root.geometry("820x670")
-        self._root.minsize(760, 640)
-        self._root.configure(bg=COLORS["root"])
-        self._root.overrideredirect(True)
+        # Keep this as a normal unowned Windows top-level so Explorer owns a
+        # stable taskbar button. Native frame styles are stripped after mapping
+        # instead of using Tk's override-redirect mode, which can de-register
+        # and recreate the taskbar entry.
+        self._root.title(TASKBAR_TITLE)
+        width = self._dip(BASE_WINDOW_SIZE[0])
+        height = self._dip(BASE_WINDOW_SIZE[1])
+        minimum_width = self._dip(BASE_MINIMUM_SIZE[0])
+        minimum_height = self._dip(BASE_MINIMUM_SIZE[1])
+        self._root.geometry(f"{width}x{height}")
+        self._root.minsize(minimum_width, minimum_height)
+        self._root.configure(bg=COLORS["shell_border"])
+        self._root.overrideredirect(False)
         self._root.protocol("WM_DELETE_WINDOW", self._request_close)
-        self._root.bind("<Map>", self._restore_custom_chrome)
+        self._root.bind("<Map>", self._on_window_mapped)
         self._root.bind("<Alt-F4>", lambda _event: self._request_close())
+        # Child widgets include the toplevel in their default bindtags, so this
+        # single handler also covers blank space in dynamically created rows.
+        self._root.bind("<ButtonPress-1>", self._on_drag_surface_press, add="+")
+        self._root.bind("<B1-Motion>", self._drag_window_fallback, add="+")
+        self._root.bind("<ButtonRelease-1>", self._end_drag_fallback, add="+")
+        self._root.bind("<FocusOut>", self._cancel_drag, add="+")
+        self._root.bind("<Unmap>", self._cancel_drag, add="+")
+
+    def _native_toplevel_hwnd(self) -> int | None:
+        if sys.platform != "win32":
+            return None
+        try:
+            self._root.update_idletasks()
+            child_hwnd = int(self._root.winfo_id())
+            user32 = ctypes.windll.user32
+            user32.GetAncestor.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+            user32.GetAncestor.restype = ctypes.c_void_p
+            root_hwnd = int(user32.GetAncestor(child_hwnd, 2) or 0)  # GA_ROOT
+            if root_hwnd:
+                return root_hwnd
+            parent_hwnd = int(user32.GetParent(child_hwnd) or 0)
+            return parent_hwnd or child_hwnd
+        except (AttributeError, OSError, tk.TclError, TypeError, ValueError):
+            return None
+
+    def _apply_windows_window_styles(self) -> None:
+        """Keep a native taskbar window while removing only the Windows frame."""
+        hwnd = self._native_toplevel_hwnd()
+        if hwnd is None:
+            return
+
+        try:
+            user32 = ctypes.windll.user32
+            get_window_long = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
+            set_window_long = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
+            get_window_long.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            get_window_long.restype = ctypes.c_ssize_t
+            set_window_long.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_ssize_t]
+            set_window_long.restype = ctypes.c_ssize_t
+            user32.SetWindowTextW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+            user32.SetWindowTextW.restype = ctypes.c_bool
+
+            self._root.title(TASKBAR_TITLE)
+            child_hwnd = int(self._root.winfo_id())
+            user32.SetWindowTextW(hwnd, TASKBAR_TITLE)
+            if child_hwnd and child_hwnd != hwnd:
+                user32.SetWindowTextW(child_hwnd, TASKBAR_TITLE)
+
+            gwl_style = -16
+            gwl_exstyle = -20
+            ws_caption = 0x00C00000
+            ws_thickframe = 0x00040000
+            ws_maximizebox = 0x00010000
+            ws_ex_toolwindow = 0x00000080
+            ws_ex_appwindow = 0x00040000
+
+            style = int(get_window_long(hwnd, gwl_style))
+            style &= ~(ws_caption | ws_thickframe | ws_maximizebox)
+            set_window_long(hwnd, gwl_style, style)
+
+            exstyle = int(get_window_long(hwnd, gwl_exstyle))
+            exstyle = (exstyle & ~ws_ex_toolwindow) | ws_ex_appwindow
+            set_window_long(hwnd, gwl_exstyle, exstyle)
+
+            swp_nosize = 0x0001
+            swp_nomove = 0x0002
+            swp_nozorder = 0x0004
+            swp_noactivate = 0x0010
+            swp_framechanged = 0x0020
+            user32.SetWindowPos(
+                hwnd,
+                0,
+                0,
+                0,
+                0,
+                0,
+                swp_nosize
+                | swp_nomove
+                | swp_nozorder
+                | swp_noactivate
+                | swp_framechanged,
+            )
+        except (AttributeError, OSError, TypeError, ValueError, tk.TclError):
+            return
+
+    def _show_initial_window(self) -> None:
+        """Map once as a normal app window, then remove only its native frame."""
+        if self._initial_show_complete:
+            return
+
+        if sys.platform != "win32":
+            self._root.deiconify()
+            self._initial_show_complete = True
+            return
+
+        try:
+            # Alpha hides the brief native-frame setup without withdrawing the
+            # window again. The single map is what gives Explorer a stable
+            # taskbar button from startup onward.
+            self._root.attributes("-alpha", 0.0)
+            self._root.deiconify()
+            self._root.update_idletasks()
+            self._apply_windows_window_styles()
+            self._root.attributes("-alpha", 1.0)
+            self._root.lift()
+            self._root.after(WINDOW_STYLE_REFRESH_MS, self._apply_windows_window_styles)
+        except tk.TclError:
+            self._root.deiconify()
+        finally:
+            self._initial_show_complete = True
+
+    def _on_window_mapped(self, _event: tk.Event | None = None) -> None:
+        if sys.platform == "win32":
+            self._root.after_idle(self._apply_windows_window_styles)
 
     def _configure_styles(self) -> None:
         style = ttk.Style(self._root)
@@ -676,8 +921,17 @@ class BuildRunnerApp:
         )
 
     def _build_ui(self) -> None:
+        self._shell = tk.Frame(
+            self._root,
+            bg=COLORS["root"],
+            bd=0,
+            highlightbackground=COLORS["shell_border"],
+            highlightcolor=COLORS["shell_border"],
+            highlightthickness=self._dip(OUTER_BORDER_DIP),
+        )
+        self._shell.pack(fill="both", expand=True)
         self._build_titlebar()
-        body = tk.Frame(self._root, bg=COLORS["root"], padx=24, pady=18)
+        body = tk.Frame(self._shell, bg=COLORS["root"], padx=24, pady=18)
         body.pack(fill="both", expand=True)
 
         tk.Label(
@@ -863,7 +1117,9 @@ class BuildRunnerApp:
         self._select_all_button.pack(side="right", padx=(6, 0))
 
     def _build_titlebar(self) -> None:
-        titlebar = tk.Frame(self._root, bg=COLORS["titlebar"], height=40)
+        if self._shell is None:
+            raise RuntimeError("Build shell must exist before the titlebar")
+        titlebar = tk.Frame(self._shell, bg=COLORS["titlebar"], height=40)
         titlebar.pack(fill="x")
         titlebar.pack_propagate(False)
         icon_path = REPO_ROOT / "SRPSS.ico"
@@ -872,33 +1128,9 @@ class BuildRunnerApp:
                 self._root.iconbitmap(default=str(icon_path))
         except tk.TclError:
             pass
-        title = tk.Label(
-            titlebar,
-            text=f"  SRPSS BUILD FOUNDRY   ·   v{APP_VERSION}",
-            bg=COLORS["titlebar"],
-            fg=COLORS["text"],
-            font=("Segoe UI", 9, "bold"),
-            anchor="w",
-        )
-        title.pack(side="left", fill="both", expand=True)
-        for widget in (titlebar, title):
-            widget.bind("<ButtonPress-1>", self._begin_drag)
-            widget.bind("<B1-Motion>", self._drag_window)
 
-        minimize = tk.Button(
-            titlebar,
-            text="—",
-            command=self._minimize,
-            bg=COLORS["titlebar"],
-            fg=COLORS["text"],
-            activebackground="#3e3e3e",
-            activeforeground=COLORS["text"],
-            relief="flat",
-            bd=0,
-            width=5,
-            cursor="hand2",
-        )
-        minimize.pack(side="right", fill="y")
+        # With side="right", the first packed widget owns the outermost edge.
+        # Pack Close first, then Minimize, so Windows-standard ordering is kept.
         close = tk.Button(
             titlebar,
             text="×",
@@ -914,23 +1146,154 @@ class BuildRunnerApp:
             cursor="hand2",
         )
         close.pack(side="right", fill="y")
+        minimize = tk.Button(
+            titlebar,
+            text="—",
+            command=self._minimize,
+            bg=COLORS["titlebar"],
+            fg=COLORS["text"],
+            activebackground="#3e3e3e",
+            activeforeground=COLORS["text"],
+            relief="flat",
+            bd=0,
+            width=5,
+            cursor="hand2",
+        )
+        minimize.pack(side="right", fill="y")
 
-    def _begin_drag(self, event: tk.Event) -> None:
-        self._drag_origin = (event.x_root - self._root.winfo_x(), event.y_root - self._root.winfo_y())
+        title = tk.Label(
+            titlebar,
+            text=f"  SRPSS BUILD FOUNDRY   ·   v{APP_VERSION}",
+            bg=COLORS["titlebar"],
+            fg=COLORS["text"],
+            font=("Segoe UI", 9, "bold"),
+            anchor="w",
+        )
+        title.pack(side="left", fill="both", expand=True)
 
-    def _drag_window(self, event: tk.Event) -> None:
-        if self._drag_origin is None:
-            return
-        x_offset, y_offset = self._drag_origin
-        self._root.geometry(f"+{event.x_root - x_offset}+{event.y_root - y_offset}")
+    @staticmethod
+    def _is_drag_surface(widget: tk.Misc) -> bool:
+        if isinstance(widget, LinkLabel):
+            return False
+        interactive = (
+            tk.Button,
+            tk.Radiobutton,
+            tk.Checkbutton,
+            tk.Entry,
+            tk.Text,
+            tk.Listbox,
+            tk.Scale,
+            tk.Scrollbar,
+            ttk.Button,
+            ttk.Checkbutton,
+            ttk.Radiobutton,
+            ttk.Entry,
+            ttk.Combobox,
+            ttk.Scale,
+            ttk.Scrollbar,
+            ttk.Progressbar,
+        )
+        if isinstance(widget, interactive):
+            return False
+        return isinstance(widget, (tk.Tk, tk.Frame, tk.Label, ttk.Frame, ttk.Label))
+
+    def _on_drag_surface_press(self, event: tk.Event) -> str | None:
+        if not self._is_drag_surface(event.widget):
+            self._drag_state = None
+            return None
+
+        if sys.platform == "win32":
+            hwnd = self._native_toplevel_hwnd()
+            if hwnd is None:
+                return None
+            try:
+                class _RECT(ctypes.Structure):
+                    _fields_ = [
+                        ("left", ctypes.c_long),
+                        ("top", ctypes.c_long),
+                        ("right", ctypes.c_long),
+                        ("bottom", ctypes.c_long),
+                    ]
+
+                user32 = ctypes.windll.user32
+                user32.GetWindowRect.argtypes = [ctypes.c_void_p, ctypes.POINTER(_RECT)]
+                user32.GetWindowRect.restype = ctypes.c_bool
+                rect = _RECT()
+                if not user32.GetWindowRect(ctypes.c_void_p(hwnd), ctypes.byref(rect)):
+                    return None
+                self._drag_state = (
+                    int(event.x_root),
+                    int(event.y_root),
+                    int(rect.left),
+                    int(rect.top),
+                )
+                return "break"
+            except (AttributeError, OSError, TypeError, ValueError):
+                self._drag_state = None
+                return None
+
+        self._drag_state = (
+            int(event.x_root),
+            int(event.y_root),
+            int(self._root.winfo_x()),
+            int(self._root.winfo_y()),
+        )
+        return "break"
+
+    def _drag_window_fallback(self, event: tk.Event) -> str | None:
+        if self._drag_state is None:
+            return None
+
+        start_x, start_y, window_x, window_y = self._drag_state
+        target_x = window_x + int(event.x_root) - start_x
+        target_y = window_y + int(event.y_root) - start_y
+
+        if sys.platform == "win32":
+            hwnd = self._native_toplevel_hwnd()
+            if hwnd is None:
+                return None
+            try:
+                user32 = ctypes.windll.user32
+                user32.SetWindowPos.argtypes = [
+                    ctypes.c_void_p,
+                    ctypes.c_void_p,
+                    ctypes.c_int,
+                    ctypes.c_int,
+                    ctypes.c_int,
+                    ctypes.c_int,
+                    ctypes.c_uint,
+                ]
+                user32.SetWindowPos.restype = ctypes.c_bool
+                swp_nosize = 0x0001
+                swp_nozorder = 0x0004
+                swp_noactivate = 0x0010
+                user32.SetWindowPos(
+                    ctypes.c_void_p(hwnd),
+                    None,
+                    target_x,
+                    target_y,
+                    0,
+                    0,
+                    swp_nosize | swp_nozorder | swp_noactivate,
+                )
+                return "break"
+            except (AttributeError, OSError, TypeError, ValueError):
+                return None
+
+        self._root.geometry(f"+{target_x}+{target_y}")
+        return "break"
+
+    def _end_drag_fallback(self, _event: tk.Event) -> str | None:
+        if self._drag_state is None:
+            return None
+        self._drag_state = None
+        return "break"
+
+    def _cancel_drag(self, _event: tk.Event | None = None) -> None:
+        self._drag_state = None
 
     def _minimize(self) -> None:
-        self._root.overrideredirect(False)
         self._root.iconify()
-
-    def _restore_custom_chrome(self, _event: tk.Event | None = None) -> None:
-        if self._root.state() == "normal":
-            self._root.after_idle(lambda: self._root.overrideredirect(True))
 
     def _request_close(self) -> None:
         if self._running:
@@ -1080,7 +1443,7 @@ class BuildRunnerApp:
         self._progress_completed = 0
         self._progress_bar.stop()
         self._progress_bar.configure(mode="indeterminate", maximum=100, value=0)
-        self._progress_bar.start(12)
+        self._progress_bar.start(PROGRESS_TICK_MS)
         self._progress_detail.configure(
             text=f"Preparing · 0 / {self._progress_total} jobs"
         )
@@ -1203,7 +1566,7 @@ class BuildRunnerApp:
             job_name = next(job.name for job in self._jobs if job.key == key)
             self._progress_bar.stop()
             self._progress_bar.configure(mode="indeterminate", maximum=100, value=0)
-            self._progress_bar.start(12)
+            self._progress_bar.start(PROGRESS_TICK_MS)
             self._progress_detail.configure(
                 text=(
                     f"{job_name} · {self._progress_completed} / "
@@ -1329,7 +1692,21 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if sys.platform != "win32":
         print("Warning: the SRPSS Build Foundry is intended for Windows")
+    dpi_mode = enable_windows_dpi_awareness()
+    set_windows_app_user_model_id()
+    prune_build_runner_logs(LOG_DIR)
     root = tk.Tk()
+    root.withdraw()
+    try:
+        root.tk.call("tk", "appname", TASKBAR_TITLE)
+    except tk.TclError:
+        pass
+    try:
+        root.tk.call("tk", "scaling", max(1.0, root.winfo_fpixels("1i") / 72.0))
+    except (tk.TclError, ValueError, TypeError):
+        pass
+    if os.environ.get("SRPSS_BUILD_RUNNER_DEBUG"):
+        print(f"Build Foundry DPI mode: {dpi_mode}")
     BuildRunnerApp(root, initial_mode=mode)
     root.mainloop()
     return 0

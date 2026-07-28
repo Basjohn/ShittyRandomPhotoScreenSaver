@@ -11,10 +11,11 @@
 [Setup]
 AppId={{D8A5B7C8-9F9B-4F0D-9C5A-0F2F6A1E7C11}
 AppName=ShittyRandomPhotoScreenSaver
-AppVersion=4.6.8
+AppVersion=4.6.9
 AppPublisher=Jayde Ver Elst
 DefaultDirName={commonpf}\SRPSS
 DefaultGroupName=ShittyRandomPhotoScreenSaver
+PrivilegesRequired=admin
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 OutputDir=..\release\installers
@@ -25,7 +26,7 @@ ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
 WizardSmallImageFile=..\images\LogoBMP.bmp
-VersionInfoVersion=4.6.8
+VersionInfoVersion=4.6.9
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -178,6 +179,27 @@ begin
     Result := RunIcacls(TargetPath, RemoveBroadGrants);
 end;
 
+function ApplySharedDataAcl(const TargetPath: String): Boolean;
+var
+  RemoveBroadGrants: String;
+  GrantRequiredPrincipals: String;
+begin
+  { Presets and sounds are shared, non-executable data updated by the }
+  { non-elevated Media Center installer. Keep executable helper files separate. }
+  RemoveBroadGrants :=
+    '/inheritance:r ' +
+    '/remove:g "*S-1-1-0" "*S-1-5-11" /T /Q';
+  GrantRequiredPrincipals :=
+    '/grant:r ' +
+    '"*S-1-5-18:(OI)(CI)F" ' +
+    '"*S-1-5-32-544:(OI)(CI)F" ' +
+    '"*S-1-5-32-545:(OI)(CI)M" /T /Q';
+
+  Result := RunIcacls(TargetPath, GrantRequiredPrincipals);
+  if Result then
+    Result := RunIcacls(TargetPath, RemoveBroadGrants);
+end;
+
 function ReconcileRedditHelperStorageAcls(): Boolean;
 var
   BaseDir: String;
@@ -192,9 +214,9 @@ begin
   if Result then
     Result := ApplyRedditHelperAcl(BaseDir + '\helper', CurrentUserId, 'RX');
   if Result then
-    Result := ApplyRedditHelperAcl(BaseDir + '\presets', CurrentUserId, 'RX');
+    Result := ApplySharedDataAcl(BaseDir + '\presets');
   if Result then
-    Result := ApplyRedditHelperAcl(BaseDir + '\sounds', CurrentUserId, 'RX');
+    Result := ApplySharedDataAcl(BaseDir + '\sounds');
   if Result then
     Result := ApplyRedditHelperAcl(BaseDir + '\url_queue', CurrentUserId, 'M');
   if Result then

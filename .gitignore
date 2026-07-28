@@ -67,6 +67,7 @@ yarn-error.log*
 /settings/
 /widgets/last_weather.json
 agent.md
+*.lnk
 
 # Build/release binary artifacts
 release/
