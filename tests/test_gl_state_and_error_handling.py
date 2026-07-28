@@ -333,10 +333,11 @@ class TestResourceManagerGLHandles:
         assert isinstance(stats, dict)
     
     def test_cleanup_purges_handles(self):
-        """cleanup_all should purge registered handles."""
+        """cleanup_all purges accounting without assuming GL ownership."""
         rm = ResourceManager()
         cleanup_called = []
         
         rm.register_gl_handle(99999, "test_purge", lambda h: cleanup_called.append(h))
         rm.cleanup_all()
-        # API should exist and not crash
+        assert cleanup_called == []
+        assert rm.get_gl_stats()["total"] == 0

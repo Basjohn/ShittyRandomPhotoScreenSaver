@@ -1192,10 +1192,12 @@ class DisplayWidget(QWidget):
         attr_name: str,
         tag: str,
         stop_method: str = "cleanup",
+        *,
+        strict: bool = False,
     ) -> None:
         """Clean one legacy overlay attribute through the shared helper."""
         from rendering.display_gl_init import cleanup_widget
-        cleanup_widget(self, attr_name, tag, stop_method)
+        cleanup_widget(self, attr_name, tag, stop_method, strict=strict)
 
     def cleanup_runtime(self, reason: str = "explicit") -> None:
         """Synchronously tear down this display while GL ownership is valid."""

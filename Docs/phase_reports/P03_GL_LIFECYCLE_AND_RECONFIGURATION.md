@@ -95,6 +95,24 @@ The harness drives the production engine/display teardown seams with instrumente
 
 Sleep/wake is explicitly not represented by the deterministic headless harness and remains a Phase 11 platform scenario. Driver-reported VRAM is also a soak/platform metric; Phase 3 proves exact owned-resource return-to-zero, while Phase 4 owns RAM/VRAM plateau containment.
 
+## Post-checkpoint runtime correction — multi-display program ownership
+
+The first real two-display Settings/CUSTOM runs after the Phase 3 checkpoint exposed a Phase 3 design flaw. Both per-display compositors copied the same compiled transition-program IDs out of a process-global cache and each pipeline claimed local deletion ownership. Because `AA_ShareOpenGLContexts` made those IDs accessible to both contexts, screen 0 deleted the shared IDs successfully and screen 1 then received `GL_INVALID_VALUE` for all eleven transition programs. CUSTOM Edit failed at 13:44:57 and Settings repeated the same failure at 13:47:59 in the 2026-07-28 lifecycle logs.
+
+The strict-deletion rule was correct; the program ownership model and gate were incomplete. The deterministic churn harness modeled display resources independently, while the original real Qt test created only one compositor. Neither exercised two live shared-context compositors deleting in sequence.
+
+Correction:
+
+- compiled program IDs and uniform locations are owned by a compositor-local `GLProgramCache`, while VAO/VBO IDs are owned by the compositor-local `GLGeometryManager`; pipeline fields are draw mirrors, not second owners;
+- stateless shader helpers may be reused, but no numeric GL handle is globally cached;
+- obsolete global program, geometry, texture, and GL-state singleton accessors were removed so local ownership is the only available production shape;
+- the generic `ResourceManager` no longer retains executable `glDelete*` callbacks: it is passive accounting, and only the context-bound local owner can delete a handle before releasing its record;
+- `engine.stop(exit_app=False)` is the sole Settings/Edit teardown authority; the duplicate handler-level `teardown_display_runtime()` calls were removed;
+- the temporary display-local visualizer GL overlay now uses the same owner-context, retain-on-failure rule and must delete successfully before its parent reference or display compositor is destroyed;
+- the real Qt gate now creates two live compositors, proves distinct program owners, and destroys them in the exact failing sequence.
+
+This is aligned with the target topology: one compositor surface **per display**, not one process-wide compositor. Phase 6 may share only measured resources through explicit leases; Phase 8 folds remaining display-local overlay surfaces into each display compositor.
+
 ## Verification
 
 Commands used:
@@ -116,8 +134,9 @@ Results at closure:
 - protected visualizer file: `186 passed, 20 skipped` for the documented retired/unavailable Bubble cases.
 - deterministic visualizer replay: `66` goldens plus manifest verified.
 - visualizer documentation references: `6 passed`.
-- real Windows Qt GL cleanup: `2 passed`, no skip.
+- real Windows Qt GL cleanup: `3 passed`, no skip, including two live compositors with distinct program owners and sequential teardown.
 - deterministic churn artifact: pass, 150 cycles, no errors.
+- post-correction changed-area/resource/visualizer gate: `350 passed, 20 skipped`; all `66` visualizer replay goldens verified unchanged.
 
 Two broad `test_display_integration.py` offscreen cases remain pre-existing environment/runtime-sensitive failures outside this phase (`transition_cleanup_on_clear` cannot start its transition under the offscreen GL plugin; Spotify volume visibility times out). They are not used as Phase 3 evidence and were not hidden or weakened.
 

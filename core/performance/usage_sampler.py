@@ -505,6 +505,7 @@ class UsageTelemetryService:
                 "vram_supported=%d vram_dedicated_mb=%s vram_shared_mb=%s "
                 "tracked_resources=%s tracked_known_bytes=%s "
                 "cpu_cache_resources=%s cpu_cache_bytes=%s "
+                "cpu_display_resources=%s cpu_display_bytes=%s "
                 "rm_resources=%s rm_known_bytes=%s rm_unknown_resources=%s "
                 "gl_resources=%s gl_known_bytes=%s gl_unknown_resources=%s "
                 "gl_texture_resources=%s gl_texture_bytes=%s "
@@ -545,6 +546,8 @@ class UsageTelemetryService:
                 _fmt(resources.get("tracked_known_bytes")),
                 _fmt(resources.get("cpu_cache_resources")),
                 _fmt(resources.get("cpu_cache_bytes")),
+                _fmt(resources.get("cpu_display_resources")),
+                _fmt(resources.get("cpu_display_bytes")),
                 _fmt(resources.get("rm_resources")),
                 _fmt(resources.get("rm_known_bytes")),
                 _fmt(resources.get("rm_unknown_resources")),

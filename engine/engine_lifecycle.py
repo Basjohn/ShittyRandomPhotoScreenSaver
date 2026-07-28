@@ -393,13 +393,6 @@ def cleanup(engine: ScreensaverEngine) -> None:
         engine.folder_sources.clear()
         engine.rss_coordinator = None
 
-        # Cleanup global shader program singletons
-        try:
-            from rendering.gl_compositor import cleanup_global_shader_programs
-            cleanup_global_shader_programs()
-            logger.debug("Global shader programs cleaned up")
-        except Exception as e:
-            logger.debug("Shader cleanup skipped: %s", e)
 
         logger.info("Engine cleanup complete")
 

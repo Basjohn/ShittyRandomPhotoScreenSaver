@@ -5,8 +5,8 @@ from typing import List, Sequence, Optional, Set
 import logging
 import numpy as np
 import time
-from PySide6.QtCore import Qt, QRect, QTimer
-from PySide6.QtGui import QColor
+from PySide6.QtCore import Qt, QRect, QTimer, QCoreApplication, QThread
+from PySide6.QtGui import QColor, QOpenGLContext
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from core.logging.logger import (
@@ -1628,14 +1628,12 @@ void main() {
         except Exception:
             logger.debug("[SPOTIFY_VIS] Mask shader setup failed", exc_info=True)
 
-        # Register GL handles with ResourceManager for VRAM leak prevention
+        # Register GL handles with ResourceManager for passive accounting.
         try:
             from core.resources.manager import ResourceManager
-            from OpenGL import GL as _gl_mod
             rm = ResourceManager.get_or_create_app_shared()
             self._gl_vao_rid = rm.register_gl_handle(
                 vao, "vao",
-                lambda h, _g=_gl_mod: _g.glDeleteVertexArrays(1, [h]),
                 description="SpotifyBarsGLOverlay VAO",
                 group="spotify_vis_gl",
                 owner=f"{type(self).__name__}:{id(self)}",
@@ -1646,7 +1644,6 @@ void main() {
             )
             self._gl_vbo_rid = rm.register_gl_handle(
                 vbo, "vbo",
-                lambda h, _g=_gl_mod: _g.glDeleteBuffers(1, [h]),
                 description="SpotifyBarsGLOverlay VBO",
                 group="spotify_vis_gl",
                 owner=f"{type(self).__name__}:{id(self)}",
@@ -1764,12 +1761,9 @@ void main() {
     def _register_gl_program_handle(self, mode: str, prog: int) -> None:
         try:
             from core.resources.manager import ResourceManager
-            from OpenGL import GL as _gl_mod
-
             rm = ResourceManager.get_or_create_app_shared()
             rid = rm.register_gl_handle(
                 prog, "program",
-                lambda h, _g=_gl_mod: _g.glDeleteProgram(h),
                 description=f"SpotifyBarsGLOverlay {mode} shader",
                 group="spotify_vis_gl",
                 owner=f"{type(self).__name__}:{id(self)}",
@@ -1825,74 +1819,132 @@ void main() {
         self._gl_program_warm_timer.start(140)
 
     def cleanup_gl(self) -> None:
-        """Delete all GL handles (programs, VAO, VBO) to prevent VRAM leaks."""
+        """Strictly delete every overlay-owned GL handle on its owner context."""
+        if self._gl_program_warm_timer is not None:
+            try:
+                self._gl_program_warm_timer.stop()
+            except Exception as exc:
+                logger.debug("[SPOTIFY_VIS] Failed to stop deferred warm timer: %s", exc)
+        self._gl_program_warm_queue = []
 
-        try:
-            from OpenGL import GL as _gl
-        except ImportError:
+        live_resources = bool(
+            self._gl_programs
+            or self._gl_program is not None
+            or self._gl_mask_program is not None
+            or self._gl_vbo is not None
+            or self._gl_vao is not None
+        )
+        state = self._gl_state.get_state()
+        if state == GLContextState.DESTROYED:
+            if live_resources:
+                raise RuntimeError("Visualizer overlay is DESTROYED with live GL resources")
             return
 
-        ctx_acquired = False
-        if self._gl_state.is_ready():
-            try:
-                self.makeCurrent()
-                ctx_acquired = True
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Failed to make GL context current for cleanup: %s", e)
+        if not live_resources:
+            if state == GLContextState.DESTROYING:
+                try:
+                    self.doneCurrent()
+                except Exception as exc:
+                    raise RuntimeError(
+                        "Visualizer overlay context release remains incomplete"
+                    ) from exc
+            if state in {
+                GLContextState.READY,
+                GLContextState.ERROR,
+                GLContextState.CONTEXT_LOST,
+            }:
+                if not self._gl_state.transition(GLContextState.DESTROYING):
+                    raise RuntimeError("Visualizer overlay could not enter DESTROYING")
+            if self._gl_state.get_state() != GLContextState.DESTROYED:
+                if not self._gl_state.transition(GLContextState.DESTROYED):
+                    raise RuntimeError("Visualizer overlay could not enter DESTROYED")
+            return
+
+        application = QCoreApplication.instance()
+        if application is not None and QThread.currentThread() is not application.thread():
+            raise RuntimeError("Visualizer overlay GL teardown must run on the GUI thread")
+        if not self.isValid():
+            raise RuntimeError("Cannot delete live visualizer GL resources: context is invalid")
+        if state != GLContextState.DESTROYING:
+            if not self._gl_state.transition(GLContextState.DESTROYING):
+                raise RuntimeError("Visualizer overlay could not enter DESTROYING")
 
         try:
-            if self._gl_program_warm_timer is not None:
+            self.makeCurrent()
+        except Exception as exc:
+            raise RuntimeError(
+                "Cannot delete live visualizer GL resources: makeCurrent() failed"
+            ) from exc
+
+        expected_context = self.context()
+        if expected_context is not None and QOpenGLContext.currentContext() != expected_context:
+            try:
+                self.doneCurrent()
+            finally:
+                raise RuntimeError(
+                    "Cannot delete live visualizer GL resources: owner context is not current"
+                )
+
+        errors: list[str] = []
+        if (
+            self._gl_program is not None
+            and int(self._gl_program) not in {int(value) for value in self._gl_programs.values()}
+        ):
+            errors.append(f"untracked_program:{int(self._gl_program)}")
+        try:
+            for mode, program_id in list(self._gl_programs.items()):
                 try:
-                    self._gl_program_warm_timer.stop()
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Failed to stop deferred warm timer: %s", e)
-            self._gl_program_warm_queue = []
-            for mode, prog in list(self._gl_programs.items()):
-                try:
-                    if ctx_acquired:
-                        _gl.glDeleteProgram(prog)
-                        self._release_resource_tracking(self._gl_program_rids.get(mode))
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Failed to delete %s program: %s", mode, e)
-            self._gl_programs.clear()
-            self._gl_uniforms.clear()
-            self._gl_program = None
+                    gl.glDeleteProgram(int(program_id))
+                except Exception as exc:
+                    errors.append(f"program:{mode}:{type(exc).__name__}:{exc}")
+                    continue
+                self._gl_programs.pop(mode, None)
+                self._gl_uniforms.pop(mode, None)
+                self._release_resource_tracking(self._gl_program_rids.pop(mode, None))
 
             if self._gl_mask_program is not None:
                 try:
-                    if ctx_acquired:
-                        _gl.glDeleteProgram(self._gl_mask_program)
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Failed to delete mask program: %s", e)
-                self._gl_mask_program = None
+                    gl.glDeleteProgram(int(self._gl_mask_program))
+                except Exception as exc:
+                    errors.append(f"mask_program:{type(exc).__name__}:{exc}")
+                else:
+                    self._gl_mask_program = None
 
             if self._gl_vbo is not None:
                 try:
-                    if ctx_acquired:
-                        _gl.glDeleteBuffers(1, [self._gl_vbo])
-                        self._release_resource_tracking(self._gl_vbo_rid)
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Failed to delete VBO: %s", e)
-                self._gl_vbo = None
+                    gl.glDeleteBuffers(1, [int(self._gl_vbo)])
+                except Exception as exc:
+                    errors.append(f"vbo:{type(exc).__name__}:{exc}")
+                else:
+                    self._gl_vbo = None
+                    self._release_resource_tracking(self._gl_vbo_rid)
+                    self._gl_vbo_rid = None
 
             if self._gl_vao is not None:
                 try:
-                    if ctx_acquired:
-                        _gl.glDeleteVertexArrays(1, [self._gl_vao])
-                        self._release_resource_tracking(self._gl_vao_rid)
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Failed to delete VAO: %s", e)
-                self._gl_vao = None
+                    gl.glDeleteVertexArrays(1, [int(self._gl_vao)])
+                except Exception as exc:
+                    errors.append(f"vao:{type(exc).__name__}:{exc}")
+                else:
+                    self._gl_vao = None
+                    self._release_resource_tracking(self._gl_vao_rid)
+                    self._gl_vao_rid = None
         finally:
-            if ctx_acquired:
-                try:
-                    self.doneCurrent()
-                except Exception:
-                    pass
+            try:
+                self.doneCurrent()
+            except Exception as exc:
+                errors.append(f"doneCurrent:{type(exc).__name__}:{exc}")
 
+        self._gl_program = next(iter(self._gl_programs.values()), None)
+        if errors:
+            raise RuntimeError(
+                "Visualizer overlay GL resource deletion incomplete: " + " | ".join(errors)
+            )
+
+        self._gl_uniforms.clear()
         self._gl_program_rids.clear()
-        self._gl_vao_rid = None
-        self._gl_vbo_rid = None
+        if not self._gl_state.transition(GLContextState.DESTROYED):
+            raise RuntimeError("Visualizer overlay could not enter DESTROYED")
         logger.debug("[SPOTIFY_VIS] GL handles cleaned up")
 
     @staticmethod

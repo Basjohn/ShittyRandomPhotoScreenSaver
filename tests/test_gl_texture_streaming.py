@@ -102,34 +102,15 @@ class TestGLTextureManagerLifecycle:
         manager = GLTextureManager()
         assert manager.is_initialized() is False
     
-    def test_singleton_getter(self):
-        """Test get_texture_manager returns singleton."""
-        from rendering.gl_programs.texture_manager import get_texture_manager, cleanup_texture_manager
-        
-        # Clean up any existing singleton
-        cleanup_texture_manager()
-        
-        manager1 = get_texture_manager()
-        manager2 = get_texture_manager()
-        
-        assert manager1 is manager2
-        
-        # Clean up
-        cleanup_texture_manager()
-    
-    def test_cleanup_resets_singleton(self):
-        """Test cleanup_texture_manager resets singleton."""
-        from rendering.gl_programs.texture_manager import get_texture_manager, cleanup_texture_manager
-        
-        manager1 = get_texture_manager()
-        cleanup_texture_manager()
-        manager2 = get_texture_manager()
-        
-        # Should be different instances
+    def test_managers_are_explicit_independent_owners(self):
+        """Each compositor must construct its own texture/PBO owner."""
+        from rendering.gl_programs.texture_manager import GLTextureManager
+
+        manager1 = GLTextureManager(owner="display:0")
+        manager2 = GLTextureManager(owner="display:1")
+
         assert manager1 is not manager2
-        
-        # Clean up
-        cleanup_texture_manager()
+        assert manager1._owner != manager2._owner
 
 
 class TestResourceManagerGLTracking:

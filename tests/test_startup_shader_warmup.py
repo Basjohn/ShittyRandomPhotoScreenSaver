@@ -117,6 +117,7 @@ def test_transition_program_ensure_binds_runtime_alias(monkeypatch) -> None:
         def __init__(self):
             self._gl_disabled_for_session = False
             self._gl_pipeline = _StubPipeline()
+            self._program_cache = _StubCache()
             self.make_current_calls = 0
             self.done_current_calls = 0
 
@@ -136,7 +137,6 @@ def test_transition_program_ensure_binds_runtime_alias(monkeypatch) -> None:
             return {"uMix": 7}
 
     monkeypatch.setattr("rendering.gl_compositor_pkg.gl_lifecycle.gl", object())
-    monkeypatch.setattr("rendering.gl_compositor_pkg.gl_lifecycle.get_program_cache", lambda: _StubCache())
 
     widget = _StubWidget()
     assert ensure_transition_program_ready(widget, "wipe") is True
@@ -156,6 +156,7 @@ def test_transition_program_ensure_binds_compositor_class(monkeypatch) -> None:
         def __init__(self):
             self._gl_disabled_for_session = False
             self._gl_pipeline = _StubPipeline()
+            self._program_cache = _StubCache()
 
         def makeCurrent(self):
             return None
@@ -173,7 +174,6 @@ def test_transition_program_ensure_binds_compositor_class(monkeypatch) -> None:
             return {"uProgress": 5}
 
     monkeypatch.setattr("rendering.gl_compositor_pkg.gl_lifecycle.gl", object())
-    monkeypatch.setattr("rendering.gl_compositor_pkg.gl_lifecycle.get_program_cache", lambda: _StubCache())
 
     widget = _StubWidget()
     assert ensure_transition_program_ready(widget, "GLCompositorBurnTransition") is True

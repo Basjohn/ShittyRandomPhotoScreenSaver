@@ -40,10 +40,8 @@ A phase is complete only with tests, runtime evidence, visualizer result, and ro
 - [x] **Phase 0 / Gate 0:** freeze, evidence, and ownership inventory are complete; the Phase 1 checkpoint supplies the clean committed recovery point. See `Docs/phase_reports/P00_FREEZE_INVENTORY_AND_EVIDENCE.md`, `Docs/phase_reports/P00_SOURCE_OWNERSHIP_INVENTORY.md`, and `Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md`.
 - [x] **Phase 1 / Gate 1:** bounded passive frame, event-loop, task, CPU-image, GL-resource, and lifecycle-snapshot measurement validated without behavioural change. See `Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md`.
 - [x] **Phase 2 / Gate 2:** deterministic all-mode visualizer replay, protected baseline goldens, cadence-separation tests, quantitative metrics, and Spectrum/Bubble logical review artifacts are complete. See `Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md`.
-- [x] **Phase 3 / Gate 3:** full stop/destroy/recreate lifecycle, generation-and-manager stale-work rejection, strict owner-context GL deletion, and 50 Settings + 50 Edit + 50 mixed hostile cycles are complete without fallback, affinity errors, stale publication, or stopped-resource growth. See `Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md`.
+- [x] **Phase 3 / Gate 3:** full stop/destroy/recreate lifecycle, generation-and-manager stale-work rejection, and strict owner-context GL deletion are complete. The post-checkpoint dual-display program-ownership defect, competing generic-registry deletion fallback, and missing two-compositor test shape were corrected and recorded in the Phase 3 report. See `Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md`.
 - [x] **Phase 4 / Gate 4:** exact byte/count CPU cache and prefetch bounds, per-compositor texture/PBO budgets, complete terminal transition release, exact-transform sharing, GUI-captured QPixmap accounting, and a 45-cycle/30-virtual-minute owner/allocator plateau are complete. See `Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md` and `Docs/phase_reports/P04_RESOURCE_LIFETIME_MAP.md`.
-
-
 
 ## Phase 5 — CPU and Task Reduction
 
@@ -88,6 +86,7 @@ A phase is complete only with tests, runtime evidence, visualizer result, and ro
 - [ ] Explicit draw order.
 - [ ] No simulation or lifecycle ownership.
 - [ ] GUI-local update coalescing only.
+- [ ] Replace the two adaptive presentation workers with one GUI-thread, active-animation-only update mechanism per display; preserve no worker waits or paint acknowledgement.
 - [ ] No compatibility mega-layer.
 - [ ] Correct multi-display overlay behaviour.
 - [ ] Cursor halo and visualizer remain smooth.
@@ -111,14 +110,10 @@ A phase is complete only with tests, runtime evidence, visualizer result, and ro
 - [ ] Remove dead retry/backoff state.
 - [ ] Remove obsolete metrics.
 - [ ] Remove or migrate inert `workers.fft` settings/default leaves after a compatibility audit; do not restore a separate FFT process without contrary latency and reliability evidence.
-- [ ] Bound and rotate the Reddit helper log before oversized-log startup failure.
-- [ ] Expire/reconcile `.bridge_ready` and URL queue state so stale files cannot block helper recovery.
-- [ ] Verify and correct the ProgramData ACL/ownership creation path so administrator takeover is not required.
-- [ ] Add automated helper recovery coverage for an oversized log, stale bridge signal, queued URLs, and restricted ProgramData ownership.
 - [ ] Prove no silent fallback.
 - [ ] Keep one understandable runtime path.
 
-**Gate:** code matches target architecture and adopted helper recovery failures are reproducibly closed.
+**Gate:** code matches target architecture and no removed compatibility path remains silently active.
 
 ## Phase 11 — Full Validation
 
@@ -148,20 +143,37 @@ A phase is complete only with tests, runtime evidence, visualizer result, and ro
 ## Current Phase
 
 ```text
-Phase: 5 — CPU and Task Reduction
+Priority: P0 — Reddit Helper Recovery
+Queued recovery phase: 5 — CPU and Task Reduction
 Branch: main
 Last evidence: Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md
 ```
 
-- [-] Inventory every recurring operation and record trigger, frequency, thread, typical/p95 duration, allocations, queue delay, coalescing eligibility, hidden/static behavior, and cross-display duplication.
-- [ ] Reconcile Phase 1 task categories and the baseline ~90–100 compute submissions/second against live owners; keep a bounded `other` bucket and identify the first measured high-rate owner.
+### P0 — Reddit Helper Recovery
+
+- [ ] Reproduce the current helper recovery failures with bounded fixtures for an oversized helper log, stale `.bridge_ready`, queued URLs, and restricted ProgramData ownership.
+- [ ] Bound and rotate the helper log before startup reads or writes can fail on an oversized file.
+- [ ] Give `.bridge_ready` and queued URL files explicit freshness, ownership, reconciliation, and terminal-removal rules so stale state cannot block recovery.
+- [ ] Correct the ProgramData directory/ACL creation path so normal installation and recovery do not require administrator takeover.
+- [ ] Add runtime-shaped helper recovery automation covering all four failures, helper restart, queued-link delivery, and absence of silent fallback.
+- [ ] Record the owning seams, failure matrix, verification, and rollback in one focused helper recovery report.
+
+**P0 gate:** helper restart and queued-link delivery recover deterministically from all four failure shapes without silent fallback, unbounded logs, stale bridge authority, or manual ownership repair.
+
+### Queued Phase 5 continuation
+
+- [ ] Inventory every recurring operation and record trigger, frequency, thread, typical/p95 duration, allocations, queue delay, coalescing eligibility, hidden/static behavior, and cross-display duplication.
+- [ ] Use the 2026-07-28 live run as the first Phase 5 owner baseline: 101.2 compute submissions/second, led by `visualizer.bubble_simulation` at 68.9/s and `visualizer.audio_analysis` at 32.2/s, with `uncategorized` at 0.85/s; reduce the measured owners without reducing visualizer fidelity.
 - [ ] Establish idle, visualizer, transition, image-decode, and controlled background-load baselines for process CPU, GUI event-loop delay, task submissions, queue depth, callback tails, and duplicate/stale publication.
+- [ ] Reconcile tracked CPU/GL bytes against RSS, private commit, and driver VRAM; specifically explain sustained RSS above roughly 900 MiB, multi-GiB private commit, driver VRAM above roughly 500 MiB, and ResourceManager unknown-byte entries without raising budgets.
 - [ ] Remove tiny recurring pool jobs whose queue/callback overhead exceeds useful work; keep Qt/GL mutation on the GUI/context owner and coarse I/O/decode/measured computation on workers.
+- [ ] Measure and attribute the two per-display adaptive presentation workers without optimizing or entrenching them; Phase 8 owns their removal in favor of GUI-local active-animation scheduling.
 - [ ] Coalesce duplicate scene invalidations, visual render-state publication, geometry updates, stale image results, metadata refresh, and deletion requests without dropping audio impulses, stop/release, topology, or settings events.
 - [ ] Stop recurring work when its owner is hidden or static, and require near-zero idle general-pool submissions outside justified monitoring.
 - [ ] Batch/vectorize only measured Python-heavy hotspots; do not add Python threads or multiprocessing without latency, memory, and GIL evidence.
 - [ ] Rerun the protected visualizer replay/runtime lock and Phase 4 resource gate after each optimization slice; require lower task/CPU cost with equivalent or better p99 frame delivery and no new synchronization.
 - [ ] Record the task inventory, before/after evidence, unsupported platform measurements, and direct rollback in `Docs/phase_reports/P05_CPU_TASK_REDUCTION.md`.
+
 ## Deferred Until Recovery Passes
 
 - new production widget families;

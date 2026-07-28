@@ -1,15 +1,16 @@
 """Centralized cache for GL shader programs.
 
-This module replaces the scattered module-level globals in gl_compositor.py
-with a proper cache class that manages lazy loading, compilation tracking,
-and cleanup of all shader programs.
+This module provides the cache object used by each compositor for compiled
+program IDs, uniform locations, and stateless shader-helper lookup.
 
-IMPORTANT: OpenGL program IDs are tied to the current GL context (or share
-group). In test runs we create many QOpenGLWidget contexts; cached IDs can
-become invalid when a new context is made current.
+IMPORTANT: OpenGL program IDs are tied to a GL context/share group and have
+exactly one cache owner. Production compositors therefore create distinct
+``GLProgramCache`` instances even when Qt contexts share resources. Sharing
+stateless program helpers is safe; sharing deletable numeric IDs without leases
+is not.
 
-GLProgramCache therefore validates cached program IDs via ``glIsProgram``
-in the current context and recompiles/recaches uniforms when IDs are stale.
+GLProgramCache validates cached program IDs via ``glIsProgram`` in the current
+context and recompiles/recaches uniforms when IDs are stale.
 
 Phase 1 of GLCompositor refactor - see audits/REFACTOR_GL_COMPOSITOR.md
 """
@@ -215,25 +216,50 @@ class GLProgramCache:
             results[name] = program is not None
         return results
     
-    def cleanup(self) -> None:
-        """Delete all programs and clear caches.
-        
-        Must be called with a valid GL context.
+    def get_program_ids(self) -> Set[int]:
+        """Return the numeric IDs still owned by this cache."""
+        return {int(program_id) for program_id in self._programs.values() if program_id}
+
+    def has_live_programs(self) -> bool:
+        """Return whether this cache still owns deletable program IDs."""
+        return bool(self._programs)
+
+    def cleanup(self, *, strict: bool = False, gl_api=None) -> None:
+        """Delete owned programs with the current owner context.
+
+        Strict cleanup retains every failed ID and raises so the compositor can
+        remain ``DESTROYING`` and retry. Successfully deleted IDs are removed
+        immediately and are never presented as live ownership.
         """
-        try:
-            from OpenGL import GL as gl
-        except ImportError:
-            gl = None
-        
-        if gl is not None:
-            for name, program_id in self._programs.items():
-                try:
-                    gl.glDeleteProgram(program_id)
-                    logger.debug("[GL CACHE] Deleted program %s: %d", name, program_id)
-                except Exception as e:
-                    logger.debug("[GL CACHE] Failed to delete %s: %s", name, e)
-        
-        self._programs.clear()
+        if gl_api is None:
+            try:
+                from OpenGL import GL as gl_api
+            except ImportError:
+                gl_api = None
+
+        if gl_api is None and self._programs:
+            if strict:
+                raise RuntimeError("Cannot delete live GL programs: PyOpenGL is unavailable")
+            return
+
+        errors: list[str] = []
+        for name, program_id in list(self._programs.items()):
+            try:
+                gl_api.glDeleteProgram(int(program_id))
+            except Exception as exc:
+                errors.append(f"{name}={program_id}:{type(exc).__name__}:{exc}")
+                logger.debug("[GL CACHE] Failed to delete %s: %s", name, exc)
+                continue
+            self._programs.pop(name, None)
+            self._uniforms.pop(name, None)
+            self._initialized.discard(name)
+            logger.debug("[GL CACHE] Deleted program %s: %d", name, program_id)
+
+        if errors:
+            if strict:
+                raise RuntimeError("GL program cache cleanup incomplete: " + " | ".join(errors))
+            return
+
         self._uniforms.clear()
         self._initialized.clear()
         self._failed.clear()
@@ -247,23 +273,3 @@ class GLProgramCache:
     def get_compiled_programs(self) -> Set[str]:
         """Get set of successfully compiled programs."""
         return self._initialized.copy()
-
-
-# Module-level singleton instance for backward compatibility
-_program_cache: Optional[GLProgramCache] = None
-
-
-def get_program_cache() -> GLProgramCache:
-    """Get the global program cache singleton."""
-    global _program_cache
-    if _program_cache is None:
-        _program_cache = GLProgramCache()
-    return _program_cache
-
-
-def cleanup_program_cache() -> None:
-    """Clean up the global program cache."""
-    global _program_cache
-    if _program_cache is not None:
-        _program_cache.cleanup()
-        _program_cache = None

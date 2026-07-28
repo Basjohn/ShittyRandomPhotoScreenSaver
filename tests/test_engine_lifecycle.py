@@ -14,6 +14,7 @@ Key scenarios tested:
 """
 import pytest
 import threading
+from types import SimpleNamespace
 from unittest.mock import patch
 from PySide6.QtWidgets import QApplication
 
@@ -67,6 +68,8 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
 
         def stop(self, exit_app=False):
             events.append(("engine_stop", exit_app))
+            self.display_manager.cleanup()
+            self.display_manager = None
 
         def _initialize_display(self):
             events.append(("initialize_display", None))
@@ -134,6 +137,8 @@ def test_custom_edit_reload_snapshots_real_lifecycle_boundaries(monkeypatch):
 
         def stop(self, exit_app=False):
             events.append(("engine_stop", exit_app))
+            self.display_manager.cleanup()
+            self.display_manager = None
 
         def _initialize_display(self):
             events.append(("initialize_display", None))
@@ -168,6 +173,45 @@ def test_custom_edit_reload_snapshots_real_lifecycle_boundaries(monkeypatch):
     assert events.index(("display_cleanup", None)) < events.index(("snapshot", "custom_edit", "after_display_cleanup"))
     assert events.index(("engine_start", None)) < events.index(("snapshot", "custom_edit", "after_restart"))
 
+
+def test_settings_teardown_failure_exits_cleanly_without_opening_dialog(monkeypatch):
+    from engine import engine_handlers
+
+    events = []
+
+    class _Coordinator:
+        def set_settings_dialog_active(self, active):
+            events.append(("settings_active", bool(active)))
+
+    engine = SimpleNamespace(
+        display_manager=SimpleNamespace(displays=[]),
+        _settings_dialog_active=False,
+        _sources_changed_during_settings=False,
+        stop=lambda exit_app=False: (_ for _ in ()).throw(RuntimeError("GL deletion failed")),
+    )
+    monkeypatch.setattr(
+        "rendering.multi_monitor_coordinator.get_coordinator",
+        lambda: _Coordinator(),
+    )
+    monkeypatch.setattr(
+        engine_handlers.QApplication,
+        "exit",
+        staticmethod(lambda code: events.append(("exit", int(code)))),
+    )
+    monkeypatch.setattr(
+        engine_handlers,
+        "SettingsDialog",
+        lambda *_args, **_kwargs: events.append(("dialog", True)),
+    )
+
+    engine_handlers.on_settings_requested(engine)
+
+    assert engine._settings_dialog_active is False
+    assert events == [
+        ("settings_active", True),
+        ("settings_active", False),
+        ("exit", 1),
+    ]
 
 def test_sources_changed_during_settings_is_deferred(monkeypatch):
     from engine import engine_handlers

@@ -158,9 +158,23 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
         stage="before_stop",
     )
     stop_start = time.perf_counter()
-    engine.stop(exit_app=False)
-    from engine.engine_lifecycle import teardown_display_runtime
-    teardown_display_runtime(engine, reason="settings_pre_dialog")
+    try:
+        # stop(exit_app=False) owns the complete display/GL teardown. A second
+        # teardown call here would create a shadow lifecycle path.
+        engine.stop(exit_app=False)
+    except Exception:
+        engine._settings_dialog_active = False
+        try:
+            if coordinator is not None:
+                coordinator.set_settings_dialog_active(False)
+        except Exception:
+            logger.debug("Coordinator reset after failed Settings teardown failed", exc_info=True)
+        logger.critical(
+            "[LIFECYCLE] Settings admission aborted because runtime teardown failed",
+            exc_info=True,
+        )
+        QApplication.exit(1)
+        return
     log_lifecycle_resource_snapshot(
         engine,
         event="settings",
@@ -271,15 +285,13 @@ def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
             event="custom_edit",
             stage="before_stop",
         )
+        # stop(exit_app=False) is the single full teardown authority.
         engine.stop(exit_app=False)
         log_lifecycle_resource_snapshot(
             engine,
             event="custom_edit",
             stage="after_stop",
         )
-
-        from engine.engine_lifecycle import teardown_display_runtime
-        teardown_display_runtime(engine, reason="custom_edit_reload")
         log_lifecycle_resource_snapshot(
             engine,
             event="custom_edit",
@@ -323,8 +335,12 @@ def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
 
         logger.info("CUSTOM layout runtime reload complete")
     except Exception as e:
-        logger.exception("Failed to reload screensaver after CUSTOM layout commit: %s", e)
-        QApplication.quit()
+        logger.critical(
+            "[LIFECYCLE] CUSTOM Edit reload aborted after teardown/rebuild failure: %s",
+            e,
+            exc_info=True,
+        )
+        QApplication.exit(1)
 
 
 # ------------------------------------------------------------------

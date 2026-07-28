@@ -15,8 +15,8 @@ from rendering.gl_programs.slide_program import SlideProgram, slide_program
 from rendering.gl_programs.wipe_program import WipeProgram, wipe_program
 from rendering.gl_programs.warp_program import WarpProgram, warp_program
 from rendering.gl_programs.raindrops_program import RaindropsProgram, raindrops_program
-from rendering.gl_programs.program_cache import GLProgramCache, get_program_cache, cleanup_program_cache
-from rendering.gl_programs.geometry_manager import GLGeometryManager, get_geometry_manager, cleanup_geometry_manager
+from rendering.gl_programs.program_cache import GLProgramCache
+from rendering.gl_programs.geometry_manager import GLGeometryManager
 
 __all__ = [
     "BaseGLProgram",
@@ -37,9 +37,5 @@ __all__ = [
     "RaindropsProgram",
     "raindrops_program",
     "GLProgramCache",
-    "get_program_cache",
-    "cleanup_program_cache",
     "GLGeometryManager",
-    "get_geometry_manager",
-    "cleanup_geometry_manager",
 ]

@@ -674,5 +674,5 @@ void main() {
             gl.glUseProgram(0)
 
 
-# Module-level singleton instance
+# Stateless module-level shader helper; compiled IDs remain compositor-owned.
 particle_program = ParticleProgram()

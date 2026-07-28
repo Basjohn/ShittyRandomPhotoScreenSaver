@@ -22,25 +22,6 @@ from core.logging.logger import is_perf_metrics_enabled
 
 logger = logging.getLogger(__name__)
 
-# Module-level singleton
-_texture_manager: Optional["GLTextureManager"] = None
-
-
-def get_texture_manager() -> "GLTextureManager":
-    """Get the singleton GLTextureManager instance."""
-    global _texture_manager
-    if _texture_manager is None:
-        _texture_manager = GLTextureManager()
-    return _texture_manager
-
-
-def cleanup_texture_manager() -> None:
-    """Cleanup and reset the singleton instance."""
-    global _texture_manager
-    if _texture_manager is not None:
-        _texture_manager.cleanup()
-        _texture_manager = None
-
 
 @dataclass
 class PBOEntry:

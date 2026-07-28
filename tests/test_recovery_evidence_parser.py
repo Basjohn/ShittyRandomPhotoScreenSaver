@@ -15,8 +15,8 @@ def _write_archive(path: Path) -> None:
             "2026-07-23 19:37:45 - usage - INFO - [USAGE] sample "
             "seq=1 cpu_app_pct=10.0 cpu_main_pct=8.0 cpu_system_pct=5.0 "
             "rss_app_mb=500.0 private_app_mb=700.0 vram_dedicated_mb=250.0 "
-            "gpu_busy_pct=5.0 tracked_resources=4 tracked_known_bytes=1184 "
-            "cpu_cache_resources=1 cpu_cache_bytes=800 rm_resources=3 rm_known_bytes=384 "
+            "gpu_busy_pct=5.0 tracked_resources=5 tracked_known_bytes=1248 "
+            "cpu_cache_resources=1 cpu_cache_bytes=800 cpu_display_resources=1 cpu_display_bytes=64 rm_resources=3 rm_known_bytes=384 "
             "rm_unknown_resources=1 gl_resources=3 gl_known_bytes=384 gl_unknown_resources=1 "
             "gl_texture_resources=1 gl_texture_bytes=128 gl_framebuffer_resources=0 "
             "gl_framebuffer_bytes=0 gl_renderbuffer_resources=0 gl_renderbuffer_bytes=0 "
@@ -28,8 +28,8 @@ def _write_archive(path: Path) -> None:
             "2026-07-23 19:38:00 - usage - INFO - [USAGE] sample "
             "seq=2 cpu_app_pct=20.0 cpu_main_pct=15.0 cpu_system_pct=7.0 "
             "rss_app_mb=550.0 private_app_mb=760.0 vram_dedicated_mb=275.0 "
-            "gpu_busy_pct=8.0 tracked_resources=4 tracked_known_bytes=1184 "
-            "cpu_cache_resources=1 cpu_cache_bytes=800 rm_resources=3 rm_known_bytes=384 "
+            "gpu_busy_pct=8.0 tracked_resources=5 tracked_known_bytes=1248 "
+            "cpu_cache_resources=1 cpu_cache_bytes=800 cpu_display_resources=1 cpu_display_bytes=64 rm_resources=3 rm_known_bytes=384 "
             "rm_unknown_resources=1 gl_resources=3 gl_known_bytes=384 gl_unknown_resources=1 "
             "gl_texture_resources=1 gl_texture_bytes=128 gl_framebuffer_resources=0 "
             "gl_framebuffer_bytes=0 gl_renderbuffer_resources=0 gl_renderbuffer_bytes=0 "
@@ -59,8 +59,8 @@ def _write_archive(path: Path) -> None:
             "late_max_ms=55.0 over_25_ms=2 over_50_ms=1 over_100_ms=0 outcome=sampled",
             "2026-07-23 19:38:03 - metrics - INFO - "
             "[PERF] [RESOURCE] snapshot event=settings stage=after_restart "
-            "tracked_resources=4 tracked_known_bytes=1184 cpu_cache_resources=1 "
-            "cpu_cache_bytes=800 rm_resources=3 rm_known_bytes=384 rm_unknown_resources=1 "
+            "tracked_resources=5 tracked_known_bytes=1248 cpu_cache_resources=1 "
+            "cpu_cache_bytes=800 cpu_display_resources=1 cpu_display_bytes=64 rm_resources=3 rm_known_bytes=384 rm_unknown_resources=1 "
             "gl_resources=3 gl_known_bytes=384 gl_unknown_resources=1 "
             "gl_texture_resources=1 gl_texture_bytes=128 gl_framebuffer_resources=0 "
             "gl_framebuffer_bytes=0 gl_renderbuffer_resources=0 gl_renderbuffer_bytes=0 "
@@ -103,11 +103,13 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     assert analysis.frame_rows[0]["dt_p99_ms"] == 24.0
     assert analysis.frame_rows[0]["dt_max_ms"] == 45.0
     assert analysis.frame_rows[0]["request_age_p99_ms"] == 7.0
-    assert analysis.memory_rows[0]["tracked_known_bytes"] == 1184
+    assert analysis.memory_rows[0]["tracked_known_bytes"] == 1248
+    assert analysis.memory_rows[0]["display_image_tracked_bytes"] == 64
     assert analysis.memory_rows[0]["resource_gl_pbo_bytes"] == 256
     assert analysis.event_loop_rows[0]["late_p99_ms"] == 8.0
     assert analysis.resource_rows[0]["stage"] == "after_restart"
     assert analysis.resource_rows[0]["gl_texture_bytes"] == 128
+    assert analysis.resource_rows[0]["cpu_display_bytes"] == 64
     assert analysis.resource_rows[0]["resource_detail_count"] == 1
     assert analysis.visualizer_rows[0]["p95_ms"] == 33.0
     assert len(analysis.errors_and_warnings) == 1
@@ -139,4 +141,4 @@ def test_write_analysis_emits_required_recovery_artifacts(tmp_path: Path) -> Non
     assert summary["counts"]["usage_samples"] == 2
     assert summary["counts"]["event_loop_windows"] == 1
     assert summary["counts"]["resource_snapshots"] == 1
-    assert summary["resources"]["tracked_known_bytes"]["maximum"] == 1184.0
+    assert summary["resources"]["tracked_known_bytes"]["maximum"] == 1248.0

@@ -182,7 +182,14 @@ def ensure_gl_compositor(widget) -> None:
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to update compositor geometry", exc_info=True)
 
-def cleanup_widget(widget, attr_name: str, tag: str, stop_method: str = "cleanup") -> None:
+def cleanup_widget(
+    widget,
+    attr_name: str,
+    tag: str,
+    stop_method: str = "cleanup",
+    *,
+    strict: bool = False,
+) -> None:
     """Stop and detach one legacy overlay attribute from its DisplayWidget."""
     try:
         child = getattr(widget, attr_name, None)
@@ -197,6 +204,8 @@ def cleanup_widget(widget, attr_name: str, tag: str, stop_method: str = "cleanup
             hide()
         setattr(widget, attr_name, None)
     except Exception as exc:
+        if strict:
+            raise
         logger.debug("[%s] Legacy widget cleanup failed: %s", tag, exc, exc_info=True)
 
 def on_destroyed(widget) -> None:

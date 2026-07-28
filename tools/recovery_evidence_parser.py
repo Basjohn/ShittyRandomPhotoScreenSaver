@@ -169,6 +169,8 @@ def _parse_usage(
                 "image_cache_tracked_bytes": _integer(
                     values.get("cpu_cache_bytes") or values.get("img_cache_tracked_bytes")
                 ),
+                "display_image_resources": _integer(values.get("cpu_display_resources")),
+                "display_image_tracked_bytes": _integer(values.get("cpu_display_bytes")),
                 "tracked_resources": _integer(values.get("tracked_resources")),
                 "tracked_known_bytes": _integer(values.get("tracked_known_bytes")),
                 "resource_total": _integer(
@@ -428,6 +430,8 @@ def _parse_resources(lines: Sequence[str]) -> list[dict[str, object]]:
                 "tracked_known_bytes": _integer(values.get("tracked_known_bytes")),
                 "cpu_cache_resources": _integer(values.get("cpu_cache_resources")),
                 "cpu_cache_bytes": _integer(values.get("cpu_cache_bytes")),
+                "cpu_display_resources": _integer(values.get("cpu_display_resources")),
+                "cpu_display_bytes": _integer(values.get("cpu_display_bytes")),
                 "rm_resources": _integer(values.get("rm_resources")),
                 "rm_known_bytes": _integer(values.get("rm_known_bytes")),
                 "rm_unknown_resources": _integer(values.get("rm_unknown_resources")),

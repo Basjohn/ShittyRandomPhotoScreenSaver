@@ -69,68 +69,14 @@ try:  # Optional dependency; shaders are disabled if unavailable.
 except Exception:  # pragma: no cover - PyOpenGL not required for CPU paths
     gl = None
 
-# Centralized shader program cache - replaces scattered module-level globals
-from rendering.gl_programs.program_cache import get_program_cache, cleanup_program_cache, GLProgramCache
+# Per-compositor shader-program ownership.
+from rendering.gl_programs.program_cache import GLProgramCache
 from rendering.gl_programs.geometry_manager import GLGeometryManager
 from rendering.gl_programs.texture_manager import GLTextureManager
 from rendering.gl_transition_renderer import GLTransitionRenderer
 from rendering.gl_error_handler import get_gl_error_handler
 from rendering.gl_state_manager import GLStateManager, GLContextState
 from rendering.transition_registry import get_transition_program_map
-
-
-def _get_blockflip_program():
-    """Get the BlockFlipProgram instance via cache."""
-    return get_program_cache().get_program_instance(GLProgramCache.BLOCK_FLIP)
-
-def _get_crossfade_program():
-    """Get the CrossfadeProgram instance via cache."""
-    return get_program_cache().get_program_instance(GLProgramCache.CROSSFADE)
-
-def _get_blinds_program():
-    """Get the BlindsProgram instance via cache."""
-    return get_program_cache().get_program_instance(GLProgramCache.BLINDS)
-
-def _get_diffuse_program():
-    """Get the DiffuseProgram instance via cache."""
-    return get_program_cache().get_program_instance(GLProgramCache.DIFFUSE)
-
-def _get_slide_program():
-    """Get the SlideProgram instance via cache."""
-    return get_program_cache().get_program_instance(GLProgramCache.SLIDE)
-
-def _get_wipe_program():
-    """Get the WipeProgram instance via cache."""
-    return get_program_cache().get_program_instance(GLProgramCache.WIPE)
-
-def _get_crumble_program():
-    """Get the CrumbleProgram instance via cache."""
-    return get_program_cache().get_program_instance(GLProgramCache.CRUMBLE)
-
-def _get_particle_program():
-    """Get the ParticleProgram instance via cache."""
-    return get_program_cache().get_program_instance(GLProgramCache.PARTICLE)
-
-def _get_warp_program():
-    """Get the WarpProgram instance via cache."""
-    return get_program_cache().get_program_instance(GLProgramCache.WARP)
-
-def _get_raindrops_program():
-    """Get the RaindropsProgram instance via cache."""
-    return get_program_cache().get_program_instance(GLProgramCache.RAINDROPS)
-
-def _get_burn_program():
-    """Get the BurnProgram instance via cache."""
-    return get_program_cache().get_program_instance(GLProgramCache.BURN)
-
-
-def cleanup_global_shader_programs() -> None:
-    """Clear all shader program instances via the centralized cache.
-    
-    Call this on application shutdown to ensure GL resources are released.
-    This is safe to call even if programs were never loaded.
-    """
-    cleanup_program_cache()
 
 
 logger = get_logger(__name__)
@@ -243,6 +189,10 @@ class GLCompositorWidget(QOpenGLWidget):
         # guaranteed. For now we keep the pipeline disabled; later phases
         # will turn this on for specific transitions.
         self._gl_pipeline: Optional[_GLPipelineState] = None
+        # Compiled shader IDs are context-owner state. Stateless shader helper
+        # instances may be shared, but every compositor owns its own cache so
+        # multi-display teardown deletes each numeric ID exactly once.
+        self._program_cache = GLProgramCache()
         self._use_shaders: bool = False
         self._gl_disabled_for_session: bool = False
         
@@ -276,17 +226,17 @@ class GLCompositorWidget(QOpenGLWidget):
         self._desync_delay_ms: int = random.randint(0, 500)  # Atomic int, no lock needed
         # Set program getters after init
         self._transition_renderer.set_program_getters({
-            "blockflip": _get_blockflip_program,
-            "crossfade": _get_crossfade_program,
-            "blinds": _get_blinds_program,
-            "diffuse": _get_diffuse_program,
-            "slide": _get_slide_program,
-            "wipe": _get_wipe_program,
-            "warp": _get_warp_program,
-            "raindrops": _get_raindrops_program,
-            "crumble": _get_crumble_program,
-            "particle": _get_particle_program,
-            "burn": _get_burn_program,
+            "blockflip": lambda: self._program_cache.get_program_instance(GLProgramCache.BLOCK_FLIP),
+            "crossfade": lambda: self._program_cache.get_program_instance(GLProgramCache.CROSSFADE),
+            "blinds": lambda: self._program_cache.get_program_instance(GLProgramCache.BLINDS),
+            "diffuse": lambda: self._program_cache.get_program_instance(GLProgramCache.DIFFUSE),
+            "slide": lambda: self._program_cache.get_program_instance(GLProgramCache.SLIDE),
+            "wipe": lambda: self._program_cache.get_program_instance(GLProgramCache.WIPE),
+            "warp": lambda: self._program_cache.get_program_instance(GLProgramCache.WARP),
+            "raindrops": lambda: self._program_cache.get_program_instance(GLProgramCache.RAINDROPS),
+            "crumble": lambda: self._program_cache.get_program_instance(GLProgramCache.CRUMBLE),
+            "particle": lambda: self._program_cache.get_program_instance(GLProgramCache.PARTICLE),
+            "burn": lambda: self._program_cache.get_program_instance(GLProgramCache.BURN),
         })
 
         # Optional ResourceManager hook so higher-level code can track this
@@ -706,8 +656,8 @@ class GLCompositorWidget(QOpenGLWidget):
         """Set the base image when no transition is active.
         
         Keep startup/runtime warmup on the compositor-owned GL lifecycle seam.
-        Do not touch the legacy global texture-manager singleton here; textures
-        are context-owned and should only be warmed via the compositor's own
+        Do not introduce a global texture-manager seam here; textures are
+        context-owned and should only be warmed via the compositor's own
         hidden/quiescent lifecycle paths.
         """
         self._base_pixmap = pixmap
@@ -1579,8 +1529,14 @@ class GLCompositorWidget(QOpenGLWidget):
         self._cancel_current_animation()
         self._stop_render_strategy()
 
-        if self._gl_state.get_state() != GLContextState.DESTROYING:
-            self._gl_state.transition(GLContextState.DESTROYING)
+        current_state = self._gl_state.get_state()
+        if current_state in {
+            GLContextState.READY,
+            GLContextState.CONTEXT_LOST,
+            GLContextState.ERROR,
+        }:
+            if not self._gl_state.transition(GLContextState.DESTROYING):
+                raise RuntimeError("Compositor could not enter DESTROYING")
         try:
             self._cleanup_gl_pipeline()
         except Exception:
@@ -1589,7 +1545,9 @@ class GLCompositorWidget(QOpenGLWidget):
                 exc_info=True,
             )
             raise
-        self._gl_state.transition(GLContextState.DESTROYED)
+        if not self._gl_state.transition(GLContextState.DESTROYED):
+            raise RuntimeError("Compositor could not enter DESTROYED")
+
     def is_gl_ready(self) -> bool:
         """Check if GL context is ready for rendering.
         

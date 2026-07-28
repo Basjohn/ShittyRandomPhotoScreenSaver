@@ -388,11 +388,10 @@ def destroy_parent_overlay(widget: Any, *, reason: str) -> None:
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to schedule overlay update before destroy", exc_info=True)
 
-    try:
-        if hasattr(overlay, "cleanup_gl"):
-            overlay.cleanup_gl()
-    except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to cleanup overlay GL state", exc_info=True)
+    # GL deletion is an ownership boundary. If it fails, retain the overlay and
+    # parent reference so full display teardown can fail loudly and retry.
+    if hasattr(overlay, "cleanup_gl"):
+        overlay.cleanup_gl()
 
     try:
         overlay.deleteLater()

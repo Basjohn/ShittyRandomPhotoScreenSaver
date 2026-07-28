@@ -241,6 +241,12 @@ Do not clear handles while a worker lives, destroy the context first, block the 
 
 Every GL resource has one owner, byte size, context/share generation, and exactly-once deletion path.
 
+A Qt share group makes a numeric GL handle accessible across contexts; it does not create deletion ownership. Never copy one globally cached program, texture, buffer, or other numeric handle into multiple local owner records. Share numeric handles only through an explicit lease/generation registry; otherwise allocate and delete them per compositor. Reusing a stateless shader helper is not resource sharing.
+
+`ResourceManager` is passive GL accounting, not a fallback GL owner. It may retain handle identity, bytes, owner, and generation, but it must never retain or invoke a `glDelete*` callback. The context-bound owner deletes first and releases the accounting record only after success.
+
+Settings/Edit handlers invoke the engine stop boundary once. `engine.stop(exit_app=False)` is the sole full-teardown authority; handlers must not add a second direct `teardown_display_runtime()` call.
+
 Do not rely on garbage collection, `QObject.destroyed`, `deleteLater()` alone, or driver cleanup.
 
 Warmup is optional optimization; correctness never depends on it.

@@ -84,6 +84,28 @@ Coverage and result:
 
 This is deterministic owner/allocator evidence, not a claim of real driver VRAM. Phase 11 retains the normal run, two-hour soak, multi-display topology, and driver-reported VRAM gates.
 
+## Live log follow-up — 2026-07-28
+
+The latest dual-display run provides encouraging but preliminary platform evidence. It lasted about 5.75 minutes and ended at the Phase 3 program-ownership fault, so it does not replace the 30-minute or two-hour Phase 11 gates.
+
+Compared with the frozen baseline peaks:
+
+| Metric | Frozen peak | Latest peak | Preliminary change |
+|---|---:|---:|---:|
+| RSS | 1770.5 MiB | 1228.7 MiB | -30.6% |
+| Private commit | 5141.9 MiB | 3172.0 MiB | -38.3% |
+| Dedicated driver VRAM | 1872.8 MiB | 773.8 MiB | -58.7% |
+
+The live Phase 4 owners stayed inside their configured envelopes: the CPU image cache remained within 256 MiB, combined two-compositor texture accounting remained within 256 MiB, and upload-PBO accounting peaked at about 45.7 MiB. This supports the containment direction but is not yet plateau proof because the scenario was short and teardown failed.
+
+The same run identifies work that must remain open:
+
+- process CPU averaged about 55.1% and compute submission rate was 101.2/s, so no CPU/task reduction is claimed;
+- `visualizer.bubble_simulation` accounted for about 68.9 submissions/s and `visualizer.audio_analysis` about 32.2/s, making them the first measured Phase 5 owners;
+- two long-lived per-display adaptive presentation workers remain and must be replaced by the Phase 8 GUI-local active-animation mechanism rather than optimized as a competing scheduler;
+- RSS above roughly 900 MiB, multi-GiB private commit, driver VRAM above roughly 500 MiB, and the gap between tracked bytes and OS/driver totals still require explanation;
+- usage telemetry now emits the already-collected display-QPixmap count/bytes explicitly, and the recovery parser preserves those fields for the next evidence capture.
+
 ## Verification
 
 ```powershell
@@ -97,7 +119,7 @@ Final closure evidence:
 - protected runtime-shaped visualizer file: `186 passed, 20` documented Bubble skips;
 - deterministic visualizer replay: all `66` goldens plus manifest verified unchanged;
 - visualizer documentation references: `6 passed`;
-- real Windows Qt GL cleanup: `2 passed` without skip;
+- real Windows Qt GL cleanup: `3 passed` without skip, including the corrected two-compositor ownership sequence;
 - deterministic 45-cycle / 30-virtual-minute resource plateau artifact: pass.
 
 ## Rollback

@@ -224,7 +224,7 @@ Run the deterministic ownership gate:
 .\.venv\Scripts\python.exe -m pytest tests\test_phase3_runtime_lifecycle.py -q
 ```
 
-This exercises the production engine/display teardown seams with exact context/resource/timer/worker/callback accounting and stale decode publication. It must report 150 cycles, 150 rejected stale callbacks, zero stopped ownership, and no errors. It complements, rather than replaces, real Windows Qt context cleanup (`tests/test_gl_compositor_cleanup.py`), runtime-shaped Settings/CUSTOM tests, Phase 4 driver/RSS/VRAM plateau work, and Phase 11 sleep/wake validation.
+This exercises the production engine/display teardown seams with exact context/resource/timer/worker/callback accounting and stale decode publication. It must report 150 cycles, 150 rejected stale callbacks, zero stopped ownership, and no errors. It complements, rather than replaces, real Windows Qt context cleanup (`tests/test_gl_compositor_cleanup.py`), whose required shape includes two live per-display compositors with distinct program owners destroyed in sequence, runtime-shaped Settings/CUSTOM tests, Phase 4 driver/RSS/VRAM plateau work, and Phase 11 sleep/wake validation.
 
 Authoritative Phase 3 evidence: `Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md`.
 

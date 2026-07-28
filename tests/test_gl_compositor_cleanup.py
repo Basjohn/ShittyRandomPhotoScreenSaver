@@ -103,3 +103,47 @@ def test_gl_compositor_cleanup_releases_pipeline_when_gl_available(qapp):
     # Second cleanup must be a no-op from the pipeline's perspective.
     comp.cleanup()
 
+
+@pytest.mark.qt_no_exception_capture
+def test_two_live_compositors_have_distinct_program_owners_and_cleanup(qapp):
+    """Reproduce the multi-display Settings/Edit teardown ownership shape."""
+    if _gl is None:
+        pytest.skip("PyOpenGL not available; skipping GL-specific cleanup test")
+
+    parent = QWidget()
+    parent.resize(160, 80)
+    compositors = [GLCompositorWidget(parent), GLCompositorWidget(parent)]
+    for index, comp in enumerate(compositors):
+        comp.setGeometry(index * 80, 0, 80, 80)
+        comp.show()
+    parent.show()
+    qapp.processEvents()
+
+    initialized = []
+    for comp in compositors:
+        try:
+            comp.makeCurrent()
+            comp._init_gl_pipeline()  # type: ignore[attr-defined]
+            comp.doneCurrent()
+        except Exception:
+            for candidate in compositors:
+                candidate.cleanup()
+            pytest.skip("GL context unavailable for multi-compositor cleanup test")
+        initialized.append(bool(getattr(comp._gl_pipeline, "initialized", False)))
+
+    if not all(initialized):
+        for comp in compositors:
+            comp.cleanup()
+        pytest.skip("Shader pipeline unavailable for multi-compositor cleanup test")
+
+    assert compositors[0]._program_cache is not compositors[1]._program_cache
+    assert compositors[0]._program_cache.has_live_programs()
+    assert compositors[1]._program_cache.has_live_programs()
+
+    # This exact sequence previously deleted globally shared IDs through the
+    # first context, then raised GL_INVALID_VALUE in the second context.
+    compositors[0].cleanup()
+    compositors[1].cleanup()
+
+    assert not compositors[0]._program_cache.has_live_programs()
+    assert not compositors[1]._program_cache.has_live_programs()

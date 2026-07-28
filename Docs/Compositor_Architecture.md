@@ -278,8 +278,12 @@ Phase 3 implementation boundary (2026-07-28):
 - `DisplayManager.cleanup()` retains any display whose explicit cleanup fails;
 - `DisplayWidget.cleanup_runtime()` stops child producers and visualizer overlays before compositor deletion;
 - `GLCompositorWidget.cleanup()` verifies GUI thread/current context and reports `DESTROYED` only after strict texture/PBO/program/buffer deletion;
+- every compositor owns its compiled transition-program IDs and uniform cache; module-level helpers may be reused only as stateless shader definitions;
+- the application `ResourceManager` observes GL handles and bytes passively; only the context-bound compositor/overlay manager can delete them;
+- `engine.stop(exit_app=False)` is the single full-teardown authority for Settings/Edit handlers;
 - deferred GL warmups are compositor-lifecycle-generation guarded;
-- engine delayed/image callbacks require runtime generation plus exact display-manager identity.
+- engine delayed/image callbacks require runtime generation plus exact display-manager identity;
+- the real Qt gate creates two live compositors and destroys them in sequence, protecting the shared-context/multi-display ownership shape missed at the original Phase 3 checkpoint.
 
 Partial reinitialization is deferred until a separately approved design proves it safe and worthwhile.
 

@@ -340,43 +340,54 @@ class GLGeometryManager:
         except Exception as e:
             logger.debug("[GL GEOMETRY] Exception suppressed: %s", e)
     
-    def cleanup(self) -> None:
-        """Delete all VAO/VBO.
-        
-        Must be called with a valid GL context.
-        """
-        if gl is None:
-            self._initialized = False
+    def has_live_resources(self) -> bool:
+        """Return whether this manager still owns any VAO/VBO handle."""
+        return any((self._quad_vao, self._quad_vbo, self._box_vao, self._box_vbo))
+
+    def cleanup(self, *, strict: bool = False, gl_api=None) -> None:
+        """Delete owned VAO/VBO handles, retaining every failed owner ID."""
+        if gl_api is None:
+            gl_api = gl
+        if gl_api is None and self.has_live_resources():
+            if strict:
+                raise RuntimeError("Cannot delete live GL geometry: PyOpenGL is unavailable")
             return
-        
-        try:
-            if self._quad_vbo:
-                gl.glDeleteBuffers(1, [self._quad_vbo])
-                self._release_resource_tracking(self._quad_vbo_rid)
-            if self._quad_vao:
-                gl.glDeleteVertexArrays(1, [self._quad_vao])
-                self._release_resource_tracking(self._quad_vao_rid)
-            if self._box_vbo:
-                gl.glDeleteBuffers(1, [self._box_vbo])
-                self._release_resource_tracking(self._box_vbo_rid)
-            if self._box_vao:
-                gl.glDeleteVertexArrays(1, [self._box_vao])
-                self._release_resource_tracking(self._box_vao_rid)
-            logger.debug("[GL GEOMETRY] Geometry cleaned up")
-        except Exception as e:
-            logger.debug("[GL GEOMETRY] Cleanup error: %s", e)
-        
-        self._quad_vao = 0
-        self._quad_vbo = 0
-        self._box_vao = 0
-        self._box_vbo = 0
+
+        errors: list[str] = []
+        resources = (
+            ("_quad_vbo", "_quad_vbo_rid", "buffer"),
+            ("_quad_vao", "_quad_vao_rid", "vertex_array"),
+            ("_box_vbo", "_box_vbo_rid", "buffer"),
+            ("_box_vao", "_box_vao_rid", "vertex_array"),
+        )
+        for handle_attr, rid_attr, kind in resources:
+            handle = int(getattr(self, handle_attr, 0) or 0)
+            if not handle:
+                continue
+            try:
+                if kind == "buffer":
+                    gl_api.glDeleteBuffers(1, [handle])
+                else:
+                    gl_api.glDeleteVertexArrays(1, [handle])
+            except Exception as exc:
+                errors.append(
+                    f"{handle_attr}={handle}:{type(exc).__name__}:{exc}"
+                )
+                continue
+            setattr(self, handle_attr, 0)
+            self._release_resource_tracking(getattr(self, rid_attr, None))
+            setattr(self, rid_attr, None)
+
+        if errors:
+            if strict:
+                raise RuntimeError(
+                    "GL geometry cleanup incomplete: " + " | ".join(errors)
+                )
+            return
+
         self._box_vertex_count = 0
         self._initialized = False
-        self._quad_vao_rid = None
-        self._quad_vbo_rid = None
-        self._box_vao_rid = None
-        self._box_vbo_rid = None
-
+        logger.debug("[GL GEOMETRY] Geometry cleaned up")
     @staticmethod
     def _release_resource_tracking(resource_id: Optional[str]) -> None:
         if not resource_id:
@@ -388,23 +399,3 @@ class GLGeometryManager:
                 manager.release_tracking(resource_id)
         except Exception as e:
             logger.debug("[GL GEOMETRY] Failed to release resource tracking: %s", e)
-
-
-# Module-level singleton for backward compatibility
-_geometry_manager: Optional[GLGeometryManager] = None
-
-
-def get_geometry_manager() -> GLGeometryManager:
-    """Get the global geometry manager singleton."""
-    global _geometry_manager
-    if _geometry_manager is None:
-        _geometry_manager = GLGeometryManager()
-    return _geometry_manager
-
-
-def cleanup_geometry_manager() -> None:
-    """Clean up the global geometry manager."""
-    global _geometry_manager
-    if _geometry_manager is not None:
-        _geometry_manager.cleanup()
-        _geometry_manager = None

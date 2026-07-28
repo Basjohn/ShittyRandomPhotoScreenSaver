@@ -27,11 +27,22 @@ def cleanup_runtime(widget: "DisplayWidget", *, reason: str) -> None:
 
     manager = getattr(widget, "_widget_manager", None)
     if manager is not None:
+        manager.prepare_for_runtime_pause()
+
+    # The visualizer owns a separate display-local GL overlay until Phase 8.
+    # Require its strict deletion before any manager clears widget references.
+    widget._cleanup_widget(
+        "spotify_visualizer_widget",
+        "SPOTIFY_VIS",
+        "cleanup",
+        strict=True,
+    )
+
+    if manager is not None:
         manager.cleanup()
 
     # Some overlays predate WidgetManager ownership. Their lifecycle methods
     # are idempotent, so clean them explicitly after the managed set.
-    widget._cleanup_widget("spotify_visualizer_widget", "SPOTIFY_VIS", "cleanup")
     widget._cleanup_widget("media_widget", "MEDIA", "cleanup")
     widget._cleanup_widget("weather_widget", "WEATHER", "cleanup")
     widget._cleanup_widget("reddit_widget", "REDDIT", "cleanup")

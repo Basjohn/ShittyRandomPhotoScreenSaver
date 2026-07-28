@@ -226,7 +226,7 @@ Phase 3 owns these concrete automated bars:
 - `tests/test_phase3_runtime_lifecycle.py` — 50/50/50 ownership churn, stale delayed publication, deferred GL warmup generation, strict context/deletion failure, visualizer overlay cleanup;
 - `tests/test_engine_lifecycle.py` — display cleanup precedes Settings dialog construction;
 - `tests/test_s_hotkey_workflow.py` — stop means full teardown and fresh rebuild, not hide/reuse;
-- `tests/test_gl_compositor_cleanup.py` — idempotent no-resource cleanup plus real Windows Qt context resource deletion;
+- `tests/test_gl_compositor_cleanup.py` — idempotent no-resource cleanup plus real Windows Qt context resource deletion, including two live per-display compositors with distinct program owners destroyed in the exact multi-display sequence;
 - `tests/test_startup_shader_warmup.py` — deferred warmup behavior;
 - focused `TestDisplayManagerSync` rebuild cases;
 - `tests/test_image_pipeline.py`, `tests/test_image_prefetcher.py`, and `tests/test_image_worker.py` — GUI-independent QImage compute payload and async regression coverage.

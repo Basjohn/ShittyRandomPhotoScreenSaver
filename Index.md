@@ -85,6 +85,8 @@ Do not read every document by default.
 | Compositor | existing compositor modules under `rendering/` |
 | Image pipeline | existing image-pipeline and prefetch modules |
 | Display image accounting | `rendering/image_resource_accounting.py` |
+| Compositor program ownership | `rendering/gl_programs/program_cache.py` |
+| Passive GL resource accounting | `core/resources/manager.py` |
 | Compositor texture/PBO budgets | `rendering/gl_programs/texture_manager.py` |
 | Visualizer model/runtime | existing modules under `widgets/spotify_visualizer/` |
 | Visualizer replay schema/runtime | `widgets/spotify_visualizer/feature_frame.py`, `widgets/spotify_visualizer/replay_runtime.py` |

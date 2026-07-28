@@ -23,7 +23,7 @@ from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.threading.manager import ThreadManager
 from rendering.gl_compositor_pkg.metrics import _GLPipelineState
 from rendering.gl_state_manager import GLContextState
-from rendering.gl_programs.program_cache import get_program_cache, GLProgramCache
+from rendering.gl_programs.program_cache import GLProgramCache
 from rendering.gl_programs.geometry_manager import GLGeometryManager
 from rendering.gl_programs.texture_manager import GLTextureManager
 from rendering.transition_registry import (
@@ -284,7 +284,9 @@ def acquire_safe_warmup_context(
 
 
 def _compile_transition_program(widget, program_name: str, program_attr: str, uniforms_attr: str) -> bool:
-    cache = get_program_cache()
+    cache = getattr(widget, "_program_cache", None)
+    if cache is None:
+        raise RuntimeError("Compositor has no local GL program owner")
     program_id = cache.get_program(program_name)
     if program_id is None:
         return False
@@ -716,6 +718,13 @@ def gl_pipeline_has_live_resources(widget) -> bool:
         if any(int(getattr(pipeline, attr, 0) or 0) for attr in resource_attrs):
             return True
 
+    geometry_manager = getattr(widget, "_geometry_manager", None)
+    if geometry_manager is not None and geometry_manager.has_live_resources():
+        return True
+    program_cache = getattr(widget, "_program_cache", None)
+    if program_cache is not None and program_cache.has_live_programs():
+        return True
+
     manager = getattr(widget, "_texture_manager", None)
     if manager is not None:
         if bool(getattr(manager, "_initialized", False)):
@@ -794,61 +803,58 @@ def cleanup_gl_pipeline(widget) -> None:
                 cleanup_errors.append(f"textures:{type(exc).__name__}:{exc}")
 
         pipeline = widget._gl_pipeline
-        program_attrs = (
-            "basic_program", "raindrops_program", "warp_program",
-            "diffuse_program", "blockflip_program", "crossfade_program",
-            "slide_program", "wipe_program", "blinds_program",
-            "crumble_program", "particle_program", "burn_program",
+        transition_program_attrs = tuple(
+            program_attr
+            for _program_name, program_attr, _uniforms_attr in _transition_program_specs()
         )
-        for attr in program_attrs:
-            program_id = int(getattr(pipeline, attr, 0) or 0)
-            if not program_id:
-                continue
+        program_cache = getattr(widget, "_program_cache", None)
+        if program_cache is not None:
             try:
-                gl.glDeleteProgram(program_id)
-                setattr(pipeline, attr, 0)
+                program_cache.cleanup(strict=True, gl_api=gl)
+            except Exception as exc:
+                cleanup_errors.append(f"program_cache:{type(exc).__name__}:{exc}")
+            finally:
+                # Cache cleanup removes successful IDs immediately and retains
+                # failed ownership. Mirror that exact truth into pipeline attrs.
+                live_program_ids = program_cache.get_program_ids()
+                for attr in transition_program_attrs:
+                    program_id = int(getattr(pipeline, attr, 0) or 0)
+                    if program_id and program_id not in live_program_ids:
+                        setattr(pipeline, attr, 0)
+        else:
+            if any(
+                int(getattr(pipeline, attr, 0) or 0)
+                for attr in transition_program_attrs
+            ):
+                cleanup_errors.append("program_cache:missing local owner")
+
+        basic_program = int(getattr(pipeline, "basic_program", 0) or 0)
+        if basic_program:
+            try:
+                gl.glDeleteProgram(basic_program)
+                pipeline.basic_program = 0
             except Exception as exc:
                 cleanup_errors.append(
-                    f"program:{attr}:{type(exc).__name__}:{exc}"
+                    f"program:basic_program:{type(exc).__name__}:{exc}"
                 )
 
         geometry_manager = getattr(widget, "_geometry_manager", None)
-        for attr in ("quad_vbo", "box_vbo"):
-            buffer_id = int(getattr(pipeline, attr, 0) or 0)
-            if not buffer_id:
-                continue
+        geometry_attrs = ("quad_vbo", "box_vbo", "quad_vao", "box_vao")
+        if geometry_manager is None:
+            if any(int(getattr(pipeline, attr, 0) or 0) for attr in geometry_attrs):
+                cleanup_errors.append("geometry:missing local owner")
+        else:
             try:
-                gl.glDeleteBuffers(1, (ctypes.c_uint * 1)(buffer_id))
-                setattr(pipeline, attr, 0)
-                if geometry_manager is not None:
-                    rid_attr = f"_{attr}_rid"
-                    geometry_manager._release_resource_tracking(
-                        getattr(geometry_manager, rid_attr, None)
-                    )
-                    setattr(geometry_manager, rid_attr, None)
+                geometry_manager.cleanup(strict=True, gl_api=gl)
             except Exception as exc:
-                cleanup_errors.append(
-                    f"buffer:{attr}:{type(exc).__name__}:{exc}"
+                cleanup_errors.append(f"geometry:{type(exc).__name__}:{exc}")
+            finally:
+                # Pipeline fields are non-owning draw mirrors of the manager.
+                for attr in geometry_attrs:
+                    setattr(pipeline, attr, int(getattr(geometry_manager, f"_{attr}", 0) or 0))
+                pipeline.box_vertex_count = int(
+                    getattr(geometry_manager, "box_vertex_count", 0) or 0
                 )
-
-        for attr in ("quad_vao", "box_vao"):
-            vao_id = int(getattr(pipeline, attr, 0) or 0)
-            if not vao_id:
-                continue
-            try:
-                gl.glDeleteVertexArrays(1, (ctypes.c_uint * 1)(vao_id))
-                setattr(pipeline, attr, 0)
-                if geometry_manager is not None:
-                    rid_attr = f"_{attr}_rid"
-                    geometry_manager._release_resource_tracking(
-                        getattr(geometry_manager, rid_attr, None)
-                    )
-                    setattr(geometry_manager, rid_attr, None)
-            except Exception as exc:
-                cleanup_errors.append(
-                    f"vertex_array:{attr}:{type(exc).__name__}:{exc}"
-                )
-
         if cleanup_errors:
             raise RuntimeError(
                 "GL resource deletion incomplete: " + " | ".join(cleanup_errors)

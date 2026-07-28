@@ -5,7 +5,6 @@ This reduces driver overhead by batching state changes.
 """
 
 from __future__ import annotations
-from typing import Optional
 
 try:
     from OpenGL import GL as gl
@@ -85,22 +84,3 @@ class GLStateTracker:
         self._current_texture_2d = 0
         self._current_active_texture = gl.GL_TEXTURE0 if gl else 0
         self._depth_test_enabled = True
-
-
-# Module-level singleton
-_state_tracker: Optional[GLStateTracker] = None
-
-
-def get_gl_state_tracker() -> GLStateTracker:
-    """Get the singleton GL state tracker."""
-    global _state_tracker
-    if _state_tracker is None:
-        _state_tracker = GLStateTracker()
-    return _state_tracker
-
-
-def reset_gl_state_tracker() -> None:
-    """Reset the singleton GL state tracker."""
-    global _state_tracker
-    if _state_tracker is not None:
-        _state_tracker.reset()

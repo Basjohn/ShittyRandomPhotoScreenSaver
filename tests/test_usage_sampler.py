@@ -130,6 +130,8 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
             "tracked_known_bytes": 4096,
             "cpu_cache_resources": 2,
             "cpu_cache_bytes": 2048,
+            "cpu_display_resources": 1,
+            "cpu_display_bytes": 512,
             "rm_resources": 3,
             "rm_known_bytes": 2048,
             "rm_unknown_resources": 1,
@@ -158,6 +160,8 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     assert "vram_dedicated_mb=512.0" in sample
     assert "tracked_known_bytes=4096" in sample
     assert "cpu_cache_bytes=2048" in sample
+    assert "cpu_display_resources=1" in sample
+    assert "cpu_display_bytes=512" in sample
     assert "gl_texture_bytes=1024" in sample
     assert "gl_framebuffer_bytes=0" in sample
     assert "gl_pbo_bytes=1024" in sample
