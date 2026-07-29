@@ -1,6 +1,6 @@
 # Contracts
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 
 Fast routing index for SRPSS contracts.
 
@@ -37,6 +37,7 @@ This is not a second `Spec.md`. Find the owner here, then read only the owning c
 | Compositor architecture | display-owned compositor | `Docs/Compositor_Architecture.md` | Producers publish; compositor consumes |
 | Transition identity | `rendering/transition_registry.py` | `Docs/Transition_Change_Checklist.md` | One registry for ids, aliases, gating, and UI |
 | Transition progress/completion | transition controller/compositor-local state | `Docs/Compositor_Architecture.md` | Local elapsed-time progress and local finalization |
+| Startup overlay reveal and optional GL warmup | `rendering/fade_coordinator.py`, `rendering/widget_manager.py`, `rendering/gl_compositor_pkg/gl_lifecycle.py` | `Docs/Compositor_Architecture.md` | Critical named holds; real fade completion; one deferred item per idle slice |
 | Visualizer simulation | visualizer controller/model | `Docs/Visualizer_Reference.md` | Independent logical cadence and mode behaviour |
 | Visualizer changes | visualizer subsystem | `Docs/Visualizer_Change_Checklist.md` | Fidelity contract and complete change sweep |
 | Visualizer renderer integration | narrow renderer interface | `Docs/Compositor_Architecture.md` | No widget impersonation or paint acknowledgement |
@@ -66,6 +67,7 @@ This is not a second `Spec.md`. Find the owner here, then read only the owning c
 | Widget positioning | existing position/stacking owners | `Docs/10_WIDGET_GUIDELINES.md` | One authored positioning path |
 | CUSTOM layout storage and apply | existing CUSTOM layout contract/manager | `Docs/10_WIDGET_GUIDELINES.md` | Display-bounded, descriptor-capability-driven |
 | Service-widget shared lifecycle | existing service runtime helper | `Docs/10_WIDGET_GUIDELINES.md` | Shared mechanics only; provider behaviour local |
+| Media artwork preparation and presentation | `widgets/media_widget.py`, `widgets/media/display_update.py`, `rendering/display_widget.py` | `Docs/10_WIDGET_GUIDELINES.md` | Worker QImage decode; GUI QPixmap handoff; all-display transition deferral |
 | Steam family | modules under `core/steam/` and Steam widgets | existing Steam focused docs | Core docs route; domain docs own detailed behaviour |
 
 ## Validation Contracts

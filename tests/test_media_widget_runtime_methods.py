@@ -161,7 +161,11 @@ def test_media_layout_deferred_update_position_skips_invalid_widget(monkeypatch)
     callbacks = []
     widget = SimpleNamespace(_update_position=lambda: (_ for _ in ()).throw(AssertionError("should not run")))
 
-    monkeypatch.setattr(media_layout.QTimer, "singleShot", lambda _ms, cb: callbacks.append(cb))
+    monkeypatch.setattr(
+        media_layout.ThreadManager,
+        "single_shot",
+        lambda _ms, cb: callbacks.append(cb),
+    )
     monkeypatch.setattr(media_layout.Shiboken, "isValid", lambda _widget: False)
 
     media_layout._defer_update_position(widget)
@@ -177,7 +181,11 @@ def test_media_layout_deferred_update_position_runs_when_widget_still_valid(monk
     calls = []
     widget = SimpleNamespace(_update_position=lambda: calls.append("updated"))
 
-    monkeypatch.setattr(media_layout.QTimer, "singleShot", lambda _ms, cb: callbacks.append(cb))
+    monkeypatch.setattr(
+        media_layout.ThreadManager,
+        "single_shot",
+        lambda _ms, cb: callbacks.append(cb),
+    )
     monkeypatch.setattr(media_layout.Shiboken, "isValid", lambda _widget: True)
 
     media_layout._defer_update_position(widget)

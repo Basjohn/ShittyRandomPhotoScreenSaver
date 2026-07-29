@@ -13,15 +13,16 @@ from __future__ import annotations
 import hashlib
 import time
 import weakref
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from enum import Enum
 from typing import Optional, TYPE_CHECKING, ClassVar, Any
 
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import QTimer, Qt, Signal, QPoint
+from PySide6.QtCore import QBuffer, QByteArray, QTimer, Qt, Signal, QPoint
 from PySide6.QtGui import (
     QFont,
     QFontMetrics,
+    QImage,
     QImageReader,
     QPixmap,
 )
@@ -55,6 +56,15 @@ if TYPE_CHECKING:
     from rendering.widget_manager import WidgetManager
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class PreparedArtwork:
+    """Worker-owned artwork decode result awaiting a UI-thread pixmap handoff."""
+
+    key: tuple[int, str]
+    image: QImage | None
+    decode_ms: float
 
 
 class MediaPosition(Enum):
@@ -145,6 +155,7 @@ class MediaWidget(BaseOverlayWidget):
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
         self._update_timer_interval_ms: Optional[int] = None
         self._refresh_in_flight = False
+        self._refresh_in_flight_generation: int = 0
         self._pending_state_override: Optional[MediaPlaybackState] = None
         self._pending_state_timer: Optional[QTimer] = None
         self._pending_keyboard_alias_command: Optional[tuple[str, float]] = None
@@ -156,6 +167,12 @@ class MediaWidget(BaseOverlayWidget):
 
         # Album artwork state (optional)
         self._artwork_pixmap: Optional[QPixmap] = None
+        self._applied_artwork_key: tuple[int, str] | None = None
+        self._pending_artwork: PreparedArtwork | None = None
+        self._pending_artwork_generation: int = 0
+        self._pending_artwork_deferred: bool = False
+        self._artwork_update_generation: int = 0
+        self._artwork_coalesced_count: int = 0
         # Cached scaled artwork to avoid expensive SmoothTransformation on every paint
         self._scaled_artwork_cache: Optional[QPixmap] = None
         self._scaled_artwork_cache_key: Optional[tuple] = None  # (pm_id, frame_w, frame_h, dpr)
@@ -245,6 +262,8 @@ class MediaWidget(BaseOverlayWidget):
         # Desync: Cache GSMTC results for 500ms to reduce IO contention
         self._gsmtc_cache_ms = 500
         self._gsmtc_cached_result: Optional[Any] = None
+        self._gsmtc_cached_prepared_artwork: PreparedArtwork | None = None
+        self._gsmtc_cached_artwork_generation: int = 0
         self._gsmtc_cache_ts: float = 0.0
         
         # Artwork vertical bias for dynamic positioning
@@ -465,7 +484,9 @@ class MediaWidget(BaseOverlayWidget):
     def _cleanup_impl(self) -> None:
         """Clean up media resources (lifecycle hook)."""
         self._deactivate_impl()
+        self._discard_pending_artwork()
         self._artwork_pixmap = None
+        self._applied_artwork_key = None
         self._scaled_artwork_cache = None
         self._scaled_artwork_cache_key = None
         self._last_info = None
@@ -519,6 +540,7 @@ class MediaWidget(BaseOverlayWidget):
         """Clean up resources (called from DisplayWidget)."""
 
         logger.debug("Cleaning up media widget")
+        self._discard_pending_artwork()
         self.stop()
 
     def _reset_update_timer_state(self, *, delete_qtimer: bool) -> None:
@@ -1131,10 +1153,9 @@ class MediaWidget(BaseOverlayWidget):
         try:
             # Bust GSMTC cache so we actually re-query the controller
             self._gsmtc_cached_result = None
+            self._gsmtc_cached_prepared_artwork = None
+            self._gsmtc_cached_artwork_generation = 0
             self._gsmtc_cache_ts = 0.0
-            # Clear scaled artwork cache so new artwork is rendered fresh
-            self._scaled_artwork_cache = None
-            self._scaled_artwork_cache_key = None
             # Reset diff gating so update_display doesn't skip the refresh
             self._last_track_identity = None
             self._skipped_identity_updates = 0
@@ -1219,7 +1240,11 @@ class MediaWidget(BaseOverlayWidget):
             if elapsed_ms < self._gsmtc_cache_ms:
                 if is_perf_metrics_enabled():
                     logger.debug("[PERF] MediaWidget: using cached GSMTC result (age=%.0fms)", elapsed_ms)
-                self._update_display(self._gsmtc_cached_result)
+                self._update_display(
+                    self._gsmtc_cached_result,
+                    self._gsmtc_cached_prepared_artwork,
+                    self._gsmtc_cached_artwork_generation,
+                )
                 return
         
         if self._refresh_in_flight:
@@ -1234,23 +1259,68 @@ class MediaWidget(BaseOverlayWidget):
             if tm is None:
                 return
 
+        fallback_info = None
+        try:
+            fallback_info = type(self)._get_shared_valid_info()
+        except Exception:
+            fallback_info = None
+        if fallback_info is None:
+            try:
+                fallback_info = self.get_retained_display_info()
+            except Exception:
+                fallback_info = None
+        if fallback_info is None:
+            fallback_info = self._last_info
+        fallback_artwork = (
+            getattr(fallback_info, "artwork", None)
+            if fallback_info is not None
+            else None
+        )
+
+        self._artwork_update_generation += 1
+        artwork_generation = self._artwork_update_generation
+        pending_artwork = self._pending_artwork
+        known_artwork_keys = frozenset(
+            key
+            for key in (
+                self._applied_artwork_key,
+                pending_artwork.key if pending_artwork is not None else None,
+            )
+            if key is not None
+        )
         self._refresh_in_flight = True
+        self._refresh_in_flight_generation = artwork_generation
         if is_verbose_logging():
             logger.debug("[MEDIA_WIDGET] Async refresh started")
 
         def _do_query():
             worker_started_monotonic = time.monotonic()
             try:
-                return (
-                    self._controller.get_current_track(),
-                    worker_started_monotonic,
-                    time.monotonic(),
-                )
+                info = self._controller.get_current_track()
             except Exception:
                 logger.debug("[MEDIA] get_current_track failed", exc_info=True)
                 if is_verbose_logging():
                     logger.debug("[MEDIA] get_current_track failed", exc_info=True)
-                return (None, worker_started_monotonic, time.monotonic())
+                info = None
+
+            artwork_payload = (
+                getattr(info, "artwork", None)
+                if info is not None
+                else fallback_artwork
+            )
+            artwork_key = type(self)._compute_artwork_payload_key(artwork_payload)
+            prepared = type(self)._prepare_artwork_payload(
+                artwork_payload,
+                artwork_key,
+                known_artwork_keys=known_artwork_keys,
+            )
+            return (
+                info,
+                prepared,
+                artwork_generation,
+                worker_started_monotonic,
+                time.monotonic(),
+            )
 
         def _handle_result(task_result):
             callback_received_monotonic = time.monotonic()
@@ -1260,16 +1330,28 @@ class MediaWidget(BaseOverlayWidget):
                     if not Shiboken.isValid(self):
                         return
                     result_payload = task_result.result if getattr(task_result, "success", False) else None
-                    if isinstance(result_payload, tuple) and len(result_payload) == 3:
-                        info, worker_started, worker_finished = result_payload
+                    if isinstance(result_payload, tuple) and len(result_payload) == 5:
+                        (
+                            info,
+                            prepared_artwork,
+                            result_generation,
+                            worker_started,
+                            worker_finished,
+                        ) = result_payload
                     else:
                         info = result_payload
+                        prepared_artwork = PreparedArtwork((0, ""), None, 0.0)
+                        result_generation = artwork_generation
                         worker_started = refresh_started_monotonic
                         worker_finished = callback_received_monotonic
+                    if int(result_generation) != self._artwork_update_generation:
+                        return
                     # Desync: Cache the result for 500ms
                     self._gsmtc_cached_result = info
+                    self._gsmtc_cached_prepared_artwork = prepared_artwork
+                    self._gsmtc_cached_artwork_generation = int(result_generation)
                     self._gsmtc_cache_ts = time.time()
-                    self._update_display(info)
+                    self._update_display(info, prepared_artwork, int(result_generation))
                     if is_perf_metrics_enabled():
                         consumed_monotonic = time.monotonic()
                         worker_ms = max(0.0, (worker_finished - worker_started) * 1000.0)
@@ -1293,19 +1375,22 @@ class MediaWidget(BaseOverlayWidget):
                 except Exception as exc:
                     logger.debug("[MEDIA_WIDGET] Exception during async refresh consume: %s", exc)
                 finally:
-                    self._refresh_in_flight = False
+                    if self._refresh_in_flight_generation == artwork_generation:
+                        self._refresh_in_flight = False
 
             try:
                 ThreadManager.run_on_ui_thread(_consume_result)
             except Exception as exc:
                 logger.debug("[MEDIA_WIDGET] Failed to marshal async refresh to UI thread: %s", exc)
-                self._refresh_in_flight = False
+                if self._refresh_in_flight_generation == artwork_generation:
+                    self._refresh_in_flight = False
 
         try:
             tm.submit_io_task(_do_query, callback=_handle_result)
         except Exception as exc:
             logger.debug("[MEDIA_WIDGET] Failed to submit async refresh: %s", exc)
-            self._refresh_in_flight = False
+            if self._refresh_in_flight_generation == artwork_generation:
+                self._refresh_in_flight = False
 
     def _emit_media_update(self, info: MediaTrackInfo) -> None:
         """Emit the current media metadata/state to interested observers."""
@@ -1346,13 +1431,24 @@ class MediaWidget(BaseOverlayWidget):
         self._perf_media_emit_count = 0
         self._perf_media_last_log_ts = now
 
-    def _update_display(self, info: Optional[MediaTrackInfo]) -> None:
+    def _update_display(
+        self,
+        info: Optional[MediaTrackInfo],
+        prepared_artwork: PreparedArtwork | None = None,
+        artwork_generation: int | None = None,
+    ) -> None:
         """Delegates to widgets.media.display_update."""
         from widgets.media.display_update import update_display
-        update_display(self, info)
+        update_display(
+            self,
+            info,
+            prepared_artwork=prepared_artwork,
+            artwork_generation=artwork_generation,
+        )
 
-    def _decode_artwork_pixmap(self, artwork: Optional[bytes]) -> Optional[QPixmap]:
-        """Decode artwork bytes into a pixmap, ensuring non-zero dimensions."""
+    @staticmethod
+    def _decode_artwork_image(artwork: Optional[bytes]) -> QImage | None:
+        """Decode artwork into a worker-safe QImage without touching GUI state."""
         if not artwork:
             return None
         try:
@@ -1368,10 +1464,7 @@ class MediaWidget(BaseOverlayWidget):
             len(data), header_hex,
         )
 
-        image = None
         try:
-            from PySide6.QtCore import QBuffer, QByteArray
-
             byte_array = QByteArray(data)
             buffer = QBuffer(byte_array)
             if not buffer.open(QBuffer.OpenModeFlag.ReadOnly):
@@ -1392,6 +1485,38 @@ class MediaWidget(BaseOverlayWidget):
             logger.debug("[MEDIA_WIDGET] Failed to decode artwork pixmap", exc_info=True)
             return None
 
+        if image.width() <= 0 or image.height() <= 0:
+            logger.debug(
+                "[MEDIA_WIDGET] Decoded image has zero dimensions: %dx%d",
+                image.width(),
+                image.height(),
+            )
+            return None
+        return image
+
+    @staticmethod
+    def _prepare_artwork_payload(
+        artwork: Optional[bytes],
+        key: tuple[int, str],
+        *,
+        known_artwork_keys: frozenset[tuple[int, str]],
+    ) -> PreparedArtwork:
+        """Decode a changed artwork key once inside the media query worker."""
+
+        if key in known_artwork_keys or key == (0, ""):
+            return PreparedArtwork(key=key, image=None, decode_ms=0.0)
+
+        decode_started = time.monotonic()
+        image = MediaWidget._decode_artwork_image(artwork)
+        decode_ms = max(0.0, (time.monotonic() - decode_started) * 1000.0)
+        return PreparedArtwork(key=key, image=image, decode_ms=decode_ms)
+
+    def _decode_artwork_pixmap(self, artwork: Optional[bytes]) -> Optional[QPixmap]:
+        """Emergency/test fallback; normal refreshes decode QImage in the worker."""
+
+        image = MediaWidget._decode_artwork_image(artwork)
+        if image is None or image.isNull():
+            return None
         pm = QPixmap.fromImage(image)
         if pm.isNull():
             logger.debug("[MEDIA_WIDGET] Decoded pixmap is null")
@@ -1405,6 +1530,265 @@ class MediaWidget(BaseOverlayWidget):
             logger.debug("[MEDIA_WIDGET] Failed to normalize artwork DPR", exc_info=True)
         logger.debug("[MEDIA_WIDGET] Artwork decoded OK: %dx%d", pm.width(), pm.height())
         return pm
+
+    @staticmethod
+    def _create_artwork_pixmap(image: QImage) -> QPixmap | None:
+        """Create the sole GUI-owned representation for a prepared image."""
+
+        pm = QPixmap.fromImage(image)
+        if pm.isNull() or pm.width() <= 0 or pm.height() <= 0:
+            return None
+        pm.setDevicePixelRatio(1.0)
+        return pm
+
+    @classmethod
+    def _has_transition_work_on_any_display(cls) -> bool:
+        """Return whether any live display is preparing or running a transition."""
+
+        try:
+            from rendering.display_widget import DisplayWidget
+
+            displays = list(DisplayWidget.get_all_instances())
+        except Exception:
+            logger.debug(
+                "[MEDIA_WIDGET] Failed to inspect displays before artwork apply",
+                exc_info=True,
+            )
+            return False
+
+        for display in displays:
+            try:
+                if not Shiboken.isValid(display):
+                    continue
+                checker = getattr(display, "has_transition_work_pending", None)
+                if callable(checker) and bool(checker()):
+                    return True
+            except RuntimeError:
+                continue
+            except Exception:
+                logger.debug(
+                    "[MEDIA_WIDGET] Failed to inspect display transition state",
+                    exc_info=True,
+                )
+        return False
+
+    def _queue_pending_artwork(
+        self,
+        prepared: PreparedArtwork,
+        generation: int,
+    ) -> None:
+        existing = self._pending_artwork
+        if existing is not None:
+            if existing.key == prepared.key:
+                # Same-key metadata churn is not a coalesced artwork change.
+                # Preserve an already decoded image when the worker correctly
+                # skipped another decode, while promoting the track generation.
+                if prepared.image is not None:
+                    self._pending_artwork = prepared
+                self._pending_artwork_generation = generation
+                self._pending_artwork_deferred = True
+                return
+            self._artwork_coalesced_count += 1
+
+        self._pending_artwork = prepared
+        self._pending_artwork_generation = generation
+        self._pending_artwork_deferred = True
+
+    def _accept_prepared_artwork(
+        self,
+        prepared: PreparedArtwork | None,
+        generation: int | None,
+        *,
+        refresh_layout_after_apply: bool,
+    ) -> bool:
+        """Apply a current result now or retain only its newest transition-safe form."""
+
+        if prepared is None or generation is None:
+            return False
+        generation = int(generation)
+        if generation != self._artwork_update_generation:
+            return False
+
+        if prepared.key == self._applied_artwork_key:
+            pending = self._pending_artwork
+            if pending is not None:
+                reverted_to_applied_key = pending.key != prepared.key
+                if reverted_to_applied_key:
+                    self._artwork_coalesced_count += 1
+                    if is_perf_metrics_enabled():
+                        logger.info(
+                            "[PERF][MEDIA_ARTWORK] key_changed=%s payload_bytes=%d "
+                            "decode_ms=%.2f ui_pixmap_ms=%.2f deferred_for_transition=%s "
+                            "coalesced_count=%d fade_started=%s",
+                            False,
+                            int(prepared.key[0]),
+                            float(prepared.decode_ms),
+                            0.0,
+                            True,
+                            int(self._artwork_coalesced_count),
+                            False,
+                        )
+                self._pending_artwork = None
+                self._pending_artwork_generation = 0
+                self._pending_artwork_deferred = False
+                self._artwork_coalesced_count = 0
+            return False
+
+        pending = self._pending_artwork
+        was_deferred = False
+        if pending is not None and pending.key == prepared.key:
+            was_deferred = bool(self._pending_artwork_deferred)
+            if prepared.image is None:
+                prepared = pending
+
+        if type(self)._has_transition_work_on_any_display():
+            self._queue_pending_artwork(prepared, generation)
+            return False
+
+        return self._apply_prepared_artwork_now(
+            prepared,
+            generation,
+            deferred_for_transition=was_deferred,
+            refresh_layout_after_apply=refresh_layout_after_apply,
+        )
+
+    def _apply_prepared_artwork_now(
+        self,
+        prepared: PreparedArtwork,
+        generation: int,
+        *,
+        deferred_for_transition: bool,
+        refresh_layout_after_apply: bool,
+    ) -> bool:
+        """Perform the one permitted UI-thread QImage -> QPixmap handoff."""
+
+        if generation != self._artwork_update_generation:
+            return False
+        key_changed = prepared.key != self._applied_artwork_key
+        if not key_changed:
+            return False
+
+        ui_started = time.monotonic()
+        pixmap: QPixmap | None = None
+        if prepared.key != (0, "") and prepared.image is not None and not prepared.image.isNull():
+            try:
+                pixmap = self._create_artwork_pixmap(prepared.image)
+            except Exception:
+                logger.debug(
+                    "[MEDIA_WIDGET] Failed to create UI artwork pixmap",
+                    exc_info=True,
+                )
+                pixmap = None
+        ui_pixmap_ms = max(0.0, (time.monotonic() - ui_started) * 1000.0)
+
+        self._artwork_pixmap = pixmap
+        self._applied_artwork_key = prepared.key
+        self._scaled_artwork_cache = None
+        self._scaled_artwork_cache_key = None
+
+        if self._pending_artwork is not None and self._pending_artwork.key == prepared.key:
+            self._pending_artwork = None
+            self._pending_artwork_generation = 0
+            self._pending_artwork_deferred = False
+
+        fade_started = False
+        if (
+            pixmap is not None
+            and bool(getattr(self, "_has_seen_first_track", False))
+            and not type(self)._has_transition_work_on_any_display()
+        ):
+            self._start_artwork_fade_in()
+            fade_started = True
+        else:
+            self._artwork_opacity = 1.0
+
+        if refresh_layout_after_apply:
+            try:
+                from widgets.media.display_update import refresh_artwork_layout
+
+                refresh_artwork_layout(self)
+            except Exception:
+                logger.debug(
+                    "[MEDIA_WIDGET] Failed to refresh deferred artwork layout",
+                    exc_info=True,
+                )
+                self._safe_update()
+
+        if is_perf_metrics_enabled():
+            logger.info(
+                "[PERF][MEDIA_ARTWORK] key_changed=%s payload_bytes=%d "
+                "decode_ms=%.2f ui_pixmap_ms=%.2f deferred_for_transition=%s "
+                "coalesced_count=%d fade_started=%s",
+                key_changed,
+                int(prepared.key[0]),
+                float(prepared.decode_ms),
+                ui_pixmap_ms,
+                bool(deferred_for_transition),
+                int(self._artwork_coalesced_count),
+                fade_started,
+            )
+        self._artwork_coalesced_count = 0
+        self._safe_update()
+        return True
+
+    @classmethod
+    def _flush_pending_artwork_when_all_displays_idle(cls) -> None:
+        """Flush newest-only artwork for every display once all transitions are idle."""
+
+        if cls._has_transition_work_on_any_display():
+            return
+
+        for widget in list(cls._instances):
+            try:
+                if not Shiboken.isValid(widget):
+                    widget._pending_artwork = None
+                    continue
+            except Exception:
+                continue
+
+            prepared = widget._pending_artwork
+            generation = int(widget._pending_artwork_generation)
+            if prepared is None:
+                continue
+            if generation != widget._artwork_update_generation:
+                widget._pending_artwork = None
+                widget._pending_artwork_generation = 0
+                widget._pending_artwork_deferred = False
+                continue
+            if cls._has_transition_work_on_any_display():
+                return
+            widget._apply_prepared_artwork_now(
+                prepared,
+                generation,
+                deferred_for_transition=True,
+                refresh_layout_after_apply=True,
+            )
+
+    def on_parent_transition_work_pending(self, pending: bool) -> None:
+        if pending:
+            return
+        type(self)._flush_pending_artwork_when_all_displays_idle()
+
+    def _discard_pending_artwork(self) -> None:
+        """Invalidate worker generations and release any unconsumed QImage."""
+
+        self._artwork_update_generation += 1
+        self._pending_artwork = None
+        self._pending_artwork_generation = 0
+        self._pending_artwork_deferred = False
+        self._artwork_coalesced_count = 0
+        self._gsmtc_cached_prepared_artwork = None
+        self._gsmtc_cached_artwork_generation = 0
+        self._refresh_in_flight = False
+
+    def _clear_artwork_for_missing_media(self) -> None:
+        """Clear artwork exactly once when the retained media card is abandoned."""
+
+        self._accept_prepared_artwork(
+            PreparedArtwork((0, ""), None, 0.0),
+            self._artwork_update_generation,
+            refresh_layout_after_apply=False,
+        )
     
     def _controls_row_min_height(self) -> int:
         """Return the minimum vertical footprint required for the controls row."""
@@ -1472,8 +1856,8 @@ class MediaWidget(BaseOverlayWidget):
             str(self.provider_display_name or "").strip().lower(),
         )
 
-    def _compute_artwork_key(self, info: MediaTrackInfo) -> tuple:
-        payload = getattr(info, "artwork", None)
+    @staticmethod
+    def _compute_artwork_payload_key(payload: Optional[bytes]) -> tuple[int, str]:
         if not payload:
             return (0, "")
         try:
@@ -1485,6 +1869,9 @@ class MediaWidget(BaseOverlayWidget):
         except Exception as exc:
             logger.debug("[MEDIA_WIDGET] Failed to compute artwork key: %s", exc)
             return (0, "")
+
+    def _compute_artwork_key(self, info: MediaTrackInfo) -> tuple[int, str]:
+        return self._compute_artwork_payload_key(getattr(info, "artwork", None))
     
     def _reset_poll_stage(self) -> None:
         """Reset polling to fastest interval."""

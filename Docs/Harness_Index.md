@@ -257,6 +257,7 @@ Run the deterministic Phase 4 owner/allocator gate:
 .\.venv\Scripts\python.exe tools\phase4_resource_harness.py --cycles 45 --output Docs\phase_reports\artifacts\P04\resource_plateau_report.json
 .\.venv\Scripts\python.exe tools\phase4_image_worker_shm_harness.py --cycles 50 --width 3840 --height 2160
 .\.venv\Scripts\python.exe -m pytest tests\test_phase4_resource_containment.py tests\test_image_cache_accounting.py tests\test_image_prefetcher.py tests\test_image_pipeline.py tests\test_image_worker.py tests\test_image_worker_shared_memory.py tests\test_process_supervisor.py tests\test_usage_sampler.py tests\test_gl_texture_streaming.py tests\test_memory_pooling.py -q
+.\.venv\Scripts\python.exe -m pytest tests\test_media_artwork_layout.py tests\test_media_display_update.py tests\test_media_transition_deferral.py tests\test_startup_shader_warmup.py tests\test_fade_coordinator.py tests\test_widget_manager.py -q
 ```
 
 The 45 rotations represent 30 virtual minutes at the shipped 40-second interval and exercise alternating resolutions/aspects, active transitions, exact-transform two-display sharing, pressure budgets, and full owner resets. It uses production cache/accounting/transition/texture/PBO seams with real QImage/QPixmap allocations and RSS, but a fake GL deletion ledger.

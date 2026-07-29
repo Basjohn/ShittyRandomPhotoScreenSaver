@@ -1,6 +1,6 @@
 # Compositor Architecture
 
-Last updated: 2026-07-26
+Last updated: 2026-07-29
 
 Target architecture and recovery contract for fullscreen presentation.
 
@@ -282,6 +282,8 @@ Phase 3 implementation boundary (2026-07-28):
 - the application `ResourceManager` observes GL handles and bytes passively; only the context-bound compositor/overlay manager can delete them;
 - `engine.stop(exit_app=False)` is the single full-teardown authority for Settings/Edit handlers;
 - deferred GL warmups are compositor-lifecycle-generation guarded;
+- display-local startup fades are held until the first frame and critical active GL work are terminal, and coordinator completion reflects the real overlay animations rather than starter dispatch;
+- noncritical transition program/resource warmup processes one item per managed callback and pauses while any coordinated startup fade or live display transition is active;
 - engine delayed/image callbacks require runtime generation plus exact display-manager identity;
 - the real Qt gate creates two live compositors and destroys them in sequence, protecting the shared-context/multi-display ownership shape missed at the original Phase 3 checkpoint.
 

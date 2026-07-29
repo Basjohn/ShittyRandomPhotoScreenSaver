@@ -487,6 +487,9 @@ def test_failed_transition_start_restores_widget_stack(qt_app, monkeypatch):
         def update(self):
             calls.append("update")
 
+        def refresh_image_resource_accounting(self):
+            calls.append("refresh_accounting")
+
     widget = _FakeWidget()
 
     display_image_ops.set_processed_image(widget, new_pixmap, new_pixmap, "next.png")
@@ -591,6 +594,9 @@ def test_set_processed_image_keeps_animation_manager_owned_until_controller_stop
 
         def update(self):
             calls.append("update")
+
+        def refresh_image_resource_accounting(self):
+            calls.append("refresh_accounting")
 
     widget = _FakeWidget()
 

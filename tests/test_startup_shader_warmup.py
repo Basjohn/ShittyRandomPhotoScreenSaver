@@ -1,13 +1,16 @@
 """Regression tests for startup shader/program warmup policy."""
 
 import inspect
+from types import SimpleNamespace
 
 import rendering.gl_compositor_pkg.gl_lifecycle as gl_lifecycle
 from rendering.gl_compositor_pkg.gl_lifecycle import (
     _disable_current_context_swap_interval,
+    _warm_next_transition_program,
     _schedule_deferred_transition_resource_warmup,
     deferred_transition_program_specs,
     ensure_transition_program_ready,
+    resume_deferred_transition_warmup,
     startup_transition_program_specs,
     _has_live_visible_base_surface,
 )
@@ -258,3 +261,236 @@ def test_deferred_transition_resource_warmup_schedules_when_base_ready(monkeypat
     assert widget._startup_transition_resource_warm_queue
     assert "GLCompositorSlideTransition" in widget._startup_transition_resource_warm_queue
     assert scheduled == [140]
+
+
+def test_noncritical_shader_warmup_waits_during_startup_fade(monkeypatch) -> None:
+    class _Pipeline:
+        burn_program = 0
+
+    widget = type(
+        "_Widget",
+        (),
+        {
+            "_gl_disabled_for_session": False,
+            "_startup_transition_warm_queue": [
+                ("burn", "burn_program", "burn_uniforms"),
+            ],
+            "_gl_pipeline": _Pipeline(),
+        },
+    )()
+    scheduled = []
+    compiled = []
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_deferred_warmup_block_reason",
+        lambda _widget: "startup_fade",
+    )
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_schedule_deferred_gl_warmup",
+        lambda _widget, callback, **_kwargs: scheduled.append(callback),
+    )
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_compile_transition_program",
+        lambda *_args: compiled.append("compiled") or True,
+    )
+
+    _warm_next_transition_program(widget)
+
+    assert compiled == []
+    assert len(widget._startup_transition_warm_queue) == 1
+    assert scheduled == [_warm_next_transition_program]
+
+
+def test_ready_overlay_without_data_does_not_strand_optional_warmup(
+    monkeypatch,
+) -> None:
+    class _Coordinator:
+        @staticmethod
+        def describe():
+            return {
+                "state": "READY",
+                "participants": ["media"],
+                "pending": [],
+                "active": [],
+                "startup_holds": [],
+            }
+
+    class _Display:
+        _widget_manager = SimpleNamespace(_fade_coordinator=_Coordinator())
+
+        @staticmethod
+        def has_transition_work_pending():
+            return False
+
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_live_displays_for_compositor",
+        lambda _widget: [_Display()],
+    )
+
+    assert gl_lifecycle._deferred_warmup_block_reason(object()) is None
+
+
+def test_noncritical_warmup_resumes_after_coordinated_fade(monkeypatch) -> None:
+    class _Pipeline:
+        burn_program = 0
+
+    widget = type(
+        "_Widget",
+        (),
+        {
+            "_gl_disabled_for_session": False,
+            "_startup_transition_warm_queue": [
+                ("burn", "burn_program", "burn_uniforms"),
+            ],
+            "_startup_transition_resource_warm_queue": [],
+            "_gl_pipeline": _Pipeline(),
+        },
+    )()
+    blocked = [True]
+    compiled = []
+    scheduled = []
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_deferred_warmup_block_reason",
+        lambda _widget: "startup_fade" if blocked[0] else None,
+    )
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_schedule_deferred_gl_warmup",
+        lambda _widget, callback, **kwargs: scheduled.append(
+            (callback, int(kwargs.get("delay_ms", 140)))
+        ),
+    )
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "acquire_safe_warmup_context",
+        lambda *_args, **_kwargs: (lambda: None),
+    )
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_compile_transition_program",
+        lambda *_args: compiled.append("burn") or True,
+    )
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_schedule_deferred_transition_resource_warmup",
+        lambda _widget: None,
+    )
+
+    _warm_next_transition_program(widget)
+    assert compiled == []
+
+    blocked[0] = False
+    resume_deferred_transition_warmup(widget)
+    assert scheduled[-1] == (_warm_next_transition_program, 0)
+    scheduled[-1][0](widget)
+
+    assert compiled == ["burn"]
+    assert widget._startup_transition_warm_queue == []
+
+
+def test_transition_beginning_postpones_next_warmup_slice(monkeypatch) -> None:
+    class _Pipeline:
+        burn_program = 0
+        warp_program = 0
+
+    widget = type(
+        "_Widget",
+        (),
+        {
+            "_gl_disabled_for_session": False,
+            "_startup_transition_warm_queue": [
+                ("burn", "burn_program", "burn_uniforms"),
+                ("warp", "warp_program", "warp_uniforms"),
+            ],
+            "_gl_pipeline": _Pipeline(),
+        },
+    )()
+    block_reason = [None]
+    compiled = []
+    scheduled = []
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_deferred_warmup_block_reason",
+        lambda _widget: block_reason[0],
+    )
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_schedule_deferred_gl_warmup",
+        lambda _widget, callback, **_kwargs: scheduled.append(callback),
+    )
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "acquire_safe_warmup_context",
+        lambda *_args, **_kwargs: (lambda: None),
+    )
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_compile_transition_program",
+        lambda _widget, name, *_args: compiled.append(name) or True,
+    )
+
+    _warm_next_transition_program(widget)
+    assert compiled == ["burn"]
+    assert len(widget._startup_transition_warm_queue) == 1
+
+    block_reason[0] = "transition_work"
+    _warm_next_transition_program(widget)
+
+    assert compiled == ["burn"]
+    assert widget._startup_transition_warm_queue[0][0] == "warp"
+    assert scheduled[-1] is _warm_next_transition_program
+
+
+def test_failed_shader_compile_still_consumes_only_one_warmup_slice(
+    monkeypatch,
+) -> None:
+    class _Pipeline:
+        burn_program = 0
+        warp_program = 0
+
+    widget = type(
+        "_Widget",
+        (),
+        {
+            "_gl_disabled_for_session": False,
+            "_startup_transition_warm_queue": [
+                ("burn", "burn_program", "burn_uniforms"),
+                ("warp", "warp_program", "warp_uniforms"),
+            ],
+            "_gl_pipeline": _Pipeline(),
+        },
+    )()
+    attempted = []
+    scheduled = []
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_deferred_warmup_block_reason",
+        lambda _widget: None,
+    )
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "acquire_safe_warmup_context",
+        lambda *_args, **_kwargs: (lambda: None),
+    )
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_compile_transition_program",
+        lambda _widget, name, *_args: attempted.append(name) or False,
+    )
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_schedule_deferred_gl_warmup",
+        lambda _widget, callback, **_kwargs: scheduled.append(callback),
+    )
+
+    _warm_next_transition_program(widget)
+
+    assert attempted == ["burn"]
+    assert widget._startup_transition_warm_queue == [
+        ("warp", "warp_program", "warp_uniforms"),
+    ]
+    assert scheduled == [_warm_next_transition_program]

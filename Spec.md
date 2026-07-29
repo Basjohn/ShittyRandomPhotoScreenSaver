@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-07-26
+Last updated: 2026-07-29
 
 Canonical stable architecture and product behaviour contracts for SRPSS.
 
@@ -125,6 +125,7 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 - `DisplayWidget.cleanup_runtime()` is the normal synchronous owner; `QObject.destroyed` is only a residual safety net.
 - A compositor remains `DESTROYING` and retains failed resource ownership when context acquisition or GL deletion cannot be proved.
 - Correctness never depends on optional deferred warmup.
+- Primary overlays reveal through the display-local `FadeCoordinator` only after the first base frame and critical active resources are terminal. Optional transition shader/resource warmup runs one item per managed callback and pauses during coordinated overlay fades or any live display transition.
 
 ## 7. CPU and Threading Contract
 
@@ -146,6 +147,8 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 - Image representations have explicit owners and lifetimes.
 - Workers may publish immutable thread-safe upload data.
 - Workers do not create GUI-affine `QPixmap` or call GL.
+- Media artwork is keyed and decoded to `QImage` in the existing media worker job. Unchanged keys are text-only updates; the GUI creates one `QPixmap` only when the applied key changes.
+- Media artwork replacement, art-dependent layout invalidation, and artwork fade are coalesced newest-only while any live display is preparing or running a transition, then flushed together after the final display becomes idle.
 - Visible paint does not decode, convert, or hash whole image buffers.
 - Stable source and transform metadata provide normal identity.
 - Shared texture reuse is legal only in a verified live share group with explicit leases and exactly-once deletion.

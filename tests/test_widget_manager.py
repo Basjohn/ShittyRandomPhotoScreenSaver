@@ -679,6 +679,63 @@ class TestStartupCoordination:
         assert calls == ["started"]
         assert parent._overlay_fade_pending == {}
 
+    def test_overlay_fade_completion_tracks_real_animation_finished(self, qt_app):
+        from PySide6.QtCore import QVariantAnimation
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QWidget
+        from rendering.fade_coordinator import FadeState
+        from rendering.widget_manager import WidgetManager
+
+        class _Signal:
+            def __init__(self):
+                self._callbacks = []
+
+            def connect(self, callback):
+                self._callbacks.append(callback)
+
+            def disconnect(self, callback):
+                if callback in self._callbacks:
+                    self._callbacks.remove(callback)
+
+            def emit(self):
+                for callback in list(self._callbacks):
+                    callback()
+
+        parent = QWidget()
+        parent.screen_index = 0
+        parent._has_rendered_first_frame = False
+        parent._overlay_fade_pending = {}
+        parent.image_displayed = _Signal()
+        fade_widget = QWidget(parent)
+        animations = []
+
+        manager = WidgetManager(parent)
+        manager.register_widget("media", fade_widget)
+        manager.add_expected_overlay("media")
+
+        def _start():
+            fade_widget._shadowfade_completed = False
+            animation = QVariantAnimation(fade_widget)
+            animation.setDuration(15)
+            animation.setStartValue(0.0)
+            animation.setEndValue(1.0)
+            fade_widget._shadowfade_anim = animation
+            animations.append(animation)
+            animation.start()
+
+        try:
+            manager.request_overlay_fade_sync("media", _start)
+            manager._on_compositor_ready("first-image")
+
+            assert manager._fade_coordinator.get_state() == FadeState.FADING
+
+            QTest.qWait(40)
+
+            assert manager._fade_coordinator.get_state() == FadeState.COMPLETE
+        finally:
+            fade_widget.close()
+            parent.close()
+
     def test_reset_fade_coordination_clears_spotify_overlay_prewarm_flags(self):
         from rendering.widget_manager import WidgetManager
 

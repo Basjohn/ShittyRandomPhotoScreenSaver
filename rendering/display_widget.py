@@ -1013,6 +1013,21 @@ class DisplayWidget(QWidget):
         """Delegates to rendering.display_image_ops."""
         from rendering.display_image_ops import _on_transition_finished
         _on_transition_finished(self, *args, **kwargs)
+        # ``set_transition_work_pending(False)`` is intentionally emitted at
+        # transition start, while has_transition_work_pending() remains true
+        # through the active animation. Notify MediaWidget again after the
+        # transition object has been cleared so the last display to finish can
+        # flush all newest-only prepared artwork.
+        media_widget = getattr(self, "media_widget", None)
+        callback = getattr(media_widget, "on_parent_transition_work_pending", None)
+        if callable(callback):
+            try:
+                callback(False)
+            except Exception as e:
+                logger.debug(
+                    "[DISPLAY_WIDGET] Transition completion media callback failed: %s",
+                    e,
+                )
 
     def _warm_transition_if_needed(
         self,
@@ -2084,7 +2099,12 @@ class DisplayWidget(QWidget):
         if self._transition_work_pending == pending:
             return
         self._transition_work_pending = pending
-        for attr_name in ("gmail_widget", "reddit_widget", "reddit2_widget"):
+        for attr_name in (
+            "gmail_widget",
+            "reddit_widget",
+            "reddit2_widget",
+            "media_widget",
+        ):
             widget = getattr(self, attr_name, None)
             callback = getattr(widget, "on_parent_transition_work_pending", None)
             if callable(callback):

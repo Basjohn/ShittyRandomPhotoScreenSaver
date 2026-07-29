@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from PySide6.QtGui import QImage
+
 import widgets.media.display_update as display_update
 from core.media.media_controller import MediaPlaybackState, MediaTrackInfo
+from widgets.media_widget import MediaWidget, PreparedArtwork
 
 
 class _StubMediaWidget:
@@ -462,3 +465,175 @@ def test_update_display_first_track_waits_for_parent_fade_starter(monkeypatch):
 
     assert widget.fade_in_calls == 1
     assert widget.notify_calls == 1
+
+
+def test_prepared_artwork_pixmap_and_fade_are_key_change_owned(
+    qt_app,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        MediaWidget,
+        "_has_transition_work_on_any_display",
+        classmethod(lambda cls: False),
+    )
+    widget = MediaWidget()
+    pixmap_calls = []
+    artwork_fades = []
+    original_create = MediaWidget._create_artwork_pixmap
+    widget._create_artwork_pixmap = lambda image: (
+        pixmap_calls.append(image),
+        original_create(image),
+    )[1]
+    widget._start_artwork_fade_in = lambda: artwork_fades.append("fade")
+    widget._start_widget_fade_in = lambda *_args, **_kwargs: None
+    widget._notify_spotify_widgets_visibility = lambda: None
+
+    image_a = QImage(32, 32, QImage.Format.Format_ARGB32)
+    image_b = QImage(32, 32, QImage.Format.Format_ARGB32)
+    key_a = (10, "a")
+    key_b = (11, "b")
+    first = MediaTrackInfo(
+        title="First",
+        artist="Artist",
+        album="Album",
+        state=MediaPlaybackState.PLAYING,
+        artwork=b"first-art",
+    )
+    title_changed = MediaTrackInfo(
+        title="Second",
+        artist="Artist",
+        album="Album",
+        state=MediaPlaybackState.PLAYING,
+        artwork=b"first-art",
+    )
+    artist_changed = MediaTrackInfo(
+        title="Second",
+        artist="Other Artist",
+        album="Album",
+        state=MediaPlaybackState.PLAYING,
+        artwork=b"first-art",
+    )
+    changed_art = MediaTrackInfo(
+        title="Second",
+        artist="Other Artist",
+        album="Album",
+        state=MediaPlaybackState.PLAYING,
+        artwork=b"second-art!",
+    )
+
+    key_map = {
+        b"first-art": key_a,
+        b"second-art!": key_b,
+    }
+    widget._compute_artwork_key = lambda info: key_map.get(
+        info.artwork,
+        (0, ""),
+    )
+
+    try:
+        widget._artwork_update_generation = 1
+        display_update.update_display(
+            widget,
+            first,
+            prepared_artwork=PreparedArtwork(key_a, image_a, 1.25),
+            artwork_generation=1,
+        )
+        assert len(pixmap_calls) == 1
+        assert artwork_fades == []
+
+        widget._artwork_update_generation = 2
+        display_update.update_display(
+            widget,
+            title_changed,
+            prepared_artwork=PreparedArtwork(key_a, None, 0.0),
+            artwork_generation=2,
+        )
+        widget._artwork_update_generation = 3
+        display_update.update_display(
+            widget,
+            artist_changed,
+            prepared_artwork=PreparedArtwork(key_a, None, 0.0),
+            artwork_generation=3,
+        )
+        assert len(pixmap_calls) == 1
+        assert artwork_fades == []
+
+        # Exercise the production diff-gate state: metadata is unchanged, but
+        # the artwork key itself must still bypass the completed-fade skip.
+        widget._fade_in_completed = True
+        widget._artwork_update_generation = 4
+        display_update.update_display(
+            widget,
+            changed_art,
+            prepared_artwork=PreparedArtwork(key_b, image_b, 1.5),
+            artwork_generation=4,
+        )
+        assert len(pixmap_calls) == 2
+        assert artwork_fades == ["fade"]
+    finally:
+        widget.cleanup()
+        widget.close()
+
+
+def test_null_prepared_artwork_clears_existing_artwork_once(
+    qt_app,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        MediaWidget,
+        "_has_transition_work_on_any_display",
+        classmethod(lambda cls: False),
+    )
+    widget = MediaWidget()
+    image = QImage(24, 24, QImage.Format.Format_ARGB32)
+    original_create = MediaWidget._create_artwork_pixmap
+    widget._create_artwork_pixmap = original_create
+    widget._start_widget_fade_in = lambda *_args, **_kwargs: None
+    widget._notify_spotify_widgets_visibility = lambda: None
+    info_with_art = MediaTrackInfo(
+        title="Track",
+        artist="Artist",
+        state=MediaPlaybackState.PLAYING,
+        artwork=b"art",
+    )
+    info_without_art = MediaTrackInfo(
+        title="Track",
+        artist="Artist",
+        state=MediaPlaybackState.PLAYING,
+        artwork=None,
+    )
+    widget._compute_artwork_key = lambda info: (3, "art") if info.artwork else (0, "")
+
+    try:
+        widget._artwork_update_generation = 1
+        display_update.update_display(
+            widget,
+            info_with_art,
+            prepared_artwork=PreparedArtwork((3, "art"), image, 0.5),
+            artwork_generation=1,
+        )
+        assert widget._artwork_pixmap is not None
+
+        widget._artwork_update_generation = 2
+        display_update.update_display(
+            widget,
+            info_without_art,
+            prepared_artwork=PreparedArtwork((0, ""), None, 0.0),
+            artwork_generation=2,
+        )
+        assert widget._artwork_pixmap is None
+        assert widget._applied_artwork_key == (0, "")
+
+        cache_sentinel = object()
+        widget._scaled_artwork_cache = cache_sentinel
+        widget._artwork_update_generation = 3
+        display_update.update_display(
+            widget,
+            info_without_art,
+            prepared_artwork=PreparedArtwork((0, ""), None, 0.0),
+            artwork_generation=3,
+        )
+        assert widget._scaled_artwork_cache is cache_sentinel
+    finally:
+        widget.cleanup()
+        widget.close()

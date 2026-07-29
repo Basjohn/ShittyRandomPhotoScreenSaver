@@ -129,6 +129,27 @@ The same run preserves separate later-phase work:
 
 This closes the deterministic shared-memory ownership slice. It does not close Phase 4: the full Phase4plus platform comparator must still prove total RSS/private commit, worker RSS, tracked GL bytes, driver VRAM, and presentation together.
 
+## Focused media/startup collision containment — 2026-07-29
+
+The latest `phase4plus_a2f7bd89` logs showed artwork payload changes and overlay/shader startup work near visualizer frame-tail gaps, but did not prove either owner caused every gap. Bubble compute remained comparatively cheap while logical `dt` gaps persisted, and transition overlap increased warning frequency without explaining all warnings. The correction therefore stays isolated to the measured ownership seams; no Spectrum/Bubble math, visual smoothing, compositor topology, or transition presentation was retuned.
+
+- The existing media `ThreadManager` query job now computes the bounded artwork key and decodes changed payloads once for each widget's current/pending key into worker-safe `QImage`. The GUI callback creates a single `QPixmap`, normalizes DPR, and invalidates the scaled cache only when the applied key changes. This slice deliberately adds no process-wide artwork cache or in-flight decode coordinator ahead of the separate cache audit.
+- Unchanged artwork keys are text-only updates. Artwork disappearance is an explicit empty-key update. Decode failure is terminal for that key rather than becoming a repeated poll-time decode.
+- While any live display is preparing or running an image transition, only the newest prepared artwork/key/generation is retained. QPixmap replacement, art-dependent margins/layout, and the artwork fade flush together only after every display is idle.
+- `FadeCoordinator` now owns named critical startup holds and real animation completion. `critical_gl_startup` releases after first-frame commitment and the existing active Spotify overlay prewarm reaches a terminal outcome; optional failure cannot strand the reveal.
+- Noncritical transition shaders/resources remain compositor-owned and optional. They run one item per managed callback, pause during actual coordinated startup fades or any live display transition, and resume after real fade completion. An enabled overlay with no startup data remains `READY` without stranding warmup; any later reveal moves synchronously to `FADING` before the next slice.
+- Bounded `[PERF][MEDIA_ARTWORK]` and `[STARTUP_SEQUENCE]` records separate worker decode, UI pixmap creation, transition deferral/coalescing, critical readiness, actual fade completion, and the first permitted deferred GL slice.
+
+Focused automated evidence:
+
+- focused media artwork/startup/fade/warmup owner suite: `119 passed`;
+- protected runtime-shaped visualizer suite: `186 passed, 20 skipped`;
+- current first-frame/mode-switch poison selection: `21 passed`;
+- deterministic replay: all `66` goldens plus manifest verified unchanged;
+- shared-memory/supervisor/accounting safety gate: `65 passed`.
+
+This closes the deterministic ownership and scheduling slice only. The full Phase4plus run still owns the 60 Hz/165 Hz forced Spotify-change collision bars, actual startup presentation review, zero terminal shared-memory counters, and whole-application memory/VRAM plateau.
+
 ## Verification
 
 ```powershell

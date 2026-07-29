@@ -231,7 +231,13 @@ def _compute_media_header_scale(
     return scale
 
 
-def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> None:
+def update_display(
+    widget: "MediaWidget",
+    info: Optional[MediaTrackInfo],
+    *,
+    prepared_artwork=None,
+    artwork_generation: int | None = None,
+) -> None:
     """Process a media track snapshot and update the widget display.
 
     This is the main update path — called after each poll cycle. It handles:
@@ -379,9 +385,46 @@ def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> Non
         info = retained_info
         widget._last_info = info
 
+    # Apply only the worker-prepared artwork that belongs to the final snapshot.
+    # A raw ``None`` result may have been replaced by retained/shared metadata,
+    # so its empty artwork result must not clear that retained card.
+    artwork_changed = False
+    if prepared_artwork is not None and artwork_generation is not None:
+        try:
+            final_artwork_key = widget._compute_artwork_key(info)
+        except Exception:
+            final_artwork_key = None
+
+        prepared_for_final_info = prepared_artwork
+        if final_artwork_key != getattr(prepared_artwork, "key", None):
+            pending = getattr(widget, "_pending_artwork", None)
+            if pending is not None and getattr(pending, "key", None) == final_artwork_key:
+                prepared_for_final_info = pending
+            else:
+                prepared_for_final_info = None
+
+        if prepared_for_final_info is not None:
+            try:
+                artwork_changed = bool(
+                    widget._accept_prepared_artwork(
+                        prepared_for_final_info,
+                        artwork_generation,
+                        refresh_layout_after_apply=False,
+                    )
+                )
+            except Exception:
+                logger.debug(
+                    "[MEDIA_WIDGET] Failed to accept prepared artwork",
+                    exc_info=True,
+                )
+
     # --- Build metadata HTML ---
     final_metadata_identity = widget._compute_metadata_identity(info)
-    metadata_changed = bool(metadata_changed or (final_metadata_identity != widget._last_metadata_identity))
+    metadata_changed = bool(
+        metadata_changed
+        or artwork_changed
+        or (final_metadata_identity != widget._last_metadata_identity)
+    )
     widget._last_metadata_identity = final_metadata_identity
 
     _build_and_apply_metadata(widget, info, prev_info, metadata_changed=metadata_changed)
@@ -479,9 +522,15 @@ def _handle_no_media(widget: "MediaWidget") -> Optional[MediaTrackInfo]:
     last_vis = widget._telemetry_last_visibility
     if last_vis or last_vis is None:
         logger.info("[MEDIA_WIDGET] No active media session; hiding media card")
-    widget._artwork_pixmap = None
-    widget._scaled_artwork_cache = None
-    widget._scaled_artwork_cache_key = None
+    clear_artwork = getattr(widget, "_clear_artwork_for_missing_media", None)
+    if callable(clear_artwork):
+        clear_artwork()
+    else:
+        widget._artwork_pixmap = None
+        widget._scaled_artwork_cache = None
+        widget._scaled_artwork_cache_key = None
+        if hasattr(widget, "_applied_artwork_key"):
+            widget._applied_artwork_key = (0, "")
 
     # Graceful fade out instead of instant hide
     if widget.isVisible():
@@ -509,6 +558,7 @@ def _build_and_apply_metadata(
     prev_info: Optional[MediaTrackInfo],
     *,
     metadata_changed: bool,
+    layout_only: bool = False,
 ) -> None:
     """Build HTML metadata and update widget text/artwork/layout."""
     title = smart_title_case((info.title or "").strip())
@@ -524,7 +574,7 @@ def _build_and_apply_metadata(
     if metadata_changed or not getattr(widget, "_metadata_paint", None):
         layout_budget = _compute_metadata_layout_budget(
             widget,
-            has_artwork=bool(getattr(info, "artwork", None) or getattr(widget, "_artwork_pixmap", None)),
+            has_artwork=_has_applied_artwork(widget),
         )
         base_font = max(6, widget._font_size)
         header_scale = _compute_media_header_scale(
@@ -624,21 +674,20 @@ def _build_and_apply_metadata(
     widget.setMinimumHeight(widget._fixed_card_height)
     widget.setMaximumHeight(widget._fixed_card_height)
 
-    # CRITICAL: Decode artwork BEFORE the first-track early return
-    artwork_pm = widget._decode_artwork_pixmap(getattr(info, "artwork", None))
-    if artwork_pm is not None:
-        widget._artwork_pixmap = artwork_pm
-        if is_verbose_logging():
-            logger.debug(
-                "[MEDIA_WIDGET] Artwork decoded: %dx%d",
-                artwork_pm.width(),
-                artwork_pm.height(),
-            )
-
-    # CRITICAL: Set content margins BEFORE the first-track early return
+    # Artwork and its reserved lane become visible atomically. Deferred
+    # worker results therefore leave both the current pixmap and margins alone.
     shrink_r, shrink_b = widget.painted_frame_shadow_card_shrink()
-    right_margin = max(widget._artwork_size + 40, 60) + shrink_r
+    if _has_applied_artwork(widget):
+        right_margin = max(widget._artwork_size + 40, 60) + shrink_r
+    else:
+        right_margin = 12 + shrink_r
     widget.setContentsMargins(29, 12, right_margin, widget._controls_row_margin() + shrink_b)
+
+    if layout_only:
+        safe_update = getattr(widget, "_safe_update", None)
+        if callable(safe_update):
+            safe_update()
+        return
 
     # On the very first non-empty track update we use this call to
     # establish a stable layout (card stays hidden until fade sync)
@@ -675,41 +724,30 @@ def _build_and_apply_metadata(
     widget._emit_media_update(info)
     _ensure_widget_visible_for_active_metadata(widget)
 
-    # Decode optional artwork bytes (for subsequent updates after first track)
-    prev_pm = widget._artwork_pixmap
-    had_artwork_before = prev_pm is not None and not prev_pm.isNull()
-    widget._artwork_pixmap = None
-    artwork_pm = widget._decode_artwork_pixmap(getattr(info, "artwork", None))
-    if artwork_pm is not None:
-        widget._artwork_pixmap = artwork_pm
 
-        # Fade in artwork whenever it appears for the first time or when metadata changes
-        should_fade_artwork = False
-        if not had_artwork_before:
-            should_fade_artwork = True
-        else:
-            try:
-                if prev_info is None:
-                    should_fade_artwork = True
-                else:
-                    def _norm(s: Optional[str]) -> str:
-                        return (s or "").strip()
+def _has_applied_artwork(widget: "MediaWidget") -> bool:
+    pixmap = getattr(widget, "_artwork_pixmap", None)
+    if pixmap is None:
+        return False
+    try:
+        return not pixmap.isNull()
+    except Exception:
+        return False
 
-                    if (
-                        _norm(getattr(prev_info, "title", None))
-                        != _norm(getattr(info, "title", None))
-                        or _norm(getattr(prev_info, "artist", None))
-                        != _norm(getattr(info, "artist", None))
-                        or _norm(getattr(prev_info, "album", None))
-                        != _norm(getattr(info, "album", None))
-                    ):
-                        should_fade_artwork = True
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                should_fade_artwork = False
 
-        if should_fade_artwork:
-            widget._start_artwork_fade_in()
+def refresh_artwork_layout(widget: "MediaWidget") -> None:
+    """Refresh only the art-dependent layout after a deferred UI handoff."""
+
+    info = getattr(widget, "_last_info", None)
+    if info is None:
+        return
+    _build_and_apply_metadata(
+        widget,
+        info,
+        prev_info=info,
+        metadata_changed=True,
+        layout_only=True,
+    )
 
 
 def _ensure_widget_visible_for_active_metadata(widget: "MediaWidget") -> None:

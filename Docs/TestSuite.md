@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-07-26
+Last updated: 2026-07-29
 
 Testing strategy, execution commands, and minimum quality gates.
 
@@ -227,7 +227,7 @@ Phase 3 owns these concrete automated bars:
 - `tests/test_engine_lifecycle.py` — display cleanup precedes Settings dialog construction;
 - `tests/test_s_hotkey_workflow.py` — stop means full teardown and fresh rebuild, not hide/reuse;
 - `tests/test_gl_compositor_cleanup.py` — idempotent no-resource cleanup plus real Windows Qt context resource deletion, including two live per-display compositors with distinct program owners destroyed in the exact multi-display sequence;
-- `tests/test_startup_shader_warmup.py` — deferred warmup behavior;
+- `tests/test_startup_shader_warmup.py`, `tests/test_fade_coordinator.py`, and `tests/test_widget_manager.py` — named critical startup holds, real fade completion, and one-at-a-time deferred warmup gating;
 - focused `TestDisplayManagerSync` rebuild cases;
 - `tests/test_image_pipeline.py`, `tests/test_image_prefetcher.py`, and `tests/test_image_worker.py` — GUI-independent QImage compute payload and async regression coverage.
 
@@ -257,6 +257,7 @@ Phase 4 owns these concrete automated bars:
 - `tests/test_image_worker_shared_memory.py` — per-transfer attachment/close ownership, one-copy parent consumption, zero live-byte accounting, timeout/late response, cancellation, runtime-generation rejection, buffered/queue shutdown disposal, publish failure, and orphan-name probes;
 - `tests/test_process_supervisor.py` and `tests/test_usage_sampler.py` — correlated response buffering/lifecycle plus labelled ImageWorker/shared-memory telemetry;
 - `tests/test_gl_texture_streaming.py` and `tests/test_memory_pooling.py` — upload/PBO reuse and cleanup regressions;
+- `tests/test_media_artwork_layout.py`, `tests/test_media_display_update.py`, and `tests/test_media_transition_deferral.py` — worker QImage decode, key-owned GUI pixmap replacement, and newest-only all-display transition deferral;
 - `tools/phase4_resource_harness.py` — 45-cycle owner/allocator plateau gate with real Qt image allocations and RSS.
 - `tools/phase4_image_worker_shm_harness.py` — real spawned-worker 50×4K transfer plateau plus shutdown-during-transfer and orphan-name gate.
 

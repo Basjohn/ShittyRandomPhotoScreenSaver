@@ -55,11 +55,153 @@ def _qt_object_is_valid(obj: object | None) -> bool:
         return True
 
 
+def _live_displays_for_compositor(widget) -> list[object]:
+    displays: list[object] = []
+    seen: set[int] = set()
+
+    try:
+        parent = widget.parentWidget()
+    except Exception:
+        try:
+            parent = widget.parent()
+        except Exception:
+            parent = None
+    if parent is not None:
+        displays.append(parent)
+        seen.add(id(parent))
+
+    try:
+        from rendering.display_widget import DisplayWidget
+
+        for display in DisplayWidget.get_all_instances():
+            if display is None or id(display) in seen:
+                continue
+            displays.append(display)
+            seen.add(id(display))
+    except Exception:
+        logger.debug(
+            "[GL COMPOSITOR] Failed to enumerate displays for warmup gating",
+            exc_info=True,
+        )
+    return displays
+
+
+def _deferred_warmup_block_reason(widget) -> str | None:
+    """Return the current cross-display reason an optional slice must wait."""
+
+    for display in _live_displays_for_compositor(widget):
+        if not _qt_object_is_valid(display):
+            continue
+
+        manager = getattr(display, "_widget_manager", None)
+        coordinator = getattr(manager, "_fade_coordinator", None)
+        if coordinator is not None:
+            try:
+                fade = coordinator.describe()
+            except Exception:
+                fade = {}
+            if fade.get("startup_holds"):
+                return "startup_hold"
+            state = str(fade.get("state", ""))
+            if state == "IDLE":
+                return "first_frame"
+            if state == "FADING":
+                return "startup_fade"
+            # READY with no pending/active fade is not work. An enabled
+            # overlay can remain data-unavailable indefinitely (for example,
+            # Spotify with no current session); optional warmup must not be
+            # stranded waiting for a fade that has not started. Any later
+            # request moves the coordinator to FADING synchronously, and the
+            # next slice will pause here before touching GL.
+
+        checker = getattr(display, "has_transition_work_pending", None)
+        if callable(checker):
+            try:
+                if bool(checker()):
+                    return "transition_work"
+            except Exception:
+                logger.debug(
+                    "[GL COMPOSITOR] Failed to inspect transition work before warmup",
+                    exc_info=True,
+                )
+    return None
+
+
+def _startup_sequence_fields(widget) -> tuple[bool, bool, list[str], bool, bool]:
+    first_frame_ready = False
+    critical_gl_ready = False
+    holds: list[str] = []
+    fade_started = False
+    fade_completed = False
+
+    displays = _live_displays_for_compositor(widget)
+    if displays:
+        display = displays[0]
+        manager = getattr(display, "_widget_manager", None)
+        coordinator = getattr(manager, "_fade_coordinator", None)
+        if coordinator is not None:
+            try:
+                fade = coordinator.describe()
+            except Exception:
+                fade = {}
+            first_frame_ready = bool(fade.get("compositor_ready"))
+            holds = list(fade.get("startup_holds") or [])
+            critical_gl_ready = bool(
+                first_frame_ready and "critical_gl_startup" not in holds
+            )
+            fade_started = bool(fade.get("fade_started"))
+            fade_completed = bool(fade.get("fade_completed"))
+    return (
+        first_frame_ready,
+        critical_gl_ready,
+        holds,
+        fade_started,
+        fade_completed,
+    )
+
+
+def _log_startup_warmup_state(
+    widget,
+    *,
+    deferred_gl_warmup_started: bool,
+    block_reason: str | None,
+) -> None:
+    fields = _startup_sequence_fields(widget)
+    snapshot = (*fields, bool(deferred_gl_warmup_started), block_reason)
+    if snapshot == getattr(widget, "_startup_sequence_last_log", None):
+        return
+    widget._startup_sequence_last_log = snapshot
+    logger.info(
+        "[STARTUP_SEQUENCE] screen=%s first_frame_ready=%s "
+        "critical_gl_ready=%s fade_holds=%s fade_started=%s "
+        "fade_completed=%s deferred_gl_warmup_started=%s block_reason=%s",
+        getattr(getattr(widget, "parentWidget", lambda: None)(), "screen_index", "?"),
+        fields[0],
+        fields[1],
+        fields[2],
+        fields[3],
+        fields[4],
+        bool(deferred_gl_warmup_started),
+        block_reason or "none",
+    )
+
+
 def _schedule_deferred_gl_warmup(widget, callback, *, delay_ms: int = 140) -> None:
     """Schedule warmup owned by the compositor lifecycle that requested it."""
     lifecycle_generation = int(getattr(widget, "_gl_lifecycle_generation", 0))
+    callback_key = getattr(callback, "__name__", repr(callback))
+    armed = getattr(widget, "_deferred_gl_warmup_armed_callbacks", None)
+    if not isinstance(armed, set):
+        armed = set()
+        widget._deferred_gl_warmup_armed_callbacks = armed
+    if callback_key in armed:
+        return
+    armed.add(callback_key)
 
     def _run(w=widget, expected_generation=lifecycle_generation) -> None:
+        pending = getattr(w, "_deferred_gl_warmup_armed_callbacks", None)
+        if isinstance(pending, set):
+            pending.discard(callback_key)
         if not _qt_object_is_valid(w):
             logger.warning(
                 "[GL COMPOSITOR][WARNING] Skipped deferred GL warmup for deleted widget callback=%s",
@@ -364,6 +506,22 @@ def _warm_next_transition_program(widget) -> None:
     queue = getattr(widget, "_startup_transition_warm_queue", None)
     if not queue:
         return
+    block_reason = _deferred_warmup_block_reason(widget)
+    if block_reason is not None:
+        _log_startup_warmup_state(
+            widget,
+            deferred_gl_warmup_started=False,
+            block_reason=block_reason,
+        )
+        _schedule_deferred_gl_warmup(widget, _warm_next_transition_program)
+        return
+    if not bool(getattr(widget, "_deferred_gl_warmup_started", False)):
+        widget._deferred_gl_warmup_started = True
+        _log_startup_warmup_state(
+            widget,
+            deferred_gl_warmup_started=True,
+            block_reason=None,
+        )
 
     release_current = acquire_safe_warmup_context(
         widget,
@@ -378,9 +536,12 @@ def _warm_next_transition_program(widget) -> None:
             program_name, program_attr, uniforms_attr = queue.pop(0)
             if getattr(widget._gl_pipeline, program_attr, 0):
                 continue
-            if _compile_transition_program(widget, program_name, program_attr, uniforms_attr):
-                break
-            logger.debug("[GL COMPOSITOR] Deferred compile failed for %s", program_name)
+            if not _compile_transition_program(widget, program_name, program_attr, uniforms_attr):
+                logger.debug("[GL COMPOSITOR] Deferred compile failed for %s", program_name)
+            # One attempted compile is the complete slice even on failure.
+            # Returning to the event loop lets newly pending fades/transitions
+            # block the next shader before any more driver work begins.
+            break
     finally:
         try:
             if release_current is not None:
@@ -403,6 +564,28 @@ def schedule_deferred_transition_program_warmup(widget) -> None:
         return
     widget._startup_transition_warm_queue = list(remaining)
     _schedule_deferred_gl_warmup(widget, _warm_next_transition_program)
+
+
+def resume_deferred_transition_warmup(widget) -> None:
+    """Nudge the existing optional warmup queues after startup fade completion."""
+
+    if getattr(widget, "_gl_disabled_for_session", False):
+        return
+    if getattr(widget, "_startup_transition_warm_queue", None):
+        _schedule_deferred_gl_warmup(
+            widget,
+            _warm_next_transition_program,
+            delay_ms=0,
+        )
+        return
+    if getattr(widget, "_startup_transition_resource_warm_queue", None):
+        _schedule_deferred_gl_warmup(
+            widget,
+            _warm_next_transition_resources,
+            delay_ms=0,
+        )
+        return
+    schedule_deferred_transition_program_warmup(widget)
 
 
 def _schedule_deferred_transition_resource_warmup(widget) -> None:
@@ -449,6 +632,22 @@ def _warm_next_transition_resources(widget) -> None:
     queue = getattr(widget, "_startup_transition_resource_warm_queue", None)
     if not queue:
         return
+    block_reason = _deferred_warmup_block_reason(widget)
+    if block_reason is not None:
+        _log_startup_warmup_state(
+            widget,
+            deferred_gl_warmup_started=False,
+            block_reason=block_reason,
+        )
+        _schedule_deferred_gl_warmup(widget, _warm_next_transition_resources)
+        return
+    if not bool(getattr(widget, "_deferred_gl_warmup_started", False)):
+        widget._deferred_gl_warmup_started = True
+        _log_startup_warmup_state(
+            widget,
+            deferred_gl_warmup_started=True,
+            block_reason=None,
+        )
 
     base_pixmap = getattr(widget, "_base_pixmap", None)
     if base_pixmap is None:
@@ -879,6 +1078,9 @@ def _cleanup_deferred_warmup_resources(widget) -> None:
     try:
         widget._deferred_warmup_context = None
         widget._deferred_warmup_surface = None
+        widget._deferred_gl_warmup_armed_callbacks = set()
+        widget._deferred_gl_warmup_started = False
+        widget._startup_sequence_last_log = None
     except Exception:
         pass
     try:
@@ -1191,4 +1393,3 @@ FragColor = vec4(color, 1.0);
 # The RaindropsProgram helper is now responsible for shader compilation and rendering.
 
 # NOTE: _create_claws_program() REMOVED - Claws/Shooting Stars transition was retired (dead code)
-

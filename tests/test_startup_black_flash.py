@@ -41,6 +41,9 @@ class DummySettings:
             return cur
         return default
 
+    def get_widgets_map(self):
+        return self.get("widgets", {})
+
 
 @pytest.fixture
 def qapp():

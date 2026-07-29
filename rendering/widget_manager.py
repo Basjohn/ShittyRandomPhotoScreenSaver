@@ -66,6 +66,7 @@ logger = get_logger(__name__)
 
 
 _STACK_RESERVED_MEDIA_VISUALIZER_KEY = "__reserved_spotify_media_visualizer"
+_CRITICAL_GL_STARTUP_HOLD = "critical_gl_startup"
 _CUSTOM_LAYOUT_REAPPLY_SUFFIXES: tuple[str, ...] = (
     ".position",
     ".position2",
@@ -125,6 +126,10 @@ class WidgetManager:
         # Fade coordination - centralized via FadeCoordinator
         self._fade_coordinator: FadeCoordinator = FadeCoordinator(
             screen_index=getattr(parent, "screen_index", 0)
+        )
+        self._fade_coordinator.add_startup_hold(_CRITICAL_GL_STARTUP_HOLD)
+        self._fade_coordinator.add_completion_callback(
+            self._on_startup_fades_complete
         )
         self._expected_overlays: set[str] = set()
         self._spotify_secondary_fade_starters: list[Callable[[], None]] = []
@@ -214,10 +219,16 @@ class WidgetManager:
         )
         return self._spotify_overlay_prewarmed
 
-    def _schedule_spotify_secondary_fades(self, delay_ms: int) -> None:
+    def _schedule_spotify_secondary_fades(
+        self,
+        delay_ms: int,
+        *,
+        prewarm: bool = True,
+    ) -> None:
         queued = list(self._spotify_secondary_fade_starters)
         self._spotify_secondary_fade_starters = []
-        self._prewarm_spotify_visualizer_overlay()
+        if prewarm:
+            self._prewarm_spotify_visualizer_overlay()
         self._mark_parent_spotify_secondary_not_before(delay_ms)
         logger.debug(
             "[SPOTIFY_SECONDARY] scheduling %d queued starters (delay_ms=%s, compositor_ready=%s, expected=%s)",
@@ -257,6 +268,8 @@ class WidgetManager:
         """Connect to parent's image_displayed signal to know when compositor is ready."""
         if self._parent is None:
             self._compositor_ready = True  # No parent, assume ready
+            self._fade_coordinator.signal_compositor_ready()
+            self._release_critical_gl_startup_hold()
             return
         
         try:
@@ -265,6 +278,8 @@ class WidgetManager:
                 self._compositor_ready = True
                 try:
                     self._fade_coordinator.signal_compositor_ready()
+                    self._prewarm_spotify_visualizer_overlay()
+                    self._release_critical_gl_startup_hold()
                 except Exception:
                     logger.debug(
                         "[WIDGET_MANAGER] Failed to prime fade coordinator for already-ready compositor",
@@ -272,12 +287,27 @@ class WidgetManager:
                     )
                 return
             
-            # Connect to image_displayed signal
-            if hasattr(self._parent, "image_displayed"):
-                self._parent.image_displayed.connect(self._on_compositor_ready)
+            # Connect to image_displayed signal. A malformed/testing parent
+            # must settle the critical hold instead of leaving overlays and
+            # optional warmup permanently blocked.
+            signal = getattr(self._parent, "image_displayed", None)
+            connector = getattr(signal, "connect", None)
+            if callable(connector):
+                connector(self._on_compositor_ready)
+                return
+
+            logger.warning(
+                "[FADE_SYNC][FALLBACK] Parent has no image_displayed signal; "
+                "settling startup coordination without it"
+            )
+            self._compositor_ready = True
+            self._fade_coordinator.signal_compositor_ready()
+            self._release_critical_gl_startup_hold()
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Failed to connect compositor ready signal: %s", e)
             self._compositor_ready = True  # Assume ready on failure
+            self._fade_coordinator.signal_compositor_ready()
+            self._release_critical_gl_startup_hold()
     
     def _on_compositor_ready(self, image_path: str) -> None:
         """Called when compositor displays first image."""
@@ -287,15 +317,19 @@ class WidgetManager:
             return  # Already marked ready
         
         self._compositor_ready = True
-        # Signal FadeCoordinator that compositor is ready
+        # Publish first-frame readiness while the critical resource hold is
+        # still active. Base image/compositor resources are already committed
+        # at this seam; only the active Spotify overlay's existing prewarm
+        # remains before primary reveals may begin.
         self._fade_coordinator.signal_compositor_ready()
         try:
             self._parent._overlay_fade_started = True
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
-        if self._expected_overlays:
-            try:
+        try:
+            self._prewarm_spotify_visualizer_overlay()
+            if self._expected_overlays:
                 policy = self._get_overlay_startup_policy()
                 logger.debug(
                     "[SPOTIFY_SECONDARY] compositor ready; using startup secondary delay=%sms",
@@ -304,9 +338,14 @@ class WidgetManager:
 
                 self._schedule_spotify_secondary_fades(
                     int(policy.spotify_secondary_startup_delay_ms),
+                    prewarm=False,
                 )
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+        finally:
+            # Optional prewarm failure is terminal for this startup attempt; a
+            # best-effort resource must never strand overlays behind the hold.
+            self._release_critical_gl_startup_hold()
         
         logger.info("[FADE_SYNC] Compositor ready on screen=%s (first image: %s)", screen_idx, image_path)
         
@@ -316,6 +355,30 @@ class WidgetManager:
                 self._parent.image_displayed.disconnect(self._on_compositor_ready)
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+
+    def _release_critical_gl_startup_hold(self) -> None:
+        self._fade_coordinator.release_startup_hold(_CRITICAL_GL_STARTUP_HOLD)
+        if not self._fade_coordinator.describe().get("participants"):
+            self._on_startup_fades_complete()
+
+    def _on_startup_fades_complete(self) -> None:
+        """Resume optional compositor warmup after the real overlay fade."""
+
+        parent = self._parent
+        compositor = getattr(parent, "_gl_compositor", None) if parent is not None else None
+        if compositor is None:
+            return
+        try:
+            from rendering.gl_compositor_pkg.gl_lifecycle import (
+                resume_deferred_transition_warmup,
+            )
+
+            resume_deferred_transition_warmup(compositor)
+        except Exception:
+            logger.debug(
+                "[WIDGET_MANAGER] Failed to resume deferred GL warmup",
+                exc_info=True,
+            )
     
     def set_factory_registry(
         self, 
@@ -2147,6 +2210,10 @@ class WidgetManager:
         """Reset fade coordination state for a new widget setup cycle."""
         if hasattr(self, '_fade_coordinator') and self._fade_coordinator is not None:
             self._fade_coordinator.reset(clear_participants=True)
+            self._fade_coordinator.add_startup_hold(_CRITICAL_GL_STARTUP_HOLD)
+            self._fade_coordinator.add_completion_callback(
+                self._on_startup_fades_complete
+            )
         self._expected_overlays = set()
         self._spotify_secondary_fade_starters = []
         self._spotify_secondary_registration_generation += 1
@@ -2163,6 +2230,8 @@ class WidgetManager:
         if self._compositor_ready and hasattr(self, '_fade_coordinator') and self._fade_coordinator is not None:
             try:
                 self._fade_coordinator.signal_compositor_ready()
+                self._prewarm_spotify_visualizer_overlay()
+                self._release_critical_gl_startup_hold()
             except Exception:
                 logger.debug("[WIDGET_MANAGER] Failed to re-prime fade coordinator for ready compositor", exc_info=True)
 
@@ -2193,6 +2262,7 @@ class WidgetManager:
         request_ts = time.monotonic()
         screen_idx = getattr(self._parent, "screen_index", "?")
         compositor_ready = bool(self._compositor_ready)
+        fade_generation = self._fade_coordinator.get_generation()
 
         parent_pending = None
         if self._parent is not None:
@@ -2232,6 +2302,10 @@ class WidgetManager:
                 self._compositor_ready,
             )
             starter()
+            self._track_overlay_fade_completion(
+                overlay_name,
+                generation=fade_generation,
+            )
 
         if isinstance(parent_pending, dict):
             try:
@@ -2255,6 +2329,81 @@ class WidgetManager:
             overlay_name,
             started_immediately,
         )
+
+    def _resolve_overlay_fade_widget(self, overlay_name: str) -> Optional[QWidget]:
+        candidates = (
+            self._widgets.get(overlay_name),
+            self._widgets.get(f"{overlay_name}_widget"),
+            getattr(self._parent, f"{overlay_name}_widget", None)
+            if self._parent is not None
+            else None,
+            getattr(self._parent, overlay_name, None)
+            if self._parent is not None
+            else None,
+        )
+        for candidate in candidates:
+            if isinstance(candidate, QWidget):
+                return candidate
+        return None
+
+    def _track_overlay_fade_completion(
+        self,
+        overlay_name: str,
+        *,
+        generation: int,
+    ) -> None:
+        """Connect coordinator completion to the real shadow-fade animation."""
+
+        widget = self._resolve_overlay_fade_widget(overlay_name)
+        if widget is None:
+            self._fade_coordinator.mark_fade_complete(
+                overlay_name,
+                generation=generation,
+            )
+            return
+
+        if bool(getattr(widget, "_shadowfade_completed", False)):
+            self._fade_coordinator.mark_fade_complete(
+                overlay_name,
+                generation=generation,
+            )
+            return
+
+        animation = getattr(widget, "_shadowfade_anim", None)
+        finished_signal = getattr(animation, "finished", None)
+        connector = getattr(finished_signal, "connect", None)
+        if not callable(connector):
+            self._fade_coordinator.mark_fade_complete(
+                overlay_name,
+                generation=generation,
+            )
+            return
+
+        completed = False
+
+        def _complete(*_args) -> None:
+            nonlocal completed
+            if completed:
+                return
+            completed = True
+            self._fade_coordinator.mark_fade_complete(
+                overlay_name,
+                generation=generation,
+            )
+
+        try:
+            connector(_complete)
+            destroyed = getattr(widget, "destroyed", None)
+            destroyed_connect = getattr(destroyed, "connect", None)
+            if callable(destroyed_connect):
+                destroyed_connect(_complete)
+        except Exception:
+            logger.debug(
+                "[FADE_COORD] Failed to track real fade completion for %s",
+                overlay_name,
+                exc_info=True,
+            )
+            _complete()
 
     def register_spotify_secondary_fade(self, starter: Callable[[], None]) -> None:
         """Register a Spotify second-wave fade to run after primary overlays."""

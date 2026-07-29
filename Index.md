@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 
 Navigation and ownership map for SRPSS.
 
@@ -73,6 +73,7 @@ Do not read every document by default.
 | Display-local ordered teardown | `rendering/display_cleanup.py::cleanup_runtime` |
 | Display setup | existing modules under `rendering/display_*` |
 | Widget lifecycle | `rendering/widget_manager.py` |
+| Startup overlay reveal / deferred GL warmup | `rendering/fade_coordinator.py`, `rendering/widget_manager.py`, `rendering/gl_compositor_pkg/gl_lifecycle.py` |
 | Widget setup | `rendering/widget_setup_all.py` |
 | Widget metadata | `rendering/widget_descriptors.py` |
 | Thread/task ownership | `core/threading/manager.py` |
@@ -86,6 +87,7 @@ Do not read every document by default.
 | Transition identity | `rendering/transition_registry.py` |
 | Compositor | existing compositor modules under `rendering/` |
 | Image pipeline | existing image-pipeline and prefetch modules |
+| Media artwork worker/UI handoff | `widgets/media_widget.py`, `widgets/media/display_update.py`, `rendering/display_widget.py` |
 | Display image accounting | `rendering/image_resource_accounting.py` |
 | Compositor program ownership | `rendering/gl_programs/program_cache.py` |
 | Passive GL resource accounting | `core/resources/manager.py` |
