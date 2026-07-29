@@ -26,10 +26,13 @@ from core.process.types import (
     WorkerResponse,
     WorkerType,
 )
+from core.process.shared_memory_transport import (
+    SharedMemoryDescriptor,
+    close_producer_shared_memory,
+    create_image_shared_memory,
+    wait_for_shared_memory_attachment,
+)
 from core.process.workers.base import BaseWorker
-from core.logging.logger import get_logger
-
-logger = get_logger(__name__)
 
 try:
     from PIL import Image, ImageFilter
@@ -65,7 +68,11 @@ class ImageWorker(BaseWorker):
         self._prescale_count = 0
         self._total_decode_ms = 0.0
         self._total_prescale_ms = 0.0
-        self._shared_memories: list[SharedMemory] = []  # Track for cleanup
+        # The worker is sequential, so at most one published transfer awaits a
+        # parent attachment.  This is a bounded handoff, not a lifetime cache.
+        self._pending_shared_transfers: dict[
+            str, tuple[SharedMemory, SharedMemoryDescriptor]
+        ] = {}
     
     @property
     def worker_type(self) -> WorkerType:
@@ -239,16 +246,18 @@ class ImageWorker(BaseWorker):
             self._prescale_count += 1
             self._total_prescale_ms += prescale_ms
             
-            # Send WORKER_IDLE to resume heartbeat monitoring
-            self._send_idle_notification(msg.correlation_id)
-            
             # Use shared memory for large images to avoid queue serialization
             if data_size > self.SHARED_MEMORY_THRESHOLD:
                 try:
                     shm_name = f"srpss_img_{uuid.uuid4().hex[:12]}"
-                    shm = SharedMemory(name=shm_name, create=True, size=data_size)
-                    shm.buf[:data_size] = rgba_data
-                    self._shared_memories.append(shm)
+                    shm, descriptor = create_image_shared_memory(
+                        rgba_data,
+                        name=shm_name,
+                    )
+                    self._pending_shared_transfers[msg.correlation_id] = (
+                        shm,
+                        descriptor,
+                    )
                     
                     if self._logger:
                         self._logger.debug(
@@ -268,8 +277,7 @@ class ImageWorker(BaseWorker):
                             "width": width,
                             "height": height,
                             "format": "RGBA",
-                            "shared_memory_name": shm_name,
-                            "shared_memory_size": data_size,
+                            **descriptor.payload_fields(),
                             "cache_key": cache_key,
                             "mode": mode,
                         },
@@ -279,7 +287,8 @@ class ImageWorker(BaseWorker):
                     if self._logger:
                         self._logger.warning("Shared memory failed, using queue: %s", shm_err)
                     # Fall through to queue-based transfer
-            
+
+            self._send_idle_notification(msg.correlation_id)
             return WorkerResponse(
                 msg_type=MessageType.IMAGE_RESULT,
                 seq_no=msg.seq_no,
@@ -407,16 +416,38 @@ class ImageWorker(BaseWorker):
             success=True,
         )
     
+    def _after_response_sent(
+        self,
+        response: WorkerResponse,
+        *,
+        delivered: bool,
+    ) -> None:
+        """Close the producer mapping as soon as parent attachment is proven."""
+        transfer = self._pending_shared_transfers.pop(
+            response.correlation_id,
+            None,
+        )
+        if transfer is None:
+            return
+
+        shm, descriptor = transfer
+        attached = False
+        try:
+            if delivered:
+                attached = wait_for_shared_memory_attachment(
+                    shm,
+                    descriptor,
+                    timeout_s=1.0,
+                )
+        finally:
+            close_producer_shared_memory(shm, attached=attached)
+            self._send_idle_notification(response.correlation_id)
+
     def _cleanup(self) -> None:
-        """Log final statistics and clean up shared memory."""
-        # Clean up any shared memory segments we created
-        for shm in self._shared_memories:
-            try:
-                shm.close()
-                shm.unlink()
-            except Exception as e:
-                logger.debug("[MISC] Exception suppressed: %s", e)
-        self._shared_memories.clear()
+        """Log final statistics and reclaim only unpublished/in-flight handoffs."""
+        for shm, _descriptor in self._pending_shared_transfers.values():
+            close_producer_shared_memory(shm, attached=False)
+        self._pending_shared_transfers.clear()
         
         if self._logger:
             if self._decode_count > 0:

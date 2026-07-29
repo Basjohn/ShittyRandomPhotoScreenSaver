@@ -46,7 +46,10 @@ def worker():
     req_queue = MockQueue()
     resp_queue = MockQueue()
     w = ImageWorker(req_queue, resp_queue)
-    return w, req_queue, resp_queue
+    try:
+        yield w, req_queue, resp_queue
+    finally:
+        w._cleanup()
 
 
 @pytest.fixture

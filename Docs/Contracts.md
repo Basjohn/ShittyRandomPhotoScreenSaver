@@ -24,9 +24,10 @@ This is not a second `Spec.md`. Find the owner here, then read only the owning c
 | Thread and task registry | `core/threading/manager.py` | `Docs/Guardrails.md` | Coarse async work; no frame-clock handshakes |
 | Qt/native resource tracking | `core/resources/manager.py` plus explicit GL owner | `Docs/Compositor_Architecture.md` | Tracking does not replace context ownership |
 | Shared application events | `core/events/event_system.py` | — | Meaningful cross-module events, not frame transport |
-| Worker process orchestration | `core/process/supervisor.py` | — | One correlated process-response seam |
+| Worker process orchestration | `core/process/supervisor.py` | `Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md` | One correlated process-response seam; payload-aware late/cancel/shutdown disposal |
+| Image shared-memory transport | `core/process/shared_memory_transport.py` plus `core/process/workers/image_worker.py` | `Docs/phase_reports/P04_RESOURCE_LIFETIME_MAP.md` | One bounded attachment handoff; parent consumes/unlinks; exact live-byte accounting |
 | Shared animation timeline | `core/animation/animator.py` | — | Shared animations only; not visualizer simulation |
-| Secure-desktop URL/helper handoff | installer task/ACL contract, `core/windows/reddit_helper_bridge.py`, `core/windows/reddit_helper_runtime.py`, and `helpers/reddit_helper_worker.py` | `Docs/Historical_Bugs.md` R-02; active recovery in `Current_Plan.md` | Atomic bounded spool; interactive-only ephemeral helper; saver teardown never waits |
+| Secure-desktop URL/helper handoff | installer task/ACL contract, `core/windows/reddit_helper_bridge.py`, `core/windows/reddit_helper_runtime.py`, and `helpers/reddit_helper_worker.py` | `Docs/Historical_Bugs.md` R-02 | Atomic bounded spool; interactive-only ephemeral helper; saver teardown never waits |
 | Build/release orchestration | `tools/build_runner.py`, `tools/build_layout.ps1`, and mode-specific workers under `scripts/` | `Docs/Harness_Index.md` Build Foundry section | One runner; sequential workers; scratch output outside the canonical four-folder release tree |
 
 ## Rendering and Performance Contracts
@@ -39,7 +40,7 @@ This is not a second `Spec.md`. Find the owner here, then read only the owning c
 | Visualizer simulation | visualizer controller/model | `Docs/Visualizer_Reference.md` | Independent logical cadence and mode behaviour |
 | Visualizer changes | visualizer subsystem | `Docs/Visualizer_Change_Checklist.md` | Fidelity contract and complete change sweep |
 | Visualizer renderer integration | narrow renderer interface | `Docs/Compositor_Architecture.md` | No widget impersonation or paint acknowledgement |
-| CPU image pipeline/cache | image pipeline/cache owner | `Docs/Compositor_Architecture.md` | Immutable worker result and byte-bounded storage |
+| CPU image pipeline/cache | image pipeline/cache owner plus transfer-scoped ImageWorker shared memory | `Docs/Compositor_Architecture.md` | Immutable worker result, one Qt-owned copy, byte-bounded storage, no retained transport mapping |
 | GPU resource store | explicit GL/context owner | `Docs/Compositor_Architecture.md` | Byte accounting, generation, leases, deletion |
 | Performance instrumentation | existing perf/usage modules | `Docs/Logging_Guide.md`, `Docs/TestSuite.md` | Passive sampled observation, never cadence |
 | Performance acceptance | benchmark and runtime gates | `Docs/TestSuite.md` | Tail latency and fidelity outrank average FPS |

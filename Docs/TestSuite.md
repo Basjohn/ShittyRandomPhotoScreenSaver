@@ -254,10 +254,13 @@ Phase 4 owns these concrete automated bars:
 - `tests/test_image_cache_accounting.py` — exact QImage/QPixmap logical-byte eviction and detached metadata;
 - `tests/test_image_prefetcher.py` — concurrency/count/future-byte backlog bounds and worker-safe QImage results;
 - `tests/test_image_pipeline.py` — exact transform sharing plus non-sharing across differing target/DPR identity;
+- `tests/test_image_worker_shared_memory.py` — per-transfer attachment/close ownership, one-copy parent consumption, zero live-byte accounting, timeout/late response, cancellation, runtime-generation rejection, buffered/queue shutdown disposal, publish failure, and orphan-name probes;
+- `tests/test_process_supervisor.py` and `tests/test_usage_sampler.py` — correlated response buffering/lifecycle plus labelled ImageWorker/shared-memory telemetry;
 - `tests/test_gl_texture_streaming.py` and `tests/test_memory_pooling.py` — upload/PBO reuse and cleanup regressions;
 - `tools/phase4_resource_harness.py` — 45-cycle owner/allocator plateau gate with real Qt image allocations and RSS.
+- `tools/phase4_image_worker_shm_harness.py` — real spawned-worker 50×4K transfer plateau plus shutdown-during-transfer and orphan-name gate.
 
-The authoritative artifact is `Docs/phase_reports/artifacts/P04/resource_plateau_report.json`. Driver-reported VRAM, a normal 30-minute wall-clock run, and the two-hour soak remain Phase 11 platform gates.
+The deterministic cache/texture/PBO artifact remains authoritative for those owners, and the 50×4K shared-memory harness closes the focused worker-transfer slice. Phase 4 is nevertheless reopened until the full Phase4plus platform comparator proves labelled worker RSS, total RSS/private commit, tracked GL bytes, and driver VRAM plateau together with unchanged visualizer/transition presentation. The two-hour soak remains a Phase 11 gate.
 
 ## 9. CPU/Task Gate
 

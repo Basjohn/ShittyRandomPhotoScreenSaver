@@ -121,6 +121,7 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 - Partial GL reinitialization is not part of the stable architecture unless separately designed and approved.
 - Settings and committed CUSTOM Edit perform full display teardown before dialog/reload work and build a fresh `DisplayManager` afterward.
 - Delayed GUI/worker publication is valid only when both the engine runtime generation and exact owning `DisplayManager` still match.
+- Large image shared-memory is transfer-scoped: the worker retains only the in-flight producer handle until parent attachment, the parent owns consume/unlink, and every timeout/cancel/rejection/buffer/shutdown path disposes payload resources before dropping a response.
 - `DisplayWidget.cleanup_runtime()` is the normal synchronous owner; `QObject.destroyed` is only a residual safety net.
 - A compositor remains `DESTROYING` and retains failed resource ownership when context acquisition or GL deletion cannot be proved.
 - Correctness never depends on optional deferred warmup.

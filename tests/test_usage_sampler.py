@@ -87,6 +87,7 @@ class _ProcessCollector:
             cpu_system_pct=51.0,
             rss_app_mb=420.0,
             rss_main_mb=350.0,
+            rss_children_mb=70.0,
             private_app_mb=380.0,
             vms_app_mb=800.0,
             threads_app=17,
@@ -147,6 +148,15 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
             "gl_pbo_resources": 1,
             "gl_pbo_bytes": 1024,
             "qt_default_fbo": "qt_owned_untracked",
+            "image_worker_pid": 101,
+            "image_worker_rss_mb": 70.0,
+            "image_worker_vms_mb": 140.0,
+            "segments_created": 4,
+            "segments_live": 0,
+            "live_bytes": 0,
+            "segments_consumed": 3,
+            "segments_reclaimed_late": 1,
+            "unlink_failures": 0,
         },
     )
 
@@ -156,6 +166,7 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     sample = next(record.message for record in caplog.records if "[USAGE] sample " in record.message)
     assert "cpu_app_pct=42.5" in sample
     assert "rss_app_mb=420.0" in sample
+    assert "rss_children_mb=70.0" in sample
     assert "gpu_busy_pct=67.0" in sample
     assert "vram_dedicated_mb=512.0" in sample
     assert "tracked_known_bytes=4096" in sample
@@ -166,6 +177,12 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     assert "gl_framebuffer_bytes=0" in sample
     assert "gl_pbo_bytes=1024" in sample
     assert "qt_default_fbo=qt_owned_untracked" in sample
+    assert "image_worker_pid=101" in sample
+    assert "image_worker_rss_mb=70.0" in sample
+    assert "shm_segments_created=4" in sample
+    assert "shm_segments_live=0" in sample
+    assert "shm_live_bytes=0" in sample
+    assert "shm_segments_reclaimed_late=1" in sample
     assert "tm_active=1" in sample
     assert '"visualizer.audio_analysis":{"active":1' in sample
     assert manager.tasks[0][2]["category"] == "diagnostics.usage"

@@ -30,6 +30,13 @@ from core.process.types import (
     WorkerState,
     WorkerType,
 )
+from core.process.shared_memory_transport import (
+    SharedMemoryAccounting,
+    SharedMemoryDescriptor,
+    SharedMemoryReadLease,
+    dispose_malformed_shared_memory_payload,
+    dispose_shared_memory_descriptor,
+)
 
 logger = get_logger(__name__)
 
@@ -55,6 +62,7 @@ class ProcessSupervisor:
     # Queue configuration
     REQUEST_QUEUE_SIZE = 64    # Max pending requests per worker
     RESPONSE_QUEUE_SIZE = 64   # Max pending responses per worker
+    MAX_BUFFERED_RESPONSES = 128
     POLL_TIMEOUT_MS = 10       # Non-blocking poll timeout
     
     def __init__(
@@ -96,6 +104,10 @@ class ProcessSupervisor:
         self._buffered_responses: dict[WorkerType, dict[str, list[WorkerResponse]]] = {
             wt: {} for wt in WorkerType
         }
+        self._abandoned_correlations: dict[WorkerType, dict[str, str]] = {
+            wt: {} for wt in WorkerType
+        }
+        self._shared_memory_accounting = SharedMemoryAccounting()
         
         # Initialize health status for all worker types
         for wt in WorkerType:
@@ -209,10 +221,15 @@ class ProcessSupervisor:
                 while time.time() < deadline and process.is_alive():
                     try:
                         data = resp_q.get(timeout=0.25)
-                        resp = WorkerResponse.from_dict(data)
+                        resp = self._response_from_data(data)
                         if resp.msg_type == MessageType.WORKER_READY:
                             ready = True
                             break
+                        if self._process_internal_response(worker_type, resp):
+                            continue
+                        if self._dispose_if_abandoned(worker_type, resp):
+                            continue
+                        self._buffer_response(worker_type, resp)
                     except QueueEmpty:
                         continue
                     except Exception:
@@ -286,8 +303,24 @@ class ProcessSupervisor:
                 except Exception:
                     pass
                 
-                # Wait for graceful shutdown
-                process.join(timeout=timeout)
+                # Drain response resources while waiting.  In particular this
+                # acknowledges a published ImageWorker mapping so the worker
+                # can close its producer handle and reach SHUTDOWN cleanly.
+                deadline = time.monotonic() + max(0.0, float(timeout))
+                while process.is_alive() and time.monotonic() < deadline:
+                    self._drain_worker_response_queue(
+                        worker_type,
+                        dispose_application=True,
+                        reason="worker_stopping",
+                    )
+                    remaining = max(0.0, deadline - time.monotonic())
+                    process.join(timeout=min(0.05, remaining))
+
+                self._drain_worker_response_queue(
+                    worker_type,
+                    dispose_application=True,
+                    reason="worker_stopping",
+                )
                 
                 if process.is_alive():
                     logger.warning(
@@ -444,8 +477,10 @@ class ProcessSupervisor:
         for _ in range(max(0, max_count - len(responses))):
             try:
                 data = resp_queue.get_nowait()
-                response = WorkerResponse.from_dict(data)
+                response = self._response_from_data(data)
                 if self._process_internal_response(worker_type, response):
+                    continue
+                if self._dispose_if_abandoned(worker_type, response):
                     continue
                 responses.append(response)
             except QueueEmpty:
@@ -484,19 +519,32 @@ class ProcessSupervisor:
         timeout_s = max(0.0, poll_slice_ms / 1000.0)
 
         while time.time() < deadline:
+            buffered = self._pop_buffered_response(
+                worker_type,
+                correlation_id,
+            )
+            if buffered is not None:
+                return buffered
             remaining = deadline - time.time()
             if remaining <= 0.0:
                 break
             try:
                 data = resp_queue.get(timeout=min(timeout_s, remaining))
-                response = WorkerResponse.from_dict(data)
+                response = self._response_from_data(data)
             except QueueEmpty:
                 continue
             except Exception as e:
                 logger.debug("[WORKER] Error awaiting response: %s", e)
+                self.abandon_response(
+                    worker_type,
+                    correlation_id,
+                    reason="await_error",
+                )
                 return None
 
             if self._process_internal_response(worker_type, response):
+                continue
+            if self._dispose_if_abandoned(worker_type, response):
                 continue
 
             if response.correlation_id == correlation_id:
@@ -504,7 +552,15 @@ class ProcessSupervisor:
 
             self._buffer_response(worker_type, response)
 
-        return self._pop_buffered_response(worker_type, correlation_id)
+        buffered = self._pop_buffered_response(worker_type, correlation_id)
+        if buffered is not None:
+            return buffered
+        self.abandon_response(
+            worker_type,
+            correlation_id,
+            reason="timeout",
+        )
+        return None
 
     def send_request_and_await_response(
         self,
@@ -628,8 +684,124 @@ class ProcessSupervisor:
                 (time.time() - health.busy_since) * 1000 
                 if health.is_busy and health.busy_since > 0 else None
             )
+            if worker_type == WorkerType.IMAGE:
+                diagnostics["shared_memory"] = (
+                    self._shared_memory_accounting.snapshot()
+                )
             
             return diagnostics
+
+    def get_shared_memory_accounting_snapshot(self) -> dict[str, int]:
+        """Return a detached ImageWorker transfer-accounting snapshot."""
+        return self._shared_memory_accounting.snapshot()
+
+    def get_image_worker_usage_snapshot(self) -> dict[str, Any]:
+        """Return PID-labelled ImageWorker RSS plus shared-memory accounting."""
+        diagnostics = self.get_detailed_health(WorkerType.IMAGE)
+        snapshot: dict[str, Any] = {
+            "image_worker_pid": diagnostics.get("process_pid"),
+            "image_worker_rss_mb": diagnostics.get("memory_rss_mb"),
+            "image_worker_vms_mb": diagnostics.get("memory_vms_mb"),
+        }
+        snapshot.update(self._shared_memory_accounting.snapshot())
+        return snapshot
+
+    def consume_shared_memory_response(
+        self,
+        response: WorkerResponse,
+        consumer: Callable[[memoryview, SharedMemoryDescriptor], Any],
+    ) -> Any:
+        """Consume one response mapping and finalize it exactly once."""
+        descriptor = self._claim_shared_memory_descriptor(response)
+        if descriptor is None:
+            raise ValueError("Worker response has no shared-memory descriptor")
+
+        lease = SharedMemoryReadLease(descriptor)
+        consumed = False
+        try:
+            payload_view = lease.open()
+            result = consumer(payload_view, descriptor)
+            consumed = True
+            return result
+        finally:
+            lease.close()
+            self._shared_memory_accounting.finalize(
+                descriptor,
+                consumed=consumed,
+                unlink_failed=lease.unlink_failed,
+            )
+
+    def dispose_response(
+        self,
+        response: WorkerResponse,
+        *,
+        reason: str,
+    ) -> bool:
+        """Release payload-owned resources from a discarded response."""
+        try:
+            descriptor = self._claim_shared_memory_descriptor(response)
+        except Exception as e:
+            emergency_descriptor, unlink_failed = (
+                dispose_malformed_shared_memory_payload(response.payload)
+            )
+            response.payload.pop("shared_memory_name", None)
+            if emergency_descriptor is not None:
+                self._shared_memory_accounting.finalize(
+                    emergency_descriptor,
+                    consumed=False,
+                    unlink_failed=unlink_failed,
+                )
+            logger.warning(
+                "[WORKER] Invalid shared-memory response discarded "
+                "reason=%s reclaimed=%s: %s",
+                reason,
+                emergency_descriptor is not None,
+                e,
+            )
+            return emergency_descriptor is not None
+        if descriptor is None:
+            return False
+
+        _opened, unlink_failed = dispose_shared_memory_descriptor(descriptor)
+        self._shared_memory_accounting.finalize(
+            descriptor,
+            consumed=False,
+            unlink_failed=unlink_failed,
+        )
+        if is_perf_metrics_enabled():
+            logger.info(
+                "[PERF] [WORKER] reclaimed image shared memory "
+                "name=%s bytes=%d reason=%s",
+                descriptor.name,
+                descriptor.data_size,
+                reason,
+            )
+        return True
+
+    def abandon_response(
+        self,
+        worker_type: WorkerType,
+        correlation_id: str,
+        *,
+        reason: str = "cancelled",
+    ) -> int:
+        """Cancel ownership of a response and tombstone a possible late reply."""
+        if not correlation_id:
+            return 0
+        with self._lock:
+            self._abandoned_correlations[worker_type][correlation_id] = reason
+            buffered = self._buffered_responses[worker_type].pop(
+                correlation_id,
+                [],
+            )
+            if buffered:
+                self._abandoned_correlations[worker_type].pop(
+                    correlation_id,
+                    None,
+                )
+        for response in buffered:
+            self.dispose_response(response, reason=reason)
+        return len(buffered)
     
     def log_all_health_diagnostics(self) -> None:
         """Log detailed health diagnostics for all workers.
@@ -675,9 +847,11 @@ class ProcessSupervisor:
             self._heartbeat_timer.cancel()
             self._heartbeat_timer = None
 
-        with self._lock:
-            for worker_type in WorkerType:
-                self._buffered_responses[worker_type].clear()
+        for worker_type in WorkerType:
+            self._dispose_buffered_responses(
+                worker_type,
+                reason="supervisor_shutdown",
+            )
         
         # Stop all workers
         per_worker_timeout = timeout / max(len(self._workers), 1)
@@ -686,7 +860,21 @@ class ProcessSupervisor:
                 self.stop(worker_type, timeout=per_worker_timeout)
             except Exception as e:
                 logger.error("Error stopping %s worker: %s", worker_type.value, e)
-        
+
+        if is_perf_metrics_enabled():
+            shared = self._shared_memory_accounting.snapshot()
+            logger.info(
+                "[PERF] [WORKER] shared_memory_final "
+                "segments_created=%d segments_live=%d live_bytes=%d "
+                "segments_consumed=%d segments_reclaimed_late=%d "
+                "unlink_failures=%d",
+                shared["segments_created"],
+                shared["segments_live"],
+                shared["live_bytes"],
+                shared["segments_consumed"],
+                shared["segments_reclaimed_late"],
+                shared["unlink_failures"],
+            )
         logger.info("ProcessSupervisor shutdown complete")
     
     # -------------------------------------------------------------------------
@@ -726,14 +914,125 @@ class ProcessSupervisor:
 
         return False
 
+    def _response_from_data(self, data: Any) -> WorkerResponse:
+        """Decode one queue item and register any resource descriptor."""
+        response = WorkerResponse.from_dict(data)
+        try:
+            descriptor = SharedMemoryDescriptor.from_payload(response.payload)
+        except Exception:
+            # The response remains caller-owned so the normal disposal path can
+            # report the malformed descriptor without silently losing it.
+            descriptor = None
+        if descriptor is not None:
+            self._shared_memory_accounting.register(descriptor)
+        return response
+
+    def _claim_shared_memory_descriptor(
+        self,
+        response: WorkerResponse,
+    ) -> SharedMemoryDescriptor | None:
+        descriptor = SharedMemoryDescriptor.from_payload(response.payload)
+        if descriptor is None:
+            return None
+        # Claim by removing the handle.  Repeated finalizers are therefore
+        # harmless even when shutdown races a consumer exception.
+        response.payload.pop("shared_memory_name", None)
+        self._shared_memory_accounting.register(descriptor)
+        return descriptor
+
+    def _dispose_if_abandoned(
+        self,
+        worker_type: WorkerType,
+        response: WorkerResponse,
+    ) -> bool:
+        correlation_id = response.correlation_id
+        if not correlation_id:
+            self.dispose_response(response, reason="uncorrelated_drop")
+            return True
+        with self._lock:
+            reason = self._abandoned_correlations[worker_type].pop(
+                correlation_id,
+                None,
+            )
+        if reason is None:
+            return False
+        self.dispose_response(response, reason=f"late_{reason}")
+        return True
+
     def _buffer_response(self, worker_type: WorkerType, response: WorkerResponse) -> None:
         """Buffer a correlated response for later retrieval."""
         corr_id = response.correlation_id
         if not corr_id:
+            self.dispose_response(response, reason="uncorrelated_drop")
             return
+        dropped: list[WorkerResponse] = []
         with self._lock:
             worker_buffer = self._buffered_responses[worker_type]
             worker_buffer.setdefault(corr_id, []).append(response)
+            buffered_count = sum(len(items) for items in worker_buffer.values())
+            while buffered_count > self.MAX_BUFFERED_RESPONSES and worker_buffer:
+                oldest_id = next(iter(worker_buffer))
+                oldest_queue = worker_buffer[oldest_id]
+                dropped.append(oldest_queue.pop(0))
+                buffered_count -= 1
+                if not oldest_queue:
+                    worker_buffer.pop(oldest_id, None)
+        for item in dropped:
+            self.dispose_response(item, reason="response_buffer_overflow")
+
+    def _dispose_buffered_responses(
+        self,
+        worker_type: WorkerType,
+        *,
+        reason: str,
+    ) -> int:
+        with self._lock:
+            worker_buffer = self._buffered_responses[worker_type]
+            responses = [
+                response
+                for queue in worker_buffer.values()
+                for response in queue
+            ]
+            worker_buffer.clear()
+        for response in responses:
+            self.dispose_response(response, reason=reason)
+        return len(responses)
+
+    def _drain_worker_response_queue(
+        self,
+        worker_type: WorkerType,
+        *,
+        dispose_application: bool,
+        reason: str,
+        max_count: int = RESPONSE_QUEUE_SIZE * 2,
+    ) -> int:
+        """Drain queue items without ever dropping payload-owned resources."""
+        with self._lock:
+            response_queue = self._response_queues.get(worker_type)
+        if response_queue is None:
+            return 0
+
+        drained = 0
+        for _ in range(max(0, int(max_count))):
+            try:
+                data = response_queue.get_nowait()
+                response = self._response_from_data(data)
+            except QueueEmpty:
+                break
+            except Exception as e:
+                logger.debug("[WORKER] Error draining response queue: %s", e)
+                break
+
+            drained += 1
+            if self._process_internal_response(worker_type, response):
+                continue
+            if self._dispose_if_abandoned(worker_type, response):
+                continue
+            if dispose_application:
+                self.dispose_response(response, reason=reason)
+            else:
+                self._buffer_response(worker_type, response)
+        return drained
 
     def _pop_buffered_response(
         self,
@@ -784,6 +1083,16 @@ class ProcessSupervisor:
     
     def _cleanup_worker(self, worker_type: WorkerType) -> None:
         """Clean up worker resources (must hold lock)."""
+        self._drain_worker_response_queue(
+            worker_type,
+            dispose_application=True,
+            reason="worker_cleanup_queue",
+        )
+        self._dispose_buffered_responses(
+            worker_type,
+            reason="worker_cleanup_buffer",
+        )
+
         process = self._workers.pop(worker_type, None)
         if process is not None:
             try:
@@ -810,7 +1119,7 @@ class ProcessSupervisor:
         
         self._health[worker_type].state = WorkerState.STOPPED
         self._health[worker_type].pid = None
-        self._buffered_responses[worker_type].clear()
+        self._abandoned_correlations[worker_type].clear()
         self._broadcast_health(worker_type)
     
     def _ensure_heartbeat_monitoring(self) -> None:
@@ -844,7 +1153,12 @@ class ProcessSupervisor:
         
         for worker_type in worker_types:
             # Poll responses to process HEARTBEAT_ACK messages
-            self.poll_responses(worker_type, max_count=20)
+            self._drain_worker_response_queue(
+                worker_type,
+                dispose_application=False,
+                reason="heartbeat_drain",
+                max_count=20,
+            )
         
         with self._lock:
             for worker_type, process in list(self._workers.items()):

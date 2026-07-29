@@ -41,6 +41,7 @@ class ProcessUsageSnapshot:
     cpu_system_pct: float
     rss_app_mb: float
     rss_main_mb: float
+    rss_children_mb: float
     private_app_mb: float | None
     vms_app_mb: float
     threads_app: int
@@ -169,6 +170,7 @@ class ProcessUsageCollector:
             cpu_system_pct=system_cpu,
             rss_app_mb=_mb(rss_app),
             rss_main_mb=_mb(rss_main),
+            rss_children_mb=_mb(max(0, rss_app - rss_main)),
             private_app_mb=_mb(private_app) if private_available else None,
             vms_app_mb=_mb(vms_app),
             threads_app=threads_app,
@@ -499,6 +501,7 @@ class UsageTelemetryService:
                 "[USAGE] sample seq=%d cadence_gap_ms=%s skipped=%d collect_ms=%s "
                 "cpu_primed=%d cpu_app_pct=%s cpu_main_pct=%s cpu_system_pct=%s "
                 "processes=%d children=%d rss_app_mb=%s rss_main_mb=%s "
+                "rss_children_mb=%s "
                 "private_app_mb=%s vms_app_mb=%s threads_app=%d handles_app=%s "
                 "io_read_mb=%s io_write_mb=%s gpu_supported=%d gpu_active=%d "
                 "gpu_status=%s gpu_busy_pct=%s gpu_engine_sum_pct=%s "
@@ -512,6 +515,11 @@ class UsageTelemetryService:
                 "gl_framebuffer_resources=%s gl_framebuffer_bytes=%s "
                 "gl_renderbuffer_resources=%s gl_renderbuffer_bytes=%s "
                 "gl_pbo_resources=%s gl_pbo_bytes=%s qt_default_fbo=%s "
+                "image_worker_pid=%s image_worker_rss_mb=%s "
+                "image_worker_vms_mb=%s shm_segments_created=%s "
+                "shm_segments_live=%s shm_live_bytes=%s "
+                "shm_segments_consumed=%s shm_segments_reclaimed_late=%s "
+                "shm_unlink_failures=%s "
                 "tm_active=%d tm_io_max=%d tm_compute_max=%d "
                 "tm_io_submitted=%d tm_io_completed=%d tm_io_failed=%d "
                 "tm_compute_submitted=%d tm_compute_completed=%d tm_compute_failed=%d "
@@ -528,6 +536,7 @@ class UsageTelemetryService:
                 process.child_count,
                 _fmt(process.rss_app_mb),
                 _fmt(process.rss_main_mb),
+                _fmt(process.rss_children_mb),
                 _fmt(process.private_app_mb),
                 _fmt(process.vms_app_mb),
                 process.threads_app,
@@ -563,6 +572,15 @@ class UsageTelemetryService:
                 _fmt(resources.get("gl_pbo_resources")),
                 _fmt(resources.get("gl_pbo_bytes")),
                 resources.get("qt_default_fbo", "na"),
+                _fmt(resources.get("image_worker_pid")),
+                _fmt(resources.get("image_worker_rss_mb")),
+                _fmt(resources.get("image_worker_vms_mb")),
+                _fmt(resources.get("segments_created")),
+                _fmt(resources.get("segments_live")),
+                _fmt(resources.get("live_bytes")),
+                _fmt(resources.get("segments_consumed")),
+                _fmt(resources.get("segments_reclaimed_late")),
+                _fmt(resources.get("unlink_failures")),
                 threads["tm_active"],
                 threads["tm_io_max"],
                 threads["tm_compute_max"],

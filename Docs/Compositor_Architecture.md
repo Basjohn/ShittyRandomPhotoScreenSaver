@@ -317,10 +317,13 @@ Phase 4 implementation boundary (2026-07-28):
 - the baseline CPU cache retains at most 16 entries by default and 256 MiB, with legacy settings clamped to 2–32 entries / 64–256 MiB;
 - prefetch admits at most four concurrent requests and independently bounds pending count and future scaled RGBA8 bytes;
 - exact-transform displays may share immutable QImage/QPixmap backing, while size/mode/DPR differences remain independent;
+- large ImageWorker RGBA handoffs retain only one in-flight producer mapping until parent attachment, then copy once into Qt-owned `QImage`; timeout/cancel/stale/buffer/shutdown paths are payload-disposed with exact live-byte accounting;
 - each compositor owns a 128 MiB / 12-entry texture LRU and one idle PBO under 64 MiB;
 - active transition texture pairs are pinned only through terminal presentation/cancellation;
 - display QPixmap metadata is captured on the GUI thread and globally deduplicated by backing identity in passive snapshots;
 - Phase 6 still owns any cross-context/shared GPU resource store and lease design.
+
+The deterministic cache/display/texture/PBO gate and focused 50×4K worker-transfer gate pass. Phase 4 remains open until the full platform comparator confirms ImageWorker and total RSS/private-commit plateau alongside tracked GL bytes, driver VRAM, and unchanged presentation.
 
 For the current dual-1440p environment:
 

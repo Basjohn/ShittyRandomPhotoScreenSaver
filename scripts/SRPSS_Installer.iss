@@ -35,77 +35,65 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 ; Main screensaver from the canonical release payload.
 Source: ".\..\release\screensaver\SRPSS.scr"; DestDir: "{sys}"; Flags: ignoreversion
 
-; Application icon used for shortcuts and ARP entry
+; Application icon used for shortcuts and ARP entry.
 Source: ".\..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
 
-; Media provider logos (Spotify is bundled via images dir; MusicBee icon)
+; Media provider logos.
 Source: ".\..\images\icons8-musicbee-96.png"; DestDir: "{app}\images"; Flags: ignoreversion
 
-; Reddit helper watcher bundle (laid down by the installer; no one-file runtime extraction)
+; Reddit helper watcher bundle.
 Source: ".\..\release\reddit_helper\*"; DestDir: "{commonappdata}\SRPSS\helper"; Flags: recursesubdirs createallsubdirs ignoreversion
 
-; Shared task-definition template used by both installer registration and
-; repo-side harness tooling so we test the same XML contract.
+; Shared scheduled-task template.
 Source: ".\reddit_helper_task_template.xml"; Flags: dontcopy
 
-; Authoritative curated visualizer presets shipped directly from the repository tree.
-; Delivered to a stable ProgramData path so upgrades always clean-replace them.
+; Curated visualizer presets and sounds.
 Source: ".\..\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: ".\..\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 
 [Dirs]
+; Keep normal inherited ProgramData ACLs. Add only the ordinary rights each
+; user-session helper directory actually needs.
 Name: "{commonappdata}\SRPSS"
-Name: "{commonappdata}\SRPSS\helper"
+Name: "{commonappdata}\SRPSS\helper"; Permissions: users-readexec
 Name: "{commonappdata}\SRPSS\presets"
 Name: "{commonappdata}\SRPSS\sounds"
-Name: "{commonappdata}\SRPSS\url_queue"
-Name: "{commonappdata}\SRPSS\logs"
-Name: "{commonappdata}\SRPSS\helper_signals"
+Name: "{commonappdata}\SRPSS\url_queue"; Permissions: users-modify
+Name: "{commonappdata}\SRPSS\logs"; Permissions: users-modify
+Name: "{commonappdata}\SRPSS\helper_signals"; Permissions: users-modify
 
 [InstallDelete]
-; Remove any legacy SRPSS screen saver binaries that can cause duplicate
-; entries in the Windows Screen Saver dropdown before installing the
-; current SRPSS.scr.
+; Remove legacy screen saver binaries.
 Type: files; Name: "{sys}\\Sprss.scr"
 Type: files; Name: "{sys}\\PSrpss.scr"
 Type: files; Name: "{sys}\\ShittyRandomPhotoScreenSaver.scr"
-; Wipe old shipped curated presets before the new ones land so stale/renamed
-; files are never left behind alongside the authoritative replacement set.
+
+; Clean-replace shipped data and helper bundle.
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\helper"
 Type: files; Name: "{commonappdata}\SRPSS\sounds\tutuogg.ogg"
 
 [Registry]
-; Set SRPSS.scr as the current user's active screensaver
+; Set SRPSS.scr as the current user's active screensaver.
 Root: HKCU; Subkey: "Control Panel\Desktop"; ValueType: string; ValueName: "SCRNSAVE.EXE"; ValueData: "{sys}\SRPSS.scr"; Flags: uninsdeletevalue
 
-; Remove the legacy login-start helper entry. The helper is now launched by
-; the actual screensaver session and must not live as a background startup app.
+; Remove the legacy login-start helper entry.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "SRPSS_RedditHelper"; Flags: deletevalue
 
 [Icons]
-; Desktop shortcut to open Screen Saver Settings (with SRPSS selected).
-; Using control.exe desk.cpl,,1 is the supported way on modern Windows.
 Name: "{commondesktop}\Configure SRPSS"; Filename: "{sys}\control.exe"; Parameters: "desk.cpl,,1"; WorkingDir: "{sys}"; IconFilename: "{app}\SRPSS.ico"
-
-; Start menu shortcut to the same Screen Saver Settings dialog
 Name: "{group}\Configure SRPSS"; Filename: "{sys}\control.exe"; Parameters: "desk.cpl,,1"; WorkingDir: "{sys}"; IconFilename: "{app}\SRPSS.ico"
 
 [UninstallRun]
-; Kill watcher before uninstall
 Filename: "taskkill"; Parameters: "/F /IM SRPSS_RedditHelper.exe"; Flags: runhidden nowait; RunOnceId: "KillHelper"
-; Remove the interactive on-demand scheduled task used to launch the helper.
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""SRPSS_RedditHelper"" /F"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteHelperTask"
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""\SRPSS\RedditHelper"" /F"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteLegacyHelperTask"
 
 [UninstallDelete]
-; Clean up Reddit helper bundle and queue
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\helper"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\url_queue"
 
 [Run]
-; No post-install run step by default. The user can open Screen Saver
-; Settings via the standard control panel entry.
 Filename: "{sys}\control.exe"; Parameters: "desk.cpl,,1"; Description: "Open Screen Saver Settings now"; Flags: postinstall nowait skipifsilent
 
 [Code]
@@ -130,104 +118,6 @@ begin
     Result := DomainName + '\' + UserName
   else
     Result := UserName;
-end;
-
-function RunIcacls(const TargetPath, Arguments: String): Boolean;
-var
-  ResultCode: Integer;
-  IcaclsPath: String;
-begin
-  IcaclsPath := ExpandConstant('{sys}\icacls.exe');
-  ResultCode := -1;
-  Result := Exec(
-    IcaclsPath,
-    '"' + TargetPath + '" ' + Arguments,
-    '',
-    SW_HIDE,
-    ewWaitUntilTerminated,
-    ResultCode
-  );
-  if Result then
-    Result := ResultCode = 0;
-  if not Result then
-    Log(Format('SRPSS: ACL reconciliation failed path="%s" args="%s" rc=%d', [
-      TargetPath,
-      Arguments,
-      ResultCode
-    ]));
-end;
-
-function ApplyRedditHelperAcl(
-  const TargetPath, CurrentUserId, CurrentUserRights: String
-): Boolean;
-var
-  RemoveBroadGrants: String;
-  GrantRequiredPrincipals: String;
-begin
-  RemoveBroadGrants :=
-    '/inheritance:r ' +
-    '/remove:g "*S-1-1-0" "*S-1-5-11" "*S-1-5-32-545" /T /Q';
-  GrantRequiredPrincipals :=
-    '/grant:r ' +
-    '"*S-1-5-18:(OI)(CI)F" ' +
-    '"*S-1-5-32-544:(OI)(CI)F" ' +
-    '"' + CurrentUserId + ':(OI)(CI)' + CurrentUserRights + '" /T /Q';
-
-  { Grant explicit recovery/traversal authority before inheritance is removed. }
-  Result := RunIcacls(TargetPath, GrantRequiredPrincipals);
-  if Result then
-    Result := RunIcacls(TargetPath, RemoveBroadGrants);
-end;
-
-function ApplySharedDataAcl(const TargetPath: String): Boolean;
-var
-  RemoveBroadGrants: String;
-  GrantRequiredPrincipals: String;
-begin
-  { Presets and sounds are shared, non-executable data updated by the }
-  { non-elevated Media Center installer. Keep executable helper files separate. }
-  RemoveBroadGrants :=
-    '/inheritance:r ' +
-    '/remove:g "*S-1-1-0" "*S-1-5-11" /T /Q';
-  GrantRequiredPrincipals :=
-    '/grant:r ' +
-    '"*S-1-5-18:(OI)(CI)F" ' +
-    '"*S-1-5-32-544:(OI)(CI)F" ' +
-    '"*S-1-5-32-545:(OI)(CI)M" /T /Q';
-
-  Result := RunIcacls(TargetPath, GrantRequiredPrincipals);
-  if Result then
-    Result := RunIcacls(TargetPath, RemoveBroadGrants);
-end;
-
-function ReconcileRedditHelperStorageAcls(): Boolean;
-var
-  BaseDir: String;
-  CurrentUserId: String;
-begin
-  BaseDir := ExpandConstant('{commonappdata}\SRPSS');
-  CurrentUserId := BuildCurrentUserId();
-  Result := CurrentUserId <> '';
-
-  if Result then
-    Result := ApplyRedditHelperAcl(BaseDir, CurrentUserId, 'RX');
-  if Result then
-    Result := ApplyRedditHelperAcl(BaseDir + '\helper', CurrentUserId, 'RX');
-  if Result then
-    Result := ApplySharedDataAcl(BaseDir + '\presets');
-  if Result then
-    Result := ApplySharedDataAcl(BaseDir + '\sounds');
-  if Result then
-    Result := ApplyRedditHelperAcl(BaseDir + '\url_queue', CurrentUserId, 'M');
-  if Result then
-    Result := ApplyRedditHelperAcl(BaseDir + '\logs', CurrentUserId, 'M');
-  if Result then
-    Result := ApplyRedditHelperAcl(BaseDir + '\helper_signals', CurrentUserId, 'M');
-
-  if Result then
-    Log('SRPSS: Reddit helper ProgramData ACLs reconciled successfully')
-  else
-    Log('SRPSS: Reddit helper ProgramData ACL reconciliation did not complete');
 end;
 
 procedure TryDeleteTaskByName(const TaskName: String);
@@ -318,8 +208,20 @@ begin
   end;
   TemplateText := TemplateTextAnsi;
 
-  HelperArgs := BuildHelperArguments(QueueDir, LogDir, SignalDir, SessionTicket, 20);
-  RenderedXml := RenderRedditHelperTaskXml(TemplateText, TaskName, TaskUserId, HelperExe, HelperArgs);
+  HelperArgs := BuildHelperArguments(
+    QueueDir,
+    LogDir,
+    SignalDir,
+    SessionTicket,
+    20
+  );
+  RenderedXml := RenderRedditHelperTaskXml(
+    TemplateText,
+    TaskName,
+    TaskUserId,
+    HelperExe,
+    HelperArgs
+  );
 
   TryDeleteTaskByName(TaskName);
   TryDeleteTaskByName('\SRPSS\RedditHelper');
@@ -333,11 +235,24 @@ begin
     TaskService := CreateOleObject('Schedule.Service');
     TaskService.Connect(Unassigned, Unassigned, Unassigned, Unassigned);
     RootFolder := TaskService.GetFolder('\');
-    RegisteredTask := RootFolder.RegisterTask(TaskName, RenderedXml, 6, Unassigned, Unassigned, 3);
-    Log('SRPSS: Reddit helper task registered successfully: ' + RegisteredTask.Name);
+    RegisteredTask := RootFolder.RegisterTask(
+      TaskName,
+      RenderedXml,
+      6,
+      Unassigned,
+      Unassigned,
+      3
+    );
+    Log(
+      'SRPSS: Reddit helper task registered successfully: ' +
+      RegisteredTask.Name
+    );
     exit;
   except
-    Log('SRPSS: Task Scheduler COM XML registration failed for task: ' + TaskName);
+    Log(
+      'SRPSS: Task Scheduler COM XML registration failed for task: ' +
+      TaskName
+    );
     MsgBox(
       'SRPSS installed, but the Reddit helper scheduled task could not be registered.' + #13#10 + #13#10 +
       'Reddit link handoff will not work until this is fixed.' + #13#10 +
@@ -352,15 +267,5 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
-  begin
-    if ReconcileRedditHelperStorageAcls() then
-      RegisterRedditHelperTask()
-    else
-      MsgBox(
-        'SRPSS installed, but the Reddit helper storage permissions could not be secured.' + #13#10 + #13#10 +
-        'The Reddit helper task was not registered because URL handoff would be unreliable.',
-        mbError,
-        MB_OK
-      );
-  end;
+    RegisterRedditHelperTask();
 end;

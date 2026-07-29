@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 
 Compact routing for recurring investigation commands.
 
@@ -140,18 +140,19 @@ Runtime flags remain CLI-first. Use only the families needed for the scenario:
 --cache
 ```
 
-Evidence location:
+Evidence location and format:
 
 ```text
-logs/evidence_chest/
+logs/evidence_chest/<run_name>/
 ```
 
-Recovery archive parser:
+New captures are plain disposable subfolders. Parse the folder directly; do not create a ZIP merely for analysis:
 
 ```powershell
-python tools/recovery_evidence_parser.py --archive logs/evidence_chest/logs00edb57.zip --output-dir logs/evidence_chest/derived/baseline_00edb57
-python tools/recovery_evidence_parser.py --archive logs/evidence_chest/logs7376bb9.zip --output-dir logs/evidence_chest/derived/head_7376bb9
+python tools/recovery_evidence_parser.py --source logs/evidence_chest/phase4plus_a2f7bd89 --output-dir logs/evidence_chest/derived/phase4plus_a2f7bd89
 ```
+
+`--archive` remains a legacy ZIP alias for frozen historical comparisons only.
 
 Phase 1 measurement benchmark:
 
@@ -254,10 +255,13 @@ Run the deterministic Phase 4 owner/allocator gate:
 
 ```powershell
 .\.venv\Scripts\python.exe tools\phase4_resource_harness.py --cycles 45 --output Docs\phase_reports\artifacts\P04\resource_plateau_report.json
-.\.venv\Scripts\python.exe -m pytest tests\test_phase4_resource_containment.py tests\test_image_cache_accounting.py tests\test_image_prefetcher.py tests\test_image_pipeline.py tests\test_gl_texture_streaming.py tests\test_memory_pooling.py -q
+.\.venv\Scripts\python.exe tools\phase4_image_worker_shm_harness.py --cycles 50 --width 3840 --height 2160
+.\.venv\Scripts\python.exe -m pytest tests\test_phase4_resource_containment.py tests\test_image_cache_accounting.py tests\test_image_prefetcher.py tests\test_image_pipeline.py tests\test_image_worker.py tests\test_image_worker_shared_memory.py tests\test_process_supervisor.py tests\test_usage_sampler.py tests\test_gl_texture_streaming.py tests\test_memory_pooling.py -q
 ```
 
-The 45 rotations represent 30 virtual minutes at the shipped 40-second interval and exercise alternating resolutions/aspects, active transitions, exact-transform two-display sharing, pressure budgets, and full owner resets. It uses production cache/accounting/transition/texture/PBO seams with real QImage/QPixmap allocations and RSS, but a fake GL deletion ledger; it does not claim driver VRAM or replace the Phase 11 real-platform soak.
+The 45 rotations represent 30 virtual minutes at the shipped 40-second interval and exercise alternating resolutions/aspects, active transitions, exact-transform two-display sharing, pressure budgets, and full owner resets. It uses production cache/accounting/transition/texture/PBO seams with real QImage/QPixmap allocations and RSS, but a fake GL deletion ledger.
+
+The shared-memory harness uses the real spawned ImageWorker and production parent QImage consumption for 50 sequential 4K transfers plus an in-flight worker stop. It requires labelled worker RSS plateau, zero terminal shared-memory bytes, zero unlink failures, and no captured orphan name. Neither deterministic harness claims driver VRAM or replaces the reopened full Phase4plus platform comparator.
 
 Authoritative Phase 4 evidence: `Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md` and `Docs/phase_reports/P04_RESOURCE_LIFETIME_MAP.md`.
 

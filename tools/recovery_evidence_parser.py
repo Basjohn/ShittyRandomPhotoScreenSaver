@@ -1,9 +1,8 @@
 """Read-only forensic parser for SRPSS architecture-recovery evidence.
 
-The recovery archives intentionally remain immutable.  This tool reads an
-archive directly and writes reproducible derived artifacts beside neither the
-archive nor the live runtime logs unless the caller explicitly chooses that
-output directory.
+Plain evidence subfolders are the current format.  Legacy ZIP archives remain
+readable for old frozen comparisons.  Derived artifacts are written only to
+the caller-selected output directory.
 """
 from __future__ import annotations
 
@@ -20,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.2"
+PARSER_VERSION = "1.3"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _KV_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>[^,\s]+)")
@@ -110,7 +109,7 @@ def _integer(value: str | None) -> int | None:
     return int(number) if number is not None else None
 
 
-def _archive_hash(path: Path) -> str:
+def _file_hash(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -118,9 +117,43 @@ def _archive_hash(path: Path) -> str:
     return digest.hexdigest().upper()
 
 
-def _read_archive(path: Path) -> tuple[dict[str, list[str]], dict[str, int]]:
+def _directory_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    for log_path in sorted(
+        path.rglob("*.log"),
+        key=lambda item: item.relative_to(path).as_posix().lower(),
+    ):
+        relative = log_path.relative_to(path).as_posix()
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        with log_path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    return digest.hexdigest().upper()
+
+
+def _source_hash(path: Path) -> str:
+    return _directory_hash(path) if path.is_dir() else _file_hash(path)
+
+
+def _read_source(path: Path) -> tuple[dict[str, list[str]], dict[str, int]]:
     logs: dict[str, list[str]] = {}
     sizes: dict[str, int] = {}
+    if path.is_dir():
+        for log_path in sorted(
+            path.rglob("*.log"),
+            key=lambda item: item.relative_to(path).as_posix().lower(),
+        ):
+            name = log_path.name
+            if name in logs:
+                raise ValueError(
+                    f"Duplicate log basename in evidence folder: {name}"
+                )
+            text = log_path.read_text(encoding="utf-8", errors="replace")
+            logs[name] = text.splitlines()
+            sizes[name] = log_path.stat().st_size
+        return logs, sizes
+
     with zipfile.ZipFile(path) as archive:
         for info in archive.infolist():
             if info.is_dir() or not info.filename.lower().endswith(".log"):
@@ -157,6 +190,30 @@ def _parse_usage(
                 **common,
                 "rss_app_mb": _number(values.get("rss_app_mb")),
                 "rss_main_mb": _number(values.get("rss_main_mb")),
+                "rss_children_mb": _number(values.get("rss_children_mb")),
+                "image_worker_pid": _integer(values.get("image_worker_pid")),
+                "image_worker_rss_mb": _number(
+                    values.get("image_worker_rss_mb")
+                ),
+                "image_worker_vms_mb": _number(
+                    values.get("image_worker_vms_mb")
+                ),
+                "shm_segments_created": _integer(
+                    values.get("shm_segments_created")
+                ),
+                "shm_segments_live": _integer(
+                    values.get("shm_segments_live")
+                ),
+                "shm_live_bytes": _integer(values.get("shm_live_bytes")),
+                "shm_segments_consumed": _integer(
+                    values.get("shm_segments_consumed")
+                ),
+                "shm_segments_reclaimed_late": _integer(
+                    values.get("shm_segments_reclaimed_late")
+                ),
+                "shm_unlink_failures": _integer(
+                    values.get("shm_unlink_failures")
+                ),
                 "private_app_mb": _number(values.get("private_app_mb")),
                 "vms_app_mb": _number(values.get("vms_app_mb")),
                 "threads_app": _integer(values.get("threads_app")),
@@ -610,9 +667,9 @@ def _metric_summary(values: Iterable[object]) -> dict[str, float] | None:
     }
 
 
-def analyze_archive(path: Path) -> ArchiveAnalysis:
+def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
     path = path.resolve()
-    logs, sizes = _read_archive(path)
+    logs, sizes = _read_source(path)
     usage_lines = logs.get("screensaver_usage.log", [])
     perf_lines = logs.get("screensaver_perf.log", [])
     visualizer_lines = logs.get("screensaver_spotify_vis.log", [])
@@ -655,8 +712,12 @@ def analyze_archive(path: Path) -> ArchiveAnalysis:
     usage_cpu = [row.get("cpu_app_pct") for row in task_rows]
     summary: dict[str, object] = {
         "parser_version": PARSER_VERSION,
+        "source_kind": "folder" if path.is_dir() else "zip",
+        "source_path": str(path),
+        "source_sha256": _source_hash(path),
+        # Compatibility fields retained for existing downstream reports.
         "source_archive": str(path),
-        "source_archive_sha256": _archive_hash(path),
+        "source_archive_sha256": _source_hash(path),
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "source_files": sizes,
         "time_range": {
@@ -686,6 +747,24 @@ def analyze_archive(path: Path) -> ArchiveAnalysis:
             "cpu_app_pct": _metric_summary(usage_cpu),
             "rss_app_mb": _metric_summary(
                 row.get("rss_app_mb") for row in memory_rows
+            ),
+            "rss_main_mb": _metric_summary(
+                row.get("rss_main_mb") for row in memory_rows
+            ),
+            "rss_children_mb": _metric_summary(
+                row.get("rss_children_mb") for row in memory_rows
+            ),
+            "image_worker_rss_mb": _metric_summary(
+                row.get("image_worker_rss_mb") for row in memory_rows
+            ),
+            "shm_segments_live": _metric_summary(
+                row.get("shm_segments_live") for row in memory_rows
+            ),
+            "shm_live_bytes": _metric_summary(
+                row.get("shm_live_bytes") for row in memory_rows
+            ),
+            "shm_unlink_failures": _metric_summary(
+                row.get("shm_unlink_failures") for row in memory_rows
             ),
             "private_app_mb": _metric_summary(
                 row.get("private_app_mb") for row in memory_rows
@@ -780,6 +859,11 @@ def analyze_archive(path: Path) -> ArchiveAnalysis:
     )
 
 
+def analyze_archive(path: Path) -> ArchiveAnalysis:
+    """Backward-compatible alias for callers that still pass legacy ZIPs."""
+    return analyze_evidence_source(path)
+
+
 def _write_csv(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
     if not rows:
         path.write_text("", encoding="utf-8")
@@ -817,27 +901,38 @@ def write_analysis(analysis: ArchiveAnalysis, output_dir: Path) -> None:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Parse an immutable SRPSS recovery evidence archive."
+        description="Parse an SRPSS evidence subfolder or legacy ZIP archive."
     )
-    parser.add_argument("--archive", type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument(
+        "--source",
+        type=Path,
+        help="Evidence subfolder (preferred) or legacy ZIP archive.",
+    )
+    source.add_argument(
+        "--archive",
+        type=Path,
+        help="Legacy alias for a ZIP evidence source.",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     return parser
 
 
 def main() -> int:
     args = _build_parser().parse_args()
-    if not args.archive.is_file():
-        print(f"Evidence archive not found: {args.archive}")
+    source = args.source or args.archive
+    if source is None or not source.exists():
+        print(f"Evidence source not found: {source}")
         return 1
     try:
-        analysis = analyze_archive(args.archive)
+        analysis = analyze_evidence_source(source)
         write_analysis(analysis, args.output_dir)
-    except (OSError, zipfile.BadZipFile) as exc:
-        print(f"Failed to parse evidence archive: {exc}")
+    except (OSError, ValueError, zipfile.BadZipFile) as exc:
+        print(f"Failed to parse evidence source: {exc}")
         return 1
     print(
         f"Wrote recovery evidence artifacts to {args.output_dir} "
-        f"(sha256={analysis.summary['source_archive_sha256']})"
+        f"(sha256={analysis.summary['source_sha256']})"
     )
     return 0
 

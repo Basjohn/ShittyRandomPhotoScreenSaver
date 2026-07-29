@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from tools.recovery_evidence_parser import analyze_archive, write_analysis
+from tools.recovery_evidence_parser import (
+    analyze_archive,
+    analyze_evidence_source,
+    write_analysis,
+)
 
 
 def _write_archive(path: Path) -> None:
@@ -14,7 +18,11 @@ def _write_archive(path: Path) -> None:
         [
             "2026-07-23 19:37:45 - usage - INFO - [USAGE] sample "
             "seq=1 cpu_app_pct=10.0 cpu_main_pct=8.0 cpu_system_pct=5.0 "
-            "rss_app_mb=500.0 private_app_mb=700.0 vram_dedicated_mb=250.0 "
+            "rss_app_mb=500.0 rss_main_mb=420.0 rss_children_mb=80.0 "
+            "image_worker_pid=123 image_worker_rss_mb=80.0 image_worker_vms_mb=160.0 "
+            "shm_segments_created=4 shm_segments_live=0 shm_live_bytes=0 "
+            "shm_segments_consumed=3 shm_segments_reclaimed_late=1 shm_unlink_failures=0 "
+            "private_app_mb=700.0 vram_dedicated_mb=250.0 "
             "gpu_busy_pct=5.0 tracked_resources=5 tracked_known_bytes=1248 "
             "cpu_cache_resources=1 cpu_cache_bytes=800 cpu_display_resources=1 cpu_display_bytes=64 rm_resources=3 rm_known_bytes=384 "
             "rm_unknown_resources=1 gl_resources=3 gl_known_bytes=384 gl_unknown_resources=1 "
@@ -27,7 +35,11 @@ def _write_archive(path: Path) -> None:
             '"visualizer.audio_analysis":{"submitted":90}}',
             "2026-07-23 19:38:00 - usage - INFO - [USAGE] sample "
             "seq=2 cpu_app_pct=20.0 cpu_main_pct=15.0 cpu_system_pct=7.0 "
-            "rss_app_mb=550.0 private_app_mb=760.0 vram_dedicated_mb=275.0 "
+            "rss_app_mb=550.0 rss_main_mb=465.0 rss_children_mb=85.0 "
+            "image_worker_pid=123 image_worker_rss_mb=85.0 image_worker_vms_mb=165.0 "
+            "shm_segments_created=5 shm_segments_live=0 shm_live_bytes=0 "
+            "shm_segments_consumed=4 shm_segments_reclaimed_late=1 shm_unlink_failures=0 "
+            "private_app_mb=760.0 vram_dedicated_mb=275.0 "
             "gpu_busy_pct=8.0 tracked_resources=5 tracked_known_bytes=1248 "
             "cpu_cache_resources=1 cpu_cache_bytes=800 cpu_display_resources=1 cpu_display_bytes=64 rm_resources=3 rm_known_bytes=384 "
             "rm_unknown_resources=1 gl_resources=3 gl_known_bytes=384 gl_unknown_resources=1 "
@@ -104,6 +116,10 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     assert analysis.frame_rows[0]["dt_max_ms"] == 45.0
     assert analysis.frame_rows[0]["request_age_p99_ms"] == 7.0
     assert analysis.memory_rows[0]["tracked_known_bytes"] == 1248
+    assert analysis.memory_rows[0]["rss_children_mb"] == 80.0
+    assert analysis.memory_rows[0]["image_worker_rss_mb"] == 80.0
+    assert analysis.memory_rows[0]["shm_segments_created"] == 4
+    assert analysis.memory_rows[0]["shm_segments_reclaimed_late"] == 1
     assert analysis.memory_rows[0]["display_image_tracked_bytes"] == 64
     assert analysis.memory_rows[0]["resource_gl_pbo_bytes"] == 256
     assert analysis.event_loop_rows[0]["late_p99_ms"] == 8.0
@@ -142,3 +158,20 @@ def test_write_analysis_emits_required_recovery_artifacts(tmp_path: Path) -> Non
     assert summary["counts"]["event_loop_windows"] == 1
     assert summary["counts"]["resource_snapshots"] == 1
     assert summary["resources"]["tracked_known_bytes"]["maximum"] == 1248.0
+    assert summary["usage"]["image_worker_rss_mb"]["maximum"] == 85.0
+    assert summary["usage"]["shm_live_bytes"]["maximum"] == 0.0
+
+
+def test_analyze_plain_evidence_subfolder_without_archive(tmp_path: Path) -> None:
+    archive = tmp_path / "legacy.zip"
+    evidence_dir = tmp_path / "phase4plus_folder"
+    _write_archive(archive)
+    with zipfile.ZipFile(archive) as source:
+        source.extractall(evidence_dir)
+
+    analysis = analyze_evidence_source(evidence_dir)
+
+    assert analysis.summary["source_kind"] == "folder"
+    assert analysis.summary["source_path"] == str(evidence_dir.resolve())
+    assert analysis.summary["source_sha256"]
+    assert analysis.summary["counts"]["usage_samples"] == 2

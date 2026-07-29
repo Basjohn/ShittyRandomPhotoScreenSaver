@@ -239,13 +239,31 @@ class BaseWorker:
             },
         ))
     
-    def _send_response(self, response: WorkerResponse) -> None:
-        """Send a response to the UI process."""
+    def _send_response(self, response: WorkerResponse) -> bool:
+        """Send a response and notify subclasses of publication outcome."""
+        delivered = False
         try:
             self._response_queue.put_nowait(response.to_dict())
+            delivered = True
         except Exception as e:
             if self._logger:
                 self._logger.error("Failed to send response: %s", e)
+        finally:
+            try:
+                self._after_response_sent(response, delivered=delivered)
+            except Exception as e:
+                if self._logger:
+                    self._logger.error("Post-response cleanup failed: %s", e)
+        return delivered
+
+    def _after_response_sent(
+        self,
+        response: WorkerResponse,
+        *,
+        delivered: bool,
+    ) -> None:
+        """Subclass hook for resources whose ownership follows publication."""
+        return None
     
     def _send_busy_notification(self, correlation_id: str) -> None:
         """Send WORKER_BUSY notification to prevent heartbeat timeout during long operations."""

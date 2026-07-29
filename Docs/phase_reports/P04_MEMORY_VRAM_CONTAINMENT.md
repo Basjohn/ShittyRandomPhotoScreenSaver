@@ -1,6 +1,7 @@
 # Phase 4 — Baseline Memory and VRAM Containment
 
 Date: 2026-07-28
+Reopened: 2026-07-29
 Branch: `main`
 Foundation: Phase 3 checkpoint `677a317104a6507d9ecf620b54e85ee858e9ba5f`
 Donor boundary: reference only; no donor merge or donor resource architecture transplant
@@ -9,7 +10,7 @@ Donor boundary: reference only; no donor merge or donor resource architecture tr
 
 Phase 4 bounds the baseline's existing CPU image cache, prefetch backlog, compositor texture cache, and upload-PBO pool by exact bytes while retaining the baseline display/compositor topology. It removes redundant active-path QImage/QPixmap copies, shares same-image backing only for exact transform matches, releases every transition family's obsolete state at terminal presentation, and extends passive resource snapshots to display-owned QPixmap backing stores.
 
-The deterministic owner/plateau gate passed. A driver VRAM soak is not fabricated by the offscreen harness and remains part of Phase 11 platform validation.
+**Status: open / platform gate blocked.** The deterministic cache, display, texture, and PBO owner/allocator gate passed and remains valid. The later real run exposed a separate ImageWorker shared-memory retention path that the deterministic harness did not model. Phase 4 is not complete until labelled worker RSS and shared-memory accounting plateau in the full Phase4plus scenario. CPU/task-rate reduction remains Phase 5.
 
 ## Baseline growth mechanisms corrected
 
@@ -22,6 +23,7 @@ The deterministic owner/plateau gate passed. A driver VRAM soak is not fabricate
 7. the PBO pool could retain multiple historical sizes and a reused PBO could be reallocated smaller behind stale capacity accounting.
 8. normal transition completion released pair references only for selected transition types; Particle/Burn cancellation did not clear their state or snap to their destination.
 9. Phase 1 accounting omitted current/previous/seed/pending/compositor QPixmap backing stores because a background sampler may not inspect live Qt objects.
+10. each large ImageWorker response appended its creator `SharedMemory` mapping to `_shared_memories`, retaining every RGBA segment until process exit; the parent copied the entire mapping into `bytes`, closed without unlinking, then deep-copied it again into a detached `QImage`.
 
 ## Implemented containment
 
@@ -59,6 +61,15 @@ The deterministic owner/plateau gate passed. A driver VRAM soak is not fabricate
 
 The Phase 6 shared resource store is intentionally not pulled forward. Phase 4 remains per-compositor and metadata/accounting-first.
 
+### ImageWorker shared-memory containment
+
+- Each large worker result now has one versioned, per-transfer mapping and no process-lifetime mapping list.
+- Windows destroys a named mapping when its last handle closes, so the worker publishes the descriptor and waits only for a one-byte attachment acknowledgement. Once the parent has opened its own mapping, the worker closes its creator handle immediately. A failed publication or unacknowledged handoff is reclaimed by the worker.
+- The parent constructs one temporary non-owning `QImage` over the mapped RGBA view and performs exactly one `QImage.copy()` into Qt-owned memory. It releases the temporary QImage and memoryviews, then closes/unlinks in `finally`; no intermediate full-image `bytes` copy remains.
+- The supervisor tombstones timeouts/cancellations, disposes stale-generation and rejected payloads, bounds and resource-disposes buffer overflow, drains response resources on worker stop, and disposes every buffered response before shutdown/cleanup.
+- Parent-visible accounting records `segments_created`, `segments_live`, `live_bytes`, `segments_consumed`, `segments_reclaimed_late`, and `unlink_failures`. Usage telemetry also emits labelled ImageWorker PID/RSS/VMS separately from main, child-total, and application RSS.
+- Shared-memory lifetime remains owned by ImageWorker transport and `ProcessSupervisor`; it is not attached to compositor teardown.
+
 ## Resource lifetime map
 
 See `Docs/phase_reports/P04_RESOURCE_LIFETIME_MAP.md` for representation, owner, identity, release event, accounting, and budget.
@@ -84,36 +95,50 @@ Coverage and result:
 
 This is deterministic owner/allocator evidence, not a claim of real driver VRAM. Phase 11 retains the normal run, two-hour soak, multi-display topology, and driver-reported VRAM gates.
 
-## Live log follow-up — 2026-07-28
+## Reopening evidence — `phase4plus_a2f7bd89`
 
-The latest dual-display run provides encouraging but preliminary platform evidence. It lasted about 5.75 minutes and ended at the Phase 3 program-ownership fault, so it does not replace the 30-minute or two-hour Phase 11 gates.
+The newest pre-fix dual-display capture ran for about 13m45s and exited cleanly. It supersedes the report's earlier 5.75-minute sample. The sole child was the ImageWorker. Across 55 usage samples its inferred RSS (`rss_app_mb - rss_main_mb`) rose from 92.2 MiB to 770.3 MiB while main RSS remained broadly bounded. From the post-warmup sample onward, the child commonly climbed by about 31–32 MiB per 40-second `3840×2158` prescale; one RGBA8 frame at that size is 31.611 MiB. This is a real-run shared-memory containment failure, not a failure of the separately bounded cache/texture/PBO owners.
 
 Compared with the frozen baseline peaks:
 
-| Metric | Frozen peak | Latest peak | Preliminary change |
+| Metric | Frozen peak | `phase4plus_a2f7bd89` peak | Change |
 |---|---:|---:|---:|
-| RSS | 1770.5 MiB | 1228.7 MiB | -30.6% |
-| Private commit | 5141.9 MiB | 3172.0 MiB | -38.3% |
-| Dedicated driver VRAM | 1872.8 MiB | 773.8 MiB | -58.7% |
+| RSS | 1770.5 MiB | 1578.7 MiB | -10.8% |
+| Private commit | 5141.9 MiB | 3216.2 MiB | -37.5% |
+| Dedicated driver VRAM | 1872.8 MiB | 773.9 MiB | -58.7% |
 
-The live Phase 4 owners stayed inside their configured envelopes: the CPU image cache remained within 256 MiB, combined two-compositor texture accounting remained within 256 MiB, and upload-PBO accounting peaked at about 45.7 MiB. This supports the containment direction but is not yet plateau proof because the scenario was short and teardown failed.
+The previously instrumented owners remained bounded: CPU image cache peaked at about 254.7 MiB, combined two-compositor texture accounting at 252.8 MiB, and upload-PBO accounting at about 45.7 MiB. Those facts preserve the deterministic Phase 4 result, but the application as a whole did not plateau because worker mappings were outside that accounting.
 
-The same run identifies work that must remain open:
+The same run preserves separate later-phase work:
 
-- process CPU averaged about 55.1% and compute submission rate was 101.2/s, so no CPU/task reduction is claimed;
-- `visualizer.bubble_simulation` accounted for about 68.9 submissions/s and `visualizer.audio_analysis` about 32.2/s, making them the first measured Phase 5 owners;
+- process CPU median was about 59.4% and median compute submission rate was 163.8/s across changing mode/transition intervals, so no CPU/task reduction is claimed;
 - two long-lived per-display adaptive presentation workers remain and must be replaced by the Phase 8 GUI-local active-animation mechanism rather than optimized as a competing scheduler;
-- RSS above roughly 900 MiB, multi-GiB private commit, driver VRAM above roughly 500 MiB, and the gap between tracked bytes and OS/driver totals still require explanation;
-- usage telemetry now emits the already-collected display-QPixmap count/bytes explicitly, and the recovery parser preserves those fields for the next evidence capture.
+- after shared-memory containment is proven live, remaining gaps between tracked owners, total RSS/private commit, and driver VRAM still require explanation without raising the 256 MiB CPU cache.
+
+## Focused shared-memory result — 2026-07-29
+
+`tools/phase4_image_worker_shm_harness.py` ran the real spawned ImageWorker for 50 sequential `3840×2160` prescales. Each payload was 33,177,600 bytes. It then submitted one additional image and stopped the worker while that transfer was in flight.
+
+- 50 mappings consumed normally; one shutdown transfer reclaimed;
+- zero live segments and zero live bytes after each normal consumption and at completion;
+- zero unlink failures;
+- no captured `srpss_img_*` name remained attachable after the forced worker stop or after final supervisor shutdown;
+- worker RSS stayed between 89.2 MiB and 90.1 MiB;
+- post-warmup RSS slope was effectively zero (-0.00009 MiB/cycle), versus the broken path's approximately 31.6 MiB/image staircase;
+- final-window high-water growth was -0.13 MiB.
+
+This closes the deterministic shared-memory ownership slice. It does not close Phase 4: the full Phase4plus platform comparator must still prove total RSS/private commit, worker RSS, tracked GL bytes, driver VRAM, and presentation together.
 
 ## Verification
 
 ```powershell
 .\.venv\Scripts\python.exe tools\phase4_resource_harness.py --cycles 45 --output Docs\phase_reports\artifacts\P04\resource_plateau_report.json
+.\.venv\Scripts\python.exe tools\phase4_image_worker_shm_harness.py --cycles 50 --width 3840 --height 2160
+.\.venv\Scripts\python.exe -m pytest tests\test_image_worker_shared_memory.py tests\test_image_worker.py tests\test_process_supervisor.py tests\test_usage_sampler.py tests\test_recovery_evidence_parser.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_phase3_runtime_lifecycle.py tests\test_engine_lifecycle.py tests\test_s_hotkey_workflow.py tests\test_gl_compositor_cleanup.py tests\test_gl_compositor_transitions.py tests\test_gl_compositor_transition_lifecycle.py tests\test_gl_texture_streaming.py tests\test_memory_pooling.py tests\test_image_cache_accounting.py tests\test_image_prefetcher.py tests\test_image_pipeline.py tests\test_image_worker.py tests\test_resource_metrics.py tests\test_phase4_resource_containment.py tests\test_settings_defaults_parity.py tests\test_regenerate_sst_defaults.py -q
 ```
 
-Final closure evidence:
+Evidence that remains valid:
 
 - combined Phase 3/4 lifecycle, resource, image, settings, and display gate: `194 passed, 13 skipped` (the skips are environment-gated GL cases);
 - protected runtime-shaped visualizer file: `186 passed, 20` documented Bubble skips;
@@ -121,6 +146,14 @@ Final closure evidence:
 - visualizer documentation references: `6 passed`;
 - real Windows Qt GL cleanup: `3 passed` without skip, including the corrected two-compositor ownership sequence;
 - deterministic 45-cycle / 30-virtual-minute resource plateau artifact: pass.
+
+Current reopened-gate evidence:
+
+- shared-memory ownership regressions: `15 passed`, including malformed-descriptor reclamation and bounded accounting history;
+- 50×4K spawned-worker shared-memory plateau: pass;
+- post-change first-frame/mode-switch poison selection: `19 passed, 1` existing environment skip;
+- post-change replay goldens: all `66` verified;
+- full Phase4plus platform comparator: pending.
 
 ## Rollback
 

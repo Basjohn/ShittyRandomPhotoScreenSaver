@@ -1,6 +1,7 @@
 # Phase 4 Resource Lifetime Map
 
 Date: 2026-07-28
+Revised: 2026-07-29
 Branch: `main`
 Scope: baseline image rotation, transition, compositor upload, display replay, and full lifecycle rebuild
 
@@ -9,7 +10,7 @@ Scope: baseline image rotation, transition, compositor upload, display replay, a
 | Representation | Creation seam | Single owner / retained roles | Release event | Accounting / bound |
 |---|---|---|---|---|
 | Encoded source file | source/RSS acquisition | filesystem/cache file, not retained as an in-process byte buffer by the display cache | source cache policy or file deletion | disk-only; outside RSS/VRAM |
-| Image-worker shared-memory RGBA payload | `load_image_via_worker()` response | temporary `SharedMemory` view copied once into detached `QImage` | view closes immediately; worker owns unlink | transient response size from worker metadata |
+| Image-worker shared-memory RGBA payload | `ImageWorker` creates/fills a versioned `srpss_img_*` segment and publishes its descriptor | worker retains only the single in-flight creator handle until the parent attachment ACK; parent/supervisor owns consumption or disposal | temporary `QImage` reads the mapped view and copies once into Qt-owned memory; all views close and parent unlinks in `finally`; timeout/cancel/stale/buffer/shutdown paths dispose payload-aware | exact descriptor bytes; supervisor reports created/live/live-bytes/consumed/late-reclaimed/unlink-failure counters; 50×4K harness requires zero terminal live bytes and worker RSS plateau |
 | Raw decoded `QImage` | raw prefetch/load | `ImageCache[path]` | exact-byte/count LRU eviction, source reset, or engine-cache replacement | `QImage.sizeInBytes()`; runtime cache hard-clamped to 256 MiB / 32 entries |
 | Scaled/cropped `QImage` | async processor or image worker | `ImageCache[transform_key]` | exact-byte/count LRU eviction, source reset, or engine-cache replacement | same CPU cache budget; key includes path, size, mode, quality flags |
 | Compute publication DTO | `_ProcessedDisplayImage` | immutable alias of the selected scaled cache `QImage` | task result/callback release | no deep image copy and no GUI object in worker |

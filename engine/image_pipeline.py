@@ -536,9 +536,12 @@ def load_image_via_worker(
     Returns:
         QImage if successful, None if worker unavailable or failed
     """
-    if not engine._process_supervisor or not engine._process_supervisor.is_running(WorkerType.IMAGE):
+    supervisor = engine._process_supervisor
+    if not supervisor or not supervisor.is_running(WorkerType.IMAGE):
         return None
 
+    runtime_generation, runtime_display_manager = _capture_runtime_identity(engine)
+    response = None
     try:
         # Get quality settings from settings manager
         use_lanczos = True
@@ -547,7 +550,7 @@ def load_image_via_worker(
             if isinstance(use_lanczos, str):
                 use_lanczos = use_lanczos.lower() == 'true'
 
-        response = engine._process_supervisor.send_request_and_await_response(
+        response = supervisor.send_request_and_await_response(
             WorkerType.IMAGE,
             MessageType.IMAGE_PRESCALE,
             payload={
@@ -565,63 +568,122 @@ def load_image_via_worker(
             logger.warning(f"{TAG_WORKER} ImageWorker timeout after %dms", timeout_ms)
             return None
 
-        if response.success:
-            payload = response.payload
-            width = payload.get("width", 0)
-            height = payload.get("height", 0)
-
-            if width <= 0 or height <= 0:
-                logger.warning(f"{TAG_WORKER} ImageWorker returned invalid dimensions")
-                return None
-
-            # Check for shared memory response (large images)
-            shm_name = payload.get("shared_memory_name")
-            if shm_name:
-                try:
-                    from multiprocessing.shared_memory import SharedMemory
-                    shm_size = payload.get("shared_memory_size", width * height * 4)
-                    shm = SharedMemory(name=shm_name, create=False)
-                    rgba_data = bytes(shm.buf[:shm_size])
-                    shm.close()
-                    # Don't unlink - worker will clean up
-
-                    if is_perf_metrics_enabled():
-                        logger.debug(
-                            f"{TAG_PERF} {TAG_WORKER} ImageWorker used shared memory: %.1f MB",
-                            shm_size / (1024 * 1024)
-                        )
-                except Exception as shm_err:
-                    logger.warning(f"{TAG_WORKER} Failed to read shared memory: %s", shm_err)
-                    return None
-            else:
-                # Queue-based transfer (smaller images)
-                rgba_data = payload.get("rgba_data")
-
-            if rgba_data and width > 0 and height > 0:
-                qimage = QImage(
-                    rgba_data,
-                    width,
-                    height,
-                    width * 4,  # bytes per line
-                    QImage.Format.Format_RGBA8888,
-                )
-                # Make a deep copy since rgba_data may be invalidated
-                qimage = qimage.copy()
-
-                if is_perf_metrics_enabled():
-                    proc_time = response.processing_time_ms or 0
-                    logger.info(
-                        f"{TAG_PERF} {TAG_WORKER} ImageWorker prescale: %dx%d in %.1fms",
-                        width, height, proc_time
-                    )
-
-                return qimage
-        else:
-            error = response.error or "Unknown error"
-            logger.warning(f"{TAG_WORKER} ImageWorker failed: %s", error)
+        if not _runtime_identity_is_current(
+            engine,
+            runtime_generation,
+            runtime_display_manager,
+            label="image_worker_response",
+        ):
+            supervisor.dispose_response(
+                response,
+                reason="runtime_generation_rejected",
+            )
             return None
 
+        if not response.success:
+            error = response.error or "Unknown error"
+            logger.warning(f"{TAG_WORKER} ImageWorker failed: %s", error)
+            supervisor.dispose_response(response, reason="worker_error")
+            return None
+
+        payload = response.payload
+        width = int(payload.get("width", 0) or 0)
+        height = int(payload.get("height", 0) or 0)
+        if width <= 0 or height <= 0:
+            logger.warning(f"{TAG_WORKER} ImageWorker returned invalid dimensions")
+            supervisor.dispose_response(response, reason="invalid_dimensions")
+            return None
+
+        expected_size = width * height * 4
+        shm_name = payload.get("shared_memory_name")
+        if shm_name:
+            declared_size = int(
+                payload.get(
+                    "shared_memory_data_size",
+                    payload.get("shared_memory_size", 0),
+                )
+                or 0
+            )
+            if declared_size != expected_size:
+                logger.warning(
+                    f"{TAG_WORKER} ImageWorker shared-memory size mismatch: "
+                    "%d != %d",
+                    declared_size,
+                    expected_size,
+                )
+                supervisor.dispose_response(
+                    response,
+                    reason="invalid_payload_size",
+                )
+                return None
+
+            def _copy_shared_rgba(
+                rgba_view: memoryview,
+                _descriptor: object,
+            ) -> QImage:
+                if len(rgba_view) != expected_size:
+                    raise ValueError(
+                        "Mapped image payload does not match RGBA dimensions"
+                    )
+                source_qimage = QImage(
+                    rgba_view,
+                    width,
+                    height,
+                    width * 4,
+                    QImage.Format.Format_RGBA8888,
+                )
+                try:
+                    if source_qimage.isNull():
+                        raise ValueError("QImage rejected shared RGBA payload")
+                    owned_qimage = source_qimage.copy()
+                    if owned_qimage.isNull():
+                        raise ValueError("QImage failed to detach shared RGBA payload")
+                    return owned_qimage
+                finally:
+                    # The non-owning QImage must die before the memoryview is
+                    # released by the supervisor's transfer lease.
+                    del source_qimage
+
+            qimage = supervisor.consume_shared_memory_response(
+                response,
+                _copy_shared_rgba,
+            )
+            if is_perf_metrics_enabled():
+                logger.debug(
+                    f"{TAG_PERF} {TAG_WORKER} ImageWorker used shared memory: %.1f MB",
+                    declared_size / (1024 * 1024),
+                )
+        else:
+            rgba_data = payload.get("rgba_data")
+            if not rgba_data or len(rgba_data) != expected_size:
+                logger.warning(f"{TAG_WORKER} ImageWorker returned invalid RGBA data")
+                return None
+            source_qimage = QImage(
+                rgba_data,
+                width,
+                height,
+                width * 4,
+                QImage.Format.Format_RGBA8888,
+            )
+            qimage = source_qimage.copy()
+            del source_qimage
+
+        if is_perf_metrics_enabled():
+            proc_time = response.processing_time_ms or 0
+            logger.info(
+                f"{TAG_PERF} {TAG_WORKER} ImageWorker prescale: %dx%d in %.1fms",
+                width,
+                height,
+                proc_time,
+            )
+        return qimage
+
     except Exception as e:
+        if response is not None:
+            supervisor.dispose_response(
+                response,
+                reason="parent_consumer_exception",
+            )
         logger.warning(f"{TAG_WORKER} ImageWorker error: %s", e)
         return None
 

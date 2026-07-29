@@ -347,11 +347,12 @@ Performance reports include scenario, environment, average FPS, p50/p90/p95/p99/
 Recovery evidence:
 
 ```text
-logs/evidence_chest/logs7376bb9.zip
-logs/evidence_chest/logs00edb57.zip
+logs/evidence_chest/<plain_run_subfolder>/
 recovery-00edb57
 donor-7376bb9
 ```
+
+Plain evidence subfolders are the current capture pattern and may be moved or deleted by the user. Legacy ZIPs remain readable historical inputs; do not create new ZIPs solely for evidence analysis.
 
 Do not merge the donor branch wholesale.
 

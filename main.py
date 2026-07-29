@@ -453,9 +453,19 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
 
                 if engine.thread_manager is None:
                     raise RuntimeError("ThreadManager unavailable after engine start")
+
+                def _usage_resource_snapshot() -> dict[str, object]:
+                    fields: dict[str, object] = dict(
+                        collect_resource_accounting(engine).aggregate_fields()
+                    )
+                    supervisor = getattr(engine, "_process_supervisor", None)
+                    if supervisor is not None:
+                        fields.update(supervisor.get_image_worker_usage_snapshot())
+                    return fields
+
                 engine._usage_telemetry = UsageTelemetryService(
                     engine.thread_manager,
-                    resource_snapshot_provider=lambda: collect_resource_accounting(engine),
+                    resource_snapshot_provider=_usage_resource_snapshot,
                 )
                 if not engine._usage_telemetry.start():
                     raise RuntimeError("usage telemetry declined startup")

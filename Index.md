@@ -80,7 +80,8 @@ Do not read every document by default.
 | Settings | `core/settings/settings_manager.py` |
 | Defaults/profile resolution | modules under `core/settings/` |
 | Shared events | `core/events/event_system.py` |
-| Worker processes | `core/process/supervisor.py` |
+| Worker processes and response disposal | `core/process/supervisor.py` |
+| Image shared-memory handoff/accounting | `core/process/shared_memory_transport.py` |
 | Shared animation | `core/animation/animator.py` |
 | Transition identity | `rendering/transition_registry.py` |
 | Compositor | existing compositor modules under `rendering/` |
@@ -152,6 +153,8 @@ Read `Docs/Compositor_Architecture.md`.
 | `tools/visualizer_replay.py` | Deterministic visualizer replay, protected golden verification, and review artifacts |
 | `tools/phase3_lifecycle_harness.py` | Deterministic 50/50/50 full-teardown, generation, callback, and resource plateau gate |
 | `tools/phase4_resource_harness.py` | Deterministic 45-cycle CPU-image/display/texture/PBO budget and allocator plateau gate |
+| `tools/phase4_image_worker_shm_harness.py` | Real spawned-ImageWorker 50×4K shared-memory/RSS plateau and orphan gate |
+| `tools/recovery_evidence_parser.py` | Parse current plain evidence subfolders or legacy ZIP comparisons |
 
 ## Navigation Rule
 
