@@ -330,6 +330,139 @@ def test_unchanged_poll_promotes_pending_artwork_before_diff_gate(
         widget.close()
 
 
+def test_idle_flush_retains_decoded_startup_art_until_current_query_resolves(
+    qt_app,
+    monkeypatch,
+    caplog,
+):
+    busy = [True]
+    _set_transition_probe(monkeypatch, busy)
+    monkeypatch.setattr("widgets.media_widget.is_perf_metrics_enabled", lambda: True)
+    widget = MediaWidget()
+    widget._start_widget_fade_in = lambda *_args, **_kwargs: None
+    widget._notify_spotify_widgets_visibility = lambda: None
+    fades = []
+    widget._start_artwork_fade_in = lambda: fades.append("fade")
+    monkeypatch.setattr(MediaWidget, "_instances", weakref.WeakSet([widget]))
+    info = MediaTrackInfo(
+        title="Startup Track",
+        artist="Startup Artist",
+        album="Startup Album",
+        state=MediaPlaybackState.PLAYING,
+        artwork=b"startup-art",
+    )
+    key = widget._compute_artwork_key(info)
+
+    try:
+        with caplog.at_level(logging.INFO):
+            widget._artwork_update_generation = 1
+            display_update.update_display(
+                widget,
+                info,
+                prepared_artwork=_prepared(key),
+                artwork_generation=1,
+            )
+            assert widget._has_seen_first_track is True
+            decoded_image = widget._pending_artwork.image
+            assert decoded_image is not None
+
+            # A same-key poll starts just before transition idle. It correctly
+            # skips a duplicate decode, but its result has not reached the UI yet.
+            widget._artwork_update_generation = 2
+            widget._refresh_in_flight = True
+            widget._refresh_in_flight_generation = 2
+            busy[0] = False
+
+            MediaWidget._flush_pending_artwork_when_all_displays_idle()
+
+            assert widget._pending_artwork is not None
+            assert widget._pending_artwork.image is decoded_image
+            assert widget._artwork_pixmap is None
+
+            display_update.update_display(
+                widget,
+                info,
+                prepared_artwork=PreparedArtwork(key, None, 0.0),
+                artwork_generation=2,
+            )
+
+            assert widget._pending_artwork is None
+            assert widget._artwork_pixmap is not None
+            assert widget._artwork_opacity == 0.0
+            assert fades == []
+
+            widget._handle_fade_in_complete()
+
+            assert fades == ["fade"]
+
+        messages = [
+            record.getMessage()
+            for record in caplog.records
+            if "[PERF][MEDIA_ARTWORK]" in record.getMessage()
+        ]
+        assert any(
+            "event=retained reason=awaiting_current_generation" in message
+            for message in messages
+        )
+        assert not any(
+            "reason=stale_idle_flush_generation" in message
+            for message in messages
+        )
+        assert any(
+            "event=applied" in message and "pixmap_ready=True" in message
+            for message in messages
+        )
+        assert any(
+            "event=fade_started reason=widget_reveal_complete" in message
+            for message in messages
+        )
+    finally:
+        widget.cleanup()
+        widget.close()
+
+
+def test_retained_stale_key_is_released_when_current_query_resolves_new_key(
+    qt_app,
+    monkeypatch,
+):
+    busy = [True]
+    _set_transition_probe(monkeypatch, busy)
+    widget = MediaWidget()
+    monkeypatch.setattr(MediaWidget, "_instances", weakref.WeakSet([widget]))
+    old_key = (100, "old-pending")
+    current_key = (200, "current")
+
+    try:
+        widget._artwork_update_generation = 1
+        widget._accept_prepared_artwork(
+            _prepared(old_key),
+            1,
+            refresh_layout_after_apply=False,
+        )
+
+        widget._artwork_update_generation = 2
+        widget._refresh_in_flight = True
+        widget._refresh_in_flight_generation = 2
+        busy[0] = False
+        MediaWidget._flush_pending_artwork_when_all_displays_idle()
+
+        assert widget._pending_artwork is not None
+        assert widget._pending_artwork.key == old_key
+
+        widget._accept_prepared_artwork(
+            _prepared(current_key),
+            2,
+            refresh_layout_after_apply=False,
+        )
+
+        assert widget._pending_artwork is None
+        assert widget._applied_artwork_key == current_key
+        assert widget._artwork_pixmap is not None
+    finally:
+        widget.cleanup()
+        widget.close()
+
+
 def test_artwork_lifecycle_telemetry_is_material_event_only(
     qt_app,
     monkeypatch,
@@ -435,6 +568,7 @@ def test_no_artwork_fade_starts_until_all_displays_idle(qt_app, monkeypatch):
     _set_transition_probe(monkeypatch, busy)
     widget = MediaWidget()
     widget._has_seen_first_track = True
+    widget._fade_in_completed = True
     fades = []
     widget._start_artwork_fade_in = lambda: fades.append("fade")
     monkeypatch.setattr(MediaWidget, "_instances", weakref.WeakSet([widget]))
@@ -456,6 +590,67 @@ def test_no_artwork_fade_starts_until_all_displays_idle(qt_app, monkeypatch):
         assert fades == ["fade"]
         assert widget._pending_artwork is None
         assert widget._artwork_pixmap is not None
+    finally:
+        widget.cleanup()
+        widget.close()
+
+
+def test_startup_artwork_fades_only_after_widget_reveal(qt_app, monkeypatch):
+    busy = [False]
+    _set_transition_probe(monkeypatch, busy)
+    widget = MediaWidget()
+    widget._has_seen_first_track = True
+    fades = []
+    widget._start_artwork_fade_in = lambda: fades.append("fade")
+
+    try:
+        widget._artwork_update_generation = 1
+        widget._accept_prepared_artwork(
+            _prepared((100, "startup")),
+            1,
+            refresh_layout_after_apply=False,
+        )
+
+        assert widget._artwork_pixmap is not None
+        assert widget._artwork_opacity == 0.0
+        assert fades == []
+
+        widget._handle_fade_in_complete()
+
+        assert fades == ["fade"]
+    finally:
+        widget.cleanup()
+        widget.close()
+
+
+def test_startup_artwork_waits_for_transition_idle_after_widget_reveal(
+    qt_app,
+    monkeypatch,
+):
+    busy = [False]
+    _set_transition_probe(monkeypatch, busy)
+    widget = MediaWidget()
+    widget._has_seen_first_track = True
+    fades = []
+    widget._start_artwork_fade_in = lambda: fades.append("fade")
+    monkeypatch.setattr(MediaWidget, "_instances", weakref.WeakSet([widget]))
+
+    try:
+        widget._artwork_update_generation = 1
+        widget._accept_prepared_artwork(
+            _prepared((100, "startup-transition")),
+            1,
+            refresh_layout_after_apply=False,
+        )
+
+        busy[0] = True
+        widget._handle_fade_in_complete()
+        assert fades == []
+
+        busy[0] = False
+        MediaWidget._flush_pending_artwork_when_all_displays_idle()
+
+        assert fades == ["fade"]
     finally:
         widget.cleanup()
         widget.close()

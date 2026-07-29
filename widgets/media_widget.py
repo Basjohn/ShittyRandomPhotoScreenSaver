@@ -1772,19 +1772,29 @@ class MediaWidget(BaseOverlayWidget):
         self._scaled_artwork_cache = None
         self._scaled_artwork_cache_key = None
 
-        if self._pending_artwork is not None and self._pending_artwork.key == prepared.key:
+        if self._pending_artwork is not None:
+            if self._pending_artwork.key != prepared.key:
+                self._artwork_coalesced_count += 1
+                self._log_artwork_lifecycle_event(
+                    "discarded",
+                    reason="superseded_by_applied_key",
+                    prepared=self._pending_artwork,
+                    generation=self._pending_artwork_generation,
+                    replaced_key=self._pending_artwork.key,
+                )
             self._pending_artwork = None
             self._pending_artwork_generation = 0
             self._pending_artwork_deferred = False
 
         fade_started = False
-        if (
-            pixmap is not None
-            and bool(getattr(self, "_has_seen_first_track", False))
-            and not type(self)._has_transition_work_on_any_display()
-        ):
-            self._start_artwork_fade_in()
-            fade_started = True
+        if pixmap is not None:
+            # The card owns startup visibility.  Artwork prepared before the
+            # coordinated card reveal must remain hidden until that reveal
+            # completes, then receive its own authored fade.
+            self._artwork_opacity = 0.0
+            fade_started = self._start_artwork_fade_if_ready(
+                reason="artwork_apply",
+            )
         else:
             self._artwork_opacity = 1.0
 
@@ -1805,7 +1815,7 @@ class MediaWidget(BaseOverlayWidget):
                 "[PERF][MEDIA_ARTWORK] event=applied key_changed=%s key_id=%s "
                 "generation=%d payload_bytes=%d "
                 "decode_ms=%.2f ui_pixmap_ms=%.2f deferred_for_transition=%s "
-                "coalesced_count=%d fade_started=%s",
+                "coalesced_count=%d pixmap_ready=%s fade_started=%s",
                 key_changed,
                 self._artwork_key_log_id(prepared.key),
                 generation,
@@ -1814,6 +1824,7 @@ class MediaWidget(BaseOverlayWidget):
                 ui_pixmap_ms,
                 bool(deferred_for_transition),
                 int(self._artwork_coalesced_count),
+                pixmap is not None,
                 fade_started,
             )
         self._artwork_coalesced_count = 0
@@ -1849,8 +1860,29 @@ class MediaWidget(BaseOverlayWidget):
             prepared = widget._pending_artwork
             generation = int(widget._pending_artwork_generation)
             if prepared is None:
+                # Artwork may already be GUI-owned but still hidden behind the
+                # coordinated card reveal.  If a transition overlapped reveal
+                # completion, transition idle is the remaining handoff.
+                widget._start_artwork_fade_if_ready(reason="all_displays_idle")
                 continue
             if generation != widget._artwork_update_generation:
+                current_generation_in_flight = bool(
+                    widget._refresh_in_flight
+                    and widget._refresh_in_flight_generation
+                    == widget._artwork_update_generation
+                )
+                if current_generation_in_flight:
+                    # The current query deliberately skipped decoding this
+                    # pending key. Keep its sole decoded QImage until that
+                    # query identifies whether the key is still authoritative;
+                    # its UI consumer will then promote or replace it.
+                    widget._log_artwork_lifecycle_event(
+                        "retained",
+                        reason="awaiting_current_generation",
+                        prepared=prepared,
+                        generation=generation,
+                    )
+                    continue
                 widget._log_artwork_lifecycle_event(
                     "discarded",
                     reason="stale_idle_flush_generation",
@@ -2235,6 +2267,37 @@ class MediaWidget(BaseOverlayWidget):
             self.on_fade_complete()
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+        self._start_artwork_fade_if_ready(reason="widget_reveal_complete")
+
+    def _start_artwork_fade_if_ready(self, *, reason: str) -> bool:
+        """Start one pending artwork fade after card reveal and transition idle."""
+
+        pixmap = self._artwork_pixmap
+        if pixmap is None or self._artwork_opacity >= 1.0:
+            return False
+        try:
+            if pixmap.isNull():
+                return False
+        except Exception:
+            return False
+        if (
+            not self._fade_in_completed
+            or not self._has_seen_first_track
+            or self._artwork_anim is not None
+            or type(self)._has_transition_work_on_any_display()
+        ):
+            return False
+
+        self._start_artwork_fade_in()
+        if is_perf_metrics_enabled():
+            logger.info(
+                "[PERF][MEDIA_ARTWORK] event=fade_started reason=%s "
+                "key_id=%s generation=%d",
+                reason,
+                self._artwork_key_log_id(self._applied_artwork_key),
+                int(self._artwork_update_generation),
+            )
+        return True
 
     def _start_artwork_fade_in(self) -> None:
         if self._artwork_anim is not None:

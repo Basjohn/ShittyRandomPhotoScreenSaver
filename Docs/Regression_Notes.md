@@ -1,6 +1,6 @@
 # Regression Notes
 
-Last updated: 2026-06-30
+Last updated: 2026-07-29
 
 Resolved regression notes that should remain easy to find but do not need the full dated narrative treatment in `Docs/Historical_Bugs.md`.
 
@@ -10,6 +10,13 @@ Resolved regression notes that should remain easy to find but do not need the fu
 - Do not use this as a changelog. Ordinary completed feature work should disappear from `Current_Plan.md` after validation.
 
 ## Current Notes
+
+### Media Artwork Waits For Its Card Reveal
+- **Area:** media startup artwork presentation
+- **Files:** `widgets/media_widget.py`, `tests/test_media_transition_deferral.py`
+- **Issue:** cold-start generation 1 could decode and queue artwork during transition work, then be discarded by transition idle after a same-key generation 2 query began. Generation 2 correctly skipped duplicate decode but consequently had no image from which to create a pixmap. The earlier reveal-only diagnosis was incomplete.
+- **Fix:** idle flush retains the sole decoded pending image while the current query is in flight. Its result then authoritatively promotes that image for the same key or replaces it for a changed key. A resulting startup pixmap remains at zero opacity until card fade completion; overlapping display transition work hands the same pending fade to the existing all-displays-idle callback.
+- **Coverage:** the runtime-shaped startup test reproduces first-track publication, transition queueing, the in-flight generation race, same-key promotion, pixmap creation, and card-before-artwork fade ordering; reveal-completion-during-transition remains separate.
 
 ### SettingsManager Bulk-Mutation Cache Purge
 - **Area:** settings cache invalidation after maintenance/destructive paths

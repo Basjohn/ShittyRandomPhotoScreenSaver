@@ -188,11 +188,13 @@ The owner-local correction keeps ordinary feedback animation unchanged when disp
 
 Focused automation after this correction:
 
-- focused media ingress/display/feedback/artwork runtime suite: `95 passed`;
+- focused media ingress/display/feedback/artwork runtime suite: `99 passed`;
 - historical first-frame and mode-switch poison bars: `22 passed`;
 - process-wide media-route convergence is included in the focused media suite.
 
-The installed gate remains open. A matching 60 Hz/165 Hz run must prove the former 30–38-paint feedback burst is absent, fixed-footprint transition metadata reports zero structural mutations, artwork still flushes newest-only after final idle, and visualizer/transition presentation tails return to the no-track-change comparator. No visualizer response, smoothing, compositor topology, or artwork-fade curve was retuned.
+Two short cold starts initially appeared to expose only a reveal-order gap. The 23:40 installed rerun proved that diagnosis incomplete: generation 1 decoded and queued the artwork, transition idle discarded that sole decoded image after generation 2 began, and generation 2 then logged an apply for the same key despite having no image or pixmap. Idle flush now retains a stale-generation pending image only while the authoritative current query remains in flight. That query then promotes the decoded image when its key matches or replaces it when the key changed. Applied telemetry now states `pixmap_ready`; startup pixmaps remain at zero opacity until card reveal completion starts their fade, with transition overlap handed to the existing all-displays-idle callback. This adds no timer, retry, eager decode, or second image representation.
+
+The installed gate remains open. A matching 60 Hz/165 Hz run must prove the former 30–38-paint feedback burst is absent, fixed-footprint transition metadata reports zero structural mutations, artwork still flushes newest-only after final idle, cold-start artwork avoids `stale_idle_flush_generation` while its current query is in flight and reports `pixmap_ready=True` followed by one `event=fade_started` only after card reveal/transition idle, and visualizer/transition presentation tails return to the no-track-change comparator. No visualizer response, smoothing, compositor topology, or artwork-fade curve was retuned.
 
 ## Verification
 
