@@ -7,6 +7,7 @@ animation triggering, and feedback metric logging.
 from __future__ import annotations
 
 import time
+import weakref
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QTimer, Qt
@@ -72,7 +73,8 @@ def maybe_stop_shared_feedback_timer(cls: type) -> None:
     if timer is None or not timer.isActive():
         return
 
-    # Check if ANY instance has active feedback
+    # Check if ANY instance has feedback that actually depends on this timer.
+    # Static transition feedback is owned by one managed single-shot callback.
     has_feedback = False
     for instance in list(cls._instances):
         try:
@@ -80,13 +82,21 @@ def maybe_stop_shared_feedback_timer(cls: type) -> None:
                 continue
         except Exception:
             continue
-        if instance._controls_feedback:
-            has_feedback = True
+        for _key, entry in instance._controls_feedback.items():
+            event_id = entry[1] if entry else None
+            meta = cls._shared_feedback_events.get(event_id, {})
+            if meta.get("mode") != "static":
+                has_feedback = True
+                break
+        if has_feedback:
             break
 
-    # Also check shared events dict
-    if not has_feedback and cls._shared_feedback_events:
-        has_feedback = True
+    # Also check shared events that use the fallback deadline sweep.
+    if not has_feedback:
+        has_feedback = any(
+            meta.get("mode") != "static"
+            for meta in cls._shared_feedback_events.values()
+        )
 
     # Stop timer only if NO feedback anywhere
     if not has_feedback:
@@ -111,6 +121,8 @@ def on_shared_feedback_tick(cls: type) -> None:
     # Expire old shared events
     expired_ids = []
     for event_id, meta in list(cls._shared_feedback_events.items()):
+        if meta.get("mode") == "static":
+            continue
         duration = meta.get("duration", 0.0) or 0.0
         timestamp = meta.get("timestamp", now)
         if (now - timestamp) >= duration:
@@ -140,6 +152,63 @@ def process_feedback_tick(widget: "MediaWidget", now: float) -> bool:
     return bool(widget._controls_feedback)
 
 
+def _has_transition_work(widget: "MediaWidget") -> bool:
+    """Return whether feedback must avoid a frame-by-frame repaint stream."""
+
+    try:
+        checker = getattr(type(widget), "_has_transition_work_on_any_display", None)
+        return bool(checker()) if callable(checker) else False
+    except Exception:
+        logger.debug(
+            "[MEDIA_WIDGET][FEEDBACK] Failed to inspect transition state",
+            exc_info=True,
+        )
+        return False
+
+
+def _record_feedback_paint_request(cls: type, event_id: str) -> None:
+    meta = cls._shared_feedback_events.get(event_id)
+    if meta is not None:
+        meta["paint_requests"] = int(meta.get("paint_requests", 0)) + 1
+
+
+def _request_feedback_paint(widget: "MediaWidget", event_id: str) -> None:
+    _record_feedback_paint_request(type(widget), event_id)
+    widget._safe_update()
+
+
+def schedule_static_feedback_clear(
+    widget: "MediaWidget",
+    key: str,
+    event_id: str,
+) -> None:
+    """Clear collision-time feedback once without a recurring timer."""
+
+    from core.threading.manager import ThreadManager
+
+    cls = type(widget)
+    widget_ref = weakref.ref(widget)
+
+    def _clear_once() -> None:
+        candidate = widget_ref()
+        if candidate is None:
+            cls._shared_feedback_events.pop(event_id, None)
+            return
+        try:
+            if not Shiboken.isValid(candidate):
+                cls._shared_feedback_events.pop(event_id, None)
+                return
+        except Exception:
+            cls._shared_feedback_events.pop(event_id, None)
+            return
+        if candidate._active_feedback_events.get(key) != event_id:
+            return
+        finalize_feedback_key(candidate, key)
+
+    delay_ms = max(0, round(widget._controls_feedback_duration * 1000.0))
+    ThreadManager.single_shot(delay_ms, _clear_once)
+
+
 def trigger_controls_feedback(
     widget: "MediaWidget", key: str, source: str = "manual"
 ) -> None:
@@ -148,7 +217,7 @@ def trigger_controls_feedback(
         logger.debug("[MEDIA_WIDGET][FEEDBACK] Invalid feedback key: %s", key)
         return
 
-    logger.debug("[MEDIA_WIDGET][FEEDBACK] Starting feedback animation for %s", key)
+    logger.debug("[MEDIA_WIDGET][FEEDBACK] Starting feedback for %s", key)
 
     cls = type(widget)
     now = time.monotonic()
@@ -159,22 +228,55 @@ def trigger_controls_feedback(
 
     # Start new feedback
     widget._controls_feedback[key] = (now, event_id)
-    widget._feedback_deadlines[key] = now + widget._controls_feedback_duration
     widget._active_feedback_events[key] = event_id
-    start_feedback_animation(widget, key)
+    transition_static = _has_transition_work(widget)
+    if not transition_static:
+        widget._feedback_deadlines[key] = now + widget._controls_feedback_duration
 
-    # Register in shared events
+    # Register before animation/scheduling so every paint request belongs to
+    # one inspectable event.
     cls._shared_feedback_events[event_id] = {
         "key": key,
         "timestamp": now,
         "source": source,
         "duration": widget._controls_feedback_duration,
+        "transition_active": transition_static,
+        "mode": "static" if transition_static else "animated",
+        "paint_requests": 0,
     }
 
-    # Ensure timer is running
-    ensure_shared_feedback_timer(cls)
-    widget._safe_update()
-    logger.debug("[MEDIA_WIDGET][FEEDBACK] Feedback animation started for %s", key)
+    if transition_static:
+        # A normal feedback fade repaints the complete media card at 60 Hz for
+        # 1.35 seconds.  During a compositor transition that otherwise-cheap
+        # stream can starve presentation delivery.  Preserve immediate visual
+        # acknowledgement as one static frame and retire it through one managed,
+        # token-checked callback.
+        widget._controls_feedback_progress[key] = 1.0
+        schedule_static_feedback_clear(widget, key, event_id)
+    else:
+        start_feedback_animation(widget, key)
+
+    _request_feedback_paint(widget, event_id)
+    log_feedback_metric(
+        widget,
+        phase="start",
+        key=key,
+        source=source,
+        event_id=event_id,
+        presentation="static_transition" if transition_static else "animated",
+    )
+    log_feedback_path_metric(
+        widget,
+        phase="start",
+        key=key,
+        event_id=event_id,
+    )
+
+    # Animated feedback keeps the existing deadline timer as a completion
+    # fallback. Static transition feedback has exactly one managed callback.
+    if not transition_static:
+        ensure_shared_feedback_timer(cls)
+    logger.debug("[MEDIA_WIDGET][FEEDBACK] Feedback started for %s", key)
 
 
 def log_feedback_metric(
@@ -184,6 +286,7 @@ def log_feedback_metric(
     key: str,
     source: str,
     event_id: str,
+    presentation: str | None = None,
 ) -> None:
     """Emit structured logs for control feedback when diagnostics enabled."""
     if not (is_perf_metrics_enabled() or is_verbose_logging()):
@@ -194,11 +297,53 @@ def log_feedback_metric(
         "[MEDIA_WIDGET][FEEDBACK] overlay=%s phase=%s key=%s source=%s event=%s"
         % (overlay, phase, key, source, event_id)
     )
+    if presentation:
+        message += " presentation=%s" % presentation
 
     if is_perf_metrics_enabled():
         logger.info(message)
     else:
         logger.debug(message)
+
+
+def log_feedback_path_metric(
+    widget: "MediaWidget",
+    *,
+    phase: str,
+    key: str,
+    event_id: str,
+    event_meta: dict | None = None,
+) -> None:
+    """Emit feedback-specific cost and scheduling telemetry."""
+
+    if not is_perf_metrics_enabled():
+        return
+    meta = (
+        event_meta
+        if event_meta is not None
+        else type(widget)._shared_feedback_events.get(event_id, {})
+    )
+    started_at = float(meta.get("timestamp", time.monotonic()))
+    configured_duration = float(
+        meta.get("duration", widget._controls_feedback_duration)
+    )
+    if phase == "start":
+        duration_ms = configured_duration * 1000.0
+    else:
+        duration_ms = max(0.0, (time.monotonic() - started_at) * 1000.0)
+    logger.info(
+        "[PERF][MEDIA_FEEDBACK] phase=%s command=%s duplicate_suppressed=False "
+        "transition_active=%s mode=%s duration_ms=%.2f paint_requests=%d "
+        "event=%s source=%s",
+        phase,
+        key,
+        bool(meta.get("transition_active", False)),
+        str(meta.get("mode", "unknown")),
+        duration_ms,
+        int(meta.get("paint_requests", 0)),
+        event_id,
+        str(meta.get("source", "unknown")),
+    )
 
 
 def start_feedback_animation(widget: "MediaWidget", key: str) -> None:
@@ -207,6 +352,7 @@ def start_feedback_animation(widget: "MediaWidget", key: str) -> None:
         from core.animation.animator import AnimationManager
         from core.animation.types import EasingCurve
 
+        event_id = widget._active_feedback_events.get(key)
         if widget._feedback_anim_mgr is None:
             widget._feedback_anim_mgr = AnimationManager.get_or_create_app_shared()
 
@@ -214,13 +360,19 @@ def start_feedback_animation(widget: "MediaWidget", key: str) -> None:
         widget._controls_feedback_progress[key] = 1.0
 
         def _on_update(progress: float) -> None:
+            if widget._active_feedback_events.get(key) != event_id:
+                return
             eased = max(0.0, 1.0 - progress)
             value = eased * eased
             widget._controls_feedback_progress[key] = value
-            widget._safe_update()
+            if event_id is not None:
+                _request_feedback_paint(widget, event_id)
+            else:
+                widget._safe_update()
 
         def _on_complete() -> None:
-            finalize_feedback_key(widget, key)
+            if widget._active_feedback_events.get(key) == event_id:
+                finalize_feedback_key(widget, key)
 
         anim_id = mgr.animate_custom(
             duration=max(0.01, widget._controls_feedback_duration),
@@ -252,12 +404,26 @@ def finalize_feedback_key(widget: "MediaWidget", key: str) -> None:
 
     widget._controls_feedback_progress.pop(key, None)
     entry = widget._controls_feedback.pop(key, None)
+    event_id = entry[1] if entry else None
+    event_meta = (
+        type(widget)._shared_feedback_events.get(event_id)
+        if event_id is not None
+        else None
+    )
     if entry:
-        _, event_id = entry
         type(widget)._shared_feedback_events.pop(event_id, None)
 
     widget._feedback_deadlines.pop(key, None)
     active_id = widget._active_feedback_events.pop(key, None)
+    if active_id and event_meta is not None:
+        event_meta["paint_requests"] = int(event_meta.get("paint_requests", 0)) + 1
+        log_feedback_path_metric(
+            widget,
+            phase="complete",
+            key=key,
+            event_id=active_id,
+            event_meta=event_meta,
+        )
     if active_id and is_perf_metrics_enabled():
         log_feedback_metric(
             widget,

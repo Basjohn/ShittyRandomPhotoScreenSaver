@@ -175,6 +175,25 @@ Focused automated evidence:
 
 This closes the deterministic ownership and scheduling slice only. The fresh full run proves the terminal shared-memory counters but predates the artwork-generation, rotation-deadline, stale-prefetch, and previous-image reuse corrections above. The next installed comparator still owns the 60 Hz/165 Hz forced Spotify-change bars, manual-change deadline collision, Spectrum/Bubble/mode-switch review, startup presentation, and whole-application plateau.
 
+## Forced track-change collision evidence — `fresh_20260729_2233`
+
+This short dual-display run is presentation evidence, not a replacement for the 52-minute whole-process plateau baseline. It contains three deliberate media-key track/artwork changes during active Wipe, Burn, and Block Puzzle Flip transitions.
+
+- Every changed artwork key decoded in the existing worker job, queued while transition work was active, and applied only after both displays were idle. No pending key was replaced or discarded; `ui_pixmap_ms` was `0.00` for all three applies.
+- The worst transition windows still had cheap compositor paint work but delayed delivery. Wipe reached screen-0/1 paint `dt` p95 values of 42.80/56.90 ms while paint itself remained at 3.22/6.89 ms p95. Burn reached a 96.85 ms screen-0 `dt` p99 with 3.70 ms paint p99. This rules out artwork conversion, Bubble compute, and shader paint as the primary collision.
+- Each media-key command launched `start_feedback_animation` for 1.35 seconds. The corresponding windows contained 30–38 full media-card paints at roughly 3–4 ms each, versus about 2–6 paints in comparable transition windows without feedback. The shared AnimationManager summaries for those feedback fades fell to about 20–28 FPS while compositor and visualizer delivery gapped around them.
+- Changed metadata also reapplied blank `QLabel` text state, fixed min/max height, and identical margins even though text is painter-owned and the card footprint had not changed. The provider header logo was smooth-scaled again on every media paint.
+
+The owner-local correction keeps ordinary feedback animation unchanged when displays are idle, but during transition work publishes one immediate static feedback frame and clears it through one managed, token-checked callback. A process-wide 200 ms gate accepts only the first Qt/WM_KEYDOWN/WM_APPCOMMAND/raw-input route before widget lookup while leaving Windows pass-through intact; the accepted route performs the visualizer wake once. Metadata title/artist state remains immediate and requests one coalesced paint; Qt label/height/margin setters now run only when the actual state differs. The DPR-sized provider header logo is cached by source, target size, and DPR. Display-change and double-click refreshes no longer bypass the in-flight query generation, closing the observed same-owner startup double decode without retaining another prepared image. `[PERF][MEDIA_FEEDBACK]` now separates ingress suppression, static/animated mode, duration, and paint requests, while `[PERF][MEDIA_PRESENTATION]` separates layout and signal-emission cost, subscriber count, transition state, and generation.
+
+Focused automation after this correction:
+
+- focused media ingress/display/feedback/artwork runtime suite: `95 passed`;
+- historical first-frame and mode-switch poison bars: `22 passed`;
+- process-wide media-route convergence is included in the focused media suite.
+
+The installed gate remains open. A matching 60 Hz/165 Hz run must prove the former 30–38-paint feedback burst is absent, fixed-footprint transition metadata reports zero structural mutations, artwork still flushes newest-only after final idle, and visualizer/transition presentation tails return to the no-track-change comparator. No visualizer response, smoothing, compositor topology, or artwork-fade curve was retuned.
+
 ## Verification
 
 ```powershell
@@ -203,7 +222,8 @@ Current reopened-gate evidence:
 - post-change replay goldens: all `66` verified;
 - follow-up deterministic 45-cycle resource harness: pass, with 4 KiB repeated-resolution drift and 8 KiB tail high-water range;
 - full `fresh_20260729_2140` comparator: worker/shared-memory and GL/VRAM owners pass; main/total RSS and private commit fail to plateau;
-- installed comparator after the fresh-run collision corrections: pending.
+- `fresh_20260729_2233` forced-collision comparator: artwork ownership passes; media feedback/presentation fails and is corrected in code;
+- installed comparator after the newest media-feedback collision correction: pending.
 
 ## Rollback
 

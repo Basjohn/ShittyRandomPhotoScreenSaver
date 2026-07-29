@@ -10,7 +10,7 @@ from dataclasses import replace
 import time
 from typing import Optional, TYPE_CHECKING
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, SIGNAL
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
@@ -590,6 +590,115 @@ def _handle_no_media(widget: "MediaWidget") -> Optional[MediaTrackInfo]:
     return None
 
 
+def _ensure_painter_owned_label_contract(widget: "MediaWidget") -> int:
+    """Keep QLabel inert without invalidating it on every metadata refresh."""
+
+    mutations = 0
+    missing = object()
+    try:
+        current_format = widget.textFormat()
+    except Exception:
+        current_format = missing
+    if current_format != Qt.TextFormat.PlainText:
+        widget.setTextFormat(Qt.TextFormat.PlainText)
+        mutations += 1
+
+    try:
+        current_text = widget.text()
+    except Exception:
+        current_text = missing
+    if current_text != "":
+        widget.setText("")
+        mutations += 1
+    return mutations
+
+
+def _ensure_card_geometry_contract(
+    widget: "MediaWidget",
+    *,
+    fixed_height: int,
+    right_margin: int,
+    bottom_margin: int,
+) -> int:
+    """Apply fixed card geometry only when the actual Qt state differs."""
+
+    mutations = 0
+    try:
+        minimum_height = int(widget.minimumHeight())
+    except Exception:
+        minimum_height = -1
+    if minimum_height != fixed_height:
+        widget.setMinimumHeight(fixed_height)
+        mutations += 1
+
+    try:
+        maximum_height = int(widget.maximumHeight())
+    except Exception:
+        maximum_height = -1
+    if maximum_height != fixed_height:
+        widget.setMaximumHeight(fixed_height)
+        mutations += 1
+
+    expected_margins = (29, 12, int(right_margin), int(bottom_margin))
+    try:
+        margins = widget.contentsMargins()
+        current_margins = (
+            int(margins.left()),
+            int(margins.top()),
+            int(margins.right()),
+            int(margins.bottom()),
+        )
+    except Exception:
+        current_margins = None
+    if current_margins != expected_margins:
+        widget.setContentsMargins(*expected_margins)
+        mutations += 1
+    return mutations
+
+
+def _log_metadata_publication(
+    widget: "MediaWidget",
+    *,
+    event: str,
+    metadata_changed: bool,
+    presentation_changed: bool,
+    layout_mutations: int,
+    update_requested: bool,
+    layout_ms: float,
+    emit_ms: float,
+) -> None:
+    if not is_perf_metrics_enabled():
+        return
+    transition_active = False
+    try:
+        checker = getattr(type(widget), "_has_transition_work_on_any_display", None)
+        transition_active = bool(checker()) if callable(checker) else False
+    except Exception:
+        transition_active = False
+    try:
+        subscriber_count = int(
+            widget.receivers(SIGNAL("media_updated(QVariantMap)"))
+        )
+    except Exception:
+        subscriber_count = -1
+    logger.info(
+        "[PERF][MEDIA_PRESENTATION] event=%s metadata_changed=%s "
+        "presentation_changed=%s deferred_for_transition=False "
+        "transition_active=%s layout_mutations=%d update_requested=%s "
+        "layout_ms=%.2f emit_ms=%.2f subscriber_count=%d generation=%d",
+        event,
+        bool(metadata_changed),
+        bool(presentation_changed),
+        transition_active,
+        int(layout_mutations),
+        bool(update_requested),
+        max(0.0, float(layout_ms)),
+        max(0.0, float(emit_ms)),
+        subscriber_count,
+        int(getattr(widget, "_artwork_update_generation", 0)),
+    )
+
+
 def _build_and_apply_metadata(
     widget: "MediaWidget",
     info: MediaTrackInfo,
@@ -599,6 +708,10 @@ def _build_and_apply_metadata(
     layout_only: bool = False,
 ) -> None:
     """Build HTML metadata and update widget text/artwork/layout."""
+    update_started = time.monotonic()
+    previous_state = getattr(prev_info, "state", None) if prev_info is not None else None
+    current_state = getattr(info, "state", None)
+    presentation_changed = prev_info is None or previous_state != current_state
     title = smart_title_case((info.title or "").strip())
     artist = smart_title_case((info.artist or "").strip())
     display_title = title
@@ -695,8 +808,7 @@ def _build_and_apply_metadata(
         "body_top_gap": compact_body_gap,
     }
 
-    widget.setTextFormat(Qt.TextFormat.PlainText)
-    widget.setText("")
+    layout_mutations = _ensure_painter_owned_label_contract(widget)
 
     # Lock the card height after the first track
     if widget._fixed_card_height is None:
@@ -709,9 +821,6 @@ def _build_and_apply_metadata(
         control_padding = widget._controls_row_min_height()
         widget._fixed_card_height = max(220, base_min, hint_h + control_padding)
 
-    widget.setMinimumHeight(widget._fixed_card_height)
-    widget.setMaximumHeight(widget._fixed_card_height)
-
     # Artwork and its reserved lane become visible atomically. Deferred
     # worker results therefore leave both the current pixmap and margins alone.
     shrink_r, shrink_b = widget.painted_frame_shadow_card_shrink()
@@ -719,19 +828,40 @@ def _build_and_apply_metadata(
         right_margin = max(widget._artwork_size + 40, 60) + shrink_r
     else:
         right_margin = 12 + shrink_r
-    widget.setContentsMargins(29, 12, right_margin, widget._controls_row_margin() + shrink_b)
+    layout_mutations += _ensure_card_geometry_contract(
+        widget,
+        fixed_height=int(widget._fixed_card_height),
+        right_margin=right_margin,
+        bottom_margin=widget._controls_row_margin() + shrink_b,
+    )
+    layout_ms = max(0.0, (time.monotonic() - update_started) * 1000.0)
 
     if layout_only:
         safe_update = getattr(widget, "_safe_update", None)
         if callable(safe_update):
             safe_update()
+        _log_metadata_publication(
+            widget,
+            event="layout_refresh",
+            metadata_changed=metadata_changed,
+            presentation_changed=presentation_changed,
+            layout_mutations=layout_mutations,
+            update_requested=True,
+            layout_ms=layout_ms,
+            emit_ms=0.0,
+        )
         return
 
     # On the very first non-empty track update we use this call to
     # establish a stable layout (card stays hidden until fade sync)
     if not widget._has_seen_first_track:
         widget._has_seen_first_track = True
+        emit_started = time.monotonic()
         widget._emit_media_update(info)
+        emit_ms = max(0.0, (time.monotonic() - emit_started) * 1000.0)
+        safe_update = getattr(widget, "_safe_update", None)
+        if callable(safe_update):
+            safe_update()
         try:
             widget.hide()
         except Exception as e:
@@ -757,10 +887,38 @@ def _build_and_apply_metadata(
                 _starter()
         else:
             _starter()
+        _log_metadata_publication(
+            widget,
+            event="first_track",
+            metadata_changed=metadata_changed,
+            presentation_changed=presentation_changed,
+            layout_mutations=layout_mutations,
+            update_requested=True,
+            layout_ms=layout_ms,
+            emit_ms=emit_ms,
+        )
         return
 
+    emit_started = time.monotonic()
     widget._emit_media_update(info)
+    emit_ms = max(0.0, (time.monotonic() - emit_started) * 1000.0)
     _ensure_widget_visible_for_active_metadata(widget)
+    update_requested = bool(metadata_changed or presentation_changed or layout_mutations)
+    if update_requested:
+        safe_update = getattr(widget, "_safe_update", None)
+        if callable(safe_update):
+            safe_update()
+    if metadata_changed or presentation_changed or layout_mutations:
+        _log_metadata_publication(
+            widget,
+            event="published",
+            metadata_changed=metadata_changed,
+            presentation_changed=presentation_changed,
+            layout_mutations=layout_mutations,
+            update_requested=update_requested,
+            layout_ms=layout_ms,
+            emit_ms=emit_ms,
+        )
 
 
 def _has_applied_artwork(widget: "MediaWidget") -> bool:

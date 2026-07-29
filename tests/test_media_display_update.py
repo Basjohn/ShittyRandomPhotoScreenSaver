@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 
 from PySide6.QtGui import QImage
@@ -220,6 +221,149 @@ def test_update_display_refades_widget_when_metadata_returns(monkeypatch):
     assert widget.notify_calls == 1
     assert widget._telemetry_last_visibility is True
     assert widget._emitted and widget._emitted[-1] is live_info
+
+
+def test_track_metadata_during_transition_avoids_redundant_qt_layout_mutation(
+    qt_app,
+    monkeypatch,
+):
+    widget = MediaWidget()
+    first = MediaTrackInfo(
+        title="First Track",
+        artist="Artist",
+        album="Album",
+        state=MediaPlaybackState.PLAYING,
+    )
+    changed = MediaTrackInfo(
+        title="Second Track",
+        artist="Artist",
+        album="Album",
+        state=MediaPlaybackState.PLAYING,
+    )
+    monkeypatch.setattr(
+        MediaWidget,
+        "_has_transition_work_on_any_display",
+        classmethod(lambda cls: True),
+    )
+    widget._has_seen_first_track = True
+    widget._emit_media_update = lambda info: None
+    widget.isVisible = lambda: True
+
+    try:
+        display_update.update_display(widget, first)
+
+        layout_calls = []
+        updates = []
+        widget.setTextFormat = lambda value: layout_calls.append(("format", value))
+        widget.setText = lambda value: layout_calls.append(("text", value))
+        widget.setMinimumHeight = lambda value: layout_calls.append(("min", value))
+        widget.setMaximumHeight = lambda value: layout_calls.append(("max", value))
+        widget.setContentsMargins = lambda *value: layout_calls.append(("margins", value))
+        widget._safe_update = lambda: updates.append("update")
+
+        display_update.update_display(widget, changed)
+
+        assert layout_calls == []
+        assert updates == ["update"]
+        assert widget._metadata_paint["title"] == "Second Track"
+    finally:
+        widget.cleanup()
+        widget.close()
+
+
+def test_playback_state_change_repaints_controls_without_qt_layout_mutation(
+    qt_app,
+    monkeypatch,
+):
+    widget = MediaWidget()
+    playing = MediaTrackInfo(
+        title="Same Track",
+        artist="Same Artist",
+        album="Album",
+        state=MediaPlaybackState.PLAYING,
+    )
+    paused = MediaTrackInfo(
+        title="Same Track",
+        artist="Same Artist",
+        album="Album",
+        state=MediaPlaybackState.PAUSED,
+    )
+    widget._has_seen_first_track = True
+    widget._emit_media_update = lambda info: None
+    widget.isVisible = lambda: True
+
+    try:
+        display_update.update_display(widget, playing)
+
+        layout_calls = []
+        updates = []
+        widget.setTextFormat = lambda value: layout_calls.append(("format", value))
+        widget.setText = lambda value: layout_calls.append(("text", value))
+        widget.setMinimumHeight = lambda value: layout_calls.append(("min", value))
+        widget.setMaximumHeight = lambda value: layout_calls.append(("max", value))
+        widget.setContentsMargins = lambda *value: layout_calls.append(("margins", value))
+        widget._safe_update = lambda: updates.append("update")
+
+        display_update.update_display(widget, paused)
+
+        assert layout_calls == []
+        assert updates == ["update"]
+        assert widget._last_info is paused
+        assert widget._last_info.state == MediaPlaybackState.PAUSED
+    finally:
+        widget.cleanup()
+        widget.close()
+
+
+def test_media_presentation_telemetry_separates_layout_and_emit_cost(
+    qt_app,
+    monkeypatch,
+    caplog,
+):
+    widget = MediaWidget()
+    info = MediaTrackInfo(
+        title="Measured Track",
+        artist="Measured Artist",
+        album="Album",
+        state=MediaPlaybackState.PLAYING,
+    )
+    received = []
+    receiver = lambda payload: received.append(payload)
+    widget.media_updated.connect(receiver)
+    widget._has_seen_first_track = True
+    widget._artwork_update_generation = 7
+    widget.isVisible = lambda: True
+    widget._safe_update = lambda: None
+    monkeypatch.setattr(display_update, "is_perf_metrics_enabled", lambda: True)
+    monkeypatch.setattr(
+        MediaWidget,
+        "_has_transition_work_on_any_display",
+        classmethod(lambda cls: True),
+    )
+
+    try:
+        with caplog.at_level(logging.INFO):
+            display_update.update_display(widget, info)
+
+        assert len(received) == 1
+        messages = [
+            record.getMessage()
+            for record in caplog.records
+            if "[PERF][MEDIA_PRESENTATION]" in record.getMessage()
+        ]
+        assert len(messages) == 1
+        message = messages[0]
+        assert "metadata_changed=True" in message
+        assert "deferred_for_transition=False" in message
+        assert "transition_active=True" in message
+        assert "layout_ms=" in message
+        assert "emit_ms=" in message
+        assert "subscriber_count=1" in message
+        assert "generation=7" in message
+    finally:
+        widget.media_updated.disconnect(receiver)
+        widget.cleanup()
+        widget.close()
 
 
 def test_update_display_retained_same_metadata_does_not_force_relayout(monkeypatch):

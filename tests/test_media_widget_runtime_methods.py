@@ -132,6 +132,25 @@ def test_media_widget_artwork_fade_uses_app_shared_animation_manager() -> None:
     assert "AnimationManager.get_or_create_app_shared()" in source
 
 
+def test_media_header_logo_scaling_is_cached_per_dpr_and_size(qt_app) -> None:
+    from widgets.media.painting import _scaled_header_logo
+
+    widget = MediaWidget()
+    logo = QPixmap(96, 96)
+    logo.fill(QColor(30, 215, 96))
+
+    try:
+        first = _scaled_header_logo(widget, logo, 72, 1.5)
+        second = _scaled_header_logo(widget, logo, 72, 1.5)
+        resized = _scaled_header_logo(widget, logo, 84, 1.5)
+
+        assert second is first
+        assert resized is not first
+        assert widget._header_logo_scaled_cache is resized
+    finally:
+        widget.deleteLater()
+
+
 def test_media_header_expands_into_artwork_gap_before_eliding(qt_app) -> None:
     from widgets.media.painting import _header_layout
 

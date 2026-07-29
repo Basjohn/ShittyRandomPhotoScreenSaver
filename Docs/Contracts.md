@@ -24,6 +24,7 @@ This is not a second `Spec.md`. Find the owner here, then read only the owning c
 | Thread and task registry | `core/threading/manager.py` | `Docs/Guardrails.md` | Coarse async work; no frame-clock handshakes |
 | Qt/native resource tracking | `core/resources/manager.py` plus explicit GL owner | `Docs/Compositor_Architecture.md` | Tracking does not replace context ownership |
 | Shared application events | `core/events/event_system.py` | — | Meaningful cross-module events, not frame transport |
+| External media-command ingress | `rendering/media_command_ingress.py` feeding centralized Qt/native input routes | `Docs/10_WIDGET_GUIDELINES.md` | One process-wide claim; OS pass-through preserved; one local feedback/refresh/wake path |
 | Worker process orchestration | `core/process/supervisor.py` | `Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md` | One correlated process-response seam; payload-aware late/cancel/shutdown disposal |
 | Image shared-memory transport | `core/process/shared_memory_transport.py` plus `core/process/workers/image_worker.py` | `Docs/phase_reports/P04_RESOURCE_LIFETIME_MAP.md` | One bounded attachment handoff; parent consumes/unlinks; exact live-byte accounting |
 | Shared animation timeline | `core/animation/animator.py` | — | Shared animations only; not visualizer simulation |

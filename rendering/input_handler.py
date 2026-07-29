@@ -185,7 +185,6 @@ class InputHandler(QObject):
         
         # Media keys should never cause exit, but we still mirror feedback
         if self._is_media_key(event):
-            logger.info("[INPUT_HANDLER] Media key detected, routing for feedback")
             self._handle_media_key_feedback(event)
             logger.debug("Media key pressed - ignoring (passthrough) (key=%s)", key)
             return False
@@ -1133,6 +1132,20 @@ class InputHandler(QObject):
             logger.info("[INPUT_HANDLER] Media key: command is None (key=%s), skipping", key)
             return
 
+        from rendering.media_command_ingress import (
+            claim_external_media_command,
+            wake_media_visualizers,
+        )
+
+        if not claim_external_media_command(command, route=f"qt:{source}"):
+            return
+
+        wake_media_visualizers(self._parent)
+        logger.info(
+            "[INPUT_HANDLER] Media key detected, routing for feedback: command=%s source=%s",
+            command,
+            source,
+        )
         media_widget = self._resolve_media_widget()
         logger.debug("[INPUT_HANDLER] Media widget lookup: widget=%s", media_widget)
         if media_widget is None:

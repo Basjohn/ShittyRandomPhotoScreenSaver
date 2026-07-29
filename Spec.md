@@ -148,7 +148,11 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 - Workers may publish immutable thread-safe upload data.
 - Workers do not create GUI-affine `QPixmap` or call GL.
 - Media artwork is keyed and decoded to `QImage` in the existing media worker job. Unchanged keys are text-only updates; the GUI creates one `QPixmap` only when the applied key changes.
+- Display-change and manual refresh requests do not bypass an existing media query; its generation remains authoritative through worker decode and UI consumption.
 - Media artwork replacement, art-dependent layout invalidation, and artwork fade are coalesced newest-only while any live display is preparing or running a transition, then flushed together after the final display becomes idle.
+- Track title/artist changes publish painter-owned metadata immediately, but fixed-height/card-margin Qt setters run only when the actual structural footprint changes.
+- External media-key routes converge through one process-wide 200 ms ingress claim before widget lookup, feedback, or refresh. The accepted route still preserves OS pass-through and wakes the visualizer; immediate duplicate routes do no widget work.
+- Media transport feedback remains immediate. While any display has transition work pending it is one static acknowledgement cleared by one managed, token-checked callback, not a frame-by-frame media-card repaint animation; normal idle presentation retains the authored fade.
 - Visible paint does not decode, convert, or hash whole image buffers.
 - Stable source and transform metadata provide normal identity.
 - Shared texture reuse is legal only in a verified live share group with explicit leases and exactly-once deletion.

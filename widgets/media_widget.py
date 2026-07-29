@@ -102,7 +102,9 @@ class MediaWidget(BaseOverlayWidget):
     _instances: ClassVar[weakref.WeakSet] = weakref.WeakSet()
     _shared_feedback_events: ClassVar[dict] = {}
     _shared_feedback_timer: ClassVar[Optional[QTimer]] = None
-    _shared_feedback_timer_interval_ms: ClassVar[int] = 16
+    # AnimationManager owns smooth feedback frames.  This timer is only the
+    # deadline/fallback sweeper, so it must not add a second 60 Hz GUI stream.
+    _shared_feedback_timer_interval_ms: ClassVar[int] = 100
     
     # Shared media info cache - prevents multi-display desync
     _shared_last_valid_info: ClassVar[Optional[MediaTrackInfo]] = None
@@ -192,6 +194,8 @@ class MediaWidget(BaseOverlayWidget):
 
         # Optional Spotify-style brand logo used when album artwork is absent.
         self._brand_pixmap: Optional[QPixmap] = self._load_brand_pixmap()
+        self._header_logo_scaled_cache: Optional[QPixmap] = None
+        self._header_logo_scaled_cache_key: Optional[tuple] = None
 
         # Painter-owned metadata layout used by widgets.media.painting.  This
         # keeps existing dynamic font scaling but avoids QLabel rich-text
@@ -369,6 +373,8 @@ class MediaWidget(BaseOverlayWidget):
         self._provider = normalized
         self._controller = controller
         self._brand_pixmap = self._load_brand_pixmap()
+        self._header_logo_scaled_cache = None
+        self._header_logo_scaled_cache_key = None
         self._safe_update()
         logger.info("[MEDIA_WIDGET] Runtime provider switch: %s -> %s", old_provider, normalized)
         return True
@@ -489,6 +495,8 @@ class MediaWidget(BaseOverlayWidget):
         self._applied_artwork_key = None
         self._scaled_artwork_cache = None
         self._scaled_artwork_cache_key = None
+        self._header_logo_scaled_cache = None
+        self._header_logo_scaled_cache_key = None
         self._last_info = None
         logger.debug("[LIFECYCLE] MediaWidget cleaned up")
     
@@ -1159,8 +1167,9 @@ class MediaWidget(BaseOverlayWidget):
             # Reset diff gating so update_display doesn't skip the refresh
             self._last_track_identity = None
             self._skipped_identity_updates = 0
-            # Force clear in-flight guard so the refresh actually runs
-            self._refresh_in_flight = False
+            # Keep an existing worker authoritative. Bypassing this guard can
+            # invalidate its generation after decode but before UI ownership,
+            # causing the same artwork bytes to be decoded again.
             if self._thread_manager is not None:
                 self._refresh_async()
             else:
@@ -1197,7 +1206,8 @@ class MediaWidget(BaseOverlayWidget):
             return
         self._is_idle = False
         self._reset_poll_stage()
-        self._refresh_in_flight = False
+        # A wake/display-change refresh must not overlap an existing query.
+        # The in-flight result already reconciles playback state and artwork.
         if self._thread_manager is not None:
             self._refresh_async()
 

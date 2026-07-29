@@ -145,17 +145,17 @@ A phase is complete only with tests, runtime evidence, visualizer result, and ro
 Priority: P0 — Phase 4 whole-application plateau and transition-collision validation
 Queued recovery phase: 5 — CPU and Task Reduction
 Branch: main
-Last evidence: logs/evidence_chest/fresh_20260729_2140/
+Last evidence: logs/evidence_chest/fresh_20260729_2233/
 Owning report: Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md
 ```
 
 ### P0 — Phase 4 whole-application plateau and transition-collision validation
 
-The 52-minute `fresh_20260729_2140` run validates the ImageWorker/shared-memory correction live: 80 segments were created and consumed, terminal live segments/bytes and unlink failures were zero, worker RSS remained bounded, and tracked GL bytes plus driver VRAM stayed flat. Phase 4 remains open because the main process, total RSS, and private commit still had positive post-warmup slopes (about +2.42, +2.54, and +3.87 MiB/min respectively). The same run exposed artwork-generation and rotation-deadline collisions that are now corrected in code but still require an installed runtime comparator.
+The 52-minute `fresh_20260729_2140` run remains the whole-process memory baseline: ImageWorker/shared-memory, tracked GL bytes, and driver VRAM were bounded, but main-process RSS, total RSS, and private commit retained positive post-warmup slopes (about +2.42, +2.54, and +3.87 MiB/min respectively). The shorter forced-collision run `fresh_20260729_2233` validates all three transition-time artwork changes as worker decode → newest-only queue → all-displays-idle apply with `ui_pixmap_ms=0.00`, but exposes a separate media-control presentation collision. A media-key track change launched a 1.35-second 60 Hz feedback fade, producing 30–38 full media-card paints versus roughly 2–6 in comparable transition windows while actual GL paint remained cheap. External Windows/Qt media routes now converge through one process-wide claim; transition-time feedback is one immediate static acknowledgement plus one managed clear; painter metadata publishes through one coalesced update without redundant Qt geometry setters; and repeated header-logo smooth scaling is cached. Display-change/double-click refreshes no longer invalidate an already-decoded in-flight generation. These corrections still require an installed dual-display comparator.
 
 - [ ] Rerun the full installed dual-display scenario against `fresh_20260729_2140`; require ImageWorker/shared-memory, tracked GL bytes, driver VRAM, main RSS, total application RSS, and private commit all to settle into bounded post-warmup plateaus.
 - [ ] Attribute any remaining main-process slope with synchronized CPU-cache, display-backing, GL-owner, main/worker/total RSS, and private-commit snapshots; do not infer containment from a bounded child alone.
-- [ ] Force Spotify artwork changes during active 60 Hz and 165 Hz transitions. Require one `event=decoded` per locally owned changed key, bounded `queued`/`replaced`/`flushing`/`applied` lifecycle records, no stale idle-flush discard, and no QPixmap/layout/fade publication until every display is idle.
+- [ ] Force Spotify artwork and title changes with media Next/Previous during active 60 Hz and 165 Hz transitions. Require one accepted `[PERF][MEDIA_FEEDBACK] phase=ingress` command and immediate-route duplicates marked `duplicate_suppressed=True`; `mode=static` with exactly two paint requests and no `start_feedback_animation` label; one `event=decoded` per locally owned changed key; bounded `queued`/`replaced`/`flushing`/`applied` lifecycle records; no stale idle-flush discard; and no QPixmap/art-dependent layout/fade publication until every display is idle. Immediate painter metadata remains intentional, but `[PERF][MEDIA_PRESENTATION]` must show one bounded publication with `layout_mutations=0` for an unchanged fixed-card footprint. Media-card paint calls must remain near the no-track-change transition comparator rather than returning to the observed 30–38-paint burst.
 - [ ] Trigger manual Next and Previous immediately before the old timer deadline. Require `[ROTATION] Timer rebased` after an accepted submission, `expiry_coalesced` before queue/cache/worker/prescale acquisition if image-change work is active, and no rebase after a rejected submission.
 - [ ] Reload image sources while raw and scaled prefetch work is in flight; require stale generations neither repopulate the cleared cache nor release a newer same-key owner.
 - [ ] Exercise previous-image replay on equal-transform displays and on differing source/DPR displays; require exact matches to share one processed/GUI backing and non-matches to remain distinct.
@@ -166,7 +166,7 @@ The 52-minute `fresh_20260729_2140` run validates the ImageWorker/shared-memory 
 
 **Non-goals:** do not change the multi-display compositor topology; attach shared-memory lifetime to compositor teardown; restart/recycle workers for reclamation; add repeated `gc.collect()`, process trimming, or memory-cache enlargement; or pull Phase 5 CPU/task-rate work into this fix.
 
-**P0 gate:** the installed comparator shows worker, main, total RSS/private commit, tracked GL bytes, and driver VRAM plateau together; shared-memory counters terminate at zero; artwork/rotation collisions are absent; and Spectrum, Bubble, and transition presentation remain unchanged.
+**P0 gate:** the installed comparator shows worker, main, total RSS/private commit, tracked GL bytes, and driver VRAM plateau together; shared-memory counters terminate at zero; artwork/rotation/media-feedback collisions are absent; and Spectrum, Bubble, and transition presentation remain unchanged.
 
 ### Queued Phase 5 continuation
 

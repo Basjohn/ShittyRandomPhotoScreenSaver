@@ -81,7 +81,7 @@ These are the seams a new widget should usually flow through:
 - Creation/reuse/startup orchestration: `rendering/widget_setup_all.py`
 - Runtime lifecycle/fade/refresh routing: `rendering/widget_manager.py`
 - Positioning math: `rendering/widget_positioner.py`
-- Input routing: `rendering/input_handler.py`
+- Input routing: `rendering/input_handler.py`; external Windows/Qt media-command convergence: `rendering/media_command_ingress.py`
 - Settings UI section build/load/save and lazy subtab routing: `ui/tabs/widgets_tab.py` plus `ui/tabs/widgets_tab_<family>.py`
 - Canonical defaults: `core/settings/default_settings.py`
 - Defaults/reset contract: `core/settings/defaults.py`

@@ -186,3 +186,88 @@ def test_refresh_async_decodes_qimage_in_existing_worker_job(
     finally:
         widget.cleanup()
         widget.close()
+
+
+def test_forced_refresh_routes_do_not_bypass_in_flight_artwork_owner(
+    qt_app,
+    monkeypatch,
+) -> None:
+    payload = _image_bytes(40, 40)
+    info = MediaTrackInfo(
+        title="Track",
+        artist="Artist",
+        album="Album",
+        state=MediaPlaybackState.PLAYING,
+        artwork=payload,
+    )
+    jobs = []
+    display_results = []
+    decode_calls = []
+    original_decode = MediaWidget._decode_artwork_image
+
+    class _Controller:
+        def get_current_track(self):
+            return info
+
+    class _HoldingThreadManager:
+        def submit_io_task(self, worker, callback):
+            jobs.append((worker, callback))
+
+    class _TaskResult:
+        success = True
+
+        def __init__(self, result):
+            self.result = result
+
+    monkeypatch.setattr(
+        MediaWidget,
+        "_decode_artwork_image",
+        staticmethod(
+            lambda data: (
+                decode_calls.append(data),
+                original_decode(data),
+            )[1]
+        ),
+    )
+    monkeypatch.setattr(
+        ThreadManager,
+        "run_on_ui_thread",
+        staticmethod(lambda callback: callback()),
+    )
+
+    widget = MediaWidget(
+        controller=_Controller(),
+        thread_manager=_HoldingThreadManager(),
+    )
+    widget._enabled = True
+    widget._update_display = (
+        lambda result_info, prepared, generation: display_results.append(
+            (result_info, prepared, generation)
+        )
+    )
+    try:
+        widget._refresh_async()
+        assert widget._refresh_in_flight is True
+        assert widget._artwork_update_generation == 1
+        assert len(jobs) == 1
+
+        widget.refresh_playback_state()
+        assert len(jobs) == 1
+        assert widget._artwork_update_generation == 1
+
+        assert widget.handle_double_click(None) is True
+        assert len(jobs) == 1
+        assert widget._artwork_update_generation == 1
+
+        worker, callback = jobs.pop()
+        callback(_TaskResult(worker()))
+
+        assert len(decode_calls) == 1
+        assert len(display_results) == 1
+        assert display_results[0][0] is info
+        assert display_results[0][1].image is not None
+        assert display_results[0][2] == 1
+        assert widget._refresh_in_flight is False
+    finally:
+        widget.cleanup()
+        widget.close()

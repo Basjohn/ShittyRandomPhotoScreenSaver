@@ -20,14 +20,17 @@ from PySide6.QtWidgets import QWidget, QApplication
 from core.logging.logger import get_logger
 from core.threading.manager import ThreadManager
 from rendering.custom_layout_manager import CustomLayoutManager
+from rendering.media_command_ingress import (
+    claim_external_media_command,
+    resolve_media_widget,
+    wake_media_visualizers,
+)
 from rendering.display_widget import (
     DisplayWidget,
     WM_APPCOMMAND,
     _APPCOMMAND_NAMES,
     _USER32,
 )
-from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-
 # Windows message constants for media key interception
 WM_KEYDOWN = 0x0100
 WM_KEYUP = 0x0101
@@ -126,13 +129,14 @@ def handle_nativeEvent(widget, eventType, message):
                     def on_media_key(command: str) -> None:
                         """Callback when media key detected - trigger visualizer wake."""
                         try:
-                            # Find Spotify visualizer and wake it
-                            for vis_w in widget.findChildren(SpotifyVisualizerWidget):
-                                if hasattr(vis_w, '_trigger_wake'):
-                                    vis_w._trigger_wake()
-                                    break
+                            if not claim_external_media_command(
+                                command,
+                                route="raw_input",
+                            ):
+                                return
+                            wake_media_visualizers(widget)
                             # Also dispatch to media widget for UI feedback
-                            mw = getattr(widget, "media_widget", None)
+                            mw = resolve_media_widget(widget)
                             if mw and hasattr(mw, "handle_transport_command"):
                                 mw.handle_transport_command(command, source="media_key", execute=False)
                         except Exception:
@@ -338,7 +342,11 @@ def _dispatch_media_vk_feedback(widget, vk_code: int) -> None:
                 pass
         return
 
-    media_widget = getattr(widget, "media_widget", None)
+    if not claim_external_media_command(command, route=f"win_vk:{vk_code:#04x}"):
+        return
+
+    wake_media_visualizers(widget)
+    media_widget = resolve_media_widget(widget)
     if media_widget is None:
         return
     try:
@@ -348,16 +356,6 @@ def _dispatch_media_vk_feedback(widget, vk_code: int) -> None:
         logger.debug("[NATIVE] Media VK feedback: vk=%#04x cmd=%s", vk_code, command)
     except Exception as e:
         logger.debug("[NATIVE] Media VK feedback error: %s", e)
-
-    # Wake Spotify visualizer
-    try:
-        for vis_w in widget.findChildren(SpotifyVisualizerWidget):
-            if hasattr(vis_w, "_trigger_wake"):
-                vis_w._trigger_wake()
-                break
-    except Exception:
-        pass
-
 
 def dispatch_appcommand_for_feedback(widget, msg) -> None:
     """Lightweight appcommand handler that only triggers visual feedback without blocking."""
@@ -372,10 +370,6 @@ def dispatch_appcommand_for_feedback(widget, msg) -> None:
         logger.debug("[DISPLAY_WIDGET] _dispatch_appcommand_for_feedback error: %s", e)
 
 def dispatch_appcommand(widget, command: int, command_name: str) -> bool:
-    media_widget = getattr(widget, "media_widget", None)
-    if media_widget is None:
-        return False
-
     mapping = {
         0x0005: "next",  # APPCOMMAND_MEDIA_NEXTTRACK
         0x0006: "prev",  # APPCOMMAND_MEDIA_PREVIOUS
@@ -389,6 +383,14 @@ def dispatch_appcommand(widget, command: int, command_name: str) -> bool:
         return False
 
     source = f"appcommand:{command_name}"
+    if not claim_external_media_command(key, route=source):
+        return True
+
+    wake_media_visualizers(widget)
+    media_widget = resolve_media_widget(widget)
+    if media_widget is None:
+        return False
+
     try:
         return bool(
             media_widget.handle_transport_command(

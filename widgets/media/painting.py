@@ -223,6 +223,42 @@ def load_brand_pixmap(provider: str = "spotify") -> Optional[QPixmap]:
     return None
 
 
+def _scaled_header_logo(
+    widget: "MediaWidget",
+    pixmap: QPixmap,
+    target_px: int,
+    dpr: float,
+) -> QPixmap:
+    """Return the cached DPR-sized provider logo used by every media paint."""
+
+    try:
+        source_key = int(pixmap.cacheKey())
+    except Exception:
+        source_key = id(pixmap)
+    cache_key = (source_key, int(target_px), round(float(dpr), 4))
+    cached = getattr(widget, "_header_logo_scaled_cache", None)
+    if (
+        getattr(widget, "_header_logo_scaled_cache_key", None) == cache_key
+        and cached is not None
+        and not cached.isNull()
+    ):
+        return cached
+
+    scaled = pixmap.scaled(
+        target_px,
+        target_px,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    try:
+        scaled.setDevicePixelRatio(dpr)
+    except Exception as e:
+        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+    widget._header_logo_scaled_cache = scaled
+    widget._header_logo_scaled_cache_key = cache_key
+    return scaled
+
+
 def paint_header_frame(widget: "MediaWidget", painter: QPainter) -> None:
     """Paint a rounded sub-frame around the logo + SPOTIFY header.
 
@@ -278,16 +314,7 @@ def paint_header_logo(widget: "MediaWidget", painter: QPainter) -> None:
     if target_px <= 0:
         return
 
-    scaled = pm.scaled(
-        target_px,
-        target_px,
-        Qt.AspectRatioMode.KeepAspectRatio,
-        Qt.TransformationMode.SmoothTransformation,
-    )
-    try:
-        scaled.setDevicePixelRatio(max(1.0, dpr))
-    except Exception as e:
-        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+    scaled = _scaled_header_logo(widget, pm, target_px, max(1.0, dpr))
 
     layout = _header_layout(widget)
     x = int(layout["logo_x"])

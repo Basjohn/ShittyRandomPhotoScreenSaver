@@ -7,6 +7,14 @@ from PySide6.QtGui import QKeyEvent
 
 from rendering.display_widget import DisplayWidget
 from rendering.input_handler import InputHandler
+from rendering.media_command_ingress import reset_media_command_ingress_for_tests
+
+
+@pytest.fixture(autouse=True)
+def _reset_process_media_gate():
+    reset_media_command_ingress_for_tests()
+    yield
+    reset_media_command_ingress_for_tests()
 
 @pytest.fixture
 def input_handler():

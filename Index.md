@@ -88,6 +88,7 @@ Do not read every document by default.
 | Compositor | existing compositor modules under `rendering/` |
 | Image pipeline | existing image-pipeline and prefetch modules |
 | Media artwork worker/UI handoff | `widgets/media_widget.py`, `widgets/media/display_update.py`, `rendering/display_widget.py` |
+| External media-command ingress/deduplication | `rendering/media_command_ingress.py`, then `rendering/input_handler.py` / `rendering/display_native_events.py` |
 | Display image accounting | `rendering/image_resource_accounting.py` |
 | Compositor program ownership | `rendering/gl_programs/program_cache.py` |
 | Passive GL resource accounting | `core/resources/manager.py` |
