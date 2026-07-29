@@ -8,6 +8,7 @@ to preserve the original interface.
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 import time
@@ -130,6 +131,16 @@ def _normalize_display_mode(display_mode: Any) -> DisplayMode:
     return DisplayMode.from_string(str(display_mode or DisplayMode.FILL.value))
 
 
+def _normalize_device_pixel_ratio(device_pixel_ratio: Any) -> float:
+    try:
+        value = float(device_pixel_ratio)
+    except (TypeError, ValueError):
+        return 1.0
+    if not math.isfinite(value) or value <= 0.0:
+        return 1.0
+    return value
+
+
 def _build_scaled_cache_key(
     image_path: str,
     target_width: int,
@@ -137,11 +148,18 @@ def _build_scaled_cache_key(
     display_mode: DisplayMode,
     use_lanczos: bool,
     sharpen: bool,
+    device_pixel_ratio: float = 1.0,
 ) -> str:
     mode = _normalize_display_mode(display_mode)
+    normalized_dpr = _normalize_device_pixel_ratio(device_pixel_ratio)
+    dpr_suffix = (
+        ""
+        if math.isclose(normalized_dpr, 1.0, rel_tol=0.0, abs_tol=1e-9)
+        else f":dpr{format(normalized_dpr, '.8g')}"
+    )
     return (
         f"{image_path}|scaled:{mode.value}:{target_width}x{target_height}"
-        f":l{1 if use_lanczos else 0}:s{1 if sharpen else 0}"
+        f":l{1 if use_lanczos else 0}:s{1 if sharpen else 0}{dpr_suffix}"
     )
 
 
@@ -206,13 +224,15 @@ def _get_prefetch_target_specs(engine: ScreensaverEngine) -> List[Dict[str, Any]
     specs: List[Dict[str, Any]] = []
     display_manager = getattr(engine, "display_manager", None)
     displays = getattr(display_manager, "displays", None) or []
-    seen: set[tuple[int, int, str]] = set()
+    seen: set[tuple[int, int, str, float]] = set()
     for display in displays:
         try:
+            dpr = _normalize_device_pixel_ratio(
+                getattr(display, "_device_pixel_ratio", 1.0)
+            )
             if hasattr(display, "get_target_size"):
                 target_size = display.get_target_size()
             else:
-                dpr = getattr(display, "_device_pixel_ratio", 1.0)
                 target_size = QSize(
                     int(display.width() * dpr),
                     int(display.height() * dpr),
@@ -222,7 +242,7 @@ def _get_prefetch_target_specs(engine: ScreensaverEngine) -> List[Dict[str, Any]
             if width <= 0 or height <= 0:
                 continue
             mode = _normalize_display_mode(getattr(display, "display_mode", DisplayMode.FILL))
-            signature = (width, height, mode.value)
+            signature = (width, height, mode.value, dpr)
             if signature in seen:
                 continue
             seen.add(signature)
@@ -231,6 +251,7 @@ def _get_prefetch_target_specs(engine: ScreensaverEngine) -> List[Dict[str, Any]
                     "width": width,
                     "height": height,
                     "display_mode": mode,
+                    "device_pixel_ratio": dpr,
                 }
             )
         except Exception as e:
@@ -245,10 +266,12 @@ def _get_prefetch_target_specs_in_display_order(engine: ScreensaverEngine) -> Li
     displays = getattr(display_manager, "displays", None) or []
     for display in displays:
         try:
+            dpr = _normalize_device_pixel_ratio(
+                getattr(display, "_device_pixel_ratio", 1.0)
+            )
             if hasattr(display, "get_target_size"):
                 target_size = display.get_target_size()
             else:
-                dpr = getattr(display, "_device_pixel_ratio", 1.0)
                 target_size = QSize(
                     int(display.width() * dpr),
                     int(display.height() * dpr),
@@ -262,6 +285,7 @@ def _get_prefetch_target_specs_in_display_order(engine: ScreensaverEngine) -> Li
                     "width": width,
                     "height": height,
                     "display_mode": _normalize_display_mode(getattr(display, "display_mode", DisplayMode.FILL)),
+                    "device_pixel_ratio": dpr,
                 }
             )
         except Exception as e:
@@ -300,9 +324,14 @@ def _get_prefetch_request_plan(engine: ScreensaverEngine, paths: List[str]) -> L
         ]
 
     distinct_specs: List[Dict[str, Any]] = []
-    seen_signatures: set[tuple[int, int, str]] = set()
+    seen_signatures: set[tuple[int, int, str, float]] = set()
     for spec in ordered_specs:
-        signature = (spec["width"], spec["height"], spec["display_mode"].value)
+        signature = (
+            spec["width"],
+            spec["height"],
+            spec["display_mode"].value,
+            spec["device_pixel_ratio"],
+        )
         if signature in seen_signatures:
             continue
         seen_signatures.add(signature)
@@ -334,6 +363,7 @@ def _build_prefetch_scaled_requests(
             spec["display_mode"],
             use_lanczos,
             sharpen,
+            spec["device_pixel_ratio"],
         )
         if cache_key in seen_keys or cache.contains(cache_key):
             continue
@@ -914,6 +944,7 @@ def _process_display_image_candidate(
         display_mode,
         use_lanczos,
         sharpen,
+        getattr(display, "device_pixel_ratio", 1.0),
     )
 
     if cache is not None:
@@ -1127,11 +1158,54 @@ def _process_same_image_with_replacements(
     return {}, None
 
 
+def _process_previous_images_with_exact_reuse(
+    engine: "ScreensaverEngine",
+    displays: List[Any],
+    image_metas: List[ImageMetadata],
+    use_lanczos: bool,
+    sharpen: bool,
+) -> Dict[int, _ProcessedDisplayImage | Dict[str, Any]]:
+    """Process previous-image targets once per exact source/transform identity."""
+
+    processed: Dict[int, _ProcessedDisplayImage | Dict[str, Any]] = {}
+    processed_by_identity: Dict[
+        tuple[Any, ...],
+        _ProcessedDisplayImage | Dict[str, Any],
+    ] = {}
+    for display_index, display in enumerate(displays):
+        meta = image_metas[display_index] if display_index < len(image_metas) else None
+        if meta is None:
+            continue
+        source_path = _image_meta_path(meta)
+        source_identity: Any = source_path if source_path else ("unique", id(meta))
+        reuse_key = (
+            source_identity,
+            _display_processing_reuse_key(display),
+            bool(use_lanczos),
+            bool(sharpen),
+        )
+        result = processed_by_identity.get(reuse_key)
+        if result is None:
+            result = _process_display_image_candidate(
+                engine,
+                display,
+                display_index,
+                meta,
+                use_lanczos,
+                sharpen,
+            )
+            if result is not None:
+                processed_by_identity[reuse_key] = result
+        if result is not None:
+            processed[display_index] = result
+    return processed
+
+
 def load_and_display_image_async(
     engine: ScreensaverEngine,
     image_meta: ImageMetadata,
     retry_count: int = 0,
-) -> None:
+) -> bool:
     """
     Load and display image asynchronously. Processes image on background thread.
 
@@ -1151,14 +1225,12 @@ def load_and_display_image_async(
     """
     if not engine.thread_manager or not engine.display_manager:
         # Fall back to sync path if no thread manager
-        load_and_display_image(engine, image_meta, retry_count)
-        return
+        return bool(load_and_display_image(engine, image_meta, retry_count))
 
     runtime_generation, display_manager = _capture_runtime_identity(engine)
     processing_targets = _snapshot_display_processing_targets(display_manager)
     if not processing_targets:
-        load_and_display_image(engine, image_meta, retry_count)
-        return
+        return bool(load_and_display_image(engine, image_meta, retry_count))
 
     # Check same_image setting to determine how many images to load
     raw_same_image = engine.settings_manager.get('display.same_image_all_monitors', True)
@@ -1275,6 +1347,14 @@ def load_and_display_image_async(
             data = result.result if result and result.success else None
             if data is None:
                 logger.warning(f"[ASYNC] Image processing failed, retrying (attempt {retry_count + 1}/10)")
+                if retry_count < 10 and engine.image_queue:
+                    next_meta = engine.image_queue.next()
+                    if next_meta and load_and_display_image_async(
+                        engine,
+                        next_meta,
+                        retry_count + 1,
+                    ):
+                        return
                 engine._loading_in_progress = False
                 try:
                     pending = getattr(display_manager, "set_transition_work_pending", None)
@@ -1282,10 +1362,6 @@ def load_and_display_image_async(
                         pending(False)
                 except Exception:
                     logger.debug("[ASYNC] Failed to clear transition pending state", exc_info=True)
-                if retry_count < 10 and engine.image_queue:
-                    next_meta = engine.image_queue.next()
-                    if next_meta:
-                        load_and_display_image_async(engine, next_meta, retry_count + 1)
                 return
 
             processed = data['processed']
@@ -1380,6 +1456,7 @@ def load_and_display_image_async(
             callback=lambda r: engine.thread_manager.run_on_ui_thread(lambda: _on_process_complete(r)),
             category="image.load_and_process",
         )
+        return True
     except Exception as e:
         logger.warning(f"[ASYNC] Failed to submit task, falling back to sync: {e}")
         if _runtime_identity_is_current(
@@ -1388,7 +1465,8 @@ def load_and_display_image_async(
             display_manager,
             label="image_submit_fallback",
         ):
-            load_and_display_image(engine, image_meta, retry_count)
+            return bool(load_and_display_image(engine, image_meta, retry_count))
+        return False
 
 
 # ------------------------------------------------------------------
@@ -1419,7 +1497,7 @@ def _record_display_history(engine: "ScreensaverEngine", image_metas: list) -> N
 def load_and_display_image_async_with_metas(
     engine: "ScreensaverEngine",
     image_metas: list,
-) -> None:
+) -> bool:
     """Load and display specific images on each display without advancing the queue.
 
     This is used by the previous-image feature to show pre-resolved
@@ -1429,8 +1507,8 @@ def load_and_display_image_async_with_metas(
     if not engine.thread_manager or not engine.display_manager:
         # Sync fallback — show first image on all displays
         if image_metas:
-            load_and_display_image(engine, image_metas[0])
-        return
+            return bool(load_and_display_image(engine, image_metas[0]))
+        return False
 
     runtime_generation, display_manager = _capture_runtime_identity(engine)
     processing_targets = _snapshot_display_processing_targets(display_manager)
@@ -1449,21 +1527,13 @@ def load_and_display_image_async_with_metas(
             ):
                 return None
             use_lanczos, sharpen = _get_display_quality_settings(engine)
-            processed_images: Dict[int, _ProcessedDisplayImage] = {}
-            for index, target in enumerate(processing_targets):
-                meta = image_metas[index] if index < len(image_metas) else None
-                if meta is None:
-                    continue
-                processed = _process_display_image_candidate(
-                    engine,
-                    target,
-                    index,
-                    meta,
-                    use_lanczos,
-                    sharpen,
-                )
-                if processed is not None:
-                    processed_images[index] = processed
+            processed_images = _process_previous_images_with_exact_reuse(
+                engine,
+                list(processing_targets),
+                image_metas,
+                use_lanczos,
+                sharpen,
+            )
             return {"processed": processed_images} if processed_images else None
         except Exception as exc:
             logger.exception("[ASYNC-PREV] Background processing failed: %s", exc)
@@ -1496,11 +1566,16 @@ def load_and_display_image_async_with_metas(
                         setter(False)
             stagger_ms = TRANSITION_STAGGER_MS
             displayed = []
+            shared_gui_pixmaps: Dict[int, QPixmap] = {}
             for i, display in enumerate(displays_list):
                 if i not in processed:
                     continue
                 proc = processed[i]
-                processed_pixmap = QPixmap.fromImage(proc.image)
+                reuse_token = id(proc)
+                processed_pixmap = shared_gui_pixmaps.get(reuse_token)
+                if processed_pixmap is None:
+                    processed_pixmap = QPixmap.fromImage(proc.image)
+                    shared_gui_pixmaps[reuse_token] = processed_pixmap
                 original_pixmap = processed_pixmap
                 delay_ms = i * stagger_ms
                 if delay_ms > 0:
@@ -1548,6 +1623,7 @@ def load_and_display_image_async_with_metas(
             callback=lambda r: engine.thread_manager.run_on_ui_thread(lambda: _on_complete(r)),
             category="image.previous_load",
         )
+        return True
     except Exception as e:
         logger.warning("[ASYNC-PREV] Failed to submit task: %s", e)
         if image_metas and _runtime_identity_is_current(
@@ -1556,7 +1632,8 @@ def load_and_display_image_async_with_metas(
             display_manager,
             label="previous_image_submit_fallback",
         ):
-            load_and_display_image(engine, image_metas[0])
+            return bool(load_and_display_image(engine, image_metas[0]))
+        return False
 
 
 # ------------------------------------------------------------------

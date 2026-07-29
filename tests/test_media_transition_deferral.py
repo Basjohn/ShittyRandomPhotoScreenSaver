@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import logging
 import weakref
 from types import SimpleNamespace
 
 from PySide6.QtGui import QImage
 
+from core.media.media_controller import MediaPlaybackState, MediaTrackInfo
 import rendering.display_image_ops as display_image_ops
 from rendering.display_widget import DisplayWidget
+from widgets.media import display_update
 from widgets.media_widget import MediaWidget, PreparedArtwork
 
 
@@ -69,6 +72,128 @@ def test_transition_coalesces_to_newest_artwork(qt_app, monkeypatch):
         assert widget._pending_artwork.key == (300, "c")
         assert widget._pending_artwork_generation == 3
         assert widget._artwork_coalesced_count == 2
+    finally:
+        widget.cleanup()
+        widget.close()
+
+
+def test_unchanged_poll_promotes_pending_artwork_before_diff_gate(
+    qt_app,
+    monkeypatch,
+):
+    busy = [True]
+    _set_transition_probe(monkeypatch, busy)
+    widget = MediaWidget()
+    monkeypatch.setattr(MediaWidget, "_instances", weakref.WeakSet([widget]))
+
+    old_info = MediaTrackInfo(
+        title="Track",
+        artist="Artist",
+        album="Album",
+        state=MediaPlaybackState.PLAYING,
+        artwork=b"old-art",
+    )
+    new_info = MediaTrackInfo(
+        title="Track",
+        artist="Artist",
+        album="Album",
+        state=MediaPlaybackState.PLAYING,
+        artwork=b"new-art",
+    )
+    old_key = widget._compute_artwork_key(old_info)
+    new_key = widget._compute_artwork_key(new_info)
+
+    try:
+        widget._fade_in_completed = True
+        widget._applied_artwork_key = old_key
+        widget._last_track_identity = widget._compute_track_identity(old_info)
+        widget._last_metadata_identity = widget._compute_metadata_identity(old_info)
+
+        widget._artwork_update_generation = 1
+        display_update.update_display(
+            widget,
+            new_info,
+            prepared_artwork=_prepared(new_key),
+            artwork_generation=1,
+        )
+        assert widget._pending_artwork is not None
+        assert widget._pending_artwork_generation == 1
+        decoded_image = widget._pending_artwork.image
+        assert decoded_image is not None
+
+        # The next same-track poll correctly skips another decode. It must still
+        # promote the retained decoded image before metadata diff-gating returns.
+        widget._artwork_update_generation = 2
+        display_update.update_display(
+            widget,
+            new_info,
+            prepared_artwork=PreparedArtwork(new_key, None, 0.0),
+            artwork_generation=2,
+        )
+        assert widget._pending_artwork is not None
+        assert widget._pending_artwork_generation == 2
+        assert widget._pending_artwork.image is decoded_image
+
+        busy[0] = False
+        MediaWidget._flush_pending_artwork_when_all_displays_idle()
+
+        assert widget._pending_artwork is None
+        assert widget._applied_artwork_key == new_key
+        assert widget._artwork_pixmap is not None
+    finally:
+        widget.cleanup()
+        widget.close()
+
+
+def test_artwork_lifecycle_telemetry_is_material_event_only(
+    qt_app,
+    monkeypatch,
+    caplog,
+):
+    busy = [True]
+    _set_transition_probe(monkeypatch, busy)
+    monkeypatch.setattr("widgets.media_widget.is_perf_metrics_enabled", lambda: True)
+    widget = MediaWidget()
+    monkeypatch.setattr(MediaWidget, "_instances", weakref.WeakSet([widget]))
+
+    try:
+        with caplog.at_level(logging.INFO):
+            widget._artwork_update_generation = 1
+            widget._accept_prepared_artwork(
+                _prepared((100, "a")),
+                1,
+                refresh_layout_after_apply=False,
+            )
+
+            # Same-key polling promotes ownership but intentionally emits no
+            # additional lifecycle record.
+            widget._artwork_update_generation = 2
+            widget._accept_prepared_artwork(
+                PreparedArtwork((100, "a"), None, 0.0),
+                2,
+                refresh_layout_after_apply=False,
+            )
+
+            widget._artwork_update_generation = 3
+            widget._accept_prepared_artwork(
+                _prepared((200, "b")),
+                3,
+                refresh_layout_after_apply=False,
+            )
+
+            busy[0] = False
+            MediaWidget._flush_pending_artwork_when_all_displays_idle()
+
+        messages = [
+            record.getMessage()
+            for record in caplog.records
+            if "[PERF][MEDIA_ARTWORK]" in record.getMessage()
+        ]
+        assert sum("event=queued" in message for message in messages) == 1
+        assert sum("event=replaced" in message for message in messages) == 1
+        assert sum("event=flushing" in message for message in messages) == 1
+        assert sum("event=applied" in message for message in messages) == 1
+        assert any("key_id=b" in message for message in messages)
     finally:
         widget.cleanup()
         widget.close()
@@ -242,12 +367,18 @@ def test_final_display_transition_completion_flushes_all_media_artwork(
         media1.close()
 
 
-def test_destroyed_media_widget_discards_pending_qimage(qt_app, monkeypatch):
+def test_destroyed_media_widget_discards_pending_qimage_once(
+    qt_app,
+    monkeypatch,
+    caplog,
+):
     widget = MediaWidget()
     widget._artwork_update_generation = 1
     widget._pending_artwork = _prepared((100, "a"))
     widget._pending_artwork_generation = 1
-    monkeypatch.setattr(MediaWidget, "_instances", weakref.WeakSet([widget]))
+    instances = weakref.WeakSet([widget])
+    monkeypatch.setattr(MediaWidget, "_instances", instances)
+    monkeypatch.setattr("widgets.media_widget.is_perf_metrics_enabled", lambda: True)
     monkeypatch.setattr(
         MediaWidget,
         "_has_transition_work_on_any_display",
@@ -258,7 +389,17 @@ def test_destroyed_media_widget_discards_pending_qimage(qt_app, monkeypatch):
         lambda candidate: candidate is not widget,
     )
 
-    MediaWidget._flush_pending_artwork_when_all_displays_idle()
+    with caplog.at_level(logging.INFO):
+        MediaWidget._flush_pending_artwork_when_all_displays_idle()
+        MediaWidget._flush_pending_artwork_when_all_displays_idle()
 
     assert widget._pending_artwork is None
+    assert widget not in instances
+    discarded = [
+        record.getMessage()
+        for record in caplog.records
+        if "[PERF][MEDIA_ARTWORK] event=discarded" in record.getMessage()
+        and "reason=widget_destroyed" in record.getMessage()
+    ]
+    assert len(discarded) == 1
     widget.close()

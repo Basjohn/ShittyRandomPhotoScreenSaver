@@ -80,6 +80,46 @@ def _coalesce_partial_same_track_metadata(
     return info
 
 
+def _accept_prepared_artwork_for_info(
+    widget: "MediaWidget",
+    info: MediaTrackInfo,
+    prepared_artwork,
+    artwork_generation: int,
+) -> bool:
+    """Promote or apply prepared artwork belonging to one resolved snapshot."""
+
+    try:
+        final_artwork_key = widget._compute_artwork_key(info)
+    except Exception:
+        final_artwork_key = None
+
+    prepared_for_final_info = prepared_artwork
+    if final_artwork_key != getattr(prepared_artwork, "key", None):
+        pending = getattr(widget, "_pending_artwork", None)
+        if pending is not None and getattr(pending, "key", None) == final_artwork_key:
+            prepared_for_final_info = pending
+        else:
+            prepared_for_final_info = None
+
+    if prepared_for_final_info is None:
+        return False
+
+    try:
+        return bool(
+            widget._accept_prepared_artwork(
+                prepared_for_final_info,
+                artwork_generation,
+                refresh_layout_after_apply=False,
+            )
+        )
+    except Exception:
+        logger.debug(
+            "[MEDIA_WIDGET] Failed to accept prepared artwork",
+            exc_info=True,
+        )
+        return False
+
+
 def _compute_metadata_layout_budget(widget: "MediaWidget", *, has_artwork: bool = False) -> dict[str, int]:
     width = max(1, int(getattr(widget, "width", lambda: 0)() or 0))
     height = max(1, int(getattr(widget, "height", lambda: 0)() or 0))
@@ -292,11 +332,26 @@ def update_display(
 
     # Smart polling: diff gating - compute track identity
     metadata_changed = False
+    artwork_changed = False
+    artwork_snapshot_processed = False
 
     if info is not None:
         current_identity = widget._compute_track_identity(info)
         current_metadata_identity = widget._compute_metadata_identity(info)
         metadata_changed = current_metadata_identity != widget._last_metadata_identity
+
+        # Artwork ownership must be processed before the metadata early-return.
+        # During a transition, unchanged follow-up polls carry the same artwork
+        # key without another decoded QImage. Promoting the existing pending
+        # image to the current request generation keeps idle flush authoritative.
+        if prepared_artwork is not None and artwork_generation is not None:
+            artwork_changed = _accept_prepared_artwork_for_info(
+                widget,
+                info,
+                prepared_artwork,
+                int(artwork_generation),
+            )
+            artwork_snapshot_processed = True
 
         # Reset idle counter when we get valid track info
         if widget._consecutive_none_count > 0 or widget._is_idle:
@@ -323,6 +378,7 @@ def update_display(
             current_identity == widget._last_track_identity
             and widget._last_track_identity is not None
             and widget._fade_in_completed
+            and not artwork_changed
         ):
             widget._skipped_identity_updates += 1
             if widget._skipped_identity_updates <= widget._max_identity_skip:
@@ -388,35 +444,17 @@ def update_display(
     # Apply only the worker-prepared artwork that belongs to the final snapshot.
     # A raw ``None`` result may have been replaced by retained/shared metadata,
     # so its empty artwork result must not clear that retained card.
-    artwork_changed = False
-    if prepared_artwork is not None and artwork_generation is not None:
-        try:
-            final_artwork_key = widget._compute_artwork_key(info)
-        except Exception:
-            final_artwork_key = None
-
-        prepared_for_final_info = prepared_artwork
-        if final_artwork_key != getattr(prepared_artwork, "key", None):
-            pending = getattr(widget, "_pending_artwork", None)
-            if pending is not None and getattr(pending, "key", None) == final_artwork_key:
-                prepared_for_final_info = pending
-            else:
-                prepared_for_final_info = None
-
-        if prepared_for_final_info is not None:
-            try:
-                artwork_changed = bool(
-                    widget._accept_prepared_artwork(
-                        prepared_for_final_info,
-                        artwork_generation,
-                        refresh_layout_after_apply=False,
-                    )
-                )
-            except Exception:
-                logger.debug(
-                    "[MEDIA_WIDGET] Failed to accept prepared artwork",
-                    exc_info=True,
-                )
+    if (
+        not artwork_snapshot_processed
+        and prepared_artwork is not None
+        and artwork_generation is not None
+    ):
+        artwork_changed = _accept_prepared_artwork_for_info(
+            widget,
+            info,
+            prepared_artwork,
+            int(artwork_generation),
+        )
 
     # --- Build metadata HTML ---
     final_metadata_identity = widget._compute_metadata_identity(info)

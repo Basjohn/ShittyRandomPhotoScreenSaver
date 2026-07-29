@@ -1012,8 +1012,10 @@ class ScreensaverEngine(QObject):
             # ARCHITECTURAL FIX: Use async image processing to avoid UI thread blocking
             # This moves heavy image scaling/cropping to background threads
             if self.thread_manager:
-                self._load_and_display_image_async(image_meta)
-                return True  # Async - will complete later
+                accepted = bool(self._load_and_display_image_async(image_meta))
+                if not accepted:
+                    self._clear_unaccepted_image_change_work()
+                return accepted  # Async submission or synchronous fallback accepted
             
             # Fallback to sync path if no thread manager
             return self._load_and_display_image(image_meta)
@@ -1091,10 +1093,10 @@ class ScreensaverEngine(QObject):
         from engine.image_pipeline import load_image_task
         return load_image_task(self, image_meta, preferred_size=preferred_size)
 
-    def _load_and_display_image_async(self, image_meta: ImageMetadata, retry_count: int = 0) -> None:
+    def _load_and_display_image_async(self, image_meta: ImageMetadata, retry_count: int = 0) -> bool:
         """Delegates to engine.image_pipeline."""
         from engine.image_pipeline import load_and_display_image_async
-        load_and_display_image_async(self, image_meta, retry_count)
+        return bool(load_and_display_image_async(self, image_meta, retry_count))
 
 
     def _load_and_display_image(self, image_meta: ImageMetadata, retry_count: int = 0) -> bool:
@@ -1104,7 +1106,91 @@ class ScreensaverEngine(QObject):
     def _on_rotation_timer(self) -> None:
         """Handle rotation timer timeout."""
         logger.debug("Rotation timer triggered")
+        if self._has_active_image_change_work():
+            logger.info(
+                "[TRANSITION][ROTATION] expiry_coalesced reason=active_image_change"
+            )
+            return
         self._show_next_image()
+
+    def _has_active_image_change_work(self) -> bool:
+        """Return whether a timer-driven rotation would overlap accepted work."""
+
+        if bool(getattr(self, "_loading_in_progress", False)):
+            return True
+        display_manager = self.display_manager
+        if display_manager is None:
+            return False
+        checker = getattr(display_manager, "has_transition_work_pending", None)
+        if not callable(checker):
+            return False
+        try:
+            return bool(checker())
+        except Exception:
+            logger.debug(
+                "[TRANSITION][ROTATION] Failed to inspect active image-change work",
+                exc_info=True,
+            )
+            return False
+
+    def _try_begin_image_change_work(self) -> bool:
+        """Claim the load owner before queue/history mutation or worker submission."""
+
+        with self._loading_lock:
+            if self._loading_in_progress:
+                return False
+            self._loading_in_progress = True
+
+        try:
+            mark_pending = getattr(self.display_manager, "set_transition_work_pending", None)
+            if callable(mark_pending):
+                mark_pending(True)
+        except Exception:
+            logger.debug(
+                "[TRANSITION] Failed to mark image-change work pending",
+                exc_info=True,
+            )
+        return True
+
+    def _clear_unaccepted_image_change_work(self) -> None:
+        """Release a claimed image-change owner when no submission was accepted."""
+
+        with self._loading_lock:
+            self._loading_in_progress = False
+        try:
+            mark_pending = getattr(self.display_manager, "set_transition_work_pending", None)
+            if callable(mark_pending):
+                mark_pending(False)
+        except Exception:
+            logger.debug(
+                "[TRANSITION] Failed to clear unaccepted image-change work",
+                exc_info=True,
+            )
+
+    def _rebase_rotation_timer(self, *, reason: str) -> bool:
+        """Restart the existing active timer from an accepted manual change."""
+
+        timer = self._rotation_timer
+        if timer is None:
+            return False
+        try:
+            if not timer.isActive():
+                return False
+            interval_ms = int(timer.interval())
+            timer.start()
+        except Exception:
+            logger.debug(
+                "[ROTATION] Failed to rebase timer reason=%s",
+                reason,
+                exc_info=True,
+            )
+            return False
+        logger.info(
+            "[ROTATION] Timer rebased reason=%s interval_ms=%d",
+            reason,
+            interval_ms,
+        )
+        return True
 
     def _prepare_random_transition_if_needed(self) -> None:
         try:
@@ -1252,28 +1338,41 @@ class ScreensaverEngine(QObject):
         if not self.image_queue:
             return
 
-        # Pop the current rotation entry (what's on screen now)
-        if len(self._display_image_history) >= 2:
-            self._display_image_history.pop()  # discard current
-            prev_entry = self._display_image_history[-1]  # peek at previous
-            # Also step the queue history back so single-display code stays in sync
-            self.image_queue.previous()
-            self._current_image = prev_entry[0] if prev_entry else self.image_queue.current()
-            self._show_images_for_displays(prev_entry)
-        elif len(self._display_image_history) == 1:
-            # Only one entry — just redisplay it
-            self.image_queue.previous()
-            self._current_image = self._display_image_history[0][0] if self._display_image_history[0] else self.image_queue.current()
-            self._show_images_for_displays(self._display_image_history[0])
-        else:
-            # No per-display history yet — fall back to queue-based previous
-            self.image_queue.previous()
-            self._show_current_image()
+        if not self._try_begin_image_change_work():
+            logger.debug("Image load already in progress, skipping previous request")
+            return
+
+        accepted = False
+        try:
+            # Pop the current rotation entry (what's on screen now)
+            if len(self._display_image_history) >= 2:
+                self._display_image_history.pop()  # discard current
+                prev_entry = self._display_image_history[-1]  # peek at previous
+                # Also step the queue history back so single-display code stays in sync
+                self.image_queue.previous()
+                self._current_image = prev_entry[0] if prev_entry else self.image_queue.current()
+                accepted = self._show_images_for_displays(prev_entry)
+            elif len(self._display_image_history) == 1:
+                # Only one entry — just redisplay it
+                self.image_queue.previous()
+                self._current_image = self._display_image_history[0][0] if self._display_image_history[0] else self.image_queue.current()
+                accepted = self._show_images_for_displays(self._display_image_history[0])
+            else:
+                # No per-display history yet — fall back to queue-based previous
+                self.image_queue.previous()
+                accepted = self._show_current_image()
+
+            if accepted:
+                self._rebase_rotation_timer(reason="manual_previous")
+        finally:
+            if not accepted:
+                self._clear_unaccepted_image_change_work()
 
     def _on_next_requested(self) -> None:
         """Handle next image request (X key)."""
         logger.info("Next image requested")
-        self._show_next_image()
+        if self._show_next_image():
+            self._rebase_rotation_timer(reason="manual_next")
     
     def _on_cycle_transition(self) -> None:
         """Delegates to engine.engine_handlers."""
@@ -1309,28 +1408,25 @@ class ScreensaverEngine(QObject):
             return False
 
         if self.thread_manager:
-            self._load_and_display_image_async(current)
-            return True
+            return bool(self._load_and_display_image_async(current))
         return self._load_and_display_image(current)
 
-    def _show_images_for_displays(self, image_metas: "List[ImageMetadata]") -> None:
+    def _show_images_for_displays(self, image_metas: "List[ImageMetadata]") -> bool:
         """Display specific images on each display (used by previous-image).
 
         Delegates to the async pipeline with pre-resolved metas so no
         queue advancement occurs.
         """
         if not self.display_manager:
-            return
+            return False
         if not image_metas:
-            self._show_current_image()
-            return
+            return self._show_current_image()
 
         primary = image_metas[0]
         if self.thread_manager:
             from engine.image_pipeline import load_and_display_image_async_with_metas
-            load_and_display_image_async_with_metas(self, image_metas)
-        else:
-            self._load_and_display_image(primary)
+            return bool(load_and_display_image_async_with_metas(self, image_metas))
+        return bool(self._load_and_display_image(primary))
     
     def _on_settings_changed(self, event) -> None:
         """Handle settings changed event."""

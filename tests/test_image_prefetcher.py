@@ -195,6 +195,82 @@ def test_prefetch_keeps_raw_backlog_for_full_preview_window(qt_app):
     }
 
 
+def test_cleared_raw_prefetch_cannot_repopulate_cache_or_release_new_owner(qt_app):
+    raw_path = r"C:\wall\stale-raw.jpg"
+    cache = _FakeCache()
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=1)
+
+    prefetcher.prefetch_paths([raw_path])
+    stale_callback = threads.io_callbacks[0][2]
+
+    prefetcher.clear_inflight()
+    prefetcher.prefetch_paths([raw_path])
+    current_callback = threads.io_callbacks[1][2]
+
+    stale_callback(
+        SimpleNamespace(
+            success=True,
+            result=_solid_qimage(320, 180, "red"),
+        )
+    )
+
+    assert raw_path not in cache.store
+    assert prefetcher.snapshot_state()["raw_inflight"] == 1
+
+    current_image = _solid_qimage(320, 180, "blue")
+    current_callback(SimpleNamespace(success=True, result=current_image))
+
+    assert cache.store[raw_path] is current_image
+    assert prefetcher.snapshot_state()["raw_inflight"] == 0
+
+
+def test_cleared_scaled_prefetch_cannot_repopulate_cache_or_release_new_owner(qt_app):
+    raw_path = r"C:\wall\stale-scaled.jpg"
+    scaled_key = "stale-scaled-result"
+    cache = _FakeCache({raw_path: _solid_qimage(640, 360, "black")})
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=1)
+    request = {
+        "stats": {},
+        "path": raw_path,
+        "cache_key": scaled_key,
+        "width": 320,
+        "height": 180,
+        "display_mode": DisplayMode.FILL,
+        "use_lanczos": False,
+        "sharpen": False,
+    }
+
+    prefetcher.register_scaled_requests([request])
+    stale_callback = threads.compute_callbacks[0][1]
+
+    prefetcher.clear_inflight()
+    prefetcher.register_scaled_requests([request])
+    current_callback = threads.compute_callbacks[1][1]
+
+    stale_callback(
+        SimpleNamespace(
+            success=True,
+            result=(scaled_key, _solid_qimage(320, 180, "red")),
+        )
+    )
+
+    assert scaled_key not in cache.store
+    assert prefetcher.snapshot_state()["scaled_inflight"] == 1
+
+    current_image = _solid_qimage(320, 180, "blue")
+    current_callback(
+        SimpleNamespace(
+            success=True,
+            result=(scaled_key, current_image),
+        )
+    )
+
+    assert cache.store[scaled_key] is current_image
+    assert prefetcher.snapshot_state()["scaled_inflight"] == 0
+
+
 def test_scaled_prefetch_registration_skips_during_transition_cooldown(qt_app):
     raw_path = r"C:\wall\one.jpg"
     cache = _FakeCache()

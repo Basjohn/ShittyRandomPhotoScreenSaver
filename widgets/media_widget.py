@@ -1290,6 +1290,8 @@ class MediaWidget(BaseOverlayWidget):
         )
         self._refresh_in_flight = True
         self._refresh_in_flight_generation = artwork_generation
+        artwork_owner_id = f"{id(self):x}"
+        artwork_provider = self._provider
         if is_verbose_logging():
             logger.debug("[MEDIA_WIDGET] Async refresh started")
 
@@ -1314,6 +1316,23 @@ class MediaWidget(BaseOverlayWidget):
                 artwork_key,
                 known_artwork_keys=known_artwork_keys,
             )
+            if (
+                is_perf_metrics_enabled()
+                and artwork_key != (0, "")
+                and artwork_key not in known_artwork_keys
+            ):
+                logger.info(
+                    "[PERF][MEDIA_ARTWORK] event=decoded owner_id=%s provider=%s "
+                    "key_id=%s generation=%d payload_bytes=%d decode_ms=%.2f "
+                    "decode_ok=%s",
+                    artwork_owner_id,
+                    artwork_provider,
+                    type(self)._artwork_key_log_id(artwork_key),
+                    artwork_generation,
+                    int(artwork_key[0]),
+                    float(prepared.decode_ms),
+                    prepared.image is not None and not prepared.image.isNull(),
+                )
             return (
                 info,
                 prepared,
@@ -1572,6 +1591,43 @@ class MediaWidget(BaseOverlayWidget):
                 )
         return False
 
+    @staticmethod
+    def _artwork_key_log_id(key: tuple[int, str] | None) -> str:
+        if key is None:
+            return "none"
+        digest = str(key[1] or "")
+        return digest[:12] if digest else "empty"
+
+    def _log_artwork_lifecycle_event(
+        self,
+        event: str,
+        *,
+        reason: str,
+        prepared: PreparedArtwork | None = None,
+        generation: int | None = None,
+        replaced_key: tuple[int, str] | None = None,
+    ) -> None:
+        """Emit one bounded, key-stable record for a material artwork event."""
+
+        if not is_perf_metrics_enabled():
+            return
+        current = prepared or self._pending_artwork
+        key = current.key if current is not None else None
+        logger.info(
+            "[PERF][MEDIA_ARTWORK] event=%s reason=%s key_id=%s "
+            "payload_bytes=%d generation=%d current_generation=%d "
+            "replaced_key_id=%s decode_ms=%.2f coalesced_count=%d",
+            event,
+            reason,
+            self._artwork_key_log_id(key),
+            int(key[0]) if key is not None else 0,
+            int(generation or 0),
+            int(self._artwork_update_generation),
+            self._artwork_key_log_id(replaced_key),
+            float(current.decode_ms) if current is not None else 0.0,
+            int(self._artwork_coalesced_count),
+        )
+
     def _queue_pending_artwork(
         self,
         prepared: PreparedArtwork,
@@ -1589,6 +1645,20 @@ class MediaWidget(BaseOverlayWidget):
                 self._pending_artwork_deferred = True
                 return
             self._artwork_coalesced_count += 1
+            self._log_artwork_lifecycle_event(
+                "replaced",
+                reason="newer_transition_key",
+                prepared=prepared,
+                generation=generation,
+                replaced_key=existing.key,
+            )
+        else:
+            self._log_artwork_lifecycle_event(
+                "queued",
+                reason="transition_active",
+                prepared=prepared,
+                generation=generation,
+            )
 
         self._pending_artwork = prepared
         self._pending_artwork_generation = generation
@@ -1607,6 +1677,12 @@ class MediaWidget(BaseOverlayWidget):
             return False
         generation = int(generation)
         if generation != self._artwork_update_generation:
+            self._log_artwork_lifecycle_event(
+                "discarded",
+                reason="stale_accept_generation",
+                prepared=prepared,
+                generation=generation,
+            )
             return False
 
         if prepared.key == self._applied_artwork_key:
@@ -1615,19 +1691,13 @@ class MediaWidget(BaseOverlayWidget):
                 reverted_to_applied_key = pending.key != prepared.key
                 if reverted_to_applied_key:
                     self._artwork_coalesced_count += 1
-                    if is_perf_metrics_enabled():
-                        logger.info(
-                            "[PERF][MEDIA_ARTWORK] key_changed=%s payload_bytes=%d "
-                            "decode_ms=%.2f ui_pixmap_ms=%.2f deferred_for_transition=%s "
-                            "coalesced_count=%d fade_started=%s",
-                            False,
-                            int(prepared.key[0]),
-                            float(prepared.decode_ms),
-                            0.0,
-                            True,
-                            int(self._artwork_coalesced_count),
-                            False,
-                        )
+                    self._log_artwork_lifecycle_event(
+                        "discarded",
+                        reason="reverted_to_applied_key",
+                        prepared=pending,
+                        generation=self._pending_artwork_generation,
+                        replaced_key=pending.key,
+                    )
                 self._pending_artwork = None
                 self._pending_artwork_generation = 0
                 self._pending_artwork_deferred = False
@@ -1663,6 +1733,12 @@ class MediaWidget(BaseOverlayWidget):
         """Perform the one permitted UI-thread QImage -> QPixmap handoff."""
 
         if generation != self._artwork_update_generation:
+            self._log_artwork_lifecycle_event(
+                "discarded",
+                reason="stale_apply_generation",
+                prepared=prepared,
+                generation=generation,
+            )
             return False
         key_changed = prepared.key != self._applied_artwork_key
         if not key_changed:
@@ -1716,10 +1792,13 @@ class MediaWidget(BaseOverlayWidget):
 
         if is_perf_metrics_enabled():
             logger.info(
-                "[PERF][MEDIA_ARTWORK] key_changed=%s payload_bytes=%d "
+                "[PERF][MEDIA_ARTWORK] event=applied key_changed=%s key_id=%s "
+                "generation=%d payload_bytes=%d "
                 "decode_ms=%.2f ui_pixmap_ms=%.2f deferred_for_transition=%s "
                 "coalesced_count=%d fade_started=%s",
                 key_changed,
+                self._artwork_key_log_id(prepared.key),
+                generation,
                 int(prepared.key[0]),
                 float(prepared.decode_ms),
                 ui_pixmap_ms,
@@ -1741,7 +1820,18 @@ class MediaWidget(BaseOverlayWidget):
         for widget in list(cls._instances):
             try:
                 if not Shiboken.isValid(widget):
+                    prepared = getattr(widget, "_pending_artwork", None)
+                    if prepared is not None:
+                        widget._log_artwork_lifecycle_event(
+                            "discarded",
+                            reason="widget_destroyed",
+                            prepared=prepared,
+                            generation=widget._pending_artwork_generation,
+                        )
                     widget._pending_artwork = None
+                    widget._pending_artwork_generation = 0
+                    widget._pending_artwork_deferred = False
+                    cls._instances.discard(widget)
                     continue
             except Exception:
                 continue
@@ -1751,12 +1841,24 @@ class MediaWidget(BaseOverlayWidget):
             if prepared is None:
                 continue
             if generation != widget._artwork_update_generation:
+                widget._log_artwork_lifecycle_event(
+                    "discarded",
+                    reason="stale_idle_flush_generation",
+                    prepared=prepared,
+                    generation=generation,
+                )
                 widget._pending_artwork = None
                 widget._pending_artwork_generation = 0
                 widget._pending_artwork_deferred = False
                 continue
             if cls._has_transition_work_on_any_display():
                 return
+            widget._log_artwork_lifecycle_event(
+                "flushing",
+                reason="all_displays_idle",
+                prepared=prepared,
+                generation=generation,
+            )
             widget._apply_prepared_artwork_now(
                 prepared,
                 generation,
@@ -1772,6 +1874,12 @@ class MediaWidget(BaseOverlayWidget):
     def _discard_pending_artwork(self) -> None:
         """Invalidate worker generations and release any unconsumed QImage."""
 
+        if self._pending_artwork is not None:
+            self._log_artwork_lifecycle_event(
+                "discarded",
+                reason="widget_lifecycle_cleanup",
+                generation=self._pending_artwork_generation,
+            )
         self._artwork_update_generation += 1
         self._pending_artwork = None
         self._pending_artwork_generation = 0

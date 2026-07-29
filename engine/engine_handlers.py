@@ -381,6 +381,15 @@ def on_sources_changed(engine: ScreensaverEngine) -> None:
     if was_running:
         engine._transition_state(EngineState.REINITIALIZING)
 
+    # Invalidate prefetch ownership before clearing the cache. A callback that
+    # completes on either side of this boundary must be rejected or cleared,
+    # never repopulate the new source generation after cache.clear().
+    if engine._prefetcher:
+        try:
+            engine._prefetcher.clear_inflight()
+        except Exception as e:
+            logger.debug(f"Failed to clear prefetcher inflight: {e}")
+
     # Clear image cache - old cached images may no longer be valid
     if engine._image_cache:
         try:
@@ -388,13 +397,6 @@ def on_sources_changed(engine: ScreensaverEngine) -> None:
             logger.info("Image cache cleared due to source change")
         except Exception as e:
             logger.debug(f"Failed to clear image cache: {e}")
-
-    # Clear prefetcher inflight set to avoid stale paths
-    if engine._prefetcher:
-        try:
-            engine._prefetcher.clear_inflight()
-        except Exception as e:
-            logger.debug(f"Failed to clear prefetcher inflight: {e}")
 
     # Clear existing sources
     engine.folder_sources.clear()

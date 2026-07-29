@@ -252,16 +252,17 @@ Phase 4 owns these concrete automated bars:
 
 - `tests/test_phase4_resource_containment.py` — exact texture-byte eviction with active-pair pinning, independent PBO bounds, Particle/Burn cancellation, and cross-display QPixmap alias deduplication;
 - `tests/test_image_cache_accounting.py` — exact QImage/QPixmap logical-byte eviction and detached metadata;
-- `tests/test_image_prefetcher.py` — concurrency/count/future-byte backlog bounds and worker-safe QImage results;
-- `tests/test_image_pipeline.py` — exact transform sharing plus non-sharing across differing target/DPR identity;
+- `tests/test_image_prefetcher.py` — concurrency/count/future-byte backlog bounds, worker-safe QImage results, source-generation invalidation, and rejection of stale raw/scaled callbacks that would otherwise repopulate the cache or release a newer same-key owner;
+- `tests/test_image_pipeline.py` — exact transform sharing plus non-sharing across differing source/target/DPR identity, including previous-image replay and DPR-aware scaled-cache keys;
 - `tests/test_image_worker_shared_memory.py` — per-transfer attachment/close ownership, one-copy parent consumption, zero live-byte accounting, timeout/late response, cancellation, runtime-generation rejection, buffered/queue shutdown disposal, publish failure, and orphan-name probes;
 - `tests/test_process_supervisor.py` and `tests/test_usage_sampler.py` — correlated response buffering/lifecycle plus labelled ImageWorker/shared-memory telemetry;
 - `tests/test_gl_texture_streaming.py` and `tests/test_memory_pooling.py` — upload/PBO reuse and cleanup regressions;
-- `tests/test_media_artwork_layout.py`, `tests/test_media_display_update.py`, and `tests/test_media_transition_deferral.py` — worker QImage decode, key-owned GUI pixmap replacement, and newest-only all-display transition deferral;
+- `tests/test_media_artwork_layout.py`, `tests/test_media_display_update.py`, and `tests/test_media_transition_deferral.py` — worker QImage decode, pre-diff generation promotion, key-owned GUI pixmap replacement, newest-only all-display transition deferral, and bounded material lifecycle telemetry;
+- `tests/test_transition_distribution.py` — accepted manual-change timer rebasing, rejected-submission handling, and timer-expiry coalescing before image acquisition while any image-change owner is active;
 - `tools/phase4_resource_harness.py` — 45-cycle owner/allocator plateau gate with real Qt image allocations and RSS.
 - `tools/phase4_image_worker_shm_harness.py` — real spawned-worker 50×4K transfer plateau plus shutdown-during-transfer and orphan-name gate.
 
-The deterministic cache/texture/PBO artifact remains authoritative for those owners, and the 50×4K shared-memory harness closes the focused worker-transfer slice. Phase 4 is nevertheless reopened until the full Phase4plus platform comparator proves labelled worker RSS, total RSS/private commit, tracked GL bytes, and driver VRAM plateau together with unchanged visualizer/transition presentation. The two-hour soak remains a Phase 11 gate.
+The deterministic cache/texture/PBO artifact remains authoritative for those owners, and both the 50×4K harness and `fresh_20260729_2140` close the ImageWorker/shared-memory slice. Phase 4 nevertheless remains open because the fresh full run did not plateau in main-process RSS, total RSS, or private commit. The post-correction installed comparator must also prove bounded artwork/rotation lifecycle events and unchanged visualizer/transition presentation. The two-hour soak remains a Phase 11 gate.
 
 ## 9. CPU/Task Gate
 

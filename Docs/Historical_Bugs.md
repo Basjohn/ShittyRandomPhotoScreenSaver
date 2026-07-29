@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 
 Track significant bugs with clear dates, failed attempts, and final fixes.
 This is the long-term anti-regression record for the project, not an active task list.
@@ -10,53 +10,53 @@ This is the long-term anti-regression record for the project, not an active task
 ### Open Issues
 1. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
 2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
-3. [U-07 — 2026-07-29 — ImageWorker Retained Every Shared-Memory Frame Until Process Exit (Resolved In Code, Phase4plus Validation Pending)](#U-07)
 
 ### Recent Resolutions
-1. [R-51 — 2026-07-28 — Phase 3 Shared Shader Cache Gave Two Compositors One Deletion Identity (Resolved)](#R-51)
-2. [R-50 — 2026-07-28 — Count-Only Image/Texture Retention And Unbounded Prefetch Backlog (Resolved)](#R-50)
-3. [R-49 — 2026-07-28 — Settings/Edit Hide-Only Pause Retained Old GL Runtime And Shadowed Cleanup (Resolved)](#R-49)
-4. [R-48 — 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved)](#R-48)
-5. [R-47 — 2026-07-15 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push (Resolved)](#R-47)
-6. [R-46 — 2026-07-15 — Failed Blob Visualizer Retired End To End (Resolved)](#R-46)
-7. [R-45 — 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved)](#R-45)
-8. [R-44 — 2026-07-15 — Gmail CUSTOM Resize Payload Overrode Live Text Balance (Resolved)](#R-44)
-9. [R-43 — 2026-07-15 — Defaults Foundry Modal Colour Picker Destroyed Its Delegate Editor (Resolved)](#R-43)
-10. [R-42 — 2026-07-15 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path (Resolved)](#R-42)
-11. [R-41 — 2026-07-14 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership (Resolved)](#R-41)
-12. [R-40 — 2026-07-14 — Abandonment Ignored The Shared Steam Refresh Interval (Resolved In Code, Runtime Validation Pending)](#R-40)
-13. [R-39 — 2026-07-14 — Abandonment Automatic Rotation Lost Uncached Selected Artwork (Resolved In Code, Runtime Validation Pending)](#R-39)
-14. [R-38 — 2026-07-14 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts (Resolved In Code, Runtime Validation Pending)](#R-38)
-15. [R-37 — 2026-07-14 — Abandonment Rotation Expiry Was Silently Dropped And Selection Walked Archive Order (Resolved In Code, Runtime Validation Pending)](#R-37)
-16. [R-36 — 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)](#R-36)
-17. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Solved)](#R-35)
-18. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Solved)](#R-34)
-19. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
-20. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
-21. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
-22. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
-23. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
-24. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
-25. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
-26. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)](#U-07)
-27. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
-28. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
-29. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
-30. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
-31. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
-32. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
-33. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
-34. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
-35. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
-36. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
-37. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
-38. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
-39. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
-40. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
-41. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
-42. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
-43. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
-44. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
+1. [R-52 — 2026-07-29 — ImageWorker Retained Every Shared-Memory Frame Until Process Exit (Resolved)](#R-52)
+2. [R-51 — 2026-07-28 — Phase 3 Shared Shader Cache Gave Two Compositors One Deletion Identity (Resolved)](#R-51)
+3. [R-50 — 2026-07-28 — Count-Only Image/Texture Retention And Unbounded Prefetch Backlog (Resolved)](#R-50)
+4. [R-49 — 2026-07-28 — Settings/Edit Hide-Only Pause Retained Old GL Runtime And Shadowed Cleanup (Resolved)](#R-49)
+5. [R-48 — 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved)](#R-48)
+6. [R-47 — 2026-07-15 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push (Resolved)](#R-47)
+7. [R-46 — 2026-07-15 — Failed Blob Visualizer Retired End To End (Resolved)](#R-46)
+8. [R-45 — 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved)](#R-45)
+9. [R-44 — 2026-07-15 — Gmail CUSTOM Resize Payload Overrode Live Text Balance (Resolved)](#R-44)
+10. [R-43 — 2026-07-15 — Defaults Foundry Modal Colour Picker Destroyed Its Delegate Editor (Resolved)](#R-43)
+11. [R-42 — 2026-07-15 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path (Resolved)](#R-42)
+12. [R-41 — 2026-07-14 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership (Resolved)](#R-41)
+13. [R-40 — 2026-07-14 — Abandonment Ignored The Shared Steam Refresh Interval (Resolved In Code, Runtime Validation Pending)](#R-40)
+14. [R-39 — 2026-07-14 — Abandonment Automatic Rotation Lost Uncached Selected Artwork (Resolved In Code, Runtime Validation Pending)](#R-39)
+15. [R-38 — 2026-07-14 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts (Resolved In Code, Runtime Validation Pending)](#R-38)
+16. [R-37 — 2026-07-14 — Abandonment Rotation Expiry Was Silently Dropped And Selection Walked Archive Order (Resolved In Code, Runtime Validation Pending)](#R-37)
+17. [R-36 — 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)](#R-36)
+18. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Solved)](#R-35)
+19. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Solved)](#R-34)
+20. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
+21. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
+22. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
+23. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
+24. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
+25. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
+26. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
+27. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)](#U-07)
+28. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
+29. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
+30. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
+31. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
+32. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
+33. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
+34. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
+35. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
+36. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
+37. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
+38. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
+39. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
+40. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
+41. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
+42. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
+43. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
+44. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
+45. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
 
 ### Archived Context
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
@@ -80,19 +80,20 @@ This is the long-term anti-regression record for the project, not an active task
 
 ## Recent Entries
 
-<a id="U-07"></a>
-### [U-07] 2026-07-29 — ImageWorker Retained Every Shared-Memory Frame Until Process Exit (Resolved In Code, Phase4plus Validation Pending)
+<a id="R-52"></a>
+### [R-52] 2026-07-29 — ImageWorker Retained Every Shared-Memory Frame Until Process Exit (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 - **Observed failure:** the 13m45s `phase4plus_a2f7bd89` capture exited cleanly but the sole child grew from about 92.2 MiB to 770.3 MiB while main RSS remained broadly bounded. Post-warmup child RSS commonly rose by roughly 31–32 MiB at each 40-second `3840×2158` prescale, matching one 31.611 MiB RGBA8 frame. The deterministic Phase 4 cache/display/texture/PBO harness still passed because it did not spawn the long-lived ImageWorker.
 - **Root cause:** each large worker result appended its creator `SharedMemory` mapping to a process-lifetime list and released the list only at worker exit. The parent copied the full mapping into `bytes`, closed without unlinking, then deep-copied it again into `QImage`. Timeout, late response, cancellation, buffered shutdown, and queue cleanup had no payload-specific disposal.
 - **Fix:** shared images now use one versioned per-transfer mapping. A one-byte attachment handshake preserves the required Windows handle lifetime only until the parent opens the mapping; the worker then closes immediately. The parent builds a temporary QImage directly over the mapped view, copies once into Qt-owned memory, and releases/closes/unlinks in `finally`. Supervisor tombstones and payload-aware disposal cover late/cancelled/stale/buffered/stopping paths, with exact shared-memory counters and separate ImageWorker RSS telemetry.
-- **Focused bars:** ownership regressions pass (`15 passed`), including malformed-descriptor reclamation and bounded accounting history; the real spawned-worker harness consumed 50 sequential 4K frames and reclaimed one forced shutdown transfer with zero live bytes, zero unlink failures, no captured orphan names, worker RSS 89.2–90.1 MiB, and effectively zero (-0.00009 MiB/cycle) post-warmup slope. The post-change visualizer gate verified all 66 replay goldens and passed 19 first-frame/mode-switch poison tests with one existing environment skip.
-- **Open gate:** rerun the full Phase4plus platform scenario and require labelled worker and total RSS/private-commit plateau, bounded tracked GL bytes and driver VRAM, zero terminal shared-memory bytes, clean teardown, and unchanged Spectrum, Bubble, and transition presentation. Until then Phase 4 remains open and this issue is not marked solved.
+- **Focused bars:** ownership regressions pass (`15 passed`), including malformed-descriptor reclamation and bounded accounting history; the real spawned-worker harness consumed 50 sequential 4K frames and reclaimed one forced shutdown transfer with zero live bytes, zero unlink failures, no captured orphan names, worker RSS 89.2–90.1 MiB, and effectively zero (-0.00009 MiB/cycle) post-warmup slope. The post-change visualizer gate verified all 66 replay goldens and passed 22 first-frame/mode-switch poison tests.
+- **Live validation:** the 52-minute `fresh_20260729_2140` run created and consumed 80 segments with zero terminal live bytes and unlink failures. ImageWorker RSS stayed within 92.1–115.7 MiB and its post-warmup slope was about +0.12 MiB/min; the former approximately 31.6 MiB/image staircase did not recur.
+- **Boundary:** Phase 4 remains open because main-process RSS, total RSS, and private commit did not plateau. That separate whole-process failure does not reopen the now-bounded ImageWorker transfer owner.
 - **Guardrail:** never retain creator mappings as a worker-lifetime cache, clear response buffers without payload disposal, attach transfer lifetime to compositor teardown, recycle workers to reclaim memory, or hide unexplained total memory with a larger CPU cache, repeated GC, or memory trimming.
 - **Evidence:** `Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md`, `Docs/phase_reports/P04_RESOURCE_LIFETIME_MAP.md`, `tests/test_image_worker_shared_memory.py`, and `tools/phase4_image_worker_shm_harness.py`.
 
@@ -122,8 +123,8 @@ This is the long-term anti-regression record for the project, not an active task
 
 - **Observed failure family:** normal image rotation retained decoded/scaled image, display pixmap, texture, and PBO representations without one complete byte-budget story. The CPU cache evicted by an RGBA approximation despite already recording exact Qt bytes; pending prefetch work was unbounded; textures were count-only; historical PBO sizes accumulated; and several transition terminal paths retained active texture pins.
 - **Root causes:** ownership stopped at object counts, prefetch concurrency was mistaken for backlog containment, GUI-affine QPixmap materialization escaped into a worker, the active display path deep-copied implicit-shared QImages and created redundant original pixmaps, identical display transforms were processed independently, and display-owned Qt backing stores were absent from passive snapshots.
-- **Fix:** exact logical bytes now drive CPU LRU eviction under clamped settings; concurrency, pending count, and future scaled bytes are independently capped; workers publish QImage only; exact size/mode/DPR transforms share immutable backing; GUI-captured QPixmap sidecars deduplicate aliases and displays; each compositor has byte/count texture and idle-PBO caps; all transition completion/cancellation families release pins and obsolete state on the owner context.
-- **Bars:** the focused cache/prefetch/pipeline/texture/PBO/accounting regressions pass. `tools/phase4_resource_harness.py` runs 45 alternating-resolution transition cycles (30 virtual minutes), two-display aliasing, pressure budgets, and full-owner resets with all budget/plateau criteria true, repeated-resolution RSS drift of 4 KiB, and final complete-cycle high-water range of 12 KiB. Real driver VRAM is explicitly not inferred from the offscreen/fake-delete seam and remains a Phase 11 platform gate.
+- **Fix:** exact logical bytes now drive CPU LRU eviction under clamped settings; concurrency, pending count, and future scaled bytes are independently capped; workers publish QImage only; source changes invalidate old raw/scaled callback generations; exact source/size/mode/DPR/quality transforms share immutable backing in both normal and previous-image paths without cross-DPR scaled-cache collapse; GUI-captured QPixmap sidecars deduplicate aliases and displays; each compositor has byte/count texture and idle-PBO caps; all transition completion/cancellation families release pins and obsolete state on the owner context.
+- **Bars:** the focused cache/prefetch/pipeline/texture/PBO/accounting regressions pass. `tools/phase4_resource_harness.py` runs 45 alternating-resolution transition cycles (30 virtual minutes), two-display aliasing, pressure budgets, and full-owner resets with all budget/plateau criteria true; the latest follow-up had 4 KiB repeated-resolution RSS drift and an 8 KiB final tail high-water range. Real driver VRAM is explicitly not inferred from the offscreen/fake-delete seam and remains a platform gate.
 - **Guardrail:** never treat item count or concurrency alone as memory containment, create QPixmap in workers, sample live Qt display objects off-thread, share differing transform/DPR outputs, retain terminal transition pins, or raise cache/PBO budgets to hide unexplained growth.
 - **Evidence:** `Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md`, `Docs/phase_reports/P04_RESOURCE_LIFETIME_MAP.md`, and `Docs/phase_reports/artifacts/P04/resource_plateau_report.json`.
 <a id="R-49"></a>

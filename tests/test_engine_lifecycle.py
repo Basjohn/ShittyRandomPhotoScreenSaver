@@ -254,6 +254,39 @@ def test_sources_changed_during_settings_is_deferred(monkeypatch):
     assert events == []
 
 
+def test_sources_changed_invalidates_prefetch_before_clearing_cache():
+    from engine import engine_handlers
+
+    events = []
+
+    class _Engine:
+        _settings_dialog_active = False
+        _sources_changed_during_settings = False
+        _running = False
+        folder_sources = ["old"]
+        rss_coordinator = object()
+        _prefetcher = SimpleNamespace(
+            clear_inflight=lambda: events.append("prefetch_invalidated")
+        )
+        _image_cache = SimpleNamespace(
+            clear=lambda: events.append("cache_cleared")
+        )
+
+        @staticmethod
+        def _is_state(*_states):
+            return False
+
+        @staticmethod
+        def _initialize_sources():
+            return False
+
+    engine = _Engine()
+
+    engine_handlers.on_sources_changed(engine)
+
+    assert events == ["prefetch_invalidated", "cache_cleared"]
+
+
 class TestEngineState:
     """Test EngineState enum and state properties."""
     

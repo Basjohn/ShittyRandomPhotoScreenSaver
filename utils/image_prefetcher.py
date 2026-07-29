@@ -71,6 +71,9 @@ class ImagePrefetcher:
         self._pending_scaled_keys: Set[str] = set()
         self._pending_scaled_bytes = 0
         self._lock = threading.Lock()
+        self._prefetch_generation = 0
+        self._raw_inflight_generations: Dict[str, int] = {}
+        self._scaled_inflight_generations: Dict[str, int] = {}
         # Desync: post-transition delay to reduce IO contention
         self._post_transition_delay_ms = max(0.0, float(post_transition_delay_ms))
         self._transition_end_time: float = 0.0
@@ -140,12 +143,15 @@ class ImagePrefetcher:
             }
     
     def clear_inflight(self) -> None:
-        """Clear the inflight set. Call when sources change to avoid stale paths."""
+        """Invalidate current work and clear queued/inflight ownership."""
         with self._lock:
+            self._prefetch_generation += 1
             self._inflight.clear()
+            self._raw_inflight_generations.clear()
             self._pending_raw_paths.clear()
             self._pending_raw_keys.clear()
             self._scaled_inflight.clear()
+            self._scaled_inflight_generations.clear()
             self._pending_scaled_requests.clear()
             self._pending_scaled_keys.clear()
             self._pending_scaled_bytes = 0
@@ -162,7 +168,7 @@ class ImagePrefetcher:
         # _pump_raw_prefetch() will avoid dispatching work until the cool-down
         # ends. Dropping the registration here makes the next transition pay the
         # worker fallback cost.
-        submissions: List[str] = []
+        submissions: List[tuple[str, int]] = []
         queued_count = 0
         skipped_count = 0
         with self._lock:
@@ -175,7 +181,8 @@ class ImagePrefetcher:
                     continue
                 if active_slots > 0:
                     self._inflight.add(p)
-                    submissions.append(p)
+                    self._raw_inflight_generations[p] = self._prefetch_generation
+                    submissions.append((p, self._prefetch_generation))
                     active_slots -= 1
                 elif len(self._pending_raw_paths) < self._max_pending_requests:
                     self._pending_raw_paths.append(p)
@@ -184,8 +191,8 @@ class ImagePrefetcher:
                 else:
                     skipped_count += 1
 
-        for path in submissions:
-            self._submit_load(path)
+        for path, generation in submissions:
+            self._submit_load(path, generation)
 
         if submissions or queued_count:
             _cache_trace(
@@ -199,7 +206,7 @@ class ImagePrefetcher:
         if self._is_in_post_transition_delay():
             return
 
-        submissions: List[str] = []
+        submissions: List[tuple[str, int]] = []
         with self._lock:
             active_slots = max(0, self._max_concurrent - len(self._inflight))
             while active_slots > 0 and self._pending_raw_paths:
@@ -208,11 +215,12 @@ class ImagePrefetcher:
                 if not path or self._cache.contains(path) or path in self._inflight:
                     continue
                 self._inflight.add(path)
-                submissions.append(path)
+                self._raw_inflight_generations[path] = self._prefetch_generation
+                submissions.append((path, self._prefetch_generation))
                 active_slots -= 1
 
-        for path in submissions:
-            self._submit_load(path)
+        for path, generation in submissions:
+            self._submit_load(path, generation)
 
         if submissions:
             with self._lock:
@@ -253,7 +261,9 @@ class ImagePrefetcher:
                 ):
                     skipped_budget += 1
                     continue
-                self._pending_scaled_requests.append(dict(request))
+                owned_request = dict(request)
+                owned_request["_prefetch_generation"] = self._prefetch_generation
+                self._pending_scaled_requests.append(owned_request)
                 self._pending_scaled_keys.add(cache_key)
                 self._pending_scaled_bytes += request_bytes
                 queued_any = True
@@ -278,9 +288,13 @@ class ImagePrefetcher:
             )
         return queued_count
 
-    def _submit_load(self, path: str) -> None:
+    def _submit_load(self, path: str, generation: int) -> None:
         # inflight is already marked by caller under lock
         from utils.image_loader import ImageLoader
+
+        with self._lock:
+            if self._raw_inflight_generations.get(path) != generation:
+                return
 
         def _load_qimage(p: str) -> Optional[QImage]:
             return ImageLoader.load_qimage_silent(p)
@@ -291,16 +305,23 @@ class ImagePrefetcher:
             try:
                 img: Optional[QImage] = res.result if res and res.success else None
                 if img is not None:
-                    try:
-                        self._cache.put(path, img)
-                        cached = True
-                        if is_verbose_logging():
-                            logger.debug(f"Prefetched and cached: {path}")
-                    except Exception as e:
-                        logger.debug("[MISC] Exception suppressed: %s", e)
+                    with self._lock:
+                        if (
+                            self._prefetch_generation == generation
+                            and self._raw_inflight_generations.get(path) == generation
+                        ):
+                            try:
+                                self._cache.put(path, img)
+                                cached = True
+                                if is_verbose_logging():
+                                    logger.debug(f"Prefetched and cached: {path}")
+                            except Exception as e:
+                                logger.debug("[MISC] Exception suppressed: %s", e)
             finally:
                 with self._lock:
-                    self._inflight.discard(path)
+                    if self._raw_inflight_generations.get(path) == generation:
+                        self._raw_inflight_generations.pop(path, None)
+                        self._inflight.discard(path)
                 self._pump_raw_prefetch()
                 if cached:
                     self._pump_scaled_prefetch(preferred_path=path)
@@ -319,7 +340,9 @@ class ImagePrefetcher:
         except Exception as e:
             logger.debug(f"Prefetch submit failed for {path}: {e}")
             with self._lock:
-                self._inflight.discard(path)
+                if self._raw_inflight_generations.get(path) == generation:
+                    self._raw_inflight_generations.pop(path, None)
+                    self._inflight.discard(path)
             self._pump_raw_prefetch()
 
     def _pump_scaled_prefetch(self, preferred_path: Optional[str] = None) -> None:
@@ -359,7 +382,11 @@ class ImagePrefetcher:
                     0,
                     self._pending_scaled_bytes - _request_logical_bytes(request),
                 )
+                generation = int(request.get("_prefetch_generation", -1))
+                if generation != self._prefetch_generation:
+                    continue
                 self._scaled_inflight.add(cache_key)
+                self._scaled_inflight_generations[cache_key] = generation
                 requests_to_submit.append(request)
 
             requests_to_submit.reverse()
@@ -383,9 +410,16 @@ class ImagePrefetcher:
             display_mode = DisplayMode.from_string(str(display_mode))
         use_lanczos = bool(request.get("use_lanczos", False))
         sharpen = bool(request.get("sharpen", False))
+        generation = int(request.get("_prefetch_generation", -1))
 
         def _compute_scaled_variant() -> Optional[tuple[str, QImage]]:
             try:
+                with self._lock:
+                    if (
+                        self._prefetch_generation != generation
+                        or self._scaled_inflight_generations.get(cache_key) != generation
+                    ):
+                        return None
                 base = self._cache.get(raw_path)
                 if isinstance(base, QPixmap) and not base.isNull():
                     base = base.toImage()
@@ -410,28 +444,35 @@ class ImagePrefetcher:
                 payload = res.result if res and res.success else None
                 if payload:
                     key, image = payload
-                    self._cache.put(key, image)
-                    stats = request.get("stats")
-                    if isinstance(stats, dict):
-                        stats["scaled_prefetch_completed"] = int(stats.get("scaled_prefetch_completed", 0)) + 1
-                    if is_perf_metrics_enabled():
-                        logger.info(
-                            "[PERF] [PREFETCH] Cached scaled variant %s (%dx%d, mode=%s)",
-                            key,
-                            width,
-                            height,
-                            display_mode.value,
-                        )
-                    _cache_trace(
-                        "Scaled prefetch completed key=%s target=%dx%d mode=%s",
-                        key,
-                        width,
-                        height,
-                        display_mode.value,
-                    )
+                    with self._lock:
+                        if (
+                            self._prefetch_generation == generation
+                            and self._scaled_inflight_generations.get(cache_key) == generation
+                        ):
+                            self._cache.put(key, image)
+                            stats = request.get("stats")
+                            if isinstance(stats, dict):
+                                stats["scaled_prefetch_completed"] = int(stats.get("scaled_prefetch_completed", 0)) + 1
+                            if is_perf_metrics_enabled():
+                                logger.info(
+                                    "[PERF] [PREFETCH] Cached scaled variant %s (%dx%d, mode=%s)",
+                                    key,
+                                    width,
+                                    height,
+                                    display_mode.value,
+                                )
+                            _cache_trace(
+                                "Scaled prefetch completed key=%s target=%dx%d mode=%s",
+                                key,
+                                width,
+                                height,
+                                display_mode.value,
+                            )
             finally:
                 with self._lock:
-                    self._scaled_inflight.discard(cache_key)
+                    if self._scaled_inflight_generations.get(cache_key) == generation:
+                        self._scaled_inflight_generations.pop(cache_key, None)
+                        self._scaled_inflight.discard(cache_key)
                 self._pump_scaled_prefetch()
 
         try:
@@ -444,5 +485,7 @@ class ImagePrefetcher:
         except Exception as e:
             logger.debug("Scaled prefetch submit failed for %s: %s", cache_key, e)
             with self._lock:
-                self._scaled_inflight.discard(cache_key)
+                if self._scaled_inflight_generations.get(cache_key) == generation:
+                    self._scaled_inflight_generations.pop(cache_key, None)
+                    self._scaled_inflight.discard(cache_key)
             self._pump_scaled_prefetch()

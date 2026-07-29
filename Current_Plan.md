@@ -142,41 +142,37 @@ A phase is complete only with tests, runtime evidence, visualizer result, and ro
 ## Current Phase
 
 ```text
-Priority: P0 — Phase 4 ImageWorker Shared-Memory Containment
+Priority: P0 — Phase 4 whole-application plateau and transition-collision validation
 Queued recovery phase: 5 — CPU and Task Reduction
 Branch: main
-Last evidence: Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md
+Last evidence: logs/evidence_chest/fresh_20260729_2140/
+Owning report: Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md
 ```
 
-### P0 — Phase 4 ImageWorker Shared-Memory Containment
+### P0 — Phase 4 whole-application plateau and transition-collision validation
 
-Phase 4 is reopened. The deterministic cache/display/texture/PBO owner gate remains valid, but `phase4plus_a2f7bd89` exposed a separate child-process staircase: the sole ImageWorker grew from about 92 MiB to 770 MiB while the main process stayed broadly bounded. The approximately 31–32 MiB steps match one `3840×2158` RGBA frame. Phase 4 remains blocked until a real run proves worker, total RSS/private commit, tracked GL bytes, and driver VRAM plateau together.
+The 52-minute `fresh_20260729_2140` run validates the ImageWorker/shared-memory correction live: 80 segments were created and consumed, terminal live segments/bytes and unlink failures were zero, worker RSS remained bounded, and tracked GL bytes plus driver VRAM stayed flat. Phase 4 remains open because the main process, total RSS, and private commit still had positive post-warmup slopes (about +2.42, +2.54, and +3.87 MiB/min respectively). The same run exposed artwork-generation and rotation-deadline collisions that are now corrected in code but still require an installed runtime comparator.
 
-- [x] Replace process-lifetime `_shared_memories` retention with one bounded transfer handoff; on Windows, keep only the published mapping open until the parent has attached, then close the worker handle immediately.
-- [x] Consume the mapped RGBA view directly into a temporary `QImage`, perform exactly one `QImage.copy()` into Qt-owned memory, then release the source QImage/view and close/unlink in `finally`.
-- [x] Tombstone timed-out and cancelled correlations and reclaim shared-memory payloads on late response, stale runtime generation, invalid payload, buffer overflow, supervisor shutdown, queue drain, and worker cleanup.
-- [x] Replace blind buffered-response clears with payload-aware disposal and drain in-flight responses while stopping a worker.
-- [x] Emit separate ImageWorker PID/RSS/VMS and shared-memory counters: `segments_created`, `segments_live`, `live_bytes`, `segments_consumed`, `segments_reclaimed_late`, and `unlink_failures`.
-- [x] Add focused ownership regressions plus a real spawned-worker harness for normal consumption, timeout/late response, cancellation, runtime-generation rejection, buffered shutdown, publish failure, worker cleanup, queue drain, and orphan-name probing.
-- [x] Pass 50 sequential `3840×2160` transfers: 50 consumed plus one forced shutdown-transfer reclaim, zero live bytes, zero unlink failures/orphans, worker RSS 89.2–90.1 MiB, and effectively zero post-warmup slope (-0.00009 MiB/cycle). Evidence: `logs/evidence_chest/phase4_shm_50x4k_codex/`.
-- [x] Rerun the protected visualizer boundary after the transport and media/startup changes: 66 replay goldens verified; the current first-frame/mode-switch poison selection passed 21.
-- [ ] Rerun the full Phase4plus scenario against `phase4plus_a2f7bd89` and require no approximately 31.6 MiB-per-image child slope, a labelled ImageWorker RSS plateau, total RSS/private commit plateau, bounded tracked GL bytes and driver VRAM, and unchanged visualizer/transition presentation.
-- [ ] During that real run, manually review Spectrum transitions and Bubble loud-passage expansion; do not retune either mode unless mode-owned evidence fails rather than shared scheduling/presentation.
-- [ ] Force Spotify artwork changes during 60 Hz and 165 Hz image transitions and verify `[PERF][MEDIA_ARTWORK]` shows one worker decode per local unique key, no UI pixmap/fade until every display is idle, newest-only coalescing, 60 Hz p95 at or below 25 ms with no repeated frames above 50 ms, and 165 Hz p95 at or below 16 ms with no sustained frames above 33 ms.
-- [ ] On a cold startup, verify `[STARTUP_SEQUENCE]` orders first-frame readiness, terminal critical GL preparation, primary fade start/completion, then deferred shader/resource slices; require no deferred warmup record between `fade_started` and `fade_completed` and no multi-second event-loop stall.
-- [ ] Confirm teardown leaves `segments_live=0`, `live_bytes=0`, `unlink_failures=0`, and no captured `srpss_img_*` name attachable after the worker stops.
-- [ ] Only after the shared-memory real-run gate passes, reassess the 256 MiB CPU cache for raw/scaled co-retention, raw survival after a display-ready derivative exists, duplicate exact transforms, unconsumed prefetch outputs, and explicit current/next display-ready pinning.
-- [ ] Amend the Phase 4 report with the new Phase4plus measurements and close Gate 4 only after the platform comparator passes.
+- [ ] Rerun the full installed dual-display scenario against `fresh_20260729_2140`; require ImageWorker/shared-memory, tracked GL bytes, driver VRAM, main RSS, total application RSS, and private commit all to settle into bounded post-warmup plateaus.
+- [ ] Attribute any remaining main-process slope with synchronized CPU-cache, display-backing, GL-owner, main/worker/total RSS, and private-commit snapshots; do not infer containment from a bounded child alone.
+- [ ] Force Spotify artwork changes during active 60 Hz and 165 Hz transitions. Require one `event=decoded` per locally owned changed key, bounded `queued`/`replaced`/`flushing`/`applied` lifecycle records, no stale idle-flush discard, and no QPixmap/layout/fade publication until every display is idle.
+- [ ] Trigger manual Next and Previous immediately before the old timer deadline. Require `[ROTATION] Timer rebased` after an accepted submission, `expiry_coalesced` before queue/cache/worker/prescale acquisition if image-change work is active, and no rebase after a rejected submission.
+- [ ] Reload image sources while raw and scaled prefetch work is in flight; require stale generations neither repopulate the cleared cache nor release a newer same-key owner.
+- [ ] Exercise previous-image replay on equal-transform displays and on differing source/DPR displays; require exact matches to share one processed/GUI backing and non-matches to remain distinct.
+- [ ] On a cold startup, verify `[STARTUP_SEQUENCE]` orders first-frame readiness, terminal critical GL preparation, primary fade start/completion, then deferred shader/resource slices; require no deferred warmup record during the coordinated fade and no multi-second event-loop stall.
+- [ ] Deliberately run Bubble loud passages, Spectrum transition boundaries, and Bubble → Spectrum → Bubble. Require the protected first-frame/mode-switch behavior and unchanged visual response; do not retune either mode unless mode-owned evidence fails.
+- [ ] After the whole-process comparator, measure raw/scaled co-retention and unconsumed prefetch residency before deciding whether raw derivatives need explicit leases/retirement. Current display ownership does not justify CPU-cache pins; add none without a concrete readiness failure.
+- [ ] Amend the Phase 4 report with the post-fix comparator, explain the remaining main-process owner or correct it, and close Gate 4 only after the complete platform plateau and presentation gate passes.
 
 **Non-goals:** do not change the multi-display compositor topology; attach shared-memory lifetime to compositor teardown; restart/recycle workers for reclamation; add repeated `gc.collect()`, process trimming, or memory-cache enlargement; or pull Phase 5 CPU/task-rate work into this fix.
 
-**P0 gate:** the platform Phase4plus comparator shows worker and total memory plateau with zero live shared-memory bytes and unchanged Spectrum, Bubble, and transition presentation.
+**P0 gate:** the installed comparator shows worker, main, total RSS/private commit, tracked GL bytes, and driver VRAM plateau together; shared-memory counters terminate at zero; artwork/rotation collisions are absent; and Spectrum, Bubble, and transition presentation remain unchanged.
 
 ### Queued Phase 5 continuation
 
 - [ ] Inventory every recurring operation and record trigger, frequency, thread, typical/p95 duration, allocations, queue delay, coalescing eligibility, hidden/static behavior, and cross-display duplication.
-- [ ] Use `phase4plus_a2f7bd89` as the current pre-Phase-5 owner baseline after separating the shared-memory defect: median compute submission rate 163.8/s (56.6–175.1/s across sampled mode/transition intervals). Keep the earlier 101.2/s capture as historical comparison only; reduce measured owners without reducing visualizer fidelity.
-- [ ] Preserve the 2026-07-28 visualizer diagnostic boundary: Bubble soft/medium/loud drift remained monotonic and all 66 replay goldens plus 17 first-frame/mode-switch poison oracles passed, while Spectrum's visible-smoothing concern correlated with 44–88 ms tick/latency gaps at image-transition boundaries. Remove the shared scheduling gaps in Phase 5 without retuning Spectrum smoothing or Bubble elasticity unless new mode-owned evidence appears.
+- [ ] Use `fresh_20260729_2140` as the current pre-Phase-5 owner baseline: median compute submission rate 166.2/s, GUI event-loop p99 38.28 ms, and a 46.6 FPS tail interval on screen 1 with p95 56.40 ms despite comparatively cheap paint work. Keep `phase4plus_a2f7bd89` and the earlier 101.2/s capture as historical comparators only.
+- [ ] Preserve the current visualizer boundary: Bubble loud response remained healthy and cheap in the fresh run, while Spectrum and a runtime mode switch were not exercised. Remove measured shared scheduling/delivery gaps in Phase 5 without retuning Spectrum smoothing or Bubble elasticity unless deliberate mode-owned evidence fails.
 - [ ] Establish idle, visualizer, transition, image-decode, and controlled background-load baselines for process CPU, GUI event-loop delay, task submissions, queue depth, callback tails, and duplicate/stale publication.
 - [ ] Reconcile tracked CPU/GL bytes against RSS, private commit, and driver VRAM; specifically explain sustained RSS above roughly 900 MiB, multi-GiB private commit, driver VRAM above roughly 500 MiB, and ResourceManager unknown-byte entries without raising budgets.
 - [ ] Remove tiny recurring pool jobs whose queue/callback overhead exceeds useful work; keep Qt/GL mutation on the GUI/context owner and coarse I/O/decode/measured computation on workers.

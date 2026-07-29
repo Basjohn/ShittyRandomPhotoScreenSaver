@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 from types import SimpleNamespace
 
@@ -106,6 +107,7 @@ def test_applied_and_pending_artwork_keys_are_both_treated_as_decoded(
 def test_refresh_async_decodes_qimage_in_existing_worker_job(
     qt_app,
     monkeypatch,
+    caplog,
 ) -> None:
     payload = _image_bytes(48, 48)
     info = MediaTrackInfo(
@@ -135,6 +137,7 @@ def test_refresh_async_decodes_qimage_in_existing_worker_job(
         "run_on_ui_thread",
         staticmethod(lambda callback: ui_callbacks.append(callback)),
     )
+    monkeypatch.setattr("widgets.media_widget.is_perf_metrics_enabled", lambda: True)
 
     class _Controller:
         def get_current_track(self):
@@ -163,14 +166,23 @@ def test_refresh_async_decodes_qimage_in_existing_worker_job(
         widget._update_display = lambda *_args, **_kwargs: display_thread_ids.append(
             threading.get_ident()
         )
-        widget._refresh_async()
+        with caplog.at_level(logging.INFO):
+            widget._refresh_async()
 
-        assert len(ui_callbacks) == 1
-        ui_callbacks.pop()()
+            assert len(ui_callbacks) == 1
+            ui_callbacks.pop()()
+            widget._refresh_async()
 
         assert worker_thread_ids
         assert worker_thread_ids[0] != threading.get_ident()
-        assert display_thread_ids == [threading.get_ident()]
+        assert display_thread_ids == [threading.get_ident(), threading.get_ident()]
+        decoded_events = [
+            record.getMessage()
+            for record in caplog.records
+            if "[PERF][MEDIA_ARTWORK] event=decoded" in record.getMessage()
+        ]
+        assert len(decoded_events) == 1
+        assert "decode_ok=True" in decoded_events[0]
     finally:
         widget.cleanup()
         widget.close()

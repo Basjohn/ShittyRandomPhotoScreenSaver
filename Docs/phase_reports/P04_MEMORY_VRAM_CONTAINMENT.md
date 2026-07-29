@@ -10,7 +10,7 @@ Donor boundary: reference only; no donor merge or donor resource architecture tr
 
 Phase 4 bounds the baseline's existing CPU image cache, prefetch backlog, compositor texture cache, and upload-PBO pool by exact bytes while retaining the baseline display/compositor topology. It removes redundant active-path QImage/QPixmap copies, shares same-image backing only for exact transform matches, releases every transition family's obsolete state at terminal presentation, and extends passive resource snapshots to display-owned QPixmap backing stores.
 
-**Status: open / platform gate blocked.** The deterministic cache, display, texture, and PBO owner/allocator gate passed and remains valid. The later real run exposed a separate ImageWorker shared-memory retention path that the deterministic harness did not model. Phase 4 is not complete until labelled worker RSS and shared-memory accounting plateau in the full Phase4plus scenario. CPU/task-rate reduction remains Phase 5.
+**Status: open / whole-process plateau failed.** The deterministic cache, display, texture, PBO, and shared-memory ownership gates pass. The 52-minute `fresh_20260729_2140` platform run also validates the ImageWorker/shared-memory fix live, but main-process RSS, total application RSS, and private commit still rise after warmup. Phase 4 is not complete until those whole-application owners plateau in a post-fix comparator. CPU/task-rate reduction remains Phase 5.
 
 ## Baseline growth mechanisms corrected
 
@@ -36,6 +36,8 @@ Phase 4 bounds the baseline's existing CPU image cache, prefetch backlog, compos
 - immutable compute DTOs alias cache-owned QImages rather than deep-copying them.
 - one GUI QPixmap serves both processed/original compatibility parameters because the original parameter is not a distinct runtime owner.
 - same-image monitors reuse compute and GUI backing only when width, height, mode, and DPR match exactly.
+- source-set invalidation advances a prefetch generation before clearing the cache; late raw/scaled callbacks may neither repopulate an obsolete cache nor release a newer same-key owner.
+- previous-image replay now shares one processed result and GUI QPixmap only for exact source, width, height, mode, DPR, and quality identity. Scaled cache keys carry non-default DPR so the cache cannot collapse a deliberately distinct replay.
 
 ### Display accounting
 
@@ -127,7 +129,28 @@ The same run preserves separate later-phase work:
 - post-warmup RSS slope was effectively zero (-0.00009 MiB/cycle), versus the broken path's approximately 31.6 MiB/image staircase;
 - final-window high-water growth was -0.13 MiB.
 
-This closes the deterministic shared-memory ownership slice. It does not close Phase 4: the full Phase4plus platform comparator must still prove total RSS/private commit, worker RSS, tracked GL bytes, driver VRAM, and presentation together.
+This closes the deterministic shared-memory ownership slice. The later full platform run below validates that result live, but does not close Phase 4 because the main process and private commit fail the whole-application plateau gate.
+
+## Full platform comparator — `fresh_20260729_2140`
+
+The fresh dual-display capture ran from 20:47:55 to 21:40:03 and produced 209 usage samples. The post-warmup comparison window was approximately 44m45s.
+
+| Owner/metric | Fresh result |
+|---|---:|
+| ImageWorker RSS min / median / max | 92.1 / 96.5 / 115.7 MiB |
+| ImageWorker post-warmup slope | about +0.12 MiB/min |
+| Main-process RSS slope | about +2.42 MiB/min |
+| Total application RSS slope | about +2.54 MiB/min |
+| Private-commit slope | about +3.87 MiB/min |
+| Shared-memory terminal counters | 80 created, 80 consumed, 0 live, 0 live bytes, 0 unlink failures |
+| Tracked GL bytes after warmup | 313,039,264 bytes, flat |
+| Dedicated driver VRAM after warmup | about 773.9–774.0 MiB |
+
+The prior approximately 31.6 MiB-per-image child staircase is gone. The worker remains within a narrow warm operating band, every published segment is consumed, and shared-memory, tracked GL, and driver-VRAM owners are bounded. This validates R-52 as solved.
+
+Phase 4 nevertheless fails as a whole: main RSS and private commit retain sustained positive slopes not explained by the bounded child, shared-memory counters, tracked GL bytes, or driver VRAM. The 256 MiB CPU cache must not be raised to conceal that gap. A post-correction comparator must synchronize cache/display/GL accounting with main, worker, total RSS, and private commit and either attribute a bounded allocator high-water pattern or identify the remaining owner.
+
+Presentation evidence is also mixed. Bubble retained healthy loud-passage response with roughly 1.1–1.8 ms mode-owned work. Spectrum and a runtime mode switch were not exercised, so no Spectrum feel conclusion is drawn. Near the tail, screen 1 delivered 46.6 FPS with p95 56.40 ms and 25 frames above 50 ms while screen 0 delivered 108.8 FPS with p95 15.61 ms. Paint work was comparatively cheap and GUI event-loop p99 was 38.28 ms, pointing at delivery/scheduling pressure rather than a visualizer-math regression.
 
 ## Focused media/startup collision containment — 2026-07-29
 
@@ -136,6 +159,8 @@ The latest `phase4plus_a2f7bd89` logs showed artwork payload changes and overlay
 - The existing media `ThreadManager` query job now computes the bounded artwork key and decodes changed payloads once for each widget's current/pending key into worker-safe `QImage`. The GUI callback creates a single `QPixmap`, normalizes DPR, and invalidates the scaled cache only when the applied key changes. This slice deliberately adds no process-wide artwork cache or in-flight decode coordinator ahead of the separate cache audit.
 - Unchanged artwork keys are text-only updates. Artwork disappearance is an explicit empty-key update. Decode failure is terminal for that key rather than becoming a repeated poll-time decode.
 - While any live display is preparing or running an image transition, only the newest prepared artwork/key/generation is retained. QPixmap replacement, art-dependent margins/layout, and the artwork fade flush together only after every display is idle.
+- A same-key follow-up poll now promotes the retained decoded QImage to the newest generation before metadata diff-gating. Material-event-only telemetry records `decoded`, `queued`, `replaced`, `flushing`, `discarded`, and `applied`; destroyed wrappers are removed after disposing an actual pending payload rather than producing repeated empty discard records.
+- Accepted manual Next/Previous submissions rebase the existing active rotation timer. Timer expiry coalesces before queue advancement, cache lookup, worker submission, or prescale whenever image-change work is active. Previous-image decode claims that work owner before history mutation; rejected submissions release it and do not rebase.
 - `FadeCoordinator` now owns named critical startup holds and real animation completion. `critical_gl_startup` releases after first-frame commitment and the existing active Spotify overlay prewarm reaches a terminal outcome; optional failure cannot strand the reveal.
 - Noncritical transition shaders/resources remain compositor-owned and optional. They run one item per managed callback, pause during actual coordinated startup fades or any live display transition, and resume after real fade completion. An enabled overlay with no startup data remains `READY` without stranding warmup; any later reveal moves synchronously to `FADING` before the next slice.
 - Bounded `[PERF][MEDIA_ARTWORK]` and `[STARTUP_SEQUENCE]` records separate worker decode, UI pixmap creation, transition deferral/coalescing, critical readiness, actual fade completion, and the first permitted deferred GL slice.
@@ -144,11 +169,11 @@ Focused automated evidence:
 
 - focused media artwork/startup/fade/warmup owner suite: `119 passed`;
 - protected runtime-shaped visualizer suite: `186 passed, 20 skipped`;
-- current first-frame/mode-switch poison selection: `21 passed`;
+- current first-frame/mode-switch poison selection: `22 passed`;
 - deterministic replay: all `66` goldens plus manifest verified unchanged;
 - shared-memory/supervisor/accounting safety gate: `65 passed`.
 
-This closes the deterministic ownership and scheduling slice only. The full Phase4plus run still owns the 60 Hz/165 Hz forced Spotify-change collision bars, actual startup presentation review, zero terminal shared-memory counters, and whole-application memory/VRAM plateau.
+This closes the deterministic ownership and scheduling slice only. The fresh full run proves the terminal shared-memory counters but predates the artwork-generation, rotation-deadline, stale-prefetch, and previous-image reuse corrections above. The next installed comparator still owns the 60 Hz/165 Hz forced Spotify-change bars, manual-change deadline collision, Spectrum/Bubble/mode-switch review, startup presentation, and whole-application plateau.
 
 ## Verification
 
@@ -172,9 +197,13 @@ Current reopened-gate evidence:
 
 - shared-memory ownership regressions: `15 passed`, including malformed-descriptor reclamation and bounded accounting history;
 - 50×4K spawned-worker shared-memory plateau: pass;
-- post-change first-frame/mode-switch poison selection: `19 passed, 1` existing environment skip;
+- combined Phase 4 cache/prefetch/pipeline/worker/supervisor/GL resource gate: `144 passed`;
+- combined media/startup/rotation/lifecycle gate: `161 passed`;
+- post-change first-frame/mode-switch poison selection: `22 passed`;
 - post-change replay goldens: all `66` verified;
-- full Phase4plus platform comparator: pending.
+- follow-up deterministic 45-cycle resource harness: pass, with 4 KiB repeated-resolution drift and 8 KiB tail high-water range;
+- full `fresh_20260729_2140` comparator: worker/shared-memory and GL/VRAM owners pass; main/total RSS and private commit fail to plateau;
+- installed comparator after the fresh-run collision corrections: pending.
 
 ## Rollback
 

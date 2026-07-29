@@ -11,8 +11,12 @@ from engine.image_pipeline import (
     _cache_trace,
     _describe_prefetcher_state,
     _get_cached_pixmap_variants,
+    _process_display_image_candidate,
     _process_display_with_replacements,
+    _process_previous_images_with_exact_reuse,
     _process_same_image_with_replacements,
+    load_and_display_image_async,
+    load_and_display_image_async_with_metas,
     notify_transition_complete,
     schedule_prefetch,
 )
@@ -178,6 +182,243 @@ def test_same_image_does_not_reuse_different_dpr_processing(monkeypatch):
     assert selected is meta
     assert calls == [0, 1]
     assert processed[0] is not processed[1]
+
+
+def test_previous_image_reuses_exact_source_transform_processing(monkeypatch):
+    shared = SimpleNamespace(local_path=r"C:\wall\shared-previous.jpg", url=None)
+    targets = [
+        SimpleNamespace(
+            get_target_size=lambda: QSize(2560, 1440),
+            display_mode=DisplayMode.FILL,
+            device_pixel_ratio=1.0,
+        ),
+        SimpleNamespace(
+            get_target_size=lambda: QSize(2560, 1440),
+            display_mode=DisplayMode.FILL,
+            device_pixel_ratio=1.0,
+        ),
+    ]
+    calls = []
+    shared_result = {"path": str(shared.local_path)}
+
+    def _process(_engine, _display, display_index, _meta, _lanczos, _sharpen):
+        calls.append(display_index)
+        return shared_result
+
+    monkeypatch.setattr("engine.image_pipeline._process_display_image_candidate", _process)
+
+    processed = _process_previous_images_with_exact_reuse(
+        SimpleNamespace(),
+        targets,
+        [shared, shared],
+        True,
+        False,
+    )
+
+    assert calls == [0]
+    assert processed[0] is processed[1]
+
+
+def test_previous_image_keeps_different_source_or_dpr_processing_separate(monkeypatch):
+    first = SimpleNamespace(local_path=r"C:\wall\first-previous.jpg", url=None)
+    second = SimpleNamespace(local_path=r"C:\wall\second-previous.jpg", url=None)
+    targets = [
+        SimpleNamespace(
+            get_target_size=lambda: QSize(1920, 1080),
+            display_mode=DisplayMode.FILL,
+            device_pixel_ratio=1.0,
+        ),
+        SimpleNamespace(
+            get_target_size=lambda: QSize(1920, 1080),
+            display_mode=DisplayMode.FILL,
+            device_pixel_ratio=2.0,
+        ),
+    ]
+    calls = []
+
+    def _process(_engine, _display, display_index, meta, _lanczos, _sharpen):
+        calls.append((display_index, str(meta.local_path)))
+        return {"path": str(meta.local_path), "display": display_index}
+
+    monkeypatch.setattr("engine.image_pipeline._process_display_image_candidate", _process)
+
+    different_dpr = _process_previous_images_with_exact_reuse(
+        SimpleNamespace(),
+        targets,
+        [first, first],
+        False,
+        False,
+    )
+    different_sources = _process_previous_images_with_exact_reuse(
+        SimpleNamespace(),
+        [targets[0], targets[0]],
+        [first, second],
+        False,
+        False,
+    )
+
+    assert different_dpr[0] is not different_dpr[1]
+    assert different_sources[0] is not different_sources[1]
+    assert calls == [
+        (0, str(first.local_path)),
+        (1, str(first.local_path)),
+        (0, str(first.local_path)),
+        (1, str(second.local_path)),
+    ]
+
+
+def test_scaled_cache_keeps_equal_pixel_targets_separate_across_dpr():
+    path = r"C:\wall\same-pixels-different-dpr.jpg"
+    raw = _solid_qimage(8, 8, QColor("navy"))
+    store = {path: raw}
+    cache = SimpleNamespace(
+        get=lambda key: store.get(key),
+        put=lambda key, value: store.__setitem__(key, value),
+    )
+    engine = SimpleNamespace(
+        _image_cache=cache,
+        _process_supervisor=None,
+    )
+    meta = SimpleNamespace(local_path=path, url=None)
+    target_1x = SimpleNamespace(
+        get_target_size=lambda: QSize(4, 4),
+        display_mode=DisplayMode.FILL,
+        device_pixel_ratio=1.0,
+    )
+    target_2x = SimpleNamespace(
+        get_target_size=lambda: QSize(4, 4),
+        display_mode=DisplayMode.FILL,
+        device_pixel_ratio=2.0,
+    )
+
+    first = _process_display_image_candidate(
+        engine,
+        target_1x,
+        0,
+        meta,
+        False,
+        False,
+    )
+    second = _process_display_image_candidate(
+        engine,
+        target_2x,
+        1,
+        meta,
+        False,
+        False,
+    )
+
+    assert first is not None
+    assert second is not None
+    assert first.image is not second.image
+    key_1x = _build_scaled_cache_key(
+        path,
+        4,
+        4,
+        DisplayMode.FILL,
+        False,
+        False,
+        1.0,
+    )
+    key_2x = _build_scaled_cache_key(
+        path,
+        4,
+        4,
+        DisplayMode.FILL,
+        False,
+        False,
+        2.0,
+    )
+    assert key_1x != key_2x
+    assert store[key_1x] is first.image
+    assert store[key_2x] is second.image
+
+
+def test_previous_async_reports_rejection_when_submit_and_fallback_fail(
+    monkeypatch,
+):
+    display = SimpleNamespace(
+        get_target_size=lambda: QSize(4, 4),
+        display_mode=DisplayMode.FILL,
+        _device_pixel_ratio=1.0,
+    )
+    display_manager = SimpleNamespace(displays=[display])
+
+    class _RejectingThreads:
+        def submit_compute_task(self, *_args, **_kwargs):
+            raise RuntimeError("submission rejected")
+
+    engine = SimpleNamespace(
+        thread_manager=_RejectingThreads(),
+        display_manager=display_manager,
+        _runtime_generation=1,
+        _shutting_down=False,
+    )
+    monkeypatch.setattr(
+        "engine.image_pipeline.load_and_display_image",
+        lambda *_args, **_kwargs: False,
+    )
+
+    assert load_and_display_image_async_with_metas(
+        engine,
+        [SimpleNamespace(local_path=r"C:\wall\previous.jpg", url=None)],
+    ) is False
+
+
+def test_normal_async_retry_retains_existing_image_change_owner():
+    display = SimpleNamespace(
+        get_target_size=lambda: QSize(4, 4),
+        display_mode=DisplayMode.FILL,
+        _device_pixel_ratio=1.0,
+    )
+    pending_calls = []
+    display_manager = SimpleNamespace(
+        displays=[display],
+        set_transition_work_pending=lambda value: pending_calls.append(value),
+    )
+
+    class _Threads:
+        def __init__(self):
+            self.callbacks = []
+
+        def submit_compute_task(self, _task, *, callback, category):
+            self.callbacks.append((callback, category))
+
+        def run_on_ui_thread(self, callback):
+            callback()
+
+    threads = _Threads()
+    retry_meta = SimpleNamespace(local_path=r"C:\wall\retry.jpg", url=None)
+    queued = [retry_meta]
+    engine = SimpleNamespace(
+        thread_manager=threads,
+        display_manager=display_manager,
+        settings_manager=SimpleNamespace(
+            get=lambda key, default=None: (
+                True if key == "display.same_image_all_monitors" else default
+            )
+        ),
+        image_queue=SimpleNamespace(
+            next=lambda: queued.pop(0) if queued else None,
+        ),
+        _runtime_generation=1,
+        _shutting_down=False,
+        _loading_in_progress=True,
+    )
+    initial_meta = SimpleNamespace(local_path=r"C:\wall\initial.jpg", url=None)
+
+    assert load_and_display_image_async(engine, initial_meta) is True
+    first_callback, first_category = threads.callbacks[0]
+    assert first_category == "image.load_and_process"
+
+    first_callback(SimpleNamespace(success=False, result=None))
+
+    assert len(threads.callbacks) == 2
+    assert threads.callbacks[1][1] == "image.load_and_process"
+    assert engine._loading_in_progress is True
+    assert pending_calls == []
+
+
 def test_cache_trace_can_emit_loud_fallback_records(monkeypatch, caplog):
     monkeypatch.setattr("engine.image_pipeline.is_cache_logging_enabled", lambda: True)
 
