@@ -44,6 +44,7 @@ class _StubMediaWidget:
         self._poll_intervals = [1000, 2000, 2500]
         self._skipped_identity_updates = 0
         self._max_identity_skip = 4
+        self._unchanged_refresh_diag_pending = False
         self._last_display_update_ts = 0.0
         self.provider_display_name = "SPOTIFY"
         self._font_size = 20
@@ -75,6 +76,17 @@ class _StubMediaWidget:
 
     def _ensure_timer(self, *, force=False):
         self._ensure_timer_force_calls.append(bool(force))
+
+    def _advance_poll_stage(self):
+        self._current_poll_stage = min(
+            self._current_poll_stage + 1,
+            len(self._poll_intervals) - 1,
+        )
+        self._polls_at_current_stage = 0
+
+    def _reset_poll_stage(self):
+        self._current_poll_stage = 0
+        self._polls_at_current_stage = 0
 
     def isVisible(self):
         return self._visible
@@ -221,6 +233,84 @@ def test_update_display_refades_widget_when_metadata_returns(monkeypatch):
     assert widget.notify_calls == 1
     assert widget._telemetry_last_visibility is True
     assert widget._emitted and widget._emitted[-1] is live_info
+
+
+def test_unchanged_visible_card_never_forces_metadata_or_layout_publication(
+    monkeypatch,
+):
+    widget = _StubMediaWidget()
+    info = MediaTrackInfo(
+        title="Stable Track",
+        artist="Stable Artist",
+        album="Stable Album",
+        state=MediaPlaybackState.PLAYING,
+    )
+    widget._last_info = info
+    widget._last_track_identity = widget._compute_track_identity(info)
+    widget._last_metadata_identity = widget._compute_metadata_identity(info)
+    widget._fade_in_completed = True
+    build_calls = []
+    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
+    monkeypatch.setattr(
+        display_update,
+        "_build_and_apply_metadata",
+        lambda *args, **kwargs: build_calls.append((args, kwargs)),
+    )
+
+    for _ in range(widget._max_identity_skip + 2):
+        display_update.update_display(widget, info)
+
+    assert build_calls == []
+    assert widget._emitted == []
+    assert widget._skipped_identity_updates == 1
+    assert widget._unchanged_refresh_diag_pending is False
+
+
+def test_unchanged_refresh_diagnostic_waits_until_transition_is_idle(
+    monkeypatch,
+    caplog,
+):
+    widget = _StubMediaWidget()
+    info = MediaTrackInfo(
+        title="Stable Track",
+        artist="Stable Artist",
+        album="Stable Album",
+        state=MediaPlaybackState.PLAYING,
+    )
+    widget._last_info = info
+    widget._last_track_identity = widget._compute_track_identity(info)
+    widget._last_metadata_identity = widget._compute_metadata_identity(info)
+    widget._fade_in_completed = True
+    widget._skipped_identity_updates = widget._max_identity_skip
+    transition = {"active": True}
+    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
+    monkeypatch.setattr(display_update, "is_perf_metrics_enabled", lambda: True)
+    monkeypatch.setattr(
+        _StubMediaWidget,
+        "_has_transition_work_on_any_display",
+        classmethod(lambda cls: transition["active"]),
+        raising=False,
+    )
+    build_calls = []
+    monkeypatch.setattr(
+        display_update,
+        "_build_and_apply_metadata",
+        lambda *args, **kwargs: build_calls.append((args, kwargs)),
+    )
+
+    with caplog.at_level(logging.DEBUG):
+        display_update.update_display(widget, info)
+        assert widget._unchanged_refresh_diag_pending is True
+        assert "unchanged_refresh_suppressed" not in caplog.text
+
+        transition["active"] = False
+        display_update.update_display(widget, info)
+
+    assert build_calls == []
+    assert widget._unchanged_refresh_diag_pending is False
+    assert "unchanged_refresh_suppressed" in caplog.text
+    assert "update_requested=False" in caplog.text
+    assert "layout_mutations=0" in caplog.text
 
 
 def test_track_metadata_during_transition_avoids_redundant_qt_layout_mutation(

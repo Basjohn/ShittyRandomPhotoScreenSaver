@@ -269,6 +269,13 @@ def resize_bar_buffers(widget, new_bar_count: int) -> None:
     widget._waiting_for_fresh_engine_frame = True
     widget._waiting_for_fresh_frame = True
     try:
+        widget._reset_latency_diagnostics()
+    except Exception:
+        logger.debug(
+            "[SPOTIFY_VIS] Failed to reset latency diagnostics for bar-count change",
+            exc_info=True,
+        )
+    try:
         if engine is None:
             engine = _resolve_engine(
                 widget,

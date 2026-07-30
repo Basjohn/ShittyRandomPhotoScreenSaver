@@ -17,6 +17,62 @@ from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_
 
 logger = get_logger(__name__)
 
+_ui_diagnostic_lock = threading.Lock()
+_ui_diagnostics: Dict[str, Any] = {
+    "queued": 0,
+    "delivered": 0,
+    "failed": 0,
+    "active": 0,
+    "queue_depth": 0,
+    "last_callback": "<none>",
+    "last_duration_ms": 0.0,
+    "last_completed_ts": 0.0,
+}
+
+
+def _record_ui_queue() -> None:
+    with _ui_diagnostic_lock:
+        _ui_diagnostics["queued"] += 1
+        _ui_diagnostics["queue_depth"] += 1
+
+
+def _run_tracked_ui_callable(
+    func: Callable,
+    args: tuple,
+    kwargs: dict,
+    *,
+    was_queued: bool,
+) -> None:
+    label = _callable_debug_name(func)
+    started = time.perf_counter()
+    with _ui_diagnostic_lock:
+        if was_queued:
+            _ui_diagnostics["queue_depth"] = max(
+                0,
+                int(_ui_diagnostics["queue_depth"]) - 1,
+            )
+        _ui_diagnostics["active"] += 1
+        _ui_diagnostics["last_callback"] = label
+    failed = False
+    try:
+        func(*args, **(kwargs or {}))
+    except Exception:
+        failed = True
+        raise
+    finally:
+        duration_ms = (time.perf_counter() - started) * 1000.0
+        with _ui_diagnostic_lock:
+            _ui_diagnostics["active"] = max(
+                0,
+                int(_ui_diagnostics["active"]) - 1,
+            )
+            _ui_diagnostics["delivered"] += 1
+            if failed:
+                _ui_diagnostics["failed"] += 1
+            _ui_diagnostics["last_callback"] = label
+            _ui_diagnostics["last_duration_ms"] = duration_ms
+            _ui_diagnostics["last_completed_ts"] = time.time()
+
 
 def _callable_debug_name(func: Callable | None) -> str:
     """Return a compact callable label for async diagnostics."""
@@ -221,7 +277,12 @@ class _UiInvoker(QObject):
 
     def _on_invoke(self, func, args, kwargs):
         try:
-            func(*args, **(kwargs or {}))
+            _run_tracked_ui_callable(
+                func,
+                tuple(args or ()),
+                dict(kwargs or {}),
+                was_queued=True,
+            )
         except Exception as e:
             logger.exception("UI invoker callable raised: %s", e)
 
@@ -383,6 +444,30 @@ class ThreadManager:
         self._active_tasks_lock = threading.RLock()
         self._category_stats_lock = threading.RLock()
         self._category_stats: Dict[str, Dict[str, int]] = {}
+        self._diagnostic_lock = threading.Lock()
+        self._diagnostic_pools: Dict[str, Dict[str, Any]] = {
+            pool_type.value: {
+                "worker_active": 0,
+                "tasks_started": 0,
+                "tasks_finished": 0,
+                "callbacks_active": 0,
+                "callbacks_delivered": 0,
+                "callbacks_failed": 0,
+                "queue_wait_ms_total": 0.0,
+                "queue_wait_ms_max": 0.0,
+                "execution_ms_total": 0.0,
+                "execution_ms_max": 0.0,
+                "callback_ms_total": 0.0,
+                "callback_ms_max": 0.0,
+                "last_task_category": "<none>",
+                "last_task": "<none>",
+                "last_queue_wait_ms": 0.0,
+                "last_execution_ms": 0.0,
+                "last_callback": "<none>",
+                "last_callback_ms": 0.0,
+            }
+            for pool_type in ThreadPoolType
+        }
         self._stats = {pool_type: {'submitted': 0, 'completed': 0, 'failed': 0} 
                       for pool_type in ThreadPoolType}
         
@@ -488,8 +573,21 @@ class ThreadManager:
         executor = self._executors[pool_type]
         
         def wrapped_func():
+            queue_wait_ms = max(0.0, (time.time() - task.created_at) * 1000.0)
             start_time = time.time()
             outcome = "failed"
+            pool_diag = self._diagnostic_pools[pool_type.value]
+            with self._diagnostic_lock:
+                pool_diag["worker_active"] += 1
+                pool_diag["tasks_started"] += 1
+                pool_diag["queue_wait_ms_total"] += queue_wait_ms
+                pool_diag["queue_wait_ms_max"] = max(
+                    float(pool_diag["queue_wait_ms_max"]),
+                    queue_wait_ms,
+                )
+                pool_diag["last_task_category"] = task.category
+                pool_diag["last_task"] = _callable_debug_name(task.func)
+                pool_diag["last_queue_wait_ms"] = queue_wait_ms
             try:
                 result = task.func(*task.args, **task.kwargs)
                 execution_time = time.time() - start_time
@@ -514,24 +612,66 @@ class ThreadManager:
                 outcome = "failed"
             finally:
                 self._unregister_active_task(task.task_id, outcome=outcome)
-            
-            # Execute callback
-            if callback:
-                try:
-                    callback(task_result)
-                except Exception as e:
-                    logger.exception(
-                        "Callback for task %s failed: %s "
-                        "(pool=%s func=%s callback=%s execution_ms=%.2f)",
-                        task.task_id,
-                        e,
-                        pool_type.value,
-                        _callable_debug_name(task.func),
-                        _callable_debug_name(callback),
-                        execution_time * 1000.0,
+
+            execution_ms = execution_time * 1000.0
+            with self._diagnostic_lock:
+                pool_diag["tasks_finished"] += 1
+                pool_diag["execution_ms_total"] += execution_ms
+                pool_diag["execution_ms_max"] = max(
+                    float(pool_diag["execution_ms_max"]),
+                    execution_ms,
+                )
+                pool_diag["last_execution_ms"] = execution_ms
+
+            try:
+                # Execute callback on the worker by contract.
+                if callback:
+                    callback_label = _callable_debug_name(callback)
+                    callback_started = time.perf_counter()
+                    callback_failed = False
+                    with self._diagnostic_lock:
+                        pool_diag["callbacks_active"] += 1
+                        pool_diag["last_callback"] = callback_label
+                    try:
+                        callback(task_result)
+                    except Exception as e:
+                        callback_failed = True
+                        logger.exception(
+                            "Callback for task %s failed: %s "
+                            "(pool=%s func=%s callback=%s execution_ms=%.2f)",
+                            task.task_id,
+                            e,
+                            pool_type.value,
+                            _callable_debug_name(task.func),
+                            callback_label,
+                            execution_ms,
+                        )
+                    finally:
+                        callback_ms = (
+                            time.perf_counter() - callback_started
+                        ) * 1000.0
+                        with self._diagnostic_lock:
+                            pool_diag["callbacks_active"] = max(
+                                0,
+                                int(pool_diag["callbacks_active"]) - 1,
+                            )
+                            pool_diag["callbacks_delivered"] += 1
+                            if callback_failed:
+                                pool_diag["callbacks_failed"] += 1
+                            pool_diag["callback_ms_total"] += callback_ms
+                            pool_diag["callback_ms_max"] = max(
+                                float(pool_diag["callback_ms_max"]),
+                                callback_ms,
+                            )
+                            pool_diag["last_callback"] = callback_label
+                            pool_diag["last_callback_ms"] = callback_ms
+                return task_result
+            finally:
+                with self._diagnostic_lock:
+                    pool_diag["worker_active"] = max(
+                        0,
+                        int(pool_diag["worker_active"]) - 1,
                     )
-            
-            return task_result
         
         # Active-task bookkeeping is authoritative at submit time. Register before
         # the executor can run a fast task and unregister itself.
@@ -617,6 +757,91 @@ class ThreadManager:
                 category: counts.copy()
                 for category, counts in sorted(self._category_stats.items())
             }
+
+    def get_diagnostic_snapshot(self) -> Dict[str, Any]:
+        """Return bounded passive queue, worker, callback and UI-delivery counters."""
+        with self._diagnostic_lock:
+            pools = {
+                pool_name: values.copy()
+                for pool_name, values in self._diagnostic_pools.items()
+            }
+        for pool_type, executor in self._executors.items():
+            queue_depth = -1
+            try:
+                queue_depth = int(executor._work_queue.qsize())
+            except Exception:
+                pass
+            pools.setdefault(pool_type.value, {})["queue_depth"] = queue_depth
+        with _ui_diagnostic_lock:
+            ui = dict(_ui_diagnostics)
+        return {
+            "pools": pools,
+            "ui": ui,
+        }
+
+    def get_frame_delivery_snapshot(self) -> Dict[str, Any]:
+        """Return the small counter set needed by frame-gap owner diagnostics.
+
+        Unlike ``get_diagnostic_snapshot()``, this path deliberately avoids
+        copying the complete cumulative timing dictionaries on every paint.
+        The compositor keeps one display-local previous snapshot and derives
+        delivery deltas without changing scheduling.
+        """
+        with self._diagnostic_lock:
+            io_diag = self._diagnostic_pools[ThreadPoolType.IO.value]
+            compute_diag = self._diagnostic_pools[ThreadPoolType.COMPUTE.value]
+            snapshot: Dict[str, Any] = {
+                "io_worker_active": int(io_diag["worker_active"]),
+                "io_callbacks_delivered": int(io_diag["callbacks_delivered"]),
+                "io_callbacks_active": int(io_diag["callbacks_active"]),
+                "io_last_task": str(io_diag["last_task"]),
+                "io_last_callback": str(io_diag["last_callback"]),
+                "io_last_queue_wait_ms": float(io_diag["last_queue_wait_ms"]),
+                "io_last_execution_ms": float(io_diag["last_execution_ms"]),
+                "io_last_callback_ms": float(io_diag["last_callback_ms"]),
+                "compute_worker_active": int(compute_diag["worker_active"]),
+                "compute_callbacks_delivered": int(
+                    compute_diag["callbacks_delivered"]
+                ),
+                "compute_callbacks_active": int(compute_diag["callbacks_active"]),
+                "compute_last_task": str(compute_diag["last_task"]),
+                "compute_last_callback": str(compute_diag["last_callback"]),
+                "compute_last_queue_wait_ms": float(
+                    compute_diag["last_queue_wait_ms"]
+                ),
+                "compute_last_execution_ms": float(
+                    compute_diag["last_execution_ms"]
+                ),
+                "compute_last_callback_ms": float(
+                    compute_diag["last_callback_ms"]
+                ),
+            }
+        for pool_type in ThreadPoolType:
+            queue_depth = -1
+            executor = self._executors.get(pool_type)
+            try:
+                queue_depth = int(executor._work_queue.qsize())
+            except Exception:
+                pass
+            snapshot[f"{pool_type.value}_queue_depth"] = queue_depth
+        with _ui_diagnostic_lock:
+            snapshot.update(
+                {
+                    "ui_queued": int(_ui_diagnostics["queued"]),
+                    "ui_delivered": int(_ui_diagnostics["delivered"]),
+                    "ui_failed": int(_ui_diagnostics["failed"]),
+                    "ui_active": int(_ui_diagnostics["active"]),
+                    "ui_queue_depth": int(_ui_diagnostics["queue_depth"]),
+                    "ui_last_callback": str(_ui_diagnostics["last_callback"]),
+                    "ui_last_duration_ms": float(
+                        _ui_diagnostics["last_duration_ms"]
+                    ),
+                    "ui_last_completed_ts": float(
+                        _ui_diagnostics["last_completed_ts"]
+                    ),
+                }
+            )
+        return snapshot
 
     def shutdown(self, wait: bool = True, timeout: Optional[float] = None):
         """
@@ -839,12 +1064,18 @@ class ThreadManager:
                 return
             
             if QThread.currentThread() is app.thread():
-                func(*args, **(kwargs or {}))
+                _run_tracked_ui_callable(
+                    func,
+                    tuple(args or ()),
+                    dict(kwargs or {}),
+                    was_queued=False,
+                )
                 return
             
             inv = _ensure_ui_invoker()
             if inv is None:
                 raise RuntimeError("UI invoker unavailable")
+            _record_ui_queue()
             inv.invoke.emit(func, args, kwargs or {})
         except Exception as e:
             logger.exception("run_on_ui_thread dispatch failed: %s", e)

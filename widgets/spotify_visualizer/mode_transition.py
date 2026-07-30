@@ -396,10 +396,14 @@ def reset_mode_owned_runtime_state(widget: Any, *, reason: str = "mode_activatio
 
     try:
         widget._bubble_count = 0
-        widget._bubble_compute_pending = False
-        clear_pending_bubble_result = getattr(widget, "_clear_pending_bubble_result", None)
-        if callable(clear_pending_bubble_result):
-            clear_pending_bubble_result()
+        reset_bubble_cadence = getattr(widget, "_reset_bubble_cadence", None)
+        if callable(reset_bubble_cadence):
+            reset_bubble_cadence()
+        else:
+            widget._bubble_compute_pending = False
+            clear_pending_bubble_result = getattr(widget, "_clear_pending_bubble_result", None)
+            if callable(clear_pending_bubble_result):
+                clear_pending_bubble_result()
         widget._bubble_pending_result_skip_count = 0
         bubble_sim = getattr(widget, "_bubble_simulation", None)
         if bubble_sim is not None and hasattr(bubble_sim, "reset"):
@@ -594,6 +598,13 @@ def prepare_engine_for_mode_reset(widget: Any) -> None:
         engine.reset_smoothing_state()
         engine.reset_floor_state()
         engine.set_smoothing(widget._smoothing)
+        try:
+            widget._reset_latency_diagnostics()
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] Failed to reset latency diagnostics for mode reset",
+                exc_info=True,
+            )
 
         # Ensure technical config cache is populated before applying config
         settings_model = getattr(widget, "_settings_model", None)

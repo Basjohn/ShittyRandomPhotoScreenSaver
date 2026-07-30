@@ -244,6 +244,47 @@ class TestThreadManagerSubmit:
             original_executor.shutdown(wait=False, cancel_futures=True)
             manager.shutdown()
 
+    def test_delivery_diagnostics_separate_queue_worker_and_callback_cost(self):
+        class InlineExecutor:
+            def submit(self, fn):
+                future = Future()
+                future.set_result(fn())
+                return future
+
+            def shutdown(self, wait=True, cancel_futures=False):
+                return None
+
+        callback_results = []
+        manager = ThreadManager()
+        original_executor = manager._executors[ThreadPoolType.COMPUTE]
+        manager._executors[ThreadPoolType.COMPUTE] = InlineExecutor()
+        try:
+            manager.submit_compute_task(
+                lambda: "done",
+                callback=lambda result: callback_results.append(result.result),
+                category="visualizer.bubble_simulation",
+            )
+
+            full = manager.get_diagnostic_snapshot()["pools"]["compute"]
+            frame = manager.get_frame_delivery_snapshot()
+
+            assert callback_results == ["done"]
+            assert full["tasks_started"] == 1
+            assert full["tasks_finished"] == 1
+            assert full["worker_active"] == 0
+            assert full["callbacks_delivered"] == 1
+            assert full["callbacks_active"] == 0
+            assert full["last_task_category"] == "visualizer.bubble_simulation"
+            assert full["queue_wait_ms_total"] >= 0.0
+            assert full["execution_ms_total"] >= 0.0
+            assert full["callback_ms_total"] >= 0.0
+            assert frame["compute_queue_depth"] == -1
+            assert frame["compute_callbacks_delivered"] == 1
+            assert frame["compute_worker_active"] == 0
+        finally:
+            original_executor.shutdown(wait=False, cancel_futures=True)
+            manager.shutdown()
+
     def test_category_cardinality_is_bounded_with_overflow_bucket(self):
         class InlineExecutor:
             def submit(self, fn):
@@ -740,15 +781,22 @@ class TestUiThreadDispatch:
         """Executing from UI thread should run synchronously."""
         called = []
         thread_ids = []
+        manager = ThreadManager()
+        before = manager.get_frame_delivery_snapshot()
 
         def _fn():
             called.append(True)
             thread_ids.append(QThread.currentThread())
 
         ThreadManager.run_on_ui_thread(_fn)
+        after = manager.get_frame_delivery_snapshot()
+        manager.shutdown()
 
         assert called == [True]
         assert thread_ids[0] is qt_app.thread()
+        assert after["ui_delivered"] == before["ui_delivered"] + 1
+        assert after["ui_active"] == 0
+        assert after["ui_last_callback"].endswith("._fn")
 
     def test_run_on_ui_thread_from_worker_thread(self, qt_app):
         """Worker threads should dispatch back to Qt main thread."""

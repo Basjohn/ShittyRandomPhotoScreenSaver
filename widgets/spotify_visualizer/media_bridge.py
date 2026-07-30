@@ -183,6 +183,15 @@ def _commit_playback_state(widget: Any, *, state: str, reason: str) -> None:
     if is_playing:
         widget._startup_require_playing_before_reveal = False
 
+    if is_playing != prev:
+        try:
+            widget._reset_latency_diagnostics()
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] Failed to reset latency diagnostics for playback epoch",
+                exc_info=True,
+            )
+
     if is_playing and not prev:
         widget._trigger_wake(reason=reason)
 

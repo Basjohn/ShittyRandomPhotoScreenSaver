@@ -131,6 +131,9 @@ class MediaWidget(BaseOverlayWidget):
         # Media provider: "spotify" or "musicbee" — drives GSMTC session filter + branding
         self._provider: str = self._validate_provider(provider)
         self._perf_media_emit_count: int = 0
+        self._perf_media_emit_total: int = 0
+        self._perf_media_update_request_total: int = 0
+        self._perf_media_display_total: int = 0
         self._perf_media_last_log_ts: float = time.monotonic()
 
         self._pending_controller_tm: Optional[ThreadManager] = None
@@ -292,6 +295,7 @@ class MediaWidget(BaseOverlayWidget):
         self._last_display_update_ts: float = 0.0
         self._skipped_identity_updates: int = 0
         self._max_identity_skip: int = 4
+        self._unchanged_refresh_diag_pending: bool = False
         
         # Widget state tracking for lifecycle management
         self._activation_time: float = 0.0
@@ -621,6 +625,7 @@ class MediaWidget(BaseOverlayWidget):
                 pass
         try:
             self.update()
+            self._perf_media_update_request_total += 1
         except RuntimeError:
             pass
         except Exception as exc:
@@ -1425,6 +1430,7 @@ class MediaWidget(BaseOverlayWidget):
         """Emit the current media metadata/state to interested observers."""
         try:
             self._perf_media_emit_count += 1
+            self._perf_media_emit_total += 1
             payload = asdict(info)
             payload["state"] = info.state.value
             self.media_updated.emit(payload)

@@ -225,9 +225,15 @@ def test_acceptance_commits_waveform_worker_energy_and_current_activation(monkey
     assert engine._energy_bands == override
     assert engine.get_latest_generation_with_frame() == engine.get_generation_id()
     assert engine.get_latest_generation_with_waveform() == engine.get_generation_id()
+    assert engine.get_latest_authoritative_frame() == (
+        30.0,
+        engine.get_generation_id(),
+        activation,
+    )
     assert engine._last_audio_ts == 30.0
 
     engine.reset_smoothing_state()
+    assert engine.get_latest_authoritative_frame() == (0.0, -1, -1)
     assert not engine.accept_analysis_frame(
         [0.4, 0.5, 0.6], 31.0, activation_id=activation
     )

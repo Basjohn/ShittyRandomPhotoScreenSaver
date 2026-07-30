@@ -23,6 +23,54 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _has_stable_visible_presentation(widget: "MediaWidget") -> bool:
+    """Return True when an unchanged card needs no visibility reconciliation."""
+    try:
+        parent = widget.parentWidget()
+    except Exception:
+        parent = None
+    if (
+        bool(getattr(widget, "_custom_layout_shell_active", False))
+        or bool(getattr(parent, "_custom_layout_edit_active", False))
+    ):
+        return True
+    try:
+        return bool(widget.isVisible())
+    except Exception:
+        return False
+
+
+def _suppress_unchanged_refresh(
+    widget: "MediaWidget",
+    *,
+    budget_exhausted: bool,
+) -> None:
+    """Keep the periodic unchanged-card diagnostic passive and transition-safe."""
+    transition_active = False
+    try:
+        checker = getattr(type(widget), "_has_transition_work_on_any_display", None)
+        transition_active = bool(checker()) if callable(checker) else False
+    except Exception:
+        transition_active = False
+
+    pending = bool(getattr(widget, "_unchanged_refresh_diag_pending", False))
+    if budget_exhausted and transition_active:
+        widget._unchanged_refresh_diag_pending = True
+        return
+    if not budget_exhausted and not pending:
+        return
+    if transition_active:
+        return
+
+    widget._unchanged_refresh_diag_pending = False
+    if is_perf_metrics_enabled():
+        logger.debug(
+            "[PERF][MEDIA_PRESENTATION] event=unchanged_refresh_suppressed "
+            "deferred_for_transition=%s update_requested=False layout_mutations=0",
+            pending,
+        )
+
+
 def _norm_metadata_text(value: Optional[str]) -> str:
     return (value or "").strip().lower()
 
@@ -315,6 +363,10 @@ def update_display(
         logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
         return
 
+    widget._perf_media_display_total = (
+        int(getattr(widget, "_perf_media_display_total", 0) or 0) + 1
+    )
+
     # Cache last track snapshot for diagnostics/interaction
     prev_info = widget._last_info
     info = _coalesce_partial_same_track_metadata(widget, info, prev_info)
@@ -379,23 +431,32 @@ def update_display(
             and widget._last_track_identity is not None
             and widget._fade_in_completed
             and not artwork_changed
+            and _has_stable_visible_presentation(widget)
         ):
             widget._skipped_identity_updates += 1
-            if widget._skipped_identity_updates <= widget._max_identity_skip:
+            budget_exhausted = (
+                widget._skipped_identity_updates > widget._max_identity_skip
+            )
+            if not budget_exhausted:
                 if is_perf_metrics_enabled():
                     logger.debug(
                         "[PERF] Media widget update skipped (diff gating - %d/%d)",
                         widget._skipped_identity_updates,
                         widget._max_identity_skip,
                     )
-                return
-            if is_perf_metrics_enabled():
-                logger.debug("[PERF] Forcing metadata refresh after repeated skips")
+            else:
+                widget._skipped_identity_updates = 0
+            _suppress_unchanged_refresh(
+                widget,
+                budget_exhausted=budget_exhausted,
+            )
+            return
 
         # Track changed - update identity and proceed
         widget._last_track_identity = current_identity
         widget._last_metadata_identity = current_metadata_identity
         widget._skipped_identity_updates = 0
+        widget._unchanged_refresh_diag_pending = False
         widget._last_display_update_ts = time.monotonic()
         if is_perf_metrics_enabled():
             logger.debug("[PERF] Media widget update applied (track changed)")

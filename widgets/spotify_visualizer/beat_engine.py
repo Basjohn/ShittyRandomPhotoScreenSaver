@@ -116,6 +116,12 @@ class _SpotifyBeatEngine(QObject):
         self._activation_id: int = 0
         self._latest_generation_with_frame: int = 0
         self._latest_generation_with_waveform: int = 0
+        # Diagnostic provenance for the latest committed analysis frame.
+        # ``_last_smooth_ts`` is also adjusted by wake/idle protection, so it
+        # is not authoritative enough for latency accounting on its own.
+        self._latest_authoritative_frame_ts: float = 0.0
+        self._latest_authoritative_frame_generation: int = -1
+        self._latest_authoritative_frame_activation: int = -1
 
         # Waveform buffer for oscilloscope visualizer (last 256 raw samples)
         self._waveform: List[float] = [0.0] * 256
@@ -184,6 +190,9 @@ class _SpotifyBeatEngine(QObject):
         self._audio_worker._activation_id = self._activation_id
         self._latest_generation_with_frame = self._generation_id - 1
         self._latest_generation_with_waveform = self._generation_id - 1
+        self._latest_authoritative_frame_ts = 0.0
+        self._latest_authoritative_frame_generation = -1
+        self._latest_authoritative_frame_activation = -1
         logger.debug(
             "[SPOTIFY_VIS] Beat engine bar-count reconfigured -> %d (generation=%d activation=%d)",
             new_count,
@@ -217,6 +226,9 @@ class _SpotifyBeatEngine(QObject):
         # this reset instead of reusing the pre-reset generation id.
         self._latest_generation_with_frame = self._generation_id - 1
         self._latest_generation_with_waveform = self._generation_id - 1
+        self._latest_authoritative_frame_ts = 0.0
+        self._latest_authoritative_frame_generation = -1
+        self._latest_authoritative_frame_activation = -1
         logger.debug(
             "[SPOTIFY_VIS] Beat engine smoothing state reset (generation=%d activation=%d)",
             self._generation_id,
@@ -550,6 +562,9 @@ class _SpotifyBeatEngine(QObject):
             self._smoothed_bars = smoothed_bars
             self._last_smooth_ts = float(timestamp)
             self._latest_generation_with_frame = self._generation_id
+            self._latest_authoritative_frame_ts = float(timestamp)
+            self._latest_authoritative_frame_generation = self._generation_id
+            self._latest_authoritative_frame_activation = self._activation_id
         if isinstance(energy, EnergyBands):
             self._energy_bands = energy
         if waveform is not None:
@@ -676,6 +691,14 @@ class _SpotifyBeatEngine(QObject):
 
     def get_latest_generation_with_frame(self) -> int:
         return self._latest_generation_with_frame
+
+    def get_latest_authoritative_frame(self) -> tuple[float, int, int]:
+        """Return timestamp, generation and activation of the last committed frame."""
+        return (
+            self._latest_authoritative_frame_ts,
+            self._latest_authoritative_frame_generation,
+            self._latest_authoritative_frame_activation,
+        )
 
     def get_latest_generation_with_waveform(self) -> int:
         return self._latest_generation_with_waveform

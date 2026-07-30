@@ -185,6 +185,7 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     assert "shm_segments_reclaimed_late=1" in sample
     assert "tm_active=1" in sample
     assert '"visualizer.audio_analysis":{"active":1' in sample
+    assert "tm_delivery={}" in sample
     assert manager.tasks[0][2]["category"] == "diagnostics.usage"
 
     service.stop()

@@ -6,6 +6,7 @@ first argument so the main class stays lean.
 """
 from __future__ import annotations
 
+import gc
 import time
 from typing import Optional, Callable, TYPE_CHECKING
 
@@ -60,6 +61,203 @@ def _is_active_transition_paint_window(stall_context: dict | None) -> bool:
         return False
 
     return bool(display_transition.get("running")) or bool(display_transition.get("pending"))
+
+
+def _counter_delta(
+    current: dict,
+    previous: dict,
+    key: str,
+) -> int:
+    """Return a non-negative display-local delta for a cumulative counter."""
+    if key not in previous:
+        return 0
+    try:
+        return max(0, int(current.get(key, 0) or 0) - int(previous.get(key, 0) or 0))
+    except Exception:
+        return 0
+
+
+def _compact_field(value, fallback: str = "<none>") -> str:
+    """Keep one-line owner logs machine-readable without leaking payload data."""
+    text = str(value if value not in (None, "") else fallback)
+    return "_".join(text.split())
+
+
+def _frame_owner_snapshot(widget) -> dict:
+    """Read passive cumulative owner counters without scheduling any work."""
+    try:
+        parent = widget.parent()
+    except Exception:
+        parent = None
+    visualizer = getattr(parent, "spotify_visualizer_widget", None)
+    media = getattr(parent, "media_widget", None)
+    overlay = getattr(parent, "_spotify_bars_overlay", None)
+    manager = getattr(parent, "_thread_manager", None)
+    if manager is None:
+        manager = getattr(visualizer, "_thread_manager", None)
+    if manager is None:
+        manager = getattr(media, "_thread_manager", None)
+    if manager is None:
+        try:
+            from core.threading.manager import ThreadManager
+
+            manager = ThreadManager.get_app_shared()
+        except Exception:
+            manager = None
+
+    thread_snapshot: dict = {}
+    getter = getattr(manager, "get_frame_delivery_snapshot", None)
+    if callable(getter):
+        try:
+            thread_snapshot = dict(getter())
+        except Exception:
+            thread_snapshot = {}
+
+    snapshot = {
+        **thread_snapshot,
+        "media_display_total": int(
+            getattr(media, "_perf_media_display_total", 0) or 0
+        ),
+        "media_emit_total": int(getattr(media, "_perf_media_emit_total", 0) or 0),
+        "media_update_total": int(
+            getattr(media, "_perf_media_update_request_total", 0) or 0
+        ),
+        "overlay_set_total": int(
+            getattr(overlay, "_perf_set_state_total", 0) or 0
+        ),
+        "overlay_update_total": int(
+            getattr(overlay, "_perf_update_request_total", 0) or 0
+        ),
+        "overlay_paint_total": int(
+            getattr(overlay, "_perf_paint_total", 0) or 0
+        ),
+        "vis_mode": getattr(visualizer, "_vis_mode_str", "<none>"),
+        "vis_phase": int(
+            getattr(visualizer, "_mode_transition_phase", 0) or 0
+        ),
+        "vis_waiting_engine": bool(
+            getattr(visualizer, "_waiting_for_fresh_engine_frame", False)
+        ),
+        "vis_waiting_frame": bool(
+            getattr(visualizer, "_waiting_for_fresh_frame", False)
+        ),
+        "bubble_worker_pending": bool(
+            getattr(visualizer, "_bubble_compute_pending", False)
+        ),
+        "bubble_result_pending": bool(
+            getattr(visualizer, "_pending_bubble_result", None) is not None
+        ),
+    }
+    return snapshot
+
+
+def _transition_label(stall_context: dict | None) -> str:
+    if not isinstance(stall_context, dict):
+        return "<none>"
+    current = stall_context.get("current_transition")
+    if current:
+        return _compact_field(current)
+    display_transition = stall_context.get("display_transition")
+    if isinstance(display_transition, dict):
+        for key in ("transition", "current_transition", "last_transition"):
+            value = display_transition.get(key)
+            if value:
+                return _compact_field(value)
+    return "<none>"
+
+
+def _log_frame_gap_owner(
+    widget,
+    metrics: _PaintMetrics,
+    *,
+    gap_ms: float,
+    paint_duration_ms: float,
+    stall_context: dict | None,
+    active_transition_window: bool,
+    current: dict,
+    previous: dict,
+) -> None:
+    """Emit exactly one compact owner record for each >33 ms paint gap."""
+    request_age_ms = None
+    if metrics.samples:
+        request_age_ms = metrics.samples[-1].request_to_paint_age_ms
+    target_hz = int(getattr(widget, "_render_timer_fps", 0) or 0)
+    if target_hz <= 0:
+        target_hz = int(
+            getattr(getattr(widget, "_animation_manager", None), "fps", 0) or 0
+        )
+    try:
+        gc_counts = "/".join(str(value) for value in gc.get_count())
+    except Exception:
+        gc_counts = "na"
+    ui_completed_ts = float(current.get("ui_last_completed_ts", 0.0) or 0.0)
+    ui_callback_age_ms = (
+        max(0.0, (time.time() - ui_completed_ts) * 1000.0)
+        if ui_completed_ts > 0.0
+        else -1.0
+    )
+    severity = "over_50" if gap_ms > 50.0 else "over_33"
+    logger.warning(
+        "[PERF][FRAME_GAP_OWNER] severity=%s screen=%s gap_ms=%.2f "
+        "paint_ms=%.2f request_age_ms=%s target_hz=%d "
+        "transition_active=%d transition=%s vis_mode=%s vis_phase=%d "
+        "waiting_engine=%d waiting_frame=%d bubble_worker=%d bubble_result=%d "
+        "io_queue=%d compute_queue=%d io_active=%d compute_active=%d "
+        "io_callbacks=%d compute_callbacks=%d "
+        "io_queue_wait_ms=%.2f compute_queue_wait_ms=%.2f "
+        "io_exec_ms=%.2f compute_exec_ms=%.2f "
+        "io_callback_ms=%.2f compute_callback_ms=%.2f "
+        "ui_callbacks=%d ui_active=%d ui_queue=%d ui_failed=%d "
+        "last_ui=%s last_ui_ms=%.2f last_ui_age_ms=%.2f "
+        "media_display=%d media_emit=%d media_repaints=%d "
+        "overlay_set=%d overlay_repaints=%d overlay_paints=%d "
+        "render_requests=%d skipped_requests=%d gc_enabled=%d gc_counts=%s",
+        severity,
+        _get_screen_index(widget),
+        gap_ms,
+        paint_duration_ms,
+        f"{request_age_ms:.2f}" if request_age_ms is not None else "na",
+        target_hz,
+        int(active_transition_window),
+        _transition_label(stall_context),
+        _compact_field(current.get("vis_mode")),
+        int(current.get("vis_phase", 0) or 0),
+        int(bool(current.get("vis_waiting_engine", False))),
+        int(bool(current.get("vis_waiting_frame", False))),
+        int(bool(current.get("bubble_worker_pending", False))),
+        int(bool(current.get("bubble_result_pending", False))),
+        int(current.get("io_queue_depth", -1) or 0),
+        int(current.get("compute_queue_depth", -1) or 0),
+        int(current.get("io_worker_active", 0) or 0),
+        int(current.get("compute_worker_active", 0) or 0),
+        _counter_delta(current, previous, "io_callbacks_delivered"),
+        _counter_delta(current, previous, "compute_callbacks_delivered"),
+        float(current.get("io_last_queue_wait_ms", 0.0) or 0.0),
+        float(current.get("compute_last_queue_wait_ms", 0.0) or 0.0),
+        float(current.get("io_last_execution_ms", 0.0) or 0.0),
+        float(current.get("compute_last_execution_ms", 0.0) or 0.0),
+        float(current.get("io_last_callback_ms", 0.0) or 0.0),
+        float(current.get("compute_last_callback_ms", 0.0) or 0.0),
+        _counter_delta(current, previous, "ui_delivered"),
+        int(current.get("ui_active", 0) or 0),
+        int(current.get("ui_queue_depth", 0) or 0),
+        _counter_delta(current, previous, "ui_failed"),
+        _compact_field(current.get("ui_last_callback")),
+        float(current.get("ui_last_duration_ms", 0.0) or 0.0),
+        ui_callback_age_ms,
+        _counter_delta(current, previous, "media_display_total"),
+        _counter_delta(current, previous, "media_emit_total"),
+        _counter_delta(current, previous, "media_update_total"),
+        _counter_delta(current, previous, "overlay_set_total"),
+        _counter_delta(current, previous, "overlay_update_total"),
+        _counter_delta(current, previous, "overlay_paint_total"),
+        metrics.render_request_count
+        - int(previous.get("render_request_count", metrics.render_request_count) or 0),
+        metrics.skipped_request_count
+        - int(previous.get("skipped_request_count", metrics.skipped_request_count) or 0),
+        int(gc.isenabled()),
+        gc_counts,
+    )
 
 
 # ------------------------------------------------------------------
@@ -197,6 +395,24 @@ def record_paint_metrics(
     now = time.time()
     stall_context = _get_stall_context(widget)
     active_transition_window = _is_active_transition_paint_window(stall_context)
+    owner_snapshot = _frame_owner_snapshot(widget)
+    owner_snapshot["render_request_count"] = metrics.render_request_count
+    owner_snapshot["skipped_request_count"] = metrics.skipped_request_count
+    previous_owner_snapshot = metrics.owner_snapshot
+    metrics.owner_snapshot = owner_snapshot
+    if dt_seconds is not None:
+        gap_ms = dt_seconds * 1000.0
+        if gap_ms > 33.0:
+            _log_frame_gap_owner(
+                widget,
+                metrics,
+                gap_ms=gap_ms,
+                paint_duration_ms=paint_duration_ms,
+                stall_context=stall_context,
+                active_transition_window=active_transition_window,
+                current=owner_snapshot,
+                previous=previous_owner_snapshot,
+            )
     if paint_duration_ms > widget._paint_slow_threshold_ms:
         if active_transition_window and now - widget._paint_warning_last_ts > 0.5:
             logger.warning(

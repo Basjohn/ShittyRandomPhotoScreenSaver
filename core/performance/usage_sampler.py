@@ -452,6 +452,12 @@ class UsageTelemetryService:
         config = self._thread_manager.config
         category_getter = getattr(self._thread_manager, "get_task_category_stats", None)
         categories = category_getter() if callable(category_getter) else {}
+        diagnostic_getter = getattr(
+            self._thread_manager,
+            "get_diagnostic_snapshot",
+            None,
+        )
+        diagnostics = diagnostic_getter() if callable(diagnostic_getter) else {}
         return {
             "tm_active": non_usage_active,
             "tm_io_max": int(config.get(ThreadPoolType.IO, 0) or 0),
@@ -464,6 +470,11 @@ class UsageTelemetryService:
             "tm_compute_failed": int(compute_stats.get("failed", 0) or 0),
             "tm_categories": json.dumps(
                 categories,
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+            "tm_delivery": json.dumps(
+                diagnostics,
                 separators=(",", ":"),
                 sort_keys=True,
             ),
@@ -523,7 +534,7 @@ class UsageTelemetryService:
                 "tm_active=%d tm_io_max=%d tm_compute_max=%d "
                 "tm_io_submitted=%d tm_io_completed=%d tm_io_failed=%d "
                 "tm_compute_submitted=%d tm_compute_completed=%d tm_compute_failed=%d "
-                "tm_categories=%s",
+                "tm_categories=%s tm_delivery=%s",
                 sequence,
                 _fmt(cadence_gap_ms),
                 skipped,
@@ -591,6 +602,7 @@ class UsageTelemetryService:
                 threads["tm_compute_completed"],
                 threads["tm_compute_failed"],
                 threads["tm_categories"],
+                threads["tm_delivery"],
             )
         except Exception:
             collect_ms = (time.perf_counter() - started) * 1000.0

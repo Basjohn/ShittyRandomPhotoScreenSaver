@@ -355,6 +355,10 @@ def deactivate_impl(widget: Any) -> None:
         widget._reset_latency_diagnostics()
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to reset latency diagnostics on deactivate", exc_info=True)
+    try:
+        widget._reset_bubble_cadence()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to reset Bubble cadence on deactivate", exc_info=True)
 
     try:
         engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
@@ -421,6 +425,10 @@ def stop_legacy(widget: Any) -> None:
         widget._reset_latency_diagnostics()
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to reset latency diagnostics on stop", exc_info=True)
+    try:
+        widget._reset_bubble_cadence()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to reset Bubble cadence on stop", exc_info=True)
     widget._startup_secondary_stage_pending = False
     widget._startup_hot_start_started = False
     widget._startup_wake_deferred = False

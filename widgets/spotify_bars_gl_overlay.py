@@ -154,6 +154,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._perf_paint_count: int = 0
         self._perf_update_request_count: int = 0
         self._perf_geometry_change_count: int = 0
+        self._perf_set_state_total: int = 0
+        self._perf_paint_total: int = 0
+        self._perf_update_request_total: int = 0
         self._perf_last_log_ts: float = time.monotonic()
         
         # Active visualization mode
@@ -461,6 +464,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
     def _request_frame_update(self, *, force: bool = False) -> None:
         del force
         self._perf_update_request_count += 1
+        self._perf_update_request_total += 1
         self.update()
 
     # ------------------------------------------------------------------
@@ -665,6 +669,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         ):
             return
         self._perf_set_state_count += 1
+        self._perf_set_state_total += 1
         osc_entering_idle = self._vis_mode == "oscilloscope" and was_playing and not bool(playing)
         osc_entering_live = self._vis_mode == "oscilloscope" and (not was_playing) and bool(playing)
 
@@ -1373,6 +1378,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
     def paintGL(self) -> None:  # type: ignore[override]
         self._perf_paint_count += 1
+        self._perf_paint_total += 1
         # Skip rendering until initializeGL has completed to avoid
         # uninitialized buffer artifacts (green dots on first frame)
         # Use GLStateManager for proper state tracking

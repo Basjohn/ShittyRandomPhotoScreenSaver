@@ -454,11 +454,12 @@ def log_perf_snapshot(widget: Any, reset: bool = False) -> None:
             bubble_perf = getattr(widget, "_bubble_last_perf_diag", None)
             if isinstance(bubble_perf, dict) and bubble_perf:
                 logger.info(
-                    "[PERF] [SPOTIFY_VIS][BUBBLE] worker_ms=%.2f tick_ms=%.2f collision_ms=%.2f snapshot_ms=%.2f pairs=%d overlaps=%d passes=%d active=%d trail_payload=%s trail_floats=%d",
+                    "[PERF] [SPOTIFY_VIS][BUBBLE] worker_ms=%.2f tick_ms=%.2f collision_ms=%.2f snapshot_ms=%.2f batch_size=%d pairs=%d overlaps=%d passes=%d active=%d trail_payload=%s trail_floats=%d",
                     float(bubble_perf.get("worker_total_ms", 0.0) or 0.0),
                     float(bubble_perf.get("tick_ms", 0.0) or 0.0),
                     float(bubble_perf.get("collision_ms", 0.0) or 0.0),
                     float(bubble_perf.get("snapshot_ms", 0.0) or 0.0),
+                    int(bubble_perf.get("batch_size", 1.0) or 1),
                     int(bubble_perf.get("collision_pairs", 0.0) or 0),
                     int(bubble_perf.get("collision_overlaps", 0.0) or 0),
                     int(bubble_perf.get("collision_passes", 0.0) or 0),
@@ -468,6 +469,28 @@ def log_perf_snapshot(widget: Any, reset: bool = False) -> None:
                 )
         except Exception:
             logger.debug("[SPOTIFY_VIS] Bubble PERF diagnostics logging failed", exc_info=True)
+        try:
+            cadence = getattr(widget, "_bubble_cadence_state", None)
+            if cadence is not None:
+                cadence_diag = cadence.diagnostic_snapshot(reset=reset)
+                logger.info(
+                    "[PERF] [SPOTIFY_VIS][BUBBLE_CADENCE] offered=%d submitted_tasks=%d "
+                    "submitted_packets=%d avg_batch=%.2f pending=%d cadence_deferrals=%d "
+                    "busy_deferrals=%d coalesced=%d stale_results=%d",
+                    int(cadence_diag.get("offered_packets", 0)),
+                    int(cadence_diag.get("submitted_tasks", 0)),
+                    int(cadence_diag.get("submitted_packets", 0)),
+                    float(cadence_diag.get("average_batch_size", 0.0)),
+                    int(cadence_diag.get("pending_packets", 0)),
+                    int(cadence_diag.get("cadence_deferrals", 0)),
+                    int(cadence_diag.get("busy_deferrals", 0)),
+                    int(cadence_diag.get("coalesced_packets", 0)),
+                    int(getattr(widget, "_bubble_stale_result_count", 0) or 0),
+                )
+                if reset:
+                    widget._bubble_stale_result_count = 0
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Bubble cadence PERF logging failed", exc_info=True)
     except Exception:
         logger.debug("[SPOTIFY_VIS] PERF metrics logging failed", exc_info=True)
     finally:

@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 
 _PAINT_TIMING_WINDOW_SIZE = 512
@@ -152,6 +152,7 @@ class _PaintMetrics:
     _active_scene_generation: int = 0
     _active_request_to_paint_age_ms: Optional[float] = None
     _active_presented_frame_index: int = 0
+    owner_snapshot: dict[str, Any] = field(default_factory=dict)
     samples: deque[_PaintTimingSample] = field(
         default_factory=lambda: deque(maxlen=_PAINT_TIMING_WINDOW_SIZE)
     )

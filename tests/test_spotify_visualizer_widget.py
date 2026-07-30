@@ -581,10 +581,13 @@ def test_latency_logging_suppresses_pre_ready_startup_warning(monkeypatch):
         _last_audio_ts=5.0,
         _last_smooth_ts=-1.0,
         get_generation_id=lambda: 8,
+        get_activation_id=lambda: 3,
         get_latest_generation_with_frame=lambda: 7,
+        get_latest_authoritative_frame=lambda: (5.0, 7, 3),
     )
     widget = SimpleNamespace(
         _enabled=True,
+        _spotify_playing=True,
         _latency_audio_ready=False,
         _latency_activation_started_ts=10.0,
         _latency_last_log_ts=0.0,
@@ -612,10 +615,13 @@ def test_latency_logging_warns_once_current_activation_is_ready(monkeypatch):
         _last_audio_ts=0.0,
         _last_smooth_ts=14.9,
         get_generation_id=lambda: 8,
+        get_activation_id=lambda: 3,
         get_latest_generation_with_frame=lambda: 8,
+        get_latest_authoritative_frame=lambda: (14.9, 8, 3),
     )
     widget = SimpleNamespace(
         _enabled=True,
+        _spotify_playing=True,
         _latency_audio_ready=False,
         _latency_activation_started_ts=10.0,
         _latency_last_log_ts=0.0,
@@ -635,7 +641,14 @@ def test_latency_logging_warns_once_current_activation_is_ready(monkeypatch):
     tick_pipeline.log_audio_latency_metrics(widget, engine, now_ts=15.0, force_reason=None)
 
     assert widget._latency_audio_ready is True
-    assert calls == [("warning", "[SPOTIFY_VIS][LATENCY] lag_ms=100.0 mode=bubble transition_phase=0 pending=<none>")]
+    assert calls == [
+        (
+            "warning",
+            "[SPOTIFY_VIS][LATENCY] lag_ms=100.0 severity=elevated mode=bubble "
+            "transition_phase=0 pending=<none> engine_generation=8 activation_id=3 "
+            "frame_generation=8 frame_activation=3",
+        )
+    ]
 
 
 def test_latency_logging_suppresses_paused_idle_stale_audio_noise(monkeypatch):
@@ -643,7 +656,9 @@ def test_latency_logging_suppresses_paused_idle_stale_audio_noise(monkeypatch):
         _last_audio_ts=5.0,
         _last_smooth_ts=5.0,
         get_generation_id=lambda: 8,
+        get_activation_id=lambda: 3,
         get_latest_generation_with_frame=lambda: 8,
+        get_latest_authoritative_frame=lambda: (5.0, 8, 3),
     )
     widget = SimpleNamespace(
         _enabled=True,
@@ -664,20 +679,28 @@ def test_latency_logging_suppresses_paused_idle_stale_audio_noise(monkeypatch):
     monkeypatch.setattr(tick_pipeline.logger, "error", lambda msg: calls.append(("error", msg)))
     monkeypatch.setattr(tick_pipeline.logger, "warning", lambda msg: calls.append(("warning", msg)))
 
-    tick_pipeline.log_audio_latency_metrics(widget, engine, now_ts=3605.0, force_reason=None)
+    tick_pipeline.log_audio_latency_metrics(
+        widget,
+        engine,
+        now_ts=3605.0,
+        force_reason="transition_start",
+    )
 
     assert calls == []
 
 
-def test_latency_logging_force_probe_remains_active_before_ready(monkeypatch):
+def test_latency_logging_force_probe_requires_fresh_current_frame(monkeypatch):
     engine = SimpleNamespace(
         _last_audio_ts=5.0,
         _last_smooth_ts=-1.0,
         get_generation_id=lambda: 8,
+        get_activation_id=lambda: 3,
         get_latest_generation_with_frame=lambda: 7,
+        get_latest_authoritative_frame=lambda: (5.0, 7, 3),
     )
     widget = SimpleNamespace(
         _enabled=True,
+        _spotify_playing=True,
         _latency_audio_ready=False,
         _latency_activation_started_ts=10.0,
         _latency_last_log_ts=0.0,
@@ -697,7 +720,52 @@ def test_latency_logging_force_probe_remains_active_before_ready(monkeypatch):
     tick_pipeline.log_audio_latency_metrics(widget, engine, now_ts=15.0, force_reason="transition_start")
 
     assert widget._latency_audio_ready is False
-    assert calls == [("error", "[!!!!][SPOTIFY_VIS][LATENCY] lag_ms=10000.0 mode=bubble transition_phase=0 pending=<none> trigger=transition_start")]
+    assert calls == []
+
+
+def test_latency_logging_rate_limits_force_probes_per_authoritative_epoch(monkeypatch):
+    source = {"ts": 19.8}
+    engine = SimpleNamespace(
+        get_generation_id=lambda: 8,
+        get_activation_id=lambda: 3,
+        get_latest_generation_with_frame=lambda: 8,
+        get_latest_authoritative_frame=lambda: (source["ts"], 8, 3),
+    )
+    widget = SimpleNamespace(
+        _enabled=True,
+        _spotify_playing=True,
+        _latency_audio_ready=False,
+        _latency_activation_started_ts=10.0,
+        _latency_last_log_ts=0.0,
+        _latency_log_interval=10.0,
+        _latency_error_ms=150.0,
+        _latency_warn_ms=80.0,
+        _latency_last_signature=None,
+        _mode_transition_phase=0,
+        _vis_mode_str="bubble",
+        _mode_transition_pending=None,
+    )
+    calls: list[str] = []
+    monkeypatch.setattr(tick_pipeline, "is_viz_logging_enabled", lambda: True)
+    monkeypatch.setattr(tick_pipeline.logger, "warning", calls.append)
+
+    tick_pipeline.log_audio_latency_metrics(
+        widget, engine, now_ts=20.0, force_reason="transition_start"
+    )
+    source["ts"] = 29.7
+    tick_pipeline.log_audio_latency_metrics(
+        widget, engine, now_ts=30.0, force_reason="transition_end"
+    )
+
+    assert len(calls) == 1
+
+    # A healthy frame re-arms a later warning in the same engine epoch.
+    source["ts"] = 39.95
+    tick_pipeline.log_audio_latency_metrics(widget, engine, now_ts=40.0)
+    source["ts"] = 49.8
+    tick_pipeline.log_audio_latency_metrics(widget, engine, now_ts=50.0)
+
+    assert len(calls) == 2
 
 
 def test_bars_snapshot_gate_skips_emit_when_logger_info_disabled(monkeypatch):
@@ -2834,7 +2902,7 @@ def test_bubble_dispatch_reads_pre_agc_snapshot_once_per_tick(qt_app, qtbot, mon
 
 
 @pytest.mark.qt
-def test_bubble_dispatch_reuses_cached_payload_dicts_between_ticks(qt_app, qtbot, monkeypatch):
+def test_bubble_dispatch_freezes_payload_dicts_at_submission_boundary(qt_app, qtbot, monkeypatch):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
 
@@ -2863,9 +2931,10 @@ def test_bubble_dispatch_reuses_cached_payload_dicts_between_ticks(qt_app, qtbot
     widget._bubble_compute_pending = False
     widget._thread_manager = _BubbleDispatchThreadManager()
     widget._spotify_playing = True
-    widget._bubble_last_tick_ts = time.time() - 0.016
+    first_now = time.time()
+    widget._bubble_last_tick_ts = first_now - 0.016
 
-    tick_pipeline.dispatch_bubble_simulation(widget, time.time())
+    tick_pipeline.dispatch_bubble_simulation(widget, first_now)
     first_call = widget._thread_manager.calls[-1]
     first_energy = first_call["args"][1]
     first_settings = first_call["args"][2]
@@ -2874,14 +2943,17 @@ def test_bubble_dispatch_reuses_cached_payload_dicts_between_ticks(qt_app, qtbot
     widget._bubble_compute_pending = False
     widget._bubble_stream_constant_speed = 0.83
     widget._bubble_big_bass_pulse = 0.92
-    widget._bubble_last_tick_ts = time.time() - 0.016
+    second_now = first_now + 0.020
+    widget._bubble_last_tick_ts = second_now - 0.016
 
-    tick_pipeline.dispatch_bubble_simulation(widget, time.time())
+    tick_pipeline.dispatch_bubble_simulation(widget, second_now)
     second_call = widget._thread_manager.calls[-1]
 
-    assert second_call["args"][1] is first_energy
-    assert second_call["args"][2] is first_settings
-    assert second_call["args"][3] is first_pulse
+    assert second_call["args"][1] is not first_energy
+    assert second_call["args"][2] is not first_settings
+    assert second_call["args"][3] is not first_pulse
+    assert first_settings["bubble_stream_constant_speed"] != pytest.approx(0.83)
+    assert first_pulse["big_bass_pulse"] != pytest.approx(0.92)
     assert second_call["args"][2]["bubble_stream_constant_speed"] == pytest.approx(0.83)
     assert second_call["args"][3]["big_bass_pulse"] == pytest.approx(0.92)
 
@@ -2982,8 +3054,10 @@ def test_bubble_compute_done_stages_pending_result_until_ui_tick_consumes_it(qt_
         success=True,
         result=([1.0, 2.0], [3.0], [4.0], 5, {"worker_total_ms": 1.25, "collision_pairs": 12.0}),
     )
+    task_token = (widget._bubble_cadence_state.activation_token, 1)
+    widget._bubble_active_task_token = task_token
 
-    widget._bubble_compute_done(result)
+    widget._bubble_compute_done(result, task_token=task_token)
 
     assert widget._bubble_compute_pending is False
     assert widget._has_pending_bubble_result() is True
@@ -9652,9 +9726,15 @@ def test_shared_nonplaying_seed_allows_idle_startup_reveal_for_bubble(qt_app, qt
     assert fade_calls == [1500]
 
 @pytest.mark.qt
-def test_spotify_visualizer_media_update_sets_playing_state(qt_app):
+def test_spotify_visualizer_media_update_sets_playing_state(qt_app, monkeypatch):
     """Visualizer should track playing state from media updates."""
     vis = SpotifyVisualizerWidget(parent=None, bar_count=10)
+    latency_resets = []
+    monkeypatch.setattr(
+        vis,
+        "_reset_latency_diagnostics",
+        lambda: latency_resets.append(bool(vis._spotify_playing)),
+    )
     
     vis._spotify_playing = True
     vis.handle_media_update({"state": "paused"})
@@ -9665,6 +9745,7 @@ def test_spotify_visualizer_media_update_sets_playing_state(qt_app):
     
     vis.handle_media_update({"state": "playing"})
     assert vis._spotify_playing is True
+    assert latency_resets == [False, True]
     
     vis.deleteLater()
 

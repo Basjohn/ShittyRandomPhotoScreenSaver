@@ -352,24 +352,17 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
 
 
 def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
-    """Snapshot bubble settings on UI thread and submit to COMPUTE pool."""
+    """Author one Bubble step and submit a bounded mode-owned compute batch."""
     has_pending_result = getattr(widget, "_has_pending_bubble_result", None)
     pending_result = bool(has_pending_result()) if callable(has_pending_result) else False
     if (
         widget._vis_mode_str != 'bubble'
-        or widget._bubble_compute_pending
-        or pending_result
         or widget._mode_teardown_block_until_ready
     ):
-        if pending_result:
-            widget._bubble_pending_result_skip_count = int(
-                getattr(widget, "_bubble_pending_result_skip_count", 0) or 0
-            ) + 1
         return
     if widget._thread_manager is None:
         return
 
-    widget._bubble_compute_pending = True
     # Bubble owns a full-dynamic continuous energy path. Using the shared
     # post-AGC snapshot here can flatten the mode into a near-constant plateau
     # under hot floor pressure, especially after preset/custom transitions.
@@ -404,6 +397,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         }
         widget._bubble_dispatch_energy_snapshot = eb_snap
     prev_dispatch_bass = float(eb_snap.get("bass", 0.0) or 0.0)
+    has_discrete_impulse = False
 
     if not widget._spotify_playing:
         dt_bubble *= _IDLE_BUBBLE_DT_SCALE
@@ -436,6 +430,11 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         _onset_detected = bool(getattr(tb, 'onset_detected', False)) if tb else False
         _onset_type = str(getattr(tb, 'onset_type', '')) if tb else ''
         _onset_strength = float(getattr(tb, 'onset_strength', 0.0) or 0.0) if tb else 0.0
+        has_discrete_impulse = bool(
+            _onset_detected
+            or _t_bass > 0.001
+            or _t_mid > 0.001
+        )
         _t_gain = getattr(widget, '_transient_pulse_gain', 1.0)
         _t_clamp = getattr(widget, '_transient_clamp', 1.5)
         _bmix_bass = getattr(widget, '_bubble_transient_mix_bass', 0.75)
@@ -561,13 +560,62 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         'big_contraction_bias': widget._bubble_big_contraction_bias,
         'big_size_clamp': widget._bubble_big_size_clamp,
     })
-    widget._thread_manager.submit_compute_task(
-        widget._bubble_compute_worker,
-        dt_bubble, eb_snap, sim_settings, pulse_params,
-        callback=widget._bubble_compute_done,
-        task_id=getattr(widget, "_bubble_sim_task_id", f"bubble_sim_{id(widget)}"),
-        category="visualizer.bubble_simulation",
+
+    cadence = getattr(widget, "_bubble_cadence_state", None)
+    if cadence is None:
+        from widgets.spotify_visualizer.bubble_cadence import BubbleCadenceState
+
+        cadence = BubbleCadenceState(submissions_hz=60.0, max_batch_size=2)
+        widget._bubble_cadence_state = cadence
+        widget._bubble_active_task_token = None
+    packet = cadence.next_packet(
+        dt=dt_bubble,
+        energy=eb_snap,
+        settings=sim_settings,
+        pulse=pulse_params,
+        has_discrete_impulse=has_discrete_impulse,
     )
+    cadence.offer(packet, now_ts=now_ts)
+    ready = cadence.take_ready(
+        worker_busy=bool(widget._bubble_compute_pending),
+        result_waiting=pending_result,
+    )
+    if ready is None:
+        if pending_result:
+            widget._bubble_pending_result_skip_count = int(
+                getattr(widget, "_bubble_pending_result_skip_count", 0) or 0
+            ) + 1
+        return
+
+    task_token, batch = ready
+    first_packet = batch[0]
+    additional_packets = batch[1:]
+    widget._bubble_active_task_token = task_token
+    widget._bubble_compute_pending = True
+
+    def _on_done(task_result, *, _task_token=task_token) -> None:
+        widget._bubble_compute_done(task_result, task_token=_task_token)
+
+    try:
+        widget._thread_manager.submit_compute_task(
+            widget._bubble_compute_worker,
+            first_packet.dt,
+            first_packet.energy,
+            first_packet.settings,
+            first_packet.pulse,
+            additional_packets,
+            callback=_on_done,
+            task_id=getattr(widget, "_bubble_sim_task_id", f"bubble_sim_{id(widget)}"),
+            category="visualizer.bubble_simulation",
+        )
+    except Exception:
+        widget._bubble_active_task_token = None
+        widget._bubble_compute_pending = False
+        cadence.restore_batch(batch)
+        logger.warning(
+            "[SPOTIFY_VIS][FALLBACK] Bubble compute submission failed",
+            exc_info=True,
+        )
 
 
 # ------------------------------------------------------------------
@@ -1021,31 +1069,34 @@ def _ensure_latency_logging_ready(
     widget: Any,
     engine: Optional[Any],
     *,
-    last_audio_ts: float,
+    source_ts: float,
+    source_generation: int,
+    source_activation: int,
+    current_generation: int,
+    current_activation: int,
+    latest_frame_generation: int,
 ) -> bool:
-    """Return True once the current activation has seen live audio or a fresh engine frame."""
-    if bool(getattr(widget, "_latency_audio_ready", False)):
-        return True
+    """Return True only for a fresh frame owned by the current engine epoch."""
     if engine is None:
         return False
 
     activation_started_ts = float(getattr(widget, "_latency_activation_started_ts", 0.0) or 0.0)
-    has_live_audio = last_audio_ts > 0.0 and (
-        activation_started_ts <= 0.0 or last_audio_ts >= (activation_started_ts - 0.05)
+    has_fresh_timestamp = source_ts > 0.0 and (
+        activation_started_ts <= 0.0 or source_ts >= (activation_started_ts - 0.05)
     )
+    has_current_frame = (
+        current_generation >= 0
+        and current_activation >= 0
+        and latest_frame_generation == current_generation
+        and source_generation == current_generation
+        and source_activation == current_activation
+    )
+    if not (has_fresh_timestamp and has_current_frame):
+        widget._latency_audio_ready = False
+        return False
 
-    try:
-        current_generation = int(engine.get_generation_id())
-    except Exception:
-        current_generation = -1
-    try:
-        latest_frame_generation = int(engine.get_latest_generation_with_frame())
-    except Exception:
-        latest_frame_generation = -1
-
-    has_current_frame = current_generation >= 0 and latest_frame_generation >= current_generation
-    if has_live_audio or has_current_frame:
-        widget._latency_audio_ready = True
+    widget._latency_audio_ready = True
+    widget._latency_authority = (current_generation, current_activation)
 
     return bool(getattr(widget, "_latency_audio_ready", False))
 
@@ -1061,22 +1112,53 @@ def log_audio_latency_metrics(
         return
     if not bool(getattr(widget, "_enabled", False)):
         return
+    # Transition probes request a sample; they never make paused idle age a
+    # meaningful latency measurement.
+    if not bool(getattr(widget, "_spotify_playing", False)):
+        return
 
-    last_audio_ts = float(getattr(engine, "_last_audio_ts", 0.0) or 0.0)
-    last_smooth_ts = float(getattr(engine, "_last_smooth_ts", -1.0) or -1.0)
-    source_ts = max(last_audio_ts, last_smooth_ts)
+    try:
+        current_generation = int(engine.get_generation_id())
+    except Exception:
+        current_generation = -1
+    try:
+        current_activation = int(engine.get_activation_id())
+    except Exception:
+        current_activation = -1
+    try:
+        latest_frame_generation = int(engine.get_latest_generation_with_frame())
+    except Exception:
+        latest_frame_generation = -1
+    try:
+        source_ts, source_generation, source_activation = (
+            engine.get_latest_authoritative_frame()
+        )
+        source_ts = float(source_ts)
+        source_generation = int(source_generation)
+        source_activation = int(source_activation)
+    except Exception:
+        # Compatibility for injected test engines. Production engines expose
+        # the generation-tagged authoritative snapshot above.
+        source_ts = float(getattr(engine, "_last_smooth_ts", -1.0) or -1.0)
+        source_generation = current_generation
+        source_activation = current_activation
     if source_ts <= 0.0:
         return
 
-    force_logging = bool(force_reason)
-    if not force_logging and not bool(getattr(widget, "_spotify_playing", True)):
-        return
-    ready = _ensure_latency_logging_ready(widget, engine, last_audio_ts=last_audio_ts)
-    if not ready and not force_logging:
+    ready = _ensure_latency_logging_ready(
+        widget,
+        engine,
+        source_ts=source_ts,
+        source_generation=source_generation,
+        source_activation=source_activation,
+        current_generation=current_generation,
+        current_activation=current_activation,
+        latest_frame_generation=latest_frame_generation,
+    )
+    if not ready:
         return
     if (
-        not force_logging
-        and (now_ts - widget._latency_last_log_ts) < widget._latency_log_interval
+        (now_ts - widget._latency_last_log_ts) < widget._latency_log_interval
     ):
         return
 
@@ -1086,33 +1168,44 @@ def log_audio_latency_metrics(
     pending = getattr(widget, "_mode_transition_pending", None)
     pending_mode = getattr(pending, "name", None) if pending is not None else None
 
-    level: Optional[str] = None
-    if lag_ms >= widget._latency_error_ms:
-        level = "error"
-    elif lag_ms >= widget._latency_warn_ms:
-        level = "warning"
-
-    if level is None:
+    if lag_ms < widget._latency_warn_ms:
+        # A recovered healthy sample re-arms one future bounded warning.
+        widget._latency_last_signature = None
         return
 
-    rounded = round(lag_ms, 1)
-    signature = (level, rounded, mode, phase, pending_mode, force_reason)
+    severity = "high" if lag_ms >= widget._latency_error_ms else "elevated"
+    signature = (
+        mode,
+        current_generation,
+        current_activation,
+        source_generation,
+        source_activation,
+    )
     if signature == widget._latency_last_signature:
         return
     widget._latency_last_signature = signature
 
     trigger_suffix = f" trigger={force_reason}" if force_reason else ""
-    prefix = "[SPOTIFY_VIS][LATENCY]"
-    if level == "error":
-        prefix = "[!!!!][SPOTIFY_VIS][LATENCY]"
     msg = (
-        f"{prefix} lag_ms=%.1f mode=%s transition_phase=%d pending=%s%s"
-        % (lag_ms, mode, phase, pending_mode or "<none>", trigger_suffix)
+        "[SPOTIFY_VIS][LATENCY] lag_ms=%.1f severity=%s mode=%s "
+        "transition_phase=%d pending=%s engine_generation=%d "
+        "activation_id=%d frame_generation=%d frame_activation=%d%s"
+        % (
+            lag_ms,
+            severity,
+            mode,
+            phase,
+            pending_mode or "<none>",
+            current_generation,
+            current_activation,
+            source_generation,
+            source_activation,
+            trigger_suffix,
+        )
     )
-    if level == "error":
-        logger.error(msg)
-    else:
-        logger.warning(msg)
+    # Source-frame age is diagnostic evidence, not proof that presentation is
+    # stale. Actual presentation-staleness owners may still log ERROR.
+    logger.warning(msg)
 
     widget._latency_last_log_ts = now_ts
 
@@ -1239,5 +1332,3 @@ def on_tick(widget: Any) -> None:
             used_gpu,
             phase_payload,
         )
-
-
