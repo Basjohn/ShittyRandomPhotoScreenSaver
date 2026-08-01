@@ -374,6 +374,22 @@ class UsageTelemetryService:
         self._last_request_at: float | None = None
         self._skipped_samples = 0
         self._sequence = 0
+        self._latest_lifecycle_snapshot: dict[str, Any] | None = None
+
+    def get_latest_lifecycle_snapshot(self) -> dict[str, Any]:
+        """Return the latest worker-collected totals without collecting again."""
+
+        snapshot = self._latest_lifecycle_snapshot
+        if snapshot is None:
+            return {}
+        result = dict(snapshot)
+        sampled_at = result.get("sampled_monotonic")
+        if sampled_at is not None:
+            result["sample_age_ms"] = max(
+                0.0,
+                (time.monotonic() - float(sampled_at)) * 1000.0,
+            )
+        return result
 
     def start(self) -> bool:
         if not self._stopped:
@@ -507,6 +523,22 @@ class UsageTelemetryService:
             gpu = self._gpu_collector.collect(process.pids)
             threads = self._thread_snapshot()
             resources = self._resource_snapshot()
+            self._latest_lifecycle_snapshot = {
+                "sequence": sequence,
+                "sampled_monotonic": time.monotonic(),
+                "process_count": process.process_count,
+                "child_count": process.child_count,
+                "rss_app_mb": process.rss_app_mb,
+                "rss_main_mb": process.rss_main_mb,
+                "rss_children_mb": process.rss_children_mb,
+                "private_app_mb": process.private_app_mb,
+                "vms_app_mb": process.vms_app_mb,
+                "threads_app": process.threads_app,
+                "handles_app": process.handles_app,
+                "vram_supported": gpu.vram_supported,
+                "vram_dedicated_mb": gpu.vram_dedicated_mb,
+                "vram_shared_mb": gpu.vram_shared_mb,
+            }
             collect_ms = (time.perf_counter() - started) * 1000.0
             logger.info(
                 "[USAGE] sample seq=%d cadence_gap_ms=%s skipped=%d collect_ms=%s "

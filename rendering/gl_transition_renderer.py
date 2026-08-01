@@ -111,6 +111,17 @@ class GLTransitionRenderer:
             getters: Dict mapping program names to getter functions
         """
         self._program_getters = getters
+
+    def detach(self) -> None:
+        """Release compositor callbacks after strict GL teardown completes."""
+
+        self._program_getters.clear()
+        self._compositor = None
+        self._get_pipeline = lambda: None
+        self._get_texture_manager = lambda: None
+        self._get_profiler = lambda: None
+        self._get_viewport_size = lambda: (0, 0)
+        self._get_render_progress = lambda _fallback: 0.0
     
     # -------------------------------------------------------------------------
     # Shader Path Rendering

@@ -475,16 +475,14 @@ def log_perf_snapshot(widget: Any, reset: bool = False) -> None:
                 cadence_diag = cadence.diagnostic_snapshot(reset=reset)
                 logger.info(
                     "[PERF] [SPOTIFY_VIS][BUBBLE_CADENCE] offered=%d submitted_tasks=%d "
-                    "submitted_packets=%d avg_batch=%.2f pending=%d cadence_deferrals=%d "
-                    "busy_deferrals=%d coalesced=%d stale_results=%d",
-                    int(cadence_diag.get("offered_packets", 0)),
+                    "publish_ratio=%.3f worker_busy_deferrals=%d "
+                    "result_waiting_deferrals=%d submission_failures=%d stale_results=%d",
+                    int(cadence_diag.get("offered_ticks", 0)),
                     int(cadence_diag.get("submitted_tasks", 0)),
-                    int(cadence_diag.get("submitted_packets", 0)),
-                    float(cadence_diag.get("average_batch_size", 0.0)),
-                    int(cadence_diag.get("pending_packets", 0)),
-                    int(cadence_diag.get("cadence_deferrals", 0)),
-                    int(cadence_diag.get("busy_deferrals", 0)),
-                    int(cadence_diag.get("coalesced_packets", 0)),
+                    float(cadence_diag.get("publish_ratio", 0.0)),
+                    int(cadence_diag.get("worker_busy_deferrals", 0)),
+                    int(cadence_diag.get("result_waiting_deferrals", 0)),
+                    int(cadence_diag.get("submission_failures", 0)),
                     int(getattr(widget, "_bubble_stale_result_count", 0) or 0),
                 )
                 if reset:

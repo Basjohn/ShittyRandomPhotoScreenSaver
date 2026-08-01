@@ -240,6 +240,33 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
         self.assertTrue(self.timer._loop_stopped_event.is_set())
         self.assertEqual(self.compositor._parent._thread_manager.active_thread_count(), 0)
 
+    def test_stop_timeout_retains_worker_and_resource_ownership(self):
+        """A live worker must block teardown instead of losing its handles."""
+
+        class _Resources:
+            def __init__(self):
+                self.unregistered = []
+
+            def unregister(self, resource_id):
+                self.unregistered.append(resource_id)
+
+        resources = _Resources()
+        timer = AdaptiveTimerStrategy(
+            self.compositor,
+            AdaptiveTimerConfig(target_fps=60, exit_immediate=True),
+        )
+        timer._resource_manager = resources
+        future = object()
+        timer._task_future = future
+        timer._task_id = "still-running"
+        timer._timer_resource_id = "timer-resource"
+
+        self.assertFalse(timer.stop())
+        self.assertIs(timer._task_future, future)
+        self.assertEqual(timer._task_id, "still-running")
+        self.assertEqual(timer._timer_resource_id, "timer-resource")
+        self.assertEqual(resources.unregistered, [])
+
     def test_render_strategy_manager_stop_waits_for_timer_loop(self):
         """Display cleanup must not drop timer ownership before the loop exits."""
         manager = AdaptiveRenderStrategyManager(self.compositor)

@@ -7,15 +7,18 @@ All functions accept the engine instance as the first parameter.
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING
 import time
 
+from PySide6.QtCore import QObject, Qt
 from PySide6.QtWidgets import QApplication
 
 from core.logging.logger import get_logger
 from core.animation import AnimationManager
 from core.performance.resource_metrics import log_lifecycle_resource_snapshot
 from core.settings import SettingsManager
+from core.threading.manager import ThreadManager
 from rendering.transition_registry import get_transition_descriptor, is_transition_available_for_hw
 from rendering.display_widget import DisplayWidget
 from ui.settings_dialog import SettingsDialog
@@ -102,6 +105,13 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
 
 def on_settings_requested(engine: ScreensaverEngine) -> None:
     """Handle settings request (S key)."""
+    if bool(getattr(engine, "_settings_dialog_active", False)) or getattr(
+        engine, "_pending_runtime_destruction_barrier", None
+    ) is not None:
+        logger.info(
+            "[LIFECYCLE] Duplicate Settings request ignored while recreation is active"
+        )
+        return
     logger.info("Settings requested - pausing screensaver and opening config")
     request_start = time.perf_counter()
     engine._settings_dialog_active = True
@@ -161,7 +171,7 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
     try:
         # stop(exit_app=False) owns the complete display/GL teardown. A second
         # teardown call here would create a shadow lifecycle path.
-        engine.stop(exit_app=False)
+        engine.stop(exit_app=False, reason="settings")
     except Exception:
         engine._settings_dialog_active = False
         try:
@@ -189,94 +199,280 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
     overall_ms = (time.perf_counter() - request_start) * 1000
     logger.info("Settings stop() completed in %.1f ms (%.1f ms since request)", stop_ms, overall_ms)
 
+    from engine.runtime_destruction import continue_after_runtime_destruction
+
+    continue_after_runtime_destruction(
+        engine,
+        partial(_open_settings_after_runtime_destroyed, engine, request_start),
+    )
+
+
+def _open_settings_after_runtime_destroyed(
+    engine: ScreensaverEngine,
+    request_start: float,
+) -> None:
+    """Open Settings only after every retired display root is destroyed."""
+
+    from engine.runtime_destruction import qt_replacement_may_run
+
     app = QApplication.instance()
+    if app is None or not qt_replacement_may_run(engine):
+        engine._settings_dialog_active = False
+        return
 
     try:
-        if app:
+        dialog_generation = (
+            f"settings-dialog:{getattr(engine, '_runtime_generation', 'unknown')}:"
+            f"{time.monotonic_ns()}"
+        )
+        try:
+            animations = AnimationManager(
+                resource_manager=engine.resource_manager,
+                owner="settings:dialog",
+                runtime_generation=dialog_generation,
+            )
+        except TypeError:
+            # Lightweight test doubles and older embedder shims do not expose
+            # lifecycle metadata; the QObject destruction barrier still owns
+            # their ordering when applicable.
             animations = AnimationManager(
                 resource_manager=engine.resource_manager,
                 owner="settings:dialog",
             )
-            dialog_init_start = time.perf_counter()
-            dialog = SettingsDialog(engine.settings_manager, animations)
-            init_ms = (time.perf_counter() - dialog_init_start) * 1000
-            since_request_ms = (time.perf_counter() - request_start) * 1000
-            logger.info(
-                "Settings dialog instantiated in %.1f ms (%.1f ms since request)",
-                init_ms,
-                since_request_ms,
-            )
-            exec_start = time.perf_counter()
-            logger.info("Entering settings dialog exec (%.1f ms since request)", (exec_start - request_start) * 1000)
-            try:
-                _ = dialog.exec()
-            finally:
-                try:
-                    animations.cleanup()
-                except Exception:
-                    logger.debug("Settings dialog AnimationManager cleanup failed", exc_info=True)
-                try:
-                    dialog.deleteLater()
-                except Exception:
-                    logger.debug("Settings dialog deleteLater failed", exc_info=True)
-            exec_duration = (time.perf_counter() - exec_start) * 1000
 
-            # After dialog closes, fully reset displays and restart
-            logger.info("Settings dialog closed, performing full-style restart of screensaver")
-            sources_changed_during_settings = bool(getattr(engine, "_sources_changed_during_settings", False))
-            engine._settings_dialog_active = False
+        dialog_init_start = time.perf_counter()
+        dialog = SettingsDialog(
+            engine.settings_manager,
+            animations,
+            runtime_generation=dialog_generation,
+        )
+        engine._active_settings_dialog = dialog
+        try:
+            dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        except Exception:
+            logger.debug("Settings dialog delete-on-close attribute unavailable", exc_info=True)
+        init_ms = (time.perf_counter() - dialog_init_start) * 1000
+        since_request_ms = (time.perf_counter() - request_start) * 1000
+        logger.info(
+            "Settings dialog instantiated in %.1f ms (%.1f ms since request)",
+            init_ms,
+            since_request_ms,
+        )
+        exec_start = time.perf_counter()
+        logger.info(
+            "Entering settings dialog exec (%.1f ms since request)",
+            (exec_start - request_start) * 1000,
+        )
+        _ = dialog.exec()
+        exec_duration = (time.perf_counter() - exec_start) * 1000
+        sources_changed = bool(
+            getattr(engine, "_sources_changed_during_settings", False)
+        )
 
-            # Reset coordinator state (halo owner, ctrl state) to avoid stale refs
-            try:
-                from rendering.multi_monitor_coordinator import get_coordinator
-                coordinator = get_coordinator()
-                coordinator.set_settings_dialog_active(False)  # Re-enable halo
-                coordinator.cleanup()
-            except Exception:
-                logger.debug("Coordinator cleanup after settings failed", exc_info=True)
-
-            DisplayWidget.suppress_pointer_input_globally(
-                700,
-                reason="settings_display_recreation",
-            )
-
-            # Reinitialize displays using current settings
-            if not engine._initialize_display():
-                logger.error("Failed to reinitialize displays after settings; quitting")
-                QApplication.quit()
-                return
-
-            # Recreate rotation timer with any updated timing settings
-            engine._setup_rotation_timer()
-
-            # Note: stop(exit_app=False) already transitioned state to STOPPED,
-            # so start() will not early-out. No need to manually set _running.
-
-            if not engine.start():
-                logger.error("Failed to restart screensaver after settings; quitting")
-                QApplication.quit()
-                return
-            log_lifecycle_resource_snapshot(
+        replacement_allowed = qt_replacement_may_run(engine)
+        continuation = (
+            partial(
+                _restart_after_settings_dialog_destroyed,
                 engine,
-                event="settings",
-                stage="after_restart",
-            )
-
-            total_duration = (time.perf_counter() - request_start) * 1000
-            logger.info(
-                "Settings lifecycle complete in %.1f ms (dialog exec %.1f ms, sources_changed=%s)",
-                total_duration,
+                request_start,
                 exec_duration,
-                sources_changed_during_settings,
+                sources_changed,
             )
+            if replacement_allowed
+            else None
+        )
+
+        from engine.runtime_destruction import RuntimeDestructionBarrier
+
+        dialog_barrier = None
+        if replacement_allowed and (
+            isinstance(dialog, QObject) or isinstance(animations, QObject)
+        ):
+            dialog_barrier = RuntimeDestructionBarrier(
+                engine,
+                reason="settings_dialog_close",
+                retiring_generation=dialog_generation,
+            )
+            if isinstance(dialog, QObject):
+                dialog_barrier.watch_qobject(dialog, label="SettingsDialog")
+                try:
+                    for child in dialog.findChildren(QObject):
+                        dialog_barrier.watch_qobject(child)
+                except RuntimeError:
+                    logger.debug(
+                        "Settings dialog children already destroyed",
+                        exc_info=True,
+                    )
+            if isinstance(animations, QObject):
+                dialog_barrier.watch_qobject(
+                    animations,
+                    label="SettingsAnimationManager",
+                )
+                timer = getattr(animations, "_timer", None)
+                if isinstance(timer, QObject):
+                    dialog_barrier.watch_qobject(
+                        timer,
+                        label="SettingsAnimationTimer",
+                    )
+
+        try:
+            animations.cleanup()
+        except Exception:
+            logger.debug(
+                "Settings dialog AnimationManager cleanup failed",
+                exc_info=True,
+            )
+        try:
+            animations.deleteLater()
+        except Exception:
+            logger.debug(
+                "Settings AnimationManager deleteLater failed",
+                exc_info=True,
+            )
+        try:
+            dialog.close()
+        except Exception:
+            logger.debug("Settings dialog close failed", exc_info=True)
+        try:
+            dialog.deleteLater()
+        except Exception:
+            logger.debug("Settings dialog deleteLater failed", exc_info=True)
+
+        try:
+            ThreadManager.cancel_scheduled_single_shots(dialog_generation)
+        except RuntimeError:
+            logger.critical(
+                "[LIFECYCLE] Settings callbacks could not be cancelled on the UI thread",
+                exc_info=True,
+            )
+            QApplication.exit(1)
+            return
+
+        engine._active_settings_dialog = None
+        if continuation is None:
+            engine._settings_dialog_active = False
+            return
+
+        if dialog_barrier is None:
+            continuation()
+        else:
+            engine._pending_runtime_destruction_barrier = dialog_barrier
+            dialog_barrier.seal()
+            dialog_barrier.then(continuation)
     except Exception as e:
+        engine._active_settings_dialog = None
         engine._settings_dialog_active = False
-        logger.exception(f"Failed to open settings dialog: {e}")
+        logger.exception("Failed to open settings dialog: %s", e)
         QApplication.quit()
+
+
+def _restart_after_settings_dialog_destroyed(
+    engine: ScreensaverEngine,
+    request_start: float,
+    exec_duration: float,
+    sources_changed_during_settings: bool,
+) -> None:
+    """Build the replacement runtime after the Settings root barrier."""
+
+    from engine.runtime_destruction import qt_replacement_may_run
+
+    if not qt_replacement_may_run(engine):
+        engine._settings_dialog_active = False
+        return
+
+    logger.info(
+        "Settings dialog destroyed, performing full-style restart of screensaver"
+    )
+    engine._settings_dialog_active = False
+    try:
+        from rendering.multi_monitor_coordinator import get_coordinator
+
+        coordinator = get_coordinator()
+        coordinator.set_settings_dialog_active(False)
+        coordinator.cleanup()
+    except Exception:
+        logger.debug("Coordinator cleanup after settings failed", exc_info=True)
+
+    DisplayWidget.suppress_pointer_input_globally(
+        700,
+        reason="settings_display_recreation",
+    )
+    if not _construct_and_start_replacement_runtime(engine, event="settings"):
+        return
+
+    total_duration = (time.perf_counter() - request_start) * 1000
+    logger.info(
+        "Settings lifecycle complete in %.1f ms "
+        "(dialog exec %.1f ms, sources_changed=%s)",
+        total_duration,
+        exec_duration,
+        sources_changed_during_settings,
+    )
+
+
+def _construct_and_start_replacement_runtime(
+    engine: ScreensaverEngine,
+    *,
+    event: str,
+) -> bool:
+    """Construct one replacement after destruction; reveal remains owner-gated."""
+
+    from engine.runtime_destruction import qt_replacement_may_run
+
+    if not qt_replacement_may_run(engine):
+        logger.info(
+            "[LIFECYCLE] Replacement runtime construction discarded during terminal shutdown"
+        )
+        return False
+    engine._runtime_lifecycle_event = event
+
+    log_lifecycle_resource_snapshot(
+        engine,
+        event=event,
+        stage="before_replacement_construction",
+    )
+    if not engine._initialize_display():
+        logger.error("Failed to initialize replacement display runtime; quitting")
+        QApplication.quit()
+        return False
+    log_lifecycle_resource_snapshot(
+        engine,
+        event=event,
+        stage="after_replacement_before_first_frame",
+    )
+    engine._setup_rotation_timer()
+    if not engine.start():
+        logger.error("Failed to start replacement display runtime; quitting")
+        QApplication.quit()
+        return False
+    log_lifecycle_resource_snapshot(
+        engine,
+        event=event,
+        stage="after_restart",
+    )
+    return True
 
 
 def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
     """Handle committed CUSTOM layout changes with a full clean runtime reload."""
+    if bool(getattr(engine, "_settings_dialog_active", False)):
+        logger.info(
+            "[LIFECYCLE] CUSTOM reload ignored while Settings owns runtime recreation"
+        )
+        return
+    if getattr(engine, "_pending_runtime_destruction_barrier", None) is not None:
+        logger.info(
+            "[LIFECYCLE] Duplicate CUSTOM reload ignored while recreation is active"
+        )
+        return
+    if (
+        getattr(engine, "display_manager", None) is None
+        or not bool(getattr(engine, "_display_initialized", False))
+    ):
+        logger.info(
+            "[LIFECYCLE] Stale CUSTOM reload ignored without a current display runtime"
+        )
+        return
     logger.info("CUSTOM layout reload requested")
 
     try:
@@ -286,7 +482,7 @@ def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
             stage="before_stop",
         )
         # stop(exit_app=False) is the single full teardown authority.
-        engine.stop(exit_app=False)
+        engine.stop(exit_app=False, reason="custom_edit")
         log_lifecycle_resource_snapshot(
             engine,
             event="custom_edit",
@@ -298,42 +494,12 @@ def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
             stage="after_display_cleanup",
         )
 
-        try:
-            from rendering.multi_monitor_coordinator import get_coordinator
-            coordinator = get_coordinator()
-            coordinator.cleanup()
-        except Exception:
-            logger.debug("Coordinator cleanup after custom layout reload failed", exc_info=True)
+        from engine.runtime_destruction import continue_after_runtime_destruction
 
-        DisplayWidget.suppress_pointer_input_globally(
-            700,
-            reason="custom_layout_runtime_reload",
-        )
-
-        try:
-            if engine.settings_manager is not None:
-                engine.settings_manager.load()
-        except Exception:
-            logger.debug("Settings reload after custom layout commit failed", exc_info=True)
-
-        if not engine._initialize_display():
-            logger.error("Failed to reinitialize displays after custom layout reload; quitting")
-            QApplication.quit()
-            return
-
-        engine._setup_rotation_timer()
-
-        if not engine.start():
-            logger.error("Failed to restart screensaver after custom layout reload; quitting")
-            QApplication.quit()
-            return
-        log_lifecycle_resource_snapshot(
+        continue_after_runtime_destruction(
             engine,
-            event="custom_edit",
-            stage="after_restart",
+            partial(_restart_after_custom_runtime_destroyed, engine),
         )
-
-        logger.info("CUSTOM layout runtime reload complete")
     except Exception as e:
         logger.critical(
             "[LIFECYCLE] CUSTOM Edit reload aborted after teardown/rebuild failure: %s",
@@ -341,6 +507,39 @@ def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
             exc_info=True,
         )
         QApplication.exit(1)
+
+
+def _restart_after_custom_runtime_destroyed(engine: ScreensaverEngine) -> None:
+    from engine.runtime_destruction import qt_replacement_may_run
+
+    if not qt_replacement_may_run(engine):
+        return
+    try:
+        from rendering.multi_monitor_coordinator import get_coordinator
+
+        coordinator = get_coordinator()
+        coordinator.cleanup()
+    except Exception:
+        logger.debug(
+            "Coordinator cleanup after custom layout reload failed",
+            exc_info=True,
+        )
+
+    DisplayWidget.suppress_pointer_input_globally(
+        700,
+        reason="custom_layout_runtime_reload",
+    )
+    try:
+        if engine.settings_manager is not None:
+            engine.settings_manager.load()
+    except Exception:
+        logger.debug(
+            "Settings reload after custom layout commit failed",
+            exc_info=True,
+        )
+
+    if _construct_and_start_replacement_runtime(engine, event="custom_edit"):
+        logger.info("CUSTOM layout runtime reload complete")
 
 
 # ------------------------------------------------------------------

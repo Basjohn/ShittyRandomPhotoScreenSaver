@@ -7,90 +7,56 @@ import pytest
 from widgets.spotify_visualizer.bubble_cadence import BubbleCadenceState
 
 
-def _packet(
-    cadence: BubbleCadenceState,
-    sequence_value: float,
-    *,
-    impulse: bool = False,
-):
-    return cadence.next_packet(
-        dt=0.01,
-        energy={
-            "bass": sequence_value,
-            "mid": 0.0,
-            "high": 0.0,
-            "overall": sequence_value,
-            "crest": 1.0 if impulse else 0.0,
-        },
-        settings={"marker": sequence_value},
-        pulse={
-            "bass": sequence_value,
-            "mid_high": 0.0,
-            "big_bass_pulse": 0.5,
-            "small_freq_pulse": 0.5,
-        },
-        has_discrete_impulse=impulse,
-    )
-
-
-def test_bubble_cadence_caps_worker_tasks_and_preserves_logical_packet_order():
-    cadence = BubbleCadenceState(submissions_hz=60.0, max_batch_size=2)
-    submitted = []
+def test_bubble_lane_adds_no_artificial_cadence_deferrals():
+    cadence = BubbleCadenceState()
+    tokens = []
 
     for index in range(1000):
-        now_ts = index * 0.01
-        cadence.offer(_packet(cadence, float(index)), now_ts=now_ts)
-        ready = cadence.take_ready(worker_busy=False, result_waiting=False)
-        if ready is not None:
-            _token, batch = ready
-            submitted.append(batch)
+        cadence.offer_tick(now_ts=index * 0.01)
+        tokens.append(cadence.begin_submission())
+        cadence.note_submission_succeeded()
 
-    assert len(submitted) <= 601
-    assert max(len(batch) for batch in submitted) <= 2
-    flattened = [packet for batch in submitted for packet in batch]
-    assert [packet.sequence for packet in flattened] == list(
-        range(1, len(flattened) + 1)
-    )
-    assert len(flattened) >= 999
-
-
-def test_bubble_cadence_overflow_preserves_impulse_peak_and_elapsed_time():
-    cadence = BubbleCadenceState(submissions_hz=60.0, max_batch_size=2)
-    cadence.offer(_packet(cadence, 0.1), now_ts=1.0)
-    cadence.offer(_packet(cadence, 0.9, impulse=True), now_ts=1.001)
-    cadence.offer(_packet(cadence, 0.2), now_ts=1.002)
-
-    _token, batch = cadence.take_ready(worker_busy=False, result_waiting=False)
-
-    assert len(batch) == 2
-    assert batch[-1].has_discrete_impulse is True
-    assert batch[-1].energy["bass"] == pytest.approx(0.9)
-    assert batch[-1].energy["crest"] == pytest.approx(1.0)
-    assert batch[-1].dt == pytest.approx(0.02)
-    assert cadence.coalesced_packets == 1
-
-
-def test_bubble_cadence_reset_invalidates_task_token_and_clears_queue():
-    cadence = BubbleCadenceState(submissions_hz=60.0, max_batch_size=2)
-    cadence.offer(_packet(cadence, 0.1), now_ts=1.0)
-    old_token, _batch = cadence.take_ready(
-        worker_busy=False,
-        result_waiting=False,
-    )
-
-    cadence.offer(_packet(cadence, 0.2), now_ts=1.01)
-    cadence.reset()
     snapshot = cadence.diagnostic_snapshot()
+    assert len(set(tokens)) == 1000
+    assert snapshot["offered_ticks"] == 1000
+    assert snapshot["submitted_tasks"] == 1000
+    assert snapshot["publish_ratio"] == pytest.approx(1.0)
+    assert snapshot["worker_busy_deferrals"] == 0
+    assert snapshot["result_waiting_deferrals"] == 0
+
+
+def test_bubble_lane_accounts_only_for_existing_worker_and_result_ownership():
+    cadence = BubbleCadenceState()
+
+    cadence.offer_tick(now_ts=1.0)
+    cadence.note_lane_blocked(worker_busy=True, result_waiting=False)
+    cadence.offer_tick(now_ts=1.01)
+    cadence.note_lane_blocked(worker_busy=False, result_waiting=True)
+
+    snapshot = cadence.diagnostic_snapshot()
+    assert snapshot["offered_ticks"] == 2
+    assert snapshot["submitted_tasks"] == 0
+    assert snapshot["worker_busy_deferrals"] == 1
+    assert snapshot["result_waiting_deferrals"] == 1
+
+
+def test_bubble_cadence_reset_invalidates_task_token():
+    cadence = BubbleCadenceState()
+    cadence.offer_tick(now_ts=1.0)
+    old_token = cadence.begin_submission()
+    cadence.note_submission_succeeded()
+
+    cadence.reset()
+    cadence.offer_tick(now_ts=1.01)
+    new_token = cadence.begin_submission()
 
     assert old_token[0] != cadence.activation_token
-    assert snapshot["pending_packets"] == 0
+    assert new_token == (cadence.activation_token, 1)
 
 
-@pytest.mark.qt
-def test_bubble_worker_batches_each_tick_and_snapshot_in_order(qt_app, monkeypatch):
+def test_bubble_worker_publishes_the_same_single_authored_step():
     from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 
-    widget = SpotifyVisualizerWidget(parent=None, bar_count=4)
     calls = []
 
     class _Simulation:
@@ -106,28 +72,26 @@ def test_bubble_worker_batches_each_tick_and_snapshot_in_order(qt_app, monkeypat
         def get_perf_diagnostics(self):
             return {}
 
-    widget._bubble_simulation = _Simulation()
-    cadence = BubbleCadenceState(submissions_hz=60.0, max_batch_size=2)
-    second = _packet(cadence, 0.8)
-
-    result = widget._bubble_compute_worker(
+    owner = SimpleNamespace(
+        _bubble_simulation=_Simulation(),
+        _bubble_worker_logged=True,
+    )
+    result = SpotifyVisualizerWidget._bubble_compute_worker(
+        owner,
         0.01,
-        {"bass": 0.2},
-        {"marker": 0.2},
+        {"bass": 0.8},
+        {"marker": 0.8},
         {
-            "bass": 0.2,
+            "bass": 0.8,
             "mid_high": 0.0,
             "big_bass_pulse": 0.5,
             "small_freq_pulse": 0.5,
         },
-        (second,),
     )
 
     assert calls == [
-        ("tick", 0.01, 0.2, 0.2),
-        ("snapshot", 0.2),
         ("tick", 0.01, 0.8, 0.8),
         ("snapshot", 0.8),
     ]
     assert result[0][2] == pytest.approx(0.8)
-    assert result[4]["batch_size"] == pytest.approx(2.0)
+    assert result[4]["batch_size"] == pytest.approx(1.0)

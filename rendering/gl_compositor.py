@@ -13,6 +13,7 @@ compositor over time.
 from __future__ import annotations
 
 from typing import Dict, Optional, Callable
+import weakref
 
 # Import metrics classes from extracted package
 from rendering.gl_compositor_pkg.metrics import (
@@ -176,6 +177,9 @@ class GLCompositorWidget(QOpenGLWidget):
         self._animation_manager: Optional[AnimationManager] = None
         self._current_anim_id: Optional[str] = None
         self._transition_animation_generation: int = 0
+        self._scheduled_transition_completions: dict[
+            int, tuple[Callable[[float], None], Callable[[], None]]
+        ] = {}
         self._render_shutdown_requested: bool = False
         self._gl_lifecycle_generation: int = 0
         # Default easing is QUAD_IN_OUT; callers can override per-transition.
@@ -609,14 +613,16 @@ class GLCompositorWidget(QOpenGLWidget):
             self._finalize_render_timer_metrics(outcome="paused")
             logger.debug("[GL COMPOSITOR] Render strategy paused")
     
-    def _stop_render_strategy(self) -> None:
+    def _stop_render_strategy(self) -> bool:
         """Stop the render strategy."""
         _mark_widget_update_consumed(self)
+        stopped = True
         if self._render_strategy_manager is not None:
-            self._render_strategy_manager.stop()
+            stopped = bool(self._render_strategy_manager.stop())
         
         self._finalize_render_timer_metrics()
         logger.debug("[GL COMPOSITOR] Render strategy stopped")
+        return stopped
     
     def _start_render_timer(self) -> None:
         """Start the render timer to drive repaints during transitions.
@@ -637,7 +643,10 @@ class GLCompositorWidget(QOpenGLWidget):
         
         This is now a wrapper around _stop_render_strategy() for backward compatibility.
         """
-        self._stop_render_strategy()
+        if not self._stop_render_strategy():
+            raise RuntimeError(
+                "Adaptive render worker remained live at compositor teardown"
+            )
     
     def _on_render_tick(self) -> None:
         """Called by render strategy to trigger a repaint.
@@ -746,6 +755,7 @@ class GLCompositorWidget(QOpenGLWidget):
     def _cancel_current_animation(self) -> None:
         """Cancel any previous animation on this compositor."""
         self._transition_animation_generation += 1
+        self._scheduled_transition_completions.clear()
         if self._current_anim_id and self._animation_manager:
             try:
                 self._animation_manager.cancel_animation(self._current_anim_id)
@@ -789,21 +799,44 @@ class GLCompositorWidget(QOpenGLWidget):
         self._current_anim_metrics = None
         self._start_render_timer()
 
+        self._scheduled_transition_completions[animation_generation] = (
+            update_callback,
+            on_complete,
+        )
+        compositor_ref = weakref.ref(self)
+
         def _complete_if_current() -> None:
+            compositor = compositor_ref()
+            if compositor is None:
+                return
+            callbacks = compositor._scheduled_transition_completions.pop(
+                animation_generation,
+                None,
+            )
+            if callbacks is None:
+                return
             if (
-                self._render_shutdown_requested
-                or animation_generation != self._transition_animation_generation
+                compositor._render_shutdown_requested
+                or animation_generation
+                != compositor._transition_animation_generation
             ):
                 return
+            final_update, final_complete = callbacks
             try:
-                update_callback(1.0)
+                final_update(1.0)
             except Exception:
                 logger.debug("[GL COMPOSITOR] Final transition progress update failed", exc_info=True)
-            on_complete()
+            final_complete()
+
+        parent = self.parent()
+        _complete_if_current._srpss_runtime_generation = getattr(
+            parent,
+            "_runtime_generation",
+            None,
+        )
 
         anim_id = f"{transition_label or 'transition'}:timeline:{id(self)}:{animation_generation}"
         try:
-            parent = self.parent()
             thread_manager = getattr(parent, "_thread_manager", None) if parent is not None else None
             if thread_manager is not None and hasattr(thread_manager, "single_shot"):
                 thread_manager.single_shot(int(duration_ms), _complete_if_current)
@@ -812,6 +845,10 @@ class GLCompositorWidget(QOpenGLWidget):
 
                 ThreadManager.single_shot(int(duration_ms), _complete_if_current)
         except Exception:
+            self._scheduled_transition_completions.pop(
+                animation_generation,
+                None,
+            )
             logger.error(
                 "[GL COMPOSITOR][FALLBACK] Timeline completion scheduler failed; "
                 "falling back to transition AnimationManager for %s",
@@ -1521,13 +1558,21 @@ class GLCompositorWidget(QOpenGLWidget):
             self._gl_state.get_state() == GLContextState.DESTROYED
             and not gl_pipeline_has_live_resources(self)
         ):
+            if self._render_strategy_manager is not None:
+                self._render_strategy_manager.cleanup()
+                self._render_strategy_manager = None
+            if self._transition_renderer is not None:
+                self._transition_renderer.detach()
             return
 
         self._render_shutdown_requested = True
         self._gl_lifecycle_generation += 1
         self._transition_animation_generation += 1
         self._cancel_current_animation()
-        self._stop_render_strategy()
+        if not self._stop_render_strategy():
+            raise RuntimeError(
+                "Adaptive render worker remained live; refusing GL/context teardown"
+            )
 
         current_state = self._gl_state.get_state()
         if current_state in {
@@ -1547,6 +1592,12 @@ class GLCompositorWidget(QOpenGLWidget):
             raise
         if not self._gl_state.transition(GLContextState.DESTROYED):
             raise RuntimeError("Compositor could not enter DESTROYED")
+
+        if self._render_strategy_manager is not None:
+            self._render_strategy_manager.cleanup()
+            self._render_strategy_manager = None
+        if self._transition_renderer is not None:
+            self._transition_renderer.detach()
 
     def is_gl_ready(self) -> bool:
         """Check if GL context is ready for rendering.
@@ -1900,4 +1951,3 @@ class GLCompositorWidget(QOpenGLWidget):
         """Delegates to gl_compositor_pkg.overlays."""
         from rendering.gl_compositor_pkg.overlays import paint_dimming_gl
         paint_dimming_gl(self)
-

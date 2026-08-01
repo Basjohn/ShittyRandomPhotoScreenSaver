@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-07-30
+Last updated: 2026-08-01
 
 Active work only.
 
@@ -47,8 +47,26 @@ A phase is complete only with tests, runtime evidence, visualizer result, and ro
 
 Active checklist and evidence contract: `Docs/phase_reports/P05_CPU_TASK_REDUCTION.md`.
 
-- [-] Execute P5.0–P5.6 in order, preserving authored visualizer feel and measured frame delivery.
-- [ ] Close the Phase 5 runtime gate with before/after evidence; implemented slices alone are not closure.
+- [-] **P5.0 visualizer cadence:** compare Bubble and Spectrum task cadence, input-to-visible latency, loud-passage response, smoothing, and first-frame/mode-switch behaviour under 60 Hz, 165 Hz, irregular paint, transition, and GUI-stall scenarios.
+  - [x] Validate the restored Bubble lane-free path: the latest installed run reached 50,106 offered / 50,106 submitted steps, no artificial cadence deferrals, cheap workers, and operator-confirmed restored reaction/elasticity.
+  - [ ] Reduce Bubble task volume only through a design that preserves each discrete scheduler edge and the visible attack of every integrated logical step. The rejected 60 Hz/max-two attempt is recorded in the Phase 5 report and Historical Bugs.
+  - [ ] Add a runtime-shaped source/discrete-edge-to-first-visible temporal oracle; final-state, ordering, task-cap, average-FPS, and worker-duration checks may not authorize reactive cadence work.
+- [-] **P5.1 delivery tails:** investigate transition-time Qt/event-loop update delivery and request coalescing. The latest run recorded 286 owner-labelled gaps, all during transitions; 105 exceeded 50 ms, p95 was 84.43 ms, max was 109.4 ms, while paint and compute execution remained cheap.
+- [-] **P5.2 latency truthfulness:** the impossible uptime-linear ERROR flood is eliminated; verify the remaining bounded, generation-matched 81–100 ms WARNING samples distinguish logical frame age from Qt delivery delay.
+- [-] **P5.3 unchanged media:** prove unchanged polls perform no metadata publication, layout mutation, artwork work, or repaint while preserving changed-track and transition-time media feedback.
+  - [ ] Remove the remaining one-shot post-start/rebuild unchanged publication (`metadata_changed=False`, `presentation_changed=False`, `layout_mutations=2`, `update_requested=True`) without disturbing first-track artwork/layout.
+- [-] **P5.4 recreation ownership:** validate the non-reentrant destruction barrier and generation-owned ResourceManager, ThreadManager, timer, animation, subscription, dialog/Edit, widget, compositor, context, and surface cleanup through at least five alternating Settings/Edit rebuild cycles.
+  - [x] Validate that closing Settings crosses its dialog destruction barrier and returns to a fresh application runtime. Two installed Settings cycles returned correctly and the operator confirmed ingress/exit behaviour.
+  - [ ] Require every retiring generation to reach zero runtime roots, resources, timers, animations, subscriptions, queued/delayed callbacks, and tasks before replacement construction.
+  - [ ] Eliminate or precisely release the `diagnostic_python_owners_remaining` set seen after the latest barriers (`WidgetManager`, `CustomLayoutManager`, and `FadeCoordinator`). QObject/resource zero is encouraging but does not satisfy the required retired-Python-root zero.
+  - [ ] Require strict owner-context GL/display accounting to reach zero during teardown; do not weaken full stop/destroy/recreate or use event pumping, repeated GC, trimming, recycling, worker restart, cache growth, or warm-standby reuse.
+  - [ ] Correlate equivalent settled states for main/worker/total RSS, private commit, dedicated VRAM, handles, threads, tracked bytes, first-frame readiness, and FadeCoordinator reveal; prove the per-cycle staircase is gone or identify the remaining live owner.
+  - [ ] Preserve the undeniable latest improvement—generation 1/2/3 main RSS about 900.9/901.2/895.2 MiB, dedicated VRAM about 539.2/554.9/540.0 MiB, and ResourceManager total/unknown 58/47, 58/47, 56/45—while tracing the remaining private-commit and handle rise.
+  - [ ] Give the one-shot compositor-ready signal explicit connection ownership so cleanup does not repeat an already-completed disconnect and emit PySide `RuntimeWarning`; preserve its first-frame readiness semantics.
+  - [ ] Re-run first-frame and mode-switch poison checks around Bubble → Spectrum → Bubble, active transition, media polling/artwork, and pending image work. Destruction and authoritative-first-frame barriers must both pass before the existing FadeCoordinator reveal.
+- [ ] **P5.5 cache representations:** only after P5.4 ownership is proven, audit raw/scaled/display co-retention, exact-transform duplication, unused prefetch results, and eviction churn without raising the 256 MiB limit.
+- [-] **P5.6 logging hygiene:** verify cache entry detail stays in `screensaver_cache.log`, lifecycle ownership detail stays in `screensaver_lifecycle.log`, bounded summaries remain correlatable, and all warnings/errors remain in `screensaver.log`.
+- [ ] Close the Phase 5 runtime gate with before/after evidence; implemented slices and deterministic automation alone are not closure.
 
 **Gate:** materially lower CPU/task cost with equal-or-better p99/max frame delivery, preserved Spectrum/Bubble behaviour, bounded accounting, and no diagnostic-induced work.
 
@@ -142,7 +160,7 @@ Active checklist and evidence contract: `Docs/phase_reports/P05_CPU_TASK_REDUCTI
 ```text
 Priority: Phase 5 — CPU and Task Reduction (in progress)
 Branch: main
-Phase 4 closure evidence: logs/evidence_chest/07_30_dc8d1741_00_26/
+Temporary Phase 4 comparator: logs/evidence_chest/07_30_dc8d1741_00_26/ (mutable operator evidence)
 Owning report: Docs/phase_reports/P05_CPU_TASK_REDUCTION.md
 ```
 

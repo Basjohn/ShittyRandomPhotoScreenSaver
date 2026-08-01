@@ -1,10 +1,27 @@
 """Passive accounting tests for the existing image-cache behavior."""
+import logging
 import math
 
 import pytest
 from PySide6.QtGui import QImage, QPixmap
 
 from utils.image_cache import ImageCache
+
+
+def test_cache_entry_telemetry_uses_the_cache_family_when_enabled(monkeypatch, caplog):
+    monkeypatch.setattr("utils.image_cache.is_cache_logging_enabled", lambda: True)
+    monkeypatch.setattr("utils.image_cache.is_verbose_logging", lambda: False)
+    cache = ImageCache(max_items=2)
+    image = QImage(2, 2, QImage.Format.Format_ARGB32)
+
+    with caplog.at_level(logging.INFO, logger="utils.image_cache"):
+        cache.put("image", image)
+        assert cache.get("image") is image
+        assert cache.get("missing") is None
+
+    assert "[CACHE] Cached: image" in caplog.text
+    assert "[CACHE] Cache hit: image" in caplog.text
+    assert "[CACHE] Cache miss: missing" in caplog.text
 
 
 def test_qimage_exact_bytes_drive_the_retention_budget():

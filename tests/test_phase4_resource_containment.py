@@ -9,7 +9,11 @@ from core.performance.resource_metrics import collect_resource_accounting
 from engine.screensaver_engine import ScreensaverEngine
 from rendering.gl_programs import texture_manager as texture_module
 from rendering.gl_programs.texture_manager import GLTextureManager, PBOEntry
-from rendering.image_resource_accounting import refresh_display_image_accounting
+from rendering.image_resource_accounting import (
+    aggregate_display_image_accounting,
+    get_display_image_accounting,
+    refresh_display_image_accounting,
+)
 from rendering.transition_state import BurnState, CrossfadeState, ParticleState
 from rendering.gl_compositor_pkg.transition_lifecycle import cancel_current_transition
 
@@ -17,6 +21,16 @@ from rendering.gl_compositor_pkg.transition_lifecycle import cancel_current_tran
 class _EmptyOwner:
     def get_accounting_snapshot(self):
         return MappingProxyType({"resources": ()})
+
+
+def test_missing_display_accounting_snapshot_is_read_only_and_empty():
+    display = SimpleNamespace()
+
+    snapshot = get_display_image_accounting(display)
+
+    assert snapshot["resources"] == ()
+    assert snapshot["total_tracked_bytes"] == 0
+    assert not hasattr(display, "_image_resource_accounting")
 
 
 def _seed_texture_cache(manager: GLTextureManager, sizes: list[int]) -> None:
@@ -190,7 +204,13 @@ def test_display_accounting_deduplicates_alias_roles_and_displays(qt_app):
     engine = SimpleNamespace(
         _image_cache=_EmptyOwner(),
         resource_manager=_EmptyOwner(),
-        display_manager=SimpleNamespace(displays=displays),
+        display_manager=SimpleNamespace(
+            displays=displays,
+            get_image_accounting_snapshot=lambda: aggregate_display_image_accounting(
+                (display._image_resource_accounting for display in displays),
+                generation=7,
+            ),
+        ),
     )
     snapshot = collect_resource_accounting(engine)
     expected = 64 * 32 * ((pixmap.depth() + 7) // 8)

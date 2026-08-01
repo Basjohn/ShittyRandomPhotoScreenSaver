@@ -9,8 +9,9 @@ starts/stops based on subscriber count.
 """
 from __future__ import annotations
 
-from typing import Callable, Set, Optional, TYPE_CHECKING
-from PySide6.QtCore import QObject, Signal
+from typing import Any, Callable, Optional, TYPE_CHECKING
+import weakref
+from PySide6.QtCore import QCoreApplication, QObject, Signal
 
 from core.logging.logger import get_logger
 
@@ -44,7 +45,7 @@ to all registered clock widgets, ensuring synchronized updates across displays.
         super().__init__()
         GlobalClockTicker._initialized = True
         
-        self._subscribers: Set[Callable[[], None]] = set()
+        self._subscribers: list[weakref.WeakMethod | Callable[[], None]] = []
         self._timer_handle: Optional[object] = None
         self._thread_manager: Optional["ThreadManager"] = None
         self._is_running = False
@@ -57,7 +58,19 @@ to all registered clock widgets, ensuring synchronized updates across displays.
     
     def subscribe(self, callback: Callable[[], None]) -> None:
         """Subscribe a clock widget to receive tick events."""
-        self._subscribers.add(callback)
+        if any(self._resolve(record) == callback for record in self._subscribers):
+            return
+        owner = getattr(callback, "__self__", None)
+        if owner is not None and getattr(callback, "__func__", None) is not None:
+            try:
+                record: weakref.WeakMethod | Callable[[], None] = weakref.WeakMethod(
+                    callback
+                )
+            except TypeError:
+                record = callback
+        else:
+            record = callback
+        self._subscribers.append(record)
         logger.debug("[CLOCK_TICKER] Subscriber added (count=%d)", len(self._subscribers))
         
         # Start ticker if first subscriber
@@ -66,7 +79,11 @@ to all registered clock widgets, ensuring synchronized updates across displays.
     
     def unsubscribe(self, callback: Callable[[], None]) -> None:
         """Unsubscribe a clock widget from tick events."""
-        self._subscribers.discard(callback)
+        self._subscribers = [
+            record
+            for record in self._subscribers
+            if self._resolve(record) not in {None, callback}
+        ]
         logger.debug("[CLOCK_TICKER] Subscriber removed (count=%d)", len(self._subscribers))
         
         # Stop ticker if no subscribers
@@ -93,13 +110,22 @@ to all registered clock widgets, ensuring synchronized updates across displays.
     
     def _stop(self) -> None:
         """Stop the global ticker."""
-        if not self._is_running:
+        if not self._is_running and self._timer_handle is None:
             return
         
         if self._timer_handle is not None:
             try:
-                # Cancel the timer via ThreadManager
-                self._thread_manager.cancel_task(self._timer_handle)  # type: ignore
+                timer = self._timer_handle
+                stop = getattr(timer, "stop", None)
+                if callable(stop):
+                    stop()
+                delete_later = getattr(timer, "deleteLater", None)
+                if (
+                    callable(delete_later)
+                    and QCoreApplication.instance() is not None
+                    and not QCoreApplication.closingDown()
+                ):
+                    delete_later()
             except Exception as e:
                 logger.debug("[CLOCK_TICKER] Exception stopping timer: %s", e)
             self._timer_handle = None
@@ -113,11 +139,92 @@ to all registered clock widgets, ensuring synchronized updates across displays.
         self.tick.emit()
         
         # Direct callback invocation for efficiency
-        for callback in list(self._subscribers):
+        live_records = []
+        for record in list(self._subscribers):
+            callback = self._resolve(record)
+            if callback is None:
+                continue
+            live_records.append(record)
             try:
                 callback()
             except Exception as e:
                 logger.debug("[CLOCK_TICKER] Subscriber callback failed: %s", e)
+        self._subscribers = live_records
+        if not live_records:
+            self._stop()
+
+    @staticmethod
+    def _resolve(
+        record: weakref.WeakMethod | Callable[[], None],
+    ) -> Callable[[], None] | None:
+        return record() if isinstance(record, weakref.WeakMethod) else record
+
+    @staticmethod
+    def _callback_runtime_identity(callback: Callable[[], None]) -> tuple[Any, str, int]:
+        owner = getattr(callback, "__self__", None)
+        owner_class = type(owner).__name__ if owner is not None else "function"
+        owner_id = id(owner) if owner is not None else id(callback)
+        current = owner
+        generation = getattr(callback, "_srpss_runtime_generation", None)
+        for _ in range(16):
+            if current is None:
+                break
+            value = getattr(current, "_runtime_generation", None)
+            if value is not None:
+                generation = value
+                break
+            parent_getter = getattr(current, "parent", None)
+            if not callable(parent_getter):
+                break
+            try:
+                current = parent_getter()
+            except RuntimeError:
+                break
+        return generation, owner_class, owner_id
+
+    def get_lifecycle_ownership_snapshot(self) -> dict[str, object]:
+        """Return bounded passive subscriber ownership for lifecycle diagnostics."""
+
+        live_records = []
+        subscribers = []
+        subscribers_by_generation: dict[str, int] = {}
+        for record in self._subscribers:
+            callback = self._resolve(record)
+            if callback is None:
+                continue
+            live_records.append(record)
+            generation, owner_class, owner_id = self._callback_runtime_identity(
+                callback
+            )
+            generation_key = (
+                str(generation) if generation is not None else "process_or_unknown"
+            )
+            subscribers_by_generation[generation_key] = (
+                subscribers_by_generation.get(generation_key, 0) + 1
+            )
+            if len(subscribers) < 64:
+                subscribers.append(
+                    {
+                        "runtime_generation": generation,
+                        "owner_class": owner_class,
+                        "owner_id": owner_id,
+                    }
+                )
+        self._subscribers = live_records
+        try:
+            timer_active = bool(
+                self._timer_handle is not None
+                and getattr(self._timer_handle, "isActive", lambda: False)()
+            )
+        except RuntimeError:
+            timer_active = False
+        return {
+            "total": len(live_records),
+            "subscribers": tuple(subscribers),
+            "subscribers_by_generation": subscribers_by_generation,
+            "omitted": max(0, len(live_records) - len(subscribers)),
+            "timer_active": timer_active,
+        }
     
     @classmethod
     def reset(cls) -> None:

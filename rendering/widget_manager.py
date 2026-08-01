@@ -136,6 +136,7 @@ class WidgetManager:
         self._spotify_secondary_registration_generation: int = 0
         self._spotify_overlay_prewarm_attempted: bool = False
         self._spotify_overlay_prewarmed: bool = False
+        self._startup_completion_published: bool = False
 
         # Wait for compositor first frame before starting widget fades
         self._compositor_ready: bool = False
@@ -377,6 +378,17 @@ class WidgetManager:
         except Exception:
             logger.debug(
                 "[WIDGET_MANAGER] Failed to resume deferred GL warmup",
+                exc_info=True,
+            )
+        if self._startup_completion_published:
+            return
+        self._startup_completion_published = True
+        try:
+            parent._startup_reveal_completed = True
+            parent.startup_reveal_completed.emit()
+        except (AttributeError, RuntimeError):
+            logger.debug(
+                "[WIDGET_MANAGER] Startup reveal completion publication skipped",
                 exc_info=True,
             )
     
@@ -734,7 +746,7 @@ class WidgetManager:
                 self._pending_raise = True
                 remaining_ms = int(self.RAISE_RATE_LIMIT_MS - elapsed_ms) + 1
                 if self._raise_timer is None:
-                    self._raise_timer = QTimer()
+                    self._raise_timer = QTimer(self._parent)
                     self._raise_timer.setSingleShot(True)
                     self._raise_timer.timeout.connect(self._do_deferred_raise)
                     if self._resource_manager:
@@ -1936,6 +1948,19 @@ class WidgetManager:
     def cleanup(self) -> None:
         """Clean up all managed widgets."""
         self.prepare_for_runtime_pause()
+
+        parent = self._parent
+        if parent is not None:
+            try:
+                signal = getattr(parent, "image_displayed", None)
+                disconnect = getattr(signal, "disconnect", None)
+                if callable(disconnect):
+                    disconnect(self._on_compositor_ready)
+            except Exception:
+                logger.debug(
+                    "[WIDGET_MANAGER] Compositor-ready disconnect skipped during cleanup",
+                    exc_info=True,
+                )
         
         # Use lifecycle cleanup for widgets that support it
         for name, widget in list(self._widgets.items()):
@@ -1948,6 +1973,22 @@ class WidgetManager:
         
         self._widgets.clear()
         self._fade_callbacks.clear()
+        self._expected_overlays.clear()
+        self._spotify_secondary_fade_starters.clear()
+        self._pending_spotify_visibility_sync = False
+        self._factory_registry = None
+        self._settings_manager = None
+        if self._fade_coordinator is not None:
+            self._fade_coordinator.reset(clear_participants=True)
+
+        # WidgetManager is a plain Python owner held by DisplayWidget.  Keeping
+        # this back-reference after terminal runtime cleanup forms a complete
+        # DisplayWidget -> WidgetManager -> DisplayWidget cycle, while the fade
+        # coordinator's bound completion callback can retain the same graph.
+        # Runtime teardown is terminal for this manager, so release the owner
+        # edge explicitly rather than relying on cyclic GC.
+        self._resource_manager = None
+        self._parent = None
         logger.debug("[WIDGET_MANAGER] Cleanup complete")
 
     def prepare_for_runtime_pause(self) -> None:
@@ -1966,6 +2007,7 @@ class WidgetManager:
         if self._raise_timer is not None:
             try:
                 self._raise_timer.stop()
+                self._raise_timer.deleteLater()
             except Exception as e:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             self._raise_timer = None

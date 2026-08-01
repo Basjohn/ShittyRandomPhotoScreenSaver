@@ -1559,7 +1559,7 @@ def _capture_bubble_dispatch_profile_metrics(
     frames: list[dict[str, object]],
     *,
     start_ts: float = 0.0,
-    dt: float = 0.016,
+    dt: float = 1.0 / 60.0,
 ) -> list[dict[str, float]]:
     series: list[dict[str, float]] = []
     for idx, _frame in enumerate(frames):
@@ -1574,7 +1574,7 @@ def _capture_bubble_dispatch_profile_perf_metrics(
     frames: list[dict[str, object]],
     *,
     start_ts: float = 0.0,
-    dt: float = 0.016,
+    dt: float = 1.0 / 60.0,
 ) -> list[dict[str, float]]:
     series: list[dict[str, float]] = []
     for idx, _frame in enumerate(frames):
@@ -2964,7 +2964,13 @@ def test_bubble_dispatch_skips_while_pending_result_waits_for_ui_tick(qt_app, qt
     qtbot.addWidget(parent)
 
     fake_engine = _FakeEngine(bar_count=8)
-    fake_engine.get_pre_agc_energy_bands = lambda: SimpleNamespace(bass=0.21, mid=0.31, high=0.41, overall=0.51)
+    energy_reads = {"count": 0}
+
+    def _energy_snapshot():
+        energy_reads["count"] += 1
+        return SimpleNamespace(bass=0.21, mid=0.31, high=0.41, overall=0.51)
+
+    fake_engine.get_pre_agc_energy_bands = _energy_snapshot
     fake_engine.get_transient_energy_bands = lambda: SimpleNamespace(
         bass_transient=0.0,
         mid_transient=0.0,
@@ -2996,6 +3002,7 @@ def test_bubble_dispatch_skips_while_pending_result_waits_for_ui_tick(qt_app, qt
 
     assert widget._thread_manager.calls == []
     assert widget._bubble_pending_result_skip_count == 1
+    assert energy_reads["count"] == 0
 
 
 @pytest.mark.qt
@@ -3004,7 +3011,13 @@ def test_bubble_dispatch_does_not_queue_duplicate_compute_while_previous_compute
     qtbot.addWidget(parent)
 
     fake_engine = _FakeEngine(bar_count=8)
-    fake_engine.get_pre_agc_energy_bands = lambda: SimpleNamespace(bass=0.52, mid=0.31, high=0.08, overall=0.44)
+    energy_reads = {"count": 0}
+
+    def _energy_snapshot():
+        energy_reads["count"] += 1
+        return SimpleNamespace(bass=0.52, mid=0.31, high=0.08, overall=0.44)
+
+    fake_engine.get_pre_agc_energy_bands = _energy_snapshot
     fake_engine.get_transient_energy_bands = lambda: SimpleNamespace(
         bass_transient=0.11,
         mid_transient=0.04,
@@ -3040,6 +3053,59 @@ def test_bubble_dispatch_does_not_queue_duplicate_compute_while_previous_compute
     assert first_call_count == 1
     assert len(widget._thread_manager.calls) == 1
     assert widget._bubble_compute_pending is True
+    assert energy_reads["count"] == 1
+
+
+@pytest.mark.qt
+def test_bubble_dispatch_submits_every_lane_free_visualizer_tick(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine.get_pre_agc_energy_bands = lambda: SimpleNamespace(
+        bass=0.52,
+        mid=0.31,
+        high=0.08,
+        overall=0.44,
+    )
+    fake_engine.get_transient_energy_bands = lambda: SimpleNamespace(
+        bass_transient=0.0,
+        mid_transient=0.0,
+        high_transient=0.0,
+        onset_detected=False,
+        onset_type="",
+        onset_strength=0.0,
+    )
+    fake_engine.get_event_scheduler = lambda: None
+
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    widget._mode_teardown_block_until_ready = False
+    widget._thread_manager = _BubbleDispatchThreadManager()
+    widget._spotify_playing = True
+    first_now = time.time()
+    widget._bubble_last_tick_ts = first_now - 0.001
+
+    for index in range(5):
+        widget._bubble_compute_pending = False
+        widget._bubble_active_task_token = None
+        tick_pipeline.dispatch_bubble_simulation(
+            widget,
+            first_now + index * 0.001,
+        )
+
+    assert len(widget._thread_manager.calls) == 5
+    cadence = widget._bubble_cadence_state.diagnostic_snapshot()
+    assert cadence["offered_ticks"] == 5
+    assert cadence["submitted_tasks"] == 5
+    assert cadence["publish_ratio"] == pytest.approx(1.0)
 
 
 @pytest.mark.qt

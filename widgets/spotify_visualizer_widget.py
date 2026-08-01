@@ -335,10 +335,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_compute_pending: bool = False  # coalescing flag
         from widgets.spotify_visualizer.bubble_cadence import BubbleCadenceState
 
-        self._bubble_cadence_state = BubbleCadenceState(
-            submissions_hz=60.0,
-            max_batch_size=2,
-        )
+        self._bubble_cadence_state = BubbleCadenceState()
         self._bubble_active_task_token: Optional[tuple[int, int]] = None
         self._bubble_stale_result_count: int = 0
         self._bubble_pending_result: Optional[tuple[list, list, list, int]] = None
@@ -1253,45 +1250,24 @@ class SpotifyVisualizerWidget(QWidget):
         eb_snap: dict,
         sim_settings: dict,
         pulse_params: dict,
-        additional_packets=(),
     ):
-        """Run one bounded batch of authored Bubble steps on the compute pool."""
+        """Run exactly one authored Bubble step on the compute pool."""
         worker_start = time.perf_counter()
         if self._bubble_simulation is None:
             from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
             self._bubble_simulation = BubbleSimulation()
             logger.debug("[SPOTIFY_VIS] Bubble simulation created on COMPUTE thread")
-        packets = [(dt, eb_snap, sim_settings, pulse_params)]
-        packets.extend(
-            (
-                packet.dt,
-                packet.energy,
-                packet.settings,
-                packet.pulse,
-            )
-            for packet in additional_packets
+        self._bubble_simulation.tick(dt, eb_snap, sim_settings)
+        pos_data, extra_data, trail_data = self._bubble_simulation.snapshot(
+            bass=pulse_params['bass'],
+            mid_high=pulse_params['mid_high'],
+            big_bass_pulse=pulse_params['big_bass_pulse'],
+            small_freq_pulse=pulse_params['small_freq_pulse'],
+            big_specular_max_size=pulse_params.get('big_specular_max_size', 2.5),
+            big_visual_smoothing=pulse_params.get('big_visual_smoothing', 0.5),
+            big_contraction_bias=pulse_params.get('big_contraction_bias', 1.0),
+            big_size_clamp=pulse_params.get('big_size_clamp', 4.0),
         )
-        pos_data: list = []
-        extra_data: list = []
-        trail_data: list = []
-        for packet_dt, packet_energy, packet_settings, packet_pulse in packets:
-            self._bubble_simulation.tick(
-                packet_dt,
-                packet_energy,
-                packet_settings,
-            )
-            # Snapshot is intentionally executed for every logical step because
-            # Bubble's display-radius smoothing advances inside this method.
-            pos_data, extra_data, trail_data = self._bubble_simulation.snapshot(
-                bass=packet_pulse['bass'],
-                mid_high=packet_pulse['mid_high'],
-                big_bass_pulse=packet_pulse['big_bass_pulse'],
-                small_freq_pulse=packet_pulse['small_freq_pulse'],
-                big_specular_max_size=packet_pulse.get('big_specular_max_size', 2.5),
-                big_visual_smoothing=packet_pulse.get('big_visual_smoothing', 0.5),
-                big_contraction_bias=packet_pulse.get('big_contraction_bias', 1.0),
-                big_size_clamp=packet_pulse.get('big_size_clamp', 4.0),
-            )
         count = self._bubble_simulation.count
         perf_diag = {}
         get_perf_diag = getattr(self._bubble_simulation, "get_perf_diagnostics", None)
@@ -1302,7 +1278,7 @@ class SpotifyVisualizerWidget(QWidget):
                 perf_diag = {}
         perf_diag["worker_total_ms"] = (time.perf_counter() - worker_start) * 1000.0
         perf_diag["result_count"] = float(count)
-        perf_diag["batch_size"] = float(len(packets))
+        perf_diag["batch_size"] = 1.0
         if not getattr(self, '_bubble_worker_logged', False):
             logger.debug(
                 "[SPOTIFY_VIS] Bubble worker: count=%d pos_len=%d extra_len=%d dt=%.3f",

@@ -23,7 +23,7 @@ from shiboken6 import Shiboken
 
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import ShadowFadeProfile
-from widgets.clock_ticker import get_global_clock_ticker
+from widgets.clock_ticker import GlobalClockTicker, get_global_clock_ticker
 from core.settings.shadow_tuning import CARD_SHADOW_TUNING as PAINTED_FRAME_SHADOW_TUNING
 from core.logging.logger import get_logger
 from core.performance import widget_paint_sample
@@ -441,9 +441,11 @@ class ClockWidget(BaseOverlayWidget):
     
     def _deactivate_impl(self) -> None:
         """Deactivate clock - unsubscribe from global ticker (lifecycle hook)."""
-        # Unsubscribe from global clock ticker
-        ticker = get_global_clock_ticker()
-        ticker.unsubscribe(self._update_time)
+        # Cleanup must never construct a new process singleton merely to
+        # unsubscribe an inactive/retired widget.
+        ticker = GlobalClockTicker._instance
+        if ticker is not None:
+            ticker.unsubscribe(self._update_time)
         
         logger.debug("[LIFECYCLE] ClockWidget deactivated")
     

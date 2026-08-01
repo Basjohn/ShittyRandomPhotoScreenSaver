@@ -464,13 +464,14 @@ class AdaptiveTimerStrategy:
             else:
                 logger.debug("[ADAPTIVE_TIMER] Resumed from %s", current.name)
     
-    def stop(self) -> None:
-        """Stop timer permanently and wait briefly for the loop to acknowledge it."""
+    def stop(self) -> bool:
+        """Stop permanently, retaining ownership if the worker does not drain."""
         # Signal stop
         task_id = self._task_id
         self._stop_event.set()
         self._wake_event.set()
 
+        stopped = True
         if self._task_future is not None:
             # Wait for the loop's finally block, not for the already-set stop event.
             try:
@@ -485,7 +486,13 @@ class AdaptiveTimerStrategy:
                         max_wait,
                     )
             except Exception:
-                pass
+                stopped = False
+
+            if not stopped:
+                # The ThreadManager task still owns this strategy's bound loop.
+                # Do not erase the only authoritative task/resource handles and
+                # let compositor teardown destroy its context underneath it.
+                return False
             self._task_future = None
         self._task_id = None
         
@@ -502,6 +509,7 @@ class AdaptiveTimerStrategy:
         else:
             logger.info("[ADAPTIVE_TIMER] Stopped")
         self._log_metrics()
+        return True
 
     def describe_state(self) -> dict:
         """Return current timer snapshot for diagnostics."""
@@ -709,18 +717,32 @@ class AdaptiveRenderStrategyManager:
                 self._describe_compositor_state(),
             )
     
-    def stop(self) -> None:
+    def stop(self) -> bool:
         """Stop timer permanently."""
+        stopped = True
         with self._lock:
             if self._timer is not None:
-                self._timer.stop()
-                self._timer = None
+                stopped = bool(self._timer.stop())
+                if stopped:
+                    self._timer = None
         if is_perf_metrics_enabled():
             logger.info(
                 "[PERF][ADAPTIVE_TIMER] manager_stopped state=%s compositor=%s",
                 self.describe_state(),
                 self._describe_compositor_state(),
             )
+        return stopped
+
+    def cleanup(self) -> None:
+        """Stop the strategy and detach its retired compositor owner."""
+
+        if not self.stop():
+            raise RuntimeError(
+                "Adaptive render worker did not acknowledge shutdown; "
+                "refusing compositor/context destruction"
+            )
+        with self._lock:
+            self._compositor = None
     
     def request_frame(self) -> None:
         """Request immediate frame."""

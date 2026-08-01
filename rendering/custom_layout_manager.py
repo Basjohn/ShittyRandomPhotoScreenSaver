@@ -141,6 +141,36 @@ class CustomLayoutManager:
         self._display_cursor_restore_shape: Qt.CursorShape | None = None
         self._geo_session_id: str | None = None
 
+    def cleanup(self) -> None:
+        """Destroy edit-session UI and release the retired display owner."""
+
+        # A deferred processed image belongs to the retiring runtime and must
+        # never be replayed while terminal cleanup is dismantling that graph.
+        self._deferred_processed_image = None
+        if self._active or self._shell_states:
+            self._finish_session(
+                restore_live_visibility=False,
+                restore_special_widgets=False,
+            )
+        else:
+            self._destroy_grid_overlay()
+            self._special_hidden.clear()
+            self._paused_visualizer = None
+
+        if self in CustomLayoutManager._active_managers:
+            CustomLayoutManager._active_managers = [
+                manager
+                for manager in CustomLayoutManager._active_managers
+                if manager is not self
+            ]
+        if not CustomLayoutManager._active_managers:
+            CustomLayoutManager._uninstall_global_key_filter()
+
+        self._shell_states.clear()
+        self._suppress_live_feedback_widget_ids.clear()
+        self._display = None
+        self._screen = None
+
     @classmethod
     def _next_geo_session_id(cls) -> str:
         cls._geo_session_counter += 1

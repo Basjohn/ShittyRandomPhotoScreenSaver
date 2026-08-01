@@ -435,6 +435,14 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
             msg3.exec()
             return run_config(app)
 
+        # RUN lifetime is owned by explicit engine/tray/error exit routes, not
+        # by the current top-level-window count.  Settings/Edit recreation now
+        # deliberately has a destruction-barrier interval after its last old
+        # window closes and before replacement construction.  Qt's default
+        # auto-quit would terminate that healthy interval before the barrier's
+        # queued completion callback can run.
+        app.setQuitOnLastWindowClosed(False)
+
         event_loop_recorder = None
         if is_perf_metrics_enabled():
             try:
@@ -456,7 +464,10 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
 
                 def _usage_resource_snapshot() -> dict[str, object]:
                     fields: dict[str, object] = dict(
-                        collect_resource_accounting(engine).aggregate_fields()
+                        collect_resource_accounting(
+                            engine,
+                            worker_safe=True,
+                        ).aggregate_fields()
                     )
                     supervisor = getattr(engine, "_process_supervisor", None)
                     if supervisor is not None:

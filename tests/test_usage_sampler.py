@@ -187,6 +187,12 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     assert '"visualizer.audio_analysis":{"active":1' in sample
     assert "tm_delivery={}" in sample
     assert manager.tasks[0][2]["category"] == "diagnostics.usage"
+    lifecycle = service.get_latest_lifecycle_snapshot()
+    assert lifecycle["sequence"] == 1
+    assert lifecycle["rss_app_mb"] == 420.0
+    assert lifecycle["private_app_mb"] == 380.0
+    assert lifecycle["vram_dedicated_mb"] == 512.0
+    assert lifecycle["sample_age_ms"] >= 0.0
 
     service.stop()
     assert manager.timer.stopped is True

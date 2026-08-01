@@ -25,6 +25,7 @@ from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
 
 from core.settings.settings_manager import SettingsManager
+from core.threading.manager import ThreadManager
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.defaults import get_default_settings
 from core.settings.visualizer_settings_snapshot import (
@@ -576,9 +577,12 @@ class WidgetsTab(QWidget):
         positions = self._settings.get(self._SCROLL_POS_KEY, {})
         if isinstance(positions, dict) and mode in positions:
             try:
-                from PySide6.QtCore import QTimer
                 pos = int(positions[mode])
-                QTimer.singleShot(0, lambda: vbar.setValue(pos))
+
+                def _restore() -> None:
+                    vbar.setValue(pos)
+
+                self._schedule_owned_single_shot(0, _restore)
             except Exception:
                 pass
     
@@ -1043,8 +1047,10 @@ class WidgetsTab(QWidget):
         # Restore incoming subtab scroll position (deferred so layout settles)
         if sa is not None and subtab_id in self._subtab_scroll_cache:
             saved = self._subtab_scroll_cache[subtab_id]
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(0, lambda: sa.verticalScrollBar().setValue(saved))
+            def _restore() -> None:
+                sa.verticalScrollBar().setValue(saved)
+
+            self._schedule_owned_single_shot(0, _restore)
 
     def _perf_log(self, label: str, start_time: float) -> None:
         if not is_perf_metrics_enabled():
@@ -1623,8 +1629,10 @@ class WidgetsTab(QWidget):
         self._save_coalesce_pending = True
         self._save_coalesce_token += 1
         token = self._save_coalesce_token
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(self._SAVE_COALESCE_MS, lambda: self._save_settings_now(token))
+        def _save() -> None:
+            self._save_settings_now(token)
+
+        self._schedule_owned_single_shot(self._SAVE_COALESCE_MS, _save)
 
     def _save_settings_now(self, token: int | None = None) -> None:
         """Perform the actual settings save (called by coalesce timer)."""
@@ -2071,3 +2079,11 @@ class WidgetsTab(QWidget):
         return config
 
 
+    def _schedule_owned_single_shot(self, delay_ms: int, callback) -> None:
+        callback._srpss_timer_owner = self
+        callback._srpss_runtime_generation = getattr(
+            self,
+            "_runtime_generation",
+            None,
+        )
+        ThreadManager.single_shot(delay_ms, callback)

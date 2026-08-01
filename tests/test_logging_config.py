@@ -37,6 +37,13 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     logging.getLogger("core.performance.usage_sampler").info("[USAGE] sample seq=1")
     logging.getLogger("core.process.supervisor").info("ProcessSupervisor initialized")
     logging.getLogger("engine.image_pipeline").info("[CACHE] cache authority trace")
+    logging.getLogger("utils.image_cache").info("[CACHE] Cache hit: image-a.jpg")
+    logging.getLogger("engine.engine_lifecycle").info(
+        "[PERF] [CACHE] ImageCacheFlow: raw_hits=1 raw_misses=0"
+    )
+    logging.getLogger("utils.image_cache").warning(
+        "[CACHE] [FALLBACK] Cache entry recovery failed"
+    )
     logging.getLogger("core.steam.backend").info("[STEAM] provider trace")
 
     logging.shutdown()
@@ -59,6 +66,9 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     assert "[USAGE] sample seq=1" not in main_log
     assert "ProcessSupervisor initialized" not in main_log
     assert "[CACHE] cache authority trace" not in main_log
+    assert "[CACHE] Cache hit: image-a.jpg" not in main_log
+    assert "[PERF] [CACHE] ImageCacheFlow: raw_hits=1 raw_misses=0" not in main_log
+    assert "[CACHE] [FALLBACK] Cache entry recovery failed" in main_log
     assert "[STEAM] provider trace" not in main_log
     assert "Specific logs available:" in main_log
     assert "Specific logs active:" in main_log
@@ -70,6 +80,13 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     assert "[USAGE] sample seq=1" in (tmp_path / "screensaver_usage.log").read_text(encoding="utf-8")
     assert "ProcessSupervisor initialized" in (tmp_path / "screensaver_lifecycle.log").read_text(encoding="utf-8")
     assert "[CACHE] cache authority trace" in (tmp_path / "screensaver_cache.log").read_text(encoding="utf-8")
+    cache_log = (tmp_path / "screensaver_cache.log").read_text(encoding="utf-8")
+    assert "[CACHE] Cache hit: image-a.jpg" in cache_log
+    assert "[PERF] [CACHE] ImageCacheFlow: raw_hits=1 raw_misses=0" in cache_log
+    assert "[CACHE] [FALLBACK] Cache entry recovery failed" in cache_log
+    assert "[PERF] [CACHE] ImageCacheFlow: raw_hits=1 raw_misses=0" in (
+        tmp_path / "screensaver_perf.log"
+    ).read_text(encoding="utf-8")
     assert "[STEAM] provider trace" in (tmp_path / "screensaver_steam.log").read_text(encoding="utf-8")
 
 

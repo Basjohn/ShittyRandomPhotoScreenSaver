@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from types import SimpleNamespace
@@ -5,6 +7,7 @@ from types import SimpleNamespace
 from rendering.adaptive_timer import _queue_safe_widget_update
 from rendering.gl_compositor import GLCompositorWidget
 from rendering.gl_compositor_pkg.compositor_metrics import _is_active_transition_paint_window
+from rendering.gl_compositor_pkg.compositor_metrics import record_paint_metrics
 from rendering.gl_compositor_pkg.compositor_metrics import record_render_timer_tick
 from rendering.gl_compositor_pkg.metrics import _PaintMetrics
 from rendering.gl_compositor_pkg import paint as paint_module
@@ -164,6 +167,137 @@ def test_render_timer_metrics_count_only_accepted_update_requests(monkeypatch):
 
     assert paint_metrics.render_request_count == 1
     assert paint_metrics.skipped_request_count == 1
+
+
+@pytest.mark.parametrize(
+    ("gap_ms", "severity"),
+    ((40.0, "over_33"), (51.0, "over_50")),
+)
+def test_frame_gap_owner_logs_one_bounded_record_with_delivery_deltas(
+    monkeypatch,
+    caplog,
+    gap_ms,
+    severity,
+):
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.compositor_metrics.is_perf_metrics_enabled",
+        lambda: True,
+    )
+
+    class _Manager:
+        def __init__(self):
+            self.snapshot = {
+                "compute_callbacks_delivered": 10,
+                "compute_queue_depth": 0,
+                "compute_worker_active": 0,
+                "compute_last_queue_wait_ms": 0.2,
+                "compute_last_execution_ms": 1.2,
+                "compute_last_callback_ms": 0.3,
+                "io_callbacks_delivered": 4,
+                "io_queue_depth": 0,
+                "io_worker_active": 0,
+                "io_last_queue_wait_ms": 0.1,
+                "io_last_execution_ms": 0.8,
+                "io_last_callback_ms": 0.2,
+                "ui_delivered": 20,
+                "ui_failed": 0,
+                "ui_active": 0,
+                "ui_queue_depth": 0,
+                "ui_last_callback": "MediaWidget.apply",
+                "ui_last_duration_ms": 0.4,
+                "ui_last_completed_ts": 0.0,
+            }
+
+        def get_frame_delivery_snapshot(self):
+            return dict(self.snapshot)
+
+    manager = _Manager()
+    media = SimpleNamespace(
+        _thread_manager=manager,
+        _perf_media_display_total=5,
+        _perf_media_emit_total=2,
+        _perf_media_update_request_total=4,
+    )
+    visualizer = SimpleNamespace(
+        _vis_mode_str="bubble",
+        _mode_transition_phase=0,
+        _waiting_for_fresh_engine_frame=False,
+        _waiting_for_fresh_frame=False,
+        _bubble_compute_pending=False,
+        _pending_bubble_result=None,
+    )
+    overlay = SimpleNamespace(
+        _perf_set_state_total=30,
+        _perf_update_request_total=30,
+        _perf_paint_total=28,
+    )
+    parent = SimpleNamespace(
+        screen_index=0,
+        _thread_manager=manager,
+        media_widget=media,
+        spotify_visualizer_widget=visualizer,
+        _spotify_bars_overlay=overlay,
+    )
+    metrics = _PaintMetrics(label="wipe", slow_threshold_ms=24.0)
+    widget = SimpleNamespace(
+        parent=lambda: parent,
+        screen_index=0,
+        _paint_metrics=metrics,
+        _paint_slow_threshold_ms=24.0,
+        _paint_warning_last_ts=0.0,
+        _render_timer_fps=165,
+        _animation_manager=None,
+        describe_stall_context=lambda: {
+            "current_transition": "wipe",
+            "has_frame_state": True,
+        },
+    )
+
+    metrics.record_render_request(accepted_update=True, request_ts=0.990)
+    record_paint_metrics(
+        widget,
+        1.0,
+        paint_start_ts=1.000,
+        paint_end_ts=1.001,
+    )
+
+    manager.snapshot["compute_callbacks_delivered"] += 2
+    manager.snapshot["ui_delivered"] += 1
+    media._perf_media_display_total += 1
+    media._perf_media_update_request_total += 1
+    overlay._perf_set_state_total += 1
+    overlay._perf_update_request_total += 1
+    overlay._perf_paint_total += 1
+    metrics.record_render_request(accepted_update=True, request_ts=1.020)
+
+    with caplog.at_level(
+        logging.WARNING,
+        logger="rendering.gl_compositor_pkg.compositor_metrics",
+    ):
+        record_paint_metrics(
+            widget,
+            1.0,
+            paint_start_ts=1.000 + gap_ms / 1000.0,
+            paint_end_ts=1.001 + gap_ms / 1000.0,
+        )
+
+    owner_records = [
+        record.message
+        for record in caplog.records
+        if "[PERF][FRAME_GAP_OWNER]" in record.message
+    ]
+    assert len(owner_records) == 1
+    message = owner_records[0]
+    assert f"severity={severity}" in message
+    assert "vis_mode=bubble" in message
+    assert "compute_callbacks=2" in message
+    assert "ui_callbacks=1" in message
+    assert "media_display=1" in message
+    assert "media_repaints=1" in message
+    assert "overlay_set=1" in message
+    assert "overlay_repaints=1" in message
+    assert "overlay_paints=1" in message
+    assert "render_requests=1" in message
 
 def test_paint_time_progress_sync_updates_active_transition_state():
     class _FrameState:

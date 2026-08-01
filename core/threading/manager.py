@@ -7,6 +7,7 @@ Adapted from SPQDocker reusable modules for screensaver use.
 import os
 import threading
 import time
+import weakref
 from concurrent.futures import ThreadPoolExecutor, Future, wait as wait_futures
 from dataclasses import dataclass
 from enum import Enum
@@ -18,22 +19,114 @@ from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_
 logger = get_logger(__name__)
 
 _ui_diagnostic_lock = threading.Lock()
+_single_shot_registry_lock = threading.RLock()
+_single_shot_timers: Dict[str, set[QTimer]] = {}
+_cancelled_single_shot_generations: set[str] = set()
+_cancelled_ui_generations: set[str] = set()
 _ui_diagnostics: Dict[str, Any] = {
     "queued": 0,
     "delivered": 0,
     "failed": 0,
+    "rejected": 0,
     "active": 0,
     "queue_depth": 0,
     "last_callback": "<none>",
     "last_duration_ms": 0.0,
     "last_completed_ts": 0.0,
+    "queued_by_generation": {},
+    "delivered_by_generation": {},
+    "scheduled_single_shots": 0,
+    "scheduled_single_shots_by_generation": {},
 }
 
 
-def _record_ui_queue() -> None:
+def _qt_dispatch_available() -> bool:
+    """Return whether creating or delivering Qt work is still safe."""
+
+    return (
+        QCoreApplication.instance() is not None
+        and not QCoreApplication.closingDown()
+    )
+
+
+def _generation_key(generation: object | None) -> str:
+    return str(generation) if generation is not None else "process_or_unknown"
+
+
+def _record_ui_queue(func: Callable | None = None) -> None:
+    _owner, _owner_class, _owner_id, generation = _callable_runtime_identity(func)
+    key = _generation_key(generation)
     with _ui_diagnostic_lock:
         _ui_diagnostics["queued"] += 1
         _ui_diagnostics["queue_depth"] += 1
+        queued = _ui_diagnostics["queued_by_generation"]
+        queued[key] = int(queued.get(key, 0)) + 1
+
+
+def _ui_generation_cancelled(generation: object | None) -> bool:
+    if generation is None:
+        return False
+    key = _generation_key(generation)
+    with _ui_diagnostic_lock:
+        return key in _cancelled_ui_generations
+
+
+def _record_single_shot_scheduled(generation: object | None) -> None:
+    key = _generation_key(generation)
+    with _ui_diagnostic_lock:
+        _ui_diagnostics["scheduled_single_shots"] += 1
+        scheduled = _ui_diagnostics["scheduled_single_shots_by_generation"]
+        scheduled[key] = int(scheduled.get(key, 0)) + 1
+
+
+def _record_single_shot_delivered(generation: object | None) -> None:
+    key = _generation_key(generation)
+    with _ui_diagnostic_lock:
+        _ui_diagnostics["scheduled_single_shots"] = max(
+            0, int(_ui_diagnostics["scheduled_single_shots"]) - 1
+        )
+        scheduled = _ui_diagnostics["scheduled_single_shots_by_generation"]
+        remaining = max(0, int(scheduled.get(key, 0)) - 1)
+        if remaining:
+            scheduled[key] = remaining
+        else:
+            scheduled.pop(key, None)
+    _prune_cancelled_single_shot_generation(key)
+
+
+def _prune_cancelled_single_shot_generation(key: str) -> None:
+    with _ui_diagnostic_lock:
+        pending = int(
+            _ui_diagnostics["scheduled_single_shots_by_generation"].get(key, 0)
+        )
+    with _single_shot_registry_lock:
+        if pending == 0 and not _single_shot_timers.get(key):
+            _cancelled_single_shot_generations.discard(key)
+            _single_shot_timers.pop(key, None)
+
+
+def _single_shot_generation_cancelled(key: str) -> bool:
+    with _single_shot_registry_lock:
+        return key in _cancelled_single_shot_generations
+
+
+def _register_single_shot_timer(key: str, timer: QTimer) -> bool:
+    with _single_shot_registry_lock:
+        if key in _cancelled_single_shot_generations:
+            return False
+        _single_shot_timers.setdefault(key, set()).add(timer)
+        return True
+
+
+def _unregister_single_shot_timer(key: str, timer: QTimer | None) -> None:
+    if timer is not None:
+        with _single_shot_registry_lock:
+            timers = _single_shot_timers.get(key)
+            if timers is not None:
+                timers.discard(timer)
+                if not timers:
+                    _single_shot_timers.pop(key, None)
+    _prune_cancelled_single_shot_generation(key)
 
 
 def _run_tracked_ui_callable(
@@ -44,15 +137,32 @@ def _run_tracked_ui_callable(
     was_queued: bool,
 ) -> None:
     label = _callable_debug_name(func)
+    _owner, _owner_class, _owner_id, generation = _callable_runtime_identity(func)
+    generation_key = _generation_key(generation)
     started = time.perf_counter()
+    rejected = _ui_generation_cancelled(generation) or not _qt_dispatch_available()
     with _ui_diagnostic_lock:
         if was_queued:
             _ui_diagnostics["queue_depth"] = max(
                 0,
                 int(_ui_diagnostics["queue_depth"]) - 1,
             )
-        _ui_diagnostics["active"] += 1
+            queued = _ui_diagnostics["queued_by_generation"]
+            remaining = max(0, int(queued.get(generation_key, 0)) - 1)
+            if remaining:
+                queued[generation_key] = remaining
+            else:
+                queued.pop(generation_key, None)
         _ui_diagnostics["last_callback"] = label
+        if rejected:
+            _ui_diagnostics["delivered"] += 1
+            _ui_diagnostics["rejected"] += 1
+            delivered = _ui_diagnostics["delivered_by_generation"]
+            delivered[generation_key] = int(delivered.get(generation_key, 0)) + 1
+            _ui_diagnostics["last_duration_ms"] = 0.0
+            _ui_diagnostics["last_completed_ts"] = time.time()
+            return
+        _ui_diagnostics["active"] += 1
     failed = False
     try:
         func(*args, **(kwargs or {}))
@@ -67,6 +177,8 @@ def _run_tracked_ui_callable(
                 int(_ui_diagnostics["active"]) - 1,
             )
             _ui_diagnostics["delivered"] += 1
+            delivered = _ui_diagnostics["delivered_by_generation"]
+            delivered[generation_key] = int(delivered.get(generation_key, 0)) + 1
             if failed:
                 _ui_diagnostics["failed"] += 1
             _ui_diagnostics["last_callback"] = label
@@ -88,6 +200,38 @@ def _callable_debug_name(func: Callable | None) -> str:
     except Exception:
         pass
     return repr(func)
+
+
+def _callable_runtime_identity(
+    func: Callable | None,
+) -> tuple[object | None, str | None, int | None, object | None]:
+    """Return passive owner/generation metadata without retaining new owners."""
+
+    if func is None:
+        return None, None, None, None
+    owner = getattr(func, "__self__", None)
+    if owner is None:
+        owner = getattr(func, "_srpss_timer_owner", None)
+    generation = getattr(func, "_srpss_runtime_generation", None)
+    if owner is None:
+        return None, None, None, generation
+
+    current = owner
+    for _ in range(16):
+        value = getattr(current, "_runtime_generation", None)
+        if value is not None:
+            generation = value
+            break
+        parent_getter = getattr(current, "parent", None)
+        if not callable(parent_getter):
+            break
+        try:
+            current = parent_getter()
+        except RuntimeError:
+            break
+        if current is None:
+            break
+    return owner, type(owner).__name__, id(owner), generation
 
 
 def _describe_timer_callable_context(func: Callable) -> dict | None:
@@ -294,8 +438,8 @@ def _ensure_ui_invoker() -> Optional[_UiInvoker]:
     global _ui_invoker
     try:
         app = QCoreApplication.instance()
-        if app is None:
-            logger.error("run_on_ui_thread: No QCoreApplication instance")
+        if app is None or QCoreApplication.closingDown():
+            logger.debug("run_on_ui_thread: Qt event loop is unavailable")
             return None
         if _ui_invoker is None:
             inv = _UiInvoker()
@@ -351,6 +495,10 @@ class Task:
         self.category = str(category or "uncategorized")
         self.created_at = time.time()
         self.future: Optional[Future] = None
+        _owner, owner_class, owner_id, generation = _callable_runtime_identity(func)
+        self.owner_class = owner_class
+        self.owner_id = owner_id
+        self.runtime_generation = generation
 
     def __lt__(self, other):
         return self.priority.value > other.priority.value
@@ -692,7 +840,15 @@ class ThreadManager:
                     ResourceType.CUSTOM,
                     f"Task future for {task.task_id}",
                     cleanup_handler=lambda f: f.cancel() if not f.done() else None,
-                    task_id=task.task_id
+                    task_id=task.task_id,
+                    runtime_generation=task.runtime_generation,
+                    lifetime_scope=(
+                        "runtime"
+                        if task.runtime_generation is not None
+                        else "process"
+                    ),
+                    owner_class=task.owner_class,
+                    owner_id=task.owner_id,
                 )
             except (TypeError, Exception) as e:
                 logger.debug(f"Skipping resource registration for task {task.task_id}: {e}")
@@ -843,6 +999,36 @@ class ThreadManager:
             )
         return snapshot
 
+    def get_lifecycle_ownership_snapshot(self) -> Dict[str, Any]:
+        """Return active task and queued-UI ownership grouped by generation."""
+
+        with self._active_tasks_lock:
+            tasks = tuple(
+                {
+                    "task_id": task.task_id,
+                    "category": task.category,
+                    "pool": getattr(getattr(task, "pool_type", None), "value", None),
+                    "owner_class": task.owner_class,
+                    "owner_id": task.owner_id,
+                    "runtime_generation": task.runtime_generation,
+                }
+                for task in self._active_tasks.values()
+            )
+        with _ui_diagnostic_lock:
+            ui = {
+                "queue_depth": int(_ui_diagnostics["queue_depth"]),
+                "queued_by_generation": dict(
+                    _ui_diagnostics["queued_by_generation"]
+                ),
+                "scheduled_single_shots": int(
+                    _ui_diagnostics["scheduled_single_shots"]
+                ),
+                "scheduled_single_shots_by_generation": dict(
+                    _ui_diagnostics["scheduled_single_shots_by_generation"]
+                ),
+            }
+        return {"active_tasks": tasks, "ui": ui}
+
     def shutdown(self, wait: bool = True, timeout: Optional[float] = None):
         """
         Shutdown all thread pools and clean up resources.
@@ -856,6 +1042,12 @@ class ThreadManager:
         if self._shutdown:
             return
         self._shutdown = True
+        try:
+            self.cancel_all_scheduled_single_shots()
+        except RuntimeError:
+            logger.debug(
+                "ThreadManager delayed-callback cancellation was not on the UI thread"
+            )
         with self.__class__._app_shared_lock:
             if self.__class__._app_shared_manager is self:
                 self.__class__._app_shared_manager = None
@@ -1040,7 +1232,7 @@ class ThreadManager:
                 self._schedule_stats_publish()
 
     def _schedule_stats_publish(self) -> None:
-        if QCoreApplication.instance() is not None:
+        if _qt_dispatch_available():
             self.single_shot(self._stats_pub_interval_ms, self._publish_stats_once)
 
     def get_stats_snapshot(self) -> Dict[str, Dict[str, Any]]:
@@ -1059,8 +1251,18 @@ class ThreadManager:
         """Dispatch a callable to the Qt UI thread"""
         try:
             app = QCoreApplication.instance()
-            if app is None:
-                logger.debug("run_on_ui_thread called without QCoreApplication")
+            if app is None or QCoreApplication.closingDown():
+                logger.debug("run_on_ui_thread called without a live Qt event loop")
+                return
+            _owner, _owner_class, _owner_id, generation = (
+                _callable_runtime_identity(func)
+            )
+            if _ui_generation_cancelled(generation):
+                logger.debug(
+                    "Rejected retired-generation UI callback generation=%s callback=%s",
+                    generation,
+                    _callable_debug_name(func),
+                )
                 return
             
             if QThread.currentThread() is app.thread():
@@ -1075,30 +1277,188 @@ class ThreadManager:
             inv = _ensure_ui_invoker()
             if inv is None:
                 raise RuntimeError("UI invoker unavailable")
-            _record_ui_queue()
+            _record_ui_queue(func)
             inv.invoke.emit(func, args, kwargs or {})
         except Exception as e:
             logger.exception("run_on_ui_thread dispatch failed: %s", e)
 
     @staticmethod
     def single_shot(delay_ms: int, func: Callable, *args, **kwargs) -> None:
-        """Schedule a callable to run on the UI thread after a delay"""
+        """Schedule a cancellable, generation-owned UI callback."""
         try:
             app = QCoreApplication.instance()
-            if app is None:
-                raise RuntimeError("single_shot called without QCoreApplication")
+            if app is None or QCoreApplication.closingDown():
+                logger.debug("single_shot ignored without a live Qt event loop")
+                return
 
-            def _invoke():
-                ThreadManager.run_on_ui_thread(func, *args, **(kwargs or {}))
+            owner, owner_class, owner_id, generation = _callable_runtime_identity(func)
+            generation_key = _generation_key(generation)
+            weak_method = None
+            if owner is not None and getattr(func, "__func__", None) is not None:
+                try:
+                    weak_method = weakref.WeakMethod(func)
+                except TypeError:
+                    weak_method = None
+            strong_func = None if weak_method is not None else func
+
+            _record_single_shot_scheduled(generation)
+
+            def _create_timer_on_ui() -> None:
+                if (
+                    not _qt_dispatch_available()
+                    or _single_shot_generation_cancelled(generation_key)
+                    or _ui_generation_cancelled(generation)
+                ):
+                    _record_single_shot_delivered(generation)
+                    return
+                try:
+                    timer_parent = owner if isinstance(owner, QObject) else app
+                    timer = QTimer(timer_parent)
+                except Exception:
+                    _record_single_shot_delivered(generation)
+                    raise
+
+                timer.setSingleShot(True)
+                timer._runtime_generation = generation
+                timer._srpss_owner_class = owner_class
+                timer._srpss_owner_id = owner_id
+                timer_ref = weakref.ref(timer)
+                state = {"finished": False}
+
+                def _finish(*, execute: bool) -> None:
+                    if state["finished"]:
+                        return
+                    state["finished"] = True
+                    current_timer = timer_ref()
+                    _unregister_single_shot_timer(
+                        generation_key,
+                        current_timer,
+                    )
+                    _record_single_shot_delivered(generation)
+                    if current_timer is not None:
+                        try:
+                            current_timer.stop()
+                            current_timer.timeout.disconnect()
+                        except (RuntimeError, TypeError):
+                            pass
+                        try:
+                            current_timer._srpss_cancel_single_shot = None
+                        except RuntimeError:
+                            pass
+                    if execute:
+                        target = (
+                            weak_method()
+                            if weak_method is not None
+                            else strong_func
+                        )
+                        if target is not None:
+                            ThreadManager.run_on_ui_thread(
+                                target,
+                                *args,
+                                **(kwargs or {}),
+                            )
+                    if current_timer is not None and _qt_dispatch_available():
+                        try:
+                            current_timer.deleteLater()
+                        except RuntimeError:
+                            pass
+
+                def _invoke() -> None:
+                    _finish(execute=True)
+
+                def _on_destroyed(*_args: object) -> None:
+                    _finish(execute=False)
+
+                timer._srpss_cancel_single_shot = lambda: _finish(execute=False)
+                timer.timeout.connect(_invoke)
+                timer.destroyed.connect(_on_destroyed)
+                if not _register_single_shot_timer(generation_key, timer):
+                    _finish(execute=False)
+                    return
+                try:
+                    timer.start(max(0, int(delay_ms)))
+                except Exception:
+                    _finish(execute=False)
+                    raise
 
             if QThread.currentThread() is app.thread():
-                QTimer.singleShot(max(0, int(delay_ms)), _invoke)
+                _create_timer_on_ui()
             else:
-                def _schedule_on_ui():
-                    QTimer.singleShot(max(0, int(delay_ms)), _invoke)
+                def _schedule_on_ui() -> None:
+                    try:
+                        _create_timer_on_ui()
+                    except Exception:
+                        logger.exception("single_shot UI timer creation failed")
+                _schedule_on_ui._srpss_runtime_generation = generation
                 ThreadManager.run_on_ui_thread(_schedule_on_ui)
         except Exception as e:
             logger.exception("single_shot failed: %s", e)
+
+    @staticmethod
+    def cancel_scheduled_single_shots(runtime_generation: object) -> int:
+        """Synchronously cancel all delayed callbacks for one retired runtime."""
+
+        app = QCoreApplication.instance()
+        if app is None:
+            return 0
+        if QThread.currentThread() is not app.thread():
+            raise RuntimeError(
+                "Runtime single-shot cancellation must run on the Qt UI thread"
+            )
+        key = _generation_key(runtime_generation)
+        with _single_shot_registry_lock:
+            _cancelled_single_shot_generations.add(key)
+            timers = tuple(_single_shot_timers.get(key, ()))
+        cancelled = 0
+        for timer in timers:
+            cancel = getattr(timer, "_srpss_cancel_single_shot", None)
+            if callable(cancel):
+                cancel()
+                cancelled += 1
+        _prune_cancelled_single_shot_generation(key)
+        return cancelled
+
+    @staticmethod
+    def cancel_queued_ui_callbacks(runtime_generation: object) -> int:
+        """Reject queued and future UI publications from a retired generation."""
+
+        key = _generation_key(runtime_generation)
+        with _ui_diagnostic_lock:
+            _cancelled_ui_generations.add(key)
+            return int(_ui_diagnostics["queued_by_generation"].get(key, 0))
+
+    @staticmethod
+    def cancel_all_scheduled_single_shots() -> int:
+        """Cancel every delayed callback while terminal shutdown owns the UI."""
+
+        app = QCoreApplication.instance()
+        if app is None:
+            return 0
+        if QThread.currentThread() is not app.thread():
+            raise RuntimeError(
+                "Global single-shot cancellation must run on the Qt UI thread"
+            )
+        with _ui_diagnostic_lock:
+            scheduled_keys = tuple(
+                _ui_diagnostics["scheduled_single_shots_by_generation"]
+            )
+        with _single_shot_registry_lock:
+            keys = tuple(set(_single_shot_timers).union(scheduled_keys))
+            _cancelled_single_shot_generations.update(keys)
+            timers = tuple(
+                timer
+                for group in _single_shot_timers.values()
+                for timer in group
+            )
+        cancelled = 0
+        for timer in timers:
+            cancel = getattr(timer, "_srpss_cancel_single_shot", None)
+            if callable(cancel):
+                cancel()
+                cancelled += 1
+        for key in keys:
+            _prune_cancelled_single_shot_generation(key)
+        return cancelled
 
     def schedule_recurring(
         self,
@@ -1119,6 +1479,12 @@ class ThreadManager:
         Returns:
             QTimer: Timer instance (keep reference to prevent GC)
         """
+        if self._shutdown:
+            raise RuntimeError("Cannot schedule a recurring timer after shutdown")
+        if not _qt_dispatch_available():
+            raise RuntimeError(
+                "Cannot schedule a recurring timer without a live Qt event loop"
+            )
         _last_invoke_ts = [0.0]
         timer_desc = description
         if not timer_desc:
@@ -1165,7 +1531,12 @@ class ThreadManager:
             except Exception as e:
                 logger.exception("Recurring task raised: %s", e)
         
-        timer = QTimer()
+        owner, owner_class, owner_id, runtime_generation = _callable_runtime_identity(func)
+        timer_parent = owner if isinstance(owner, QObject) else None
+        timer = QTimer(timer_parent)
+        timer._runtime_generation = runtime_generation
+        timer._srpss_owner_class = owner_class
+        timer._srpss_owner_id = owner_id
         timer_ref[0] = timer
         timer.setTimerType(Qt.TimerType.PreciseTimer)
         timer.timeout.connect(_invoke)
@@ -1179,7 +1550,13 @@ class ThreadManager:
                     timer,
                     ResourceType.TIMER,
                     f"Recurring timer ({interval_ms}ms) - {timer_desc}",
-                    cleanup_handler=lambda t: t.stop()
+                    cleanup_handler=lambda t: t.stop(),
+                    runtime_generation=runtime_generation,
+                    lifetime_scope=(
+                        "runtime" if runtime_generation is not None else "process"
+                    ),
+                    owner_class=owner_class,
+                    owner_id=owner_id,
                 )
             except Exception as e:
                 logger.debug("Could not register timer: %s", e)

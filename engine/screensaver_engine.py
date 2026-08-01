@@ -21,6 +21,7 @@ State Management:
         Any state -> SHUTTING_DOWN (terminal)
 """
 import threading
+import weakref
 import random
 from enum import Enum, auto
 from pathlib import Path
@@ -158,6 +159,12 @@ class ScreensaverEngine(QObject):
         self._rotation_timer: Optional[QTimer] = None
         self._current_image: Optional[ImageMetadata] = None
         self._pending_monitor_replay_image: Optional[ImageMetadata] = None
+        self._display_image_accounting_snapshot = {
+            "generation": None,
+            "total_tracked_bytes": 0,
+            "resource_count": 0,
+            "resources": (),
+        }
         self._display_initializing: bool = False
         self._pending_displays_ready_generation: Optional[tuple[int, object, int]] = None
         self._settings_dialog_active: bool = False
@@ -166,6 +173,10 @@ class ScreensaverEngine(QObject):
         # It advances before runtime teardown, so callbacks from the old display
         # stack cannot publish into a newly-created stack.
         self._runtime_generation: int = 0
+        self._pending_runtime_destruction_barrier = None
+        self._terminal_shutdown_requested = False
+        self._active_settings_dialog = None
+        self._runtime_lifecycle_event = "cold_start"
         self._lifecycle_rejected_callbacks: int = 0
         self._loading_in_progress: bool = False
         self._loading_lock = threading.Lock()  # FIX: Protect loading flag from race conditions
@@ -201,6 +212,11 @@ class ScreensaverEngine(QObject):
     def _running(self) -> bool:
         """Legacy compatibility: True if engine is in RUNNING state."""
         return self._state == EngineState.RUNNING
+
+    def _set_display_image_accounting_snapshot(self, snapshot) -> None:
+        """Accept one detached GUI-thread capture for background telemetry."""
+
+        self._display_image_accounting_snapshot = snapshot
     
     @property
     def _initialized(self) -> bool:
@@ -704,6 +720,15 @@ class ScreensaverEngine(QObject):
 
     def _initialize_display(self) -> bool:
         """Initialize display manager."""
+        pending_barrier = self._pending_runtime_destruction_barrier
+        if pending_barrier is not None and not bool(
+            getattr(pending_barrier, "is_complete", False)
+        ):
+            logger.critical(
+                "[LIFECYCLE] Replacement display construction rejected while "
+                "retired-runtime destruction is pending"
+            )
+            return False
         try:
             logger.info("Initializing display...")
             self._display_initializing = True
@@ -722,6 +747,8 @@ class ScreensaverEngine(QObject):
                 settings_manager=self.settings_manager,
                 resource_manager=self.resource_manager,
                 thread_manager=self.thread_manager,
+                runtime_generation=self._runtime_generation,
+                image_accounting_publisher=self._set_display_image_accounting_snapshot,
             )
             
             # Connect exit signal
@@ -739,6 +766,20 @@ class ScreensaverEngine(QObject):
             runtime_generation = int(getattr(self, "_runtime_generation", 0))
             self.display_manager.displays_ready.connect(
                 lambda generation, manager=display_manager, runtime=runtime_generation: self._on_displays_ready(
+                    generation,
+                    manager,
+                    runtime,
+                )
+            )
+            self.display_manager.authoritative_first_frames_ready.connect(
+                lambda generation, manager=display_manager, runtime=runtime_generation: self._on_authoritative_first_frames_ready(
+                    generation,
+                    manager,
+                    runtime,
+                )
+            )
+            self.display_manager.startup_reveal_completed.connect(
+                lambda generation, manager=display_manager, runtime=runtime_generation: self._on_startup_reveal_completed(
                     generation,
                     manager,
                     runtime,
@@ -807,6 +848,102 @@ class ScreensaverEngine(QObject):
         self._pending_monitor_replay_image = None
         logger.info("[DISPLAY] Display generation ready; replaying current image generation=%s", generation)
         self._load_and_display_image(image)
+
+    def _on_authoritative_first_frames_ready(
+        self,
+        signalled_generation: int,
+        display_manager: object,
+        runtime_generation: int,
+    ) -> None:
+        """Snapshot only the current manager's compositor-first-frame seam."""
+
+        if (
+            int(signalled_generation) != int(runtime_generation)
+            or not self._is_runtime_identity_current(
+                runtime_generation,
+                display_manager,
+            )
+        ):
+            self._record_stale_runtime_callback(
+                "authoritative_first_frames_ready",
+                runtime_generation,
+            )
+            return
+        from core.performance.resource_metrics import log_lifecycle_resource_snapshot
+
+        log_lifecycle_resource_snapshot(
+            self,
+            event=self._runtime_lifecycle_event,
+            stage="authoritative_first_frame_ready",
+        )
+
+    def _on_startup_reveal_completed(
+        self,
+        signalled_generation: int,
+        display_manager: object,
+        runtime_generation: int,
+    ) -> None:
+        """Snapshot completion of the existing FadeCoordinator reveal path."""
+
+        if (
+            int(signalled_generation) != int(runtime_generation)
+            or not self._is_runtime_identity_current(
+                runtime_generation,
+                display_manager,
+            )
+        ):
+            self._record_stale_runtime_callback(
+                "startup_reveal_completed",
+                runtime_generation,
+            )
+            return
+        from core.logging.logger import (
+            is_lifecycle_logging_enabled,
+            is_perf_metrics_enabled,
+        )
+        from core.performance.resource_metrics import log_lifecycle_resource_snapshot
+
+        event = self._runtime_lifecycle_event
+        log_lifecycle_resource_snapshot(
+            self,
+            event=event,
+            stage="fade_reveal_completed",
+        )
+        if not (
+            is_perf_metrics_enabled() or is_lifecycle_logging_enabled()
+        ):
+            return
+        engine_ref = weakref.ref(self)
+        try:
+            manager_ref = weakref.ref(display_manager)
+        except TypeError:
+            manager_ref = lambda: display_manager
+
+        def _snapshot_settled() -> None:
+            engine = engine_ref()
+            manager = manager_ref()
+            if engine is None or manager is None:
+                return
+            if not engine._is_runtime_identity_current(
+                runtime_generation,
+                manager,
+            ):
+                engine._record_stale_runtime_callback(
+                    "runtime_settled_snapshot",
+                    runtime_generation,
+                )
+                return
+            log_lifecycle_resource_snapshot(
+                engine,
+                event=event,
+                stage="replacement_settled",
+            )
+
+        _snapshot_settled._srpss_runtime_generation = runtime_generation
+        scheduler = self.thread_manager
+        if scheduler is not None:
+            scheduler.single_shot(2000, _snapshot_settled)
+
     def _setup_rotation_timer(self) -> None:
         """Setup timer for image rotation."""
         interval_seconds = self.settings_manager.get('timing.interval', 10)
@@ -894,7 +1031,7 @@ class ScreensaverEngine(QObject):
         
         logger.info(f"Worker startup complete: {workers_started} started, {workers_failed} failed")
     
-    def start(self) -> bool:
+    def start(self, *, show_first_image: bool = True) -> bool:
         """
         Start the screensaver engine.
         
@@ -919,9 +1056,13 @@ class ScreensaverEngine(QObject):
         try:
             logger.info("Starting screensaver engine...")
             
-            # Show first image immediately
-            if not self._show_next_image():
-                logger.warning("[FALLBACK] Failed to show first image")
+            # Show first image immediately unless a topology rebuild already
+            # submitted replay of the current image into this generation.
+            if show_first_image:
+                if not self._show_next_image():
+                    logger.warning("[FALLBACK] Failed to show first image")
+                    self._schedule_startup_first_image_retry()
+            else:
                 self._schedule_startup_first_image_retry()
             
             # Start rotation timer
@@ -948,10 +1089,15 @@ class ScreensaverEngine(QObject):
             self._transition_state(EngineState.STOPPED)
             return False
     
-    def stop(self, exit_app: bool = True) -> None:
+    def stop(
+        self,
+        exit_app: bool = True,
+        *,
+        reason: str | None = None,
+    ) -> None:
         """Delegates to engine.engine_lifecycle."""
         from engine.engine_lifecycle import stop
-        stop(self, exit_app)
+        stop(self, exit_app, reason=reason)
 
     def _stop_qtimer_safe(self, timer=None, *, description: str) -> None:
         """Delegates to engine.engine_lifecycle."""
@@ -1447,19 +1593,73 @@ class ScreensaverEngine(QObject):
     
     def _on_monitors_changed(self, new_count: int) -> None:
         """Handle monitor configuration change."""
+        from PySide6.QtWidgets import QApplication
+        from rendering.display_widget import DisplayWidget
+
         logger.info(f"Monitor configuration changed: {new_count} monitors")
-        
-        # Reinitialize displays
-        if self.display_manager:
-            old_display_manager = self.display_manager
-            try:
-                old_display_manager.disconnect_monitor_detection()
-            except Exception:
-                logger.debug("Failed to disconnect old display manager monitor detection", exc_info=True)
-            old_display_manager.cleanup()
-            self._pending_monitor_replay_image = self._current_image
+
+        if not self.display_manager:
+            return
+        if self._pending_runtime_destruction_barrier is not None:
+            logger.info(
+                "[LIFECYCLE] Monitor rebuild ignored while another destruction barrier is active"
+            )
+            return
+
+        replay_image = self._current_image
+        try:
+            self.stop(exit_app=False, reason="monitor_topology")
+        except Exception:
+            logger.critical(
+                "[LIFECYCLE] Monitor rebuild aborted because full teardown failed",
+                exc_info=True,
+            )
+            QApplication.exit(1)
+            return
+
+        self._pending_monitor_replay_image = replay_image
+
+        def _rebuild_after_destruction() -> None:
+            from engine.runtime_destruction import qt_replacement_may_run
+            from core.performance.resource_metrics import (
+                log_lifecycle_resource_snapshot,
+            )
+
+            if not qt_replacement_may_run(self):
+                return
+            self._runtime_lifecycle_event = "monitor_topology"
+            DisplayWidget.suppress_pointer_input_globally(
+                700,
+                reason="monitor_topology_runtime_reload",
+            )
+            log_lifecycle_resource_snapshot(
+                self,
+                event="monitor_topology",
+                stage="before_replacement_construction",
+            )
+            had_replay = self._pending_monitor_replay_image is not None
             if not self._initialize_display():
                 self._pending_monitor_replay_image = None
+                QApplication.quit()
+                return
+            log_lifecycle_resource_snapshot(
+                self,
+                event="monitor_topology",
+                stage="after_replacement_before_first_frame",
+            )
+            self._setup_rotation_timer()
+            if not self.start(show_first_image=not had_replay):
+                QApplication.quit()
+                return
+            log_lifecycle_resource_snapshot(
+                self,
+                event="monitor_topology",
+                stage="after_restart",
+            )
+
+        from engine.runtime_destruction import continue_after_runtime_destruction
+
+        continue_after_runtime_destruction(self, _rebuild_after_destruction)
     
     def _update_rotation_interval(self) -> None:
         """Update rotation timer interval from settings."""

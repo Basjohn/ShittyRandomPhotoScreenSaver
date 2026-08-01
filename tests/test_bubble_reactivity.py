@@ -1059,6 +1059,7 @@ def test_group_drift_viz_diagnostics_path_does_not_crash(monkeypatch):
 
 
 def test_group_drift_swish_horizontal_reverses_on_authored_cadence_without_snapping():
+    random.seed(10115)
     sim = BubbleSimulation()
     settings = _default_settings(
         bubble_big_count=0,
@@ -1073,7 +1074,8 @@ def test_group_drift_swish_horizontal_reverses_on_authored_cadence_without_snapp
 
     dx_series: list[float] = []
     arc_series: list[float] = []
-    for _ in range(540):
+    # Cover the slowest shaped-frequency dwell plus its complete eased turn.
+    for _ in range(720):
         sim.tick(1 / 60, _energy(bass=0.92, mid=0.28, high=0.08), settings)
         dx_series.append(sim._group_drift_dx)
         arc_series.append(abs(sim._group_drift_arc_y))
@@ -1840,7 +1842,10 @@ class TestBubbleBouncePhysics:
         from widgets.spotify_visualizer.bubble_simulation import BubbleState
 
         left = BubbleState(x=0.50, y=0.50, radius=0.06, is_big=left_big)
-        right = BubbleState(x=0.56, y=0.50, radius=0.06, is_big=right_big)
+        # Runtime collision uses the rendered/clamped radius, which is smaller
+        # than this deliberately oversized base radius at quiet energy. Keep
+        # the fixture inside that actual collision envelope.
+        right = BubbleState(x=0.52, y=0.50, radius=0.06, is_big=right_big)
         return left, right
 
     def test_full_bounce_applies_impulse_response(self):
@@ -1973,7 +1978,21 @@ class TestBubbleBouncePhysics:
         for i, a in enumerate(sim._bubbles):
             for b in sim._bubbles[i + 1:]:
                 dist = math.hypot(b.x - a.x, b.y - a.y)
-                overlap = max(0.0, (a.radius + b.radius) - dist)
+                a_radius = sim._effective_collision_radius(
+                    a,
+                    big_bass_pulse=0.5,
+                    small_freq_pulse=0.5,
+                    big_contraction_bias=1.0,
+                    big_size_clamp=4.0,
+                )
+                b_radius = sim._effective_collision_radius(
+                    b,
+                    big_bass_pulse=0.5,
+                    small_freq_pulse=0.5,
+                    big_contraction_bias=1.0,
+                    big_size_clamp=4.0,
+                )
+                overlap = max(0.0, (a_radius + b_radius) - dist)
                 worst_overlap = max(worst_overlap, overlap)
         assert worst_overlap < 0.022, (
             f"Dense bounce enforcement left too much overlap ({worst_overlap:.4f}) at 100%/100% settings."
@@ -2129,7 +2148,7 @@ class TestBubbleBouncePhysics:
 
         sim = BubbleSimulation()
         a = BubbleState(x=0.48, y=0.5, radius=0.05, is_big=True)
-        b = BubbleState(x=0.54, y=0.5, radius=0.05, is_big=True)
+        b = BubbleState(x=0.50, y=0.5, radius=0.05, is_big=True)
         sim._bubbles = [a, b]
 
         random.seed(77)
@@ -2145,7 +2164,7 @@ class TestBubbleBouncePhysics:
 
         # Force immediate re-overlap and attempt a second response in the same
         # simulation time instant; pair cooldown should block re-bounce impulse.
-        a.x, b.x = 0.49, 0.53
+        a.x, b.x = 0.49, 0.51
         random.seed(78)
         sim._apply_bubble_collision_response(
             1 / 60,
@@ -2194,7 +2213,7 @@ class TestBubbleBouncePhysics:
         sim = BubbleSimulation()
         # a is visible, b is just outside left edge; they overlap.
         a = BubbleState(x=0.01, y=0.50, radius=0.05, is_big=True)
-        b = BubbleState(x=-0.03, y=0.50, radius=0.05, is_big=True)
+        b = BubbleState(x=-0.021, y=0.50, radius=0.05, is_big=True)
         sim._bubbles = [a, b]
 
         start_a_x = a.x

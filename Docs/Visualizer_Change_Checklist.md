@@ -1,6 +1,6 @@
 # Visualizer Change Checklist
 
-Last updated: 2026-06-30
+Last updated: 2026-08-01
 
 Use this checklist whenever visualizer settings, presets, activation, runtime transport, renderer behavior, or card geometry changes.
 
@@ -49,6 +49,16 @@ Add or update focused coverage for:
 - and authored curated preset runtime oracles when the visible mode behavior changes.
 
 Before touching shared visualizer/audio/activation/render/transition paths, run the focused visualizer reactivity lock from `Docs/Harness_Index.md`; rerun it after the change.
+
+For cadence, batching, coalescing, or task-frequency changes, also require:
+
+- source tick or discrete edge to first visible publication latency;
+- every integrated logical edge to remain visible exactly once under the mode's authored semantics;
+- irregular GUI stalls and transition overlap at 60 Hz and high refresh;
+- Bubble loud-passage expansion/elasticity and Spectrum smoothing review;
+- installed manual review against the protected feel.
+
+Final-state equality, packet ordering, worker duration, average FPS, and a task-count cap cannot close a reactive visualizer change. If the runtime-visible complaint remains while these proxy tests pass, reject the change and strengthen the oracle.
 
 ## 7. Docs And Closure
 - Refresh `Spec.md`, `Index.md`, `Docs/Visualizer_Reference.md`, and `Docs/TestSuite.md` when contracts or validation inventory change.

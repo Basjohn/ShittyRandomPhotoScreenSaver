@@ -9,12 +9,17 @@ Tests the centralized resource management functionality including:
 - Object pooling
 - Shutdown behavior
 """
+import gc
 import threading
+import weakref
+from concurrent.futures import Future
 from unittest.mock import MagicMock
 
 import pytest
+from PySide6.QtCore import QObject
 from PySide6.QtGui import QImage, QPixmap
 
+from core.resources import manager as resource_manager_module
 from core.resources.manager import ResourceManager
 from core.resources.types import ResourceType
 
@@ -460,7 +465,8 @@ class TestResourceStats:
         class TestResource:
             pass
 
-        resource_manager.register(TestResource(), ResourceType.GUI_COMPONENT, "GUI resource")
+        resource = TestResource()
+        resource_manager.register(resource, ResourceType.GUI_COMPONENT, "GUI resource")
 
         stats = resource_manager.get_stats()
 
@@ -578,6 +584,36 @@ class TestResourceAccountingSnapshot:
         with pytest.raises(TypeError):
             snapshot["resources"][0]["owner"] = "changed"
 
+    def test_usage_snapshot_never_probes_live_qobjects(
+        self,
+        resource_manager,
+        qt_app,
+        monkeypatch,
+    ):
+        resource = QObject()
+        resource_manager.register(
+            resource,
+            ResourceType.GUI_COMPONENT,
+            "usage-safe QObject",
+            runtime_generation=31,
+        )
+
+        def _forbidden_qobject_probe(_resource):
+            raise AssertionError("usage accounting probed a live QObject")
+
+        monkeypatch.setattr(
+            resource_manager_module,
+            "_qobject_validity",
+            _forbidden_qobject_probe,
+        )
+
+        snapshot = resource_manager.get_usage_accounting_snapshot()
+        entry = snapshot["resources"][0]
+
+        assert entry["runtime_generation"] == 31
+        assert entry["weak_live"] is None
+        assert entry["qobject_valid"] is None
+
     def test_release_tracking_never_invokes_cleanup(self, resource_manager):
         cleanup = MagicMock()
         resource = MagicMock()
@@ -641,3 +677,109 @@ class TestResourceAccountingSnapshot:
 
         cleanup.assert_not_called()
         assert resource_manager.get_accounting_snapshot()["total_resources"] == 0
+
+
+class TestResourceRegistrationDiagnostics:
+    """Ownership diagnostics must remain passive and avoid retaining owners."""
+
+    def test_bound_cleanup_method_is_weak_and_gc_removes_the_record(self, resource_manager):
+        class Resource:
+            def cleanup(self):
+                raise AssertionError("GC must not invoke cleanup on an unavailable owner")
+
+        resource = Resource()
+        resource_ref = weakref.ref(resource)
+        resource_id = resource_manager.register(resource, ResourceType.CUSTOM, "weak owner")
+
+        snapshot = resource_manager.get_accounting_snapshot()
+        entry = next(item for item in snapshot["resources"] if item["resource_id"] == resource_id)
+        assert entry["cleanup_handler_kind"] == "weak_bound_method"
+        assert entry["cleanup_callback_retains_owner"] is False
+        assert entry["weak_live"] is True
+
+        del resource
+        gc.collect()
+
+        assert resource_ref() is None
+        assert resource_manager.get(resource_id) is None
+        assert resource_manager.get_accounting_snapshot()["total_resources"] == 0
+
+    def test_finalization_removes_handlerless_accounting_record(self, resource_manager):
+        class Resource:
+            pass
+
+        resource = Resource()
+        resource_ref = weakref.ref(resource)
+        resource_id = resource_manager.register(resource, ResourceType.CUSTOM, "handlerless")
+
+        del resource
+        gc.collect()
+
+        assert resource_ref() is None
+        assert resource_id not in resource_manager._resources
+        assert resource_id not in resource_manager._weak_refs
+        assert resource_id not in resource_manager._registration_details
+
+    def test_explicit_unregister_still_invokes_live_weak_bound_cleanup(self, resource_manager):
+        class Resource:
+            def __init__(self):
+                self.cleanup_count = 0
+
+            def cleanup(self):
+                self.cleanup_count += 1
+
+        resource = Resource()
+        resource_id = resource_manager.register(resource, ResourceType.CUSTOM, "explicit cleanup")
+
+        assert resource_manager.unregister(resource_id, force=True) is True
+        assert resource.cleanup_count == 1
+
+    def test_qobject_parent_generation_and_scope_are_queryable(self, resource_manager, qt_app):
+        root = QObject()
+        root._runtime_generation = 23
+        child = QObject(root)
+        process_entry = QObject()
+        runtime_id = resource_manager.register(child, ResourceType.GUI_COMPONENT, "runtime child")
+        process_id = resource_manager.register(
+            process_entry,
+            ResourceType.GUI_COMPONENT,
+            "process observer",
+            runtime_generation=23,
+            lifetime_scope="process",
+        )
+
+        entry = next(
+            item
+            for item in resource_manager.get_accounting_snapshot()["resources"]
+            if item["resource_id"] == runtime_id
+        )
+        assert entry["runtime_generation"] == 23
+        assert entry["generation_source"] == "qobject_parent"
+        assert entry["lifetime_scope"] == "runtime"
+        assert entry["resource_class"] == "QObject"
+        assert entry["resource_identity"] == id(child)
+        assert entry["owner_class"] == "QObject"
+        assert entry["owner_id"] == id(child)
+        assert entry["creation_site_kind"] == "caller_frame"
+        assert entry["creation_site"]
+        assert entry["weak_live"] is True
+        assert entry["qobject_valid"] is True
+
+        runtime_entries = resource_manager.get_resources_by_runtime_generation(23)
+        assert [item["resource_id"] for item in runtime_entries] == [runtime_id]
+        all_entries = resource_manager.get_generation_accounting_snapshot(
+            23, include_process_scoped=True
+        )["resources"]
+        assert {item["resource_id"] for item in all_entries} == {runtime_id, process_id}
+
+    def test_future_registration_skips_caller_capture(self, resource_manager):
+        future = Future()
+        resource_id = resource_manager.register(future, ResourceType.CUSTOM, "task future")
+
+        entry = next(
+            item
+            for item in resource_manager.get_accounting_snapshot()["resources"]
+            if item["resource_id"] == resource_id
+        )
+        assert entry["creation_site"] is None
+        assert entry["creation_site_kind"] == "suppressed_high_volume_future"

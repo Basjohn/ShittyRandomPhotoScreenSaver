@@ -261,4 +261,5 @@ class ImagePresenter(QObject):
         self._previous_pixmap = None
         self._seed_pixmap = None
         self._last_seed_ts = None
+        self._parent = None
         logger.debug("[IMAGE_PRESENTER] Cleanup complete")

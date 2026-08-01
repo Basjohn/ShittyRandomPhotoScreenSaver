@@ -2,6 +2,7 @@
 
 Date: 2026-07-28
 Reopened: 2026-07-29
+Closed: 2026-07-30
 Branch: `main`
 Foundation: Phase 3 checkpoint `677a317104a6507d9ecf620b54e85ee858e9ba5f`
 Donor boundary: reference only; no donor merge or donor resource architecture transplant
@@ -10,7 +11,7 @@ Donor boundary: reference only; no donor merge or donor resource architecture tr
 
 Phase 4 bounds the baseline's existing CPU image cache, prefetch backlog, compositor texture cache, and upload-PBO pool by exact bytes while retaining the baseline display/compositor topology. It removes redundant active-path QImage/QPixmap copies, shares same-image backing only for exact transform matches, releases every transition family's obsolete state at terminal presentation, and extends passive resource snapshots to display-owned QPixmap backing stores.
 
-**Status: open / whole-process plateau failed.** The deterministic cache, display, texture, PBO, and shared-memory ownership gates pass. The 52-minute `fresh_20260729_2140` platform run also validates the ImageWorker/shared-memory fix live, but main-process RSS, total application RSS, and private commit still rise after warmup. Phase 4 is not complete until those whole-application owners plateau in a post-fix comparator. CPU/task-rate reduction remains Phase 5.
+**Status: closed.** The deterministic cache, display, texture, PBO, and shared-memory ownership gates pass. The 52-minute `fresh_20260729_2140` platform run validates the ImageWorker/shared-memory fix live, and the later installed comparator preserved as the mutable evidence folder `07_30_dc8d1741_00_26` closed the remaining artwork-startup, forced track-change/transition, and normal-run presentation bars. The later memory staircase caused specifically by repeated full Edit/Settings recreation is tracked under P5.4; it is a generation-lifetime ownership failure and does not reopen this normal Phase 4 containment result. CPU/task-rate reduction remains Phase 5.
 
 ## Baseline growth mechanisms corrected
 
@@ -129,7 +130,7 @@ The same run preserves separate later-phase work:
 - post-warmup RSS slope was effectively zero (-0.00009 MiB/cycle), versus the broken path's approximately 31.6 MiB/image staircase;
 - final-window high-water growth was -0.13 MiB.
 
-This closes the deterministic shared-memory ownership slice. The later full platform run below validates that result live, but does not close Phase 4 because the main process and private commit fail the whole-application plateau gate.
+This closed the deterministic shared-memory ownership slice. The later full platform run below validated that result live but, at that point in the investigation, kept Phase 4 reopened because the main process and private commit had not yet passed the whole-application comparator.
 
 ## Full platform comparator — `fresh_20260729_2140`
 
@@ -148,7 +149,7 @@ The fresh dual-display capture ran from 20:47:55 to 21:40:03 and produced 209 us
 
 The prior approximately 31.6 MiB-per-image child staircase is gone. The worker remains within a narrow warm operating band, every published segment is consumed, and shared-memory, tracked GL, and driver-VRAM owners are bounded. This validates R-52 as solved.
 
-Phase 4 nevertheless fails as a whole: main RSS and private commit retain sustained positive slopes not explained by the bounded child, shared-memory counters, tracked GL bytes, or driver VRAM. The 256 MiB CPU cache must not be raised to conceal that gap. A post-correction comparator must synchronize cache/display/GL accounting with main, worker, total RSS, and private commit and either attribute a bounded allocator high-water pattern or identify the remaining owner.
+This comparator therefore kept Phase 4 open at that time: main RSS and private commit retained sustained positive slopes not explained by the bounded child, shared-memory counters, tracked GL bytes, or driver VRAM. The 256 MiB CPU cache was not raised to conceal that gap. The later closure comparator below completed the normal Phase 4 gate; repeated teardown/recreation ownership is now measured separately under P5.4.
 
 Presentation evidence is also mixed. Bubble retained healthy loud-passage response with roughly 1.1–1.8 ms mode-owned work. Spectrum and a runtime mode switch were not exercised, so no Spectrum feel conclusion is drawn. Near the tail, screen 1 delivered 46.6 FPS with p95 56.40 ms and 25 frames above 50 ms while screen 0 delivered 108.8 FPS with p95 15.61 ms. Paint work was comparatively cheap and GUI event-loop p99 was 38.28 ms, pointing at delivery/scheduling pressure rather than a visualizer-math regression.
 
@@ -173,7 +174,7 @@ Focused automated evidence:
 - deterministic replay: all `66` goldens plus manifest verified unchanged;
 - shared-memory/supervisor/accounting safety gate: `65 passed`.
 
-This closes the deterministic ownership and scheduling slice only. The fresh full run proves the terminal shared-memory counters but predates the artwork-generation, rotation-deadline, stale-prefetch, and previous-image reuse corrections above. The next installed comparator still owns the 60 Hz/165 Hz forced Spotify-change bars, manual-change deadline collision, Spectrum/Bubble/mode-switch review, startup presentation, and whole-application plateau.
+This closed the deterministic ownership and scheduling slice only. The fresh full run proved the terminal shared-memory counters but predated the artwork-generation, rotation-deadline, stale-prefetch, and previous-image reuse corrections above. At that point, the next installed comparator still owned the 60 Hz/165 Hz forced Spotify-change bars, manual-change deadline collision, Spectrum/Bubble/mode-switch review, startup presentation, and whole-application plateau.
 
 ## Forced track-change collision evidence — `fresh_20260729_2233`
 
@@ -194,7 +195,19 @@ Focused automation after this correction:
 
 Two short cold starts initially appeared to expose only a reveal-order gap. The 23:40 installed rerun proved that diagnosis incomplete: generation 1 decoded and queued the artwork, transition idle discarded that sole decoded image after generation 2 began, and generation 2 then logged an apply for the same key despite having no image or pixmap. Idle flush now retains a stale-generation pending image only while the authoritative current query remains in flight. That query then promotes the decoded image when its key matches or replaces it when the key changed. Applied telemetry now states `pixmap_ready`; startup pixmaps remain at zero opacity until card reveal completion starts their fade, with transition overlap handed to the existing all-displays-idle callback. This adds no timer, retry, eager decode, or second image representation.
 
-The installed gate remains open. A matching 60 Hz/165 Hz run must prove the former 30–38-paint feedback burst is absent, fixed-footprint transition metadata reports zero structural mutations, artwork still flushes newest-only after final idle, cold-start artwork avoids `stale_idle_flush_generation` while its current query is in flight and reports `pixmap_ready=True` followed by one `event=fade_started` only after card reveal/transition idle, and visualizer/transition presentation tails return to the no-track-change comparator. No visualizer response, smoothing, compositor topology, or artwork-fade curve was retuned.
+## Closure comparator — `07_30_dc8d1741_00_26`
+
+The installed dual-display comparator closed the remaining Phase 4 presentation gate:
+
+- startup media artwork became visible and followed the existing card-first fade contract;
+- media-key track changes during transitions no longer damaged transition frame delivery;
+- artwork decode/application remained newest-only and transition-aware;
+- Bubble/Spectrum presentation and the protected first-frame/mode-switch boundaries showed no authored-behaviour regression attributable to the Phase 4 containment work;
+- there were no genuine runtime exceptions.
+
+The run's apparent visualizer latency errors were impossible uptime-linear values caused by stale timestamp/generation ownership. That diagnostics defect moved to P5.2 and does not invalidate the observed presentation. The evidence folder name is a convenience, not a permanent repository artifact; evidence-chest folders are mutable and may be moved or deleted.
+
+Phase 4 is closed. The subsequently observed equivalent-state memory/VRAM staircase after repeated Edit/CUSTOM and Settings recreation belongs to P5.4. It must be fixed through generation-owner destruction and accounting while preserving the Phase 3/4 GL teardown, the existing compositor topology, and the first-frame/mode-switch poison protections.
 
 ## Verification
 
@@ -214,7 +227,7 @@ Evidence that remains valid:
 - real Windows Qt GL cleanup: `3 passed` without skip, including the corrected two-compositor ownership sequence;
 - deterministic 45-cycle / 30-virtual-minute resource plateau artifact: pass.
 
-Current reopened-gate evidence:
+Historical reopen and closure evidence:
 
 - shared-memory ownership regressions: `15 passed`, including malformed-descriptor reclamation and bounded accounting history;
 - 50×4K spawned-worker shared-memory plateau: pass;
@@ -225,7 +238,8 @@ Current reopened-gate evidence:
 - follow-up deterministic 45-cycle resource harness: pass, with 4 KiB repeated-resolution drift and 8 KiB tail high-water range;
 - full `fresh_20260729_2140` comparator: worker/shared-memory and GL/VRAM owners pass; main/total RSS and private commit fail to plateau;
 - `fresh_20260729_2233` forced-collision comparator: artwork ownership passes; media feedback/presentation fails and is corrected in code;
-- installed comparator after the newest media-feedback collision correction: pending.
+- `07_30_dc8d1741_00_26` installed closure comparator: startup artwork and forced track-change/transition presentation pass; no genuine runtime exception; false visualizer-latency diagnostics transferred to P5.2.
+- later repeated Edit/Settings recreation staircase: active P5.4 work and explicitly outside the closed Phase 4 normal-run gate.
 
 ## Rollback
 

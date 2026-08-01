@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-07-25
+Last updated: 2026-08-01
 
 Durable cross-cutting rules for SRPSS.
 
@@ -191,6 +191,14 @@ Before and after shared visualizer/audio/timing/render changes:
 - perform manual review;
 - do not rewrite expected output merely to pass.
 
+### Reactive visualizer task-reduction stop rule
+
+Task-count reduction is subordinate to authored reaction timing. Never add a second cadence authority, token bucket, deadline gate, or paint/transition-derived clock between an authored visualizer tick and its simulation. Never batch multiple logical simulation steps when only the terminal snapshot will be published, and never place a live mutable scheduler or event source inside a deferred or batched payload.
+
+Coalescing is permitted only after each logical input has been integrated and the mode's visible publication semantics remain intact. A lower submission count is a failed optimization if it delays first visible attack, hides or decays a discrete edge before publication, reduces loud-passage expansion or elasticity, repeats unchanged state while the ownership lane is free, or changes Spectrum smoothing. Do not revive such a design under a different scheduler name.
+
+Before accepting visualizer cadence or task-frequency work, require a runtime-shaped source-tick-to-first-visible oracle, discrete-edge accounting, irregular-stall and transition coverage, 60 Hz and high-refresh coverage, Bubble and Spectrum comparison, and installed manual review. Final-state equality, packet ordering, average FPS, worker duration, and task-cap tests are not sufficient. If the visible complaint reproduces while those tests remain green, the optimization fails and the validation bar must be strengthened.
+
 Visualizer simulation is independent of paint and transition cadence.
 
 The compositor may skip render snapshots, but cannot block simulation, change simulation time, drop input before integration, or flatten behaviour after a stall.
@@ -219,17 +227,19 @@ Cannot make QOpenGLContext current in a different thread
 
 Settings, Edit, topology recreation, and exit follow full ordered teardown:
 
-1. close old-runtime admission;
+1. close old-runtime admission and invalidate its runtime generation;
 2. stop producers and GUI timers;
-3. disconnect callbacks;
-4. cancel/drain workers;
-5. prevent old-runtime GUI/GL work;
+3. disconnect callbacks, animations, and global subscriptions;
+4. cancel/drain workers plus queued and delayed GUI work;
+5. reject every remaining old-runtime GUI/GL publication;
 6. delete child GL resources with valid context;
-7. destroy compositor/surface last;
-8. assert no old-generation resources;
-9. create a clean generation.
+7. close old Qt roots and queue compositor/surface destruction last;
+8. wait for watched root destruction and assert zero old-generation resources, tasks, timers, animations, and subscriptions;
+9. only then create a clean generation.
 
-The current production boundary is one engine runtime generation plus exact `DisplayManager` identity. Settings/CUSTOM handlers must call full teardown before constructing dialogs or replacement displays. `DisplayManager.cleanup()` invokes `DisplayWidget.cleanup_runtime()` synchronously; do not move correctness back to `QObject.destroyed`, `deleteLater()`, hide-only pauses, or post-dialog cleanup.
+The current production boundary is one engine runtime generation plus exact `DisplayManager` identity. Settings/CUSTOM handlers must call full teardown before constructing dialogs or replacement displays. `DisplayManager.cleanup()` invokes `DisplayWidget.cleanup_runtime()` synchronously; a non-reentrant destruction barrier then confirms that the retired Qt roots and generation-scoped owners are gone. Do not treat `deleteLater()`, hide-only pauses, post-dialog cleanup, or a bounded timer delay as destruction proof, and do not use nested `processEvents()` calls to manufacture that proof. A successfully started RUN session must also disable Qt last-window auto-quit: the deliberate zero-window destruction interval is not an application-exit request, and only explicit terminal routes may end it.
+
+The destruction barrier and presentation barrier are independent. Destroying the old graph only permits replacement construction. The replacement display/compositor/visualizer remains hidden until current runtime generation, visualizer engine generation, and activation identity produce their own authoritative first frame. The existing `FadeCoordinator` remains the sole reveal coordinator; old frames, cached state, construction, GL initialization, repaint requests, and timer ticks do not satisfy readiness.
 
 Context acquisition/deletion failure is a hard incomplete teardown: retain the resource/manager, keep the compositor out of `DESTROYED`, log the owner/context/generation, and fail the reconfiguration. Never clear handles to manufacture a zero count.
 
@@ -247,7 +257,7 @@ A Qt share group makes a numeric GL handle accessible across contexts; it does n
 
 Settings/Edit handlers invoke the engine stop boundary once. `engine.stop(exit_app=False)` is the sole full-teardown authority; handlers must not add a second direct `teardown_display_runtime()` call.
 
-Do not rely on garbage collection, `QObject.destroyed`, `deleteLater()` alone, or driver cleanup.
+Do not rely on garbage collection, `deleteLater()` alone, or driver cleanup. `QObject.destroyed` may participate in an explicit bounded destruction barrier, but never replaces synchronous owner-context GL/resource cleanup. Periodic/production `gc.collect()`, working-set or allocator trimming, process/worker recycling, cache enlargement, retired-tree reuse, and warm-standby runtimes are forbidden substitutes for releasing owners.
 
 Warmup is optional optimization; correctness never depends on it.
 
@@ -266,7 +276,7 @@ Before adding a worker:
 - stop hidden/static work;
 - coalesce latest non-critical state.
 
-Do not use a general COMPUTE task per presentation frame, worker-to-paint handshake, busy-spin timing, or one UI callback per diagnostic event.
+Do not use a general COMPUTE task per presentation frame, worker-to-paint handshake, busy-spin timing, or one UI callback per diagnostic event. Where an existing reactive mode already uses one bounded compute lane, task reduction must preserve every lane-free authored step and every discrete input edge; do not add a second token clock or publish only an already-decayed terminal batch state.
 
 Measure GUI timer lateness, callback duration, paint duration, scene age, signal backlog, synchronous I/O, and logging overhead.
 

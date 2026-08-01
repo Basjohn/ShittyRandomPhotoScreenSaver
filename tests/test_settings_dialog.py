@@ -230,8 +230,8 @@ def test_settings_dialog_background_hydration_delay_respects_closing(
     scheduled_builds = []
     try:
         monkeypatch.setattr(
-            settings_dialog_module.QTimer,
-            "singleShot",
+            settings_dialog_module.ThreadManager,
+            "single_shot",
             staticmethod(lambda _delay, callback: callbacks.append(callback)),
         )
         monkeypatch.setattr(
@@ -264,8 +264,8 @@ def test_settings_dialog_scheduled_background_build_respects_closing(
     built = []
     try:
         monkeypatch.setattr(
-            settings_dialog_module.QTimer,
-            "singleShot",
+            settings_dialog_module.ThreadManager,
+            "single_shot",
             staticmethod(lambda _delay, callback: callbacks.append(callback)),
         )
         monkeypatch.setattr(dialog, "_ensure_tab_built", lambda index: built.append(index))

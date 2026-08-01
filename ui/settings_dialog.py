@@ -456,7 +456,9 @@ class SettingsDialog(QDialog):
     
     def __init__(self, settings_manager: SettingsManager,
                  animation_manager: AnimationManager,
-                 parent: Optional[QWidget] = None):
+                 parent: Optional[QWidget] = None,
+                 *,
+                 runtime_generation: object | None = None):
         """
         Initialize settings dialog.
         
@@ -467,6 +469,7 @@ class SettingsDialog(QDialog):
         """
         super().__init__(parent)
 
+        self._runtime_generation = runtime_generation
         self._settings = settings_manager
         self._animations = animation_manager
         self._is_maximized = False
@@ -842,7 +845,10 @@ class SettingsDialog(QDialog):
             self._log_perf_event("SettingsDialog.background_hydration_delay", hydration_start)
             self._schedule_next_background_build()
 
-        ThreadManager.single_shot(self._background_hydration_delay_ms, _run)
+        self._schedule_runtime_single_shot(
+            self._background_hydration_delay_ms,
+            _run,
+        )
 
     def _schedule_next_background_build(self) -> None:
         if self._closing or self._background_build_scheduled or not self._background_tab_queue:
@@ -860,7 +866,21 @@ class SettingsDialog(QDialog):
             self._ensure_tab_built(index)
             self._schedule_next_background_build()
 
-        ThreadManager.single_shot(self._background_hydration_step_delay_ms, _run)
+        self._schedule_runtime_single_shot(
+            self._background_hydration_step_delay_ms,
+            _run,
+        )
+
+    def _schedule_runtime_single_shot(
+        self,
+        delay_ms: int,
+        callback,
+    ) -> None:
+        """Track dialog-owned delayed work through the runtime scheduler."""
+
+        callback._srpss_timer_owner = self
+        callback._srpss_runtime_generation = self._runtime_generation
+        ThreadManager.single_shot(delay_ms, callback)
 
     def _style_tab_widget(self, widget: Optional[QWidget]) -> None:
         if widget is None:
@@ -1105,8 +1125,7 @@ class SettingsDialog(QDialog):
             finally:
                 self._suppress_scroll_capture = False
 
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(0, _apply_scroll)
+        self._schedule_runtime_single_shot(0, _apply_scroll)
 
     def _save_last_tab(self, index: int) -> None:
         if index < 0:
@@ -1269,7 +1288,11 @@ class SettingsDialog(QDialog):
                 if notice is not None:
                     notice.setText("Settings reverted to defaults!")
                     notice.setVisible(True)
-                    QTimer.singleShot(2000, lambda: notice.setVisible(False))
+
+                    def _hide_notice() -> None:
+                        notice.setVisible(False)
+
+                    self._schedule_runtime_single_shot(2000, _hide_notice)
             except Exception:
                 logger.debug("Failed to show reset notice label", exc_info=True)
         except Exception as exc:
@@ -1430,7 +1453,11 @@ class SettingsDialog(QDialog):
             if notice is not None:
                 notice.setText("Visualizer presets imported!")
                 notice.setVisible(True)
-                QTimer.singleShot(2000, lambda: notice.setVisible(False))
+
+                def _hide_notice() -> None:
+                    notice.setVisible(False)
+
+                self._schedule_runtime_single_shot(2000, _hide_notice)
         except Exception:
             logger.debug("Failed to show visualizer import notice label", exc_info=True)
     
@@ -1733,8 +1760,10 @@ class SettingsDialog(QDialog):
             pass
         # Defer image scaling until after Qt processes layout geometry
         try:
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(0, self._update_about_header_images)
+            self._schedule_runtime_single_shot(
+                0,
+                self._update_about_header_images,
+            )
         except Exception as e:
             logger.debug("[SETTINGS] Exception suppressed: %s", e)
         self._log_perf_event("SettingsDialog.showEvent.total", show_start)

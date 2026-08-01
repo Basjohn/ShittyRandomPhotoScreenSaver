@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QGroupBox, QCheckBox, QLineEdit,
     QSlider, QWidget, QPushButton, QGridLayout,
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
@@ -182,7 +182,9 @@ def _queue_gmail_auth_refresh(tab: WidgetsTab) -> None:
         tab._gmail_auth_refresh_queued = False
         _refresh_gmail_auth_state(tab)
 
-    QTimer.singleShot(250, _run)
+    _run._srpss_timer_owner = tab
+    _run._srpss_runtime_generation = getattr(tab, "_runtime_generation", None)
+    ThreadManager.single_shot(250, _run)
 
 
 def _finalize_bucket_body(toggle, body: QWidget) -> None:

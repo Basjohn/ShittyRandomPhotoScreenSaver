@@ -7,6 +7,7 @@ Manages resource lifecycle and ensures proper cleanup.
 from __future__ import annotations
 
 import atexit
+from dataclasses import dataclass
 import sys
 import uuid
 import weakref
@@ -20,6 +21,16 @@ from core.logging.logger import get_logger, is_verbose_logging
 
 T = TypeVar('T')
 
+try:
+    from PySide6.QtCore import QObject
+except ImportError:  # pragma: no cover - used by non-Qt maintenance tools
+    QObject = ()  # type: ignore[assignment,misc]
+
+try:
+    from shiboken6 import isValid as _is_valid_qobject
+except ImportError:  # pragma: no cover - used by non-Qt maintenance tools
+    _is_valid_qobject = None
+
 
 def _freeze_snapshot_value(value):
     """Detach mutable metadata before exposing an immutable snapshot."""
@@ -32,6 +43,117 @@ def _freeze_snapshot_value(value):
     if isinstance(value, (list, tuple, set, frozenset)):
         return tuple(_freeze_snapshot_value(item) for item in value)
     return repr(value)
+
+
+def _freeze_worker_snapshot_value(value):
+    """Detach metadata without invoking arbitrary object ``repr`` methods."""
+    if value is None or isinstance(value, (str, int, float, bool, bytes)):
+        return value
+    if isinstance(value, dict):
+        return MappingProxyType({
+            key: _freeze_worker_snapshot_value(item) for key, item in value.items()
+        })
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return tuple(_freeze_worker_snapshot_value(item) for item in value)
+    return MappingProxyType({
+        "type": type(value).__name__,
+        "identity": id(value),
+    })
+
+
+@dataclass(frozen=True)
+class _CleanupHandlerRecord:
+    """Cleanup callback storage that does not accidentally own bound objects."""
+
+    callback: Any
+    is_method: bool
+    is_weak_method: bool
+    kind: str
+    owner_class: Optional[str]
+    owner_id: Optional[int]
+
+    def resolve(self) -> Optional[Callable[..., None]]:
+        """Return the currently live callback, if this record still has one."""
+        if self.is_weak_method:
+            return self.callback()
+        return self.callback
+
+
+def _is_future_registration(resource: Any) -> bool:
+    """Avoid adding diagnostic work to the high-volume task-Future path."""
+    resource_type = type(resource)
+    return (
+        resource_type.__name__ == "Future"
+        and resource_type.__module__.startswith("concurrent.futures")
+    )
+
+
+def _bounded_creation_site(resource: Any) -> tuple[Optional[str], str]:
+    """Capture one caller frame, never a traceback or a retained frame chain."""
+    if _is_future_registration(resource):
+        return None, "suppressed_high_volume_future"
+    try:
+        caller = sys._getframe(2)
+        return (
+            f"{os.path.basename(caller.f_code.co_filename)}:"
+            f"{caller.f_lineno}:{caller.f_code.co_name}",
+            "caller_frame",
+        )
+    except (AttributeError, ValueError):
+        return None, "unavailable"
+    finally:
+        # A frame keeps locals alive; do not retain it in registration metadata.
+        try:
+            del caller
+        except UnboundLocalError:
+            pass
+
+
+def _qobject_validity(resource: Any) -> Optional[bool]:
+    """Return QObject validity without making Qt a ResourceManager dependency."""
+    if not QObject or not isinstance(resource, QObject):
+        return None
+    if _is_valid_qobject is None:
+        return True
+    try:
+        return bool(_is_valid_qobject(resource))
+    except RuntimeError:
+        return False
+
+
+def _infer_runtime_generation(resource: Any, metadata: Dict[str, Any]) -> tuple[Any, str]:
+    """Use explicit metadata first, then a short QObject parent walk if available."""
+    value = metadata.get("runtime_generation")
+    if value is not None:
+        return value, "metadata:runtime_generation"
+
+    if not QObject or not isinstance(resource, QObject):
+        return None, "unavailable"
+
+    current = resource
+    for _ in range(16):
+        if _qobject_validity(current) is False:
+            return None, "invalid_qobject"
+        try:
+            value = getattr(current, "_runtime_generation", None)
+            if value is not None:
+                return value, "qobject_parent"
+            current = current.parent()
+        except RuntimeError:
+            return None, "invalid_qobject"
+        if current is None:
+            break
+    return None, "unavailable"
+
+
+def _lifetime_scope(metadata: Dict[str, Any], runtime_generation: Any) -> str:
+    """Keep process-scoped registrations distinct from generation-owned entries."""
+    explicit_scope = metadata.get("lifetime_scope", metadata.get("scope"))
+    if isinstance(explicit_scope, str):
+        normalized = explicit_scope.lower()
+        if normalized in {"process", "runtime"}:
+            return normalized
+    return "runtime" if runtime_generation is not None else "unspecified"
 
 _logger = get_logger("resources.manager")
 
@@ -81,7 +203,8 @@ class ResourceManager:
         self._resources: Dict[str, ResourceInfo] = {}
         self._weak_refs: Dict[str, Any] = {}
         self._strong_refs: Dict[str, Any] = {}  # Strong refs for temp files, etc.
-        self._cleanup_handlers: Dict[str, Callable[[Any], None]] = {}
+        self._cleanup_handlers: Dict[str, _CleanupHandlerRecord] = {}
+        self._registration_details: Dict[str, Dict[str, Any]] = {}
         self._logger = _logger
         self._shutdown = False
         self._initialized = False
@@ -137,6 +260,16 @@ class ResourceManager:
             resource_type_enum = ResourceType.from_string(resource_type)
         else:
             resource_type_enum = resource_type
+
+        registration_metadata = dict(metadata)
+        runtime_generation, generation_source = _infer_runtime_generation(
+            resource, registration_metadata
+        )
+        lifetime_scope = _lifetime_scope(registration_metadata, runtime_generation)
+        creation_site, creation_site_kind = _bounded_creation_site(resource)
+        if runtime_generation is not None:
+            registration_metadata.setdefault("runtime_generation", runtime_generation)
+        registration_metadata.setdefault("lifetime_scope", lifetime_scope)
         
         with self._lock:
             # Generate unique ID
@@ -147,7 +280,7 @@ class ResourceManager:
                 resource_id=resource_id,
                 resource_type=resource_type_enum,
                 description=description,
-                metadata=metadata or {}
+                metadata=registration_metadata
             )
             
             # Store the resource
@@ -155,7 +288,7 @@ class ResourceManager:
             
             # Create weak reference with finalizer
             def _finalize(rid: str) -> None:
-                if not self._initialized or self._shutdown:
+                if not self._initialized:
                     return
                 # In non-verbose mode we skip the per-resource debug line to
                 # keep logs readable; the real work still happens in
@@ -178,17 +311,111 @@ class ResourceManager:
             
             # Determine cleanup handler
             if cleanup_handler is not None:
-                self._cleanup_handlers[resource_id] = (cleanup_handler, False)
+                cleanup_record = self._make_cleanup_handler_record(
+                    cleanup_handler, is_method=False
+                )
             elif isinstance(resource, CleanupProtocol):
-                # Store as (handler, is_method) - methods don't need resource arg
-                self._cleanup_handlers[resource_id] = (resource.cleanup, True)
+                cleanup_record = self._make_cleanup_handler_record(
+                    resource.cleanup, is_method=True
+                )
             elif hasattr(resource, 'cleanup') and callable(resource.cleanup):
-                self._cleanup_handlers[resource_id] = (resource.cleanup, True)
+                cleanup_record = self._make_cleanup_handler_record(
+                    resource.cleanup, is_method=True
+                )
+            else:
+                cleanup_record = None
+
+            if cleanup_record is not None:
+                self._cleanup_handlers[resource_id] = cleanup_record
+
+            self._registration_details[resource_id] = {
+                "runtime_generation": runtime_generation,
+                "generation_source": generation_source,
+                "lifetime_scope": lifetime_scope,
+                "resource_class": type(resource).__name__,
+                "resource_identity": id(resource),
+                "owner_class": registration_metadata.get("owner_class")
+                or type(resource).__name__,
+                "owner_id": registration_metadata.get("owner_id")
+                or id(resource),
+                "creation_site": creation_site,
+                "creation_site_kind": creation_site_kind,
+                "cleanup_handler_kind": (
+                    cleanup_record.kind if cleanup_record is not None else "none"
+                ),
+                "cleanup_handler_owner_class": (
+                    cleanup_record.owner_class if cleanup_record is not None else None
+                ),
+                "cleanup_handler_owner_id": (
+                    cleanup_record.owner_id if cleanup_record is not None else None
+                ),
+                "cleanup_callback_retains_owner": (
+                    cleanup_record is not None
+                    and cleanup_record.owner_id is not None
+                    and not cleanup_record.is_weak_method
+                ),
+            }
+
+            # A PySide wrapper can remain reachable after its C++ QObject has
+            # emitted ``destroyed``.  Release passive accounting at the C++
+            # lifetime boundary as well as at Python weak finalization so a
+            # retired generation cannot accumulate invalid GUI/timer records.
+            if QObject and isinstance(resource, QObject):
+                try:
+                    manager_ref = weakref.ref(self)
+
+                    def _release_destroyed_qobject(
+                        *_args: object,
+                        rid: str = resource_id,
+                        rm_ref: weakref.ReferenceType[ResourceManager] = manager_ref,
+                    ) -> None:
+                        manager = rm_ref()
+                        if manager is not None:
+                            manager.release_tracking(rid)
+
+                    resource.destroyed.connect(_release_destroyed_qobject)
+                except (AttributeError, RuntimeError, TypeError):
+                    self._logger.debug(
+                        "Could not attach QObject destruction accounting release for %s",
+                        resource_id,
+                        exc_info=True,
+                    )
             
             resource_info.increment_reference_count()
             
             self._logger.debug(f"Registered resource: {resource_id} ({description})")
             return resource_id
+
+    @staticmethod
+    def _make_cleanup_handler_record(
+        cleanup_handler: Callable[..., None], *, is_method: bool
+    ) -> _CleanupHandlerRecord:
+        """Weakly retain ordinary Python bound methods when their owner supports it."""
+        owner = getattr(cleanup_handler, "__self__", None)
+        is_bound_method = owner is not None and getattr(cleanup_handler, "__func__", None) is not None
+        owner_class = type(owner).__name__ if is_bound_method else None
+        owner_id = id(owner) if is_bound_method else None
+        if is_bound_method:
+            try:
+                return _CleanupHandlerRecord(
+                    callback=weakref.WeakMethod(cleanup_handler),
+                    is_method=is_method,
+                    is_weak_method=True,
+                    kind="weak_bound_method",
+                    owner_class=owner_class,
+                    owner_id=owner_id,
+                )
+            except TypeError:
+                # Built-in/C-extension methods can be non-weak-referenceable.
+                pass
+        return _CleanupHandlerRecord(
+            callback=cleanup_handler,
+            is_method=is_method,
+            is_weak_method=False,
+            kind="bound_method" if is_bound_method else "function",
+            owner_class=owner_class,
+            owner_id=owner_id,
+        )
     
     def register_qt(
         self,
@@ -410,48 +637,151 @@ class ResourceManager:
                         stats["total"] += 1
             return stats
 
-    def get_accounting_snapshot(self):
-        """Return an immutable, detached snapshot of registered resources."""
+    def _snapshot_entry(
+        self,
+        info: ResourceInfo,
+        *,
+        inspect_live_resource: bool = True,
+    ) -> MappingProxyType:
+        """Build one detached diagnostic record while the registry lock is held."""
+        metadata = dict(info.metadata)
+        details = self._registration_details.get(info.resource_id, {})
+        freeze_value = (
+            _freeze_snapshot_value
+            if inspect_live_resource
+            else _freeze_worker_snapshot_value
+        )
+        tracked_bytes = metadata.get("tracked_bytes")
+        if not (
+            isinstance(tracked_bytes, int)
+            and not isinstance(tracked_bytes, bool)
+            and tracked_bytes >= 0
+        ):
+            tracked_bytes = None
+        dimensions = metadata.get("dimensions")
+        if isinstance(dimensions, (list, tuple)):
+            dimensions = tuple(dimensions)
+        elif dimensions is not None:
+            dimensions = None
+
+        resource = None
+        if inspect_live_resource:
+            strong_resource = self._strong_refs.get(info.resource_id)
+            weak_resource = self._weak_refs.get(info.resource_id)
+            resource = strong_resource if strong_resource is not None else (
+                weak_resource() if weak_resource is not None else None
+            )
+        return MappingProxyType({
+            "resource_id": info.resource_id,
+            "resource_type": info.resource_type.name,
+            "description": freeze_value(info.description),
+            "group": metadata.get("group", info.group),
+            "gl_handle_type": freeze_value(
+                metadata.get("gl_handle_type")
+            ),
+            "owner": freeze_value(metadata.get("owner")),
+            "generation": freeze_value(metadata.get("generation")),
+            "runtime_generation": freeze_value(
+                details.get("runtime_generation")
+            ),
+            "generation_source": details.get("generation_source"),
+            "lifetime_scope": details.get("lifetime_scope"),
+            "resource_class": details.get("resource_class"),
+            "resource_identity": details.get("resource_identity"),
+            "owner_class": details.get("owner_class"),
+            "owner_id": details.get("owner_id"),
+            "creation_site": details.get("creation_site"),
+            "creation_site_kind": details.get("creation_site_kind"),
+            "weak_live": resource is not None if inspect_live_resource else None,
+            "qobject_valid": (
+                _qobject_validity(resource)
+                if inspect_live_resource and resource is not None
+                else None
+            ),
+            "cleanup_handler_kind": details.get("cleanup_handler_kind", "none"),
+            "cleanup_handler_owner_class": details.get("cleanup_handler_owner_class"),
+            "cleanup_handler_owner_id": details.get("cleanup_handler_owner_id"),
+            "cleanup_callback_retains_owner": details.get(
+                "cleanup_callback_retains_owner", False
+            ),
+            "dimensions": dimensions,
+            "format": freeze_value(metadata.get("format")),
+            "tracked_bytes": tracked_bytes,
+            "lease_count": None,
+        })
+
+    def _accounting_snapshot_for_ids(
+        self,
+        resource_ids: Optional[set[str]] = None,
+        *,
+        inspect_live_resources: bool = True,
+    ):
+        """Return the existing aggregate snapshot, optionally filtered to known ids."""
         with self._lock:
             resources = []
             known_tracked_bytes = 0
             unknown_tracked_resources = 0
             for info in self._resources.values():
-                metadata = dict(info.metadata)
-                tracked_bytes = metadata.get("tracked_bytes")
-                if (
-                    isinstance(tracked_bytes, int)
-                    and not isinstance(tracked_bytes, bool)
-                    and tracked_bytes >= 0
-                ):
-                    known_tracked_bytes += tracked_bytes
-                else:
-                    tracked_bytes = None
+                if resource_ids is not None and info.resource_id not in resource_ids:
+                    continue
+                entry = self._snapshot_entry(
+                    info,
+                    inspect_live_resource=inspect_live_resources,
+                )
+                if entry["tracked_bytes"] is None:
                     unknown_tracked_resources += 1
-                dimensions = metadata.get("dimensions")
-                if dimensions is not None:
-                    dimensions = tuple(dimensions)
-                resources.append(MappingProxyType({
-                    "resource_id": info.resource_id,
-                    "resource_type": info.resource_type.name,
-                    "description": info.description,
-                    "group": metadata.get("group", info.group),
-                    "gl_handle_type": _freeze_snapshot_value(
-                        metadata.get("gl_handle_type")
-                    ),
-                    "owner": _freeze_snapshot_value(metadata.get("owner")),
-                    "generation": _freeze_snapshot_value(metadata.get("generation")),
-                    "dimensions": dimensions,
-                    "format": _freeze_snapshot_value(metadata.get("format")),
-                    "tracked_bytes": tracked_bytes,
-                    "lease_count": None,
-                }))
+                else:
+                    known_tracked_bytes += entry["tracked_bytes"]
+                resources.append(entry)
             return MappingProxyType({
                 "total_resources": len(resources),
                 "known_tracked_bytes": known_tracked_bytes,
                 "unknown_tracked_resources": unknown_tracked_resources,
                 "resources": tuple(resources),
             })
+
+    def get_accounting_snapshot(self):
+        """Return an immutable, detached snapshot of registered resources."""
+        return self._accounting_snapshot_for_ids()
+
+    def get_usage_accounting_snapshot(self):
+        """Return worker-safe accounting without dereferencing live resources.
+
+        The periodic usage sampler runs outside the GUI thread.  It may read
+        immutable registration metadata and byte counts, but it must not
+        dereference QObject weakrefs, call Shiboken validity checks, or invoke
+        arbitrary object ``repr`` methods.
+        """
+        return self._accounting_snapshot_for_ids(inspect_live_resources=False)
+
+    def get_generation_accounting_snapshot(
+        self, runtime_generation: Any, *, include_process_scoped: bool = False
+    ):
+        """Return a read-only snapshot of entries owned by one runtime generation.
+
+        Process-scoped records are deliberately excluded unless the caller opts in;
+        this is diagnostic selection only and never performs cleanup.
+        """
+        with self._lock:
+            resource_ids = {
+                resource_id
+                for resource_id, details in self._registration_details.items()
+                if details.get("runtime_generation") == runtime_generation
+                and (
+                    include_process_scoped
+                    or details.get("lifetime_scope") != "process"
+                )
+            }
+        return self._accounting_snapshot_for_ids(resource_ids)
+
+    def get_resources_by_runtime_generation(
+        self, runtime_generation: Any, *, include_process_scoped: bool = False
+    ) -> tuple[MappingProxyType, ...]:
+        """Return read-only entry details for one runtime generation without cleanup."""
+        return self.get_generation_accounting_snapshot(
+            runtime_generation,
+            include_process_scoped=include_process_scoped,
+        )["resources"]
     
     def get(self, resource_id: str) -> Optional[Any]:
         """
@@ -510,12 +840,15 @@ class ResourceManager:
             cleanup_info = self._cleanup_handlers.pop(resource_id, None)
             self._resources.pop(resource_id, None)
             self._weak_refs.pop(resource_id, None)
+            self._registration_details.pop(resource_id, None)
 
         # Cleanup may call GL; registry locks must never cross this boundary.
         if cleanup_info is not None:
             try:
-                handler, is_method = cleanup_info
-                if is_method:
+                handler = cleanup_info.resolve()
+                if handler is None:
+                    return True
+                if cleanup_info.is_method:
                     if resource is not None:
                         handler()
                 elif resource is not None:
@@ -535,19 +868,20 @@ class ResourceManager:
             self._resources.pop(resource_id, None)
             self._weak_refs.pop(resource_id, None)
             self._strong_refs.pop(resource_id, None)
+            self._registration_details.pop(resource_id, None)
             return True
     
     def _finalize_resource(self, resource_id: str) -> None:
         """Called when a resource is garbage collected."""
         with self._lock:
-            if resource_id in self._cleanup_handlers:
-                # Resource was GC'd but handler still exists. The detailed
-                # per-id debug message is only useful when running in verbose
-                # diagnostics mode; for normal debug runs we keep logs tight.
-                self._cleanup_handlers.pop(resource_id, None)
-                self._resources.pop(resource_id, None)
-                if is_verbose_logging():
-                    self._logger.debug(f"Resource {resource_id} was garbage collected")
+            was_registered = resource_id in self._resources
+            self._cleanup_handlers.pop(resource_id, None)
+            self._resources.pop(resource_id, None)
+            self._weak_refs.pop(resource_id, None)
+            self._strong_refs.pop(resource_id, None)
+            self._registration_details.pop(resource_id, None)
+            if was_registered and is_verbose_logging():
+                self._logger.debug(f"Resource {resource_id} was garbage collected")
     
     def get_all_resources(self) -> List[ResourceInfo]:
         """Get information about all registered resources."""

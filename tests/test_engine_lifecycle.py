@@ -36,7 +36,7 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
             events.append(("animations_cleanup", None))
 
     class _Dialog:
-        def __init__(self, _settings, _animations):
+        def __init__(self, _settings, _animations, **_kwargs):
             events.append(("dialog_init", None))
 
         def exec(self):
@@ -66,7 +66,7 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
             self.resource_manager = object()
             self._display_initialized = True
 
-        def stop(self, exit_app=False):
+        def stop(self, exit_app=False, *, reason=None):
             events.append(("engine_stop", exit_app))
             self.display_manager.cleanup()
             self.display_manager = None
@@ -135,7 +135,7 @@ def test_custom_edit_reload_snapshots_real_lifecycle_boundaries(monkeypatch):
             self.settings_manager = _Settings()
             self._display_initialized = True
 
-        def stop(self, exit_app=False):
+        def stop(self, exit_app=False, *, reason=None):
             events.append(("engine_stop", exit_app))
             self.display_manager.cleanup()
             self.display_manager = None
@@ -174,6 +174,23 @@ def test_custom_edit_reload_snapshots_real_lifecycle_boundaries(monkeypatch):
     assert events.index(("engine_start", None)) < events.index(("snapshot", "custom_edit", "after_restart"))
 
 
+def test_custom_layout_reload_is_rejected_while_settings_owns_recreation():
+    from engine import engine_handlers
+
+    stop_calls = []
+    engine = SimpleNamespace(
+        _settings_dialog_active=True,
+        _pending_runtime_destruction_barrier=None,
+        _display_initialized=False,
+        display_manager=None,
+        stop=lambda *args, **kwargs: stop_calls.append((args, kwargs)),
+    )
+
+    engine_handlers.on_custom_layout_reload_requested(engine)
+
+    assert stop_calls == []
+
+
 def test_settings_teardown_failure_exits_cleanly_without_opening_dialog(monkeypatch):
     from engine import engine_handlers
 
@@ -187,7 +204,7 @@ def test_settings_teardown_failure_exits_cleanly_without_opening_dialog(monkeypa
         display_manager=SimpleNamespace(displays=[]),
         _settings_dialog_active=False,
         _sources_changed_during_settings=False,
-        stop=lambda exit_app=False: (_ for _ in ()).throw(RuntimeError("GL deletion failed")),
+        stop=lambda exit_app=False, reason=None: (_ for _ in ()).throw(RuntimeError("GL deletion failed")),
     )
     monkeypatch.setattr(
         "rendering.multi_monitor_coordinator.get_coordinator",
@@ -212,6 +229,34 @@ def test_settings_teardown_failure_exits_cleanly_without_opening_dialog(monkeypa
         ("settings_active", False),
         ("exit", 1),
     ]
+
+
+def test_terminal_stop_from_stopped_state_is_not_ignored(monkeypatch):
+    from engine.screensaver_engine import EngineState
+
+    engine = ScreensaverEngine()
+    engine._state = EngineState.STOPPED
+    exits = []
+    monkeypatch.setattr(
+        QApplication,
+        "quit",
+        staticmethod(lambda: exits.append("quit")),
+    )
+
+    engine.stop(exit_app=True)
+
+    assert engine._get_state() is EngineState.SHUTTING_DOWN
+    assert engine._terminal_shutdown_requested is True
+    assert exits == ["quit"]
+
+
+def test_display_initialization_rejects_pending_destruction_barrier():
+    engine = ScreensaverEngine()
+    engine._pending_runtime_destruction_barrier = SimpleNamespace(
+        is_complete=False
+    )
+
+    assert engine._initialize_display() is False
 
 def test_sources_changed_during_settings_is_deferred(monkeypatch):
     from engine import engine_handlers

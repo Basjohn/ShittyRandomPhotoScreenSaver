@@ -23,7 +23,10 @@ from PySide6.QtGui import QColor, QGuiApplication, QImage, QPixmap
 from core.performance.resource_metrics import collect_resource_accounting
 from rendering.gl_programs import texture_manager as texture_module
 from rendering.gl_programs.texture_manager import GLTextureManager, PBOEntry
-from rendering.image_resource_accounting import refresh_display_image_accounting
+from rendering.image_resource_accounting import (
+    aggregate_display_image_accounting,
+    refresh_display_image_accounting,
+)
 from rendering.transition_state import CrossfadeState
 from utils.image_cache import ImageCache
 
@@ -165,7 +168,13 @@ def run_harness(cycles: int) -> dict[str, Any]:
     engine = SimpleNamespace(
         _image_cache=cache,
         resource_manager=_EmptyOwner(),
-        display_manager=SimpleNamespace(displays=displays),
+        display_manager=SimpleNamespace(
+            displays=displays,
+            get_image_accounting_snapshot=lambda: aggregate_display_image_accounting(
+                (display._image_resource_accounting for display in displays),
+                generation=1,
+            ),
+        ),
     )
     process = psutil.Process()
     sizes = [

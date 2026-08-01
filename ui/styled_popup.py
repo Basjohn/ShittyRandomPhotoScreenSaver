@@ -8,10 +8,11 @@ from PySide6.QtWidgets import (
     QDialog, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QWidget,
     QGraphicsDropShadowEffect, QColorDialog, QFrame,
 )
-from PySide6.QtCore import Qt, QTimer, QPoint, Signal
+from PySide6.QtCore import Qt, QPoint, Signal
 from PySide6.QtGui import QColor, QPalette, QPainter, QPen, QBrush, QLinearGradient
 
 from core.logging.logger import get_logger
+from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
 
@@ -63,7 +64,7 @@ class StyledPopup(QDialog):
         
         # Auto-close timer
         if auto_close_ms > 0:
-            QTimer.singleShot(auto_close_ms, self._auto_accept)
+            ThreadManager.single_shot(auto_close_ms, self._auto_accept)
     
     def _setup_ui(self) -> None:
         """Build the popup UI."""

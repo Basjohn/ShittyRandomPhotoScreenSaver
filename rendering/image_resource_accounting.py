@@ -12,6 +12,17 @@ from typing import Any
 from PySide6.QtGui import QPixmap
 
 
+_EMPTY_DISPLAY_IMAGE_ACCOUNTING = MappingProxyType(
+    {
+        "owner": "uninitialized",
+        "generation": None,
+        "total_tracked_bytes": 0,
+        "resource_count": 0,
+        "resources": (),
+    }
+)
+
+
 def _candidate_roles(widget: Any) -> list[tuple[str, Any]]:
     candidates: list[tuple[str, Any]] = [
         ("display.current", getattr(widget, "current_pixmap", None)),
@@ -64,7 +75,7 @@ def _candidate_roles(widget: Any) -> list[tuple[str, Any]]:
     return candidates
 
 
-def refresh_display_image_accounting(widget: Any) -> None:
+def refresh_display_image_accounting(widget: Any):
     """Capture unique QPixmap backing stores and all roles retaining them."""
     unique: dict[int, dict[str, Any]] = {}
     for role, pixmap in _candidate_roles(widget):
@@ -116,12 +127,36 @@ def refresh_display_image_accounting(widget: Any) -> None:
             "resources": tuple(resources),
         }
     )
+    return widget._image_resource_accounting
 
 
 def get_display_image_accounting(widget: Any):
     """Return the detached last GUI-thread capture."""
     snapshot = getattr(widget, "_image_resource_accounting", None)
-    if snapshot is None:
-        refresh_display_image_accounting(widget)
-        snapshot = widget._image_resource_accounting
-    return snapshot
+    return snapshot if snapshot is not None else _EMPTY_DISPLAY_IMAGE_ACCOUNTING
+
+
+def aggregate_display_image_accounting(
+    snapshots,
+    *,
+    generation: Any = None,
+):
+    """Deduplicate immutable per-display captures without touching Qt state."""
+
+    unique: dict[str, Any] = {}
+    for snapshot in snapshots:
+        for item in snapshot.get("resources", ()):
+            resource_id = str(item.get("resource_id", ""))
+            if resource_id and resource_id not in unique:
+                unique[resource_id] = item
+    resources = tuple(unique[key] for key in sorted(unique))
+    return MappingProxyType(
+        {
+            "generation": generation,
+            "total_tracked_bytes": sum(
+                int(item.get("tracked_bytes", 0) or 0) for item in resources
+            ),
+            "resource_count": len(resources),
+            "resources": resources,
+        }
+    )

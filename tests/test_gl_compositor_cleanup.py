@@ -11,6 +11,7 @@ import pytest
 from PySide6.QtWidgets import QApplication, QWidget
 
 from rendering.gl_compositor import GLCompositorWidget, gl as _gl
+from rendering.gl_state_manager import GLContextState
 
 
 @pytest.fixture
@@ -40,6 +41,31 @@ def test_gl_compositor_cleanup_idempotent_without_context(qapp):
     # Call cleanup multiple times without forcing a GL context.
     comp.cleanup()
     comp.cleanup()
+
+
+def test_cleanup_refuses_gl_teardown_while_adaptive_worker_is_live():
+    class _State:
+        @staticmethod
+        def get_state():
+            return GLContextState.READY
+
+    compositor = type(
+        "CompositorStub",
+        (),
+        {
+            "_gl_state": _State(),
+            "_render_shutdown_requested": False,
+            "_gl_lifecycle_generation": 1,
+            "_transition_animation_generation": 1,
+            "_cancel_current_animation": lambda self: None,
+            "_stop_render_strategy": lambda self: False,
+        },
+    )()
+
+    with pytest.raises(RuntimeError, match="refusing GL/context teardown"):
+        GLCompositorWidget.cleanup(compositor)
+
+    assert compositor._render_shutdown_requested is True
 
 
 @pytest.mark.qt_no_exception_capture

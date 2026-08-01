@@ -365,7 +365,7 @@ class TransitionController(QObject):
         self._watchdog_started_at = time.monotonic()
         
         try:
-            timer = QTimer()
+            timer = QTimer(self)
             timer.setSingleShot(True)
             timer.timeout.connect(self._on_watchdog_timeout)
             timer.start(timeout_ms)
@@ -390,9 +390,10 @@ class TransitionController(QObject):
     
     def _cancel_watchdog(self) -> None:
         """Stop the watchdog timer."""
-        if self._watchdog_timer and self._watchdog_timer.isActive():
+        timer = self._watchdog_timer
+        if timer and timer.isActive():
             try:
-                self._watchdog_timer.stop()
+                timer.stop()
             except Exception as e:
                 logger.debug("[TRANSITION] Exception suppressed: %s", e)
         
@@ -401,6 +402,12 @@ class TransitionController(QObject):
                 self._resource_manager.unregister(self._watchdog_resource_id)
             except Exception as e:
                 logger.debug("[TRANSITION] Exception suppressed: %s", e)
+
+        if timer is not None:
+            try:
+                timer.deleteLater()
+            except Exception as e:
+                logger.debug("[TRANSITION] Watchdog deleteLater skipped: %s", e)
         
         self._watchdog_timer = None
         self._watchdog_resource_id = None
@@ -477,4 +484,7 @@ class TransitionController(QObject):
         self._cancel_watchdog()
         self._overlay_timeouts.clear()
         self._pending_finish_args = None
+        self._widget_manager = None
+        self._resource_manager = None
+        self._parent = None
         logger.debug("[TRANSITION_CONTROLLER] Cleanup complete")

@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-07-29
+Last updated: 2026-08-01
 
 Navigation and ownership map for SRPSS.
 
@@ -68,6 +68,7 @@ Do not read every document by default.
 |---|---|
 | Runtime sequencing | `engine/screensaver_engine.py` |
 | Full runtime teardown | `engine/engine_lifecycle.py::teardown_display_runtime` |
+| Retired-generation destruction barrier | `engine/runtime_destruction.py` |
 | Display topology/lifecycle | `engine/display_manager.py` |
 | Fullscreen presenter | `rendering/display_widget.py` |
 | Display-local ordered teardown | `rendering/display_cleanup.py::cleanup_runtime` |
@@ -77,7 +78,8 @@ Do not read every document by default.
 | Widget setup | `rendering/widget_setup_all.py` |
 | Widget metadata | `rendering/widget_descriptors.py` |
 | Thread/task ownership | `core/threading/manager.py` |
-| Resource tracking | `core/resources/manager.py` |
+| Resource tracking and generation ownership | `core/resources/manager.py`, `core/performance/resource_metrics.py` |
+| Whole-process usage sampling | `core/performance/usage_sampler.py` |
 | Settings | `core/settings/settings_manager.py` |
 | Defaults/profile resolution | modules under `core/settings/` |
 | Shared events | `core/events/event_system.py` |
@@ -141,6 +143,7 @@ Phase 2 report:  Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md
 Phase 3 report:  Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md
 Phase 4 report:  Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md
 Phase 4 map:     Docs/phase_reports/P04_RESOURCE_LIFETIME_MAP.md
+Phase 5 report:  Docs/phase_reports/P05_CPU_TASK_REDUCTION.md
 ```
 
 Read `Docs/Compositor_Architecture.md`.

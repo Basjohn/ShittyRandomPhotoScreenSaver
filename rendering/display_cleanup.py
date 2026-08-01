@@ -29,6 +29,11 @@ def cleanup_runtime(widget: "DisplayWidget", *, reason: str) -> None:
     if manager is not None:
         manager.prepare_for_runtime_pause()
 
+    custom_layout_manager = getattr(widget, "_custom_layout_manager", None)
+    if custom_layout_manager is not None:
+        custom_layout_manager.cleanup()
+        widget._custom_layout_manager = None
+
     # The visualizer owns a separate display-local GL overlay until Phase 8.
     # Require its strict deletion before any manager clears widget references.
     widget._cleanup_widget(
@@ -40,6 +45,7 @@ def cleanup_runtime(widget: "DisplayWidget", *, reason: str) -> None:
 
     if manager is not None:
         manager.cleanup()
+        widget._widget_manager = None
 
     # Some overlays predate WidgetManager ownership. Their lifecycle methods
     # are idempotent, so clean them explicitly after the managed set.
@@ -73,7 +79,8 @@ def cleanup_runtime(widget: "DisplayWidget", *, reason: str) -> None:
 
     try:
         if widget._transition_controller is not None:
-            widget._transition_controller.stop_current(reason=reason)
+            widget._transition_controller.cleanup()
+            widget._transition_controller = None
         elif widget._current_transition:
             widget._current_transition.stop()
             widget._current_transition.cleanup()
@@ -86,6 +93,21 @@ def cleanup_runtime(widget: "DisplayWidget", *, reason: str) -> None:
     except Exception as exc:
         logger.debug("[OVERLAYS] Hide failed: %s", exc, exc_info=True)
     widget._cancel_transition_watchdog()
+
+    input_handler = getattr(widget, "_input_handler", None)
+    if input_handler is not None:
+        input_handler.cleanup()
+        widget._input_handler = None
+
+    image_presenter = getattr(widget, "_image_presenter", None)
+    if image_presenter is not None:
+        image_presenter.cleanup()
+        widget._image_presenter = None
+
+    transition_factory = getattr(widget, "_transition_factory", None)
+    if transition_factory is not None:
+        transition_factory.cleanup()
+        widget._transition_factory = None
 
     try:
         if widget._ctrl_cursor_hint is not None:

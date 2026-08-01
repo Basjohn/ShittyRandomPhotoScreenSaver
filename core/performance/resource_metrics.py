@@ -6,13 +6,22 @@ creates, deletes, leases, or otherwise participates in resource control flow.
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.logging.logger import (
+    get_logger,
+    is_lifecycle_logging_enabled,
+    is_perf_metrics_enabled,
+)
 
 
 logger = get_logger(__name__)
+
+_GENERATION_SUMMARY_LIMIT = 16
+_RESOURCE_DETAIL_LIMIT = 256
 
 
 def _json_safe(value: Any) -> Any:
@@ -40,6 +49,19 @@ class ResourceAccountingRecord:
     format: str | None
     tracked_bytes: int | None
     lease_count: int | None
+    runtime_generation: Any = None
+    generation_source: str | None = None
+    lifetime_scope: str | None = None
+    owner_class: str | None = None
+    owner_id: int | None = None
+    creation_site: str | None = None
+    creation_site_kind: str | None = None
+    weak_live: bool | None = None
+    qobject_valid: bool | None = None
+    cleanup_handler_kind: str | None = None
+    cleanup_handler_owner_class: str | None = None
+    cleanup_handler_owner_id: int | None = None
+    cleanup_callback_retains_owner: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -101,9 +123,12 @@ class ResourceAccountingSnapshot:
             "qt_default_fbo": "qt_owned_untracked",
         }
 
-    def resources_json(self) -> str:
+    def resources_json(self, *, limit: int | None = None) -> str:
+        resources = self.resources
+        if limit is not None:
+            resources = resources[: max(0, int(limit))]
         return json.dumps(
-            [_json_safe(asdict(record)) for record in self.resources],
+            [_json_safe(asdict(record)) for record in resources],
             separators=(",", ":"),
             sort_keys=True,
         )
@@ -146,66 +171,629 @@ def _record_from_mapping(
             and not isinstance(values.get("lease_count"), bool)
             else None
         ),
+        runtime_generation=_json_safe(values.get("runtime_generation")),
+        generation_source=(
+            str(values.get("generation_source"))
+            if values.get("generation_source") is not None
+            else None
+        ),
+        lifetime_scope=(
+            str(values.get("lifetime_scope"))
+            if values.get("lifetime_scope") is not None
+            else None
+        ),
+        owner_class=(
+            str(values.get("owner_class"))
+            if values.get("owner_class") is not None
+            else None
+        ),
+        owner_id=(
+            int(values.get("owner_id"))
+            if isinstance(values.get("owner_id"), int)
+            and not isinstance(values.get("owner_id"), bool)
+            else None
+        ),
+        creation_site=(
+            str(values.get("creation_site"))
+            if values.get("creation_site") is not None
+            else None
+        ),
+        creation_site_kind=(
+            str(values.get("creation_site_kind"))
+            if values.get("creation_site_kind") is not None
+            else None
+        ),
+        weak_live=(
+            bool(values.get("weak_live"))
+            if values.get("weak_live") is not None
+            else None
+        ),
+        qobject_valid=(
+            bool(values.get("qobject_valid"))
+            if values.get("qobject_valid") is not None
+            else None
+        ),
+        cleanup_handler_kind=(
+            str(values.get("cleanup_handler_kind"))
+            if values.get("cleanup_handler_kind") is not None
+            else None
+        ),
+        cleanup_handler_owner_class=(
+            str(values.get("cleanup_handler_owner_class"))
+            if values.get("cleanup_handler_owner_class") is not None
+            else None
+        ),
+        cleanup_handler_owner_id=(
+            int(values.get("cleanup_handler_owner_id"))
+            if isinstance(values.get("cleanup_handler_owner_id"), int)
+            and not isinstance(values.get("cleanup_handler_owner_id"), bool)
+            else None
+        ),
+        cleanup_callback_retains_owner=(
+            bool(values.get("cleanup_callback_retains_owner"))
+            if values.get("cleanup_callback_retains_owner") is not None
+            else None
+        ),
     )
 
 
-def collect_resource_accounting(engine: Any) -> ResourceAccountingSnapshot:
-    """Collect one detached snapshot from the engine's existing owners."""
-    records: list[ResourceAccountingRecord] = []
-    image_cache = getattr(engine, "_image_cache", None)
-    if image_cache is not None:
-        getter = getattr(image_cache, "get_accounting_snapshot", None)
-        if callable(getter):
-            cache_snapshot = getter()
-            for index, item in enumerate(cache_snapshot.get("resources", ())):
-                records.append(
-                    _record_from_mapping(
-                        source="cpu_image_cache",
-                        resource_id=f"cache:{index}",
-                        resource_kind="cpu_image",
-                        values=item,
-                    )
-                )
+def _safe_getattr(owner: Any, name: str, default: Any = None) -> Any:
+    """Read diagnostic state without allowing a deleted Qt wrapper to escape."""
+    try:
+        return getattr(owner, name, default)
+    except (AttributeError, ReferenceError, RuntimeError):
+        return default
 
-    display_manager = getattr(engine, "display_manager", None)
-    seen_display_resources: set[str] = set()
-    for display in list(getattr(display_manager, "displays", ()) or ()):
-        getter = getattr(display, "get_image_accounting_snapshot", None)
-        if not callable(getter):
+
+def _safe_items(value: Any) -> tuple[tuple[Any, Any], ...]:
+    try:
+        return tuple(value.items()) if hasattr(value, "items") else ()
+    except (AttributeError, ReferenceError, RuntimeError):
+        return ()
+
+
+def _safe_call(callable_value: Any, default: Any = None) -> Any:
+    try:
+        return callable_value() if callable(callable_value) else default
+    except (ReferenceError, RuntimeError, TypeError):
+        return default
+
+
+def _bounded_generation_counts(
+    values: list[Any],
+    *,
+    current_generation: Any,
+    retiring_generation: Any,
+) -> dict[str, int]:
+    """Return a capped generation map while retaining current/retiring buckets."""
+    counts: dict[str, int] = {}
+    for value in values:
+        key = "unassigned" if value is None else str(value)
+        counts[key] = counts.get(key, 0) + 1
+
+    return _cap_generation_counts(
+        counts,
+        current_generation=current_generation,
+        retiring_generation=retiring_generation,
+    )
+
+
+def _cap_generation_counts(
+    counts: dict[str, int],
+    *,
+    current_generation: Any,
+    retiring_generation: Any,
+) -> dict[str, int]:
+    """Keep a pre-aggregated generation map bounded without losing key owners."""
+
+    preferred = [
+        str(value)
+        for value in (current_generation, retiring_generation)
+        if value is not None and str(value) in counts
+    ]
+    selected = list(dict.fromkeys(preferred))
+    for key in sorted(counts):
+        if key not in selected and len(selected) < _GENERATION_SUMMARY_LIMIT:
+            selected.append(key)
+    result = {key: counts[key] for key in selected}
+    omitted = sum(value for key, value in counts.items() if key not in result)
+    if omitted:
+        result["other_generations"] = omitted
+    return result
+
+
+def _bounded_generation_count_mapping(
+    counts: Any,
+    *,
+    current_generation: Any,
+    retiring_generation: Any,
+) -> dict[str, int]:
+    """Cap an existing generation-to-count mapping without expanding its counts."""
+    values: dict[str, int] = {}
+    for key, count in _safe_items(counts):
+        try:
+            normalized_count = max(0, int(count or 0))
+        except (TypeError, ValueError):
             continue
-        display_snapshot = getter()
-        for index, item in enumerate(display_snapshot.get("resources", ())):
-            resource_id = str(item.get("resource_id") or f"display:{id(display)}:{index}")
-            if resource_id in seen_display_resources:
-                continue
-            seen_display_resources.add(resource_id)
-            records.append(
-                _record_from_mapping(
-                    source="cpu_display",
-                    resource_id=resource_id,
-                    resource_kind="cpu_pixmap",
-                    values=item,
-                )
-            )
+        if normalized_count:
+            normalized_key = "unassigned" if key is None else str(key)
+            values[normalized_key] = values.get(normalized_key, 0) + normalized_count
+    return _cap_generation_counts(
+        values,
+        current_generation=current_generation,
+        retiring_generation=retiring_generation,
+    )
 
-    resource_manager = getattr(engine, "resource_manager", None)
-    if resource_manager is not None:
-        getter = getattr(resource_manager, "get_accounting_snapshot", None)
-        if callable(getter):
-            manager_snapshot = getter()
-            for item in manager_snapshot.get("resources", ()):
-                records.append(
-                    _record_from_mapping(
-                        source="resource_manager",
-                        resource_id=str(item.get("resource_id", "")),
-                        resource_kind=str(
-                            item.get("gl_handle_type")
-                            or item.get("resource_type")
-                            or "unknown"
-                        ),
-                        values=item,
-                    )
+
+def _generation_bucket(
+    generation: Any,
+    *,
+    current_generation: Any,
+    retiring_generation: Any,
+) -> str:
+    if generation is None:
+        return "unassigned"
+    if current_generation is not None and generation == current_generation:
+        return "active"
+    if retiring_generation is not None and generation == retiring_generation:
+        return "retiring"
+    return "stale"
+
+
+def _resource_manager_ownership_summary(
+    engine: Any,
+    *,
+    current_generation: Any,
+    retiring_generation: Any,
+) -> dict[str, Any]:
+    manager = _safe_getattr(engine, "resource_manager")
+    getter = _safe_getattr(manager, "get_accounting_snapshot")
+    if not callable(getter):
+        return {"available": False}
+    try:
+        entries = tuple(getter().get("resources", ()))
+    except Exception:
+        logger.debug("[LIFECYCLE] ResourceManager ownership snapshot failed", exc_info=True)
+        return {"available": False}
+
+    by_type: dict[str, int] = {}
+    generations: list[Any] = []
+    lifecycle_buckets = {
+        "process": 0,
+        "active": 0,
+        "retiring": 0,
+        "stale": 0,
+        "unassigned": 0,
+    }
+    invalid_qobjects = 0
+    retained_cleanup_callbacks = 0
+    for entry in entries:
+        resource_type = str(entry.get("resource_type", "unknown"))
+        by_type[resource_type] = by_type.get(resource_type, 0) + 1
+        generation = entry.get("runtime_generation", entry.get("generation"))
+        generations.append(generation)
+        if entry.get("qobject_valid") is False:
+            invalid_qobjects += 1
+        if bool(entry.get("cleanup_callback_retains_owner", False)):
+            retained_cleanup_callbacks += 1
+        if entry.get("lifetime_scope") == "process":
+            lifecycle_buckets["process"] += 1
+        else:
+            lifecycle_buckets[
+                _generation_bucket(
+                    generation,
+                    current_generation=current_generation,
+                    retiring_generation=retiring_generation,
                 )
+            ] += 1
+    return {
+        "available": True,
+        "total": len(entries),
+        "by_resource_type": dict(sorted(by_type.items())),
+        "by_runtime_generation": _bounded_generation_counts(
+            generations,
+            current_generation=current_generation,
+            retiring_generation=retiring_generation,
+        ),
+        "lifetime_buckets": lifecycle_buckets,
+        "invalid_qobjects": invalid_qobjects,
+        "cleanup_callbacks_retaining_owner": retained_cleanup_callbacks,
+    }
+
+
+def _thread_ownership_summary(
+    engine: Any,
+    *,
+    current_generation: Any,
+    retiring_generation: Any,
+) -> dict[str, Any]:
+    manager = _safe_getattr(engine, "thread_manager")
+    getter = _safe_getattr(manager, "get_lifecycle_ownership_snapshot")
+    if not callable(getter):
+        return {"available": False}
+    try:
+        snapshot = getter()
+    except Exception:
+        logger.debug("[LIFECYCLE] ThreadManager ownership snapshot failed", exc_info=True)
+        return {"available": False}
+
+    tasks = tuple(snapshot.get("active_tasks", ()))
+    task_generations = [task.get("runtime_generation") for task in tasks]
+    ui = snapshot.get("ui", {})
+    return {
+        "available": True,
+        "active_tasks": len(tasks),
+        "active_tasks_by_generation": _bounded_generation_counts(
+            task_generations,
+            current_generation=current_generation,
+            retiring_generation=retiring_generation,
+        ),
+        "ui_queue_depth": int(ui.get("queue_depth", 0) or 0),
+        "ui_queued_by_generation": _bounded_generation_count_mapping(
+            ui.get("queued_by_generation", {}),
+            current_generation=current_generation,
+            retiring_generation=retiring_generation,
+        ),
+        "ui_scheduled_single_shots": int(ui.get("scheduled_single_shots", 0) or 0),
+        "ui_scheduled_by_generation": _bounded_generation_count_mapping(
+            ui.get("scheduled_single_shots_by_generation", {}),
+            current_generation=current_generation,
+            retiring_generation=retiring_generation,
+        ),
+    }
+
+
+def _display_ownership_summary(
+    display_manager: Any,
+    *,
+    current_generation: Any,
+    retiring_generation: Any,
+) -> dict[str, Any]:
+    """Count existing display-owned roots without invoking lifecycle or GL work."""
+    displays = _safe_getattr(display_manager, "displays", ()) or ()
+    try:
+        displays = tuple(displays)
+    except TypeError:
+        displays = ()
+
+    by_generation: dict[str, dict[str, Any]] = {}
+    for display in displays:
+        generation = _safe_getattr(display, "_runtime_generation")
+        if generation is None:
+            generation = current_generation
+        generation_key = "unassigned" if generation is None else str(generation)
+        counts = by_generation.setdefault(
+            generation_key,
+            {
+                "displays": 0,
+                "widget_managers": 0,
+                "widgets": 0,
+                "visualizers": 0,
+                "overlays": 0,
+                "compositors": 0,
+                "contexts": 0,
+                "offscreen_surfaces": 0,
+                "first_frames_ready": 0,
+                "visualizer_identities": [],
+                "fade_states": {},
+                "fade_compositor_ready": 0,
+                "fade_startup_holds": 0,
+            },
+        )
+        counts["displays"] += 1
+        if bool(_safe_getattr(display, "_has_rendered_first_frame", False)):
+            counts["first_frames_ready"] += 1
+
+        compositor = _safe_getattr(display, "_gl_compositor")
+        if compositor is not None:
+            counts["compositors"] += 1
+            context_getter = _safe_getattr(compositor, "context")
+            if callable(context_getter):
+                try:
+                    if context_getter() is not None:
+                        counts["contexts"] += 1
+                except (ReferenceError, RuntimeError):
+                    pass
+            if _safe_getattr(compositor, "_deferred_warmup_context") is not None:
+                counts["contexts"] += 1
+            if _safe_getattr(compositor, "_deferred_warmup_surface") is not None:
+                counts["offscreen_surfaces"] += 1
+
+        visualizer = _safe_getattr(display, "spotify_visualizer_widget")
+        if visualizer is not None:
+            counts["visualizers"] += 1
+            engine = _safe_getattr(visualizer, "_engine")
+            generation_getter = _safe_getattr(engine, "get_generation_id")
+            activation_getter = _safe_getattr(engine, "get_activation_id")
+            overlay = _safe_getattr(display, "_spotify_bars_overlay")
+            identity = {
+                "engine_generation": (
+                    _safe_call(generation_getter)
+                ),
+                "engine_activation": (
+                    _safe_call(activation_getter)
+                ),
+                "overlay_generation": _safe_getattr(
+                    overlay, "_engine_generation"
+                ),
+                "overlay_activation": _safe_getattr(overlay, "_activation_id"),
+            }
+            if len(counts["visualizer_identities"]) < 8:
+                counts["visualizer_identities"].append(identity)
+        for overlay_name in (
+            "_spotify_bars_overlay",
+            "_ctrl_cursor_hint",
+        ):
+            if _safe_getattr(display, overlay_name) is not None:
+                counts["overlays"] += 1
+        custom_manager = _safe_getattr(display, "_custom_layout_manager")
+        if _safe_getattr(custom_manager, "_grid_overlay") is not None:
+            counts["overlays"] += 1
+        widget_manager = _safe_getattr(display, "_widget_manager")
+        if widget_manager is None:
+            continue
+        counts["widget_managers"] += 1
+        widgets = _safe_getattr(widget_manager, "_widgets", {})
+        widget_items = _safe_items(widgets)
+        counts["widgets"] += len(widget_items)
+
+        fade = _safe_getattr(widget_manager, "_fade_coordinator")
+        if fade is None:
+            continue
+        state = _safe_getattr(_safe_getattr(fade, "_state"), "name", "unknown")
+        fade_states = counts["fade_states"]
+        fade_states[str(state)] = fade_states.get(str(state), 0) + 1
+        if bool(_safe_getattr(fade, "_compositor_ready", False)):
+            counts["fade_compositor_ready"] += 1
+        holds = _safe_getattr(fade, "_startup_holds", ())
+        try:
+            counts["fade_startup_holds"] += len(holds)
+        except TypeError:
+            pass
+
+    generation_keys = _bounded_generation_count_mapping(
+        {key: counts["displays"] for key, counts in by_generation.items()},
+        current_generation=current_generation,
+        retiring_generation=retiring_generation,
+    )
+    selected = set(generation_keys) - {"other_generations"}
+    omitted_displays = sum(
+        counts["displays"] for key, counts in by_generation.items() if key not in selected
+    )
+    selected_details = {
+        key: by_generation[key]
+        for key in sorted(selected)
+        if key in by_generation
+    }
+    if omitted_displays:
+        selected_details["other_generations"] = {"displays": omitted_displays}
+    return {
+        "display_manager_id": id(display_manager) if display_manager is not None else None,
+        "by_generation": selected_details,
+    }
+
+
+def _process_ownership_summary(engine: Any) -> dict[str, Any]:
+    """Take only non-blocking main-process facts; worker RSS uses its existing seam."""
+    process_summary: dict[str, Any] = {"main_pid": os.getpid()}
+    try:
+        import psutil
+
+        process = psutil.Process(os.getpid())
+        memory = process.memory_info()
+        process_summary.update(
+            {
+                "main_rss_bytes": int(getattr(memory, "rss", 0) or 0),
+                "main_private_bytes": getattr(memory, "private", None),
+                "main_threads": int(process.num_threads()),
+                "main_handles": getattr(process, "num_handles", lambda: None)(),
+            }
+        )
+    except Exception:
+        process_summary["main_metrics_available"] = False
+
+    supervisor = _safe_getattr(engine, "_process_supervisor")
+    worker_getter = _safe_getattr(supervisor, "get_image_worker_usage_snapshot")
+    if callable(worker_getter):
+        try:
+            worker = worker_getter()
+            process_summary["image_worker"] = {
+                "pid": worker.get("image_worker_pid"),
+                "rss_mb": worker.get("image_worker_rss_mb"),
+            }
+        except Exception:
+            process_summary["image_worker"] = {"available": False}
+
+    usage_service = _safe_getattr(engine, "_usage_telemetry")
+    latest_usage_getter = _safe_getattr(
+        usage_service,
+        "get_latest_lifecycle_snapshot",
+    )
+    if callable(latest_usage_getter):
+        try:
+            latest_usage = dict(latest_usage_getter())
+        except Exception:
+            latest_usage = {}
+        if latest_usage:
+            process_summary.update(
+                {
+                    "usage_sample_sequence": latest_usage.get("sequence"),
+                    "usage_sample_age_ms": latest_usage.get("sample_age_ms"),
+                    "total_rss_mb": latest_usage.get("rss_app_mb"),
+                    "total_private_commit_mb": latest_usage.get("private_app_mb"),
+                    "total_threads": latest_usage.get("threads_app"),
+                    "total_handles": latest_usage.get("handles_app"),
+                    "dedicated_vram_mb": latest_usage.get("vram_dedicated_mb"),
+                    "shared_vram_mb": latest_usage.get("vram_shared_mb"),
+                }
+            )
+    return process_summary
+
+
+def _global_subscription_summary(
+    engine: Any,
+    *,
+    current_generation: Any,
+    retiring_generation: Any,
+) -> dict[str, Any]:
+    event_system = _safe_getattr(engine, "event_system")
+    event_count = _safe_call(
+        _safe_getattr(event_system, "get_subscription_count"),
+        0,
+    )
+    ticker_snapshot: dict[str, Any] = {"total": 0, "subscribers": ()}
+    try:
+        from widgets.clock_ticker import GlobalClockTicker
+
+        ticker = GlobalClockTicker._instance
+        if ticker is not None:
+            ticker_snapshot = ticker.get_lifecycle_ownership_snapshot()
+    except Exception:
+        logger.debug(
+            "[LIFECYCLE] Clock ticker ownership snapshot failed",
+            exc_info=True,
+        )
+    return {
+        "process_event_system": int(event_count or 0),
+        "clock_ticker_total": int(ticker_snapshot.get("total", 0) or 0),
+        "clock_ticker_timer_active": bool(
+            ticker_snapshot.get("timer_active", False)
+        ),
+        "clock_ticker_by_generation": _bounded_generation_count_mapping(
+            ticker_snapshot.get("subscribers_by_generation", {}),
+            current_generation=current_generation,
+            retiring_generation=retiring_generation,
+        ),
+    }
+
+
+def collect_lifecycle_ownership_summary(
+    engine: Any,
+    *,
+    accounting_snapshot: ResourceAccountingSnapshot | None = None,
+) -> dict[str, Any]:
+    """Collect a bounded passive ownership summary for lifecycle-sidecar logs."""
+    if accounting_snapshot is None:
+        accounting_snapshot = collect_resource_accounting(engine)
+    current_generation = _safe_getattr(engine, "_runtime_generation")
+    barrier = _safe_getattr(engine, "_pending_runtime_destruction_barrier")
+    retiring_generation = _safe_getattr(barrier, "retiring_generation")
+    display_manager = _safe_getattr(engine, "display_manager")
+    return {
+        "current_runtime_generation": current_generation,
+        "retiring_runtime_generation": retiring_generation,
+        "destruction_barrier": (
+            _safe_call(_safe_getattr(barrier, "describe"))
+        ),
+        "tracked_bytes": accounting_snapshot.aggregate_fields(),
+        "display": _display_ownership_summary(
+            display_manager,
+            current_generation=current_generation,
+            retiring_generation=retiring_generation,
+        ),
+        "resource_manager": _resource_manager_ownership_summary(
+            engine,
+            current_generation=current_generation,
+            retiring_generation=retiring_generation,
+        ),
+        "thread_manager": _thread_ownership_summary(
+            engine,
+            current_generation=current_generation,
+            retiring_generation=retiring_generation,
+        ),
+        "global_subscriptions": _global_subscription_summary(
+            engine,
+            current_generation=current_generation,
+            retiring_generation=retiring_generation,
+        ),
+        "process": _process_ownership_summary(engine),
+    }
+
+
+def collect_resource_accounting(
+    engine: Any,
+    *,
+    worker_safe: bool = False,
+) -> ResourceAccountingSnapshot:
+    """Collect one detached snapshot from the engine's existing owners.
+
+    ``worker_safe`` is required for the periodic usage sampler.  In that mode
+    ResourceManager contributes only its immutable registration metadata and
+    byte counts; live resources and QObject validity are never inspected.
+    """
+    records: list[ResourceAccountingRecord] = []
+    image_cache = _safe_getattr(engine, "_image_cache")
+    if image_cache is not None:
+        getter = _safe_getattr(image_cache, "get_accounting_snapshot")
+        if callable(getter):
+            try:
+                cache_snapshot = getter()
+                for index, item in enumerate(cache_snapshot.get("resources", ())):
+                    records.append(
+                        _record_from_mapping(
+                            source="cpu_image_cache",
+                            resource_id=f"cache:{index}",
+                            resource_kind="cpu_image",
+                            values=item,
+                        )
+                    )
+            except Exception:
+                logger.debug("[LIFECYCLE] CPU cache accounting snapshot failed", exc_info=True)
+
+    display_manager = _safe_getattr(engine, "display_manager")
+    display_snapshot = _safe_getattr(
+        engine,
+        "_display_image_accounting_snapshot",
+    )
+    if not isinstance(display_snapshot, Mapping):
+        getter = _safe_getattr(display_manager, "get_image_accounting_snapshot")
+        try:
+            display_snapshot = getter() if callable(getter) else {}
+        except Exception:
+            logger.debug("[LIFECYCLE] Display accounting snapshot failed", exc_info=True)
+            display_snapshot = {}
+    for index, item in enumerate(display_snapshot.get("resources", ())):
+        resource_id = str(item.get("resource_id") or f"display:{index}")
+        records.append(
+            _record_from_mapping(
+                source="cpu_display",
+                resource_id=resource_id,
+                resource_kind="cpu_pixmap",
+                values=item,
+            )
+        )
+
+    resource_manager = _safe_getattr(engine, "resource_manager")
+    if resource_manager is not None:
+        getter_name = (
+            "get_usage_accounting_snapshot"
+            if worker_safe
+            else "get_accounting_snapshot"
+        )
+        getter = _safe_getattr(resource_manager, getter_name)
+        if callable(getter):
+            try:
+                manager_snapshot = getter()
+                for item in manager_snapshot.get("resources", ()):
+                    records.append(
+                        _record_from_mapping(
+                            source="resource_manager",
+                            resource_id=str(item.get("resource_id", "")),
+                            resource_kind=str(
+                                item.get("gl_handle_type")
+                                or item.get("resource_type")
+                                or "unknown"
+                            ),
+                            values=item,
+                        ),
+                    )
+            except Exception:
+                logger.debug("[LIFECYCLE] ResourceManager accounting snapshot failed", exc_info=True)
+        elif worker_safe:
+            logger.debug(
+                "[USAGE] ResourceManager has no worker-safe accounting snapshot; "
+                "omitting registry resources"
+            )
 
     cpu_records = [record for record in records if record.source == "cpu_image_cache"]
     display_records = [record for record in records if record.source == "cpu_display"]
@@ -284,48 +872,65 @@ def log_lifecycle_resource_snapshot(
     stage: str,
 ) -> ResourceAccountingSnapshot | None:
     """Emit one low-frequency snapshot at an owning lifecycle boundary."""
-    if not is_perf_metrics_enabled():
+    perf_enabled = is_perf_metrics_enabled()
+    lifecycle_enabled = is_lifecycle_logging_enabled()
+    if not perf_enabled and not lifecycle_enabled:
         return None
     try:
         snapshot = collect_resource_accounting(engine)
         fields = snapshot.aggregate_fields()
-        logger.info(
-            "[PERF] [RESOURCE] snapshot event=%s stage=%s "
-            "tracked_resources=%d tracked_known_bytes=%d "
-            "cpu_cache_resources=%d cpu_cache_bytes=%d "
-            "cpu_display_resources=%d cpu_display_bytes=%d "
-            "rm_resources=%d rm_known_bytes=%d rm_unknown_resources=%d "
-            "gl_resources=%d gl_known_bytes=%d gl_unknown_resources=%d "
-            "gl_texture_resources=%d gl_texture_bytes=%d "
-            "gl_framebuffer_resources=%d gl_framebuffer_bytes=%d "
-            "gl_renderbuffer_resources=%d gl_renderbuffer_bytes=%d "
-            "gl_pbo_resources=%d gl_pbo_bytes=%d qt_default_fbo=%s "
-            "resources_json=%s",
-            event,
-            stage,
-            fields["tracked_resources"],
-            fields["tracked_known_bytes"],
-            fields["cpu_cache_resources"],
-            fields["cpu_cache_bytes"],
-            fields["cpu_display_resources"],
-            fields["cpu_display_bytes"],
-            fields["rm_resources"],
-            fields["rm_known_bytes"],
-            fields["rm_unknown_resources"],
-            fields["gl_resources"],
-            fields["gl_known_bytes"],
-            fields["gl_unknown_resources"],
-            fields["gl_texture_resources"],
-            fields["gl_texture_bytes"],
-            fields["gl_framebuffer_resources"],
-            fields["gl_framebuffer_bytes"],
-            fields["gl_renderbuffer_resources"],
-            fields["gl_renderbuffer_bytes"],
-            fields["gl_pbo_resources"],
-            fields["gl_pbo_bytes"],
-            fields["qt_default_fbo"],
-            snapshot.resources_json(),
-        )
+        if perf_enabled:
+            logger.info(
+                "[PERF] [RESOURCE] snapshot event=%s stage=%s "
+                "tracked_resources=%d tracked_known_bytes=%d "
+                "cpu_cache_resources=%d cpu_cache_bytes=%d "
+                "cpu_display_resources=%d cpu_display_bytes=%d "
+                "rm_resources=%d rm_known_bytes=%d rm_unknown_resources=%d "
+                "gl_resources=%d gl_known_bytes=%d gl_unknown_resources=%d "
+                "gl_texture_resources=%d gl_texture_bytes=%d "
+                "gl_framebuffer_resources=%d gl_framebuffer_bytes=%d "
+                "gl_renderbuffer_resources=%d gl_renderbuffer_bytes=%d "
+                "gl_pbo_resources=%d gl_pbo_bytes=%d qt_default_fbo=%s",
+                event,
+                stage,
+                fields["tracked_resources"],
+                fields["tracked_known_bytes"],
+                fields["cpu_cache_resources"],
+                fields["cpu_cache_bytes"],
+                fields["cpu_display_resources"],
+                fields["cpu_display_bytes"],
+                fields["rm_resources"],
+                fields["rm_known_bytes"],
+                fields["rm_unknown_resources"],
+                fields["gl_resources"],
+                fields["gl_known_bytes"],
+                fields["gl_unknown_resources"],
+                fields["gl_texture_resources"],
+                fields["gl_texture_bytes"],
+                fields["gl_framebuffer_resources"],
+                fields["gl_framebuffer_bytes"],
+                fields["gl_renderbuffer_resources"],
+                fields["gl_renderbuffer_bytes"],
+                fields["gl_pbo_resources"],
+                fields["gl_pbo_bytes"],
+                fields["qt_default_fbo"],
+            )
+        if lifecycle_enabled:
+            ownership = collect_lifecycle_ownership_summary(
+                engine,
+                accounting_snapshot=snapshot,
+            )
+            logger.info(
+                "[LIFECYCLE] [RESOURCE_DETAIL] event=%s stage=%s "
+                "resources_total=%d resources_omitted=%d "
+                "ownership_json=%s resources_json=%s",
+                event,
+                stage,
+                len(snapshot.resources),
+                max(0, len(snapshot.resources) - _RESOURCE_DETAIL_LIMIT),
+                json.dumps(_json_safe(ownership), separators=(",", ":"), sort_keys=True),
+                snapshot.resources_json(limit=_RESOURCE_DETAIL_LIMIT),
+            )
         return snapshot
     except Exception:
         logger.exception(

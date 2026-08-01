@@ -9,6 +9,7 @@ from __future__ import annotations
 import ctypes
 import sys
 import time
+import weakref
 from typing import TYPE_CHECKING
 from PySide6.QtCore import QCoreApplication, QThread
 from PySide6.QtGui import QOffscreenSurface, QOpenGLContext
@@ -198,7 +199,12 @@ def _schedule_deferred_gl_warmup(widget, callback, *, delay_ms: int = 140) -> No
         return
     armed.add(callback_key)
 
-    def _run(w=widget, expected_generation=lifecycle_generation) -> None:
+    widget_ref = weakref.ref(widget)
+
+    def _run(expected_generation=lifecycle_generation) -> None:
+        w = widget_ref()
+        if w is None:
+            return
         pending = getattr(w, "_deferred_gl_warmup_armed_callbacks", None)
         if isinstance(pending, set):
             pending.discard(callback_key)
@@ -220,6 +226,12 @@ def _schedule_deferred_gl_warmup(widget, callback, *, delay_ms: int = 140) -> No
             return
         callback(w)
 
+    parent = getattr(widget, "parentWidget", lambda: None)()
+    _run._srpss_runtime_generation = getattr(
+        parent,
+        "_runtime_generation",
+        None,
+    )
     ThreadManager.single_shot(max(0, int(delay_ms)), _run)
 
 def _wgl_proc_address(name: str) -> int | None:

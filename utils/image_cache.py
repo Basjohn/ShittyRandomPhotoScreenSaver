@@ -10,7 +10,11 @@ import threading
 from types import MappingProxyType
 from typing import Optional, Union
 from PySide6.QtGui import QPixmap, QImage
-from core.logging.logger import get_logger, is_verbose_logging
+from core.logging.logger import (
+    get_logger,
+    is_cache_logging_enabled,
+    is_verbose_logging,
+)
 
 
 def _freeze_snapshot_value(value):
@@ -26,6 +30,14 @@ def _freeze_snapshot_value(value):
     return repr(value)
 
 logger = get_logger(__name__)
+
+
+def _cache_trace(message: str, *args: object) -> None:
+    """Route per-entry cache telemetry to the opt-in cache sidecar."""
+    if is_cache_logging_enabled():
+        logger.info("[CACHE] " + message, *args)
+    elif is_verbose_logging():
+        logger.debug(message, *args)
 
 
 class ImageCache:
@@ -91,13 +103,11 @@ class ImageCache:
                 # Move to end (most recently used)
                 self._cache.move_to_end(key)
                 self._hit_count += 1
-                if is_verbose_logging():
-                    logger.debug(f"Cache hit: {key}")
+                _cache_trace("Cache hit: %s", key)
                 return self._cache[key]
             
             self._miss_count += 1
-            if is_verbose_logging():
-                logger.debug(f"Cache miss: {key}")
+            _cache_trace("Cache miss: %s", key)
             return None
     
     def put(self, key: str, image: Union[QImage, QPixmap]) -> None:
@@ -138,11 +148,13 @@ class ImageCache:
             while self._should_evict_locked():
                 self._evict_oldest_locked()
             
-            if is_verbose_logging():
-                logger.debug(
-                    f"Cached: {key} (size={len(self._cache)}/{self.max_items}, "
-                    f"memory={self._current_memory / (1024*1024):.1f}MB)"
-                )
+            _cache_trace(
+                "Cached: %s (size=%d/%d, memory=%.1fMB)",
+                key,
+                len(self._cache),
+                self.max_items,
+                self._current_memory / (1024 * 1024),
+            )
     
     def contains(self, key: str) -> bool:
         """
@@ -173,8 +185,7 @@ class ImageCache:
                 self._current_memory -= self._tracked_size(pixmap)
                 self._current_tracked_bytes -= self._tracked_bytes_by_key.pop(key, 0)
                 self._resource_metadata_by_key.pop(key, None)
-                if is_verbose_logging():
-                    logger.debug(f"Removed from cache: {key}")
+                _cache_trace("Removed from cache: %s", key)
                 return True
             return False
     
@@ -269,8 +280,7 @@ class ImageCache:
         self._current_tracked_bytes -= self._tracked_bytes_by_key.pop(key, 0)
         self._resource_metadata_by_key.pop(key, None)
         self._evict_count += 1
-        if is_verbose_logging():
-            logger.debug(f"Evicted from cache: {key}")
+        _cache_trace("Evicted from cache: %s", key)
     
     def _estimate_size(self, image: Union[QImage, QPixmap]) -> int:
         """

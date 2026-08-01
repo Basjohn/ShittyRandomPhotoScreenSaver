@@ -352,15 +352,38 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
 
 
 def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
-    """Author one Bubble step and submit a bounded mode-owned compute batch."""
-    has_pending_result = getattr(widget, "_has_pending_bubble_result", None)
-    pending_result = bool(has_pending_result()) if callable(has_pending_result) else False
+    """Submit one authored Bubble step whenever its bounded lane is free."""
     if (
         widget._vis_mode_str != 'bubble'
         or widget._mode_teardown_block_until_ready
     ):
         return
     if widget._thread_manager is None:
+        return
+
+    cadence = getattr(widget, "_bubble_cadence_state", None)
+    if cadence is None:
+        from widgets.spotify_visualizer.bubble_cadence import BubbleCadenceState
+
+        cadence = BubbleCadenceState()
+        widget._bubble_cadence_state = cadence
+        widget._bubble_active_task_token = None
+    cadence.offer_tick(now_ts=now_ts)
+
+    has_pending_result = getattr(widget, "_has_pending_bubble_result", None)
+    pending_result = bool(has_pending_result()) if callable(has_pending_result) else False
+    worker_busy = bool(widget._bubble_compute_pending)
+    if worker_busy or pending_result:
+        # Do not sample audio, consume scheduler impulses, or advance Bubble's
+        # authored timestamp while an older step/result still owns the lane.
+        cadence.note_lane_blocked(
+            worker_busy=worker_busy,
+            result_waiting=pending_result,
+        )
+        if pending_result:
+            widget._bubble_pending_result_skip_count = int(
+                getattr(widget, "_bubble_pending_result_skip_count", 0) or 0
+            ) + 1
         return
 
     # Bubble owns a full-dynamic continuous energy path. Using the shared
@@ -397,8 +420,6 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         }
         widget._bubble_dispatch_energy_snapshot = eb_snap
     prev_dispatch_bass = float(eb_snap.get("bass", 0.0) or 0.0)
-    has_discrete_impulse = False
-
     if not widget._spotify_playing:
         dt_bubble *= _IDLE_BUBBLE_DT_SCALE
         idle_phase = now_ts
@@ -430,11 +451,6 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         _onset_detected = bool(getattr(tb, 'onset_detected', False)) if tb else False
         _onset_type = str(getattr(tb, 'onset_type', '')) if tb else ''
         _onset_strength = float(getattr(tb, 'onset_strength', 0.0) or 0.0) if tb else 0.0
-        has_discrete_impulse = bool(
-            _onset_detected
-            or _t_bass > 0.001
-            or _t_mid > 0.001
-        )
         _t_gain = getattr(widget, '_transient_pulse_gain', 1.0)
         _t_clamp = getattr(widget, '_transient_clamp', 1.5)
         _bmix_bass = getattr(widget, '_bubble_transient_mix_bass', 0.75)
@@ -561,35 +577,13 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         'big_size_clamp': widget._bubble_big_size_clamp,
     })
 
-    cadence = getattr(widget, "_bubble_cadence_state", None)
-    if cadence is None:
-        from widgets.spotify_visualizer.bubble_cadence import BubbleCadenceState
-
-        cadence = BubbleCadenceState(submissions_hz=60.0, max_batch_size=2)
-        widget._bubble_cadence_state = cadence
-        widget._bubble_active_task_token = None
-    packet = cadence.next_packet(
-        dt=dt_bubble,
-        energy=eb_snap,
-        settings=sim_settings,
-        pulse=pulse_params,
-        has_discrete_impulse=has_discrete_impulse,
-    )
-    cadence.offer(packet, now_ts=now_ts)
-    ready = cadence.take_ready(
-        worker_busy=bool(widget._bubble_compute_pending),
-        result_waiting=pending_result,
-    )
-    if ready is None:
-        if pending_result:
-            widget._bubble_pending_result_skip_count = int(
-                getattr(widget, "_bubble_pending_result_skip_count", 0) or 0
-            ) + 1
-        return
-
-    task_token, batch = ready
-    first_packet = batch[0]
-    additional_packets = batch[1:]
+    # Freeze each payload only after the ownership lane is known to be free.
+    # The event scheduler remains live by design, but now reaches exactly the
+    # current step instead of being consumed by an older batched packet.
+    energy_payload = dict(eb_snap)
+    settings_payload = dict(sim_settings)
+    pulse_payload = dict(pulse_params)
+    task_token = cadence.begin_submission()
     widget._bubble_active_task_token = task_token
     widget._bubble_compute_pending = True
 
@@ -599,19 +593,19 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
     try:
         widget._thread_manager.submit_compute_task(
             widget._bubble_compute_worker,
-            first_packet.dt,
-            first_packet.energy,
-            first_packet.settings,
-            first_packet.pulse,
-            additional_packets,
+            dt_bubble,
+            energy_payload,
+            settings_payload,
+            pulse_payload,
             callback=_on_done,
             task_id=getattr(widget, "_bubble_sim_task_id", f"bubble_sim_{id(widget)}"),
             category="visualizer.bubble_simulation",
         )
+        cadence.note_submission_succeeded()
     except Exception:
         widget._bubble_active_task_token = None
         widget._bubble_compute_pending = False
-        cadence.restore_batch(batch)
+        cadence.note_submission_failure()
         logger.warning(
             "[SPOTIFY_VIS][FALLBACK] Bubble compute submission failed",
             exc_info=True,

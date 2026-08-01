@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-07-29
+Last updated: 2026-08-01
 
 Canonical stable architecture and product behaviour contracts for SRPSS.
 
@@ -119,11 +119,14 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 - Compositor/surface destruction occurs after child/native resource cleanup.
 - Late worker results are rejected by lifetime generation.
 - Partial GL reinitialization is not part of the stable architecture unless separately designed and approved.
-- Settings and committed CUSTOM Edit perform full display teardown before dialog/reload work and build a fresh `DisplayManager` afterward.
-- Delayed GUI/worker publication is valid only when both the engine runtime generation and exact owning `DisplayManager` still match.
+- Settings and committed CUSTOM Edit perform full display teardown before dialog/reload work and build a fresh `DisplayManager` afterward. Replacement construction is forbidden until the retiring generation's watched QObject roots have actually been destroyed and its runtime-scoped resources, tasks, timers, animations, and global subscriptions are absent.
+- A successful RUN session is owned by explicit engine, tray, and error exit routes rather than Qt's top-level-window count. The intentional zero-window interval between Settings/dialog destruction and replacement construction must not quit the application; startup-failure/configuration-only paths retain their normal window-owned lifetime.
+- Runtime generation invalidation rejects queued and delayed GUI/worker publication as well as new work. Valid publication requires the current engine runtime generation, exact owning `DisplayManager`, and any mode-owned engine generation/activation identity.
+- The old-runtime destruction barrier and the replacement's authoritative-first-frame barrier are separate. Passing destruction never authorizes reveal; a replacement remains hidden until its own generation produces authoritative presentation state and the existing `FadeCoordinator` releases it.
 - Large image shared-memory is transfer-scoped: the worker retains only the in-flight producer handle until parent attachment, the parent owns consume/unlink, and every timeout/cancel/rejection/buffer/shutdown path disposes payload resources before dropping a response.
 - `DisplayWidget.cleanup_runtime()` is the normal synchronous owner; `QObject.destroyed` is only a residual safety net.
 - A compositor remains `DESTROYING` and retains failed resource ownership when context acquisition or GL deletion cannot be proved.
+- Teardown does not spin nested event processing, run production garbage collection, trim memory, recycle processes/workers, reuse retired trees, or construct a replacement while the old graph is merely queued through `deleteLater()`.
 - Correctness never depends on optional deferred warmup.
 - Primary overlays reveal through the display-local `FadeCoordinator` only after the first base frame and critical active resources are terminal. Optional transition shader/resource warmup runs one item per managed callback and pauses during coordinated overlay fades or any live display transition.
 
@@ -132,7 +135,7 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 - `ThreadManager` owns registered async tasks and workers; it is not a presentation clock.
 - GUI and GL mutation remain on the GUI/context owner.
 - Workers perform coarse I/O, decode, preparation, and measured pure computation.
-- High-frequency tiny jobs are batched, coalesced, vectorized, or removed.
+- High-frequency tiny jobs are batched, coalesced, vectorized, or removed only when their logical inputs and visible authored behaviour remain intact. A reactive visualizer may not gain a second cadence authority or terminal-only multi-step batch that delays first-visible attack, consumes a discrete edge without publishing it, reduces loud-passage elasticity, or changes mode smoothing merely to lower task counts. Final-state/order/task-count tests do not authorize that change; runtime-shaped temporal validation and installed visual review are required.
 - More Python threads are not assumed to provide multi-core scaling.
 - Hidden/static systems stop unnecessary recurring work.
 - Task accounting is direct and passive; diagnostics do not enqueue UI work.
@@ -141,7 +144,7 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 
 - CPU image caches are bounded by exact logical bytes and entry count; persisted legacy limits are clamped to the supported production envelope.
 - Prefetch concurrency, pending count, and future decoded/scaled bytes are bounded independently of cache residency.
-- Display-owned `QPixmap` backing stores are captured on the GUI thread into detached accounting sidecars and deduplicated by Qt backing identity.
+- Display-owned `QPixmap` backing stores are captured on the GUI thread into detached accounting sidecars and deduplicated by Qt backing identity. Background usage sampling consumes detached display and ResourceManager aggregates; it never inspects live `QPixmap`, `DisplayWidget`, or QObject validity.
 - GPU textures and upload-PBO retention are byte-accounted, byte-bounded, and generation-safe.
 - Normal cycling reaches a stable RAM/VRAM plateau.
 - Image representations have explicit owners and lifetimes.

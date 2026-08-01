@@ -9,10 +9,14 @@ from __future__ import annotations
 
 from typing import Optional, TYPE_CHECKING
 
-from PySide6.QtCore import QTimer, QMetaObject, Qt, QThread
+from PySide6.QtCore import QCoreApplication, QTimer, QMetaObject, Qt, QThread
 from PySide6.QtWidgets import QApplication
 
-from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.logging.logger import (
+    get_logger,
+    is_cache_logging_enabled,
+    is_perf_metrics_enabled,
+)
 
 if TYPE_CHECKING:
     from engine.screensaver_engine import ScreensaverEngine
@@ -65,12 +69,45 @@ def teardown_display_runtime(
     engine: ScreensaverEngine,
     *,
     reason: str,
-) -> None:
-    """Synchronously destroy one display runtime before reconfiguration."""
+) -> object | None:
+    """Clean one display runtime and queue its Qt roots for destruction.
+
+    Producer shutdown and strict GL deletion complete synchronously.  The
+    returned barrier represents only Qt/Python root destruction, which must be
+    observed on a later event-loop turn before constructing a replacement.
+    """
     manager = getattr(engine, "display_manager", None)
     if manager is None:
         engine._display_initialized = False
-        return
+        return None
+
+    retiring_generation = getattr(manager, "_runtime_generation", None)
+    barrier = None
+    try:
+        from PySide6.QtCore import QObject
+        from engine.runtime_destruction import create_runtime_destruction_barrier
+
+        app = QCoreApplication.instance()
+        qt_event_loop_available = (
+            app is not None and not QCoreApplication.closingDown()
+        )
+        if (
+            isinstance(manager, QObject)
+            and qt_event_loop_available
+            and reason not in {"application_exit", "engine_cleanup"}
+        ):
+            barrier = create_runtime_destruction_barrier(
+                engine,
+                manager,
+                reason=reason,
+                retiring_generation=retiring_generation,
+            )
+    except Exception:
+        logger.critical(
+            "[LIFECYCLE] Failed to arm retired-runtime destruction tracking",
+            exc_info=True,
+        )
+        raise
 
     try:
         display_count = manager.get_display_count()
@@ -95,6 +132,12 @@ def teardown_display_runtime(
             states,
         )
 
+    disconnect_monitor_detection = getattr(
+        manager, "disconnect_monitor_detection", None
+    )
+    if callable(disconnect_monitor_detection):
+        disconnect_monitor_detection()
+
     quiesce = getattr(manager, "quiesce_all", None)
     if callable(quiesce):
         quiesce()
@@ -102,14 +145,72 @@ def teardown_display_runtime(
     if callable(clear):
         clear()
 
+    thread_manager = getattr(engine, "thread_manager", None)
+    cancel_generation_callbacks = getattr(
+        thread_manager,
+        "cancel_scheduled_single_shots",
+        None,
+    )
+    if retiring_generation is not None and callable(cancel_generation_callbacks):
+        cancelled_callbacks = cancel_generation_callbacks(retiring_generation)
+        if cancelled_callbacks:
+            logger.info(
+                "[LIFECYCLE] Cancelled %d delayed callbacks for retiring generation=%s",
+                cancelled_callbacks,
+                retiring_generation,
+            )
+    reject_generation_ui = getattr(
+        thread_manager,
+        "cancel_queued_ui_callbacks",
+        None,
+    )
+    if retiring_generation is not None and callable(reject_generation_ui):
+        queued_callbacks = reject_generation_ui(retiring_generation)
+        if queued_callbacks:
+            logger.info(
+                "[LIFECYCLE] Rejected %d queued UI callbacks for retiring generation=%s",
+                queued_callbacks,
+                retiring_generation,
+            )
+
+    try:
+        from core.performance.resource_metrics import log_lifecycle_resource_snapshot
+
+        log_lifecycle_resource_snapshot(
+            engine,
+            event=reason,
+            stage="after_producers_stopped",
+        )
+    except Exception:
+        logger.debug("Lifecycle producer-stop snapshot failed", exc_info=True)
+
     cleanup_manager = getattr(manager, "cleanup", None)
     if not callable(cleanup_manager):
         raise RuntimeError("DisplayManager has no cleanup() contract")
     cleanup_manager()
 
+    try:
+        from core.performance.resource_metrics import log_lifecycle_resource_snapshot
+
+        log_lifecycle_resource_snapshot(
+            engine,
+            event=reason,
+            stage="after_gl_display_cleanup",
+        )
+    except Exception:
+        logger.debug("Lifecycle GL/display snapshot failed", exc_info=True)
+
     flush_urls = getattr(manager, "flush_deferred_reddit_urls", None)
     if callable(flush_urls):
         flush_urls(ensure_widgets_dismissed=True)
+
+    retire_manager = getattr(manager, "retire_runtime", None)
+    if callable(retire_manager):
+        retire_manager()
+    else:
+        delete_later = getattr(manager, "deleteLater", None)
+        if callable(delete_later):
+            delete_later()
 
     if getattr(engine, "display_manager", None) is manager:
         engine.display_manager = None
@@ -117,17 +218,36 @@ def teardown_display_runtime(
     engine._display_initializing = False
     engine._pending_displays_ready_generation = None
     engine._loading_in_progress = False
+    if barrier is not None:
+        engine._pending_runtime_destruction_barrier = barrier
+        barrier.seal()
+    try:
+        from core.performance.resource_metrics import log_lifecycle_resource_snapshot
+
+        log_lifecycle_resource_snapshot(
+            engine,
+            event=reason,
+            stage="after_roots_queued",
+        )
+    except Exception:
+        logger.debug("Lifecycle root-queue snapshot failed", exc_info=True)
     logger.info(
         "[LIFECYCLE] Full display teardown complete reason=%s generation=%s",
         reason,
         getattr(engine, "_runtime_generation", "unknown"),
     )
+    return barrier
 
 # ------------------------------------------------------------------
 # Engine stop
 # ------------------------------------------------------------------
 
-def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
+def stop(
+    engine: ScreensaverEngine,
+    exit_app: bool = True,
+    *,
+    reason: str | None = None,
+) -> None:
     """
     Stop the screensaver engine.
 
@@ -141,14 +261,44 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
     """
     from engine.screensaver_engine import EngineState
 
+    if exit_app:
+        engine._terminal_shutdown_requested = True
+        pending_barrier = getattr(
+            engine, "_pending_runtime_destruction_barrier", None
+        )
+        cancel_barrier = getattr(
+            pending_barrier, "cancel_for_terminal_shutdown", None
+        )
+        if callable(cancel_barrier):
+            cancel_barrier()
+        active_dialog = getattr(engine, "_active_settings_dialog", None)
+        close_dialog = getattr(active_dialog, "close", None)
+        if callable(close_dialog):
+            try:
+                close_dialog()
+            except (RuntimeError, TypeError):
+                logger.debug(
+                    "[LIFECYCLE] Active Settings dialog already destroyed"
+                )
+        engine._active_settings_dialog = None
+
     current_state = engine._get_state()
-    if not bool(getattr(engine, "_running", False)) and current_state not in {
+    if (
+        not exit_app
+        and not bool(getattr(engine, "_running", False))
+        and current_state not in {
         EngineState.RUNNING,
         EngineState.STARTING,
         EngineState.REINITIALIZING,
-    }:
+        }
+    ):
         logger.debug("Engine stop ignored in state=%s", current_state.name)
         return
+
+    lifecycle_reason = str(
+        reason
+        or ("application_exit" if exit_app else "runtime_reconfiguration")
+    )
 
     # Determine target state based on exit_app
     target_state = EngineState.SHUTTING_DOWN if exit_app else EngineState.STOPPING
@@ -166,11 +316,19 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
 
     advance_generation = getattr(engine, "_advance_runtime_generation", None)
     if callable(advance_generation):
-        advance_generation(
-            "application_exit" if exit_app else "runtime_reconfiguration"
-        )
+        advance_generation(lifecycle_reason)
     else:
         engine._runtime_generation = int(getattr(engine, "_runtime_generation", 0)) + 1
+    try:
+        from core.performance.resource_metrics import log_lifecycle_resource_snapshot
+
+        log_lifecycle_resource_snapshot(
+            engine,
+            event=lifecycle_reason,
+            stage="after_generation_invalidation",
+        )
+    except Exception:
+        logger.debug("Lifecycle generation snapshot failed", exc_info=True)
     engine._pending_displays_ready_generation = None
     engine._pending_monitor_replay_image = None
     engine._prefetch_resume_scheduled = False
@@ -202,7 +360,7 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
         # object survives into Settings/CUSTOM reconfiguration.
         teardown_display_runtime(
             engine,
-            reason="application_exit" if exit_app else "runtime_reconfiguration",
+            reason=lifecycle_reason,
         )
         # Stop any pending image loads
         engine._loading_in_progress = False
@@ -259,14 +417,14 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
                 logger.warning("ThreadManager shutdown failed: %s", e, exc_info=True)
 
         # Emit a concise image cache summary for profiling.
-        # Tagged with "[PERF] ImageCache" so production builds can grep and
-        # gate/strip this debug telemetry if desired.
-        if is_perf_metrics_enabled():
+        # Dual-tagged for the PERF and cache sidecars so cache investigations
+        # retain their bounded stop summary without adding it to the main log.
+        if is_perf_metrics_enabled() or is_cache_logging_enabled():
             try:
                 if engine._image_cache is not None:
                     stats = engine._image_cache.get_stats()
                     logger.info(
-                        "[PERF] ImageCache: items=%d/%d, mem=%.1f/%.0fMB, hits=%d, "
+                        "[PERF] [CACHE] ImageCache: items=%d/%d, mem=%.1f/%.0fMB, hits=%d, "
                         "misses=%d, hit_rate=%.1f%%%%, evictions=%d",
                         stats.get('item_count', 0),
                         stats.get('max_items', 0),
@@ -280,7 +438,7 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
                 cache_flow = getattr(engine, "_cache_runtime_stats", None)
                 if isinstance(cache_flow, dict):
                     logger.info(
-                        "[PERF] ImageCacheFlow: raw_hits=%d raw_misses=%d scaled_hits=%d "
+                        "[PERF] [CACHE] ImageCacheFlow: raw_hits=%d raw_misses=%d scaled_hits=%d "
                         "scaled_misses=%d worker_fallbacks=%d scaled_prefetch_requests=%d "
                         "scaled_prefetch_completed=%d scaled_derivations=%d "
                         "prefetch_resume_scheduled=%d prefetch_resume_runs=%d",
@@ -334,6 +492,14 @@ def cleanup(engine: ScreensaverEngine) -> None:
     logger.info("Cleaning up screensaver engine...")
 
     try:
+        pending_barrier = getattr(
+            engine, "_pending_runtime_destruction_barrier", None
+        )
+        cancel_barrier = getattr(
+            pending_barrier, "cancel_for_terminal_shutdown", None
+        )
+        if callable(cancel_barrier):
+            cancel_barrier()
         # Stop if running
         if engine._running:
             engine.stop()

@@ -157,6 +157,7 @@ class DisplayWidget(QWidget):
     
     exit_requested = Signal()
     image_displayed = Signal(str)  # image path
+    startup_reveal_completed = Signal()
     transition_completed = Signal()
     previous_requested = Signal()  # Z key - go to previous image
     next_requested = Signal()  # X key - go to next image
@@ -226,6 +227,7 @@ class DisplayWidget(QWidget):
         parent: Optional[QWidget] = None,
         resource_manager: Optional[ResourceManager] = None,
         thread_manager=None,
+        runtime_generation: int | None = None,
     ):
         """
         Initialize display widget.
@@ -237,6 +239,13 @@ class DisplayWidget(QWidget):
             parent: Parent widget
         """
         super().__init__(parent)
+
+        # Set before constructing/registering any child QObject so passive
+        # ResourceManager parent-chain inference attributes every runtime-local
+        # timer, overlay and compositor to the correct generation.
+        self._runtime_generation = (
+            int(runtime_generation) if runtime_generation is not None else None
+        )
         
         self.screen_index = screen_index
         self.display_mode = display_mode
@@ -318,6 +327,7 @@ class DisplayWidget(QWidget):
         self._context_menu_active: bool = False
         self._context_menu_prewarmed: bool = False
         self._pending_effect_invalidation: bool = False
+        self._startup_reveal_completed: bool = False
         
         # MC mode state - default to always on top for MC builds
         self._is_mc_build: bool = is_mc_build()
@@ -964,7 +974,10 @@ class DisplayWidget(QWidget):
         """Capture display-owned QPixmap backing stores on the GUI thread."""
         from rendering.image_resource_accounting import refresh_display_image_accounting
 
-        refresh_display_image_accounting(self)
+        snapshot = refresh_display_image_accounting(self)
+        publisher = getattr(self, "_image_resource_accounting_publisher", None)
+        if callable(publisher):
+            publisher(self, snapshot)
 
     def get_image_accounting_snapshot(self):
         """Return the detached image-resource sidecar for background sampling."""

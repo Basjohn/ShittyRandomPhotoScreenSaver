@@ -54,7 +54,7 @@ def engine_with_settings(qt_app, tmp_path):
 
 
 
-def test_s_hotkey_opens_settings_without_crash(engine_with_settings, qt_app):
+def test_s_hotkey_opens_settings_without_crash(engine_with_settings, qt_app, qtbot):
     """
     Test that S hotkey opens settings dialog without crashing.
     
@@ -76,11 +76,10 @@ def test_s_hotkey_opens_settings_without_crash(engine_with_settings, qt_app):
     assert engine.start(), "Engine should start"
     assert engine._running is True, "Engine should be running"
     
-    # Verify displays are visible before S key
+    # The first-frame poison gate may keep displays hidden when this test's
+    # intentionally invalid image cannot produce an authoritative frame.
     assert engine.display_manager is not None
     old_displays = list(engine.display_manager.displays)
-    for display in old_displays:
-        assert display.isVisible(), "Displays should be visible while running"
 
     # Settings admission is a full runtime boundary, not a hide-only pause.
     engine.stop(exit_app=False)
@@ -92,14 +91,23 @@ def test_s_hotkey_opens_settings_without_crash(engine_with_settings, qt_app):
 
     assert engine._running is False, "Engine should be stopped"
 
-    # Simulate the handler's fresh display/timer build after settings closes.
-    assert engine._initialize_display()
-    engine._setup_rotation_timer()
-    assert engine.start()
+    # Replacement construction must occur only after the asynchronous QObject
+    # destruction barrier, never directly after stop().
+    from engine.runtime_destruction import continue_after_runtime_destruction
+
+    restarted = []
+
+    def _restart():
+        assert engine._initialize_display()
+        engine._setup_rotation_timer()
+        assert engine.start()
+        restarted.append(True)
+
+    continue_after_runtime_destruction(engine, _restart)
+    qtbot.waitUntil(lambda: restarted == [True], timeout=3000)
 
     assert engine.display_manager is not None
-    for display in engine.display_manager.displays:
-        assert display.isVisible(), "Fresh displays should be visible after restart"
+    assert all(display not in old_displays for display in engine.display_manager.displays)
 
 
 def test_display_initialized_flag_lifecycle(qt_app):
@@ -229,7 +237,7 @@ def test_settings_request_cancels_active_custom_layout_session_before_stop(monke
         resource_manager=None,
         settings_manager=SimpleNamespace(),
         _display_initialized=False,
-        stop=lambda exit_app=False: calls.append(f"stop:{exit_app}"),
+        stop=lambda exit_app=False, reason=None: calls.append(f"stop:{exit_app}"),
         _initialize_display=lambda: True,
         _setup_rotation_timer=lambda: calls.append("setup_rotation_timer"),
         start=lambda: calls.append("start") or True,
@@ -291,7 +299,7 @@ def test_custom_layout_reload_arms_pointer_guard(monkeypatch, qt_app):
         display_manager=SimpleNamespace(cleanup=lambda: None),
         settings_manager=SimpleNamespace(load=lambda: load_calls.append("load")),
         _display_initialized=True,
-        stop=lambda exit_app=False: None,
+        stop=lambda exit_app=False, reason=None: None,
         _initialize_display=lambda: True,
         _setup_rotation_timer=lambda: None,
         start=lambda: True,
@@ -319,7 +327,7 @@ def test_engine_start_schedules_bounded_first_image_retry(monkeypatch, qt_app):
     monkeypatch.setattr(engine, "_show_next_image", _show_next_image)
     scheduled: list[int] = []
     monkeypatch.setattr(
-        "engine.screensaver_engine.QTimer.singleShot",
+        "engine.screensaver_engine.ThreadManager.single_shot",
         lambda delay_ms, callback: scheduled.append(int(delay_ms)),
     )
 

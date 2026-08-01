@@ -338,6 +338,7 @@ class AnimationManager(QObject):
         fps: int = 60,
         resource_manager: Optional["ResourceManager"] = None,
         owner: str = "<unknown>",
+        runtime_generation: object | None = None,
     ):
         """
         Initialize animation manager.
@@ -348,6 +349,7 @@ class AnimationManager(QObject):
         super().__init__()
         self._shutdown = False
         self._srpss_owner = owner
+        self._runtime_generation = runtime_generation
         
         self.fps = fps
         self.frame_time = 1.0 / fps
@@ -383,7 +385,15 @@ class AnimationManager(QObject):
             if self._resources is None:
                 self._resources = ResourceManager.get_or_create_app_shared()
             try:
-                self._resources.register_qt(self._timer, description="AnimationManager timer")
+                self._resources.register_qt(
+                    self._timer,
+                    description="AnimationManager timer",
+                    runtime_generation=runtime_generation,
+                    lifetime_scope=(
+                        "runtime" if runtime_generation is not None else "process"
+                    ),
+                    owner=owner,
+                )
             except Exception as e:
                 logger.debug("[ANIMATOR] Exception suppressed: %s", e)
         except Exception as e:

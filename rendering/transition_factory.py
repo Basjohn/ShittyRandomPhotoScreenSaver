@@ -325,6 +325,16 @@ class TransitionFactory:
         except Exception as e:
             logger.debug("[TRANSITION_FACTORY] _pick_random_transition error: %s", e)
             return 'Crossfade'
+
+    def cleanup(self) -> None:
+        """Release runtime-owned callbacks and cached precomputation state."""
+
+        self._precompute_cache.clear()
+        self._process_supervisor = None
+        self._check_compositor = lambda: False
+        self._ensure_compositor = lambda: None
+        self._settings = None
+        self._resources = None
     
     def _get_duration(self, settings: dict, transition_type: str) -> int:
         """Get duration for the transition type."""

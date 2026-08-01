@@ -4,7 +4,9 @@ Display manager for multi-monitor support.
 Manages DisplayWidget instances across multiple screens.
 """
 import time
-from typing import List, Dict, Optional, Set
+import weakref
+from types import MappingProxyType
+from typing import Any, List, Dict, Optional, Set
 from PySide6.QtCore import QObject, Signal, QUrl
 from PySide6.QtGui import QGuiApplication, QScreen, QPixmap, QDesktopServices
 
@@ -44,6 +46,8 @@ class DisplayManager(QObject):
     exit_requested = Signal()
     monitors_changed = Signal(int)  # new monitor count
     displays_ready = Signal(int)  # startup generation ready for image replay
+    authoritative_first_frames_ready = Signal(int)  # runtime generation
+    startup_reveal_completed = Signal(int)  # runtime generation
     transition_completed = Signal(int)  # screen index
     previous_requested = Signal()  # Z key - go to previous image
     next_requested = Signal()  # X key - go to next image
@@ -58,6 +62,8 @@ class DisplayManager(QObject):
         settings_manager=None,
         resource_manager: ResourceManager | None = None,
         thread_manager=None,
+        runtime_generation: int | None = None,
+        image_accounting_publisher=None,
     ):
         """
         Initialize display manager.
@@ -68,6 +74,11 @@ class DisplayManager(QObject):
             settings_manager: SettingsManager for widget configuration
         """
         super().__init__()
+
+        self._runtime_generation = (
+            int(runtime_generation) if runtime_generation is not None else None
+        )
+        self._retired = False
         
         self.display_mode = display_mode
         self.same_image_mode = same_image_mode
@@ -76,6 +87,28 @@ class DisplayManager(QObject):
             resource_manager or ResourceManager.get_or_create_app_shared()
         )
         self._thread_manager = thread_manager
+        self._image_accounting_publisher_ref = None
+        if image_accounting_publisher is not None:
+            try:
+                self._image_accounting_publisher_ref = weakref.WeakMethod(
+                    image_accounting_publisher
+                )
+            except TypeError:
+                try:
+                    self._image_accounting_publisher_ref = weakref.ref(
+                        image_accounting_publisher
+                    )
+                except TypeError:
+                    self._image_accounting_publisher_ref = None
+        self._display_image_accounting_by_id: dict[int, Any] = {}
+        self._display_image_accounting_snapshot = MappingProxyType(
+            {
+                "generation": self._runtime_generation,
+                "total_tracked_bytes": 0,
+                "resource_count": 0,
+                "resources": (),
+            }
+        )
         self.displays: List[DisplayWidget] = []
         self.current_images: Dict[int, str] = {}  # screen_index -> image_path
         self._deferred_reddit_urls: list[str] = []
@@ -83,6 +116,10 @@ class DisplayManager(QObject):
         self._display_startup_ready_expected: Set[int] = set()
         self._display_startup_ready_seen: Set[int] = set()
         self._display_startup_ready_emitted_generation: int = -1
+        self._authoritative_first_frame_screens: Set[int] = set()
+        self._authoritative_first_frame_emitted = False
+        self._startup_reveal_screens: Set[int] = set()
+        self._startup_reveal_emitted = False
         
         # Phase 3: Multi-display synchronization (lock-free)
         self._transition_ready_queue: Optional[SPSCQueue] = None
@@ -98,6 +135,35 @@ class DisplayManager(QObject):
         self._setup_monitor_detection()
         
         logger.info("DisplayManager initialized (mode=%s, same_image=%s)" % (display_mode, same_image_mode))
+
+        self._publish_display_image_accounting()
+
+    def _publish_display_image_accounting(self) -> None:
+        """Publish one immutable, display-deduplicated GUI capture."""
+
+        from rendering.image_resource_accounting import (
+            aggregate_display_image_accounting,
+        )
+
+        self._display_image_accounting_snapshot = aggregate_display_image_accounting(
+            self._display_image_accounting_by_id.values(),
+            generation=self._runtime_generation,
+        )
+        publisher_ref = self._image_accounting_publisher_ref
+        publisher = publisher_ref() if publisher_ref is not None else None
+        if publisher is not None:
+            publisher(self._display_image_accounting_snapshot)
+
+    def _record_display_image_accounting(self, display: object, snapshot: Any) -> None:
+        if self._retired:
+            return
+        self._display_image_accounting_by_id[id(display)] = snapshot
+        self._publish_display_image_accounting()
+
+    def get_image_accounting_snapshot(self):
+        """Return the latest GUI-captured aggregate without touching widgets."""
+
+        return self._display_image_accounting_snapshot
     
     def _setup_monitor_detection(self) -> None:
         """Setup monitor hotplug detection."""
@@ -195,9 +261,16 @@ class DisplayManager(QObject):
             return
         self._monitor_reconcile_pending = True
 
+        manager_ref = weakref.ref(self)
+
         def _run() -> None:
-            self._monitor_reconcile_pending = False
-            self._reconcile_monitor_topology(reason)
+            manager = manager_ref()
+            if manager is None or manager._retired:
+                return
+            manager._monitor_reconcile_pending = False
+            manager._reconcile_monitor_topology(reason)
+
+        _run._srpss_runtime_generation = self._runtime_generation
 
         if self._thread_manager is None or not hasattr(self._thread_manager, "single_shot"):
             self._monitor_reconcile_pending = False
@@ -357,23 +430,31 @@ class DisplayManager(QObject):
                 self._show_display_widget(display, startup_generation=startup_generation)
                 continue
 
+            manager_ref = weakref.ref(self)
+            display_ref = weakref.ref(display)
+
             def _show_if_current(
-                disp: DisplayWidget = display,
                 generation: int = startup_generation,
             ) -> None:
-                if generation != self._display_startup_generation:
+                manager = manager_ref()
+                disp = display_ref()
+                if manager is None or disp is None or manager._retired:
+                    return
+                if generation != manager._display_startup_generation:
                     logger.debug(
                         "[DISPLAY] Suppressed stale staggered show for screen %s",
                         getattr(disp, "screen_index", "?"),
                     )
                     return
-                if disp not in self.displays:
+                if disp not in manager.displays:
                     logger.debug(
                         "[DISPLAY] Suppressed staggered show for removed screen %s",
                         getattr(disp, "screen_index", "?"),
                     )
                     return
-                self._show_display_widget(disp, startup_generation=generation)
+                manager._show_display_widget(disp, startup_generation=generation)
+
+            _show_if_current._srpss_runtime_generation = self._runtime_generation
 
             try:
                 from core.threading.manager import ThreadManager
@@ -410,9 +491,18 @@ class DisplayManager(QObject):
                 settings_manager=self.settings_manager,
                 resource_manager=self._resource_manager,
                 thread_manager=self._thread_manager,
+                runtime_generation=self._runtime_generation,
             )
             display._image_resource_owner = f"display:{screen_index}:manager:{id(self)}"
             display._image_resource_generation = id(self)
+            manager_ref = weakref.ref(self)
+
+            def _publish_image_accounting(display_obj, snapshot) -> None:
+                manager = manager_ref()
+                if manager is not None:
+                    manager._record_display_image_accounting(display_obj, snapshot)
+
+            display._image_resource_accounting_publisher = _publish_image_accounting
             refresh_accounting = getattr(display, "refresh_image_resource_accounting", None)
             if callable(refresh_accounting):
                 refresh_accounting()
@@ -422,6 +512,9 @@ class DisplayManager(QObject):
             # FIX: Use default args to capture screen_index by value (not by reference)
             display.image_displayed.connect(
                 lambda path, idx=screen_index: self._on_image_displayed(idx, path)
+            )
+            display.startup_reveal_completed.connect(
+                lambda idx=screen_index: self._on_startup_reveal_completed(idx)
             )
             display.transition_completed.connect(
                 lambda idx=screen_index: self.transition_completed.emit(idx)
@@ -546,7 +639,38 @@ class DisplayManager(QObject):
     def _on_image_displayed(self, screen_index: int, image_path: str) -> None:
         """Handle image displayed event."""
         self.current_images[screen_index] = image_path
+        self._authoritative_first_frame_screens.add(int(screen_index))
         logger.debug(f"Image displayed on screen {screen_index}: {image_path}")
+        expected = {
+            int(getattr(display, "screen_index", -1))
+            for display in self.displays
+        }
+        if (
+            not self._authoritative_first_frame_emitted
+            and expected
+            and expected.issubset(self._authoritative_first_frame_screens)
+        ):
+            self._authoritative_first_frame_emitted = True
+            self.authoritative_first_frames_ready.emit(
+                int(self._runtime_generation or 0)
+            )
+
+    def _on_startup_reveal_completed(self, screen_index: int) -> None:
+        """Publish once after every display's existing FadeCoordinator completes."""
+
+        self._startup_reveal_screens.add(int(screen_index))
+        expected = {
+            int(getattr(display, "screen_index", -1))
+            for display in self.displays
+        }
+        if (
+            self._startup_reveal_emitted
+            or not expected
+            or not expected.issubset(self._startup_reveal_screens)
+        ):
+            return
+        self._startup_reveal_emitted = True
+        self.startup_reveal_completed.emit(int(self._runtime_generation or 0))
     
     def set_process_supervisor(self, supervisor) -> None:
         """Set the ProcessSupervisor on all display widgets.
@@ -890,6 +1014,10 @@ class DisplayManager(QObject):
         self._display_startup_ready_expected = set()
         self._display_startup_ready_seen = set()
         self._display_startup_ready_emitted_generation = -1
+        self._authoritative_first_frame_screens.clear()
+        self._authoritative_first_frame_emitted = False
+        self._startup_reveal_screens.clear()
+        self._startup_reveal_emitted = False
         count = len(self.displays)
         logger.info("Cleaning up %d display widgets", count)
 
@@ -947,6 +1075,8 @@ class DisplayManager(QObject):
                     raise RuntimeError("DisplayWidget has no cleanup_runtime() contract")
                 cleanup_runtime("display_manager_cleanup")
                 display.close()
+                display._image_resource_accounting_publisher = None
+                self._display_image_accounting_by_id.pop(id(display), None)
                 display.deleteLater()
             except Exception as exc:
                 failed_displays.append(display)
@@ -962,6 +1092,7 @@ class DisplayManager(QObject):
                 )
 
         self._deferred_reddit_urls = pending_reddit_urls
+        self._publish_display_image_accounting()
         if cleanup_errors:
             # Retain failed objects so a caller can inspect or retry; clearing the
             # list here would falsely declare ownership released.
@@ -973,6 +1104,52 @@ class DisplayManager(QObject):
         self.displays.clear()
         self.current_images.clear()
         logger.info("Display manager cleanup complete")
+
+    def retire_runtime(self) -> None:
+        """Detach process-level routes and queue this retired manager for deletion.
+
+        ``cleanup()`` remains reusable by ``initialize_displays()``.  This
+        terminal method is intentionally separate and is called only when the
+        engine is replacing or shutting down the entire runtime generation.
+        """
+
+        if self._retired:
+            return
+        self._retired = True
+        self.disconnect_monitor_detection()
+        self._display_startup_generation += 1
+        self._display_startup_ready_expected.clear()
+        self._display_startup_ready_seen.clear()
+        self._monitor_reconcile_pending = False
+        self._transition_work_pending = False
+        self._transition_ready_queue = None
+        self._display_image_accounting_by_id.clear()
+        self._publish_display_image_accounting()
+        self._image_accounting_publisher_ref = None
+
+        for signal_name in (
+            "exit_requested",
+            "monitors_changed",
+            "displays_ready",
+            "authoritative_first_frames_ready",
+            "startup_reveal_completed",
+            "transition_completed",
+            "previous_requested",
+            "next_requested",
+            "cycle_transition_requested",
+            "settings_requested",
+            "custom_layout_reload_requested",
+        ):
+            try:
+                getattr(self, signal_name).disconnect()
+            except Exception:
+                pass
+
+        self.settings_manager = None
+        self._thread_manager = None
+        self._resource_manager = None
+        self.deleteLater()
+
     def take_deferred_reddit_urls(self) -> list[str]:
         """Retrieve and clear deferred Reddit URLs collected during cleanup."""
         urls, self._deferred_reddit_urls = self._deferred_reddit_urls, []

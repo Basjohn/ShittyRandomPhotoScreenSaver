@@ -529,6 +529,9 @@ class InputHandler(QObject):
         self._ctrl_held = False
         self._exit_gesture_active = False
         self._context_menu_active = False
+        self._settings_manager = None
+        self._widget_manager = None
+        self._parent = None
         logger.debug("[INPUT_HANDLER] Cleanup complete")
 
     # =========================================================================

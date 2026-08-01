@@ -1,6 +1,6 @@
 # Logging Guide
 
-Last updated: 2026-06-22
+Last updated: 2026-08-01
 
 Operator-facing logging guide for SRPSS.
 
@@ -32,6 +32,7 @@ Notes:
 | CLI flag | File(s) | Purpose |
 |---|---|---|
 | `--perf` | `screensaver_perf.log`, `perf_widgets.log` | Performance telemetry, GC/perf probes, widget timing summaries. |
+| `--usage` | `screensaver_usage.log` | Low-cadence whole-application CPU, main/child/total RSS, private commit, handles/threads, driver GPU/VRAM, shared-memory, task, and aggregate owner bytes. |
 | `--viz` | `screensaver_spotify_vis.log`, `screensaver_spotify_vol.log` | Visualizer and volume diagnostics. `--viz` also enables visualizer diagnostics. |
 | `--geo` | `screensaver_geometry.log` | Geometry, z-order, CUSTOM layout, and display-stack diagnostics. |
 | `--set` | `screensaver_settings.log` | Settings mutations, imports, schema normalization, and settings-binding traces. |
@@ -72,6 +73,8 @@ Legacy compatibility:
   - `--life --geo`
 - Cache/prefetch/prescale investigations:
   - `--perf --cache`
+- Settings/Edit memory/VRAM recreation investigations:
+  - `--usage --life --perf --cache`
 - Steam widget family investigations:
   - `--steam --cache --set`
   - Add `--devsteam` only when investigating Steam Journey, Friend Pulse, or Abandonment Issues prototypes.
@@ -80,6 +83,10 @@ Legacy compatibility:
 - Transition-scoped perf warnings should describe active-cadence problems, not intentional idle time.
 - Recurring-timer `Large gap` warnings are meant for unexpected steady-runtime cadence loss; if a widget intentionally hands cadence to a different owner during transitions, the resumed dedicated timer should not be treated as a catastrophic gap by itself.
 - Compositor `Paint gap` warnings are transition-paint diagnostics. Once a transition has completed and the compositor is intentionally idle/paused, later base-frame paints should not inherit the old transition label.
+- Per-entry image-cache hit/miss/put/remove/eviction records belong to `screensaver_cache.log` when `--cache` is active. `screensaver_perf.log` retains only bounded `[PERF] [CACHE]` summaries needed for lifecycle correlation.
+- Bounded ResourceManager generation/owner/creation-site records belong to `screensaver_lifecycle.log` as `[LIFECYCLE] [RESOURCE_DETAIL]`. The ordinary `[PERF] [RESOURCE]` record contains aggregate counts/bytes only and does not duplicate the resource list.
+- Lifecycle snapshots reuse the latest background `--usage` totals for whole-app RSS/private commit/VRAM and state their sample age. They do not run a new driver query or inspect live Qt pixmaps, QObjects, or Qt-wrapper validity from the usage worker.
+- `[SPOTIFY_VIS][BUBBLE_CADENCE]` distinguishes lane-free submissions from `worker_busy_deferrals` and `result_waiting_deferrals`. It is passive accounting, not a task-rate controller; a low publish ratio must be explained by an existing owner, never an artificial cadence token.
 
 ## Guardrails
 - Do not reintroduce environment-variable activation for diagnostic families.
