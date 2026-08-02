@@ -1,162 +1,366 @@
 # 14 — Failure Triage Map
 
-Use this map to identify architectural seams. It is not a list of symptom patches.
+Last reconciled: 2026-08-02
 
-## Visualizer becomes flat or less reactive
+Use this map to identify ownership seams. It is not a menu of symptom patches.
+
+## First triage questions
+
+Before changing code, establish:
+
+- exact commit/scenario/environment;
+- direct log/source/user evidence;
+- confidence in the cause;
+- current owner and generation;
+- whether the failure is shared or mode-specific;
+- whether the comparison is warm/equivalent;
+- which known-bad incident resembles the shape.
+
+State confidence below 90% explicitly.
+
+# Visualizer and presentation
+
+## Visualizer becomes flat, delayed, or less reactive
 
 Investigate:
 
-- simulation cadence changed;
-- elapsed time derived from paint timing;
-- normalization/smoothing changed;
-- beat impulses dropped before simulation;
-- render-state coalescing occurring before logical integration;
-- state copied through compatibility façade incorrectly;
-- mode state reset during publication.
+- scheduler/executor/cadence change even if equations are unchanged;
+- source sampling/normalization/smoothing change;
+- impulses/events dropped before logical integration;
+- terminal batching or cadence cap;
+- persistent/dedicated lane queueing;
+- activation/generation reset;
+- stale first-frame authority;
+- render coalescing before simulation.
 
-Do not:
+Do not blindly raise gain, reduce damping, or add a reactivity multiplier.
 
-- increase gain blindly;
-- reduce damping blindly;
-- add a “reactivity multiplier” to compensate for timing loss.
+`666624d` is the persistent-lane reference failure.
+
+## Bubble looks worse or is blamed for general load
+
+First determine whether the cost belongs to:
+
+- shared capture/analysis;
+- general executor/callback delivery;
+- immutable-state conversion;
+- per-display renderer/resource duplication;
+- presentation/event-loop pressure;
+- actual Bubble-owned physics/state.
+
+Do not change Bubble-specific cadence, batching, physics, buffers, resolution, or precision without direct mode-owned evidence and explicit user authorization.
+
+Stale Bubble tests/presets are not runtime evidence.
+
+## Spectrum is less smooth after “smoothing”
+
+Investigate:
+
+- second presentation cadence;
+- self-requested repaint loop;
+- paint-local decay/state mutation;
+- authoritative publication versus paint rate divergence;
+- attack/decay on different clocks;
+- event-loop/update pressure.
+
+Do not tune the decay constant first. Remove the second authority.
+
+`ebfec397`/R-55 is the negative control.
 
 ## Visualizer has microgaps under low load
 
 Investigate:
 
-- producer waits for paint;
 - GUI event-loop stalls;
-- tiny thread-pool task queueing;
-- excessive logging;
-- scene update notification storm;
-- repeated image/upload work on main thread;
-- GIL contention.
+- tiny task queueing/callback delivery;
+- logging/formatting;
+- duplicate scene notifications;
+- image/upload work on GUI thread;
+- GIL contention;
+- source age/publication gaps;
+- transition/widget collision.
 
-Do not add another timer or retry.
+Do not add another timer, lane, retry, or paint loop.
 
 ## High average FPS but visible jumps
 
 Investigate:
 
-- p99/max interval;
+- p99/max intervals;
 - burst delivery;
-- transition based on wall time while paints stall;
-- latest-scene age;
-- queued updates;
-- frame-count metrics counting bursts.
+- latest source/scene age;
+- paint/update/publication rate mismatch;
+- transition monotonic progress during missed paints;
+- event-loop starvation;
+- metrics counting burst frames.
 
 Average FPS is not the acceptance metric.
 
 ## Cursor halo or unrelated UI becomes choppy
 
-Investigate:
+Investigate shared pressure above any one visualizer mode:
 
-- main-thread event-loop pressure;
-- synchronous image/GL work;
-- logging/formatting;
+- event-loop occupancy;
+- synchronous image/GL/native work;
 - callback cascades;
-- Python GIL saturation;
-- paint duration.
+- logging;
+- GIL saturation;
+- paint duration/update storm;
+- resource churn.
 
-This points above a single visualizer mode.
+# Lifecycle and Qt ownership
 
-## Overlay stuck on display 0
-
-Investigate:
-
-- display-global singleton state;
-- primary-display assumptions;
-- update requests routed only to first compositor;
-- shared visual state containing display-local geometry;
-- z-order compatibility path.
-
-Fix ownership, not display-index conditionals.
-
-## `QOpenGLContext` different-thread error
+## Settings returns but logs deleted-wrapper RuntimeError
 
 Investigate:
 
-- worker calling context methods;
-- deferred cleanup callback on wrong thread;
-- retained renderer/FBO after widget destruction;
-- partial reinit;
+- `WA_DeleteOnClose` deleting the C++ dialog during `exec()`;
+- barrier/child discovery created after modal return;
+- `isinstance(QObject)` used as liveness;
+- duplicate `close()`/`deleteLater()`;
+- animation/timer ownership separated from dialog root.
+
+Correct shape:
+
+- observe valid dialog graph before `exec()`;
+- validate underlying C++ wrapper after return;
+- never touch invalid wrapper;
+- seal barrier and replace once.
+
+Do not remove `WA_DeleteOnClose` or merely suppress the error.
+
+R-56 is the reference incident.
+
+## Edit Save-and-Continue persists then exits code 1
+
+Investigate:
+
+- synchronous reload signal entering `engine.stop()` from `CustomLayoutManager.save_session()`;
+- still-running manager/action/key-filter frames;
+- shell resolver/applier closures and manager-bound signals;
+- class-level active manager/key filter/restack state;
+- manager cleanup invalidating fields used by the returning `finally` block;
+- destruction barrier Python-root survivors.
+
+Correct shape:
+
+1. persist graph;
+2. retire temporary session/callbacks;
+3. return from owner frames;
+4. queue immutable engine-owned admission;
+5. run the same full reinit.
+
+Do not hide `CustomLayoutManager` from the barrier or weaken full reconstruction.
+
+R-53 is the reference incident.
+
+## `QOpenGLContext` different-thread/currentness failure
+
+Investigate:
+
+- worker/deferred callback touching context;
+- wrong owner-thread deletion;
 - context generation mismatch;
-- QObject moved or deleted on wrong thread;
+- renderer/FBO retained after surface destruction;
+- two owners deleting one handle;
+- partial reinit;
 - shutdown order.
 
-Do not suppress warning or retry `makeCurrent()` elsewhere.
+Do not retry `makeCurrent()` elsewhere, suppress the warning, or clear ownership after failed deletion.
+
+## Replacement appears stale or too early
+
+Investigate:
+
+- destruction barrier bypass;
+- delayed callback missing runtime and exact-manager validation;
+- old visualizer/transition/image state satisfying first frame;
+- construction/GL init/timer fire treated as readiness;
+- multiple reveal coordinators;
+- graph replay occurring after visible reveal.
+
+Keep replacement hidden until fresh authoritative state.
+
+# Cache and image pipeline
+
+## `IndexError: pop index out of range` in scaled prefetch
+
+Investigate:
+
+- priority selection order versus numeric deletion order;
+- later preferred index selected before earlier general index;
+- `reversed(selected_indices)` rather than descending sort/partition;
+- duplicate selection and byte/key bookkeeping;
+- stale generation entries.
+
+Fix by stable-identity partitioning or descending unique numeric deletion. Do not add retry/broad exception masking.
+
+R-57 is the reference incident.
+
+## Repeated scaled misses or worker fallback
+
+Investigate:
+
+- unstable transform/DPR/cache identity;
+- preferred/raw producer ordering;
+- premature raw-source release;
+- bounded backlog too small for authored preview window;
+- failed callback leaving accounting/inflight inconsistent;
+- stale generation repopulation.
+
+Do not raise cache budget before proving the miss cause.
 
 ## RAM grows with image changes
 
 Investigate:
 
-- decoded images retained;
-- transform variants;
-- upload bytes;
-- QPixmap cache;
+- decoded/raw/scaled variants;
+- QImage/QPixmap/display aliases/copies;
+- upload/shared-memory buffers;
 - futures/callback closures;
-- prefetch queue;
-- stale scene snapshots;
-- log buffers.
+- pending prefetch/results;
+- previous/fallback frames;
+- stale snapshots;
+- cache key/eviction failure;
+- logs/diagnostics.
 
-Require owner and byte count.
+Require owner, generation, count, and bytes.
 
 ## VRAM grows with image changes
 
 Investigate:
 
-- old textures not deleted;
-- leases not released;
-- transition source retained;
-- resized FBOs retained;
-- per-display duplicate textures;
-- context deletion queue not flushed;
-- registry entry outliving actual use.
+- old textures/FBOs/PBOs/programs;
+- transition/source pins;
+- resized resources;
+- per-display duplicates;
+- failed deletion queue/currentness;
+- stale context/store entry;
+- driver sample age.
 
-Do not rely solely on driver usage; compare tracked bytes.
+Compare tracked GL bytes and teardown idle-driver baseline; do not rely on driver total alone.
+
+# Whole-process resource use
+
+## Memory is flat but still around one GiB RSS
+
+Treat as unresolved absolute-footprint debt.
+
+Investigate separately:
+
+- main versus child RSS/private working set;
+- private commit versus VMS/reserved mappings;
+- thread stacks;
+- Python/Qt/native allocations;
+- image/cache logical bytes;
+- shared-memory/mapped files/DLLs;
+- allocator high-water pages;
+- driver mappings/shared GPU memory;
+- retained callbacks/owners.
+
+Do not add RSS and private commit. Do not call flat usage acceptable merely because it stopped climbing.
+
+## Settings first cycle rises, second does not
+
+Before calling a leak or allocator issue, verify:
+
+- identical warmup duration;
+- same visualizer mode/input;
+- same image/cache/transition state;
+- asynchronous GPU sample age;
+- main/child split;
+- handles/threads/resources;
+- zero retiring ownership.
+
+A one-time uplift can be warmup/high-water/mapping or retention. Cause remains below 90% without attribution.
+
+## Private commit is multi-GiB while RSS is lower
+
+Investigate:
+
+- private bytes versus resident private pages;
+- process/child VMS and mappings;
+- allocator arenas;
+- thread stacks;
+- shared-memory regions;
+- Qt/native/driver reservations;
+- pagefile-backed commitment.
+
+It is commitment pressure, not an additional amount of physical RAM to add to RSS.
+
+Do not trim/recycle to hide it.
+
+# CPU/tasking
 
 ## CPU pegs one core
 
 Investigate:
 
-- high-frequency Python loops;
-- 90–100 small tasks/sec;
-- callback overhead;
-- duplicate per-display simulation;
+- high-frequency Python/shared loops;
+- queueing/callback overhead;
+- duplicate cross-display transforms/state;
+- unchanged provider/media/layout work;
 - full-buffer copies/hashes;
 - logging;
-- Qt event-loop work;
-- busy polling.
+- GUI-thread work;
+- busy polling/retries;
+- allocation/native conversion.
 
-Do not add more Python threads before profiling.
+Do not add more Python threads or persistent visualizer lanes before profiling.
 
-## Settings/Edit memory increases each cycle
+## Task count falls but feel worsens
 
-Investigate:
+The optimization failed.
 
-- old runtime callbacks;
-- timers/workers not stopped;
-- GL resource generation still live;
-- cache not cleared or shared incorrectly;
-- widget retained by closure/signal;
-- partial reconstruction.
+Investigate dropped logical events, cadence reduction, terminal batching, source age, first-visible delay, and scheduler ownership.
 
-Full teardown is the reference behavior.
+Restore accepted executor semantics before further tuning.
+
+# Transition and display
 
 ## Transition freezes or final frame sticks
 
 Investigate:
 
-- terminal transaction;
-- paint acknowledgement;
-- source/destination lease ownership;
-- local completion logic;
-- scene snapshot publication.
+- terminal transaction/acknowledgement;
+- source/destination ownership;
+- local completion exactly-once logic;
+- interrupted/cancelled/resize path;
+- scene publication and resource release.
 
-Prefer local transition finalization.
+Prefer local completion and deterministic release.
 
-## Fix requires many new flags
+## Overlay appears only on display 0
 
-Stop.
+Investigate:
 
-Re-evaluate ownership and state boundaries. A new flag may be valid, but repeated flags indicate architecture failure.
+- display-global singleton state;
+- primary-display assumptions;
+- requests routed only to first compositor;
+- shared logical state carrying display-local geometry;
+- z-order/compatibility path;
+- missing exact display membership.
+
+Fix ownership, not index conditionals.
+
+# Architecture smell
+
+## Fix requires several new flags, retries, generations, or timers
+
+Stop and re-evaluate ownership.
+
+One new state may be valid. A chain of compensating states usually means the wrong object owns the concern or two authorities exist.
+
+## Tests pass but installed behaviour fails
+
+Check whether tests use:
+
+- counter-only lifecycle stubs;
+- immediate executor instead of production executor;
+- logical final state without temporal/first-visible assertions;
+- offscreen QObject destruction without PySide callback wrappers;
+- regenerated expected outputs;
+- no known-bad negative control;
+- no user review.
+
+Strengthen the oracle; do not weaken the runtime to satisfy stale tests.
