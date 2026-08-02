@@ -1,281 +1,319 @@
-# 09 — RAM, VRAM, GPU Resource, and Cache Plan
+# 09 — RAM, Commit, VRAM, GPU Resource, and Cache Plan
 
-## Evidence
+Last reconciled: 2026-08-02
 
-The baseline can climb toward approximately:
+## Current conclusion
 
-- 1.5–1.8 GB RSS;
-- 4–5 GB private commit;
-- 1.8–1.9 GB dedicated VRAM.
+The project has corrected several known monotonic leaks and can return tracked GL ownership to zero during full display teardown. That is necessary but not sufficient.
 
-The donor branch often keeps VRAM closer to a bounded region, but still uses hundreds of megabytes and does not solve CPU/presentation behavior.
-
-A dual-2560×1440 setup does not inherently justify gigabytes of application-owned live texture data.
-
-## Resource accounting first
-
-Every application-owned representation must be tracked.
-
-### CPU representations
-
-- encoded file bytes, if cached;
-- decoded source image;
-- orientation-corrected image;
-- crop/scale result;
-- upload buffer;
-- thumbnails/previews;
-- metadata artwork;
-- retained `QImage`;
-- `QPixmap`.
-
-### GPU representations
-
-- base texture;
-- transition source texture;
-- transition destination texture;
-- visualizer FBO(s);
-- intermediate transition FBO;
-- PBO/upload staging buffer;
-- overlay texture;
-- shader/program buffers;
-- retained fallback frame.
-
-For each resource record:
+Latest active installed evidence reports approximately:
 
 ```text
-id
-kind
-owner
-source identity
-transform identity
-display/share group
-runtime generation
-context generation
-width
-height
-format
-byte size
-lease count
-created_at
-last_used_at
-deletion_reason
+whole-app resident RAM:   847–1074 MiB
+whole-app private commit: 2.86–3.17 GiB
+dedicated VRAM:           554–777 MiB
+shared GPU memory:        84–121 MiB
 ```
 
-## Byte formulas
+This is too heavy for a screensaver even when the values plateau.
 
-For uncompressed RGBA8:
+The project now has two independent resource gates:
 
-```text
-bytes = width × height × 4
-```
+1. **containment:** no monotonic growth across image/lifecycle cycles;
+2. **absolute efficiency:** warm steady-state usage must fall to an evidence-backed reasonable level.
 
-A 2560×1440 RGBA8 buffer is approximately 14.06 MiB.
+## Metric definitions
 
-Two displays with source and destination textures require approximately:
+Do not combine or confuse these measurements:
 
-```text
-2 displays × 2 textures × 14.06 MiB ≈ 56.25 MiB
-```
+- **RSS / working set:** pages currently resident in physical system RAM;
+- **private working set:** resident pages not shared with other processes, where measurable;
+- **private commit / private bytes:** committed private virtual memory backed by RAM and/or pagefile; it is not additional physical RAM to add on top of RSS;
+- **VMS/reserved/mapped address space:** virtual mappings/reservations that may not be committed or resident;
+- **child process RSS/commit:** ImageWorker or other process ownership, reported separately and in whole-app totals;
+- **dedicated VRAM:** GPU-local memory attributed by the driver/tool;
+- **shared GPU memory:** system RAM mapped/used by GPU work;
+- **tracked logical bytes:** application ownership estimates; useful but not identical to physical/driver accounting.
 
-Additional FBOs, staging, driver overhead, and caches increase this, but application-owned live resources should remain explainable.
+Every official report must state exactly which metric a value represents.
 
-## Initial resource budgets
+## Current evidence interpretation
 
-These are provisional engineering gates, not immutable product limits.
+The latest Settings comparison showed:
+
+- the old approximately linear per-cycle Settings staircase did not reproduce across two replacements;
+- a one-time post-first-recreation uplift remained;
+- tracked resources, handles, and threads did not add another step on the second cycle;
+- dedicated VRAM fell near idle-driver levels while the display runtime was absent;
+- substantial process RAM/commit remained even without active display GL ownership.
+
+Cause of the one-time uplift and absolute residual footprint is below 90% confidence. Do not label it allocator, driver, Qt, cache, or leak without attribution evidence.
+
+Edit plateau testing remains blocked until R-53 is repaired.
+
+## Provisional engineering targets
+
+For the current dual-2560×1440 environment, use these as investigation/acceptance targets, not immutable laws:
+
+### Whole-app resident RAM
+
+- preferred warm steady state: **under 600 MiB**;
+- warning/investigation: **750 MiB**;
+- hard unresolved gate: **900 MiB**.
 
 ### Dedicated VRAM
 
-For two 2560×1440 displays:
+- preferred warm steady state: **under 300 MiB**;
+- warning/investigation: **400 MiB**;
+- hard unresolved gate: **500 MiB**.
 
-- preferred steady-state application contribution: **under 300 MiB**;
-- warning threshold: **400 MiB**;
-- hard investigation gate: **500 MiB**;
-- absolutely no monotonic growth across image cycles.
+### Private commit
 
-Higher-resolution or unusual effects must use formula-driven adjusted budgets.
+- no unexplained multi-GiB commitment;
+- separate main and child commitment;
+- identify reserved/mapped regions, thread stacks, allocator arenas, shared-memory mappings, Qt/native allocations, and driver mappings before revising the target.
 
-### Process RAM
+Targets may be revised only through a decision record containing identical-scenario measurements, ownership explanation, fidelity result, and user-visible consequence.
 
-- preferred steady-state RSS after warmup: **under 600 MiB**;
-- warning threshold: **750 MiB**;
-- hard investigation gate: **900 MiB**;
-- no multi-gigabyte private commit without an explained mapped/reserved source;
-- no monotonic growth across image cycles or lifecycle cycles.
+## Fidelity and attribution rule
 
-These targets may be revised only with evidence and a decision record.
+No resource target may be met by reducing:
 
-## CPU image cache
+- visualizer cadence/source sampling or mode behaviour;
+- target/display texture resolution or precision;
+- image scaling/crop quality;
+- transition quality/duration;
+- artwork, shadows, widget content, animation, or first-frame responsiveness.
 
-Use a byte-budgeted cache, not count-only limits.
+Aggregate visualizer memory/CPU is presumed shared/runtime-owned until direct evidence proves a mode-specific owner. Bubble is not a default resource target.
 
-Cache key should include:
+## Required process-level attribution
 
-- canonical source identity;
-- modification stamp/size or content version;
-- transform/crop parameters;
-- target dimensions;
-- color/quality version.
+For controlled equivalent scenarios, break down:
 
-Cache entries must be:
+- main process RSS/private working set/private commit/VMS;
+- each child process RSS/private commit/VMS;
+- Python traced allocations by owner where useful;
+- Qt QObject/widget/image/pixmap ownership where safely observable;
+- thread count and reserved/committed stack contribution;
+- mapped files/DLLs/shared-memory regions;
+- CPU image cache logical and tracked bytes;
+- live QImage/QPixmap/display representations;
+- GL texture/FBO/PBO/program/buffer logical bytes;
+- dedicated/shared GPU memory;
+- process handles/GDI/USER objects;
+- pending tasks/futures/callback closures;
+- logging buffers and diagnostics history;
+- allocator/native high-water behaviour under quiescence and pressure.
 
-- immutable;
-- byte-accounted;
-- evictable when unpinned;
-- free of GUI-only objects on worker-owned paths.
+Measure with identical displays, DPR, image sources, cache warmup, transition set, widgets, duration, entry point, and visualizer input/state.
 
-Avoid retaining all of:
+## Resource ownership record
 
-- original decoded image;
-- multiple scale variants;
-- raw upload bytes;
-- QPixmap;
-- per-display duplicates;
-
-unless each has measured benefit.
-
-## GPU resource store
-
-The registry/store must be metadata-first.
-
-Responsibilities:
-
-- lookup by explicit resource key and share group;
-- lease acquisition/release;
-- byte accounting;
-- LRU eligibility;
-- context-generation invalidation;
-- scheduling deletion.
-
-Non-responsibilities:
-
-- making GL calls while locked;
-- owning scene or transition state;
-- image sequencing;
-- retry loops;
-- fallback presentation.
-
-## Texture identity
-
-Use stable metadata:
+For every application-owned representation, record where applicable:
 
 ```text
-source_id
-source_version
-transform_id
-target_size
-pixel_format
-pipeline_version
+stable identity
+kind
+owner and owner class
+runtime/context/source generation
+source/transform/DPR/quality identity
+dimensions/format
+logical byte size
+physical/allocation size where available
+lease/pin/reference state
+created/last-used timestamps
+retirement reason
 ```
 
-Do not hash every decoded/upload byte by default.
+Count-only limits are insufficient.
 
-Optional content hashing may be used:
+## CPU representations
 
-- offline;
-- for diagnostics;
-- for uncertain external sources;
-- after evidence proves cost acceptable.
+Audit and avoid unnecessary simultaneous retention of:
 
-## Upload path
+- encoded source bytes;
+- decoded source image;
+- orientation-corrected image;
+- crop/scale variants;
+- upload/staging bytes;
+- QImage and QPixmap aliases/copies;
+- per-display duplicates;
+- thumbnails/previews/artwork;
+- deferred/previous/fallback frames;
+- worker/shared-memory transfer buffers.
 
-Target one unavoidable upload-ready representation.
+Implicit sharing is not assumed to eliminate physical copies; verify detach/copy behaviour.
 
-Avoid:
+## GPU representations
+
+Audit:
+
+- base/source/destination textures;
+- transition and visualizer FBOs;
+- intermediate effect buffers;
+- upload/PBO staging;
+- overlay/widget textures;
+- shader/program/geometry buffers;
+- retained fallback/previous frames;
+- per-display duplicates and driver-created backing.
+
+A 2560×1440 RGBA8 buffer is roughly 14.06 MiB. Formula-driven expected ownership should explain most application-created live bytes even though driver accounting includes additional overhead.
+
+## CPU cache policy
+
+Current production CPU-cache limit remains 256 MiB unless evidence proves a different value is necessary.
+
+Requirements:
+
+- exact byte budget plus item cap;
+- stable source/transform/DPR/quality keys;
+- immutable entries;
+- deterministic eviction/clear;
+- no worker-created QPixmap;
+- no stale generation repopulation;
+- no raw source release while scaled derivatives still own it;
+- pending count and future scaled bytes independently bounded.
+
+Do not raise the cache merely to hide misses, fallback noise, or process memory.
+
+## Prefetch policy and R-57
+
+Prefetch must be bounded by:
+
+- active concurrency;
+- pending request count;
+- future logical bytes;
+- generation;
+- stable key ownership.
+
+R-57 proves that selection priority and positional deletion order were conflated. Multi-item removal must use stable identity/partitioning or explicitly descending unique numeric indices.
+
+The repair must preserve preferred-path priority, raw-source derivative lifetime, exact pending keys/bytes, generation rejection, and no duplicate dispatch.
+
+## GPU ownership/store policy
+
+Current per-compositor resource owners remain valid until evidence justifies a future shared store.
+
+Any future store must:
+
+- be metadata-first and byte-bounded;
+- use explicit leases;
+- identify exact deletion owner and context/share generation;
+- perform no GL calls under registry locks;
+- delete on owner thread/context;
+- invalidate old-context entries;
+- never let two local owners delete the same numeric handle.
+
+A shared store is not automatically a memory improvement; prove actual active-VRAM reduction and lifecycle simplicity.
+
+## Upload/copy path
+
+Target the fewest necessary representations without changing output.
+
+Investigate chains such as:
 
 1. decode;
 2. copy to bytes;
-3. hash entire bytes;
-4. copy into another payload;
-5. copy into PBO;
-6. upload.
+3. hash whole buffer;
+4. copy into payload/shared memory;
+5. copy into QImage/upload buffer;
+6. copy into PBO/texture.
 
-Prefer ownership transfer or a single contiguous backing buffer where safe.
+Remove only proven redundant copies. Preserve Windows shared-memory handle lifetime and exactly-once cleanup.
 
-## Prefetch
+## Transition and display resources
 
-Prefetch must be bounded by bytes and outstanding request count.
+During a normal transition, only the required base/source/destination and documented temporary effect resources remain owned.
 
-Rules:
+All completion/cancel/interruption/resize/Settings/Edit/topology paths release obsolete pins, textures, PBOs, FBOs, and previous frames exactly once.
 
-- no unbounded future queue;
-- cancel stale prefetch after sequence/settings change;
-- do not decode many full-size images merely because workers are idle;
-- reserve memory for active transition and current image;
-- deprioritize or stop prefetch under memory pressure.
+After full display teardown:
 
-## Transition resources
-
-At most the needed source and destination resources should remain leased for a normal transition.
-
-After completion:
-
-- destination becomes base;
-- source transition lease releases;
-- temporary FBO/PBO releases;
-- no retained “just in case” frame without a documented bounded policy.
+- tracked display/GL ownership reaches zero before surfaces disappear;
+- dedicated VRAM should approach idle-driver baseline after sampling delay;
+- residual process RAM/commit is still investigated separately.
 
 ## Visualizer resources
 
-Use only the buffers actually required.
+Question and account for every visualizer:
 
-Question every:
+- CPU state/buffer;
+- immutable snapshot;
+- per-display conversion;
+- VBO/VAO/texture/FBO;
+- retained/prewarm/fallback/double buffer.
 
-- double buffer;
-- retained frame;
-- prewarm FBO;
-- fallback FBO;
-- per-display duplicate.
+Do not assume Bubble is responsible for shared visualizer resources. Do not remove a buffer or lower precision/resolution without proving identical visible output and approved behaviour.
 
-If double buffering is necessary, account for it explicitly and prove why.
+## Lifecycle interaction
 
-## Context recreation
+R-53/R-56 must close before final lifecycle memory slopes are trusted.
 
-On a new context generation:
+For every Settings/Edit cycle record:
 
-- old handles are invalid;
-- registry entries are removed or marked dead;
-- deletion occurs before context destruction where possible;
-- no old texture ID is reused by metadata alone;
-- resource byte counters return to zero for the old generation.
+- pre-stop warm state;
+- zero-owner teardown checkpoint;
+- dialog/edit-session checkpoint;
+- replacement settled state after fixed warmup;
+- exact runtime and display/visualizer mode;
+- RSS/private working set/private commit/VMS;
+- main/child split;
+- dedicated/shared GPU memory with sample age;
+- handles/threads/resources/tasks/subscriptions.
 
-## Memory tests
+Do not compare early cold Spectrum against later warm Bubble and call the delta a leak or optimization.
 
-### Plateau test
+## Required tests
 
-- warm up;
-- cycle images for 30 minutes;
-- record tracked/untracked RAM and VRAM;
-- require stable oscillation, not growth.
+### Controlled warm baseline
 
-### Churn test
+Fixed source set, displays, DPR, widgets, transition, visualizer input/mode, cache state, duration, and diagnostics.
 
-- alternate unusually large and small images;
-- vary aspect ratios;
-- force transitions;
-- verify old sizes release.
+### Plateau
 
-### Lifecycle test
+Post-warmup image cycling and stable-state slopes for RSS/private commit/VRAM/tracked bytes/handles/threads.
 
-- 50 Settings/Edit cycles;
-- verify return to same plateau.
+### Churn
 
-### Pressure test
+Alternate large/small images, aspect ratios, transitions, route changes, and cache pressure; prove old sizes release.
 
-- apply conservative cache budget;
-- verify eviction correctness;
-- verify no decode storm or visualizer degradation.
+### Lifecycle
 
-## Leak triage
+After R-53/R-56 repair, at least five alternating installed cycles for current Phase 5, followed by the larger release matrix.
 
-When process usage exceeds tracked bytes:
+### Pressure
 
-1. compare Qt image/pixmap caches;
-2. inspect Python allocations;
-3. inspect native allocations;
-4. inspect driver-reported VRAM;
-5. inspect deleted-but-pending GL resources;
-6. inspect worker queues and retained futures;
-7. inspect log buffers;
-8. inspect thread stacks and object graphs.
+Conservative cache/resource pressure without decode storms, visible quality loss, first-frame failure, or visualizer degradation.
 
-Do not increase budgets to conceal unexplained memory.
+### Quiescent teardown
+
+No display runtime: verify tracked zero ownership, driver VRAM fall, and characterize residual main/child RSS/commit.
+
+## Leak/footprint triage order
+
+When whole-process usage exceeds tracked bytes:
+
+1. verify scenario/warmup/sample age equivalence;
+2. split main/children and resident/commit/mapped metrics;
+3. inspect live application representations and queues;
+4. inspect Python and Qt ownership;
+5. inspect native/allocator regions and thread stacks;
+6. inspect mappings/shared memory/DLL/driver state;
+7. inspect deleted-but-pending GL/Qt objects;
+8. test whether pressure reclaims pages without explicit trimming;
+9. name uncertainty honestly when ownership remains below 90% confidence.
+
+Do not increase budgets or add trimming/recycling to conceal unexplained usage.
+
+## Phase acceptance
+
+Memory/resource work passes only when:
+
+- equivalent scenarios show no monotonic growth;
+- absolute warm RSS/private commit/VRAM fall materially and meet or have an approved explanation against provisional gates;
+- tracked/untracked gaps are documented by owner/category;
+- full teardown reaches zero retiring application ownership;
+- no fidelity/cadence/quality trade was used;
+- normal and Media Center variants pass;
+- the user reports no visual regression.
