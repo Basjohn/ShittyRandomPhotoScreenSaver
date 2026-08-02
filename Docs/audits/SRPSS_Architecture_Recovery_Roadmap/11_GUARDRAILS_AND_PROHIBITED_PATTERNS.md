@@ -1,181 +1,255 @@
 # 11 — Guardrails and Prohibited Patterns
 
+Last reconciled: 2026-08-02
+
 ## Purpose
 
-These guardrails exist because the failed architecture accumulated individually plausible fixes that collectively created an unmanageable state machine.
+These are roadmap-level architectural guardrails. Compact always-loaded rules belong in `Docs/Guardrails.md` and focused guardrails; detailed incident evidence belongs in `Docs/Historical_Bugs/`.
 
-## Hard architectural guardrails
+The rules below incorporate lessons from the donor failure, persistent visualizer lanes, rejected Spectrum smoothing, current lifecycle evidence, and prefetch failure.
 
-### G-1: One owner per mutable concern
+# Hard architectural guardrails
 
-No object may jointly own more than one of:
+## G-1 — One owner per mutable concern
 
-- application lifecycle;
-- GL resource lifetime;
-- visualizer simulation;
-- transition simulation;
-- image pipeline;
-- presentation scheduling.
+Do not share lifecycle admission, deletion responsibility, logical cadence, transition completion, cache eviction, or presentation authority across multiple objects.
 
-A coordinator may invoke owners but not absorb their internal state.
+A coordinator may invoke narrow owners but may not absorb their internal state or make generic managers responsible for unrelated domains.
 
-### G-2: No producer-to-paint wait
+## G-2 — No producer-to-paint wait
 
-Normal frame producers may never wait on:
+Normal producers never wait on:
 
-- `paintGL`;
+- `paintGL()`;
 - Qt `update()` completion;
-- presentation generation;
+- presentation generations;
 - compositor acknowledgement;
-- terminal frame acknowledgement.
+- terminal-frame acknowledgement.
 
-### G-3: No GL outside owner thread/context
+## G-3 — One visualizer presentation cadence
 
-No exceptions, retries, or warnings-only mode.
+No:
 
-### G-4: No partial reinit until separately approved
+- self-requested visualizer repaint loop;
+- overlay-local animation timer for authoritative visualizer state;
+- paint-derived clock;
+- `paintGL()` smoothing/state mutation;
+- paint count used as producer control.
 
-Full teardown/recreate is mandatory.
+R-55/`ebfec397` remains the historical negative control.
 
-### G-5: No visualizer behavior changes in infrastructure commits
+## G-4 — Preserve approved visualizer execution
 
-Automated and manual fidelity gates apply.
+The ordinary general COMPUTE executor restored at `4bde89e` is the approved production model.
 
-### G-6: No unbounded cache or queue
+Do not restore persistent analysis/Bubble lanes, dedicated long-lived visualizer loops, cadence caps, source decimation, or terminal batching.
 
-Every cache/queue has:
+## G-5 — Protect all modes; Bubble is not the default target
 
-- byte/count cap;
-- eviction/drop policy;
-- metrics;
-- owner;
-- lifecycle reset.
+Aggregate load is presumed shared/runtime-owned until direct evidence proves mode ownership.
 
-### G-7: No silent fallback
+Do not alter Bubble-specific scheduling, physics, publication, buffers, resolution, or precision to solve general CPU/memory/task concerns without explicit user authorization.
 
-Fallback activation must be explicit and observable.
+## G-6 — No perceivable-fidelity trade for resource targets
 
-### G-8: No dynamic compatibility façade
+Do not lower:
 
-No broad `__getattr__`, `__setattr__`, or giant forwarded attribute lists.
+- visualizer cadence/source sampling;
+- target texture/display resolution;
+- buffer precision;
+- transition quality;
+- image scaling/crop quality;
+- artwork/shadows/widget content;
+- animation smoothness;
+- first-frame responsiveness.
 
-### G-9: No state-machine expansion without deletion
+Resource optimization removes waste; it does not silently downgrade the product.
 
-If a change introduces a new state, flag, generation, retry counter, or event:
+## G-7 — Full reinit remains mandatory
 
-- identify which old state it replaces;
-- prove why ownership cannot express the requirement;
-- document transitions;
-- add state-transition tests.
+Settings and committed CUSTOM Edit perform full stop–destroy–recreate.
 
-Adding a new state without removing complexity requires architecture review.
+No partial reinit or retired-tree reuse without a separately approved architecture proposal after release-quality stability.
 
-### G-10: No optimization without a baseline scenario
+## G-8 — Teardown admission cannot come from a retiring owner frame
 
-Every optimization names:
+A retiring manager/session/widget must not synchronously initiate destruction of the runtime that owns its current call stack.
 
-- scenario;
-- before data;
-- after data;
-- fidelity result;
-- rollback.
+Persist and explicitly retire temporary session state, return from owner/action/key-filter frames, then queue engine-owned immutable admission on a later GUI turn.
 
-## Performance guardrails
+R-53 is the negative control.
 
-- p99 and max matter more than average FPS.
-- CPU reduction may not come from lowering visualizer fidelity.
-- RAM/VRAM must plateau.
-- task rate must be categorized.
-- instrumentation overhead must be measured.
-- idle/static work must approach zero where practical.
-- no full-buffer hash/copy in a recurring hot path without evidence.
+## G-9 — A Python wrapper is not Qt-object liveness
 
-## Visualizer guardrails
+Whenever a QObject can be destroyed by modal close, `WA_DeleteOnClose`, `deleteLater()`, or queued deletion:
 
-- golden input fixtures are immutable during infrastructure work;
-- logical simulation is independent of paint cadence;
-- beat impulses cannot be dropped before simulation;
-- elapsed-time handling is explicit;
-- mode-specific state is not reconstructed through generic smoothing;
-- manual review is required.
+- register observation before the deletion boundary;
+- validate the underlying C++ object before later touches;
+- never use `isinstance(..., QObject)` as a liveness check;
+- never double-close/delete an invalid wrapper.
 
-## Lifecycle guardrails
+R-56 is the negative control.
 
-- stop producers first;
-- disconnect callbacks;
-- cancel/drain workers;
-- destroy GL resources with current context;
-- invalidate generation;
-- destroy surface last;
-- assert no old resource remains;
-- start from clean state.
+## G-10 — No GL outside the sole owner thread/context
 
-## Resource guardrails
+No retries, warnings-only mode, or handle clearing after failed deletion.
 
-- exact byte accounting;
-- deterministic release;
-- context generation;
+Share-group accessibility does not create shared deletion ownership. One numeric GL handle has one deletion owner.
+
+## G-11 — Every cache/queue is bounded and internally consistent
+
+Every queue/cache has:
+
+- count and/or byte cap appropriate to its retained cost;
+- explicit owner;
+- stable identity;
+- generation/reset policy;
+- drop/eviction policy;
+- exact bookkeeping tests.
+
+When removing multiple positions, use stable identity/partitioning or explicitly descending unique numeric indices. Priority order is not deletion order. R-57 is the negative control.
+
+## G-12 — Plateau and absolute usage are separate requirements
+
+RAM/private commit/VRAM must:
+
+- stop growing in equivalent scenarios;
+- reach an evidence-backed reasonable steady state;
+- be reconciled against tracked ownership.
+
+Flat usage near one GiB RSS, multi-GiB private commit, or more than 500 MiB dedicated VRAM is not automatically acceptable.
+
+## G-13 — No fake memory fixes
+
+Do not use:
+
+- working-set/allocator trimming;
+- production `gc.collect()`;
+- process/worker recycling;
+- cache inflation or blind cache reduction;
+- ignored owners/counters;
+- forced page-out;
+- reduced quality;
+
+to make a graph look better.
+
+## G-14 — No silent fallback architecture
+
+Fallback activation is explicit, bounded, observable, and temporary. It cannot silently switch to a second complete runtime path.
+
+## G-15 — No dynamic compatibility façade
+
+No broad `__getattr__`/`__setattr__`, giant forwarding lists, widget/controller impersonation, or whole-owner free-function seams.
+
+## G-16 — No state-machine expansion without deletion
+
+A new state, generation, retry, flag, queue, timer, or callback authority must identify what old complexity it replaces and why plain ownership cannot express the requirement.
+
+Adding a compensating state without deleting another requires architecture review.
+
+## G-17 — No optimization without an equivalent baseline
+
+Every optimization records exact scenario, environment, cache/warmup state, before/after metrics, fidelity result, lifecycle result, resource result, and rollback.
+
+# Performance guardrails
+
+- user-observed feel and first-visible response outrank average FPS/task count;
+- p99/max and event-loop lateness are mandatory;
+- task rate is categorized, not blindly minimized;
+- instrumentation overhead is measured;
+- unchanged/static work should stop where genuinely unnecessary;
+- no recurring full-buffer hash/copy without evidence;
+- no task per paint or per bar/bubble/group;
+- no performance result that merely shifts work or memory elsewhere.
+
+# Visualizer guardrails
+
+- approved fixtures/goldens are immutable during infrastructure work;
+- strengthened temporal suite includes production executor and known-bad controls;
+- logical input/events are integrated before render-state coalescing;
+- activation/generation/first-frame identity is explicit;
+- manual installed review is required for shared source/scheduling/presentation changes;
+- user rejection triggers rollback, not parameter compensation.
+
+# Lifecycle guardrails
+
+- stop producers before deleting display/GL ownership;
+- reject late results by generation and exact manager/owner identity;
+- destroy GL with owner context current;
+- retain ownership on failed deletion;
+- destroy surfaces last;
+- barrier reaches zero before replacement construction;
+- reveal uses fresh authoritative state only;
+- no nested event pumping, retry sleeps, timeout extension, forced GC, or ignored owners.
+
+# Resource guardrails
+
+- exact logical bytes and stable identity;
+- deterministic release reason;
+- context/runtime/source generation;
 - no Python-GC-owned GL lifetime;
-- no registry GL calls under lock;
-- no stale texture ID reuse;
-- no per-display duplicate if shareable and identical;
-- no retained fallback frame without a bounded reason.
+- no registry GL calls under locks;
+- no per-display duplicate unless transform/DPR/output genuinely differ;
+- no retained previous/fallback frame without a bounded product reason;
+- tracked counters are reconciled with main/child RSS, private commit, mapped regions, and driver memory.
 
-## Prohibited anti-patterns
+# Prohibited anti-patterns
 
-### “Fix the symptom with another flag”
+## “Fix the symptom with another flag”
 
 Examples:
 
 - `paint_pending_but_not_really`;
-- `terminal_ack_deferred`;
 - `visualizer_retry_after_pause`;
+- `ignore_generation_once`;
 - `force_reinit_on_next_gap`;
-- `ignore_generation_once`.
+- `terminal_ack_deferred`.
 
-These indicate unclear ownership.
+Repeated compensating flags indicate an ownership error.
 
-### “Thread pool as animation loop”
+## “Thread pool or lane as animation loop”
 
-Submitting one general compute task per visual frame creates queueing and callback overhead.
+A persistent or per-frame worker loop can alter timing even when equations are identical.
 
-### “Compatibility forever”
+## “More paints means smoother”
 
-Temporary adapters must have removal criteria and a deadline.
+Extra repaint requests can create a competing cadence, higher paint pressure, and worse visual continuity.
 
-### “Metrics as control flow”
+## “More averaging to hide jitter”
 
-A profiler or starvation classifier must not trigger normal scheduling decisions.
+Smoothing or damping to conceal scheduling gaps changes feel.
 
-### “More averaging to hide jitter”
+## “Keep all representations for speed”
 
-Smoothing values to conceal presentation gaps damages feel.
+Retaining raw, scaled, pixmap, upload, texture, previous, and fallback copies without measured benefit is not optimization.
 
-### “Keep all representations for speed”
+## “Fast Settings/Edit by retaining unknown state”
 
-Retaining decoded, scaled, pixmap, bytes, texture, and fallback copies without a byte budget is not optimization.
+A quick partial restart is not a win if ownership cannot be proven.
 
-### “Fast Settings by retaining unknown state”
+## “Tests passed, therefore feel/lifecycle passed”
 
-A quick partial restart is not a win if it corrupts context ownership.
+Counter stubs, logical-only replay, and offscreen cleanup cannot replace the real relay shape, temporal negative controls, installed weakref/barrier evidence, and user review.
 
-### “Tests passed, therefore feel passed”
+## “Tracked bytes are flat, therefore memory is solved”
 
-Logical tests do not replace deterministic temporal replay and manual review.
+Whole-process physical/commit/driver memory can remain excessive despite correct logical counters.
 
-## Code review questions
+# Review questions
 
-Every review must answer:
+Every review answers:
 
-1. Who owns this mutable state?
-2. Which thread mutates it?
-3. Can it outlive its runtime/context generation?
-4. What happens when paint is late?
-5. What happens when Settings opens now?
-6. What bytes does it retain?
-7. What work happens while hidden/static?
-8. Does it alter visualizer timing or equations?
-9. Does it add a state/flag/retry?
-10. What evidence proves improvement?
+1. Who owns each mutable state and deletion responsibility?
+2. Which thread/context mutates it?
+3. Can it outlive runtime/context/source/activation identity?
+4. Does it alter approved cadence or first-visible response?
+5. What happens when paint is late?
+6. What happens when Settings closes the modal dialog?
+7. What happens when Edit Save-and-Continue fires from a key/action frame?
+8. What bytes/commit/mappings does it retain in main and children?
+9. What happens while hidden/static/unchanged?
+10. Does it add a timer/lane/queue/retry/generation/flag?
+11. Which known-bad negative control would catch failure?
+12. What exact installed evidence and rollback prove the result?
 
-A review that cannot answer these questions is incomplete.
+If those answers require several overlapping owners or hidden control paths, the design has regressed.
