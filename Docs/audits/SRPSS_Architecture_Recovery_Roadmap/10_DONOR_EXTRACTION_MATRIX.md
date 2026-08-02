@@ -1,193 +1,165 @@
 # 10 — Donor Extraction Matrix
 
-## Rule
+Last reconciled: 2026-08-02
 
-The donor branch is a reference library, not a merge source.
+## Current role
 
-For each donor feature:
+The donor commit `7376bb9` is frozen reference history, not an active implementation queue.
 
-1. identify the product requirement;
-2. inspect baseline behavior;
-3. inspect donor implementation;
-4. extract the smallest principle or algorithm;
-5. redesign it under the target ownership model;
-6. add tests before integration;
-7. benchmark in isolation.
+The project has already selectively reconstructed several useful principles—measurement, ownership metadata, generation rejection, immutable handoff, byte accounting, and strict GL deletion—while rejecting the donor's scheduler/presentation/lifecycle orchestration.
 
-## Commit progression
+Do not revisit donor code merely because a later phase number mentions a resource store or single-surface compositor. Begin from a current measured requirement in `Current_Plan.md` and current `main` ownership.
 
-### `00edb57` — behavioural baseline
+## Extraction rule
 
-Use as reference for:
+For any new donor-derived idea:
 
-- visualizer response and feel;
-- smoother presentation behavior;
-- Settings/Edit lifecycle topology;
-- pre-compositor integration behavior.
+1. name the current product/ownership problem;
+2. prove it in current `main` evidence;
+3. inspect current implementation first;
+4. inspect donor code only for a narrowly relevant principle/test;
+5. identify rejected dependencies and historical regressions;
+6. redesign under current ownership and visualizer/lifecycle contracts;
+7. add known-bad negative controls where applicable;
+8. benchmark the isolated change;
+9. preserve a rollback point and installed user review when presentation is touched.
 
-Do not preserve unchanged:
+No large cherry-pick or donor-shaped compatibility bridge.
 
-- unbounded memory/resource lifetime;
-- high recurring task rate;
-- large CPU workload;
-- duplicated image representations.
+## Historical commit progression
 
-### `7eed32c` — texture streaming/resource profiling work
+### `00edb57` — original behavioural baseline
 
-Likely donor value:
+Historical value:
 
-- texture usage instrumentation;
-- streaming tests;
-- geometry/resource profiling;
-- resource-use visibility.
+- smoother presentation and visualizer feel;
+- simpler lifecycle topology;
+- pre-donor behaviour comparison.
 
-Extraction decision:
+Known weaknesses:
 
-- **Inspect and selectively reconstruct.**
-- Prefer tests and accounting ideas.
-- Do not assume texture-manager code can be copied without ownership review.
+- high CPU/task work;
+- unbounded/duplicated representations;
+- RAM/private-commit/VRAM growth;
+- insufficient accounting.
 
-### `6e4a2cf` — orchestration expansion begins
+Current note: it is no longer the sole behavioural authority. `ff934616` is the current user-approved Bubble/Spectrum runtime.
 
-Notable direction:
+### `7eed32c` — texture/resource profiling
 
-- larger `display_image_ops.py`;
-- program-cache and transition lifecycle work;
-- visualizer overlay changes;
-- more transaction/retry behavior.
+Useful historical ideas:
 
-Extraction decision:
+- resource-use visibility;
+- texture/geometry instrumentation;
+- tests that expose lifetime/streaming problems.
 
-- **Generally reject orchestration shape.**
-- Inspect for isolated shader/program cache fixes.
-- Do not port widget-instance free-function coupling.
-- Do not port retries without identifying the ownership defect they mask.
+Current rule: use only if current diagnostics still lack a named measurement.
 
-### `7e10589` — compositor architecture and single-surface visualizer layer
+### `6e4a2cf` — orchestration expansion
 
-Notable direction:
+Historical warning signs:
 
-- architecture document;
-- large `spotify_visualizer_layer.py`;
-- extensive compatibility and staging code;
-- single-surface pivot.
+- larger widget-shaped/free-function seams;
+- retry/transaction growth;
+- lifecycle and transition responsibility spread.
 
-Extraction decision:
+Decision: reject orchestration shape; mine only isolated stateless logic with current tests.
 
-- **Keep the product goal; reject the compatibility implementation.**
-- Reuse context-agnostic renderer math or shaders only after fidelity proof.
-- Do not port the layer mega-object.
-- Do not port dynamic forwarding.
-- Do not retain both old overlay and new layer as long-term architecture.
+### `7e10589` — single-surface visualizer layer
 
-### `729ef2e` — adaptive timing/backpressure/performance work
+Historical value:
 
-Notable direction:
+- one-surface product goal;
+- potentially reusable context-agnostic shader/math ideas.
 
-- adaptive timer expansion;
-- compositor scheduling changes;
-- usage sampling;
-- thread-manager changes.
+Decision: reject mega-layer, widget impersonation, dynamic forwarding, and dual long-term runtime paths.
 
-Extraction decision:
+### `729ef2e` — adaptive timing/backpressure
 
-- **Reject adaptive timer and paint-ack path.**
-- Retain only diagnostics that can operate passively.
-- Review any thread-manager simplifications independently.
+Historical value:
 
-### `7376bb9` — resource/lifecycle expansion
+- passive diagnostics only.
 
-Notable direction:
+Decision: reject adaptive timer, paint acknowledgement, starvation control flow, and worker/presentation handshake.
 
-- shared texture registry;
-- image upload payload;
-- lifecycle helper;
-- compositor state expansion;
-- visualizer-layer expansion;
-- image-pipeline changes;
-- adaptive timer expansion;
-- many tests.
+### `7376bb9` — expanded resource/lifecycle architecture
 
-Extraction decision:
+Potentially reusable principles:
 
-#### Keep/reconstruct
-
-- explicit share-group-aware texture identity;
-- lease/reference concept;
+- explicit resource identity and bytes;
+- one deletion owner;
+- context/share generation checks;
+- immutable worker/render handoff;
 - callbacks outside locks;
-- GL affinity assertions;
-- context/lifecycle generation checks for stale results;
-- immutable worker/render handoff principle;
-- resource accounting tests;
-- selected profiling utilities.
+- affinity assertions;
+- resource/accounting tests.
 
-#### Rewrite
+Rejected implementation shapes:
 
-- shared texture registry into a smaller resource store;
-- image upload payload without mandatory full-buffer hash/copy;
-- context-agnostic visualizer renderer behind a narrow interface;
-- one-outstanding-update coalescing as a GUI-only flag;
-- diagnostics as sampled observation.
-
-#### Discard
-
-- adaptive timer;
+- adaptive/persistent visualizer scheduling;
 - paint acknowledgement;
-- compositor cadence starvation flow;
-- partial reinitialization;
-- terminal transaction machinery;
-- compatibility mega-layer;
-- dynamic attribute forwarding;
-- retained fallback/retry state spread;
-- whole-widget free-function seams;
-- hot-path SHA-256 of full buffers.
+- compositor cadence control;
+- partial Settings/Edit reinit;
+- terminal-frame transactions;
+- compatibility mega-layer/dynamic forwarding;
+- distributed retry/fallback state;
+- whole-buffer hot-path hashes/copies;
+- multiple owners recording the same GL handle.
 
-## Component matrix
+## Lessons from later current-main experiments
 
-| Donor component/principle | Decision | Conditions |
+The donor was not the only source of bad scheduling ideas. Later current-main experiments confirmed the same principles:
+
+- `666624d`: persistent shared-analysis/Bubble lanes degraded approved behaviour and were reverted;
+- `ebfec397`: paint-local Spectrum decay introduced a second cadence and made presentation significantly less smooth;
+- R-53: a full teardown can still be architecturally correct yet admitted from the wrong retiring call stack;
+- R-56: Python wrapper identity cannot stand in for Qt C++ liveness;
+- R-57: queue priority order cannot stand in for safe positional deletion order.
+
+Future extraction must account for these current lessons, not merely avoid donor code names.
+
+## Component decisions
+
+| Principle/component | Current decision | Conditions |
 |---|---|---|
-| One surface per display | Reconstruct | Only after lifecycle, resource, and visualizer decoupling phases |
-| Context-agnostic visualizer renderer | Reconstruct | Narrow API; deterministic fidelity proof |
-| `CompositorSpotifyVisualizerLayer` | Discard | Mine only isolated renderer/shader logic |
-| Shared texture registry concept | Keep | Simplify and byte-bound |
-| Current shared registry implementation | Selective donor | Verify locks, generations, deletion, driver behavior |
-| Immutable upload payload concept | Keep | Avoid duplicate copy/hash |
-| Full SHA-256 content identity | Discard default | Optional diagnostic only |
-| Adaptive timer | Discard | No replacement worker handshake |
-| Paint generation acknowledgement | Discard | Latest-state coalescing only |
-| One pending `update()` principle | Keep | GUI-local boolean/atomic state |
-| Partial Settings/Edit reinit | Discard | Full teardown/recreate |
-| GL affinity assertions | Keep and strengthen | Fail early in development |
-| Lifecycle generation | Keep narrowly | One real lifetime boundary |
-| Terminal-frame transactions | Discard | Local transition completion |
-| Dynamic compatibility forwarding | Discard | Explicit typed interfaces |
-| `display_image_ops` widget-shaped seam | Discard/refactor | Explicit services and DTOs |
-| Performance logging | Keep selectively | Sampled, aggregated, low overhead |
-| Texture streaming tests | Keep/adapt | Add byte plateau and context recreation |
-| Legacy visualizer behavior | Preserve | Golden replay and manual review |
+| One surface per display | Future option | Only after Phase 5; compositor owns no simulation/lifecycle/scheduler authority |
+| Context-agnostic visualizer renderer | Possible future reconstruction | Narrow immutable API; current temporal goldens and user approval |
+| Donor visualizer layer/mega-object | Discard | Mine isolated stateless shader/math only |
+| Shared resource-store concept | Reassess later | Current measurements must prove benefit over per-compositor ownership |
+| Existing donor shared registry | Reference only | Never copy ownership/lock/deletion shape blindly |
+| Immutable upload/result handoff | Keep principle | Avoid duplicate copy/hash; generation/owner identity required |
+| Full-buffer SHA-256 identity | Reject default | Diagnostic/offline only unless measured need |
+| Adaptive/persistent visualizer timers/lanes | Discard | Ordinary executor and one cadence remain approved |
+| Paint generation acknowledgement | Discard | GUI-local request coalescing only; no producer wait |
+| One pending GUI update principle | Keep narrowly | Display-owner deduplication, no frame acknowledgement |
+| Partial Settings/Edit reinit | Discard | Full rebuild required |
+| GL affinity and strict deletion | Keep/strengthen | One deletion owner; fail closed |
+| Runtime/context/request generation | Keep narrowly | Real lifetime boundaries only |
+| Terminal-frame transaction | Discard | Local transition completion |
+| Dynamic compatibility forwarding | Discard | Explicit interfaces/DTOs |
+| Passive performance/resource diagnostics | Keep selectively | Sampled, bounded, non-controlling |
+| Historical tests | Adapt selectively | Must reproduce current ownership/runtime shape |
 
-## Cherry-pick policy
-
-Allowed only when a donor commit:
-
-- is small;
-- is independent;
-- does not import rejected dependencies;
-- has a clear test;
-- does not modify visualizer behavior;
-- does not alter lifecycle or presentation without phase approval.
-
-Otherwise manually reconstruct.
-
-## Donor comparison commands
+## Current comparison commands
 
 Examples:
 
 ```bash
-git diff recovery-00edb57..donor-7376bb9 -- rendering/gl_compositor.py
-git show donor-7376bb9:rendering/gl_programs/shared_texture_registry.py
-git show donor-7376bb9:rendering/gl_compositor_pkg/spotify_visualizer_layer.py
-git log --oneline 00edb57..7376bb9
+git diff 7376bb9..main -- <path>
+git show 7376bb9:<path>
+git show 00edb57:<path>
+git log --oneline 00edb57..main -- <path>
 ```
 
-Record every donor extraction in a decision or phase report.
+Use exact commit SHAs in reports. Do not assume branch aliases exist locally.
+
+## Acceptance for any donor-derived change
+
+- current problem is measured;
+- smallest principle is extracted, not implementation bulk;
+- no rejected scheduler/presentation/lifecycle dependency appears;
+- current visual and lifecycle contracts pass;
+- whole-process resource effect is measured;
+- user approval is recorded when presentation/feel is touched;
+- current main remains simpler or more explainable;
+- rollback is exact.
