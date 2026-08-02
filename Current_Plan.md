@@ -12,12 +12,15 @@ Stable architecture belongs in `Spec.md`. Durable safety rules belong in `Docs/G
 branch: main
 recovery baseline: 00edb57a3076b845cb8ee4b6cb7f36ea83411f0c
 donor/reference only: 7376bb9bb380253f3bd14079e65d7bdbca062fad
+pre-persistent-lane behavioral checkpoint: 6f188adadabb77b1a9d47a0fe1685c86ad39fb77
 current failed-evidence application checkpoint: 666624d421b08f978c5f610571a078570150a1e7
 current evidence: logs/evidence_chest/08_01_666624d4_22_05/
 owning report: Docs/phase_reports/P05_CPU_TASK_REDUCTION.md
 ```
 
 The donor is read-only reference material, never a merge target. Phase 4 remains closed. Current failures are repaired under Phase 5 rather than reopening or discarding completed work.
+
+`6f188ad` is the immediate checkpoint before the persistent shared-audio and Bubble compute-lane migration. It already contains the restored lane-free Bubble path that received operator confirmation. It is therefore the authoritative behavioral recovery point for this visualizer regression investigation.
 
 ## Status Legend
 
@@ -33,7 +36,8 @@ A code slice is not complete merely because unit tests pass. Acceptance requires
 
 - Visualizer feel, reactivity, latency, smoothness, mode personality, and first-frame correctness outrank task-count reduction.
 - Spectrum and Bubble are independently protected. A change helping one may not silently alter the other.
-- Average FPS and mean worker duration cannot hide p99/max delivery gaps, source holds, lost impulses, or visible stepping.
+- Operator-observed Bubble or Spectrum regression overrides green task counters and incomplete deterministic proxies.
+- Average FPS, mean worker duration, total accepted steps, and zero rejected submissions cannot hide p99/max source gaps, lost impulses, stale energy, or visible stepping.
 - Full Settings/Edit stop/destroy/recreate remains authoritative. Do not weaken it to make recreation pass.
 - The destruction barrier fails closed. Do not ignore an idle-but-registered owner, extend timeouts, add retries, or continue after a critical timeout.
 - The destruction barrier and authoritative-first-frame barrier are separate and must both pass before reveal.
@@ -44,7 +48,9 @@ A code slice is not complete merely because unit tests pass. Acceptance requires
 - Producers never wait for paint. Simulation and analysis cadence are never derived from paint acknowledgement.
 - Do not add arbitrary sleeps, nested `processEvents()`, periodic `gc.collect()`, working-set trimming, process/worker recycling, cache enlargement, retired-tree reuse, or warm-standby runtimes.
 - Existing files and documents are not renamed or moved.
-- Do not discard or overwrite unrelated in-progress Phase 5 work. Finish an atomic slice safely before changing lanes.
+- Do not discard or overwrite unrelated in-progress Phase 5 work. Finish an atomic slice safely before changing visualizer execution paths.
+- Do not update or regenerate visualizer goldens to bless the current lane behavior.
+- Do not tune Bubble or Spectrum while restoring the pre-lane execution path.
 
 ## Completed Checkpoints
 
@@ -66,7 +72,9 @@ The application checkpoint and evidence above are failed runtime evidence.
 - [!] Settings stop/open/return tears down but does not complete its intended flow.
 - [!] Both paths can fail on an unreleased retiring-generation `visualizer.audio_analysis` compute lane.
 - [!] CUSTOM/Edit additionally retains two `CustomLayoutManager` Python owners.
-- [!] Spectrum is visibly less smooth and less reliable than before the latest Phase 5 work.
+- [!] Spectrum is visibly less smooth and less reliable than at the pre-lane checkpoint.
+- [!] Bubble is operator-reported as regressed after previously being restored and approved at `6f188ad`.
+- [!] The persistent visualizer lanes are not accepted production architecture while either visualizer fidelity or lifecycle ownership is failing.
 - [!] No run containing `CRITICAL [LIFECYCLE_BARRIER] timeout` may be described as accepted or successful.
 - [!] P5.4 blocks P5.5 and Phase 5 closure.
 
@@ -74,74 +82,139 @@ The application checkpoint and evidence above are failed runtime evidence.
 
 1. Inspect and preserve the current working tree and retained Codex context.
 2. Finish the currently atomic in-progress task safely; do not leave unused shells.
-3. Keep active docs truthful and remove stale lifecycle pass claims.
-4. Repair exact engine/lane ownership and prove the retiring audio-analysis lane is released.
-5. Repair `CustomLayoutManager` ownership and the Edit-save-to-reload call-stack boundary.
-6. Prove Settings and Edit recreation in normal and Media Center variants.
-7. Rerun first-frame and mode-switch poison protection.
-8. Resolve the shared analysis-lane fidelity risk and Spectrum regression without degrading Bubble or other modes.
-9. Recover and document the two adversarial lane findings previously reported by Codex.
-10. Resume remaining Phase 5 work in order.
-11. Close Phase 5 only after the complete installed matrix passes.
+3. Keep active docs truthful and remove stale lifecycle or visualizer pass claims.
+4. Restore the exact pre-persistent-lane visualizer execution semantics from `6f188ad` for both shared audio analysis and Bubble simulation, preserving only passive newer telemetry and lifecycle identity tags that do not alter execution.
+5. Produce an installed recovery build before tuning, smoothing changes, scheduler changes, or new golden work.
+6. Obtain operator A/B confirmation for Bubble and Spectrum against `6f188ad` behavior.
+7. After confirmation, remove the now-unused visualizer lane facades and generic scheduler integration unless another proven production owner exists.
+8. Repair the remaining `CustomLayoutManager` ownership and Edit-save-to-reload call-stack boundary.
+9. Prove Settings and Edit recreation in normal and Media Center variants.
+10. Rerun first-frame and mode-switch poison protection.
+11. Recover and document the two adversarial lane findings previously reported by Codex.
+12. Resume remaining Phase 5 work in order.
+13. Close Phase 5 only after the complete installed matrix passes.
 
 # Investigation Ledger
 
 Concrete source-level findings belong here as they are established. Suspicions remain labelled as hypotheses until runtime evidence distinguishes them.
 
-## CF-01 — Persistent audio-analysis lane is a cross-mode fidelity boundary
+## CF-01 — Persistent visualizer lane migration crossed a protected behavioral boundary
 
-**Status:** concrete architectural finding; exact contribution to the operator-observed Spectrum regression still requires installed comparison.
+**Status:** concrete commit-boundary finding and rejected current production state. Exact internal timing mechanism remains useful diagnostic evidence, but behavioral recovery no longer waits for a speculative lane repair.
 
-### What changed
+### Commit isolation
 
-Phase 5 moved the shared beat engine's `visualizer.audio_analysis` work from repeated general COMPUTE submissions to one persistent managed analysis lane. That lane computes and commits:
+The persistent lane migration is isolated to the change from:
 
-- raw bar output;
-- engine-smoothed bars;
-- continuous energy bands;
-- audio-worker processing state;
-- authoritative frame timestamp;
-- engine generation and activation ownership.
+```text
+6f188adadabb77b1a9d47a0fe1685c86ad39fb77
+→
+666624d421b08f978c5f610571a078570150a1e7
+```
 
-This is not a Spectrum-only lane. It is the common live analysis source used by several modes.
+`6f188ad` already contained:
 
-No new or separate Spectrum lane is proposed here.
+- the rollback of the failed 60 Hz/max-two Bubble batching design;
+- one authored Bubble simulation step for every lane-free opportunity;
+- operator-confirmed restored Bubble reaction and elasticity;
+- the ordinary general COMPUTE executor path for shared audio analysis;
+- the ordinary general COMPUTE executor path for Bubble simulation.
 
-### Mode impact
+`666624d` introduced two distinct behavioral migrations:
 
-- **Spectrum — high exposure**
-  - Reads engine-smoothed bars from the shared analysis result.
-  - Copies accepted bars directly to the displayed bar array.
-  - Publishes a new Spectrum GPU state only when bars or another explicit presentation property change.
-  - Irregular analysis publication can therefore appear as hold-then-step motion.
+1. shared `visualizer.audio_analysis` moved from repeated general COMPUTE submissions to one persistent managed lane;
+2. Bubble simulation moved from the restored general COMPUTE submission path to a persistent Bubble lane.
 
-- **Bubble — high but visually masked exposure**
-  - Its particle simulation has a separate authored simulation lane.
-  - Its continuous energy, transients, onset/event state, and audio-worker control state still originate from the shared analysis pipeline.
-  - Bubble may continue moving while its source energy is stale or uneven, making regressions strongly song-dependent and harder to diagnose by eye.
-  - A healthy Bubble simulation-step counter does not prove healthy audio-source cadence.
+The current regression report therefore has two plausible direct causes rather than requiring one shared speculative explanation:
 
-- **Dev Curve — meaningful exposure**
-  - Its solver consumes shared continuous energy and transient state each presentation tick.
-  - Uneven source publication can change layer drive and transient response while geometric motion continues.
+- Spectrum can regress through the shared audio-analysis lane;
+- Bubble can regress through both the shared source lane and its own simulation-lane migration.
 
-- **Sine Wave and Oscilloscope — partial exposure**
-  - Raw waveform authority is updated directly from the consumed audio frame and is less dependent on the analysis lane for primary line motion.
-  - Reactive glow, energy, transient width, onset envelopes, and related effects consume shared analysis state and can still regress.
+### Current decision
 
-- **Paused synthetic idle paths**
-  - Do not establish live-lane fidelity because they use generated idle state rather than live audio analysis.
+The persistent visualizer lane design is not accepted in its current form.
 
-### Correction to the earlier hypothesis
+It achieved lower Task/Future/accounting churn, but it now has both:
 
-`_target_bars`, `_visual_bars`, `_visual_smoothing_tau`, and `_apply_visual_smoothing()` still exist, but the recovery baseline and Phase 4 code already copied engine-smoothed bars directly into `_display_bars`.
+- a hard lifecycle failure: the retired shared audio lane remains registered and blocks Settings/Edit recreation;
+- an operator-reported fidelity failure: Spectrum and Bubble no longer match the accepted pre-lane behavior.
 
-Therefore:
+A task-reduction design that fails lifecycle or authored visualizer feel is a failed optimization regardless of average handoff, worker duration, publication count, or rejected-submission count.
 
-- the unused visual interpolation helper is real technical debt and may be useful in the repair;
-- its disconnection is not proven to be a recent Phase 5 regression;
-- restoring it blindly is not a valid historical revert;
-- the first comparison must be old executor publication versus current persistent-lane publication.
+Do not ask Codex to tune the lane until it looks right. Restore the exact known behavior first.
+
+### Is the lane idea intrinsically invalid?
+
+No general claim is made that persistent compute lanes can never be useful.
+
+The narrower conclusion is authoritative:
+
+- this visualizer adoption was not sufficiently validated;
+- the generic lane scheduler has no proven non-visualizer production consumer at this checkpoint;
+- the shared analysis and Bubble paths are too behavior-sensitive to retain an unapproved scheduler substitution;
+- future reconsideration belongs after recovery, with a scheduler-shaped oracle and operator-approved evidence.
+
+No separate Spectrum lane is proposed.
+
+### Why current counters do not clear the design
+
+The latest installed evidence reports:
+
+- no busy or stopped submission rejection during long sampled sections;
+- cheap mean handoff and callbacks;
+- high accepted/completed/published totals;
+- occasional substantially larger execution and handoff maxima than the means.
+
+These counters prove throughput and bounded ownership during normal operation. They do not prove equivalence of:
+
+- inter-publication timing;
+- exact source sequence;
+- transient-to-first-visible timing;
+- Bubble event consumption timing;
+- Bubble expansion and contraction trajectory;
+- Spectrum hold duration and per-frame step size;
+- source freshness during a continuously moving simulation.
+
+This is the same class of validation failure that allowed the earlier Bubble batching regression to pass proxy tests.
+
+### Exact old versus new shared-analysis semantics
+
+At `6f188ad`, each accepted audio frame:
+
+- created one ordinary COMPUTE task;
+- captured the smoothing state for that task;
+- ran FFT and smoothing through the general executor;
+- cleared `_compute_task_active` at callback entry before committing the result;
+- committed through `_commit_analysis_frame()` after token and activation checks.
+
+At `666624d`, the same logical work:
+
+- enters one persistent scheduler lane;
+- shares a small process-owned lane worker set with other managed visualizer lanes;
+- remains lane-owned through result publication;
+- clears `_compute_task_active` only after callback completion;
+- gains persistent lane registration and lifecycle state.
+
+The new sequence may be safer in some interleavings, but it is not behaviorally identical. The old semantics are the recovery authority.
+
+### Exact old versus new Bubble semantics
+
+At `6f188ad`, every lane-free authored Bubble step:
+
+- freezes current energy/settings/pulse payloads;
+- submits the existing Bubble worker directly to the general COMPUTE executor;
+- publishes through the existing token-checked callback;
+- uses no persistent Bubble facade or scheduler lane.
+
+At `666624d`, that step:
+
+- is wrapped in `BubbleStepPacket`;
+- is submitted through `BubbleComputeLane` and the shared persistent scheduler;
+- publishes through an additional facade callback layer;
+- competes under the generic managed-lane worker pool;
+- gains another lifetime owner and stop contract.
+
+Even when every step is accepted, this changes scheduling and publication timing. Operator evidence says the replacement is not equivalent.
 
 ### Why the Phase 2 goldens did not stop this
 
@@ -153,142 +226,167 @@ The replay path:
 - uses an immediate deterministic compute test double;
 - executes worker and callback synchronously;
 - does not advertise or run the production persistent compute-lane scheduler;
-- does not reproduce lane handoff, shared-worker contention, publication jitter, long worker tails, newest-only source loss, or real callback timing.
+- does not reproduce handoff, shared-worker contention, publication jitter, real callback timing, or lifetime ownership.
 
-The current persistent-lane unit test proves one packet can execute, commit, and disappear after stop. It does not prove:
-
-- continuous publication cadence;
-- source-to-visible latency;
-- behaviour under irregular worker delay;
-- two-display or multi-lane contention;
-- Spectrum visible smoothness;
-- Bubble input freshness;
-- other-mode reactive extras.
+The persistent-lane unit tests similarly establish local packet execution and stop behavior, not live visual equivalence.
 
 Exact goldens can therefore remain green while live scheduling feel regresses.
 
-### Important live-evidence interpretation
+### Can Git reconstruct the true golden?
 
-The latest installed logs show healthy average audio-lane throughput and cheap typical callbacks during long sections. That does not clear the lane:
+Git can reconstruct the exact code and deterministic logical output of `6f188ad`.
 
-- average publication rate cannot expose irregular inter-publication gaps;
-- cumulative maxima show occasional much longer analysis execution than the mean;
-- Spectrum directly exposes a long source gap;
-- Bubble can conceal a source gap by continuing its own simulation against old energy;
-- the logs currently lack per-publication interval and source-sequence evidence needed to assign the visible complaint conclusively.
+Git cannot independently reconstruct the complete subjective live golden because visual feel also depends on:
 
-### Required diagnosis before architecture changes
+- real audio capture timing;
+- song dynamics;
+- Windows scheduling;
+- display refresh and Qt delivery;
+- the exact installed settings/preset;
+- operator perception of reaction, elasticity, and smoothness.
 
-Add passive, bounded analysis-source telemetry:
+Therefore:
+
+- do not ask Codex to infer the desired Bubble feel from current code;
+- do not ask Codex to create new expected outputs from the broken checkpoint;
+- use `6f188ad` as an executable behavioral oracle;
+- restore its execution path mechanically into the current lifecycle branch;
+- require operator confirmation;
+- only after confirmation capture stronger reference traces from that approved behavior.
+
+### Behavioral recovery implementation
+
+#### Recovery commit A — disable visualizer lane adoption
+
+Make the smallest behavior-restoring patch first.
+
+1. `widgets/spotify_visualizer/beat_engine.py`
+   - restore `_schedule_compute_bars_task()` from `6f188ad` as the active production path;
+   - use ordinary `ThreadManager.submit_compute_task()`;
+   - preserve the old smoothing snapshot, callback ordering, token check, activation check, and `_commit_analysis_frame()` seam;
+   - retain current runtime-generation annotations only when they are passive ownership metadata and do not change callback order;
+   - stop creating or consulting `_analysis_compute_lane`;
+   - do not add replacement cadence, priority, smoothing, queue, or retry logic.
+
+2. `widgets/spotify_visualizer/tick_pipeline.py`
+   - restore the `6f188ad` Bubble submission path exactly;
+   - submit `_bubble_compute_worker` directly through the general COMPUTE executor;
+   - preserve one authored step per lane-free opportunity;
+   - preserve token-checked publication and existing event/energy payload semantics;
+   - passive `source_ts`/`authored_ts` observation may remain only if it does not alter worker arguments, callback order, admission, or publication.
+
+3. `widgets/spotify_visualizer_widget.py`
+   - stop constructing, starting, stopping, or diagnosing `BubbleComputeLane`;
+   - restore the `6f188ad` Bubble worker/result ownership fields and cleanup behavior;
+   - preserve current generation and first-frame rejection guards.
+
+4. Shared engine lifecycle
+   - stop creating the persistent audio-analysis lane;
+   - ensure no lane registration can remain after visualizer cleanup because no production visualizer lane is acquired;
+   - continue to cancel or generation-reject ordinary executor work during teardown.
+
+5. Tests
+   - add a structural test that production shared analysis does not call `create_compute_lane()`;
+   - add a structural test that production Bubble dispatch does not call `BubbleComputeLane` or `create_compute_lane()`;
+   - keep Phase 2 goldens read-only;
+   - keep the Bubble source/discrete-edge oracle;
+   - do not replace operator acceptance with these tests.
+
+#### Temporary retention rule
+
+For the first installed recovery build, the generic `ComputeLaneScheduler` and facades may remain present but must be unreachable from production visualizer execution. This keeps the behavioral patch narrow and makes causality easy to confirm.
+
+They may remain inert for only this A/B step.
+
+#### Recovery commit B — remove rejected scaffolding
+
+After operator confirmation that Bubble and Spectrum are restored:
+
+- delete `widgets/spotify_visualizer/bubble_compute_lane.py`;
+- delete visualizer lane tests that only authorize the rejected path;
+- remove visualizer-specific lane diagnostics and lifecycle accounting;
+- remove `ComputeLaneScheduler` and ThreadManager integration if repository search still shows no proven production consumer;
+- otherwise retain the generic scheduler only for the independently proven consumer and remove all visualizer coupling;
+- update Phase 5 and Historical Bugs with the exact rejection and rollback.
+
+Do not leave dead lane shells indefinitely.
+
+### Installed behavioral comparison
+
+Produce two comparable builds or runs:
 
 ```text
-source_sequence
-source_timestamp
-runtime_generation
-engine_generation
-activation_id
-capture_to_submit_ms
-lane_handoff_ms
-analysis_execution_ms
-commit_ms
-inter_publication_ms
-source_age_at_visual_tick_ms
-source_age_at_gpu_push_ms
-source_sequences_skipped
-lane_busy_rejections
-scheduler_worker_occupancy
-competing_lane_category
+reference: 6f188ad
+recovery: current branch with Recovery commit A
 ```
 
-Report p50/p95/p99/max and bounded worst samples by mode. Do not emit per-frame INFO logs.
+Use the same:
 
-Compare at minimum:
+- settings and selected visualizer preset;
+- display route and refresh conditions;
+- audio device;
+- song and playback position where practical;
+- Bubble and Spectrum mode-switch sequence;
+- normal/MC variant where applicable.
 
-1. recovery/Phase 4 general-executor path;
-2. current persistent-lane path;
-3. Spectrum alone;
-4. Bubble alone;
-5. shared audio lane plus Bubble lane;
-6. dual-display ownership;
-7. 60 Hz and high-refresh presentation;
-8. controlled worker delays and GUI stalls;
-9. normal and Media Center runtime.
+Required operator review:
 
-### Best repair sequence
+- Bubble on quiet, sustained-bass, sharp-kick, and dense/loud material;
+- Spectrum attack, decay, between-frame smoothness, and reliability;
+- Bubble → Spectrum → Bubble;
+- transition overlap;
+- pause/resume;
+- Settings/Edit recreation after the lane is absent.
 
-1. **Preserve one authoritative shared audio source.**
-   - Do not create a separate Spectrum analysis authority merely because Spectrum exposes the fault.
-   - Do not return to one Future/task per frame without evidence.
-   - Do not allow old and new analysis commits to overlap unsafely.
+The operator's result decides whether behavior is restored. Codex may report measurements but may not overrule the visual result.
 
-2. **Fix source cadence or scheduler fairness where evidence points.**
-   - If inter-publication gaps originate in lane scheduling, repair bounded fairness/priority or ownership in the existing scheduler.
-   - Audio analysis must not be starved by Bubble or another high-rate lane.
-   - Do not solve starvation by dropping authored Bubble edges or batching terminal state.
+### Stronger golden only after recovery
 
-3. **Add presentation bridging for Spectrum only if source timing remains inherently irregular.**
-   - Treat each authoritative analysis result as a newest target.
-   - Interpolate visual bars on the existing visualizer presentation tick using real elapsed time.
-   - Preserve fast attack and `spectrum_drop_speed` decay semantics.
-   - Continue publishing while visual state is converging even without a new source packet.
-   - Carry source generation and activation through target, visual, and displayed state.
-   - Do not add a timer, worker, scheduler, retry, paint acknowledgement, or second source authority.
-   - This is a targeted presentation improvement, not a blind restoration of dead code.
+Once the restored current build is operator-approved:
 
-4. **Protect Bubble separately.**
-   - Do not apply Spectrum visual interpolation to Bubble.
-   - Measure audio-source age at every Bubble authored step.
-   - Preserve every discrete scheduler edge and immediate first-visible attack.
-   - Require Bubble manual comparison across quiet, bass-heavy, sustained, and transient-heavy tracks.
+1. Record a deterministic PCM or post-capture source sequence with authoritative timestamps.
+2. Run it through the approved general-executor analysis path.
+3. Capture:
+   - source sequence and timestamps;
+   - accepted analysis frames;
+   - inter-publication intervals;
+   - Bubble input snapshots and simulation results;
+   - Spectrum displayed bars;
+   - source-to-first-visible timing;
+   - mode-owned overlay state.
+4. Freeze those traces as an additional scheduler-shaped reference.
+5. Never update them automatically.
 
-5. **Audit other modes.**
-   - Sine/Oscilloscope: separate waveform age from energy/transient age.
-   - Dev Curve: measure energy/transient source age and first visible response.
-   - No shared-source change is accepted from Spectrum-only evidence.
-
-### Required new validation layer
-
-Keep the exact Phase 2 goldens. Add a scheduler-shaped fidelity gate using the real `ComputeLaneScheduler`:
-
-- deterministic source frames;
-- controlled handoff and execution jitter;
-- real persistent analysis lane;
-- shared audio plus Bubble-lane contention;
-- 60/90/120/165 Hz presentation ticks;
-- injected GUI stalls;
-- transitions;
-- source sequence tracking;
-- first-visible response;
-- maximum visible hold;
-- maximum visual step;
-- attack and decay timing;
-- discrete-edge accounting;
-- mode-switch and first-frame identity.
-
-The scheduler-shaped gate supplements the goldens; it does not replace or rewrite them.
+This supplements the Phase 2 logical goldens. It does not replace operator runtime review.
 
 ### Acceptance
 
-- Shared-source inter-publication p99/max is bounded and explained.
-- No unexplained long source holds under normal load.
-- Spectrum has equal-or-better first-visible reaction and visibly smoother motion/decay.
-- Bubble retains operator-confirmed reactivity, expansion, elasticity, and discrete-edge response.
-- Sine/Oscilloscope waveform and reactive extras remain correct.
-- Dev Curve energy/transient response remains correct.
-- Phase 2 exact goldens remain unchanged unless an intentional, user-approved behaviour change is declared.
-- Installed manual review is mandatory.
+Recovery commit A passes only when:
+
+- production audio analysis uses the `6f188ad` general COMPUTE path;
+- production Bubble simulation uses the `6f188ad` general COMPUTE path;
+- no production visualizer compute lane is registered;
+- the Settings/Edit barrier no longer sees `visualizer.audio_analysis` or Bubble lane ownership;
+- Phase 2 goldens remain unchanged;
+- existing first-frame and generation guards remain passing;
+- Bubble is operator-confirmed equal to the approved pre-lane behavior;
+- Spectrum is operator-confirmed equal to or better than the pre-lane behavior;
+- no new task reduction is attempted during recovery.
+
+If behavior remains wrong after the exact execution-path restoration, continue diffing `6f188ad → current` outside the lane subsystem. Do not tune blindly.
 
 # P5.0 — Visualizer cadence and fidelity
 
-- [-] Complete CF-01 source-cadence instrumentation and old/new comparison.
+- [!] Reject the current persistent shared-analysis and Bubble-lane production adoption.
+- [-] Implement CF-01 Recovery commit A from `6f188ad` without tuning.
+- [ ] Produce the installed `6f188ad` versus recovery comparison.
+- [ ] Obtain explicit operator Bubble and Spectrum acceptance.
+- [ ] Remove rejected lane scaffolding in Recovery commit B after acceptance.
 - [x] Reject the failed Bubble 60 Hz/max-two terminal-batching design.
-- [x] Restore one authored Bubble step for every lane-free opportunity.
+- [x] Restore one authored Bubble step for every lane-free opportunity at `6f188ad`.
 - [x] Add a source/discrete-edge-to-first-visible Bubble oracle for the rejected batching failure.
-- [ ] Extend the oracle to shared audio-source age and persistent-lane contention.
-- [ ] Add the scheduler-shaped all-mode gate described in CF-01.
-- [ ] Resolve Spectrum reliability/smoothness with equal-or-better reaction latency.
-- [ ] Validate Bubble with multiple song dynamics rather than one favourable track.
-- [ ] Validate Sine, Oscilloscope, and Dev Curve reactive lanes.
+- [ ] Capture stronger scheduler-shaped references from the operator-approved restored path.
+- [ ] Validate Sine, Oscilloscope, and Dev Curve after the shared source is restored.
 - [ ] Require installed operator review before marking P5.0 complete.
 
 # P5.1 — Delivery tails
@@ -302,9 +400,9 @@ The scheduler-shaped gate supplements the goldens; it does not replace or rewrit
 
 - [x] Remove impossible uptime-linear visualizer ERROR values.
 - [x] Separate Bubble source, simulation, render-state, and request-to-paint ages.
-- [ ] Validate the separated ages in installed transition evidence.
-- [ ] Add CF-01 source-sequence and inter-publication truthfulness.
-- [ ] Keep source-frame age diagnostic unless presentation is proven stale.
+- [ ] Preserve passive source/visible timing telemetry through the executor restoration.
+- [ ] Validate separated ages in installed transition evidence.
+- [ ] Do not reinterpret current lane metrics as fidelity proof.
 
 # P5.3 — Unchanged media work
 
@@ -327,40 +425,20 @@ Settings can reach zero QObjects and Python owners yet still time out on the sam
 
 The barrier is correctly failing closed.
 
-## Engine/lane ownership repair
+## Visualizer lane blocker
 
-- [-] Replace implicit shared-engine refcount authority with an exact per-widget lease or equivalent explicit ownership token.
-- [ ] Record exact engine instance, owner widget, runtime generation, acquisition token, release state, lane identity, and activation.
-- [ ] Acquire once and release once through one idempotent seam.
-- [ ] Release independently of `_enabled`, visibility, or prior deactivation.
-- [ ] Cleanup releases the exact acquired engine before clearing the reference.
-- [ ] Never call `get_shared_spotify_beat_engine()` merely to release an engine the widget may not have acquired.
-- [ ] Final lease release stops/cancels the audio-analysis lane and removes it from lifecycle ownership.
-- [ ] One display cleanup may not stop another valid display's lease.
-- [ ] A lane may not change runtime generation in place while an old lease exists.
-- [ ] Duplicate stop/cleanup is harmless and cannot decrement another owner.
+CF-01 Recovery commit A is the first repair for the shared lane blocker.
 
-## Compute-lane terminal contract
+After the visualizer no longer registers persistent compute lanes:
 
-Test:
+- the destruction barrier must contain no `visualizer.audio_analysis` lane;
+- Settings must proceed to its dialog/recreation flow;
+- Edit must either proceed or fail only on independently retained owners;
+- ordinary executor tasks remain generation-visible and must cancel, complete, or reject publication before the barrier passes.
 
-- idle stop;
-- pending stop;
-- active stop;
-- callback concurrent with stop;
-- callback attempting resubmission;
-- owner disappearance;
-- generation invalidation during compute;
-- duplicate lane ID;
-- weak worker/callback release;
-- worker exception;
-- callback exception;
-- duplicate stop;
-- scheduler shutdown with live lanes;
-- final engine lease release during publication;
-- no lane resurrection after stop.
+Do not build a complex engine-lease system solely to preserve a rejected visualizer lane.
 
-A stopped idle lane must disappear synchronously from lifecycle ownership. An active lane becomes terminal immediately and disappears after worker return without publication.
+If an engine, audio worker, ordinary executor task, or widget owner still survives after lane removal, then add the narrow exact ownership lease needed for that remaining owner. Do not pre-emptively retain the lane architecture.
 
 ## CUSTOM/Edit manager ownership
 
@@ -396,8 +474,8 @@ Run at least five alternating Edit and Settings cycles in both normal and Media 
 - Spotify playing and paused;
 - active image transition near teardown;
 - pending image work;
-- pending audio analysis;
-- pending Bubble simulation;
+- pending ordinary audio-analysis work;
+- pending ordinary Bubble simulation;
 - dual display;
 - one selected display.
 
@@ -412,7 +490,7 @@ Every retiring generation must reach zero:
 - queued/delayed callbacks;
 - executor tasks;
 - compute lanes;
-- visualizer engine leases;
+- visualizer engine owners;
 - CustomLayoutManagers;
 - display/coordinator registrations;
 - display pixmaps;
@@ -449,12 +527,13 @@ Codex previously reported two major adversarial-lane issues that are not present
 - [ ] For each, record the interleaving, owner, failure, missing test, reproduction, repair, rollback, deterministic acceptance, and installed evidence.
 - [ ] Current correctness, lifecycle, latency, memory, or fidelity issues remain in Phase 5 and Historical Bugs.
 - [ ] If the exact findings are no longer recoverable, state that plainly and rerun the adversarial audit. Do not invent them.
+- [ ] If the generic scheduler has no production consumer after CF-01 Recovery commit B, document the findings before deleting it; do not preserve rejected production architecture merely to justify the audit.
 
 # Phase 5 gate
 
 Phase 5 passes only when:
 
-- CPU/task cost is materially lower;
+- CPU/task cost is materially lower without lane-induced visualizer regression;
 - p99/max delivery is equal or better;
 - Settings and Edit recreation pass repeatedly;
 - memory/VRAM/handle/thread ownership plateaus;
@@ -486,7 +565,7 @@ Phase 5 passes only when:
 - injected GUI-stall tests;
 - no producer paint waits.
 
-CF-01 may introduce a narrow Spectrum presentation bridge in Phase 5 only when required to repair the measured current regression. It must not pre-empt the broader Phase 7 architecture.
+Any future persistent-lane reconsideration belongs here or in a separately approved Phase 5 experiment after the restored executor path is frozen. It must use the stronger scheduler-shaped reference and operator approval.
 
 ## Phase 8 — Narrow Single-Surface Compositor
 
