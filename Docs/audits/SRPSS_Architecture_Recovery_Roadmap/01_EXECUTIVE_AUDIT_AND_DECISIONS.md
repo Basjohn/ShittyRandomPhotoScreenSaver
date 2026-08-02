@@ -1,268 +1,208 @@
-# 01 — Executive Architecture Audit and Decision Record
+# 01 — Executive Architecture Audit and Decisions
 
-## Scope
+Last reconciled: 2026-08-02
 
-This audit compares:
+## Scope and historical basis
+
+The original audit compared:
 
 - behavioural baseline `00edb57`;
-- donor/head `7376bb9`;
-- intermediate compositor work:
-  - `7eed32c`
-  - `6e4a2cf`
-  - `7e10589`
-  - `729ef2e`
-  - `7376bb9`;
-- supplied runtime evidence in `logs/evidence_chest`.
+- donor/reference `7376bb9`;
+- intermediate compositor work `7eed32c`, `6e4a2cf`, `7e10589`, and `729ef2e`;
+- supplied baseline/donor runtime evidence.
 
-The unrelated large visualizer blob-mode removal predates the comparison baseline and must not influence the architectural judgement.
+That comparison remains useful architectural history. It no longer describes the complete current state of `main`.
 
-## Executive conclusion
+## Original conclusion that remains valid
 
-The donor branch is not a viable repair foundation.
+The donor branch was not a viable repair foundation.
 
-It contains useful low-level ideas, but the complete architecture:
+It contained useful low-level ideas, but its complete orchestration:
 
-- couples visualizer cadence to compositor presentation;
-- uses a worker-to-Qt paint acknowledgement handshake;
-- spreads lifecycle authority across too many objects;
-- attempts partial GL reconstruction;
-- hides incompatibilities behind a large compatibility façade;
-- adds terminal-frame transactions and multiple generations;
-- improves selected averages while worsening frame-time tails and perceived motion;
-- introduces or exposes a repeatable `QOpenGLContext` cross-thread failure after Settings/Edit.
+- coupled visualizer cadence to compositor presentation;
+- used producer-to-paint acknowledgement;
+- spread lifecycle authority across too many objects;
+- attempted partial GL reconstruction;
+- hid incompatibilities behind compatibility machinery;
+- added terminal-frame transactions and overlapping generations;
+- improved selected averages while worsening perceived motion and frame-time tails;
+- retained invalid GL-context ownership paths.
 
-The recovery branch should remain based on `00edb57`.
+The original baseline was also not an acceptable final implementation because of high CPU/task rate, RAM/private-commit growth, severe VRAM growth, duplicate representations, and insufficient lifetime accounting.
 
-The baseline is not acceptable as a final implementation because it also shows:
+The durable conclusion remains:
 
-- approximately one-core CPU saturation;
-- a very high recurring task rate;
-- RAM and private-commit growth;
-- severe VRAM growth during ordinary image cycling;
-- insufficient resource-lifetime accounting;
-- degraded smoothness under substantial background load.
+> Preserve approved behaviour and visualizer feel.  
+> Adopt only isolated resource/accounting principles.  
+> Reject donor orchestration, paint acknowledgement, partial reinit, and compatibility mega-layers.  
+> Require one owner and evidence for every optimization.
 
-Therefore:
+## Current state amendments
 
-> Use the baseline for behaviour, visualizer feel, and lifecycle topology.  
-> Use selected donor concepts for explicit resource control and diagnostics.  
-> Rebuild presentation and resource architecture instead of merging either implementation wholesale.
+The project now works directly on `main`, not `recovery-00edb57`.
 
-## Runtime evidence summary
-
-The figures below are approximate representative active-window observations from the supplied logs. They must not be treated as laboratory-identical runs.
-
-### Baseline `00edb57`
-
-Observed strengths:
-
-- visibly smoother visualizer and overlay motion;
-- correct or much closer visualizer reactivity and elasticity;
-- no reproduced GL crash after Settings/Edit in the supplied baseline run;
-- fewer signs of compositor-side presentation starvation.
-
-Observed weaknesses:
-
-- main-process CPU repeatedly approaches one full logical core;
-- compute submissions are approximately 100 per second;
-- RSS reaches roughly 1.5–1.8 GB;
-- private commit reaches roughly 4–5 GB;
-- dedicated VRAM climbs from roughly 0.5 GB toward roughly 1.9 GB during the run;
-- resource usage appears to grow with image cycling rather than reach a clean plateau;
-- frame pacing degrades under extensive background activity.
-
-### Donor/head `7376bb9`
-
-Observed strengths:
-
-- dedicated VRAM is substantially more bounded in the supplied runs;
-- some average `DT_Max` and FPS counters improve;
-- diagnostics provide better visibility into scheduling and resource generations.
-
-Observed regressions:
-
-- visualizer becomes flatter, less reactive, and less elastic;
-- all modes show more microgaps and stutter;
-- cursor halo and general UI movement become choppy;
-- transitions can advance in visible jumps despite respectable average FPS;
-- logs repeatedly classify gaps as compositor cadence starvation while no transition is active;
-- paint waits and pending presentation generations accumulate;
-- GPU utilization remains low while CPU remains high;
-- Settings/Edit eventually reaches the same cross-thread `QOpenGLContext` failure;
-- partial reinitialization does not remove the ownership defect.
-
-## Root architectural finding: one surface became many authorities
-
-The intended goal was one compositor surface per display.
-
-The donor implementation achieved one physical surface while creating multiple coupled software authorities:
-
-- visualizer simulation clock;
-- adaptive timer worker;
-- compositor dirty generation;
-- requested generation;
-- acknowledged generation;
-- Qt event-loop presentation;
-- transition terminal transaction;
-- lifecycle generation;
-- renderer generation;
-- resource/texture generation;
-- deferred warmup/retry state;
-- widget/controller compatibility state.
-
-A single surface is not itself the problem. The problem is that the surface became a synchronization hub for unrelated subsystems.
-
-The desired system is:
-
-- one surface;
-- one GL owner;
-- several independent state producers;
-- no producer waiting for paint;
-- one immutable latest scene snapshot;
-- local transition completion;
-- explicit resource lifetime.
-
-## Why higher FPS looked worse
-
-Average FPS measures count over time. It does not describe delivery uniformity.
-
-A stream like:
+Current behavioural references:
 
 ```text
-16 ms, 16 ms, 16 ms, 120 ms, 2 ms, 2 ms, 2 ms
+pre-persistent-lane reference: 6f188adadabb77b1a9d47a0fe1685c86ad39fb77
+rejected lane checkpoint:       666624d421b08f978c5f610571a078570150a1e7
+restored executor behaviour:    4bde89e8e39177dc4dd7b5e64b9ac99256ab9486
+approved visual behaviour:      ff93461685476bd0657aa88312fc2e35e9037880
+rejected Spectrum smoothing:    ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
 ```
 
-can retain a respectable average while looking visibly broken.
+Later evidence established:
 
-The donor logs include:
+1. A dedicated/persistent analysis lane and persistent Bubble lane changed scheduling semantics and degraded behaviour despite plausible throughput goals. The ordinary general COMPUTE executor is the approved production model.
+2. Paint-local Spectrum decay created a second presentation cadence and visibly reduced smoothness. Presentation may not self-schedule from paint or mutate authoritative state in `paintGL()`.
+3. Settings full runtime destruction/recreation now succeeds, but modal wrapper lifetime remains invalid in R-56.
+4. CUSTOM/Edit still admits teardown synchronously from inside the retiring manager save graph. R-53 proves the admission boundary failure above 99% confidence.
+5. Application-owned resource accounting and deterministic GL teardown improved substantially, but active whole-process usage remains excessive even when it plateaus.
+6. Logical visualizer goldens alone were insufficient to detect scheduling and first-visible-response damage. Stronger temporal and installed approval artifacts are mandatory.
 
-- visualizer p95 gaps in the tens of milliseconds;
-- maxima around 100–300 ms;
-- paint wait outliers exceeding a second;
-- pending update warnings;
-- compositor cadence starvation;
-- broader main-thread timer gaps.
+## Current resource conclusion
 
-This creates burst delivery:
+Latest active evidence reports approximately:
 
-1. simulation or transition time advances;
-2. presentation stalls;
-3. the next paint consumes a much later state;
-4. motion visibly jumps.
+- 847–1074 MiB whole-app resident RAM;
+- 2.86–3.17 GiB private commit;
+- 554–777 MiB dedicated VRAM;
+- 84–121 MiB shared GPU memory.
 
-The architecture must optimize p95/p99/max frame intervals and input-to-presentation latency, not merely average FPS.
+Those values are too high for a screensaver. Containment is necessary but no longer sufficient. The project must attribute and reduce absolute usage without lowering perceivable fidelity.
 
-## Why “more multithreading” is not the direct answer
+## Root architectural finding
 
-Both versions use worker pools, yet the main process can saturate approximately one logical core.
+The failed donor architecture turned one physical surface into a synchronization hub for unrelated authorities:
 
-Reasons include:
+- visualizer simulation;
+- adaptive scheduling;
+- dirty/requested/acknowledged presentation generations;
+- Qt paint delivery;
+- transition terminal transactions;
+- runtime/context/resource generations;
+- deferred warmup/retry state;
+- compatibility widget/controller state.
 
-- Python GIL contention for Python-heavy work;
-- Qt GUI and OpenGL thread affinity;
-- high-frequency tiny task submission;
-- callback and publication overhead;
-- repeated state conversion and logging;
-- queueing and wake-up costs;
-- duplicate work across display or mode boundaries.
+The target remains:
 
-Twenty-three workers do not make small Python jobs free. The correct response is:
+- one owner per mutable concern;
+- no producer waiting for paint;
+- immutable/latest handoffs only after logical integration;
+- full lifecycle boundaries;
+- explicit resource lifetime;
+- local transition completion;
+- no additional cadence hidden inside presentation.
 
-- less recurring work;
-- larger/coarser jobs;
-- latest-state coalescing;
-- native/vectorized numeric paths where measured;
-- explicit idle behaviour;
-- no producer-to-paint blocking.
+A one-surface compositor is a later target, not a justification to centralize simulation, scheduling, lifecycle, or resource policy.
+
+## Why higher FPS can look worse
+
+Average FPS does not describe delivery uniformity. Burst delivery can retain a respectable average while producing visible jumps.
+
+Performance decisions must use:
+
+- p50/p90/p95/p99/max intervals;
+- source-to-first-visible latency;
+- latest-state age at paint;
+- GUI event-loop lateness;
+- user visual judgement;
+- resource and task ownership.
+
+Manual rejection overrides favorable averages.
+
+## Why more threads are not the default answer
+
+Python-heavy work, Qt/GL affinity, callback delivery, queueing, repeated conversion, logging, and duplicate work can dominate even with many workers.
+
+The accepted direction is:
+
+- remove work before moving it;
+- preserve the ordinary executor where its timing is behaviourally approved;
+- use larger/coarser jobs only where temporal goldens prove equivalence;
+- reduce duplicate representations and publications;
+- stop unchanged/hidden work;
+- use native/vectorized paths only after owner-level measurement;
+- never lower visualizer cadence or impulses merely to reduce task rate.
 
 ## Architecture decisions
 
-### ADR-A: Recovery foundation
+### ADR-A — Working line
 
-**Decision:** Continue from `recovery-00edb57`.
+**Decision:** Work directly on `main`.
 
-**Reason:** Better behavioural fidelity, smoother runtime, and safer Settings/Edit lifecycle.
+**Constraint:** No branches, forks, or pull requests unless the user explicitly requests them.
 
-**Constraint:** Baseline memory, GPU-resource, and task architecture must be replaced incrementally.
+### ADR-B — Behavioural authority
 
-### ADR-B: Donor role
+**Decision:** `ff934616` is the current user-approved Bubble/Spectrum behavioural authority; `00edb57` remains historical context.
 
-**Decision:** Keep `donor-7376bb9` intact as read-only donor/reference.
+**Consequence:** Later documentation or optimization commits do not replace visual approval automatically.
 
-**Reason:** It contains useful implementation ideas and tests, but is not a safe mainline.
+### ADR-C — Donor role
 
-**Prohibition:** No wholesale merge or large blind cherry-pick.
+**Decision:** Keep `7376bb9` as reference-only history.
 
-### ADR-C: Visualizer priority
+**Consequence:** No wholesale merge, large blind cherry-pick, or active donor-driven work without a current measured requirement.
 
-**Decision:** Visualizer feel is a protected product contract.
+### ADR-D — Visualizer family protection
 
-**Reason:** Reactivity and elasticity are difficult to reconstruct after infrastructure changes blur the cause.
+**Decision:** All supported modes are protected. Aggregate load is presumed shared/runtime-owned unless direct evidence proves a mode-specific owner.
 
-**Consequence:** Infrastructure phases may not alter visualizer equations without a separate declared change.
+**Consequence:** Bubble is not a default CPU, memory, task, cadence, or fidelity target. Mode-specific changes require explicit user authorization.
 
-### ADR-D: Presentation model
+### ADR-E — Approved visualizer execution
 
-**Decision:** Producers publish latest state; painters consume latest state.
+**Decision:** Preserve the ordinary general COMPUTE executor semantics restored at `4bde89e`.
 
-**Reason:** Blocking producers on paint acknowledgement caused starvation and burst delivery.
+**Rejected:** persistent analysis/Bubble lanes, cadence caps, terminal batching, source decimation, and producer-to-paint control.
 
-**Consequence:** No adaptive timer/presentation-ack handshake.
+### ADR-F — Presentation authority
 
-### ADR-E: Lifecycle
+**Decision:** One authoritative visualizer presentation cadence; painters consume immutable/current state.
 
-**Decision:** Restore full orderly teardown and recreation.
+**Rejected:** self-requested paint loops, paint-derived clocks, and authoritative mutation inside `paintGL()`.
 
-**Reason:** Partial reconstruction added lifecycle states without eliminating context ownership failures.
+### ADR-G — Lifecycle
 
-**Consequence:** Optimization of reconfiguration latency is deferred until correctness is proven.
+**Decision:** Full orderly teardown and recreation remain mandatory.
 
-### ADR-F: GL ownership
+**Addition:** teardown may not begin from inside a retiring session owner's call stack. Persist and retire temporary Edit state first; queue engine-owned admission on a later GUI turn.
 
-**Decision:** One explicit GUI/context owner performs all GL creation, mutation, and destruction.
+### ADR-H — Qt wrapper lifetime
 
-**Reason:** Cross-thread context operations are invalid and difficult to recover from.
+**Decision:** Python wrapper identity is not QObject liveness.
 
-### ADR-G: Resource management
+**Consequence:** Observe destruction before modal/deletion boundaries and validate Shiboken/QPointer state before later touches.
 
-**Decision:** Adopt bounded, byte-accounted CPU and GPU stores.
+### ADR-I — GL ownership
 
-**Reason:** Baseline RAM/VRAM growth is unacceptable.
+**Decision:** GL creation, mutation, and destruction occur on one explicit GUI/context owner. Failed deletion retains ownership and fails closed.
 
-**Consequence:** Every representation has one owner, a byte size, a generation, and deterministic retirement.
+### ADR-J — Resource management
 
-### ADR-H: Single surface
+**Decision:** Every representation is byte-accounted and deterministically retired.
 
-**Decision:** One compositor surface per display remains the long-term target.
+**Addition:** whole-process RSS/private-commit/VRAM must be reconciled against tracked resources and reduced to reasonable levels; accounting alone is not completion.
 
-**Reason:** It can remove stacked GL widget and z-order problems.
+### ADR-K — Transition completion
 
-**Constraint:** It must not own simulation cadence, application lifecycle, or worker scheduling.
+**Decision:** transition completion is local and exactly-once; no pipeline/worker terminal acknowledgement.
 
-### ADR-I: Transition completion
+### ADR-L — Identity and hashing
 
-**Decision:** Transition completion is local to the transition controller/compositor.
+**Decision:** stable source/transform/generation metadata is the default identity. Full-buffer hashing is diagnostic-only unless separately justified.
 
-**Reason:** Distributed terminal transactions add failure modes without product value.
+## Current success conditions
 
-### ADR-J: Hashing
+The architecture succeeds only when it is:
 
-**Decision:** Whole decoded/upload buffer SHA-256 is not a default hot-path identity mechanism.
-
-**Reason:** It adds a full memory-bandwidth pass and may force copies.
-
-**Replacement:** Stable source identity plus transform metadata and generation.
-
-## Success conditions relative to both versions
-
-The final architecture must be:
-
-- at least as responsive and elastic as baseline;
-- smoother than baseline under background load;
-- free from donor lifecycle crash;
-- materially lower in CPU than both;
-- materially lower and bounded in RAM;
-- bounded below donor worst-case VRAM and far below baseline growth;
-- simpler in ownership and number of runtime state machines;
-- explainable from a single resource dump;
-- testable through deterministic visualizer replay and hostile lifecycle loops.
+- equal or better than `ff934616` in user-observed visualizer feel;
+- temporally protected against `666624d`, terminal batching, and `ebfec397` known-bad shapes;
+- free from invalid wrapper touches and re-entrant Edit teardown;
+- repeatable through Settings/Edit with zero retired owners;
+- materially lower in CPU/task work without cadence or quality cuts;
+- both bounded and appropriately low in RSS/private commit/VRAM;
+- explainable from resource plus process-level diagnostics;
+- simpler in authority, state machines, callbacks, and generations;
+- validated in normal and Media Center builds under hostile and long-duration scenarios.
