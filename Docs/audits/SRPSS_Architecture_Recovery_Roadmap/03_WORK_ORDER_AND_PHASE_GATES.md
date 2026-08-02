@@ -1,257 +1,242 @@
 # 03 — Work Order and Phase Gates
 
-## Why ordering matters
+Last reconciled: 2026-08-02
 
-The failed compositor work mixed several difficult problems:
+## Purpose
 
-- single-surface composition;
-- visualizer integration;
-- scheduling;
-- backpressure;
-- transition terminal state;
-- partial lifecycle reconstruction;
-- texture sharing;
-- worker/render boundaries;
-- performance instrumentation.
+The phase model exists to prevent unrelated architecture changes from being mixed and falsely attributed. `Current_Plan.md` owns the exact active order; this document owns the dependency logic and phase acceptance model.
 
-The recovery must establish evidence and invariants before changing architecture. Otherwise later changes cannot be attributed.
+## Current phase interpretation
 
-## Ordered program
+| Phase | Current state |
+|---|---|
+| 0 — Freeze/evidence | Historical foundation complete |
+| 1 — Measurement | Implemented; whole-process attribution still active |
+| 2 — Visualizer fidelity | Logical package complete; temporal/installed protection reopened under P5.0 |
+| 3 — Lifecycle | Core full-teardown architecture implemented; R-53/R-56 reopen installed closure |
+| 4 — Resource containment | Known leaks/budgets improved; absolute whole-process footprint reopened |
+| 5 — Workload, recreation, and resource recovery | Active |
+| 6–10 | Future architecture/cleanup; blocked by Phase 5 |
+| 11–12 | Final validation/release |
 
-### Phase 0 — Repository and evidence freeze
+A completed historical phase may be reopened when later evidence disproves its gate. Preserve its report; do not erase the evidence or pretend the later failure never happened.
 
-**Goal:** Create a reproducible starting point.
+# Ordered program
 
-**Allowed changes:** Documentation, scripts that do not alter runtime.
+## Phase 0 — Repository and evidence freeze
 
-**Deliverables:**
+**Goal:** preserve the original baseline/donor comparison and reproducible recovery starting point.
 
-- branch verification;
-- evidence hashes;
-- environment manifest;
-- ownership inventory;
-- timer/task inventory.
+**Status:** complete historical foundation.
 
-**Do not:**
+Current work occurs on `main`; the old recovery branch name is not an execution instruction.
 
-- optimize;
-- port donor code;
-- change visualizer;
-- change Settings/Edit.
+## Phase 1 — Measurement foundation
 
-### Phase 1 — Measurement foundation
+**Goal:** measure timing, work, resources, and lifecycle without altering behaviour.
 
-**Goal:** Know where time and bytes go without changing behavior.
+Implemented foundations include:
 
-Add:
+- frame/presentation interval summaries;
+- event-loop lateness;
+- task categories;
+- CPU image and GL resource bytes;
+- lifecycle resource snapshots;
+- whole-process usage sampling.
 
-- frame interval recorder;
-- event-loop stall recorder;
-- task category counters;
-- CPU cache byte accounting;
-- GL resource byte accounting;
-- lifecycle resource snapshots.
+**Remaining gate:** process-level RSS/private-commit/VRAM must be reconcilable against tracked application ownership, native/Qt allocations, mappings, workers, stacks, and driver state.
 
-Use a fixed-size ring buffer and periodic aggregation.
+Diagnostics remain passive and bounded.
 
-**Pass criteria:**
+## Phase 2 — Visualizer fidelity lock
 
-- less than 2% CPU overhead in target scenario;
-- no visualizer fidelity change;
-- no material p99 regression;
-- metrics survive Settings/Edit.
+**Goal:** prevent infrastructure changes from damaging supported visualizer behaviour.
 
-### Phase 2 — Visualizer fidelity lock
+The original deterministic logical replay package remains useful, but it missed scheduler/publication/first-visible failures.
 
-**Goal:** Protect the hardest-to-recover product behavior before infrastructure work.
+**Current supplementary gate under P5.0:**
 
-Build deterministic replay outside Spotify timing. Capture the baseline mode state sequence.
+- exact approved commit/environment manifest;
+- production general-executor temporal capture;
+- source-to-first-visible checks;
+- separate user approval by mode;
+- known-bad negative controls for `666624d`, terminal batching, and `ebfec397`;
+- no automatic golden regeneration.
 
-**Pass criteria:**
+`ff934616` is the current user-approved Bubble/Spectrum reference.
 
-- replay is deterministic within documented floating-point tolerance;
-- live and replay pathways use the same simulation code;
-- manual review artifacts exist;
-- golden data is versioned and protected.
+## Phase 3 — Lifecycle correction
 
-### Phase 3 — Lifecycle correction
+**Goal:** reliable full stop–destroy–recreate with explicit ownership.
 
-**Goal:** Make Settings/Edit reliable before adding shared GL architecture.
+Implemented architecture retained:
 
-Return to simple full teardown/recreation and formalize it.
+- generation invalidation;
+- producer stop before display/GL deletion;
+- owner-context deterministic GL deletion;
+- fail-closed destruction barriers;
+- replacement construction only after retiring ownership reaches zero;
+- authoritative-first-frame reveal for the new runtime.
 
-**Pass criteria:**
+**Reopened gates:**
 
-- 50 Settings cycles;
-- 50 Edit cycles;
-- 50 mixed cycles;
-- zero cross-thread context errors;
-- no growth in live resource count;
-- no callbacks into dead generations.
+- R-56: observe/retire the Settings dialog graph without touching an invalid wrapper after modal deletion;
+- R-53: persist and retire the temporary Edit session, return from manager/action/key-filter frames, then queue engine-owned full-reload admission on a later GUI turn;
+- zero surviving `CustomLayoutManager` wrappers;
+- full graph-based placement/replay preserved.
 
-### Phase 4 — Baseline resource containment
+Historical 50/50/50 harness success does not overrule a current installed failure shape absent from that harness.
 
-**Goal:** Stop RAM/VRAM growth while retaining baseline rendering topology.
+## Phase 4 — Resource containment and efficiency
 
-This phase deliberately precedes single-surface composition. Resource lifetime can be fixed independently and measured cleanly.
+**Goal:** bounded and appropriately low resource usage with explainable ownership.
 
-**Pass criteria:**
+Implemented foundations retained:
 
-- 30-minute image cycling reaches a plateau;
-- tracked bytes explain most application-owned memory;
-- no image representation lacks an owner;
-- visualizer unchanged.
+- byte-budgeted CPU caches;
+- bounded prefetch queues/future bytes;
+- exact texture/PBO accounting;
+- deterministic transition/resource release;
+- shared-memory transfer retirement;
+- owner-context teardown.
 
-### Phase 5 — Workload and task-rate reduction
+**Reopened gates:**
 
-**Goal:** Reduce one-core saturation before changing presentation topology.
+- absolute active whole-app RSS, private commit, and dedicated VRAM must fall substantially from current evidence;
+- tracked/untracked gap must be attributed;
+- R-57 prefetch correctness must close;
+- lifecycle cycles must reach a stable equivalent plateau after R-53/R-56 repair;
+- no quality, cadence, resolution, precision, artwork, shadow, widget, or visualizer cuts.
 
-Targets:
+## Phase 5 — CPU, task, delivery, recreation, and resource recovery
 
-- remove unnecessary recurring tasks;
-- batch tiny jobs;
-- stop idle work;
-- coalesce duplicate publications;
-- vectorize measured numeric hotspots.
+**Goal:** close current lifecycle defects, strengthen visual fidelity protection, reduce measured unnecessary work, and lower absolute resource footprint.
 
-**Pass criteria:**
+Current ordered work is defined in `Current_Plan.md`. The architecture order is:
 
-- materially lower CPU;
-- lower task submissions per second;
-- same or better p99;
-- visualizer fidelity passes.
+1. freeze the exact approved visual behaviour/environment;
+2. repair narrow proven correctness failures R-57 and R-56;
+3. repair R-53 Edit admission and deterministic temporary-session retirement;
+4. prove one Settings and one dual-display Edit installed cycle;
+5. capture controlled equivalent-state resource baselines;
+6. attribute process/resource gaps before optimization;
+7. remove only measured duplication, unchanged work, idle work, callback/queue overhead, logging overhead, and redundant representations;
+8. run alternating lifecycle, churn, pressure, normal, and Media Center matrices;
+9. complete stronger temporal visualizer goldens before scheduler/presentation/visualizer optimization or lane-scaffolding deletion.
 
-### Phase 6 — Explicit GPU resource store
+### Phase 5 prohibitions
 
-**Goal:** Introduce bounded sharing/reuse as an isolated resource feature.
+Do not:
 
-This is the most valuable donor idea, but it must be smaller than the donor implementation.
+- reduce visualizer cadence/source sampling;
+- batch away logical impulses;
+- target Bubble because a combined visualizer scenario is expensive;
+- reintroduce dedicated/persistent analysis lanes;
+- add a second presentation cadence;
+- trim working sets or recycle processes;
+- raise budgets to conceal usage;
+- weaken full teardown or first-frame authority.
 
-**Pass criteria:**
+### Phase 5 pass criteria
 
-- exact byte cap;
-- deterministic context-thread deletion;
+- user-approved visual behaviour remains equal or better than `ff934616`;
+- known-bad scheduling/presentation controls fail the strengthened suite;
+- R-53/R-56/R-57 close deterministically and in installed runs;
+- Settings/Edit repeatedly reach zero retiring ownership;
+- CPU/task work falls for named owners;
+- p99/max and first-visible response do not regress;
+- RAM/private commit/VRAM both plateau and meet evidence-backed reasonable targets;
+- all supported visualizer modes pass shared-source validation;
+- normal and Media Center variants pass.
+
+## Phase 6 — Explicit GPU resource store
+
+**Goal:** introduce bounded reuse only if current evidence proves it remains necessary.
+
+This is no longer an automatic donor-extraction step. Reassess after Phase 5 absolute-resource attribution.
+
+**Pass criteria if implemented:**
+
+- exact byte caps and dumpable ownership;
+- one deletion owner per handle;
+- explicit leases;
+- context/share generation correctness;
+- no GL under registry locks;
 - no stale generation reuse;
-- no registry lock around GL operations;
-- no memory growth under churn.
+- no worse active VRAM or lifecycle complexity than current ownership.
 
-### Phase 7 — Visualizer/presentation decoupling
+## Phase 7 — Visualizer/presentation decoupling
 
-**Goal:** Establish the correct producer/consumer relationship before single-surface composition.
+**Goal:** narrow immutable state boundaries without changing approved timing or feel.
 
-Visualizer simulation produces immutable latest state. Presentation may skip intermediate states but may not block simulation.
+**Constraints:**
 
-**Pass criteria:**
-
-- deterministic output unchanged;
+- preserve ordinary general-executor semantics unless explicit approved evidence supports a change;
 - no paint waits;
 - no compositor-owned visualizer timer;
-- input-to-state latency within baseline tolerance;
-- smooth recovery after injected UI stalls.
+- no self-requested presentation loop;
+- no paint-local authoritative state;
+- coalescing only after logical integration.
 
-### Phase 8 — Narrow single-surface compositor
+## Phase 8 — Narrow one-surface compositor
 
-**Goal:** Replace stacked surfaces without importing donor orchestration.
+**Goal:** one surface per display without donor orchestration.
 
-Compositor owns:
+This remains a future architecture option, not a Phase 5 shortcut.
 
-- GL surface;
-- draw order;
-- scene snapshot;
-- local animation request.
+The compositor may own surface, draw order, immutable scene snapshot, and compositor-local transition continuation. It may not own visualizer simulation/cadence, image selection, worker pools, Settings/Edit, or producer acknowledgement.
 
-It does not own:
+## Phase 9 — Transition simplification
 
-- simulation;
-- image selection;
-- Settings lifecycle;
-- worker pools;
-- producer acknowledgements.
+**Goal:** local exactly-once completion and immediate temporary-resource release.
 
-**Pass criteria:**
+No terminal transaction or producer/pipeline acknowledgement.
 
-- no overlay stuck on display 0;
-- correct z-order on every display;
-- cursor halo smooth;
-- p99 no worse than prior phase;
-- lifecycle loops still pass.
+## Phase 10 — Temporary and legacy scaffolding removal
 
-### Phase 9 — Transition simplification
+**Goal:** remove proven-unused forwarding, duplicate paths, retries/backoff, obsolete metrics, settings, and compatibility shells.
 
-**Goal:** Remove distributed completion machinery.
+Require production search, dynamic/frozen-build audit, fallback audit, tests, and rollback. Do not delete evidence or adapters still needed for migration.
 
-A transition is a local timed draw state.
+## Phase 11 — Full hostile validation
 
-**Pass criteria:**
+Scenarios include:
 
-- no terminal transaction;
-- no generation handshake with image pipeline;
-- destination finalizes exactly once;
-- resources release immediately;
-- interrupted transitions remain correct.
+- cold/idle/warm static;
+- each supported visualizer mode;
+- transitions;
+- combined normal operation;
+- CPU/disk/GPU/mixed load;
+- Settings/Edit during active work;
+- image churn and memory pressure;
+- display topology/sleep-wake where supported;
+- two-hour soak;
+- normal and Media Center entry points.
 
-### Phase 10 — Compatibility deletion
+## Phase 12 — Release and documentation
 
-**Goal:** Remove temporary and donor-shaped scaffolding.
-
-Delete:
-
-- dynamic forwarding;
-- legacy widget impersonation;
-- duplicated overlay paths;
-- obsolete retry state;
-- dead flags and metrics.
-
-**Pass criteria:**
-
-- one runtime path;
-- no silent fallback;
-- architecture diagram matches code.
-
-### Phase 11 — Full hostile validation
-
-**Goal:** Prove the final architecture is better under realistic adversity.
-
-Scenarios:
-
-- idle;
-- visualizer only;
-- transitions only;
-- visualizer plus transitions;
-- background CPU;
-- background disk;
-- background GPU;
-- mixed load;
-- Settings/Edit during animation;
-- long soak.
-
-### Phase 12 — Release and documentation
-
-**Goal:** Freeze the architecture and evidence.
+**Goal:** freeze current architecture, evidence, limitations, rollback point, and release candidate.
 
 ## Dependency rules
 
-- Phase 2 must complete before any visualizer integration rewrite.
-- Phase 3 must complete before shared-context or single-surface work.
-- Phase 4 must complete before claiming donor resource work is necessary.
-- Phase 5 must complete before adding another scheduler.
-- Phase 6 must complete before the final compositor depends on shared textures.
-- Phase 7 must complete before single-surface visualizer rendering.
-- Phase 8 must complete before deleting the legacy visualizer surface.
-- Phase 11 must pass before release candidate.
+- active work follows `Current_Plan.md`;
+- stronger temporal visualizer protection precedes any new scheduler/presentation/visualizer optimization;
+- R-53/R-56 closure precedes lifecycle plateau conclusions;
+- lifecycle plateau precedes broad cache/resource retuning;
+- owner attribution precedes resource reduction changes;
+- Phase 5 passes before Phase 6–10 architecture expansion;
+- Phase 11 passes before a release candidate.
 
 ## Rollback discipline
 
-Each phase must end at a clean commit. If a phase fails:
+Each independently risky change gets a clean reversible commit. If a candidate fails:
 
-1. preserve its report and evidence;
-2. reset or revert the phase branch;
-3. do not carry “temporary” corrective flags into the next phase;
-4. revise the architecture decision;
-5. rerun the prior phase benchmark to confirm recovery.
+1. preserve its evidence and historical record;
+2. revert exactly;
+3. confirm accepted behaviour returns;
+4. revise the causal model;
+5. do not carry compensating flags, retries, lanes, or hidden fallbacks forward.
 
 ## Forbidden shortcut
 
-Do not jump directly from baseline to the donor single-surface implementation and then try to optimize it.
-
-That route recreates the original failure: too many variables change at once, visualizer feel is lost, and the runtime becomes impossible to reason about.
+Do not jump from an approved behavioural baseline to a broad donor or speculative architecture and then attempt to recover feel afterward. Do not use resource pressure as permission to lower perceivable fidelity.
