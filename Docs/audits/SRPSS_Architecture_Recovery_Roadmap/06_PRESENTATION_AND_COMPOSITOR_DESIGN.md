@@ -1,190 +1,231 @@
 # 06 — Presentation and Compositor Design
 
+Last reconciled: 2026-08-02
+
 ## Design objective
 
-Use one compositor surface per display without recreating the donor scheduling failure.
+Provide predictable display-local presentation without recreating donor scheduling failure or the rejected Spectrum second-cadence experiment.
 
-## What must be removed
+One surface per display remains a later architecture target. It is not required for current Phase 5 fixes and does not authorize moving simulation, lifecycle, or scheduling into the compositor.
 
-Do not port or preserve:
+## Absolute presentation rules
 
-- adaptive timer worker waiting for paint;
-- dirty/requested/acknowledged frame-generation protocol;
-- producer waits for `paintGL`;
-- compositor cadence starvation as a normal state;
-- compositor-owned visualizer simulation cadence;
-- distributed transition terminal transaction;
-- widget-shaped visualizer compatibility façade;
-- broad dynamic attribute forwarding;
-- retained fallback layers that silently switch architecture;
-- retry/backoff state for ordinary frame presentation.
+Do not port or introduce:
 
-## Presentation model
+- adaptive timer workers waiting for paint;
+- dirty/requested/acknowledged frame-generation protocols;
+- producer waits for `paintGL()` or `update()` completion;
+- compositor cadence starvation as ordinary control flow;
+- compositor-owned visualizer simulation/cadence;
+- self-requested visualizer repaint loops;
+- paint-derived clocks;
+- authoritative state mutation in `paintGL()`;
+- distributed transition terminal transactions;
+- broad compatibility forwarding;
+- hidden fallback presentation paths;
+- retry/backoff state for ordinary frame delivery.
 
-Qt provides paint opportunities. The application maintains a latest scene snapshot.
+There is one authoritative visualizer presentation cadence. A compositor paint is a consumer opportunity, not a new animation clock.
 
-When state changes:
+## Current approved visualizer boundary
 
-1. producer/controller updates its immutable state;
-2. scene coordinator replaces the latest scene snapshot;
-3. GUI thread coalesces an `update()` request if one is not already pending;
-4. compositor paints the latest snapshot;
-5. if a local animation remains active, compositor schedules another future update through one simple GUI-thread mechanism.
+The current approved Bubble/Spectrum runtime is `ff934616`, code-equivalent to the ordinary-executor restoration at `4bde89e`.
 
-No producer blocks.
+Presentation work must preserve:
 
-## One outstanding update
+- shared-source ordering and event integration;
+- mode-owned authored steps;
+- engine generation and activation identity;
+- source-to-first-visible behaviour;
+- authoritative state publication cadence;
+- mode/activation/generation resets.
 
-Keep the useful principle, simplify the implementation.
+No compositor/presentation refactor may reintroduce the rejected `666624d` lane scheduling or `ebfec397` paint-local smoothing shapes.
 
-Possible state:
+## Latest-state presentation model
+
+When an authoritative producer/controller accepts new immutable state:
+
+1. logical work and events are fully integrated;
+2. current render/scene state is replaced atomically or on the GUI owner;
+3. one GUI-local update request may be coalesced;
+4. Qt paints the latest accepted state when it has an opportunity.
+
+The compositor may skip intermediate immutable render snapshots. It may not cause logical events, authored steps, or scheduler publications to be skipped.
+
+## GUI-local update coalescing
+
+A display-local coalescing flag is acceptable only as request deduplication:
 
 ```text
-paint_requested: bool
+update_requested: bool
 ```
 
-On scene change:
+Rules:
 
-```text
-if not paint_requested:
-    paint_requested = True
-    widget.update()
-```
+- only the GUI/display owner mutates it;
+- producers never wait for it;
+- it does not count or acknowledge logical frames;
+- clearing it does not advance simulation or smoothing;
+- if current scene state changed while a paint was pending, one later request may be posted by the GUI owner;
+- no paint method recursively becomes the animation scheduler.
 
-At paint start or end on the GUI thread:
+The flag must not become requested/acknowledged generations or a producer backpressure channel.
 
-```text
-paint_requested = False
-```
+## Local compositor animation
 
-If state changed during paint, request one more update.
+The compositor may request continued frames only for animation it genuinely owns, such as an active image transition.
 
-This is coalescing, not acknowledgement. No worker waits for the flag.
+That continuation mechanism:
 
-## Local animation scheduling
-
-The compositor may need continued frames for transitions or other compositor-local animation.
-
-Use one GUI-thread timer or frame callback with clear rules:
-
-- active only while at least one local animation is active;
-- stopped when the scene is static;
-- does not advance visualizer simulation;
-- does not wait for paint completion;
-- does not submit a worker task per frame;
+- is GUI-thread owned;
+- exists only while compositor-local animation is active;
 - uses monotonic time;
-- records missed intervals but does not “catch up” by emitting bursts of `update()` calls.
+- stops when the local animation is static/complete;
+- does not advance visualizer state;
+- does not submit a worker task per frame;
+- does not wait for paint acknowledgement;
+- does not emit catch-up bursts;
+- is not reused as a generic visualizer or overlay scheduler.
 
-## Visualizer presentation
+A visualizer remaining active is not by itself permission for a compositor-local timer. Visualizer state publication follows the established visualizer authority.
 
-The visualizer controller publishes latest render state independently.
+## Spectrum second-cadence guard
 
-When visible and animated, it may cause scene-change notifications at its logical cadence, but:
+The rejected paint-local smoothing experiment produced roughly 977–1000 authoritative state updates but 1417–1544 paints per ten seconds and was reported significantly less smooth.
 
-- duplicate notifications are coalesced;
-- latest state replaces previous state;
-- compositor may present fewer states than simulation produces;
-- simulation remains correct;
-- there is no direct worker-to-widget mutation.
+Therefore:
+
+- no `paintGL()` or render callback may advance Spectrum smoothing;
+- no falling-value decay continuation may self-request more paints;
+- no overlay-local timer may create additional state updates;
+- paint count above publication count is not proof of smoother motion;
+- any future smoothing experiment runs on the existing authoritative tick only and requires explicit user approval.
 
 ## Scene composition order
 
-Define explicitly, for example:
+Define explicit display-local order, for example:
 
 1. clear/background;
 2. base image or transition;
-3. visualizer;
-4. metadata/text overlays;
-5. cursor halo or interaction overlays;
+3. visualizer render state;
+4. metadata/text/widget overlays;
+5. interaction/cursor halo;
 6. diagnostics when enabled.
 
-The order must be display-local and cannot rely on separate widget z-order.
+Do not depend on display 0, stacked-widget z-order, or a cross-display singleton for visibility or updates.
 
 ## Display independence
 
-Each display has:
+Each display owns:
 
-- its own compositor surface;
-- viewport;
+- its surface/context;
+- viewport/DPR;
 - scene snapshot;
-- local GL resources or leases;
-- update coalescing state.
+- local resource owners/leases;
+- update-coalescing state;
+- compositor-local transition continuation.
 
-Global controllers may publish shared logical state, but display 0 must not become the implicit owner for overlay visibility or updates.
+Global controllers may publish shared logical state. They may not make one display the implicit presentation owner for all displays.
 
-Tests must intentionally vary:
+Tests intentionally vary primary display, indices, resolution/DPR/refresh, one/all display routes, and topology changes.
 
-- primary display;
-- display indexes;
-- different resolutions;
-- visualizer on one or all displays;
-- display removal/reconnect.
+## Immutable scene snapshot
+
+A snapshot contains explicit current-generation identities, such as:
+
+```text
+SceneSnapshot
+- runtime_generation
+- context_generation
+- exact display identity
+- base resource/lease
+- optional TransitionSnapshot
+- optional visualizer render state with engine/activation identity
+- overlay/widget state
+- viewport/DPR
+- scene_generation
+```
+
+The compositor does not mutate producer-owned state or retain old snapshots without a bounded reason.
 
 ## Transition design
 
-Transition snapshot:
+A transition owns:
 
 ```text
 TransitionSnapshot
-- source texture lease
-- destination texture lease
+- source resource reference
+- destination resource reference
 - start monotonic timestamp
 - duration
-- easing identifier/parameters
+- easing identity/parameters
 ```
 
-At paint:
+At presentation:
 
 ```text
 progress = clamp((now - start) / duration, 0, 1)
-draw(source, destination, easing(progress))
-if progress >= 1:
-    finalize destination locally
 ```
 
-Finalization:
+Local exactly-once finalization:
 
 - destination becomes base;
-- source transition lease is released;
-- temporary resources are released;
+- source transition ownership releases;
+- temporary FBO/PBO/texture state releases;
 - transition becomes inactive;
-- no worker or pipeline acknowledgement is required.
+- no worker/image-pipeline acknowledgement is required.
 
-## Frame pacing metrics
+Interrupted, replaced, resized, Settings, Edit, and topology paths must release the same ownership deterministically.
+
+## First-frame and reveal boundary
+
+A newly reconstructed display remains hidden until fresh authoritative state from its current runtime and exact owner identities is ready.
+
+Paint opportunity, GL initialization, timer fire, stale cached state, old visualizer publication, or construction alone cannot satisfy readiness.
+
+Presentation changes may not bypass `FadeCoordinator` or create another reveal authority without a separately approved design.
+
+## Frame-pacing evidence
 
 Record:
 
-- scene update publication rate;
+- authoritative state publication rate;
+- scene replacement rate;
 - coalesced update count;
 - `update()` request rate;
-- paint rate;
-- paint intervals;
+- paint rate and intervals;
 - paint duration;
-- latest-scene age at paint;
-- number of logical visualizer states skipped;
-- transition progress at presentation.
+- latest-state age at paint;
+- source-to-first-visible latency;
+- skipped render snapshots versus dropped logical events;
+- transition progress at presentation;
+- event-loop lateness and transition/GUI-stall markers.
 
-Skipped intermediate render states are acceptable. Long latest-scene age and visible jumps are not.
+Paint rate is diagnostic only. More paints are not automatically better.
 
-## Failure behavior
+## Failure behaviour
 
-If a frame is late:
+If presentation is late:
 
-- draw current latest state;
-- do not replay stale frames;
-- do not flood Qt with queued updates;
+- draw current accepted state;
+- do not replay stale snapshots;
+- do not flood Qt;
 - do not block producers;
-- do not add another scheduler;
-- log one aggregated late-frame event.
+- do not create a new scheduler/cadence;
+- record bounded diagnostics;
+- preserve local exactly-once resource release.
 
 ## Acceptance criteria
 
-- zero paint waits;
-- zero compositor cadence starvation state;
-- no persistent update queue growth;
-- p99 frame interval meets benchmark gate;
-- cursor halo remains smooth;
-- transition motion does not jump under idle conditions;
-- visualizer fidelity tests pass;
-- GPU stays meaningfully utilized during GL work without CPU orchestration dominating;
-- Settings/Edit lifecycle remains safe.
+- zero producer-to-paint waits;
+- zero second visualizer cadence;
+- zero paint-local authoritative mutation;
+- no persistent update-queue growth;
+- source-to-first-visible and p99/max meet the approved gate;
+- user reports no visualizer degradation;
+- cursor halo/UI remain smooth;
+- transitions do not visibly jump under controlled idle conditions;
+- Settings/Edit full lifecycle remains safe;
+- active resource usage does not increase without explained benefit;
+- known-bad `ebfec397` fails the presentation guard.
