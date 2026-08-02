@@ -1,244 +1,285 @@
-# 02 — Codex Operating Contract
+# 02 — Operating Contract
 
-This file defines how Codex must execute the recovery. It is intentionally strict.
+Last reconciled: 2026-08-02
 
-## 1. Work only from the recovery line
+This file defines how architecture-recovery work is executed. `Current_Plan.md` owns the current task order; this contract owns execution discipline.
+
+## 1. Work directly on `main`
 
 Default branch:
 
 ```text
-recovery-00edb57
+main
 ```
 
-Create a short-lived child branch per phase, for example:
+Do not create a branch, fork, or pull request unless the user explicitly requests one.
 
-```text
-recovery/p01-measurement
-recovery/p03-gl-lifecycle
-recovery/p04-memory-bounds
-```
+Keep changes narrow, mechanically verifiable, and independently reversible. Use separate commits when concerns can fail independently.
 
-Do not work directly on `donor-7376bb9`.
+The donor commit `7376bb9` is read-only reference history. Do not merge it wholesale or use it as a current implementation authority.
 
-Do not merge `donor-7376bb9`.
+## 2. Read current authority before editing
 
-Do not cherry-pick a large donor commit merely because it contains a desired feature. Reconstruct the smallest coherent idea after reviewing its dependencies.
+Before implementation:
 
-## 2. Read before editing
+1. read the relevant section of `Current_Plan.md`;
+2. read the focused guardrail and historical bug record;
+3. read the phase-specific roadmap document;
+4. inspect current `main` code and tests;
+5. inspect baseline/donor code only when it answers a specific historical or extraction question;
+6. inspect applicable deterministic and installed evidence;
+7. state confidence when the causal claim is below 90%.
 
-Before a phase:
+Do not start from old branch instructions, stale phase completion claims, or repository-wide search-and-replace.
 
-1. read this contract;
-2. read the live checklist;
-3. read the phase-specific document;
-4. inspect relevant baseline code;
-5. inspect relevant donor code;
-6. inspect applicable logs;
-7. write a brief phase plan in the phase report.
+## 3. One dominant architecture concern per change
 
-Do not start with repository-wide search-and-replace.
+Do not combine independent rewrites of:
 
-## 3. One architecture concern per phase
+- lifecycle admission;
+- Qt wrapper lifetime;
+- compositor/presentation;
+- visualizer behaviour;
+- cache/resource ownership;
+- transition completion;
+- threading/scheduling;
+- diagnostics.
 
-Do not combine:
+A change should have one dominant hypothesis, one rollback point, and measurable acceptance.
 
-- lifecycle rewrite;
-- compositor rewrite;
-- visualizer behavior changes;
-- cache rewrite;
-- transition rewrite;
-- threading rewrite;
+## 4. The user is the visual authority
 
-into one commit or phase.
+User-observed behaviour overrides averages and green tests.
 
-A phase should have one dominant hypothesis and measurable outcome.
+Current approved Bubble/Spectrum behaviour is tied to exact commit `ff934616`, code-equivalent to restored executor commit `4bde89e`.
 
-## 4. Behaviour is frozen unless explicitly declared
+During infrastructure or resource work, do not alter:
 
-During infrastructure work, do not alter:
+- visualizer cadence or source sampling;
+- attack, decay, normalization, thresholds, spring constants, damping, elasticity, or amplitudes;
+- logical impulse/event consumption;
+- bar count or layout semantics;
+- mode activation/generation rules;
+- target resolution, precision, or renderer quality;
+- transition timing/easing;
+- image crop/scale quality;
+- artwork, shadow, widget-content, or first-frame quality.
 
-- visualizer smoothing coefficients;
-- spring constants;
-- decay curves;
-- amplitude normalization;
-- bar count/layout semantics;
-- bubble force/elasticity;
-- mode-specific thresholds;
-- user transition timing/easing;
-- image scale/crop quality.
+Any intentional visualizer behaviour change requires:
 
-Any intentional visualizer change requires:
+- an explicit user request or approval;
+- a completed visualizer change declaration;
+- before/after deterministic and temporal evidence;
+- installed review;
+- a separate reversible commit.
 
-- `templates/VISUALIZER_CHANGE_DECLARATION.md`;
-- before/after deterministic replay;
-- manual approval;
-- separate commit.
+A refactor claimed to be equivalent still needs the unchanged goldens and installed comparison.
 
-A refactor that “should be equivalent” is still subject to fidelity tests.
+## 5. Protect the visualizer family; do not blame Bubble by default
 
-## 5. Never optimize from averages alone
+All supported modes are protected.
 
-Every performance claim must include:
+Aggregate CPU, task, RAM, commit, or VRAM load is presumed to arise from shared/runtime ownership until direct owner-level evidence proves otherwise.
 
-- p50;
-- p90;
-- p95;
-- p99;
-- maximum;
-- sample count;
-- scenario duration;
-- CPU;
-- GPU busy;
-- RSS;
-- private commit where available;
-- tracked GPU bytes;
-- task submission rate.
+Bubble is not a default optimization target. Do not change Bubble-specific code, cadence, batching, physics, or publication merely because a combined visualizer scenario is expensive. Mode-specific production changes require direct evidence and explicit user authorization.
 
-An average FPS improvement with worse p99 or worse manual motion is a failed optimization.
+## 6. Preserve the accepted executor model
 
-## 6. No hidden fallback architecture
+The ordinary general COMPUTE executor restored at `4bde89e` is the approved production behaviour.
 
-Do not keep two complete runtime paths behind automatic fallback unless the phase explicitly requires a temporary comparison switch.
+Do not reintroduce:
 
-Temporary dual paths must have:
+- persistent audio-analysis lanes;
+- persistent Bubble lanes;
+- dedicated long-lived visualizer worker loops;
+- terminal batching;
+- visualizer cadence caps;
+- source decimation;
+- paint acknowledgement;
+- producer waits for presentation.
 
-- an explicit development flag;
-- a removal deadline;
+A scheduler change is a behavioural change even when equations remain identical.
+
+## 7. Never optimize from averages alone
+
+Every performance claim must identify:
+
+- exact commit and scenario;
+- environment and cache/warmup state;
+- p50/p90/p95/p99/max timing;
+- sample count and duration;
+- source-to-first-visible latency where relevant;
+- process and event-loop CPU;
+- task category/rate/queueing;
+- whole-app RSS and private commit;
+- main/child process split;
+- dedicated and shared GPU memory;
+- tracked CPU/GL bytes;
+- visual/manual result.
+
+An average-FPS or task-count improvement with worse perceived motion, first-visible response, p99, or resource ownership is a failed optimization.
+
+## 8. Plateau and absolute footprint are separate gates
+
+Resource work must prove both:
+
+1. no monotonic growth across equivalent cycles;
+2. an evidence-backed reasonable steady-state footprint.
+
+Do not declare success because usage is flat near one GiB RSS, multi-GiB private commit, or more than half a GiB dedicated VRAM.
+
+Do not use:
+
+- working-set trimming;
+- allocator trimming;
+- production `gc.collect()`;
+- process/worker recycling;
+- cache-budget inflation;
+- reduced fidelity;
+- ignored owners;
+
+to manufacture a lower graph.
+
+## 9. No hidden fallback architecture
+
+Do not keep two complete runtime paths behind an automatic fallback.
+
+A temporary comparison path requires:
+
+- explicit development-only activation;
 - separate metrics;
-- no automatic silent activation;
-- no shared mutable state.
+- no shared mutable authority;
+- a removal criterion;
+- no silent production fallback.
 
-At the end of the phase, remove the losing path or mark the phase incomplete.
-
-## 7. No broad compatibility façade
+## 10. No broad compatibility façade
 
 Do not introduce:
 
-- dynamic attribute forwarding;
-- giant `_LOCAL_ATTRS` registries;
-- duck-typed widget impersonation;
-- free functions receiving a full widget/controller instance;
-- generic “manager” objects owning unrelated responsibilities.
+- broad dynamic forwarding;
+- giant forwarded-attribute registries;
+- widget/controller impersonation;
+- whole-owner objects passed through generic free functions;
+- generic managers owning unrelated responsibilities.
 
-Use narrow typed interfaces.
+Use narrow interfaces and immutable intent/state.
 
-## 8. GL rules are absolute
+## 11. GL rules are absolute
 
-Codex must not:
+Never:
 
-- call `makeCurrent()` from a worker;
-- create/delete textures or FBOs from a worker;
-- destroy GL-owned Qt objects after their context is gone;
-- retain GL handles across context generation changes;
-- rely on Python finalizers for GL deletion;
-- swallow context-affinity assertion failures;
-- “fix” the crash by suppressing the warning.
+- call `makeCurrent()` or mutate GL from workers;
+- create/delete textures, FBOs, PBOs, buffers, programs, or GL-owned Qt objects off the owner GUI/context thread;
+- clear handle ownership after failed deletion;
+- retain handles across context generations;
+- rely on finalizers/GC for GL deletion;
+- suppress affinity failures;
+- make two local owners responsible for deleting the same numeric handle.
 
-Every GL mutation must have a named owner and a current context.
+Share-group accessibility is not deletion ownership.
 
-## 9. Producers do not wait for painters
+## 12. Producers do not wait for painters
 
-Never add:
+Normal state producers may not wait for:
 
-- paint acknowledgement waits;
-- event waits for `paintGL`;
-- worker loops blocked on presentation generation;
-- compositor starvation classification as normal flow.
+- `paintGL()`;
+- `update()` completion;
+- presentation generation;
+- paint acknowledgement;
+- terminal-frame acknowledgement.
 
-Producers publish latest state. The compositor consumes it when Qt paints.
+There is one authoritative visualizer presentation cadence. Do not create self-requested paint loops, paint-derived clocks, or authoritative mutation inside `paintGL()`.
 
-Critical control events may use explicit bounded acknowledgement, but normal animation frames may not.
+## 13. Lifecycle correctness precedes speed
 
-## 10. Lifecycle correctness precedes fast reconfiguration
+Settings and committed CUSTOM Edit use full stop–destroy–recreate.
 
-Settings/Edit initially use full teardown and recreation.
+Teardown may not begin from inside a retiring session owner's call stack.
 
-Do not optimize to partial reinit until:
+For Edit:
 
-- 100 mixed lifecycle cycles pass;
-- resource accounting returns to expected baseline each cycle;
-- context ownership is formally documented;
-- the partial alternative has a separate design review.
+1. persist the complete graph-based layout;
+2. explicitly retire temporary shells/callbacks/key-filter/session state;
+3. return from manager/action/key-filter frames;
+4. queue one engine-owned immutable reload intent on a later GUI turn;
+5. validate generation and exact manager identity;
+6. perform the same full fail-closed teardown and reconstruction.
 
-Fast-but-fragile Settings/Edit is unacceptable.
+For modal Qt objects, a Python wrapper is not proof of a live C++ object. Observe destruction before the deletion boundary and validate wrapper liveness before every later method call.
 
-## 11. Every resource is byte-accounted
+No partial reinit without a separate approved architecture proposal.
 
-For every cache or GPU resource:
+## 14. Every retained representation is accounted
 
-- identity;
+For every cache, image, pixmap, upload buffer, texture, FBO, PBO, mapping, queue item, and fallback frame, development diagnostics must identify:
+
+- stable identity;
 - owner;
-- byte size;
+- logical/physical byte size where available;
 - dimensions/format;
-- generation;
-- lease/reference count;
-- creation time;
-- last-use time;
-- deletion reason;
+- runtime/context/source generation;
+- lease/reference state;
+- creation/last-use time;
+- retirement reason.
 
-must be available in development diagnostics.
+Count-only limits are insufficient. Tracked counters must also reconcile against process-level memory.
 
-Count-only cache limits are insufficient.
+## 15. Logging must not become workload
 
-## 12. Logging must not become workload
+Use bounded counters, histograms, sampled summaries, ring buffers, and deferred formatting.
 
-No per-frame INFO logging.
+No per-frame INFO logging. Diagnostics must not request paints, alter cadence, enumerate live Qt objects off-thread, or become control flow.
 
-Use:
+## 16. Tests must reproduce the real ownership shape
 
-- aggregated counters;
-- histograms;
-- periodic summaries;
-- debug-only ring buffers;
-- deferred formatting;
-- sampling.
+A stub that only increments a counter does not prove synchronous signal/lifecycle safety.
 
-Measure instrumentation overhead with it enabled and disabled.
+Tests for lifecycle and scheduling changes must reproduce:
 
-## 13. Commit discipline
+- real signal relay timing;
+- GUI-turn boundaries;
+- weakref death without `gc.collect()`;
+- stale generation/identity rejection;
+- exact known-bad negative controls;
+- installed runtime behaviour where automation cannot judge feel.
 
-Each commit message should state:
+Do not rewrite expected output merely to make a candidate pass.
 
-- phase;
-- architecture concern;
-- invariant protected;
-- benchmark or test added;
+## 17. Commit discipline
+
+Each commit should state:
+
+- the concern changed;
+- the invariant protected;
+- evidence/test added;
 - rollback relevance.
 
-Example:
+Do not claim installed success from source inspection or deterministic tests alone.
 
-```text
-P04: bound decoded-image cache by bytes
+## 18. Repository artifacts required for closure
 
-- adds exact decoded/scaled image accounting
-- preserves visualizer and compositor behavior
-- evicts only unpinned entries
-- adds 30-minute plateau benchmark
-```
+When a phase or incident closes, update the appropriate artifacts:
 
-## 14. Required end-of-phase output
+- `Current_Plan.md` for active-state removal or next work;
+- the live roadmap checklist for phase status;
+- focused historical bug record;
+- phase/benchmark report;
+- decision record for architecture deviations;
+- guardrail only when the rule is durable and compact.
 
-For every phase, Codex must update:
+## 19. Stop conditions
 
-- `00_INDEX_AND_LIVE_CHECKLIST.md`;
-- a completed phase report;
-- benchmark report where applicable;
-- decision record for any architecture deviation;
-- relevant diagrams or ownership tables.
+Stop and mark the candidate failed when:
 
-Do not claim completion in chat without updating repository artifacts.
+- the user reports worse visual behaviour;
+- approved goldens change unexpectedly;
+- a known-bad negative control also passes;
+- first-visible latency or p99/max materially worsens;
+- lifecycle emits invalid wrapper/context/owner evidence;
+- a retired owner survives;
+- RAM/commit/VRAM grows monotonically or remains unacceptably high without attribution;
+- task rate rises without measured benefit;
+- a solution needs another scheduler, cadence, retry, generation, or flag to hide unclear ownership;
+- the fix requires weakening full teardown, graph replay, first-frame authority, or resource accounting.
 
-## 15. Stop conditions
-
-Stop implementation and mark `[!]` when:
-
-- visualizer golden tests change unexpectedly;
-- manual visualizer review reports flatter or less elastic behavior;
-- p99 frame interval worsens materially;
-- lifecycle produces a context warning;
-- RAM/VRAM grows monotonically in a plateau test;
-- resource accounting cannot explain usage;
-- task rate rises without a measured benefit;
-- the solution requires another generation/flag/retry to compensate for unclear ownership.
-
-The correct action is to revisit the model, not add another patch.
+The correct response is rollback and model revision, not another compensating patch.
