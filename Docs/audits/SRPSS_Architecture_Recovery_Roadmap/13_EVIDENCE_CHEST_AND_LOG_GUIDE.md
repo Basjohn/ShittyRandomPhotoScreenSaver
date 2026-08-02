@@ -1,15 +1,70 @@
 # 13 — Evidence Chest and Log Guide
 
-## Required files
+Last reconciled: 2026-08-02
 
-Repository-relative expected location:
+## Purpose
+
+The evidence chest preserves raw installed-runtime evidence, parser output, environment manifests, and rejected-candidate comparisons. It is forensic input, not a source of cherry-picked numbers.
+
+## Evidence classes
+
+### A. Original baseline/donor archives
+
+Canonical historical archives:
 
 ```text
 logs/evidence_chest/logs7376bb9.zip
 logs/evidence_chest/logs00edb57.zip
 ```
 
-Expected contents of each archive include:
+Identity:
+
+- `logs7376bb9.zip`: donor/reference `7376bb9`, generated around 2026-07-22;
+- `logs00edb57.zip`: original baseline `00edb57`, generated around 2026-07-23.
+
+Recorded SHA-256:
+
+```text
+logs7376bb9.zip  2E0E125BF4D8877D55EFFAFEEE82CC3367EB9B4A319669122F372801878B0D74
+logs00edb57.zip  90AF3A54058FEBD54E961CA56FFFBDDD26D8AB4204EC605C1E8C4C4305E5DAEB
+```
+
+Do not rename/modify those files without updating the Phase 0 record and hashes.
+
+### B. Current installed evidence folders
+
+Use one folder per authored run or coherent comparison:
+
+```text
+logs/evidence_chest/MM_DD_<short-commit>_HH_MM/
+```
+
+Current temporary evidence identity:
+
+```text
+logs/evidence_chest/08_02_3877b2c7_20_27/
+```
+
+It contains the latest Settings/Edit/lifecycle/memory/prefetch evidence used by R-53, R-56, R-57, and `Current_Plan.md`.
+
+A folder name is a convenient temporary identity, not a durable substitute for an environment manifest and exact commit.
+
+### C. Rejected candidate archives/folders
+
+Keep failed experiment evidence when it teaches a durable lesson, for example the rejected Spectrum smoothing logs originally supplied as `logsspectsmoo.zip`.
+
+Record:
+
+- candidate commit;
+- accepted comparison commit;
+- exact user verdict;
+- scenario/environment;
+- parser/analysis;
+- revert commit.
+
+## Expected log sidecars
+
+A run may include:
 
 ```text
 perf_widgets.log
@@ -25,97 +80,52 @@ screensaver_usage.log
 screensaver_verbose.log
 ```
 
-## Evidence identity
+Not every run must contain every sidecar. The manifest must state which diagnostic flags were enabled and whether missing files are expected.
 
-- `logs7376bb9.zip`: donor/head `7376bb9`, generated around 2026-07-22.
-- `logs00edb57.zip`: baseline `00edb57`, generated around 2026-07-23.
+## Evidence manifest requirements
 
-Recorded SHA-256 hashes:
+Every current official folder/archive includes or is paired with:
 
-```text
-logs7376bb9.zip  2E0E125BF4D8877D55EFFAFEEE82CC3367EB9B4A319669122F372801878B0D74
-logs00edb57.zip  90AF3A54058FEBD54E961CA56FFFBDDD26D8AB4204EC605C1E8C4C4305E5DAEB
-```
+- exact branch/commit and clean/dirty state;
+- date/time/timezone and duration;
+- normal or Media Center entry point;
+- OS/Python/PySide/CPU/RAM/GPU/driver;
+- displays/resolution/refresh/DPR/route;
+- power profile;
+- exact SRPSS settings/profile;
+- image source/cache/warmup state;
+- audio source/capture/mode/preset/playback authority;
+- transition/widget activity;
+- logging/diagnostic flags;
+- user actions in order;
+- expected versus unexpected termination;
+- source archive hash where applicable.
 
-Do not rename or modify either archive without updating this document and the Phase 0 report.
+Do not store credentials, API keys, personal titles/URLs, or copyrighted commercial audio.
+
+## Raw evidence protection
+
+- never edit raw logs in place;
+- preserve source timestamps and file identity;
+- derived/sanitized files live separately;
+- document redactions and excluded intervals;
+- do not omit failed runs;
+- do not merge logs from different scenarios into one apparent timeline without explicit boundaries.
 
 ## Extraction
 
 Cross-platform Python:
 
 ```bash
-python -m zipfile -e logs/evidence_chest/logs7376bb9.zip logs/evidence_chest/head_7376bb9
-python -m zipfile -e logs/evidence_chest/logs00edb57.zip logs/evidence_chest/baseline_00edb57
+python -m zipfile -e logs/evidence_chest/logs7376bb9.zip logs/evidence_chest/derived/head_7376bb9
+python -m zipfile -e logs/evidence_chest/logs00edb57.zip logs/evidence_chest/derived/baseline_00edb57
 ```
 
-Keep extracted directories ignored if they are large/noisy. Preserve ZIPs.
-
-## Questions Codex must answer from logs
-
-### Presentation
-
-- How often are visualizer microgaps reported?
-- What are p95/p99/max intervals?
-- Does starvation occur while transitions are inactive?
-- Are paint requests pending for long periods?
-- Are state generations diverging?
-- Are frames delivered in bursts?
-
-### CPU/tasking
-
-- What is process CPU during active rendering?
-- What is main-thread/event-loop delay?
-- How many compute tasks are submitted per second?
-- Which task categories dominate?
-- Is GPU busy low while CPU remains high?
-
-### Memory
-
-- Does RSS plateau?
-- Does private commit plateau?
-- Does dedicated VRAM plateau?
-- Does usage rise after each image, transition, Settings, or Edit cycle?
-- Which tracked cache/resource counters correlate with growth?
-
-### Lifecycle
-
-- What happens immediately before Settings/Edit?
-- Which workers/timers stop?
-- Which generations change?
-- Are old callbacks or resources retained?
-- Is a context-current error present in the archive?
-- If absent, does the log end before crash output is flushed?
-
-### Visualizer
-
-- What logical update rate is reported?
-- What presentation gaps occur?
-- Does mode state continue while compositor is paused?
-- Does publication wait for presentation?
-- Are amplitude/smoothing values changed by infrastructure?
-
-## Known evidence conclusions
-
-These conclusions are already supported strongly enough to guide architecture:
-
-1. The donor visualizer suffers compositor cadence starvation even without an active transition.
-2. Average FPS and improved `DT_Max` do not reflect perceived smoothness.
-3. The donor path has extensive microgaps, paint waits, and tail latency.
-4. The donor runtime is CPU-heavy while GPU busy can remain low.
-5. The baseline looks and feels better but has severe RAM/VRAM growth and high CPU/task rate.
-6. The donor's resource work appears to improve VRAM bounds relative to baseline.
-7. The donor Settings/Edit lifecycle introduces or retains a cross-thread GL context failure not reproduced in the supplied baseline run.
-8. Neither version is an acceptable final performance architecture.
-
-## Important epistemic limit
-
-The supplied donor ZIP does not necessarily contain the literal final `QOpenGLContext` error line. Do not falsely claim the archive captures it if it does not.
-
-The user observed the crash and prior architecture evidence records the same error class. Treat it as a reproducible external observation requiring a new controlled lifecycle test.
+Large extracted directories may remain ignored while the source archive and derived summary are preserved.
 
 ## Recovery evidence parser
 
-The repeatable read-only parser is `tools/recovery_evidence_parser.py`.
+Use read-only parser:
 
 ```powershell
 python tools/recovery_evidence_parser.py `
@@ -127,7 +137,9 @@ python tools/recovery_evidence_parser.py `
   --output-dir logs/evidence_chest/derived/head_7376bb9
 ```
 
-It produces:
+For plain current folders, use the parser's supported folder/input mode and preserve the exact command in the report.
+
+Typical outputs:
 
 ```text
 summary.json
@@ -141,25 +153,100 @@ errors_and_warnings.txt
 unknown_lines.txt
 ```
 
-The parser:
+Derived data records parser version, source hash/path, assumptions, file sizes, timestamps/line numbers, excluded intervals, and unknown/unclassified lines.
 
-- preserves timestamps and source line numbers;
-- parses canonical sidecars by category to avoid double-counting verbose-log duplicates;
-- records parser version, source archive hash, assumptions, and file sizes;
-- retains every unclassified non-empty line for later inspection;
-- treats frame records as aggregate windows because the archives do not contain every raw interval.
+## Questions to answer from current evidence
 
-## Evidence protection
+### Visualizer and presentation
 
-Do not modify original logs.
+- Which mode/source/preset/activation was authoritative?
+- What were source/publication/paint rates and ages?
+- Was there one presentation cadence?
+- Did logical events integrate before render coalescing?
+- What was source-to-first-visible latency?
+- Did Settings/Edit/mode switch reveal stale state?
+- What did the user report separately by affected mode?
 
-Derived data must state:
+Logs can diagnose cadence and timing. They cannot certify feel.
 
-- parser version;
-- source archive hash;
-- commit;
-- assumptions;
-- excluded intervals;
-- why intervals were excluded.
+### CPU/tasking
 
-The evidence chest is a forensic input, not a convenient source of cherry-picked numbers.
+- Which categories dominate submitted, queueing, callback, and GUI-commit cost?
+- What work occurs while hidden/static/unchanged?
+- Is work duplicated by display or representation?
+- Did a lower task rate change first-visible response or fidelity?
+- Are diagnostics contributing meaningful load?
+
+### System memory
+
+Report separately:
+
+- whole-app/main/child RSS;
+- private working set where available;
+- private commit/private bytes;
+- VMS/reserved/mapped regions;
+- thread/handle counts;
+- tracked images/caches/resources;
+- dedicated/shared GPU memory with sample age.
+
+Do not add RSS and private commit. Do not treat stale asynchronous GPU samples as exact same-instant values.
+
+### Resource ownership
+
+- Did tracked application resources reach expected zero/plateau?
+- Which logical representations remain live?
+- How large is the tracked/untracked gap?
+- Did full teardown reduce driver VRAM?
+- Are pending tasks/mappings/callbacks retaining outputs?
+
+### Lifecycle
+
+- What exact event admitted stop/reload?
+- Was teardown called from inside a retiring owner frame?
+- Which QObjects/Python roots/tasks/timers/resources survived at arm, completion, or timeout?
+- Did a modal wrapper's C++ object die before later code touched it?
+- Was replacement constructed exactly once and only after zero ownership?
+- Which fresh state authorized reveal?
+
+### Cache/prefetch
+
+- Were pending keys/bytes/count internally consistent?
+- Did preferred/general selection overlap?
+- Were multiple indices removed safely?
+- Did stale callbacks repopulate or release current ownership?
+- Did callback failure increase fallback/miss churn?
+
+## Current strongly supported conclusions
+
+1. Donor presentation orchestration damaged visual smoothness despite selected average improvements.
+2. Original baseline behaviour was better but resource/task architecture was not acceptable.
+3. Persistent shared-analysis/Bubble lanes changed approved timing and were rejected.
+4. Paint-local Spectrum decay created a second cadence and was visually worse.
+5. Current Settings full runtime recreation succeeds; R-56 wrapper lifetime remains invalid.
+6. Current Edit full teardown is admitted from inside the retiring manager graph; R-53 cause boundary is above 99% confidence.
+7. R-57 selected-index deletion order is a proven prefetch correctness defect.
+8. The old linear Settings memory staircase did not reproduce in the latest two cycles.
+9. Current absolute active RSS/private commit/VRAM remains excessive and not fully attributed.
+10. Tracked-zero GL teardown and low teardown VRAM do not alone explain residual process memory.
+
+## Epistemic rules
+
+- distinguish direct log fact, source fact, inference, user visual verdict, and unresolved hypothesis;
+- state confidence below 90% explicitly;
+- do not claim a literal error line exists when only external observation/source architecture supports it;
+- do not claim a leak from one non-equivalent snapshot;
+- do not claim resource success from logical counters alone;
+- do not use logs to overrule user-observed visual behaviour.
+
+## Derived evidence retention
+
+Derived outputs state:
+
+- source path/archive hash;
+- parser/version/command;
+- exact commit/environment;
+- assumptions and sanitization;
+- exclusions and reasons;
+- confidence and unresolved gaps.
+
+The evidence chest preserves both successful and failed runs so later work cannot rewrite history.
