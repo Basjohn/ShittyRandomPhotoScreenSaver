@@ -1,37 +1,98 @@
 # Visualizer Change Declaration
 
-Infrastructure work must not use this form to justify accidental regressions.
+Infrastructure, lifecycle, memory, cache, compositor, or threading work must not use this form to justify an accidental regression after the fact.
 
 ## Change identity
 
-- Branch:
-- Commit:
-- Modes affected:
+- Working branch: `main`
+- Candidate commit:
+- Current approved comparison commit:
+- Date/time:
 - Requested by:
-- Date:
+- Exact user request/approval scope:
+- Modes affected:
+- Shared source/scheduler/presentation paths affected:
 
-## Current behavior
+## Attribution
 
-## Proposed behavior
+- Direct evidence that this is mode-specific rather than shared/runtime-owned:
+- Cause confidence:
+- Important details below 90% confidence:
 
-## Why the behavior should change
+Bubble-specific work requires explicit Bubble scope; aggregate visualizer load is not sufficient evidence.
 
-## Exact equations/parameters/data flow changed
+## Current approved behaviour
 
-## Deterministic replay evidence
+Describe attack, decay, amplitude, elasticity, first-visible response, cadence, activation/reset, and relevant mode personality.
 
-## Manual comparison evidence
+## Proposed behaviour
 
-## Performance effect
+## Why behaviour should change
 
-## Risks
+Performance or resource reduction alone is not sufficient unless the user explicitly requests the behavioural trade.
+
+## Exact changes
+
+- equations/parameters:
+- source sampling/normalization:
+- executor/scheduler/cadence:
+- event/impulse integration:
+- publication/coalescing:
+- presentation/paint authority:
+- renderer/buffer precision/resolution:
+- activation/generation/reset:
+
+## Prohibited-shape check
+
+- [ ] No persistent/dedicated visualizer lane unless explicitly approved as the behaviour change
+- [ ] No terminal batching or source decimation hidden as optimization
+- [ ] No producer-to-paint acknowledgement
+- [ ] No second repaint/presentation cadence
+- [ ] No authoritative state mutation in `paintGL()`
+- [ ] No stale first-frame/activation state
+- [ ] No unintended changes to other supported modes
+
+## Deterministic logical evidence
+
+## Production-executor temporal evidence
+
+Include source sequence/timestamp, submit/start/end/callback/commit, publication interval/source age, first-visible result, and generation/activation identity.
+
+## Known-bad negative controls
+
+State results for applicable controls such as `666624d`, terminal batching fixtures, and `ebfec397`.
+
+## Installed manual comparison
+
+- exact source fixture/track segment and playback offset:
+- environment/displays/refresh/DPR:
+- normal speed and slow-motion comparison where useful:
+- Settings/Edit/mode-switch result:
+- user verdict separately by mode:
+
+## Performance and resource effect
+
+Report CPU/task/p99/first-visible plus whole-app RSS/private commit/dedicated/shared GPU memory. Do not trade perceivable fidelity silently for a lower number.
+
+## Risks and cross-mode effects
 
 ## Golden data policy
 
-- [ ] Existing goldens remain valid
-- [ ] Goldens intentionally change with approval
+- [ ] Existing approved goldens remain unchanged
+- [ ] A new version is intentionally created after explicit installed approval
+- [ ] Previous approved golden/version remains preserved
+- [ ] No automatic regeneration occurred
+
+## Rollback
+
+- exact revert/rollback commit:
+- accepted-behaviour revalidation:
 
 ## Approval
 
-- [ ] Approved
+- [ ] Approved by user for the exact candidate commit
 - [ ] Rejected
+- [ ] Inconclusive; no production change permitted
+
+- Exact approval/rejection statement:
+- Date:
