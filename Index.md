@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-08-01
+Last updated: 2026-08-02
 
 Navigation and ownership map for SRPSS.
 
@@ -14,7 +14,7 @@ This file is not a specification and must not accumulate implementation narrativ
 | Find the owning subsystem | `Docs/Contracts.md` |
 | Stable architecture change | `Spec.md` |
 | Current recovery work | `Current_Plan.md` |
-| Recovery program and live checklist | `audits/SRPSS_Architecture_Recovery_Roadmap/README.md` |
+| Recovery program and live checklist | `Docs/audits/SRPSS_Architecture_Recovery_Roadmap/README.md` |
 | Compositor/GL/performance recovery | `Docs/Compositor_Architecture.md` |
 | Test selection | `Docs/TestSuite.md` |
 | Existing harness command | `Docs/Harness_Index.md` |
@@ -32,6 +32,7 @@ Do not read every document by default.
 | `Docs/Contracts.md` | Fast task-to-owner routing |
 | `Spec.md` | Stable architecture and behaviour contracts |
 | `Current_Plan.md` | Active unfinished work only |
+| `Docs/audits/SRPSS_Architecture_Recovery_Roadmap/README.md` | Full recovery audit, phase program, ownership targets, and evidence gates |
 | `Docs/Compositor_Architecture.md` | Compositor recovery target and validation |
 | `Docs/TestSuite.md` | Test levels and release gates |
 | `Docs/Harness_Index.md` | Recurring commands/probes |
@@ -51,6 +52,7 @@ Do not read every document by default.
 | Transition changes | `Docs/Transition_Change_Checklist.md` |
 | Logging | `Docs/Logging_Guide.md` |
 | Shared UI style | `Docs/Custom_Style_Implementation.md` |
+| Historical architecture/Bubble/geometry/Oscilloscope audits | `Docs/audits/OLD/` |
 | Steam sources and promotion | existing Steam-focused documents |
 | Media-key/focus investigation | `Docs/MEDIAKEYDEBUG.md` |
 
@@ -138,6 +140,7 @@ baseline:        00edb57a3076b845cb8ee4b6cb7f36ea83411f0c
 donor branch:    donor-7376bb9 (reference-only/read-only)
 donor:           7376bb9bb380253f3bd14079e65d7bdbca062fad
 evidence:        logs/evidence_chest/
+audit roadmap:   Docs/audits/SRPSS_Architecture_Recovery_Roadmap/
 Phase 1 report:  Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md
 Phase 2 report:  Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md
 Phase 3 report:  Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md
