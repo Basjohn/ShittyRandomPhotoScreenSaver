@@ -1,0 +1,19 @@
+{
+  "package": "SRPSS Architecture Recovery Roadmap",
+  "baseline_branch": "recovery-00edb57",
+  "baseline_commit": "00edb57a3076b845cb8ee4b6cb7f36ea83411f0c",
+  "donor_branch": "donor-7376bb9",
+  "donor_commit": "7376bb9bb380253f3bd14079e65d7bdbca062fad",
+  "evidence": [
+    "logs/evidence_chest/logs.zip",
+    "logs/evidence_chest/logs00edb57.zip"
+  ],
+  "critical_priority_order": [
+    "visualizer fidelity and reactivity",
+    "lifecycle safety",
+    "frame pacing",
+    "bounded memory",
+    "CPU efficiency",
+    "average FPS"
+  ]
+}

@@ -61,7 +61,6 @@ yarn-error.log*
 /cache/reddit/*.json
 /cache/*/*.json
 /cache/**/*.json
-/audits/
 /archive/
 /bak/
 /settings/
