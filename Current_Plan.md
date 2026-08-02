@@ -15,15 +15,19 @@ restored executor behaviour: 4bde89e8e39177dc4dd7b5e64b9ac99256ab9486
 rejected Spectrum smoothing: ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
 current approved visual behaviour: ff93461685476bd0657aa88312fc2e35e9037880
 current lifecycle/cache evidence code state: 3877b2c76791892cd5cb18c43d66a90a29c64d33
+current audit-doc checkpoint: 10c9536271dd1eaec1bac2ec04c400e6d055e66d
 latest evidence: logs/evidence_chest/08_02_3877b2c7_20_27/
 owning report: Docs/phase_reports/P05_CPU_TASK_REDUCTION.md
+audit roadmap: Docs/audits/SRPSS_Architecture_Recovery_Roadmap/00_INDEX_AND_LIVE_CHECKLIST.md
+audit memory plan: Docs/audits/SRPSS_Architecture_Recovery_Roadmap/09_MEMORY_GPU_RESOURCE_AND_CACHE_PLAN.md
+audit visualizer contract: Docs/audits/SRPSS_Architecture_Recovery_Roadmap/05_VISUALIZER_FIDELITY_CONTRACT.md
 visualizer guardrail: Docs/Guardrails/Visualizer_Presentation.md
 R-53 recreation/memory: Docs/Historical_Bugs/R-53_Runtime_Recreation_Ownership_And_Memory.md
 R-56 Settings wrapper: Docs/Historical_Bugs/R-56_Settings_Dialog_Deleted_Wrapper_Retouch.md
 R-57 scaled prefetch: Docs/Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Order.md
 ```
 
-`ff934616` is code-equivalent to `4bde89e` and remains the user-approved Bubble/Spectrum behaviour. The commits after it through the evidence state are documentation-only apart from the already reverted smoothing experiment.
+`ff934616` is code-equivalent to `4bde89e` and remains the user-approved Bubble/Spectrum behaviour. Later documentation and audit commits do not replace that behavioural authority.
 
 ## Status Legend
 
@@ -36,11 +40,14 @@ R-57 scaled prefetch: Docs/Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Or
 ## Non-Negotiable Gates
 
 - User-observed visualizer feel outranks task counts, mean timings, paint counts, and green logical tests.
-- Bubble and Spectrum are independently protected.
+- All supported visualizer modes are protected as a family. Aggregate application or visualizer load is presumed to come from shared/runtime ownership until direct evidence proves a mode-specific owner.
+- Bubble is not a default CPU, RAM, VRAM, task-rate, cadence, or fidelity optimization target. Do not change Bubble-specific code unless evidence isolates a Bubble-owned cost and the user explicitly authorizes that scope.
 - No visualizer optimization begins before the stronger approved goldens exist.
+- No optimization may lower perceivable fidelity to meet a resource target: no reduced visualizer cadence, source sampling, display resolution, target texture resolution, buffer precision, transition quality, artwork/shadow quality, widget content, animation quality, or first-frame responsiveness.
 - No future optimization silently changes cadence, scheduler, source sampling, attack, decay, elasticity, or presentation authority.
 - No second visualizer cadence, self-requested Spectrum repaint loop, paint-derived clock, or `paintGL()` mutation authority.
-- Settings/Edit destruction remains fail-closed; no timeout extension, ignored owner, retry sleep, nested event pumping, forced garbage collection, or fake zero count.
+- Resource containment is not enough by itself. Whole-app warm RSS, private commit, and dedicated VRAM must also be reduced to an evidence-backed reasonable level.
+- Settings/Edit destruction remains fail-closed; no timeout extension, ignored owner, retry sleep, nested event pumping, forced garbage collection, working-set trimming, or fake zero count.
 - Full runtime teardown may not begin from inside a retiring widget/session owner call stack. Persist and retire the local edit session first; engine-owned recreation admission runs on a later GUI turn.
 - Full runtime reinitialization, graph-based CUSTOM placement, graph replay, exact `DisplayManager` identity, generation checks, owner-context GL deletion, and authoritative-first-frame reveal remain mandatory.
 - A Python wrapper is not proof of a live Qt object. Validate the underlying C++ object before every post-modal or post-delete touch.
@@ -48,7 +55,7 @@ R-57 scaled prefetch: Docs/Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Or
 - Do not rename or move existing files.
 - Do not regenerate expected outputs merely to make a change pass.
 
-# Phase 5 — CPU, Task, Delivery, And Recreation Recovery
+# Phase 5 — CPU, Task, Delivery, Recreation, And Resource Recovery
 
 ## Current State
 
@@ -73,11 +80,27 @@ R-57 scaled prefetch: Docs/Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Or
 - [!] Cause confidence for the CUSTOM admission defect: **greater than 99%**.
 - [!] Exact final eight-second manager-retention edge confidence: **below 90%**. Shell/action/key-filter Python callback records remain the leading candidates, but no live referrer dump exists.
 - [!] The fail-closed barrier reaches zero QObjects, resources, tasks, and subscriptions, then times out on exactly two `CustomLayoutManager` wrappers and exits code 1.
-- [x] **Settings memory:** the former linear per-cycle staircase did not reproduce across two Settings replacements.
+- [x] **Settings memory growth:** the former linear per-cycle staircase did not reproduce across two Settings replacements.
 - [!] One-time post-first-recreation process uplift remains unexplained; confidence in allocator/cache/driver/retained-owner cause is below 90%.
 - [ ] Edit memory/plateau evidence remains blocked because CUSTOM exits before replacement construction.
 - [!] **R-57:** scaled prefetch has an exact selected-index deletion-order bug. Cause confidence: **greater than 99%**.
 - [x] Replacement initialization itself still has no demonstrated separate defect; preserve it and validate it rather than redesigning it.
+
+### Absolute resource footprint
+
+The latest active run was contained but still far too heavy for a screensaver:
+
+```text
+whole-app resident RAM:   approximately 847–1074 MiB
+whole-app private commit: approximately 2.86–3.17 GiB
+dedicated VRAM:           approximately 554–777 MiB
+shared GPU memory:        approximately 84–121 MiB
+```
+
+- [!] Plateauing near one GiB of physical RAM and over half a GiB of dedicated VRAM is not an acceptable completion state.
+- [!] The gap between tracked application-owned bytes and whole-process usage remains too large and must be attributed rather than dismissed as runtime/driver overhead.
+- [!] Multi-gigabyte private commit must be decomposed into resident private pages, mapped/reserved regions, child-process commitment, thread stacks, Qt/native allocations, driver mappings, and genuinely retained application state.
+- [x] Dedicated VRAM falls to roughly idle-driver levels during full display teardown, proving that deterministic GL deletion is broadly effective even though active steady-state VRAM remains excessive.
 
 ## Required Work Order
 
@@ -88,10 +111,12 @@ R-57 scaled prefetch: Docs/Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Or
 5. Repair R-53 CUSTOM/Edit persistence-to-recreation admission and deterministic shell callback retirement.
 6. Run focused tests for R-57, R-56, and the two-display CUSTOM weakref/barrier path.
 7. Run one installed Settings cycle and one dual-display Edit Save-and-Continue cycle.
-8. Run the full alternating Settings/Edit lifecycle and memory plateau matrix.
-9. Remove unused visualizer lane facades, diagnostics, tests, and generic scheduler integration only after stronger goldens and repository-use audit.
-10. Complete delivery-tail, unchanged-media, broader cache-representation, and logging work.
-11. Close Phase 5 only after installed normal and Media Center evidence passes.
+8. Capture a controlled warm resource baseline with fixed displays, source images, cache state, transitions, widgets, duration, and supported visualizer scenarios.
+9. Attribute the whole-app RAM/commit/VRAM gap by owner and representation, then implement only measured reductions that preserve visible output and responsiveness.
+10. Run the full alternating Settings/Edit lifecycle, memory plateau, image churn, and pressure matrix.
+11. Remove unused visualizer lane facades, diagnostics, tests, and generic scheduler integration only after stronger goldens and repository-use audit.
+12. Complete delivery-tail, unchanged-media, broader cache-representation, and logging work.
+13. Close Phase 5 only after installed normal and Media Center evidence passes.
 
 # P5.0 — Visualizer Fidelity And Mandatory Goldens
 
@@ -172,6 +197,7 @@ Run and record:
 - Bubble sharp kick/transient passage;
 - Bubble dense/loud passage;
 - Spectrum attack, decay, and rapid alternating rise/fall passage;
+- Sine, Oscilloscope, and Dev Curve representative passages;
 - Bubble → Spectrum → Bubble;
 - pause/resume;
 - mode transition overlap;
@@ -198,7 +224,7 @@ A golden package that also accepts these known-bad shapes is not strong enough.
 - Never auto-regenerate approved visualizer goldens.
 - A golden change requires a named candidate commit, reason, before/after evidence, and explicit user approval.
 - Preserve old golden versions and their approved commit identities.
-- A performance optimization should normally pass unchanged goldens.
+- A performance or memory optimization should normally pass unchanged goldens.
 - If visual behaviour intentionally changes, capture a new version only after installed approval; never overwrite the previous approved baseline.
 
 ## P5.0 tasks
@@ -219,6 +245,8 @@ A golden package that also accepts these known-bad shapes is not strong enough.
 # Deferred Visualizer Optimizations
 
 These are not current-priority work. None may begin until all P5.0 stronger-golden tasks are complete and the user explicitly authorizes the individual experiment.
+
+Resource profiling may compare scenarios across modes, but a difference in whole-process usage does not prove mode-specific ownership. Default to shared audio, render, cache, compositor, process, and lifecycle causes. A mode-specific production change requires direct owner-level evidence and explicit user authorization.
 
 Potentially acceptable later experiments:
 
@@ -268,7 +296,7 @@ Explicitly rejected unless separately re-proposed after new evidence:
 - [ ] Preserve changed-track responsiveness and transition-time static feedback.
 - [ ] Preserve startup artwork generation and reveal ordering.
 
-# P5.4 — Recreation Ownership, Initialization, And Memory
+# P5.4 — Recreation Ownership, Initialization, And Memory Containment
 
 ## Settings result and R-56
 
@@ -323,11 +351,11 @@ The full runtime reinit and graph placement/replay architecture stay unchanged. 
 - delayed show callbacks are rejected by runtime generation, exact manager, and display membership;
 - replacement remains hidden until its own authoritative first frame;
 - old callbacks, transitions, visualizer results, cached state, construction, GL initialization, or timer ticks cannot satisfy readiness;
-- Bubble and Spectrum use current engine generation and activation;
+- every supported visualizer uses current engine generation and activation;
 - `FadeCoordinator` remains the sole reveal coordinator;
 - missing fresh data keeps presentation hidden rather than showing stale state.
 
-## Memory result and validation
+## Memory growth result and validation
 
 Current settled snapshots:
 
@@ -341,14 +369,14 @@ Settings generation 2     946.6       2179.1        1823       62        413.4 M
 - [x] The second Settings cycle did not add another RSS/private/handle/thread/resource step.
 - [!] Do not interpret the first one-time uplift as a leak or allocator explanation; the cold state differed in warm-up and visualizer mode, and cause confidence is below 90%.
 - [ ] After R-53 repair, run at least five alternating Edit and Settings cycles in normal and Media Center variants.
-- [ ] Include Bubble, Spectrum, Bubble → Spectrum → Bubble, playing/paused, transition-time teardown, pending image work, pending ordinary audio/Bubble executor work, dual display, and one selected display.
+- [ ] Include all supported visualizer modes as comparison scenarios, playing/paused, transition-time teardown, pending image work, pending ordinary executor work, dual display, and one selected display.
 - [ ] Every retired generation must reach zero QObjects, Python owners, resources, timers, animations, subscriptions, callbacks, tasks, lanes, registrations, pixmaps, textures, PBOs, and tracked GL bytes.
 - [ ] Equivalent settled RSS, private commit, dedicated VRAM, handles, threads, CPU, and GPU must stop rising approximately linearly per cycle.
 - [ ] If ownership reaches zero but memory still rises, begin a new evidence-led retention investigation. Do not alter cache budgets, trim working sets, recycle processes, or weaken teardown without evidence.
 
-# P5.5 — Cache Representations And R-57
+# P5.5 — Absolute Resource Footprint, Cache Representations, And R-57
 
-R-57 is a narrow correctness fix and is not blocked by the broader P5.4 plateau matrix.
+R-57 is a narrow correctness fix and is not blocked by the broader lifecycle or memory-attribution work.
 
 ## R-57 required change
 
@@ -358,13 +386,58 @@ R-57 is a narrow correctness fix and is not blocked by the broader P5.4 plateau 
 - [ ] Cover preferred first/middle/last positions, stale generation, mixed ready/not-ready rows, and late callbacks after `clear_inflight()`.
 - [ ] Run installed transition/image rotation and require no callback failure or unexpected worker fallback increase.
 
+## Provisional engineering targets
+
+For the current dual-2560×1440 environment, use the tracked audit gates until evidence justifies a written revision:
+
+```text
+whole-app warm RSS: preferred <600 MiB; warning 750 MiB; hard investigation 900 MiB
+dedicated VRAM:     preferred <300 MiB; warning 400 MiB; hard investigation 500 MiB
+private commit:     no unexplained multi-GiB commitment; every large region has a measured owner/type
+```
+
+- [ ] Reach the preferred targets, or produce a decision record that identifies every excess owner, explains why it is necessary, and proposes the next bounded target.
+- [ ] Formula-adjust VRAM targets only for measured resolution/DPR/effect requirements; do not use hardware capacity as justification for waste.
+- [ ] Treat current active usage above the hard investigation gates as an unresolved optimization defect even when usage is flat.
+
+## Required attribution before optimization
+
+- [ ] Capture cold, post-warm-up, active-transition, steady image, Settings-gap, post-Settings, and full-teardown snapshots under one fixed workload.
+- [ ] Record main and child process RSS, private working set where available, private bytes/commit, virtual/mapped/reserved regions, thread count/stack reservation, GDI/USER handles, dedicated/shared GPU memory, and sampler age.
+- [ ] Reconcile process totals against exact CPU cache, QImage/QPixmap/display backing, upload/staging buffers, textures, FBOs, PBOs, visualizer surfaces, transition resources, worker mappings, and passive ResourceManager records.
+- [ ] Split one-time warm-up/high-water retention from active live ownership and from true per-cycle growth.
+- [ ] Compare supported visualizer scenarios only to distinguish shared from genuinely mode-owned resources. Do not infer a mode-specific cause from whole-process totals.
+- [ ] If unexplained process memory remains, inspect Python allocations, Qt/native heaps, driver mappings, thread stacks, worker queues/futures, logging buffers, and deleted-but-pending objects in that order.
+
+## Safe optimization candidates
+
+Only promote a candidate after its owner, bytes, lifetime, and visible role are measured:
+
+- [ ] Remove duplicate raw/decoded/orientation-corrected/scaled/QImage/QPixmap/upload representations where one immutable backing can safely serve the same transform/DPR identity.
+- [ ] Release transition source textures, temporary FBOs/PBOs, upload buffers, fallback frames, and resized resources immediately at their terminal owner boundary.
+- [ ] Deduplicate exact same-size/same-transform per-display image backing without collapsing different DPR or transform outputs.
+- [ ] Right-size prefetch and image-cache occupancy by measured hit rate, fallback cost, active-transition reserve, and future-byte pressure; do not create decode storms to save resident bytes.
+- [ ] Audit process-lifetime worker mappings, queue buffers, thread-pool/thread-stack reservation, callback history, metrics history, and log retention.
+- [ ] Remove dead Python/Qt owner graphs and redundant native surfaces rather than masking them with GC, trimming, or process recycling.
+- [ ] Phase 5 may remove duplicate or dead retained resources; a new shared GPU resource-store architecture remains Phase 6 work and must not be smuggled into a small memory patch.
+
+## Fidelity and performance acceptance
+
+Every memory change must prove:
+
+- unchanged approved visualizer goldens and user-observed feel;
+- no Bubble-specific production change unless Bubble-owned cost is directly proven and explicitly authorized;
+- identical target/display resolution, texture precision, transition output, widget content, artwork, shadows, and first-frame authority;
+- no new source decimation, cadence cap, snapshot batching, damping, animation reduction, or hidden-state shortcut;
+- no increased cache-miss/decode storm, startup delay, transition p99/max, request-to-paint delay, or Settings/Edit recreation time;
+- stable image quality at 100/125/150/200% DPR where applicable;
+- lower whole-app RSS/commit/VRAM under the same authored workload, not merely lower tracked counters.
+
 ## Broader cache audit
 
-Blocked until clean lifecycle cycles exist.
-
-- [ ] Audit raw/scaled/display co-retention, exact-transform duplication, unused prefetch results, and eviction churn.
-- [ ] Keep the 256 MiB production CPU-cache limit.
-- [ ] Do not add pins or raise budgets without a proven readiness failure.
+- [ ] Audit raw/scaled/display co-retention, exact-transform duplication, unused prefetch results, and eviction churn after clean lifecycle cycles exist.
+- [ ] Keep the current 256 MiB production CPU-cache cap until hit-rate/fallback evidence supports a deliberate revision; do not raise it to hide unexplained memory.
+- [ ] Do not add pins, reserve caches, or retained fallback frames without a proven readiness requirement and byte budget.
 
 # P5.6 — Logging Hygiene
 
@@ -372,6 +445,7 @@ Blocked until clean lifecycle cycles exist.
 - [-] Keep lifecycle ownership detail in `screensaver_lifecycle.log`.
 - [ ] Add one authoritative startup record distinguishing `main` and `main_mc`.
 - [ ] Add bounded CUSTOM admission diagnostics: request identity, queued turn, persist-complete timestamp, teardown-start timestamp, stale/duplicate rejection, and manager/shell weakref counts.
+- [ ] Add bounded resource-baseline summaries that separate physical resident RAM, private commit, private working set when available, child processes, tracked application bytes, dedicated VRAM, shared GPU memory, and sample age.
 - [ ] Deleted Qt-wrapper touches and worker callback failures must be visible as actionable warnings/errors, not only suppressed DEBUG traces.
 - [ ] Keep high-volume diagnostics bounded and passive.
 - [ ] All warnings and errors remain visible in `screensaver.log`.
@@ -389,14 +463,16 @@ Blocked until clean lifecycle cycles exist.
 Phase 5 passes only when:
 
 - the stronger user-approved visualizer golden package exists;
-- Bubble and Spectrum remain equal or better than `ff934616`;
-- all five visualizer modes pass restored shared-source validation;
+- Bubble and Spectrum remain equal or better than `ff934616`, and the other supported modes remain current-good;
+- no resource optimization has reduced perceivable fidelity, cadence, resolution, transition quality, widget content, or first-frame responsiveness;
 - R-57 passes deterministic and installed prefetch validation;
 - R-56 closes without invalid wrapper touches;
 - Settings and Edit recreation pass repeatedly;
 - CUSTOM teardown begins only after the retiring edit session is explicitly retired and its owner call stacks return;
 - no retired generation survives;
 - memory, VRAM, handles, threads, and ownership plateau;
+- whole-app warm RSS and dedicated VRAM reach the provisional preferred audit targets, or an evidence-backed decision record accounts for every remaining excess and sets an approved bounded target;
+- multi-gigabyte private commit is decomposed and no large unexplained commitment remains;
 - first-frame poison does not return;
 - p99/max delivery is equal or better;
 - diagnostics create no meaningful work;
@@ -427,7 +503,7 @@ Remove forwarding, duplicate runtime paths, dead retries/backoff, obsolete metri
 
 ## Phase 11 — Full Validation
 
-Normal run, two-hour soak, all-mode review, CPU/disk/GPU/mixed hostile load, Settings/Edit during activity, multi-display/topology, memory plateau, and p99/max gates.
+Normal run, two-hour soak, all-mode review, CPU/disk/GPU/mixed hostile load, Settings/Edit during activity, multi-display/topology, absolute resource targets, memory plateau, and p99/max gates.
 
 ## Phase 12 — Release Preparation
 
