@@ -1,19 +1,43 @@
 {
   "package": "SRPSS Architecture Recovery Roadmap",
-  "baseline_branch": "recovery-00edb57",
-  "baseline_commit": "00edb57a3076b845cb8ee4b6cb7f36ea83411f0c",
-  "donor_branch": "donor-7376bb9",
-  "donor_commit": "7376bb9bb380253f3bd14079e65d7bdbca062fad",
-  "evidence": [
-    "logs/evidence_chest/logs.zip",
+  "schema_version": 2,
+  "last_reconciled": "2026-08-02",
+  "working_branch": "main",
+  "active_plan": "Current_Plan.md",
+  "original_recovery_baseline": "00edb57a3076b845cb8ee4b6cb7f36ea83411f0c",
+  "pre_persistent_lane_reference": "6f188adadabb77b1a9d47a0fe1685c86ad39fb77",
+  "restored_executor_reference": "4bde89e8e39177dc4dd7b5e64b9ac99256ab9486",
+  "approved_visual_reference": "ff93461685476bd0657aa88312fc2e35e9037880",
+  "rejected_persistent_lane": "666624d421b08f978c5f610571a078570150a1e7",
+  "rejected_spectrum_smoothing": "ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9",
+  "donor_reference": "7376bb9bb380253f3bd14079e65d7bdbca062fad",
+  "historical_evidence": [
+    "logs/evidence_chest/logs7376bb9.zip",
     "logs/evidence_chest/logs00edb57.zip"
+  ],
+  "current_evidence": [
+    "logs/evidence_chest/08_02_3877b2c7_20_27/"
+  ],
+  "active_incidents": [
+    "R-53",
+    "R-56",
+    "R-57"
   ],
   "critical_priority_order": [
     "visualizer fidelity and reactivity",
     "lifecycle safety",
-    "frame pacing",
-    "bounded memory",
-    "CPU efficiency",
-    "average FPS"
+    "frame pacing and first-visible response",
+    "lower and bounded RAM, private commit, and VRAM",
+    "CPU and task efficiency",
+    "average FPS",
+    "code elegance"
+  ],
+  "authority_order": [
+    "Current_Plan.md",
+    "Spec.md",
+    "Docs/Guardrails.md and focused guardrails",
+    "Docs/audits/SRPSS_Architecture_Recovery_Roadmap/",
+    "Docs/Historical_Bugs/",
+    "Docs/audits/OLD/"
   ]
 }
