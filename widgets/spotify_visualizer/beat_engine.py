@@ -109,10 +109,6 @@ class _SpotifyBeatEngine(QObject):
         self._compute_task_active: bool = False
         self._compute_gate_token: int = 0
         self._thread_manager: Optional[ThreadManager] = None
-        self._runtime_generation: int | None = None
-        self._analysis_compute_lane = None
-        self._analysis_lane_serial: int = 0
-        self._analysis_lane_last_log_ts: float = 0.0
         self._ref_count: int = 0
         self._latest_bars: Optional[List[float]] = None
         self._last_audio_ts: float = 0.0
@@ -155,24 +151,7 @@ class _SpotifyBeatEngine(QObject):
         self._idle_wave_phase: float = 0.0
 
     def set_thread_manager(self, thread_manager: Optional[ThreadManager]) -> None:
-        if thread_manager is not self._thread_manager:
-            self.cancel_pending_compute_tasks()
         self._thread_manager = thread_manager
-
-    def set_runtime_generation(self, runtime_generation: object | None) -> None:
-        """Attribute shared analysis work to the active display generation."""
-
-        try:
-            generation = (
-                None
-                if runtime_generation is None
-                else int(runtime_generation)
-            )
-        except (TypeError, ValueError):
-            generation = None
-        if generation != self._runtime_generation:
-            self.cancel_pending_compute_tasks()
-            self._runtime_generation = generation
     
     def set_process_supervisor(self, supervisor: Optional[ProcessSupervisor]) -> None:
         """Set the ProcessSupervisor for worker integration."""
@@ -269,16 +248,6 @@ class _SpotifyBeatEngine(QObject):
         """Invalidate outstanding compute callbacks before restarting."""
         self._compute_gate_token += 1
         self._compute_task_active = False
-        lane = self._analysis_compute_lane
-        self._analysis_compute_lane = None
-        if lane is not None:
-            try:
-                lane.stop()
-            except Exception:
-                logger.debug(
-                    "[SPOTIFY_VIS] Failed to stop audio-analysis lane",
-                    exc_info=True,
-                )
 
     def set_smoothing(self, tau: float) -> None:
         """Set the base smoothing time constant."""
@@ -426,7 +395,6 @@ class _SpotifyBeatEngine(QObject):
             self._ref_count -= 1
         if self._ref_count == 0:
             self._capture_keepalive_deadline = 0.0
-            self.cancel_pending_compute_tasks()
             self._stop_worker()
 
     def ensure_started(self) -> None:
@@ -487,41 +455,73 @@ class _SpotifyBeatEngine(QObject):
         if tm is None:
             return
 
-        packet = {
-            "samples": samples,
-            "token": self._compute_gate_token,
-            "activation_id": self._activation_id,
-            "smoothed": list(self._smoothed_bars),
-            "last_smooth_ts": self._last_smooth_ts,
-            "smoothing_tau": self._smoothing_tau,
-            "bar_count": self._bar_count,
-            "hysteresis": self._segment_hysteresis,
-            "min_change": self._min_change_threshold,
-        }
         self._compute_task_active = True
+        token = self._compute_gate_token
+        activation_id = self._activation_id
+        
+        smoothed_copy = list(self._smoothed_bars)
+        last_smooth_ts = self._last_smooth_ts
+        smoothing_tau = self._smoothing_tau
+        bar_count = self._bar_count
+        hysteresis = self._segment_hysteresis
+        min_change = self._min_change_threshold
 
-        if getattr(tm, "supports_persistent_compute_lanes", False) is True:
+        def _job(local_samples=samples):
+            """FFT + smoothing on COMPUTE pool - keeps UI thread free."""
             try:
-                lane = self._ensure_analysis_compute_lane()
-                if lane is not None and lane.submit(packet):
-                    return
+                worker_state = self._audio_worker.make_compute_snapshot()
             except Exception:
-                logger.warning(
-                    "[SPOTIFY_VIS][FALLBACK] Managed audio-analysis lane failed",
-                    exc_info=True,
-                )
-            if packet["token"] == self._compute_gate_token:
-                self._compute_task_active = False
-            return
+                logger.debug("[SPOTIFY_VIS] Failed to snapshot audio worker for compute", exc_info=True)
+                return None
+            from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
 
-        def _job():
-            return self._compute_analysis_packet(packet)
+            raw_bars = compute_bars_from_samples(worker_state, local_samples)
+            if not isinstance(raw_bars, list):
+                return None
+            
+            now_ts = time.time()
+            smoothed, reset, energy = _smooth_analysis_bars(
+                raw_bars,
+                smoothed_copy,
+                last_smooth_ts,
+                now_ts,
+                bar_count=bar_count,
+                smoothing_tau=smoothing_tau,
+                segment_hysteresis=hysteresis,
+                min_change_threshold=min_change,
+            )
+            return {
+                'raw': raw_bars,
+                'smoothed': smoothed,
+                'ts': now_ts,
+                'reset': reset,
+                'energy': energy,
+                'worker_state': worker_state,
+                'activation_id': activation_id,
+            }
 
         def _on_result(result) -> None:
-            self._analysis_compute_done(result, payload=packet)
+            try:
+                if token != self._compute_gate_token or activation_id != self._activation_id:
+                    return
+                self._compute_task_active = False
+                success = getattr(result, "success", True)
+                data = getattr(result, "result", None)
+                if not success or data is None:
+                    return
+                if data.get('activation_id') != self._activation_id:
+                    return
+                self._commit_analysis_frame(
+                    raw_bars=data.get('raw'),
+                    smoothed_bars=data.get('smoothed'),
+                    timestamp=data.get('ts', time.time()),
+                    activation_id=data.get('activation_id'),
+                    worker_state=data.get('worker_state'),
+                    energy=data.get('energy'),
+                )
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
 
-        _job._srpss_runtime_generation = self._runtime_generation
-        _on_result._srpss_runtime_generation = self._runtime_generation
         try:
             tm.submit_compute_task(
                 _job,
@@ -530,125 +530,8 @@ class _SpotifyBeatEngine(QObject):
             )
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            if packet["token"] == self._compute_gate_token:
+            if token == self._compute_gate_token:
                 self._compute_task_active = False
-
-    def _ensure_analysis_compute_lane(self):
-        lane = self._analysis_compute_lane
-        if lane is not None and not bool(getattr(lane, "is_stopped", True)):
-            return lane
-        tm = self._thread_manager
-        creator = getattr(tm, "create_compute_lane", None)
-        if not callable(creator):
-            return None
-        self._analysis_lane_serial += 1
-        lane = creator(
-            self._compute_analysis_packet,
-            self._analysis_compute_done,
-            lane_id=(
-                f"visualizer-audio-analysis:{id(self)}:"
-                f"{self._analysis_lane_serial}"
-            ),
-            category="visualizer.audio_analysis",
-            runtime_generation=self._runtime_generation,
-        )
-        self._analysis_compute_lane = lane
-        return lane
-
-    def _compute_analysis_packet(self, packet: dict) -> object:
-        """FFT and smooth one newest-only audio packet on a managed lane."""
-
-        try:
-            worker_state = self._audio_worker.make_compute_snapshot()
-        except Exception:
-            logger.debug(
-                "[SPOTIFY_VIS] Failed to snapshot audio worker for compute",
-                exc_info=True,
-            )
-            return None
-        from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
-
-        raw_bars = compute_bars_from_samples(worker_state, packet["samples"])
-        if not isinstance(raw_bars, list):
-            return None
-
-        now_ts = time.time()
-        smoothed, reset, energy = _smooth_analysis_bars(
-            raw_bars,
-            packet["smoothed"],
-            packet["last_smooth_ts"],
-            now_ts,
-            bar_count=packet["bar_count"],
-            smoothing_tau=packet["smoothing_tau"],
-            segment_hysteresis=packet["hysteresis"],
-            min_change_threshold=packet["min_change"],
-        )
-        return {
-            "raw": raw_bars,
-            "smoothed": smoothed,
-            "ts": now_ts,
-            "reset": reset,
-            "energy": energy,
-            "worker_state": worker_state,
-            "activation_id": packet["activation_id"],
-        }
-
-    def _analysis_compute_done(self, result, *, payload: dict) -> None:
-        token = payload["token"]
-        activation_id = payload["activation_id"]
-        if token != self._compute_gate_token or activation_id != self._activation_id:
-            return
-        try:
-            success = getattr(result, "success", True)
-            data = getattr(result, "result", None)
-            if not success:
-                logger.warning(
-                    "[SPOTIFY_VIS] Audio-analysis compute failed: %s",
-                    getattr(result, "error", None),
-                )
-                return
-            if data is None:
-                return
-            if data.get("activation_id") != self._activation_id:
-                return
-            self._commit_analysis_frame(
-                raw_bars=data.get("raw"),
-                smoothed_bars=data.get("smoothed"),
-                timestamp=data.get("ts", time.time()),
-                activation_id=data.get("activation_id"),
-                worker_state=data.get("worker_state"),
-                energy=data.get("energy"),
-            )
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
-        finally:
-            if token == self._compute_gate_token and activation_id == self._activation_id:
-                self._compute_task_active = False
-
-    def get_analysis_lane_diagnostics(self) -> dict[str, object]:
-        lane = self._analysis_compute_lane
-        if lane is None:
-            return {}
-        snapshot = getattr(lane, "diagnostic_snapshot", None)
-        return dict(snapshot()) if callable(snapshot) else {}
-
-    def take_analysis_lane_diagnostics_for_log(
-        self,
-        *,
-        min_interval_seconds: float = 2.0,
-    ) -> dict[str, object]:
-        """Return one bounded shared-engine lane sample across all displays."""
-
-        now = time.monotonic()
-        if now - self._analysis_lane_last_log_ts < max(
-            0.0,
-            float(min_interval_seconds),
-        ):
-            return {}
-        snapshot = self.get_analysis_lane_diagnostics()
-        if snapshot:
-            self._analysis_lane_last_log_ts = now
-        return snapshot
 
     def _commit_analysis_frame(
         self,

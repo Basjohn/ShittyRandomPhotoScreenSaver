@@ -1,31 +1,21 @@
-"""Bubble facade over ThreadManager's bounded compute-lane scheduler.
+"""Temporary Bubble facade over the approved general COMPUTE executor path.
 
-Every authored Bubble tick remains a single logical simulation step. The
-process-owned scheduler removes per-step Task/Future/resource/UI-stat churn
-without occupying a general COMPUTE executor worker while idle, batching
-steps, or coupling simulation to paint.
+The rejected persistent scheduler remains available elsewhere for forensic work,
+but production Bubble submissions through this facade use the same one-task-per-
+lane-free-authored-step executor semantics as the approved pre-lane checkpoint.
+The facade exists only to preserve current widget/timing instrumentation until
+operator approval allows the rejected lane scaffolding to be removed.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import threading
 from typing import Any, Callable
 import weakref
 
 
-@dataclass(frozen=True)
-class BubbleStepPacket:
-    task_token: tuple[int, int]
-    dt: float
-    energy: dict[str, Any]
-    settings: dict[str, Any]
-    pulse: dict[str, Any]
-    source_ts: float
-    authored_ts: float
-
-
 class BubbleComputeLane:
-    """One serial scheduler lane serving one visualizer activation owner."""
+    """Compatibility adapter that does not create a persistent compute lane."""
 
     def __init__(
         self,
@@ -38,39 +28,43 @@ class BubbleComputeLane:
         self._runtime_generation = runtime_generation
         self._worker_ref = weakref.WeakMethod(worker)
         self._result_callback_ref = weakref.WeakMethod(result_callback)
-        self._lane_id = f"{task_id}:lane:{id(self)}"
-        self._handle = None
+        self._task_id = str(task_id)
+        self._thread_manager_ref: Callable[[], Any | None] = lambda: None
+        self._lock = threading.Lock()
         self._stopped = False
-        self._local_metrics: dict[str, float | int] = {
+        self._in_flight = False
+        self._metrics: dict[str, float | int] = {
+            "lane_registrations": 0,
+            "executor_task_submissions": 0,
+            "logical_steps_accepted": 0,
+            "logical_steps_completed": 0,
+            "logical_steps_published": 0,
+            "logical_steps_rejected_publication": 0,
+            "submit_rejected_busy": 0,
+            "submit_rejected_stopped": 0,
+            "pending_cancelled": 0,
+            "worker_failures": 0,
+            "callback_failures": 0,
+            "owner_releases": 0,
             "lane_start_failures": 0,
             "callback_owner_released": 0,
         }
 
     @property
     def is_stopped(self) -> bool:
-        handle = self._handle
-        return bool(
-            self._stopped
-            or handle is None
-            or getattr(handle, "is_stopped", True)
-        )
+        with self._lock:
+            return bool(self._stopped)
 
     def start(self, thread_manager) -> None:
-        if self._handle is not None and not self.is_stopped:
-            return
-        if self._stopped:
-            raise RuntimeError("Cannot start a stopped Bubble compute lane")
-        creator = getattr(thread_manager, "create_compute_lane", None)
-        if not callable(creator):
-            self._local_metrics["lane_start_failures"] += 1
-            raise RuntimeError("ThreadManager does not provide managed compute lanes")
-        self._handle = creator(
-            self._execute_packet,
-            self._publish_packet,
-            lane_id=self._lane_id,
-            category="visualizer.bubble_simulation",
-            runtime_generation=self._runtime_generation,
-        )
+        """Bind the ordinary executor owner without registering a lane."""
+
+        with self._lock:
+            if self._stopped:
+                raise RuntimeError("Cannot start a stopped Bubble executor adapter")
+            try:
+                self._thread_manager_ref = weakref.ref(thread_manager)
+            except TypeError:
+                self._thread_manager_ref = lambda: thread_manager
 
     def submit(
         self,
@@ -83,83 +77,114 @@ class BubbleComputeLane:
         source_ts: float,
         authored_ts: float,
     ) -> bool:
-        handle = self._handle
-        if self._stopped or handle is None:
+        """Submit one authored Bubble step through ``submit_compute_task``."""
+
+        thread_manager = self._thread_manager_ref()
+        worker = self._worker_ref()
+        if thread_manager is None or worker is None:
+            with self._lock:
+                self._metrics["owner_releases"] += 1
             return False
-        return bool(
-            handle.submit(
-                BubbleStepPacket(
+
+        with self._lock:
+            if self._stopped:
+                self._metrics["submit_rejected_stopped"] += 1
+                return False
+            if self._in_flight:
+                self._metrics["submit_rejected_busy"] += 1
+                return False
+            self._in_flight = True
+            self._metrics["logical_steps_accepted"] += 1
+            self._metrics["executor_task_submissions"] += 1
+
+        runtime_generation = self._runtime_generation
+
+        def _job():
+            # Match the approved pre-lane worker call: token ownership stays in
+            # the publication callback and is not injected into simulation.
+            return worker(float(dt), energy, settings, pulse)
+
+        def _on_done(task_result) -> None:
+            callback = self._result_callback_ref()
+            with self._lock:
+                self._in_flight = False
+                self._metrics["logical_steps_completed"] += 1
+            if callback is None:
+                with self._lock:
+                    self._metrics["callback_owner_released"] += 1
+                    self._metrics["logical_steps_rejected_publication"] += 1
+                return
+            try:
+                callback(
+                    task_result,
                     task_token=task_token,
-                    dt=float(dt),
-                    energy=energy,
-                    settings=settings,
-                    pulse=pulse,
                     source_ts=float(source_ts or 0.0),
                     authored_ts=float(authored_ts or 0.0),
                 )
+            except Exception:
+                with self._lock:
+                    self._metrics["callback_failures"] += 1
+                raise
+            else:
+                with self._lock:
+                    self._metrics["logical_steps_published"] += 1
+
+        # Preserve current passive lifecycle attribution without changing the
+        # approved executor admission or callback sequence.
+        _job._srpss_runtime_generation = runtime_generation
+        _on_done._srpss_runtime_generation = runtime_generation
+
+        try:
+            thread_manager.submit_compute_task(
+                _job,
+                callback=_on_done,
+                task_id=self._task_id,
+                category="visualizer.bubble_simulation",
             )
-        )
+        except Exception:
+            with self._lock:
+                self._in_flight = False
+                self._metrics["worker_failures"] += 1
+            return False
+        return True
 
     def cancel_pending(self) -> int:
-        handle = self._handle
-        if handle is None:
+        thread_manager = self._thread_manager_ref()
+        cancel = getattr(thread_manager, "cancel_task", None)
+        if not callable(cancel):
             return 0
-        return int(handle.cancel_pending())
+        try:
+            cancelled = bool(cancel(self._task_id))
+        except Exception:
+            cancelled = False
+        if cancelled:
+            with self._lock:
+                self._in_flight = False
+                self._metrics["pending_cancelled"] += 1
+            return 1
+        return 0
 
     def stop(self) -> None:
-        if self._stopped:
-            return
-        self._stopped = True
-        handle = self._handle
-        if handle is not None:
-            handle.stop()
+        with self._lock:
+            if self._stopped:
+                return
+            self._stopped = True
+        self.cancel_pending()
 
     def diagnostic_snapshot(self) -> dict[str, Any]:
-        handle = self._handle
-        snapshot = (
-            handle.diagnostic_snapshot()
-            if handle is not None
-            else {
-                "lane_registrations": 0,
-                "executor_task_submissions": 0,
-                "logical_steps_accepted": 0,
-                "logical_steps_completed": 0,
-                "logical_steps_published": 0,
-                "submit_rejected_busy": 0,
-                "submit_rejected_stopped": 0,
-                "pending_cancelled": 0,
-                "handoff_ms_mean": 0.0,
-                "handoff_ms_max": 0.0,
-                "execution_ms_mean": 0.0,
-                "execution_ms_max": 0.0,
-                "callback_ms_mean": 0.0,
-                "callback_ms_max": 0.0,
-            }
-        )
-        snapshot.update(self._local_metrics)
-        snapshot["stopped"] = self.is_stopped
-        return snapshot
-
-    def _execute_packet(self, packet: BubbleStepPacket) -> Any:
-        worker = self._worker_ref()
-        if worker is None:
-            raise RuntimeError("Bubble compute owner was released")
-        return worker(
-            packet.dt,
-            packet.energy,
-            packet.settings,
-            packet.pulse,
-            task_token=packet.task_token,
-        )
-
-    def _publish_packet(self, result, *, payload: BubbleStepPacket) -> None:
-        callback = self._result_callback_ref()
-        if callback is None:
-            self._local_metrics["callback_owner_released"] += 1
-            return
-        return callback(
-            result,
-            task_token=payload.task_token,
-            source_ts=payload.source_ts,
-            authored_ts=payload.authored_ts,
-        )
+        with self._lock:
+            snapshot: dict[str, Any] = dict(self._metrics)
+            snapshot.update(
+                {
+                    "lane_id": "<general-compute-adapter>",
+                    "category": "visualizer.bubble_simulation",
+                    "runtime_generation": self._runtime_generation,
+                    "stopped": bool(self._stopped),
+                    "active": bool(self._in_flight),
+                    "publishing": False,
+                    "pending": False,
+                    "queued": False,
+                    "adapter": "general_compute",
+                }
+            )
+            return snapshot
