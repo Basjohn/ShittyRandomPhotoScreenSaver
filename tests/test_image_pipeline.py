@@ -334,6 +334,56 @@ def test_scaled_cache_keeps_equal_pixel_targets_separate_across_dpr():
     assert store[key_2x] is second.image
 
 
+def test_exact_scaled_hit_does_not_probe_raw_or_rewrite_cache():
+    path = r"C:\wall\display-ready.jpg"
+    scaled_key = _build_scaled_cache_key(
+        path,
+        4,
+        4,
+        DisplayMode.FILL,
+        False,
+        False,
+        1.0,
+    )
+    scaled = _solid_qimage(4, 4, QColor("green"))
+    gets = []
+    puts = []
+
+    def _get(key):
+        gets.append(key)
+        return scaled if key == scaled_key else None
+
+    engine = SimpleNamespace(
+        _image_cache=SimpleNamespace(
+            get=_get,
+            put=lambda key, value: puts.append((key, value)),
+        ),
+        _process_supervisor=None,
+    )
+    display = SimpleNamespace(
+        get_target_size=lambda: QSize(4, 4),
+        display_mode=DisplayMode.FILL,
+        device_pixel_ratio=1.0,
+    )
+
+    result = _process_display_image_candidate(
+        engine,
+        display,
+        0,
+        SimpleNamespace(local_path=path, url=None),
+        False,
+        False,
+    )
+
+    assert result is not None
+    assert result.image is scaled
+    assert gets == [scaled_key]
+    assert puts == []
+    assert engine._cache_runtime_stats["scaled_reuses_without_put"] == 1
+    assert engine._cache_runtime_stats["raw_hits"] == 0
+    assert engine._cache_runtime_stats["raw_misses"] == 0
+
+
 def test_previous_async_reports_rejection_when_submit_and_fallback_fail(
     monkeypatch,
 ):

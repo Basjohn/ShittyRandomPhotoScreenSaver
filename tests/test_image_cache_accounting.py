@@ -78,6 +78,21 @@ def test_exact_counter_follows_replacement_eviction_remove_and_clear():
     assert cache.tracked_memory_usage() == 0
 
 
+def test_identical_put_reuses_existing_entry_without_metadata_churn():
+    cache = ImageCache(max_items=2)
+    image = QImage(8, 8, QImage.Format.Format_ARGB32)
+
+    cache.put("same", image)
+    initial_snapshot = cache.get_accounting_snapshot()
+    cache.put("same", image)
+
+    stats = cache.get_stats()
+    assert cache.get_accounting_snapshot()["resources"][0] is initial_snapshot["resources"][0]
+    assert stats["replacements"] == 0
+    assert stats["idempotent_puts_avoided"] == 1
+    assert cache.tracked_memory_usage() == image.sizeInBytes()
+
+
 def test_snapshot_reads_precomputed_metadata_not_live_qt_objects():
     cache = ImageCache(max_items=1)
     image = QImage(3, 2, QImage.Format.Format_RGB888)
@@ -116,3 +131,20 @@ def test_exact_byte_budget_evicts_even_below_item_limit():
     assert cache.contains("second")
     assert cache.memory_usage() == second.sizeInBytes()
     assert cache.memory_usage() <= cache.max_memory_bytes
+
+
+def test_cache_stats_separate_raw_and_display_ready_churn():
+    image = QImage(4, 4, QImage.Format.Format_ARGB32)
+    cache = ImageCache(max_items=2)
+
+    cache.put("source-a.jpg", image)
+    cache.put("source-a.jpg|scaled:fill:4x4:l0:s0", image.copy())
+    cache.put("source-b.jpg|scaled:fill:4x4:l0:s0", image.copy())
+
+    stats = cache.get_stats()
+    assert stats["raw_items"] == 0
+    assert stats["scaled_items"] == 2
+    assert stats["raw_evictions"] == 1
+    assert stats["scaled_evictions"] == 0
+    assert stats["raw_evicted_bytes"] == image.sizeInBytes()
+    assert stats["scaled_bytes"] == image.sizeInBytes() * 2

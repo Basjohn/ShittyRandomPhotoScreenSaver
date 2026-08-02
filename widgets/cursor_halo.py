@@ -618,6 +618,12 @@ class CursorHaloWidget(QWidget):
                 return
             self._move_internal(pending[0], pending[1])
 
+        _flush._srpss_runtime_generation = getattr(
+            self,
+            "_runtime_generation",
+            getattr(self.parent(), "_runtime_generation", None),
+        )
+
         ThreadManager.single_shot(0, _flush)
 
     # --- Helpers ---------------------------------------------------------

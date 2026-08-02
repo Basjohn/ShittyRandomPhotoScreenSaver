@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from rendering.adaptive_timer import _queue_safe_widget_update
 from rendering.gl_compositor import GLCompositorWidget
 from rendering.gl_compositor_pkg.compositor_metrics import _is_active_transition_paint_window
+from rendering.gl_compositor_pkg.compositor_metrics import _transition_label
 from rendering.gl_compositor_pkg.compositor_metrics import record_paint_metrics
 from rendering.gl_compositor_pkg.compositor_metrics import record_render_timer_tick
 from rendering.gl_compositor_pkg.metrics import _PaintMetrics
@@ -40,6 +41,20 @@ def test_active_transition_paint_window_false_after_transition_completes():
     }
 
     assert _is_active_transition_paint_window(context) is False
+
+
+def test_transition_label_uses_display_snapshot_name_when_frame_state_is_active():
+    context = {
+        "current_transition": None,
+        "has_frame_state": True,
+        "display_transition": {
+            "running": True,
+            "name": "GLCompositorBlockSpinTransition",
+            "last_transition": None,
+        },
+    }
+
+    assert _transition_label(context) == "GLCompositorBlockSpinTransition"
 
 
 def test_complete_transition_finalizes_paint_metrics():
@@ -129,7 +144,6 @@ def test_render_timer_metrics_separate_wakeups_from_accepted_updates(monkeypatch
         "rendering.gl_compositor_pkg.compositor_metrics.is_perf_metrics_enabled",
         lambda: True,
     )
-
     class _Metrics:
         def __init__(self):
             self.accepted: list[bool] = []
@@ -183,6 +197,10 @@ def test_frame_gap_owner_logs_one_bounded_record_with_delivery_deltas(
         "rendering.gl_compositor_pkg.compositor_metrics.is_perf_metrics_enabled",
         lambda: True,
     )
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.compositor_metrics.time",
+        SimpleNamespace(time=lambda: 10.0),
+    )
 
     class _Manager:
         def __init__(self):
@@ -224,7 +242,10 @@ def test_frame_gap_owner_logs_one_bounded_record_with_delivery_deltas(
         _waiting_for_fresh_engine_frame=False,
         _waiting_for_fresh_frame=False,
         _bubble_compute_pending=False,
-        _pending_bubble_result=None,
+        _bubble_pending_result=object(),
+        _bubble_visible_source_ts=9.900,
+        _bubble_visible_simulation_ts=9.950,
+        _bubble_visible_render_state_ts=9.980,
     )
     overlay = SimpleNamespace(
         _perf_set_state_total=30,
@@ -290,6 +311,10 @@ def test_frame_gap_owner_logs_one_bounded_record_with_delivery_deltas(
     message = owner_records[0]
     assert f"severity={severity}" in message
     assert "vis_mode=bubble" in message
+    assert "source_age_ms=100.00" in message
+    assert "simulation_age_ms=50.00" in message
+    assert "render_state_age_ms=20.00" in message
+    assert "bubble_result=1" in message
     assert "compute_callbacks=2" in message
     assert "ui_callbacks=1" in message
     assert "media_display=1" in message
@@ -298,6 +323,7 @@ def test_frame_gap_owner_logs_one_bounded_record_with_delivery_deltas(
     assert "overlay_repaints=1" in message
     assert "overlay_paints=1" in message
     assert "render_requests=1" in message
+
 
 def test_paint_time_progress_sync_updates_active_transition_state():
     class _FrameState:

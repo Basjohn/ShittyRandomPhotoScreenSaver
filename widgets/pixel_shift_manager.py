@@ -40,6 +40,7 @@ class PixelShiftManager:
         self,
         resource_manager: Optional[ResourceManager] = None,
         thread_manager: Optional[ThreadManager] = None,
+        runtime_generation: int | None = None,
     ) -> None:
         """
         Initialize the pixel shift manager.
@@ -49,6 +50,11 @@ class PixelShiftManager:
         """
         self._resource_manager = resource_manager
         self._thread_manager = thread_manager
+        # PixelShiftManager is a plain Python display-runtime owner.  Expose
+        # the generation explicitly so ThreadManager attributes its bound
+        # recurring callback and ResourceManager timer to the retiring display
+        # graph instead of the process lifetime.
+        self._runtime_generation = runtime_generation
         self._enabled = False
         self._shifts_per_minute = 1
         self._timer: Optional[QTimer] = None
@@ -194,10 +200,16 @@ class PixelShiftManager:
     
     def cleanup(self) -> None:
         """Clean up resources and reset all widgets to original positions."""
+        self._enabled = False
         self._stop_timer()
         self._reset_positions()
         self._widgets.clear()
         self._original_positions.clear()
+        # The defer callback is display-owned.  Clear it synchronously so a
+        # pending Qt deleteLater boundary cannot retain the retired display.
+        self._defer_check = None
+        self._thread_manager = None
+        self._resource_manager = None
         logger.debug("PixelShiftManager cleaned up")
     
     def _start_timer(self) -> None:

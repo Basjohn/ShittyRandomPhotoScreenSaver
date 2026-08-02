@@ -99,8 +99,14 @@ def _start_with_desync(
                 exc_info=True,
             )
 
+    parent = widget.parent()
+    deferred_start._srpss_runtime_generation = getattr(
+        parent,
+        "_runtime_generation",
+        getattr(widget, "_runtime_generation", None),
+    )
+
     try:
-        parent = widget.parent()
         scheduler = getattr(parent, "_thread_manager", None) if parent is not None else None
         if scheduler is not None and hasattr(scheduler, "single_shot"):
             scheduler.single_shot(delay_ms, deferred_start)

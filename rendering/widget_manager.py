@@ -5,8 +5,10 @@ Manages overlay widget lifecycle, positioning, visibility, and Z-order.
 """
 from __future__ import annotations
 
+from functools import partial
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING, Mapping
+import weakref
 
 from PySide6.QtCore import QPoint, QRect, QSize, QTimer
 from PySide6.QtWidgets import QWidget
@@ -77,6 +79,29 @@ _CUSTOM_LAYOUT_REAPPLY_SUFFIXES: tuple[str, ...] = (
 )
 
 
+def _dispatch_spotify_secondary_attempt(
+    manager_ref: "weakref.ReferenceType[WidgetManager]",
+    widget_ref: "weakref.ReferenceType[QWidget]",
+    anchor_ref: "weakref.ReferenceType[QWidget] | None",
+    registration_generation: int,
+    manager_id: int,
+    attempt: int,
+) -> None:
+    """Resolve weak runtime owners and deliver one secondary-stage attempt."""
+
+    manager = manager_ref()
+    widget = widget_ref()
+    if manager is None or widget is None:
+        return
+    manager._run_spotify_secondary_fade_attempt(
+        widget,
+        anchor_ref,
+        registration_generation=registration_generation,
+        manager_id=manager_id,
+        attempt=attempt,
+    )
+
+
 class WidgetManager:
     """
     Manages overlay widgets for a DisplayWidget.
@@ -110,6 +135,7 @@ class WidgetManager:
             resource_manager: Optional ResourceManager for lifecycle tracking
         """
         self._parent = parent
+        self._runtime_generation = getattr(parent, "_runtime_generation", None)
         self._resource_manager = resource_manager
         
         # Widget references
@@ -124,7 +150,7 @@ class WidgetManager:
         self._fade_callbacks: Dict[str, Callable] = {}
         
         # Fade coordination - centralized via FadeCoordinator
-        self._fade_coordinator: FadeCoordinator = FadeCoordinator(
+        self._fade_coordinator: Optional[FadeCoordinator] = FadeCoordinator(
             screen_index=getattr(parent, "screen_index", 0)
         )
         self._fade_coordinator.add_startup_hold(_CRITICAL_GL_STARTUP_HOLD)
@@ -140,6 +166,12 @@ class WidgetManager:
 
         # Wait for compositor first frame before starting widget fades
         self._compositor_ready: bool = False
+        # ``image_displayed`` is a one-shot connection owned by this manager.
+        # Keep explicit ownership rather than attempting a best-effort
+        # disconnect during terminal cleanup: PySide warns when there is no
+        # matching connection left after the first-frame handler has already
+        # disconnected it.
+        self._compositor_ready_signal_connected: bool = False
         self._connect_compositor_ready_signal()
         
         # Widget positioning (Dec 2025)
@@ -159,6 +191,22 @@ class WidgetManager:
         self._visualizer_preset_save_token: int = 0
         
         logger.debug("[WIDGET_MANAGER] Initialized")
+
+    def _own_runtime_callback(self, callback: Callable) -> Callable:
+        """Attach retiring-generation ownership to a manager closure.
+
+        ``ThreadManager.single_shot`` can infer bound-method owners, but local
+        closures otherwise look process-scoped.  These callbacks already close
+        over this manager; explicit metadata lets teardown cancel and release
+        them before the Python-owner destruction barrier is evaluated.
+        """
+
+        try:
+            callback._srpss_timer_owner = self
+            callback._srpss_runtime_generation = self._runtime_generation
+        except (AttributeError, TypeError):
+            pass
+        return callback
 
     def _mirror_parent_overlay_state(self) -> None:
         parent = self._parent
@@ -295,6 +343,7 @@ class WidgetManager:
             connector = getattr(signal, "connect", None)
             if callable(connector):
                 connector(self._on_compositor_ready)
+                self._compositor_ready_signal_connected = True
                 return
 
             logger.warning(
@@ -309,9 +358,41 @@ class WidgetManager:
             self._compositor_ready = True  # Assume ready on failure
             self._fade_coordinator.signal_compositor_ready()
             self._release_critical_gl_startup_hold()
+
+    def _disconnect_compositor_ready_signal(self) -> None:
+        """Release this manager's one-shot compositor-ready connection once."""
+
+        if not self._compositor_ready_signal_connected:
+            return
+
+        # Clear the ownership bit before touching Qt so a failing/disposed
+        # sender cannot cause a second disconnect attempt from cleanup.
+        self._compositor_ready_signal_connected = False
+        parent = self._parent
+        signal = getattr(parent, "image_displayed", None) if parent is not None else None
+        disconnect = getattr(signal, "disconnect", None)
+        if not callable(disconnect):
+            return
+        try:
+            disconnect(self._on_compositor_ready)
+        except (RuntimeError, TypeError):
+            # Sender disposal can race terminal cleanup.  The ownership bit is
+            # already clear, which is the important lifetime boundary here.
+            logger.debug(
+                "[WIDGET_MANAGER] Compositor-ready sender was unavailable during disconnect",
+                exc_info=True,
+            )
+        except Exception:
+            logger.debug(
+                "[WIDGET_MANAGER] Compositor-ready disconnect failed after ownership release",
+                exc_info=True,
+            )
     
     def _on_compositor_ready(self, image_path: str) -> None:
         """Called when compositor displays first image."""
+        # Disconnect before running readiness work.  This makes the slot truly
+        # one-shot even if a nested event is emitted during fade preparation.
+        self._disconnect_compositor_ready_signal()
         screen_idx = getattr(self._parent, "screen_index", "?")
         if self._compositor_ready:
             logger.debug("[FADE_SYNC] Compositor already ready on screen=%s, ignoring duplicate signal", screen_idx)
@@ -350,13 +431,6 @@ class WidgetManager:
         
         logger.info("[FADE_SYNC] Compositor ready on screen=%s (first image: %s)", screen_idx, image_path)
         
-        # Disconnect signal to avoid repeated calls
-        try:
-            if self._parent is not None and hasattr(self._parent, "image_displayed"):
-                self._parent.image_displayed.disconnect(self._on_compositor_ready)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
     def _release_critical_gl_startup_hold(self) -> None:
         self._fade_coordinator.release_startup_hold(_CRITICAL_GL_STARTUP_HOLD)
         if not self._fade_coordinator.describe().get("participants"):
@@ -1949,18 +2023,21 @@ class WidgetManager:
         """Clean up all managed widgets."""
         self.prepare_for_runtime_pause()
 
+        self._disconnect_compositor_ready_signal()
+
+        # DisplayWidget mirrors not-yet-started reveal callbacks so the
+        # compositor-ready path can release them together.  Each wrapper closes
+        # over this manager.  If teardown happens before first-frame readiness,
+        # leaving that mirror populated retains the retired WidgetManager even
+        # after every widget and the FadeCoordinator have been cleaned.
         parent = self._parent
         if parent is not None:
             try:
-                signal = getattr(parent, "image_displayed", None)
-                disconnect = getattr(signal, "disconnect", None)
-                if callable(disconnect):
-                    disconnect(self._on_compositor_ready)
-            except Exception:
-                logger.debug(
-                    "[WIDGET_MANAGER] Compositor-ready disconnect skipped during cleanup",
-                    exc_info=True,
-                )
+                pending_reveals = getattr(parent, "_overlay_fade_pending", None)
+                if isinstance(pending_reveals, dict):
+                    pending_reveals.clear()
+            except RuntimeError:
+                pass
         
         # Use lifecycle cleanup for widgets that support it
         for name, widget in list(self._widgets.items()):
@@ -1970,6 +2047,16 @@ class WidgetManager:
                         widget.cleanup()
                 except Exception:
                     logger.debug("[WIDGET_MANAGER] Failed to cleanup %s", name, exc_info=True)
+                finally:
+                    # Several managed overlays keep a back-reference for
+                    # runtime routing.  Cleanup is terminal for this manager;
+                    # leaving any of those edges intact retains the complete
+                    # retired manager graph until cyclic GC.
+                    try:
+                        if getattr(widget, "_widget_manager", None) is self:
+                            widget._widget_manager = None
+                    except (AttributeError, RuntimeError):
+                        pass
         
         self._widgets.clear()
         self._fade_callbacks.clear()
@@ -1979,7 +2066,8 @@ class WidgetManager:
         self._factory_registry = None
         self._settings_manager = None
         if self._fade_coordinator is not None:
-            self._fade_coordinator.reset(clear_participants=True)
+            self._fade_coordinator.cleanup()
+        self._fade_coordinator = None
 
         # WidgetManager is a plain Python owner held by DisplayWidget.  Keeping
         # this back-reference after terminal runtime cleanup forms a complete
@@ -2422,13 +2510,17 @@ class WidgetManager:
             return
 
         completed = False
+        coordinator_ref = weakref.ref(self._fade_coordinator)
 
         def _complete(*_args) -> None:
             nonlocal completed
             if completed:
                 return
             completed = True
-            self._fade_coordinator.mark_fade_complete(
+            coordinator = coordinator_ref()
+            if coordinator is None:
+                return
+            coordinator.mark_fade_complete(
                 overlay_name,
                 generation=generation,
             )
@@ -2526,6 +2618,8 @@ class WidgetManager:
             finally:
                 self._pending_spotify_visibility_sync = False
 
+        self._own_runtime_callback(_run)
+
         try:
             ThreadManager.single_shot(0, _run)
         except Exception:
@@ -2604,83 +2698,13 @@ class WidgetManager:
             logger.debug("[WIDGET_MANAGER] Failed to mark widget as secondary-stage registered", exc_info=True)
 
         anchor = getattr(widget, "_anchor_media", None)
-        max_deferrals = 20
-
-        def _is_registration_current() -> bool:
-            try:
-                widget.objectName()
-            except RuntimeError:
-                return False
-            try:
-                return (
-                    bool(getattr(widget, "_spotify_secondary_stage_registered", False))
-                    and getattr(widget, "_spotify_secondary_stage_generation", None) == generation
-                    and getattr(widget, "_spotify_secondary_stage_manager_id", None) == manager_id
-                    and generation == self._spotify_secondary_registration_generation
-                )
-            except Exception as exc:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
-                return False
-
-        def _run_sync() -> None:
-            if not _is_registration_current():
-                return
-            try:
-                begin_secondary = getattr(widget, "begin_spotify_secondary_stage", None)
-                if callable(begin_secondary):
-                    begin_secondary()
-                    return
-                sync = getattr(widget, "sync_visibility_with_anchor", None)
-                if callable(sync):
-                    sync()
-            except Exception as exc:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
-
-        def _starter(attempt: int = 0) -> None:
-            # Guard: widget may have been destroyed during settings restart
-            if not _is_registration_current():
-                if is_perf_metrics_enabled():
-                    logger.warning(
-                        "[SPOTIFY_VIS][STARTUP] Skipping stale secondary-stage starter "
-                        "widget=%s generation=%s current_generation=%s screen=%s",
-                        type(widget).__name__,
-                        generation,
-                        self._spotify_secondary_registration_generation,
-                        getattr(self._parent, "screen_index", "?"),
-                    )
-                return
-            try:
-                anchor_visible = True
-                if anchor is not None and hasattr(anchor, "isVisible"):
-                    anchor_visible = bool(anchor.isVisible())
-            except Exception as exc:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
-                anchor_visible = True
-
-            if not anchor_visible and attempt < max_deferrals:
-                delay_ms = min(1000, 200 + attempt * 100)
-                if is_perf_metrics_enabled():
-                    logger.debug(
-                        "[SPOTIFY_DIAG] deferring secondary fade for %s (anchor hidden, attempt=%s, delay=%sms)",
-                        widget.objectName() or type(widget).__name__,
-                        attempt + 1,
-                        delay_ms,
-                    )
-                ThreadManager.single_shot(delay_ms, _starter, attempt + 1)
-                return
-
-            if not anchor_visible and is_perf_metrics_enabled():
-                logger.debug(
-                    "[SPOTIFY_DIAG] anchor still hidden after deferrals, forcing fade for %s",
-                    widget.objectName() or type(widget).__name__,
-                )
-
-            if is_perf_metrics_enabled():
-                logger.debug(
-                    "[SPOTIFY_DIAG] secondary fade starter running for %s",
-                    widget.objectName() or type(widget).__name__,
-                )
-            _run_sync()
+        starter = self._make_spotify_secondary_fade_starter(
+            widget,
+            anchor,
+            registration_generation=generation,
+            manager_id=manager_id,
+            attempt=0,
+        )
 
         if is_perf_metrics_enabled():
             logger.debug(
@@ -2688,7 +2712,127 @@ class WidgetManager:
                 widget.objectName() or type(widget).__name__,
                 getattr(self._parent, "screen_index", "?"),
             )
-        self.register_spotify_secondary_fade(_starter)
+        self.register_spotify_secondary_fade(starter)
+
+    def _make_spotify_secondary_fade_starter(
+        self,
+        widget: QWidget,
+        anchor: Optional[QWidget],
+        *,
+        registration_generation: int,
+        manager_id: int,
+        attempt: int,
+    ) -> Callable[[], None]:
+        """Build a generation-owned callback without a runtime-owner cycle."""
+
+        callback = partial(
+            _dispatch_spotify_secondary_attempt,
+            weakref.ref(self),
+            weakref.ref(widget),
+            weakref.ref(anchor) if anchor is not None else None,
+            int(registration_generation),
+            int(manager_id),
+            int(attempt),
+        )
+        callback._srpss_runtime_generation = self._runtime_generation
+        return callback
+
+    def _run_spotify_secondary_fade_attempt(
+        self,
+        widget: QWidget,
+        anchor_ref: "weakref.ReferenceType[QWidget] | None",
+        *,
+        registration_generation: int,
+        manager_id: int,
+        attempt: int,
+    ) -> None:
+        """Run or reschedule one Spotify secondary-stage visibility attempt."""
+
+        try:
+            widget.objectName()
+            registration_current = (
+                bool(getattr(widget, "_spotify_secondary_stage_registered", False))
+                and getattr(widget, "_spotify_secondary_stage_generation", None)
+                == registration_generation
+                and getattr(widget, "_spotify_secondary_stage_manager_id", None)
+                == manager_id
+                and registration_generation
+                == self._spotify_secondary_registration_generation
+            )
+        except (RuntimeError, TypeError):
+            registration_current = False
+        except Exception as exc:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
+            registration_current = False
+
+        if not registration_current:
+            if is_perf_metrics_enabled():
+                logger.warning(
+                    "[SPOTIFY_VIS][STARTUP] Skipping stale secondary-stage starter "
+                    "widget=%s generation=%s current_generation=%s screen=%s",
+                    type(widget).__name__,
+                    registration_generation,
+                    self._spotify_secondary_registration_generation,
+                    getattr(self._parent, "screen_index", "?"),
+                )
+            return
+
+        anchor = anchor_ref() if anchor_ref is not None else None
+        try:
+            anchor_visible = not (
+                anchor is not None
+                and hasattr(anchor, "isVisible")
+                and not bool(anchor.isVisible())
+            )
+        except (RuntimeError, TypeError):
+            anchor_visible = True
+        except Exception as exc:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
+            anchor_visible = True
+
+        max_deferrals = 20
+        if not anchor_visible and attempt < max_deferrals:
+            delay_ms = min(1000, 200 + attempt * 100)
+            if is_perf_metrics_enabled():
+                logger.debug(
+                    "[SPOTIFY_DIAG] deferring secondary fade for %s (anchor hidden, attempt=%s, delay=%sms)",
+                    widget.objectName() or type(widget).__name__,
+                    attempt + 1,
+                    delay_ms,
+                )
+            ThreadManager.single_shot(
+                delay_ms,
+                self._make_spotify_secondary_fade_starter(
+                    widget,
+                    anchor,
+                    registration_generation=registration_generation,
+                    manager_id=manager_id,
+                    attempt=attempt + 1,
+                ),
+            )
+            return
+
+        if not anchor_visible and is_perf_metrics_enabled():
+            logger.debug(
+                "[SPOTIFY_DIAG] anchor still hidden after deferrals, forcing fade for %s",
+                widget.objectName() or type(widget).__name__,
+            )
+        if is_perf_metrics_enabled():
+            logger.debug(
+                "[SPOTIFY_DIAG] secondary fade starter running for %s",
+                widget.objectName() or type(widget).__name__,
+            )
+
+        try:
+            begin_secondary = getattr(widget, "begin_spotify_secondary_stage", None)
+            if callable(begin_secondary):
+                begin_secondary()
+                return
+            sync = getattr(widget, "sync_visibility_with_anchor", None)
+            if callable(sync):
+                sync()
+        except Exception as exc:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
 
     # =========================================================================
     # Widget Factory Methods (Phase 2 - Jan 2026)

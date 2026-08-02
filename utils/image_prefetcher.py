@@ -69,6 +69,7 @@ class ImagePrefetcher:
         self._scaled_inflight: Set[str] = set()
         self._pending_scaled_requests: List[Dict[str, Any]] = []
         self._pending_scaled_keys: Set[str] = set()
+        self._scaled_inflight_paths: Dict[str, str] = {}
         self._pending_scaled_bytes = 0
         self._lock = threading.Lock()
         self._prefetch_generation = 0
@@ -152,6 +153,7 @@ class ImagePrefetcher:
             self._pending_raw_keys.clear()
             self._scaled_inflight.clear()
             self._scaled_inflight_generations.clear()
+            self._scaled_inflight_paths.clear()
             self._pending_scaled_requests.clear()
             self._pending_scaled_keys.clear()
             self._pending_scaled_bytes = 0
@@ -387,6 +389,7 @@ class ImagePrefetcher:
                     continue
                 self._scaled_inflight.add(cache_key)
                 self._scaled_inflight_generations[cache_key] = generation
+                self._scaled_inflight_paths[cache_key] = str(request.get("path") or "")
                 requests_to_submit.append(request)
 
             requests_to_submit.reverse()
@@ -440,6 +443,7 @@ class ImagePrefetcher:
                 return None
 
         def _on_done(res) -> None:
+            scaled_cached = False
             try:
                 payload = res.result if res and res.success else None
                 if payload:
@@ -450,6 +454,7 @@ class ImagePrefetcher:
                             and self._scaled_inflight_generations.get(cache_key) == generation
                         ):
                             self._cache.put(key, image)
+                            scaled_cached = True
                             stats = request.get("stats")
                             if isinstance(stats, dict):
                                 stats["scaled_prefetch_completed"] = int(stats.get("scaled_prefetch_completed", 0)) + 1
@@ -473,6 +478,23 @@ class ImagePrefetcher:
                     if self._scaled_inflight_generations.get(cache_key) == generation:
                         self._scaled_inflight_generations.pop(cache_key, None)
                         self._scaled_inflight.discard(cache_key)
+                        self._scaled_inflight_paths.pop(cache_key, None)
+                    has_more_scaled_owners = any(
+                        str(pending.get("path") or "") == raw_path
+                        for pending in self._pending_scaled_requests
+                    ) or raw_path in self._scaled_inflight_paths.values()
+                    if scaled_cached and not has_more_scaled_owners:
+                        remover = getattr(self._cache, "remove", None)
+                        if callable(remover) and remover(raw_path):
+                            stats = request.get("stats")
+                            if isinstance(stats, dict):
+                                stats["raw_released_after_scaled"] = int(
+                                    stats.get("raw_released_after_scaled", 0)
+                                ) + 1
+                            _cache_trace(
+                                "Released raw prefetch source after final scaled derivative path=%s",
+                                raw_path,
+                            )
                 self._pump_scaled_prefetch()
 
         try:
@@ -488,4 +510,5 @@ class ImagePrefetcher:
                 if self._scaled_inflight_generations.get(cache_key) == generation:
                     self._scaled_inflight_generations.pop(cache_key, None)
                     self._scaled_inflight.discard(cache_key)
+                    self._scaled_inflight_paths.pop(cache_key, None)
             self._pump_scaled_prefetch()

@@ -967,6 +967,12 @@ class BaseOverlayWidget(QLabel):
             except Exception:
                 logger.debug("[STACK] Parent stacking recalculation failed", exc_info=True)
 
+        _run._srpss_runtime_generation = getattr(
+            self,
+            "_runtime_generation",
+            None,
+        )
+
         try:
             ThreadManager.single_shot(0, _run)
         except Exception:

@@ -104,7 +104,9 @@ def test_s_hotkey_opens_settings_without_crash(engine_with_settings, qt_app, qtb
         restarted.append(True)
 
     continue_after_runtime_destruction(engine, _restart)
-    qtbot.waitUntil(lambda: restarted == [True], timeout=3000)
+    # Strict owner destruction adds a real queued boundary before replacement;
+    # allow the subsequent two-display reconstruction to finish as well.
+    qtbot.waitUntil(lambda: restarted == [True], timeout=8000)
 
     assert engine.display_manager is not None
     assert all(display not in old_displays for display in engine.display_manager.displays)

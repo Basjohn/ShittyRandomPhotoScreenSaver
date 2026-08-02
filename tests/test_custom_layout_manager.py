@@ -320,6 +320,27 @@ def _attach_manager(display: _DisplayStub, manager: CustomLayoutManager) -> None
     display._custom_layout_manager = manager
 
 
+def test_terminal_cleanup_releases_display_owned_python_references(qtbot):
+    _reset_custom_layout_manager_state()
+    display = _DisplayStub(_SettingsStub())
+    qtbot.addWidget(display)
+    manager = CustomLayoutManager(display)
+    manager._active = True
+    manager._geo_session_id = "retiring-session"
+    manager._edit_mode_dimming_restore = (True, 0.5)
+    manager._display_cursor_restore_shape = Qt.CursorShape.ArrowCursor
+
+    manager.cleanup()
+
+    assert manager._display is None
+    assert manager._screen is None
+    assert manager._active is False
+    assert manager._geo_session_id is None
+    assert manager._edit_mode_dimming_restore is None
+    assert manager._display_cursor_restore_shape is None
+    assert manager not in CustomLayoutManager.active_managers()
+
+
 def test_custom_layout_manager_saves_and_reapplies_clock_geometry(qtbot):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()

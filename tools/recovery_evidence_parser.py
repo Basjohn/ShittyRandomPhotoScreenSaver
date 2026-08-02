@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.3"
+PARSER_VERSION = "1.4"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _KV_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>[^,\s]+)")
@@ -56,6 +56,25 @@ _LIFECYCLE_TERMS = re.compile(
     r"recreate|stop|start|quies|makecurrent|donecurrent|error|warning",
     re.IGNORECASE,
 )
+_FRAME_GAP_OWNER_RE = re.compile(r"\[PERF\]\[FRAME_GAP_OWNER\]\s+(?P<payload>.*)")
+_ADAPTIVE_TIMER_METRICS_RE = re.compile(
+    r"\[ADAPTIVE_TIMER\]\s+Metrics:\s*(?P<payload>.*)", re.IGNORECASE
+)
+_VISUALIZER_LANE_RE = re.compile(
+    r"\[PERF\]\s*\[SPOTIFY_VIS\]\[(?P<lane>BUBBLE_LANE|AUDIO_LANE)\]\s+(?P<payload>.*)"
+)
+_MEDIA_PRESENTATION_RE = re.compile(
+    r"\[PERF\]\[MEDIA_PRESENTATION\]\s+(?P<payload>.*)"
+)
+_CACHE_REPRESENTATIONS_RE = re.compile(
+    r"\[PERF\]\s*\[CACHE\]\s+ImageCacheRepresentations:\s*(?P<payload>.*)"
+)
+_CACHE_FLOW_RE = re.compile(
+    r"\[PERF\]\s*\[CACHE\]\s+ImageCacheFlow:\s*(?P<payload>.*)"
+)
+_LIFECYCLE_BARRIER_RE = re.compile(
+    r"\[LIFECYCLE_BARRIER\]\s+(?P<event>armed|complete)\s+(?P<payload>.*)"
+)
 
 
 @dataclass(frozen=True)
@@ -69,6 +88,7 @@ class ArchiveAnalysis:
     resource_rows: list[dict[str, object]]
     lifecycle_rows: list[dict[str, object]]
     visualizer_rows: list[dict[str, object]]
+    phase5_rows: list[dict[str, object]]
     errors_and_warnings: list[str]
     unknown_lines: list[str]
 
@@ -97,7 +117,7 @@ def _kv(payload: str) -> dict[str, str]:
 def _number(value: str | None) -> float | None:
     if value is None or value.lower() in {"na", "none", "<none>", "n/a"}:
         return None
-    cleaned = value.rstrip("%").removesuffix("ms").removesuffix("Hz")
+    cleaned = value.rstrip("%").removesuffix("ms").removesuffix("Hz").removesuffix("s")
     try:
         return float(cleaned)
     except ValueError:
@@ -593,6 +613,98 @@ def _parse_lifecycle(lines: Sequence[str]) -> list[dict[str, object]]:
     return rows
 
 
+def _parse_phase5_telemetry(
+    logs: Mapping[str, Sequence[str]],
+) -> list[dict[str, object]]:
+    """Parse current compact Phase 5 records without assuming a log sidecar."""
+    rows: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for source, lines in sorted(logs.items()):
+        for line_number, line in enumerate(lines, 1):
+            normalized = line.strip()
+            if normalized in seen:
+                continue
+            match = _FRAME_GAP_OWNER_RE.search(line)
+            kind = "frame_gap_owner"
+            extra: dict[str, object] = {}
+            if match:
+                extra["severity"] = _kv(match.group("payload")).get("severity", "")
+            else:
+                match = _ADAPTIVE_TIMER_METRICS_RE.search(line)
+                kind = "adaptive_timer_metrics"
+            if not match:
+                match = _VISUALIZER_LANE_RE.search(line)
+                kind = "visualizer_lane"
+                if match:
+                    extra["lane"] = match.group("lane").lower()
+            if not match:
+                match = _MEDIA_PRESENTATION_RE.search(line)
+                kind = "media_presentation"
+            if not match:
+                match = _CACHE_REPRESENTATIONS_RE.search(line)
+                kind = "cache_representations"
+            if not match:
+                match = _CACHE_FLOW_RE.search(line)
+                kind = "cache_flow"
+            if not match:
+                match = _LIFECYCLE_BARRIER_RE.search(line)
+                kind = "lifecycle_barrier"
+                if match:
+                    extra["barrier_event"] = match.group("event")
+            if not match:
+                continue
+            seen.add(normalized)
+            values = _kv(match.group("payload"))
+            rows.append(
+                {
+                    "timestamp": _timestamp(line),
+                    "source": source,
+                    "line": line_number,
+                    "kind": kind,
+                    "severity": extra.get("severity", ""),
+                    "lane": extra.get("lane", ""),
+                    "barrier_event": extra.get("barrier_event", ""),
+                    "event": values.get("event", ""),
+                    "update_requested": values.get("update_requested", ""),
+                    "reason": values.get("reason", ""),
+                    "transition": values.get("transition", ""),
+                    "owner": values.get("last_ui", ""),
+                    "gap_ms": _number(values.get("gap_ms")),
+                    "paint_ms": _number(values.get("paint_ms")),
+                    "request_age_ms": _number(values.get("request_age_ms")),
+                    "source_age_ms": _number(values.get("source_age_ms")),
+                    "simulation_age_ms": _number(values.get("simulation_age_ms")),
+                    "render_state_age_ms": _number(values.get("render_state_age_ms")),
+                    "owner_age_ms": _number(values.get("last_ui_age_ms")),
+                    "elapsed_ms": _number(values.get("elapsed_ms")),
+                    "frames": _integer(values.get("frames")),
+                    "transitions": _integer(values.get("transitions")),
+                    "time_idle_ms": _number(values.get("time_idle")),
+                    "time_paused_ms": _number(values.get("time_paused")),
+                    "time_running_ms": _number(values.get("time_running")),
+                    "total_runtime_seconds": _number(values.get("total_runtime")),
+                    "logical_steps": _integer(values.get("logical_steps")),
+                    "published": _integer(values.get("published")),
+                    "executor_tasks": _integer(values.get("executor_tasks")),
+                    "handoff_ms_max": _number(values.get("handoff_ms_max")),
+                    "execution_ms_max": _number(values.get("execution_ms_max")),
+                    "callback_ms_max": _number(values.get("callback_ms_max")),
+                    "raw_items": _integer(values.get("raw_items")),
+                    "scaled_items": _integer(values.get("scaled_items")),
+                    "raw_mb": _number(values.get("raw_mb")),
+                    "scaled_mb": _number(values.get("scaled_mb")),
+                    "raw_hits": _integer(values.get("raw_hits")),
+                    "raw_misses": _integer(values.get("raw_misses")),
+                    "scaled_hits": _integer(values.get("scaled_hits")),
+                    "scaled_misses": _integer(values.get("scaled_misses")),
+                    "qobjects": _integer(values.get("qobjects")),
+                    "python_owners": _integer(values.get("python_owners")),
+                    "values_json": json.dumps(values, separators=(",", ":"), sort_keys=True),
+                }
+            )
+    return rows
+
+
 def _collect_errors(logs: Mapping[str, Sequence[str]]) -> list[str]:
     found: list[str] = []
     seen: set[str] = set()
@@ -681,6 +793,7 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
     resource_rows = _parse_resources(perf_lines)
     visualizer_rows = _parse_visualizer(visualizer_lines)
     lifecycle_rows = _parse_lifecycle(lifecycle_lines)
+    phase5_rows = _parse_phase5_telemetry(logs)
     errors = _collect_errors(logs)
 
     recognized = {
@@ -695,6 +808,8 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
         ("screensaver_spotify_vis.log", row["line"]) for row in visualizer_rows
     } | {
         ("screensaver_lifecycle.log", row["line"]) for row in lifecycle_rows
+    } | {
+        (str(row["source"]), row["line"]) for row in phase5_rows
     }
     unknown = [
         f"{source}:{line_number}: {line}"
@@ -740,6 +855,7 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
             "resource_snapshots": len(resource_rows),
             "visualizer_events": len(visualizer_rows),
             "lifecycle_events": len(lifecycle_rows),
+            "phase5_telemetry_records": len(phase5_rows),
             "deduplicated_errors_and_warnings": len(errors),
             "unknown_lines": len(unknown),
         },
@@ -843,6 +959,75 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                 if row["event"] == "latency"
             ),
         },
+        "phase5": {
+            "frame_gap_owner": {
+                "count": sum(row["kind"] == "frame_gap_owner" for row in phase5_rows),
+                "gap_ms": _metric_summary(
+                    row.get("gap_ms") for row in phase5_rows
+                    if row["kind"] == "frame_gap_owner"
+                ),
+                "request_age_ms": _metric_summary(
+                    row.get("request_age_ms") for row in phase5_rows
+                    if row["kind"] == "frame_gap_owner"
+                ),
+                "source_age_ms": _metric_summary(
+                    row.get("source_age_ms") for row in phase5_rows
+                    if row["kind"] == "frame_gap_owner"
+                ),
+                "simulation_age_ms": _metric_summary(
+                    row.get("simulation_age_ms") for row in phase5_rows
+                    if row["kind"] == "frame_gap_owner"
+                ),
+                "render_state_age_ms": _metric_summary(
+                    row.get("render_state_age_ms") for row in phase5_rows
+                    if row["kind"] == "frame_gap_owner"
+                ),
+                "owner_age_ms": _metric_summary(
+                    row.get("owner_age_ms") for row in phase5_rows
+                    if row["kind"] == "frame_gap_owner"
+                ),
+                "severity_counts": {
+                    severity: sum(
+                        row["kind"] == "frame_gap_owner" and row["severity"] == severity
+                        for row in phase5_rows
+                    )
+                    for severity in sorted({str(row["severity"]) for row in phase5_rows if row["kind"] == "frame_gap_owner"})
+                },
+            },
+            "adaptive_timer": {
+                "count": sum(row["kind"] == "adaptive_timer_metrics" for row in phase5_rows),
+                "frames": _metric_summary(row.get("frames") for row in phase5_rows if row["kind"] == "adaptive_timer_metrics"),
+                "transitions": _metric_summary(row.get("transitions") for row in phase5_rows if row["kind"] == "adaptive_timer_metrics"),
+                "time_running_ms": _metric_summary(row.get("time_running_ms") for row in phase5_rows if row["kind"] == "adaptive_timer_metrics"),
+                "total_runtime_seconds": _metric_summary(row.get("total_runtime_seconds") for row in phase5_rows if row["kind"] == "adaptive_timer_metrics"),
+            },
+            "visualizer_lanes": {
+                lane: {
+                    "count": sum(row["kind"] == "visualizer_lane" and row["lane"] == lane for row in phase5_rows),
+                    "logical_steps": _metric_summary(row.get("logical_steps") for row in phase5_rows if row["kind"] == "visualizer_lane" and row["lane"] == lane),
+                    "published": _metric_summary(row.get("published") for row in phase5_rows if row["kind"] == "visualizer_lane" and row["lane"] == lane),
+                    "execution_ms_max": _metric_summary(row.get("execution_ms_max") for row in phase5_rows if row["kind"] == "visualizer_lane" and row["lane"] == lane),
+                }
+                for lane in sorted({str(row["lane"]) for row in phase5_rows if row["kind"] == "visualizer_lane"})
+            },
+            "media_presentation": {
+                "applied": sum(row["kind"] == "media_presentation" and row["update_requested"].lower() == "true" for row in phase5_rows),
+                "unchanged_refresh_suppressed": sum(row["kind"] == "media_presentation" and row["event"] == "unchanged_refresh_suppressed" for row in phase5_rows),
+            },
+            "cache": {
+                "representation_records": sum(row["kind"] == "cache_representations" for row in phase5_rows),
+                "flow_records": sum(row["kind"] == "cache_flow" for row in phase5_rows),
+                "raw_items": _metric_summary(row.get("raw_items") for row in phase5_rows if row["kind"] == "cache_representations"),
+                "scaled_items": _metric_summary(row.get("scaled_items") for row in phase5_rows if row["kind"] == "cache_representations"),
+                "raw_hits": _metric_summary(row.get("raw_hits") for row in phase5_rows if row["kind"] == "cache_flow"),
+                "scaled_hits": _metric_summary(row.get("scaled_hits") for row in phase5_rows if row["kind"] == "cache_flow"),
+            },
+            "lifecycle_barrier": {
+                "armed": sum(row["kind"] == "lifecycle_barrier" and row["barrier_event"] == "armed" for row in phase5_rows),
+                "complete": sum(row["kind"] == "lifecycle_barrier" and row["barrier_event"] == "complete" for row in phase5_rows),
+                "elapsed_ms": _metric_summary(row.get("elapsed_ms") for row in phase5_rows if row["kind"] == "lifecycle_barrier" and row["barrier_event"] == "complete"),
+            },
+        },
     }
     return ArchiveAnalysis(
         summary=summary,
@@ -854,6 +1039,7 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
         resource_rows=resource_rows,
         lifecycle_rows=lifecycle_rows,
         visualizer_rows=visualizer_rows,
+        phase5_rows=phase5_rows,
         errors_and_warnings=errors,
         unknown_lines=unknown,
     )
@@ -889,6 +1075,7 @@ def write_analysis(analysis: ArchiveAnalysis, output_dir: Path) -> None:
     _write_csv(output_dir / "resource_snapshots.csv", analysis.resource_rows)
     _write_csv(output_dir / "lifecycle_events.csv", analysis.lifecycle_rows)
     _write_csv(output_dir / "visualizer_gaps.csv", analysis.visualizer_rows)
+    _write_csv(output_dir / "phase5_telemetry.csv", analysis.phase5_rows)
     (output_dir / "errors_and_warnings.txt").write_text(
         "\n".join(analysis.errors_and_warnings) + "\n",
         encoding="utf-8",

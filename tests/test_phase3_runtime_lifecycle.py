@@ -68,10 +68,12 @@ def test_delayed_image_publication_rejects_old_runtime_manager() -> None:
 def test_deferred_gl_warmup_rejects_stopped_generation(monkeypatch) -> None:
     scheduled = []
     warmed = []
-    widget = SimpleNamespace(
-        _gl_lifecycle_generation=8,
-        _render_shutdown_requested=False,
-    )
+
+    class _WeakrefableWidget:
+        _gl_lifecycle_generation = 8
+        _render_shutdown_requested = False
+
+    widget = _WeakrefableWidget()
 
     monkeypatch.setattr(
         gl_lifecycle.ThreadManager,

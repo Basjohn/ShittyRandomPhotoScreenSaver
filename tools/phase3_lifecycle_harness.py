@@ -151,12 +151,20 @@ class _HarnessDisplay:
 
 class _HarnessManager:
     def __init__(self, display: _HarnessDisplay) -> None:
+        self._runtime_generation = display.generation
         self.displays = [display]
         self.current_images: dict[int, str] = {0: "fixture.jpg"}
+        self._image_accounting_publisher_ref = None
+        self._display_image_accounting_by_id: dict[int, Any] = {}
+        self._display_image_accounting_snapshot = None
         self._display_startup_generation = display.generation
         self._display_startup_ready_expected: set[int] = set()
         self._display_startup_ready_seen: set[int] = set()
         self._display_startup_ready_emitted_generation = -1
+        self._authoritative_first_frame_screens: set[int] = set()
+        self._authoritative_first_frame_emitted = False
+        self._startup_reveal_screens: set[int] = set()
+        self._startup_reveal_emitted = False
         self._deferred_reddit_urls: list[str] = []
 
     def get_display_count(self) -> int:
@@ -170,6 +178,9 @@ class _HarnessManager:
 
     def cleanup(self) -> None:
         DisplayManager.cleanup(self)
+
+    def _publish_display_image_accounting(self) -> None:
+        DisplayManager._publish_display_image_accounting(self)
 
     def flush_deferred_reddit_urls(self, *, ensure_widgets_dismissed: bool = False) -> None:
         self._deferred_reddit_urls.clear()

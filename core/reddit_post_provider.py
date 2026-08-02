@@ -700,7 +700,7 @@ class RedditHtmlProvider:
         resp.raise_for_status()
         posts = self._parse_html(resp.content, request.subreddit, base_url=base_url)
         if posts:
-            logger.warning(
+            logger.info(
                 "[CACHE][REDDIT] Designed HTML provider succeeded cache_key=%s source=%s posts=%d",
                 request.cache_key,
                 label,
@@ -736,7 +736,7 @@ class FallbackRedditPostProvider:
         for source_id in self._source_order(request):
             attempted_sources.append(source_id)
             try:
-                logger.warning(
+                logger.info(
                     "[CACHE][REDDIT] Provider source started cache_key=%s source=%s",
                     request.cache_key,
                     source_id,
@@ -756,7 +756,7 @@ class FallbackRedditPostProvider:
                         post_count=len(result.posts),
                         requested_limit=request.limit,
                     )
-                    logger.warning(
+                    logger.info(
                         "[CACHE][REDDIT] Provider source succeeded cache_key=%s source=%s posts=%d attempted=%s",
                         request.cache_key,
                         success_source,
@@ -827,7 +827,7 @@ class FallbackRedditPostProvider:
             if source_id in {REDDIT_SOURCE_HTML_OLD, REDDIT_SOURCE_HTML_WWW}:
                 promotion_floor = max(8, int(clamp_list_capacity(requested_limit) * 0.6))
                 if post_count < promotion_floor:
-                    logger.warning(
+                    logger.info(
                         "[CACHE][REDDIT] Session source not promoted cache_key=%s source=%s "
                         "reason=sparse_html_success posts=%d threshold=%d",
                         str(cache_key or "reddit"),
@@ -840,7 +840,7 @@ class FallbackRedditPostProvider:
             previous = _SESSION_PRIMARY_SOURCE_BY_CACHE_KEY.get(normalized_key)
             if previous != source_id:
                 _SESSION_PRIMARY_SOURCE_BY_CACHE_KEY[normalized_key] = source_id
-                logger.warning(
+                logger.info(
                     "[CACHE][REDDIT] Session source promoted cache_key=%s source=%s previous=%s",
                     normalized_key,
                     source_id,

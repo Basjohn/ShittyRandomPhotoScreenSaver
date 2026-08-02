@@ -275,6 +275,18 @@ class FadeCoordinator:
         if clear_participants:
             self._participants.clear()
         logger.debug("[FADE_COORD] screen=%s reset", self._screen_index)
+
+    def cleanup(self) -> None:
+        """Release terminal callback and queued-starter ownership.
+
+        A ``FadeCoordinator`` belongs to one ``WidgetManager`` runtime.  Its
+        completion callbacks and pending starter wrappers can retain that
+        manager, so terminal teardown must not leave the coordinator as a
+        diagnostic Python root waiting for cyclic collection.
+        """
+
+        self.reset(clear_participants=True)
+        self._request_queue.clear()
     
     def get_state(self) -> FadeState:
         return self._state

@@ -409,6 +409,12 @@ def schedule_raise_when_ready(
 
         ThreadManager.single_shot(poll_ms, _check)
 
+    _check._srpss_runtime_generation = getattr(
+        widget,
+        "_runtime_generation",
+        None,
+    )
+
     ThreadManager.single_shot(0, _check)
 
 

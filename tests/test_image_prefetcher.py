@@ -17,6 +17,7 @@ def _solid_qimage(width: int, height: int, color: str) -> QImage:
 class _FakeCache:
     def __init__(self, store=None):
         self.store = dict(store or {})
+        self.removed = []
 
     def get(self, key):
         return self.store.get(key)
@@ -26,6 +27,13 @@ class _FakeCache:
 
     def contains(self, key):
         return key in self.store
+
+    def remove(self, key):
+        if key not in self.store:
+            return False
+        self.removed.append(key)
+        self.store.pop(key)
+        return True
 
 
 class _FakeThreads:
@@ -83,7 +91,48 @@ def test_scaled_prefetch_requests_use_bounded_parallelism(qt_app):
     first_callback(SimpleNamespace(success=True, result=("one-scaled", first_pixmap)))
 
     assert "one-scaled" in cache.store
+    assert raw_path in cache.store
+    assert cache.removed == []
     assert stats["scaled_prefetch_completed"] == 1
+    assert stats.get("raw_released_after_scaled", 0) == 0
+
+
+def test_scaled_prefetch_retains_raw_until_every_planned_derivative_finishes(qt_app):
+    raw_path = r"C:\wall\multi-target.jpg"
+    cache = _FakeCache({raw_path: _solid_qimage(640, 360, "blue")})
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=2)
+    stats = {}
+    requests = [
+        {
+            "stats": stats,
+            "path": raw_path,
+            "cache_key": f"multi-scaled-{idx}",
+            "width": width,
+            "height": height,
+            "display_mode": DisplayMode.FILL,
+            "use_lanczos": False,
+            "sharpen": False,
+        }
+        for idx, (width, height) in enumerate(((320, 180), (160, 90)))
+    ]
+
+    prefetcher.register_scaled_requests(requests)
+    first_callback = threads.compute_callbacks[0][1]
+    second_callback = threads.compute_callbacks[1][1]
+
+    first_callback(
+        SimpleNamespace(success=True, result=("multi-scaled-0", _solid_qimage(320, 180, "red")))
+    )
+    assert raw_path in cache.store
+    assert cache.removed == []
+
+    second_callback(
+        SimpleNamespace(success=True, result=("multi-scaled-1", _solid_qimage(160, 90, "green")))
+    )
+    assert raw_path not in cache.store
+    assert cache.removed == [raw_path]
+    assert stats["raw_released_after_scaled"] == 1
 
 
 def test_scaled_prefetch_requests_queue_beyond_parallel_limit(qt_app):

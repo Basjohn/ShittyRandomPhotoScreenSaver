@@ -519,6 +519,7 @@ class ThreadManager:
     _app_shared_lock = threading.RLock()
     _max_task_categories = 64
     _max_task_category_length = 80
+    supports_persistent_compute_lanes = True
 
     @classmethod
     def set_app_shared(cls, manager: Optional["ThreadManager"]) -> Optional["ThreadManager"]:
@@ -629,6 +630,8 @@ class ThreadManager:
         
         self._resource_manager = resource_manager
         self._resource_id = None
+        self._compute_lane_lock = threading.RLock()
+        self._compute_lane_scheduler = None
         
         # Initialize pools
         self._initialize_pools()
@@ -873,6 +876,57 @@ class ThreadManager:
         """
         return self.submit_task(ThreadPoolType.COMPUTE, func, *args, **kwargs)
 
+    def create_compute_lane(
+        self,
+        worker: Callable[[Any], Any],
+        callback: Callable[..., None],
+        *,
+        lane_id: str,
+        category: str,
+        runtime_generation: object | None = None,
+    ):
+        """Create a bounded high-frequency lane without per-step Futures.
+
+        The lane scheduler is a distinct, lazily-created process service. Its
+        sleeping workers never occupy the general COMPUTE executor, while each
+        logical step remains visible in lane diagnostics and lifecycle owner
+        snapshots.
+        """
+
+        if self._shutdown:
+            raise RuntimeError("Cannot create a compute lane after shutdown")
+        from core.threading.compute_lanes import ComputeLaneScheduler
+
+        with self._compute_lane_lock:
+            scheduler = self._compute_lane_scheduler
+            if scheduler is None:
+                scheduler = ComputeLaneScheduler(
+                    worker_count=min(
+                        2,
+                        max(1, int(self.config[ThreadPoolType.COMPUTE])),
+                    )
+                )
+                self._compute_lane_scheduler = scheduler
+
+        owner, owner_class, owner_id, inferred_generation = (
+            _callable_runtime_identity(worker)
+        )
+        del owner
+        generation = (
+            runtime_generation
+            if runtime_generation is not None
+            else inferred_generation
+        )
+        return scheduler.register_lane(
+            lane_id=lane_id,
+            category=category,
+            worker=worker,
+            callback=callback,
+            runtime_generation=generation,
+            owner_class=owner_class,
+            owner_id=owner_id,
+        )
+
     def get_task_result(self, task_id: str, timeout: Optional[float] = None) -> TaskResult:
         """Get the result of a specific task"""
         with self._active_tasks_lock:
@@ -930,9 +984,21 @@ class ThreadManager:
             pools.setdefault(pool_type.value, {})["queue_depth"] = queue_depth
         with _ui_diagnostic_lock:
             ui = dict(_ui_diagnostics)
+        scheduler = self._compute_lane_scheduler
         return {
             "pools": pools,
             "ui": ui,
+            "compute_lanes": (
+                scheduler.diagnostic_snapshot()
+                if scheduler is not None
+                else {
+                    "worker_threads": 0,
+                    "worker_active": 0,
+                    "queue_depth": 0,
+                    "registered_lanes": 0,
+                    "logical_steps_completed": 0,
+                }
+            ),
         }
 
     def get_frame_delivery_snapshot(self) -> Dict[str, Any]:
@@ -997,6 +1063,34 @@ class ThreadManager:
                     ),
                 }
             )
+        scheduler = self._compute_lane_scheduler
+        lane_diag = (
+            scheduler.frame_snapshot()
+            if scheduler is not None
+            else {}
+        )
+        snapshot.update(
+            {
+                "compute_lane_worker_active": int(
+                    lane_diag.get("worker_active", 0)
+                ),
+                "compute_lane_queue_depth": int(
+                    lane_diag.get("queue_depth", 0)
+                ),
+                "compute_lane_callbacks_delivered": int(
+                    lane_diag.get("callbacks_delivered", 0)
+                ),
+                "compute_lane_last_category": str(
+                    lane_diag.get("last_category", "<none>")
+                ),
+                "compute_lane_last_execution_ms": float(
+                    lane_diag.get("last_execution_ms", 0.0)
+                ),
+                "compute_lane_last_callback_ms": float(
+                    lane_diag.get("last_callback_ms", 0.0)
+                ),
+            }
+        )
         return snapshot
 
     def get_lifecycle_ownership_snapshot(self) -> Dict[str, Any]:
@@ -1014,6 +1108,9 @@ class ThreadManager:
                 }
                 for task in self._active_tasks.values()
             )
+        scheduler = self._compute_lane_scheduler
+        if scheduler is not None:
+            tasks = tasks + scheduler.lifecycle_work_snapshot()
         with _ui_diagnostic_lock:
             ui = {
                 "queue_depth": int(_ui_diagnostics["queue_depth"]),
@@ -1029,7 +1126,7 @@ class ThreadManager:
             }
         return {"active_tasks": tasks, "ui": ui}
 
-    def shutdown(self, wait: bool = True, timeout: Optional[float] = None):
+    def shutdown(self, wait: bool = True, timeout: Optional[float] = None) -> bool:
         """
         Shutdown all thread pools and clean up resources.
         
@@ -1040,7 +1137,13 @@ class ThreadManager:
         logger.info("Shutting down thread manager...")
         
         if self._shutdown:
-            return
+            scheduler = self._compute_lane_scheduler
+            if scheduler is None:
+                return True
+            complete = bool(scheduler.shutdown(wait=wait, timeout=timeout))
+            if complete:
+                self._compute_lane_scheduler = None
+            return complete
         self._shutdown = True
         try:
             self.cancel_all_scheduled_single_shots()
@@ -1051,6 +1154,19 @@ class ThreadManager:
         with self.__class__._app_shared_lock:
             if self.__class__._app_shared_manager is self:
                 self.__class__._app_shared_manager = None
+
+        scheduler = self._compute_lane_scheduler
+        lane_shutdown_complete = True
+        if scheduler is not None:
+            try:
+                lane_shutdown_complete = bool(
+                    scheduler.shutdown(wait=wait, timeout=timeout)
+                )
+            except Exception:
+                logger.exception("Compute lane scheduler shutdown failed")
+                lane_shutdown_complete = False
+            if lane_shutdown_complete:
+                self._compute_lane_scheduler = None
         
         # Cancel active tasks
         with self._active_tasks_lock:
@@ -1109,7 +1225,14 @@ class ThreadManager:
         with self._active_tasks_lock:
             self._active_tasks.clear()
         
+        if not lane_shutdown_complete:
+            logger.critical(
+                "Thread manager shutdown retained live compute-lane workers; "
+                "lifecycle accounting remains armed until they exit"
+            )
+            return False
         logger.info("Thread manager shut down complete")
+        return True
 
     def _register_active_task(self, task: Task) -> None:
         """Synchronously register an in-flight task so bookkeeping is immediately authoritative."""
@@ -1299,7 +1422,16 @@ class ThreadManager:
                     weak_method = weakref.WeakMethod(func)
                 except TypeError:
                     weak_method = None
-            strong_func = None if weak_method is not None else func
+            # Keep the callback payload in one mutable holder so cancellation
+            # can release closure owners synchronously.  Capturing ``func`` and
+            # ``args`` directly in ``_finish`` leaves them reachable through
+            # Qt's timeout/destroyed callback graph until cyclic GC, which is
+            # too late for the retiring-generation destruction barrier.
+            callback_payload = {
+                "strong_func": None if weak_method is not None else func,
+                "args": tuple(args or ()),
+                "kwargs": dict(kwargs or {}),
+            }
 
             _record_single_shot_scheduled(generation)
 
@@ -1329,6 +1461,16 @@ class ThreadManager:
                     if state["finished"]:
                         return
                     state["finished"] = True
+                    target = (
+                        weak_method()
+                        if weak_method is not None
+                        else callback_payload["strong_func"]
+                    )
+                    call_args = callback_payload["args"]
+                    call_kwargs = callback_payload["kwargs"]
+                    callback_payload["strong_func"] = None
+                    callback_payload["args"] = ()
+                    callback_payload["kwargs"] = {}
                     current_timer = timer_ref()
                     _unregister_single_shot_timer(
                         generation_key,
@@ -1345,18 +1487,12 @@ class ThreadManager:
                             current_timer._srpss_cancel_single_shot = None
                         except RuntimeError:
                             pass
-                    if execute:
-                        target = (
-                            weak_method()
-                            if weak_method is not None
-                            else strong_func
+                    if execute and target is not None:
+                        ThreadManager.run_on_ui_thread(
+                            target,
+                            *call_args,
+                            **call_kwargs,
                         )
-                        if target is not None:
-                            ThreadManager.run_on_ui_thread(
-                                target,
-                                *args,
-                                **(kwargs or {}),
-                            )
                     if current_timer is not None and _qt_dispatch_available():
                         try:
                             current_timer.deleteLater()

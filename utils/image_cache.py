@@ -83,6 +83,10 @@ class ImageCache:
         self._hit_count: int = 0
         self._miss_count: int = 0
         self._evict_count: int = 0
+        self._evict_count_by_kind: dict[str, int] = {"raw": 0, "scaled": 0}
+        self._evicted_bytes_by_kind: dict[str, int] = {"raw": 0, "scaled": 0}
+        self._replacement_count: int = 0
+        self._idempotent_put_count: int = 0
         self._lock = threading.RLock()
         
         logger.info(f"ImageCache initialized: max_items={max_items}, "
@@ -123,10 +127,16 @@ class ImageCache:
         # Remove if already exists (to update order)
         with self._lock:
             if key in self._cache:
+                if self._cache[key] is image:
+                    self._cache.move_to_end(key)
+                    self._idempotent_put_count += 1
+                    _cache_trace("Retained identical cached object without replacement: %s", key)
+                    return
                 old_img = self._cache.pop(key)
                 self._current_memory -= self._tracked_size(old_img)
                 self._current_tracked_bytes -= self._tracked_bytes_by_key.pop(key, 0)
                 self._resource_metadata_by_key.pop(key, None)
+                self._replacement_count += 1
             
             # Add new entry
             self._cache[key] = image
@@ -252,6 +262,8 @@ class ImageCache:
             max_memory_mb = self.max_memory_bytes / (1024 * 1024)
             total_accesses = self._hit_count + self._miss_count
             hit_rate = (self._hit_count / total_accesses * 100.0) if total_accesses > 0 else 0.0
+            raw_keys = [key for key in self._cache if self._key_kind(key) == "raw"]
+            scaled_keys = [key for key in self._cache if self._key_kind(key) == "scaled"]
 
             return {
                 'item_count': item_count,
@@ -264,6 +276,16 @@ class ImageCache:
                 'misses': self._miss_count,
                 'hit_rate_percent': hit_rate,
                 'evictions': self._evict_count,
+                'raw_items': len(raw_keys),
+                'raw_bytes': sum(self._tracked_bytes_by_key.get(key, 0) for key in raw_keys),
+                'scaled_items': len(scaled_keys),
+                'scaled_bytes': sum(self._tracked_bytes_by_key.get(key, 0) for key in scaled_keys),
+                'raw_evictions': self._evict_count_by_kind["raw"],
+                'scaled_evictions': self._evict_count_by_kind["scaled"],
+                'raw_evicted_bytes': self._evicted_bytes_by_kind["raw"],
+                'scaled_evicted_bytes': self._evicted_bytes_by_kind["scaled"],
+                'replacements': self._replacement_count,
+                'idempotent_puts_avoided': self._idempotent_put_count,
             }
     
     def _should_evict_locked(self) -> bool:
@@ -276,11 +298,20 @@ class ImageCache:
         if not self._cache:
             return
         key, img = self._cache.popitem(last=False)
+        tracked_bytes = self._tracked_bytes_by_key.pop(key, 0)
         self._current_memory -= self._tracked_size(img)
-        self._current_tracked_bytes -= self._tracked_bytes_by_key.pop(key, 0)
+        self._current_tracked_bytes -= tracked_bytes
         self._resource_metadata_by_key.pop(key, None)
         self._evict_count += 1
+        kind = self._key_kind(key)
+        self._evict_count_by_kind[kind] += 1
+        self._evicted_bytes_by_kind[kind] += tracked_bytes
         _cache_trace("Evicted from cache: %s", key)
+
+    @staticmethod
+    def _key_kind(key: str) -> str:
+        """Classify source versus display-ready derivative keys for bounded summaries."""
+        return "scaled" if "|scaled:" in str(key) else "raw"
     
     def _estimate_size(self, image: Union[QImage, QPixmap]) -> int:
         """

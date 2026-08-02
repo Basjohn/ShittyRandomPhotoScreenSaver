@@ -53,6 +53,8 @@ class _StubMediaWidget:
         self._fixed_card_height = None
         self._artwork_size = 200
         self._artwork_pixmap = None
+        self._applied_artwork_key = (0, "")
+        self._pending_artwork = None
         self._scaled_artwork_cache = None
         self._scaled_artwork_cache_key = None
         self.fade_in_calls = 0
@@ -109,6 +111,9 @@ class _StubMediaWidget:
 
     def _compute_metadata_identity(self, info):
         return (info.title, info.artist, self._font_size, self.provider_display_name)
+
+    def _compute_artwork_key(self, _info):
+        return (0, "")
 
     def _emit_media_update(self, info):
         self._emitted.append(info)
@@ -264,6 +269,56 @@ def test_unchanged_visible_card_never_forces_metadata_or_layout_publication(
     assert widget._emitted == []
     assert widget._skipped_identity_updates == 1
     assert widget._unchanged_refresh_diag_pending is False
+
+
+def test_unchanged_fixed_card_during_first_fade_skips_metadata_artwork_and_repaint(
+    monkeypatch,
+):
+    """The intentional hidden first-card fade is not missing presentation state."""
+
+    widget = _StubMediaWidget()
+    info = MediaTrackInfo(
+        title="Stable Track",
+        artist="Stable Artist",
+        album="Stable Album",
+        state=MediaPlaybackState.PLAYING,
+    )
+    widget._last_info = info
+    widget._last_track_identity = widget._compute_track_identity(info)
+    widget._last_metadata_identity = widget._compute_metadata_identity(info)
+    widget._has_seen_first_track = True
+    widget._fixed_card_height = 244
+    widget._metadata_paint = {"title": "Stable Track"}
+    widget._fade_in_completed = False
+    widget._visible = False
+    build_calls = []
+    artwork_accepts = []
+    repaint_requests = []
+
+    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
+    monkeypatch.setattr(
+        display_update,
+        "_build_and_apply_metadata",
+        lambda *args, **kwargs: build_calls.append((args, kwargs)),
+    )
+    monkeypatch.setattr(
+        display_update,
+        "_accept_prepared_artwork_for_info",
+        lambda *args, **kwargs: artwork_accepts.append((args, kwargs)) or False,
+    )
+    widget._safe_update = lambda: repaint_requests.append(True)
+
+    display_update.update_display(
+        widget,
+        info,
+        prepared_artwork=PreparedArtwork((0, ""), None, 0.0),
+        artwork_generation=2,
+    )
+
+    assert build_calls == []
+    assert artwork_accepts == []
+    assert widget._emitted == []
+    assert repaint_requests == []
 
 
 def test_unchanged_refresh_diagnostic_waits_until_transition_is_idle(

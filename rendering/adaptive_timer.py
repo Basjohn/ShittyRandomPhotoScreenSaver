@@ -121,10 +121,9 @@ def _queue_safe_widget_update(widget) -> bool:
             return False
         if bool(getattr(widget, "_srpss_timer_update_pending", False)):
             age_ms = _pending_widget_update_age_ms(widget)
-            if age_ms is None or age_ms >= _PENDING_UPDATE_LOG_AFTER_MS:
+            if age_ms is not None and age_ms >= _PENDING_UPDATE_LOG_AFTER_MS:
                 _maybe_log_pending_widget_update(widget)
-                return False
-            setattr(widget, "_srpss_timer_update_dispatch_pending", True)
+            return False
         else:
             _mark_widget_update_pending(widget)
     except Exception:
@@ -269,6 +268,8 @@ class AdaptiveTimerMetrics:
     time_in_idle_ms: float = 0.0
     time_in_paused_ms: float = 0.0
     time_in_running_ms: float = 0.0
+    idle_blocking_waits: int = 0
+    paused_blocking_waits: int = 0
     last_state_change_ts: float = field(default_factory=time.time)
     
     def record_state_change(self, old_state: TimerState) -> None:
@@ -535,11 +536,16 @@ class AdaptiveTimerStrategy:
 
                 if state == TimerState.IDLE:
                     next_tick_deadline = None
-                    # Deep sleep - but use short timeout to check stop_event frequently
-                    # Use 1 second chunks to allow quick shutdown response
-                    if self._wake_event.wait(timeout=1.0):
+                    # Resume and stop both signal ``_wake_event``.  A bounded
+                    # blocking wait therefore stays immediately interruptible
+                    # without waking a compute worker once per second forever.
+                    self._metrics.idle_blocking_waits += 1
+                    idle_wait_s = max(
+                        0.1,
+                        float(self._config.max_deep_sleep_sec),
+                    )
+                    if self._wake_event.wait(timeout=idle_wait_s):
                         self._wake_event.clear()
-                    # Continue loop to check state
                     continue
 
                 elif state == TimerState.PAUSED:
@@ -554,8 +560,15 @@ class AdaptiveTimerStrategy:
                             logger.debug("[ADAPTIVE_TIMER] Auto-idle after %.1fs", elapsed)
                         continue
 
-                    # Brief sleep before rechecking
-                    time.sleep(0.001)
+                    # Pause is an interruptible idle deadline, not a 1 kHz
+                    # polling mode.  ``resume()`` and ``stop()`` both wake it.
+                    self._metrics.paused_blocking_waits += 1
+                    remaining_idle_s = max(
+                        0.0,
+                        float(self._config.idle_timeout_sec) - elapsed,
+                    )
+                    if self._wake_event.wait(timeout=remaining_idle_s):
+                        self._wake_event.clear()
                     continue
 
                 elif state == TimerState.RUNNING:
@@ -628,9 +641,10 @@ class AdaptiveTimerStrategy:
         logger.info(
             "[ADAPTIVE_TIMER] Metrics: frames=%d, transitions=%d, "
             "time_idle=%.1fms, time_paused=%.1fms, time_running=%.1fms, "
-            "total_runtime=%.1fs",
+            "idle_waits=%d paused_waits=%d total_runtime=%.1fs",
             m.frame_count, m.state_transitions,
             m.time_in_idle_ms, m.time_in_paused_ms, m.time_in_running_ms,
+            m.idle_blocking_waits, m.paused_blocking_waits,
             total_time
         )
     

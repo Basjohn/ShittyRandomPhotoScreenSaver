@@ -1563,6 +1563,7 @@ class GLCompositorWidget(QOpenGLWidget):
                 self._render_strategy_manager = None
             if self._transition_renderer is not None:
                 self._transition_renderer.detach()
+                self._transition_renderer = None
             return
 
         self._render_shutdown_requested = True
@@ -1598,6 +1599,7 @@ class GLCompositorWidget(QOpenGLWidget):
             self._render_strategy_manager = None
         if self._transition_renderer is not None:
             self._transition_renderer.detach()
+            self._transition_renderer = None
 
     def is_gl_ready(self) -> bool:
         """Check if GL context is ready for rendering.

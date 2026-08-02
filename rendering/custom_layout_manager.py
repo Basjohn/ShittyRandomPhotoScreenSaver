@@ -168,6 +168,10 @@ class CustomLayoutManager:
 
         self._shell_states.clear()
         self._suppress_live_feedback_widget_ids.clear()
+        self._active = False
+        self._geo_session_id = None
+        self._edit_mode_dimming_restore = None
+        self._display_cursor_restore_shape = None
         self._display = None
         self._screen = None
 

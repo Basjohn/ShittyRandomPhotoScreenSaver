@@ -282,12 +282,19 @@ def reset_visualizer_state(
     widget._bubble_last_tick_ts = 0.0
     # Reset the CPU-side bubble simulation so stale running averages,
     # burst state, and beat timestamps don't bleed across mode switches.
-    bubble_sim = getattr(widget, '_bubble_simulation', None)
-    if bubble_sim is not None:
+    reset_bubble_simulation = getattr(widget, "_reset_bubble_simulation", None)
+    if callable(reset_bubble_simulation):
         try:
-            bubble_sim.reset()
+            reset_bubble_simulation()
         except Exception:
             pass
+    else:
+        bubble_sim = getattr(widget, '_bubble_simulation', None)
+        if bubble_sim is not None:
+            try:
+                bubble_sim.reset()
+            except Exception:
+                pass
     widget._heartbeat_intensity = 0.0
     widget._heartbeat_avg_bass = 0.0
     widget._heartbeat_last_ts = 0.0
@@ -405,9 +412,13 @@ def reset_mode_owned_runtime_state(widget: Any, *, reason: str = "mode_activatio
             if callable(clear_pending_bubble_result):
                 clear_pending_bubble_result()
         widget._bubble_pending_result_skip_count = 0
-        bubble_sim = getattr(widget, "_bubble_simulation", None)
-        if bubble_sim is not None and hasattr(bubble_sim, "reset"):
-            bubble_sim.reset()
+        reset_bubble_simulation = getattr(widget, "_reset_bubble_simulation", None)
+        if callable(reset_bubble_simulation):
+            reset_bubble_simulation()
+        else:
+            bubble_sim = getattr(widget, "_bubble_simulation", None)
+            if bubble_sim is not None and hasattr(bubble_sim, "reset"):
+                bubble_sim.reset()
     except Exception:
         pass
 

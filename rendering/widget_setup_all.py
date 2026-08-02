@@ -6,8 +6,10 @@ all overlay widgets based on settings.
 """
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from typing import Dict, Optional, TYPE_CHECKING
+import weakref
 
 from PySide6.QtCore import QRect
 from PySide6.QtWidgets import QWidget
@@ -33,6 +35,43 @@ logger = get_logger(__name__)
 REMOTE_CUSTOM_VISUALIZER_FALLBACK_RECHECK_MS = 1500
 SPOTIFY_CUSTOM_LAYOUT_STABILIZE_VERIFY_MS = 250
 SPOTIFY_CUSTOM_LAYOUT_STABILIZE_CONFIRM_MS = 750
+
+
+def _passive_ref(value):
+    try:
+        return weakref.ref(value)
+    except TypeError:
+        # Test doubles and immutable sentinels may not support weakrefs.  Real
+        # runtime owners here are WidgetManager/QWidget instances.
+        return lambda: value
+
+
+def _schedule_weak_runtime_callback(
+    delay_ms: int,
+    owner,
+    callback,
+    *args,
+    **kwargs,
+) -> None:
+    """Schedule runtime work without retaining its retiring owner."""
+
+    owner_ref = _passive_ref(owner)
+    runtime_generation = getattr(owner, "_runtime_generation", None)
+
+    def _run() -> None:
+        current_owner = owner_ref()
+        if current_owner is None:
+            return
+        if (
+            runtime_generation is not None
+            and getattr(current_owner, "_runtime_generation", None)
+            != runtime_generation
+        ):
+            return
+        callback(current_owner, *args, **kwargs)
+
+    _run._srpss_runtime_generation = runtime_generation
+    ThreadManager.single_shot(max(0, int(delay_ms)), _run)
 
 
 @dataclass
@@ -250,10 +289,10 @@ def _verify_saved_custom_layouts_after_startup(
             setattr(parent, "_custom_layout_runtime_stabilize_pending", True)
         except Exception:
             logger.debug("[WIDGET_SETUP] Failed to set custom-layout stabilize pending flag", exc_info=True)
-        ThreadManager.single_shot(
+        _schedule_weak_runtime_callback(
             SPOTIFY_CUSTOM_LAYOUT_STABILIZE_CONFIRM_MS,
-            _verify_saved_custom_layouts_after_startup,
             parent,
+            _verify_saved_custom_layouts_after_startup,
             log_prefix=log_prefix,
             token=token,
             confirmed=True,
@@ -343,10 +382,10 @@ def _reapply_saved_custom_layouts_after_startup(parent: Optional[QWidget], *, lo
         setattr(parent, "_custom_layout_runtime_stabilize_pending", False)
         token = int(getattr(parent, "_spotify_custom_layout_stabilize_token", 0)) + 1
         setattr(parent, "_spotify_custom_layout_stabilize_token", token)
-        ThreadManager.single_shot(
+        _schedule_weak_runtime_callback(
             SPOTIFY_CUSTOM_LAYOUT_STABILIZE_VERIFY_MS,
-            _verify_saved_custom_layouts_after_startup,
             parent,
+            _verify_saved_custom_layouts_after_startup,
             log_prefix=log_prefix,
             token=token,
             confirmed=False,
@@ -595,9 +634,33 @@ def _schedule_remote_custom_visualizer_fallback_recheck(
         target_screen_index,
         REMOTE_CUSTOM_VISUALIZER_FALLBACK_RECHECK_MS,
     )
-    ThreadManager.single_shot(
+    media_widget_ref = _passive_ref(media_widget) if media_widget is not None else None
+    _schedule_weak_runtime_callback(
         REMOTE_CUSTOM_VISUALIZER_FALLBACK_RECHECK_MS,
-        _run_remote_custom_visualizer_fallback_recheck,
+        mgr,
+        _run_remote_custom_visualizer_fallback_recheck_owned,
+        copy.deepcopy(widgets_config),
+        copy.deepcopy(shadows_config),
+        screen_index,
+        thread_manager,
+        media_widget_ref,
+        target_screen_index,
+        token,
+    )
+
+
+def _run_remote_custom_visualizer_fallback_recheck_owned(
+    mgr: "WidgetManager",
+    widgets_config: dict,
+    shadows_config: dict,
+    screen_index: int,
+    thread_manager: Optional["ThreadManager"],
+    media_widget_ref: "weakref.ReferenceType[QWidget] | None",
+    target_screen_index: int,
+    token: int,
+) -> None:
+    media_widget = media_widget_ref() if media_widget_ref is not None else None
+    _run_remote_custom_visualizer_fallback_recheck(
         mgr,
         widgets_config,
         shadows_config,

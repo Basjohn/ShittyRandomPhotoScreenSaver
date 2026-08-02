@@ -168,6 +168,44 @@ def _accept_prepared_artwork_for_info(
         return False
 
 
+def _prepared_artwork_requires_acceptance(
+    widget: "MediaWidget",
+    info: MediaTrackInfo,
+    prepared_artwork,
+) -> bool:
+    """Return whether a prepared result can change the card's artwork state.
+
+    A normal unchanged poll carries a ``PreparedArtwork`` marker with the
+    already-applied key and no image.  Sending that marker through the
+    transition/artwork owner is harmless today, but it is needless UI-path
+    work during the short first-card fade window.  Keep the call when it can
+    promote a pending key or clear a stale deferred replacement.
+    """
+
+    try:
+        final_key = widget._compute_artwork_key(info)
+    except Exception:
+        return True
+
+    pending = getattr(widget, "_pending_artwork", None)
+    prepared_key = getattr(prepared_artwork, "key", None)
+    if final_key != prepared_key:
+        return pending is not None and getattr(pending, "key", None) == final_key
+
+    applied_key = getattr(widget, "_applied_artwork_key", None)
+    return final_key != applied_key or pending is not None
+
+
+def _has_fixed_metadata_presentation(widget: "MediaWidget") -> bool:
+    """Return whether first-track layout is already authoritative while fading."""
+
+    return bool(
+        getattr(widget, "_has_seen_first_track", False)
+        and getattr(widget, "_fixed_card_height", None) is not None
+        and getattr(widget, "_metadata_paint", None)
+    )
+
+
 def _compute_metadata_layout_budget(widget: "MediaWidget", *, has_artwork: bool = False) -> dict[str, int]:
     width = max(1, int(getattr(widget, "width", lambda: 0)() or 0))
     height = max(1, int(getattr(widget, "height", lambda: 0)() or 0))
@@ -396,14 +434,22 @@ def update_display(
         # During a transition, unchanged follow-up polls carry the same artwork
         # key without another decoded QImage. Promoting the existing pending
         # image to the current request generation keeps idle flush authoritative.
-        if prepared_artwork is not None and artwork_generation is not None:
+        if (
+            prepared_artwork is not None
+            and artwork_generation is not None
+            and _prepared_artwork_requires_acceptance(
+                widget,
+                info,
+                prepared_artwork,
+            )
+        ):
             artwork_changed = _accept_prepared_artwork_for_info(
                 widget,
                 info,
                 prepared_artwork,
                 int(artwork_generation),
             )
-            artwork_snapshot_processed = True
+        artwork_snapshot_processed = prepared_artwork is not None
 
         # Reset idle counter when we get valid track info
         if widget._consecutive_none_count > 0 or widget._is_idle:
@@ -429,9 +475,21 @@ def update_display(
         if (
             current_identity == widget._last_track_identity
             and widget._last_track_identity is not None
-            and widget._fade_in_completed
             and not artwork_changed
-            and _has_stable_visible_presentation(widget)
+            and (
+                (
+                    widget._fade_in_completed
+                    and _has_stable_visible_presentation(widget)
+                )
+                # The first track has already established the fixed card
+                # contract.  It can be deliberately hidden while the
+                # coordinator owns its fade, which must not turn a same-track
+                # poll into a metadata publication or a geometry/repaint pass.
+                or (
+                    not metadata_changed
+                    and _has_fixed_metadata_presentation(widget)
+                )
+            )
         ):
             widget._skipped_identity_updates += 1
             budget_exhausted = (

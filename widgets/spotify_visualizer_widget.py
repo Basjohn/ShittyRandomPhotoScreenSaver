@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import List, Optional, Dict, Any, Callable, Mapping
 import copy
 import threading
@@ -56,6 +57,7 @@ class SpotifyVisualizerWidget(QWidget):
         initial_mode: VisualizerMode | str | None = None,
     ) -> None:
         super().__init__(parent)
+        self._runtime_generation = getattr(parent, "_runtime_generation", None)
 
         self._bar_count = max(1, int(bar_count))
         self._display_bars: List[float] = [0.0] * self._bar_count
@@ -326,6 +328,10 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_big_size_clamp: float = 4.0
         self._bubble_big_specular_max_size: float = 2.5
         self._bubble_simulation: Optional[object] = None  # lazy init (owned by compute thread)
+        # Serialise simulation mutation with mode/runtime reset. A stale
+        # generation may finish computing, but it can never mutate Bubble after
+        # the new mode-owned reset has completed.
+        self._bubble_simulation_lock = threading.RLock()
         self._bubble_pos_data: list = []
         self._bubble_extra_data: list = []
         self._bubble_trail_data: list = []
@@ -338,11 +344,20 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_cadence_state = BubbleCadenceState()
         self._bubble_active_task_token: Optional[tuple[int, int]] = None
         self._bubble_stale_result_count: int = 0
-        self._bubble_pending_result: Optional[tuple[list, list, list, int]] = None
+        self._bubble_pending_result: Optional[
+            tuple[list, list, list, int, float, float]
+        ] = None
         self._bubble_pending_result_lock = threading.Lock()
         self._bubble_pending_result_skip_count: int = 0
         self._bubble_last_perf_diag: Dict[str, float] = {}
         self._bubble_last_tick_ts: float = 0.0
+        self._bubble_compute_lane = None
+        # Passive timing provenance for the currently visible Bubble state.
+        # All values use time.time() so compositor owner logs can compare them
+        # without crossing clock domains. They never influence scheduling.
+        self._bubble_visible_source_ts: float = 0.0
+        self._bubble_visible_simulation_ts: float = 0.0
+        self._bubble_visible_render_state_ts: float = 0.0
         self._bubble_dispatch_energy_snapshot: Dict[str, float] = {
             "bass": 0.0,
             "mid": 0.0,
@@ -1250,32 +1265,49 @@ class SpotifyVisualizerWidget(QWidget):
         eb_snap: dict,
         sim_settings: dict,
         pulse_params: dict,
+        *,
+        task_token: tuple[int, int] | None = None,
     ):
-        """Run exactly one authored Bubble step on the compute pool."""
+        """Run exactly one authored Bubble step on the managed compute lane."""
         worker_start = time.perf_counter()
-        if self._bubble_simulation is None:
-            from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
-            self._bubble_simulation = BubbleSimulation()
-            logger.debug("[SPOTIFY_VIS] Bubble simulation created on COMPUTE thread")
-        self._bubble_simulation.tick(dt, eb_snap, sim_settings)
-        pos_data, extra_data, trail_data = self._bubble_simulation.snapshot(
-            bass=pulse_params['bass'],
-            mid_high=pulse_params['mid_high'],
-            big_bass_pulse=pulse_params['big_bass_pulse'],
-            small_freq_pulse=pulse_params['small_freq_pulse'],
-            big_specular_max_size=pulse_params.get('big_specular_max_size', 2.5),
-            big_visual_smoothing=pulse_params.get('big_visual_smoothing', 0.5),
-            big_contraction_bias=pulse_params.get('big_contraction_bias', 1.0),
-            big_size_clamp=pulse_params.get('big_size_clamp', 4.0),
-        )
-        count = self._bubble_simulation.count
-        perf_diag = {}
-        get_perf_diag = getattr(self._bubble_simulation, "get_perf_diagnostics", None)
-        if callable(get_perf_diag):
-            try:
-                perf_diag = dict(get_perf_diag())
-            except Exception:
-                perf_diag = {}
+        simulation_lock = getattr(self, "_bubble_simulation_lock", None)
+        with simulation_lock if simulation_lock is not None else nullcontext():
+            if (
+                task_token is not None
+                and task_token != self._bubble_active_task_token
+            ):
+                # The activation boundary is serialized by this same lock.
+                # Reject before BubbleSimulation.tick() can consume a newly
+                # armed kick/snare/vocal edge through the live scheduler.
+                return ([], [], [], 0, {"stale_before_tick": 1.0})
+            if self._bubble_simulation is None:
+                from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
+
+                self._bubble_simulation = BubbleSimulation()
+                logger.debug("[SPOTIFY_VIS] Bubble simulation created on compute lane")
+            self._bubble_simulation.tick(dt, eb_snap, sim_settings)
+            pos_data, extra_data, trail_data = self._bubble_simulation.snapshot(
+                bass=pulse_params['bass'],
+                mid_high=pulse_params['mid_high'],
+                big_bass_pulse=pulse_params['big_bass_pulse'],
+                small_freq_pulse=pulse_params['small_freq_pulse'],
+                big_specular_max_size=pulse_params.get('big_specular_max_size', 2.5),
+                big_visual_smoothing=pulse_params.get('big_visual_smoothing', 0.5),
+                big_contraction_bias=pulse_params.get('big_contraction_bias', 1.0),
+                big_size_clamp=pulse_params.get('big_size_clamp', 4.0),
+            )
+            count = self._bubble_simulation.count
+            perf_diag = {}
+            get_perf_diag = getattr(
+                self._bubble_simulation,
+                "get_perf_diagnostics",
+                None,
+            )
+            if callable(get_perf_diag):
+                try:
+                    perf_diag = dict(get_perf_diag())
+                except Exception:
+                    perf_diag = {}
         perf_diag["worker_total_ms"] = (time.perf_counter() - worker_start) * 1000.0
         perf_diag["result_count"] = float(count)
         perf_diag["batch_size"] = 1.0
@@ -1287,7 +1319,25 @@ class SpotifyVisualizerWidget(QWidget):
             self._bubble_worker_logged = True
         return (pos_data, extra_data, trail_data, count, perf_diag)
 
-    def _bubble_compute_done(self, task_result, task_token=None) -> None:
+    def _reset_bubble_simulation(self) -> None:
+        """Reset Bubble only after any in-flight mutation leaves its lock."""
+
+        simulation_lock = getattr(self, "_bubble_simulation_lock", None)
+        with simulation_lock if simulation_lock is not None else nullcontext():
+            simulation = self._bubble_simulation
+            if simulation is not None:
+                reset = getattr(simulation, "reset", None)
+                if callable(reset):
+                    reset()
+
+    def _bubble_compute_done(
+        self,
+        task_result,
+        task_token=None,
+        *,
+        source_ts: float = 0.0,
+        authored_ts: float = 0.0,
+    ) -> None:
         """Callback from COMPUTE thread — stage the latest result for the next UI tick."""
         active_token = self._bubble_active_task_token
         if task_token is None:
@@ -1303,8 +1353,6 @@ class SpotifyVisualizerWidget(QWidget):
             self._bubble_stale_result_count += 1
             return
 
-        self._bubble_active_task_token = None
-        self._bubble_compute_pending = False
         if task_result.success and task_result.result is not None:
             pos_data, extra_data, trail_data, count, perf_diag = task_result.result
             if not getattr(self, '_bubble_done_logged', False):
@@ -1314,19 +1362,76 @@ class SpotifyVisualizerWidget(QWidget):
                 )
                 self._bubble_done_logged = True
             self._bubble_last_perf_diag = dict(perf_diag or {})
-            self._store_pending_bubble_result(pos_data, extra_data, trail_data, count)
+            self._store_pending_bubble_result(
+                pos_data,
+                extra_data,
+                trail_data,
+                count,
+                source_ts=source_ts,
+                authored_ts=authored_ts,
+            )
         elif not task_result.success:
             logger.warning(
                 "[SPOTIFY_VIS] Bubble compute FAILED: %s",
                 task_result.error,
             )
+        # Publish ownership last.  A UI tick can then never observe a free
+        # lane between this result becoming authoritative and its pending
+        # snapshot being visible.
+        self._bubble_active_task_token = None
+        self._bubble_compute_pending = False
+
+    def _ensure_bubble_compute_lane(self):
+        """Return the production persistent lane, or None for test/replay fakes."""
+
+        thread_manager = self._thread_manager
+        if (
+            thread_manager is None
+            or getattr(
+                thread_manager,
+                "supports_persistent_compute_lanes",
+                False,
+            ) is not True
+        ):
+            return None
+        lane = self._bubble_compute_lane
+        if lane is not None and not lane.is_stopped:
+            return lane
+        from widgets.spotify_visualizer.bubble_compute_lane import BubbleComputeLane
+
+        lane = BubbleComputeLane(
+            worker=self._bubble_compute_worker,
+            result_callback=self._bubble_compute_done,
+            runtime_generation=getattr(self, "_runtime_generation", None),
+            task_id=self._bubble_sim_task_id,
+        )
+        lane.start(thread_manager)
+        self._bubble_compute_lane = lane
+        return lane
+
+    def _stop_bubble_compute_lane(self) -> None:
+        lane = self._bubble_compute_lane
+        if lane is not None:
+            lane.stop()
 
     def _reset_bubble_cadence(self) -> None:
         """Invalidate Bubble task/result ownership at a runtime boundary."""
-        self._bubble_cadence_state.reset()
-        self._bubble_active_task_token = None
-        self._bubble_compute_pending = False
-        self._clear_pending_bubble_result()
+        lane = getattr(self, "_bubble_compute_lane", None)
+        cancel_pending = getattr(lane, "cancel_pending", None)
+        if callable(cancel_pending):
+            cancel_pending()
+        simulation_lock = getattr(self, "_bubble_simulation_lock", None)
+        with simulation_lock if simulation_lock is not None else nullcontext():
+            # Invalidate only after any old simulation mutation leaves this
+            # boundary.  When this returns, no retired packet can consume a
+            # post-reset discrete event or race the subsequent simulation reset.
+            self._bubble_cadence_state.reset()
+            self._bubble_active_task_token = None
+            self._bubble_compute_pending = False
+            self._clear_pending_bubble_result()
+            self._bubble_visible_source_ts = 0.0
+            self._bubble_visible_simulation_ts = 0.0
+            self._bubble_visible_render_state_ts = 0.0
 
     def _store_pending_bubble_result(
         self,
@@ -1334,9 +1439,19 @@ class SpotifyVisualizerWidget(QWidget):
         extra_data: list,
         trail_data: list,
         count: int,
+        *,
+        source_ts: float = 0.0,
+        authored_ts: float = 0.0,
     ) -> None:
         with self._bubble_pending_result_lock:
-            self._bubble_pending_result = (pos_data, extra_data, trail_data, count)
+            self._bubble_pending_result = (
+                pos_data,
+                extra_data,
+                trail_data,
+                count,
+                float(source_ts or 0.0),
+                float(authored_ts or 0.0),
+            )
 
     def _has_pending_bubble_result(self) -> bool:
         with self._bubble_pending_result_lock:
@@ -1355,11 +1470,21 @@ class SpotifyVisualizerWidget(QWidget):
         if pending is None:
             return False
 
-        pos_data, extra_data, trail_data, count = pending
+        (
+            pos_data,
+            extra_data,
+            trail_data,
+            count,
+            source_ts,
+            authored_ts,
+        ) = pending
         self._bubble_pos_data = pos_data
         self._bubble_extra_data = extra_data
         self._bubble_trail_data = trail_data
         self._bubble_count = count
+        self._bubble_visible_source_ts = source_ts
+        self._bubble_visible_simulation_ts = authored_ts
+        self._bubble_visible_render_state_ts = time.time()
         return True
 
     def _ensure_tick_source(self) -> None:
@@ -1621,11 +1746,15 @@ class SpotifyVisualizerWidget(QWidget):
     def cleanup(self) -> None:
         """Release logical producers and parent-owned visualizer GL resources."""
         self.stop()
+        stop_lane = getattr(self, "_stop_bubble_compute_lane", None)
+        if callable(stop_lane):
+            stop_lane()
         try:
             self.detach_from_animation_manager()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Cleanup animation detach failed", exc_info=True)
         self._engine = None
+        self._bubble_compute_lane = None
         self._destroy_parent_overlay(reason="widget_cleanup")
 
     # ------------------------------------------------------------------

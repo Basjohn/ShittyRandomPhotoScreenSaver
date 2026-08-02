@@ -109,6 +109,7 @@ class DisplayManager(QObject):
                 "resources": (),
             }
         )
+        self._runtime_signal_connections: list[tuple[str, Any]] = []
         self.displays: List[DisplayWidget] = []
         self.current_images: Dict[int, str] = {}  # screen_index -> image_path
         self._deferred_reddit_urls: list[str] = []
@@ -164,6 +165,36 @@ class DisplayManager(QObject):
         """Return the latest GUI-captured aggregate without touching widgets."""
 
         return self._display_image_accounting_snapshot
+
+    def track_runtime_signal_connection(
+        self,
+        signal_name: str,
+        callback: Any,
+    ) -> None:
+        """Record one engine-owned outgoing connection for exact retirement."""
+
+        self._runtime_signal_connections.append((str(signal_name), callback))
+
+    def disconnect_runtime_signal_connections(self) -> None:
+        """Disconnect each tracked outgoing route exactly once."""
+
+        connections, self._runtime_signal_connections = (
+            self._runtime_signal_connections,
+            [],
+        )
+        for signal_name, callback in reversed(connections):
+            signal = getattr(self, signal_name, None)
+            disconnect = getattr(signal, "disconnect", None)
+            if not callable(disconnect):
+                continue
+            try:
+                disconnect(callback)
+            except (RuntimeError, TypeError):
+                logger.debug(
+                    "[DISPLAY_MANAGER] Runtime signal unavailable during retirement signal=%s",
+                    signal_name,
+                    exc_info=True,
+                )
     
     def _setup_monitor_detection(self) -> None:
         """Setup monitor hotplug detection."""
@@ -1117,6 +1148,7 @@ class DisplayManager(QObject):
             return
         self._retired = True
         self.disconnect_monitor_detection()
+        self.disconnect_runtime_signal_connections()
         self._display_startup_generation += 1
         self._display_startup_ready_expected.clear()
         self._display_startup_ready_seen.clear()
@@ -1126,24 +1158,6 @@ class DisplayManager(QObject):
         self._display_image_accounting_by_id.clear()
         self._publish_display_image_accounting()
         self._image_accounting_publisher_ref = None
-
-        for signal_name in (
-            "exit_requested",
-            "monitors_changed",
-            "displays_ready",
-            "authoritative_first_frames_ready",
-            "startup_reveal_completed",
-            "transition_completed",
-            "previous_requested",
-            "next_requested",
-            "cycle_transition_requested",
-            "settings_requested",
-            "custom_layout_reload_requested",
-        ):
-            try:
-                getattr(self, signal_name).disconnect()
-            except Exception:
-                pass
 
         self.settings_manager = None
         self._thread_manager = None

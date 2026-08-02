@@ -126,6 +126,12 @@ def _schedule_startup_first_frame_ready(widget, image_path: str) -> None:
             return
         _complete_startup_first_frame_ready(widget, image_path, token)
 
+    _complete_when_current._srpss_runtime_generation = getattr(
+        widget,
+        "_runtime_generation",
+        None,
+    )
+
     thread_manager = getattr(widget, "_thread_manager", None)
     if thread_manager is not None and hasattr(thread_manager, "single_shot"):
         try:
@@ -809,4 +815,3 @@ def _push_spotify_bars_overlay_state(
         return False
 
     return True
-

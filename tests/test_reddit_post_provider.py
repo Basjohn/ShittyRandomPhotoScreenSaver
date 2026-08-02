@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 
 import pytest
 
@@ -9,6 +10,7 @@ from core.reddit_post_provider import (
     PullPushProvider,
     RedditFetchRequest,
     RedditHtmlProvider,
+    RedditProviderResult,
     RedditRssProvider,
     build_reddit_post_provider,
     normalize_reddit_provider_id,
@@ -59,6 +61,37 @@ def test_build_reddit_post_provider_uses_configured_provider() -> None:
     assert type(getattr(json_provider, "primary")).__name__ == "RedditPublicJsonProvider"
     assert type(html_provider).__name__ == "FallbackRedditPostProvider"
     assert type(getattr(html_provider, "primary")).__name__ == "RedditHtmlProvider"
+
+
+def test_composite_provider_success_logs_no_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """Routine source start/success/promotion is diagnostic INFO, not a warning."""
+
+    class SuccessfulPrimary:
+        provider_id = "rss"
+
+        def fetch_posts(self, request):  # noqa: ANN001
+            return RedditProviderResult.with_posts(
+                [{"title": "Fresh post", "url": "https://example.com/post"}],
+                source_id=self.provider_id,
+            )
+
+    provider = FallbackRedditPostProvider(SuccessfulPrimary())
+    request = RedditFetchRequest(
+        subreddit="python",
+        sort="hot",
+        limit=25,
+        cache_key="reddit",
+        shutdown_event=None,
+    )
+
+    with caplog.at_level(logging.INFO, logger="core.reddit_post_provider"):
+        result = provider.fetch_posts(request)
+
+    assert result.posts
+    provider_records = [record for record in caplog.records if record.name == "core.reddit_post_provider"]
+    assert not [record for record in provider_records if record.levelno >= logging.WARNING]
+    assert any("Provider source started" in record.getMessage() for record in provider_records)
+    assert any("Provider source succeeded" in record.getMessage() for record in provider_records)
 
 
 def test_rss_provider_maps_atom_entries(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -5,13 +5,19 @@ from __future__ import annotations
 from types import SimpleNamespace
 import threading
 import weakref
+import warnings
 
-from PySide6.QtCore import QObject, QTimer
+from PySide6.QtCore import QObject, QTimer, Signal
 
 from core.resources import ResourceManager, ResourceType
 from core.threading.manager import ThreadManager
 from engine.display_manager import DisplayManager
-from engine.runtime_destruction import RuntimeDestructionBarrier
+from engine.engine_lifecycle import teardown_display_runtime
+from engine.runtime_destruction import (
+    RuntimeDestructionBarrier,
+    continue_after_runtime_destruction,
+)
+from rendering.widget_manager import WidgetManager
 from widgets.clock_ticker import GlobalClockTicker
 from widgets.clock_widget import ClockWidget
 
@@ -70,7 +76,7 @@ def test_qobject_destruction_precedes_replacement_continuation(qt_app, qtbot):
     assert engine._pending_runtime_destruction_barrier is None
 
 
-def test_python_cycle_is_diagnostic_not_a_qt_destruction_gate(qt_app, qtbot):
+def test_python_cycle_blocks_replacement_until_explicitly_released(qt_app, qtbot):
     class _CyclicOwner:
         pass
 
@@ -92,10 +98,115 @@ def test_python_cycle_is_diagnostic_not_a_qt_destruction_gate(qt_app, qtbot):
     barrier.then(lambda: completed.append(True))
 
     root.deleteLater()
-    qtbot.waitUntil(lambda: bool(completed), timeout=1000)
+    qtbot.waitUntil(
+        lambda: barrier.describe()["qobjects_pending"] == 0,
+        timeout=1000,
+    )
 
-    assert completed == [True]
+    assert completed == []
+    assert barrier.describe()["python_owners_by_class"] == {"cyclic-owner": 1}
     assert cyclic_owner.self is cyclic_owner
+
+    cyclic_owner.self = None
+    del cyclic_owner
+    qtbot.waitUntil(lambda: completed == [True], timeout=1000)
+
+
+def test_display_teardown_releases_widget_manager_and_fade_owner_before_replacement(
+    qt_app,
+    qtbot,
+):
+    class _Display(QObject):
+        image_displayed = Signal(str)
+
+        def __init__(self, parent):
+            super().__init__(parent)
+            self.screen_index = 0
+            self._has_rendered_first_frame = False
+            self._runtime_cleanup_complete = False
+            self._widget_manager = WidgetManager(self, resource_manager=object())
+
+        def describe_runtime_state(self):
+            return {"screen": self.screen_index}
+
+        def quiesce_for_runtime_pause(self):
+            self._widget_manager.prepare_for_runtime_pause()
+
+        def clear(self):
+            return None
+
+        def cleanup_runtime(self, _reason):
+            self._widget_manager.cleanup()
+            self._widget_manager = None
+            self._runtime_cleanup_complete = True
+
+        def close(self):
+            assert self._runtime_cleanup_complete
+
+    manager = DisplayManager(
+        resource_manager=object(),
+        thread_manager=None,
+        runtime_generation=301,
+    )
+    display = _Display(manager)
+    manager.displays = [display]
+    widget_manager_ref = weakref.ref(display._widget_manager)
+    fade_coordinator_ref = weakref.ref(display._widget_manager._fade_coordinator)
+    engine = SimpleNamespace(
+        display_manager=manager,
+        resource_manager=_EmptyResourceManager(),
+        thread_manager=_EmptyThreadManager(),
+        _pending_runtime_destruction_barrier=None,
+        _terminal_shutdown_requested=False,
+        _display_initialized=True,
+        _display_initializing=False,
+        _pending_displays_ready_generation=None,
+        _loading_in_progress=False,
+        _runtime_generation=302,
+    )
+    del display
+    del manager
+
+    barrier = teardown_display_runtime(engine, reason="settings")
+    completed = []
+    continue_after_runtime_destruction(engine, lambda: completed.append(True))
+
+    assert barrier is not None
+    qtbot.waitUntil(lambda: completed == [True], timeout=1000)
+    assert widget_manager_ref() is None
+    assert fade_coordinator_ref() is None
+    assert barrier.describe()["python_owners_pending"] == 0
+
+
+def test_display_manager_retires_only_owned_signal_connections_without_warnings(
+    qt_app,
+):
+    manager = DisplayManager(
+        resource_manager=object(),
+        thread_manager=None,
+        runtime_generation=303,
+    )
+    calls = []
+
+    def _on_exit():
+        calls.append("exit")
+
+    manager.exit_requested.connect(_on_exit)
+    manager.track_runtime_signal_connection("exit_requested", _on_exit)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        manager.retire_runtime()
+
+    manager.exit_requested.emit()
+    assert calls == []
+    assert manager._runtime_signal_connections == []
+    assert not [
+        warning
+        for warning in caught
+        if issubclass(warning.category, RuntimeWarning)
+        and "disconnect" in str(warning.message).lower()
+    ]
 
 
 def test_terminal_shutdown_discards_pending_replacement(qt_app, qtbot):
@@ -173,6 +284,37 @@ def test_runtime_single_shot_is_cancelled_by_generation(qt_app, qtbot):
 
     assert owner.calls == 0
     owner.deleteLater()
+
+
+def test_cancelled_runtime_closure_releases_plain_owner_without_gc(qt_app, qtbot):
+    """Cancellation must drop closure payloads before the destruction barrier."""
+
+    import gc
+
+    class _PlainOwner:
+        _runtime_generation = 411
+
+    def _schedule_owner_closure():
+        owner = _PlainOwner()
+
+        def _publish():
+            return owner
+
+        _publish._srpss_timer_owner = owner
+        _publish._srpss_runtime_generation = owner._runtime_generation
+        ThreadManager.single_shot(60_000, _publish)
+        return weakref.ref(owner)
+
+    was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        owner_ref = _schedule_owner_closure()
+        assert owner_ref() is not None
+        assert ThreadManager.cancel_scheduled_single_shots(411) == 1
+        qtbot.waitUntil(lambda: owner_ref() is None, timeout=1000)
+    finally:
+        if was_enabled:
+            gc.enable()
 
 
 def test_queued_ui_callback_is_rejected_for_retired_generation(qt_app, qtbot):
@@ -338,6 +480,12 @@ def test_five_alternating_recreation_cycles_reach_zero_retired_ownership(
         def publish(self):
             self.calls += 1
 
+        def compute(self, value):
+            return value
+
+        def computed(self, _result, *, payload):
+            self.calls += int(payload == 1)
+
     resource_manager = ResourceManager()
     thread_manager = ThreadManager.create_helper_manager(
         resource_manager=resource_manager,
@@ -386,6 +534,13 @@ def test_five_alternating_recreation_cycles_reach_zero_retired_ownership(
 
             ticker.subscribe(owner.publish)
             ThreadManager.single_shot(60_000, owner.publish)
+            lane = thread_manager.create_compute_lane(
+                owner.compute,
+                owner.computed,
+                lane_id=f"lifecycle-cycle-{generation}",
+                category="test.lifecycle_lane",
+                runtime_generation=generation,
+            )
 
             barrier = RuntimeDestructionBarrier(
                 engine,
@@ -406,6 +561,7 @@ def test_five_alternating_recreation_cycles_reach_zero_retired_ownership(
 
             assert ThreadManager.cancel_scheduled_single_shots(generation) == 1
             ThreadManager.cancel_queued_ui_callbacks(generation)
+            lane.stop()
             ticker.unsubscribe(owner.publish)
             timer.stop()
             barrier.then(lambda g=generation: completed.append(g))
@@ -430,6 +586,10 @@ def test_five_alternating_recreation_cycles_reach_zero_retired_ownership(
             assert generation_key not in ticker.get_lifecycle_ownership_snapshot()[
                 "subscribers_by_generation"
             ]
+            assert not any(
+                item.get("runtime_generation") == generation
+                for item in thread_snapshot["active_tasks"]
+            )
 
         assert completed == [201, 202, 203, 204, 205]
         assert len(destroyed) == 15

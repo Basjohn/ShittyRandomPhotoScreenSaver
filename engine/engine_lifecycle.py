@@ -411,7 +411,14 @@ def stop(
                 # Active tasks were already cancelled above so this should
                 # complete quickly. Stuck threads would be killed by OS on
                 # process exit anyway, but joining avoids lingering processes.
-                engine.thread_manager.shutdown(wait=True, timeout=5.0)
+                shutdown_complete = engine.thread_manager.shutdown(
+                    wait=True,
+                    timeout=5.0,
+                )
+                if shutdown_complete is False:
+                    raise RuntimeError(
+                        "ThreadManager still has executing compute-lane work"
+                    )
                 logger.info("ThreadManager shutdown complete")
             except Exception as e:
                 logger.warning("ThreadManager shutdown failed: %s", e, exc_info=True)
@@ -435,12 +442,29 @@ def stop(
                         stats.get('hit_rate_percent', 0.0),
                         stats.get('evictions', 0),
                     )
+                    logger.info(
+                        "[PERF] [CACHE] ImageCacheRepresentations: raw_items=%d raw_mb=%.1f "
+                        "scaled_items=%d scaled_mb=%.1f raw_evictions=%d scaled_evictions=%d "
+                        "raw_evicted_mb=%.1f scaled_evicted_mb=%.1f replacements=%d "
+                        "idempotent_puts_avoided=%d",
+                        int(stats.get("raw_items", 0)),
+                        int(stats.get("raw_bytes", 0)) / (1024 * 1024),
+                        int(stats.get("scaled_items", 0)),
+                        int(stats.get("scaled_bytes", 0)) / (1024 * 1024),
+                        int(stats.get("raw_evictions", 0)),
+                        int(stats.get("scaled_evictions", 0)),
+                        int(stats.get("raw_evicted_bytes", 0)) / (1024 * 1024),
+                        int(stats.get("scaled_evicted_bytes", 0)) / (1024 * 1024),
+                        int(stats.get("replacements", 0)),
+                        int(stats.get("idempotent_puts_avoided", 0)),
+                    )
                 cache_flow = getattr(engine, "_cache_runtime_stats", None)
                 if isinstance(cache_flow, dict):
                     logger.info(
                         "[PERF] [CACHE] ImageCacheFlow: raw_hits=%d raw_misses=%d scaled_hits=%d "
                         "scaled_misses=%d worker_fallbacks=%d scaled_prefetch_requests=%d "
                         "scaled_prefetch_completed=%d scaled_derivations=%d "
+                        "raw_released_after_scaled=%d scaled_reuses_without_put=%d "
                         "prefetch_resume_scheduled=%d prefetch_resume_runs=%d",
                         int(cache_flow.get("raw_hits", 0)),
                         int(cache_flow.get("raw_misses", 0)),
@@ -450,6 +474,8 @@ def stop(
                         int(cache_flow.get("scaled_prefetch_requests", 0)),
                         int(cache_flow.get("scaled_prefetch_completed", 0)),
                         int(cache_flow.get("scaled_derivations", 0)),
+                        int(cache_flow.get("raw_released_after_scaled", 0)),
+                        int(cache_flow.get("scaled_reuses_without_put", 0)),
                         int(cache_flow.get("prefetch_resume_scheduled", 0)),
                         int(cache_flow.get("prefetch_resume_runs", 0)),
                     )

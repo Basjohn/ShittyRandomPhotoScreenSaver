@@ -715,7 +715,8 @@ class RedditWidget(BaseOverlayWidget):
             self._refresh_interval_ms() / 1000.0
         )
         self._periodic_due_reason_by_cache_key[cache_key] = str(reason or "terminal_due")
-        logger.warning(
+        log_terminal = logger.info if reason == "success" else logger.warning
+        log_terminal(
             "[CACHE][REDDIT] Refresh chain terminal cache_key=%s outcome=%s next_due_s=%.1f",
             cache_key,
             reason,
@@ -729,7 +730,7 @@ class RedditWidget(BaseOverlayWidget):
         self._manual_due_by_cache_key[cache_key] = (
             time.monotonic() + self.MANUAL_REFRESH_INTERVAL.total_seconds()
         )
-        logger.warning(
+        logger.info(
             "[CACHE][REDDIT] Manual refresh gate armed cache_key=%s next_manual_s=%.1f",
             cache_key,
             self.MANUAL_REFRESH_INTERVAL.total_seconds(),
@@ -749,7 +750,7 @@ class RedditWidget(BaseOverlayWidget):
         cache_key = str(self._cache_key or "reddit")
         due_reason = self._periodic_due_reason_by_cache_key.pop(cache_key, "periodic_due")
         self._periodic_due_by_cache_key.pop(cache_key, None)
-        logger.warning(
+        logger.info(
             "[CACHE][REDDIT] Periodic refresh fired cache_key=%s due_reason=%s",
             self._cache_key,
             due_reason,
@@ -1261,7 +1262,7 @@ class RedditWidget(BaseOverlayWidget):
 
         self._display_configured_posts(fade=False)
 
-        logger.warning(
+        logger.info(
             "[CACHE][REDDIT] Cache refreshed cache_key=%s source=%s attempted=%s candidates=%d visible_limit=%d",
             self._cache_key,
             source_id or "<unknown>",
@@ -1301,7 +1302,7 @@ class RedditWidget(BaseOverlayWidget):
 
         merged = self._dedupe_candidate_posts([*posts, *cached_posts])
         merged = self._sort_candidate_posts(merged)[:LIST_WIDGET_MAX_CAPACITY]
-        logger.warning(
+        logger.info(
             "[CACHE][REDDIT] Sparse fallback merged cache_key=%s source=%s attempted=%s incoming=%d existing=%d merged=%d",
             self._cache_key,
             source_id or "<unknown>",
@@ -1441,8 +1442,7 @@ class RedditWidget(BaseOverlayWidget):
         if defer_for_transition and self._defer_fetch_error_if_transition(error):
             return
         
-        if is_verbose_logging():
-            logger.warning("[REDDIT] Fetch error: %s", error)
+        logger.warning("[REDDIT] Fetch error: %s", error)
 
         error_lower = str(error or "").lower()
         if "403" in error_lower or "429" in error_lower or "blocked for url" in error_lower:

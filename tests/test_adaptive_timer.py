@@ -209,6 +209,27 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
         
         self.timer.pause()
         self.assertEqual(self.timer.get_state(), TimerState.PAUSED)
+
+    def test_paused_worker_blocks_until_idle_deadline_instead_of_polling(self):
+        """A post-transition grace period must not wake at 1 kHz."""
+        config = AdaptiveTimerConfig(
+            target_fps=60,
+            idle_timeout_sec=0.05,
+            max_deep_sleep_sec=1.0,
+        )
+        self.timer = AdaptiveTimerStrategy(self.compositor, config)
+        self.timer.start()
+        self.timer.pause()
+
+        deadline = time.monotonic() + 0.5
+        while self.timer.get_state() != TimerState.IDLE:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.005)
+
+        # One stale startup wake can race the first pause wait, so two waits is
+        # the strict upper bound.  The rejected implementation performed about
+        # fifty 1 ms polling sleeps in this same 50 ms interval.
+        self.assertLessEqual(self.timer._metrics.paused_blocking_waits, 2)
     
     def test_resume_transitions_to_running(self):
         """Resume transitions from PAUSED to RUNNING."""
@@ -343,13 +364,13 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             self.assertFalse(getattr(widget, "_srpss_timer_update_dispatch_pending"))
 
             _queue_safe_widget_update(widget)
-            self.assertEqual(len(queued), 2)
+            self.assertEqual(len(queued), 1)
 
             _mark_widget_update_consumed(widget)
             self.assertFalse(getattr(widget, "_srpss_timer_update_pending"))
 
             _queue_safe_widget_update(widget)
-            self.assertEqual(len(queued), 3)
+            self.assertEqual(len(queued), 2)
         finally:
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken
@@ -477,8 +498,8 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken
 
-    def test_safe_widget_update_allows_fresh_pending_to_keep_target_cadence(self):
-        """Fresh paint-pending state should not self-throttle high-refresh cadence."""
+    def test_safe_widget_update_coalesces_fresh_pending_until_paint_consumes_it(self):
+        """One accepted Qt update owns delivery even at high refresh."""
         class _FrameState:
             started = True
             completed = False
@@ -507,8 +528,8 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
 
             accepted = _queue_safe_widget_update(widget)
 
-            self.assertTrue(accepted)
-            self.assertEqual(len(queued), 1)
+            self.assertFalse(accepted)
+            self.assertEqual(len(queued), 0)
             self.assertTrue(getattr(widget, "_srpss_timer_update_pending"))
             self.assertEqual(widget.update_count, 0)
         finally:

@@ -97,6 +97,8 @@ def _schedule_engine_delay(
             return
         func()
 
+    _run_if_current._srpss_runtime_generation = runtime_generation
+
     try:
         if scheduler is not None and hasattr(scheduler, "single_shot"):
             scheduler.single_shot(max(0, int(delay_ms)), _run_if_current)
@@ -178,6 +180,8 @@ def _ensure_cache_runtime_stats(engine: ScreensaverEngine) -> Dict[str, int]:
         "scaled_prefetch_requests": 0,
         "scaled_prefetch_completed": 0,
         "scaled_derivations": 0,
+        "raw_released_after_scaled": 0,
+        "scaled_reuses_without_put": 0,
     }
     setattr(engine, "_cache_runtime_stats", stats)
     return stats
@@ -937,6 +941,7 @@ def _process_display_image_candidate(
     cache = getattr(engine, "_image_cache", None)
     qimage: Optional[QImage] = None
     processed_qimage: Optional[QImage] = None
+    scaled_cache_hit = False
     scaled_key = _build_scaled_cache_key(
         img_path,
         width,
@@ -951,16 +956,18 @@ def _process_display_image_candidate(
         cached_scaled = cache.get(scaled_key)
         if isinstance(cached_scaled, QImage) and not cached_scaled.isNull():
             processed_qimage = cached_scaled
+            scaled_cache_hit = True
             _bump_cache_runtime_stat(engine, "scaled_hits")
         else:
             _bump_cache_runtime_stat(engine, "scaled_misses")
 
-        cached_raw = cache.get(img_path)
-        if isinstance(cached_raw, QImage) and not cached_raw.isNull():
-            qimage = cached_raw
-            _bump_cache_runtime_stat(engine, "raw_hits")
-        else:
-            _bump_cache_runtime_stat(engine, "raw_misses")
+        if processed_qimage is None:
+            cached_raw = cache.get(img_path)
+            if isinstance(cached_raw, QImage) and not cached_raw.isNull():
+                qimage = cached_raw
+                _bump_cache_runtime_stat(engine, "raw_hits")
+            else:
+                _bump_cache_runtime_stat(engine, "raw_misses")
 
     if processed_qimage is None and (qimage is None or qimage.isNull()):
         if not Path(img_path).exists():
@@ -1012,8 +1019,10 @@ def _process_display_image_candidate(
     if processed_qimage is None or processed_qimage.isNull():
         return None
 
-    if cache is not None:
+    if cache is not None and not scaled_cache_hit:
         cache.put(scaled_key, processed_qimage)
+    elif scaled_cache_hit:
+        _bump_cache_runtime_stat(engine, "scaled_reuses_without_put")
 
     return _ProcessedDisplayImage(
         image=processed_qimage,

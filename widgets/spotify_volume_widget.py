@@ -206,6 +206,12 @@ class SpotifyVolumeWidget(QWidget):
             finally:
                 self._custom_layout_geometry_reapply_pending = False
 
+        _reapply._srpss_runtime_generation = getattr(
+            self,
+            "_runtime_generation",
+            getattr(self.parent(), "_runtime_generation", None),
+        )
+
         try:
             ThreadManager.single_shot(0, _reapply)
         except Exception as e:

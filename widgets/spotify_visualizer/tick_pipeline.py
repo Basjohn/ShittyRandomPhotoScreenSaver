@@ -583,12 +583,67 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
     energy_payload = dict(eb_snap)
     settings_payload = dict(sim_settings)
     pulse_payload = dict(pulse_params)
+    source_ts = 0.0
+    if widget._engine is not None:
+        try:
+            source_ts = float(widget._engine.get_latest_authoritative_frame()[0])
+        except Exception:
+            try:
+                source_ts = float(getattr(widget._engine, "_last_smooth_ts", 0.0) or 0.0)
+            except Exception:
+                source_ts = 0.0
     task_token = cadence.begin_submission()
     widget._bubble_active_task_token = task_token
     widget._bubble_compute_pending = True
 
-    def _on_done(task_result, *, _task_token=task_token) -> None:
-        widget._bubble_compute_done(task_result, task_token=_task_token)
+    ensure_lane = getattr(widget, "_ensure_bubble_compute_lane", None)
+    try:
+        lane = ensure_lane() if callable(ensure_lane) else None
+    except Exception:
+        widget._bubble_active_task_token = None
+        widget._bubble_compute_pending = False
+        cadence.note_submission_failure()
+        logger.warning(
+            "[SPOTIFY_VIS][FALLBACK] Managed Bubble lane creation failed",
+            exc_info=True,
+        )
+        return
+    if lane is not None:
+        accepted = lane.submit(
+            task_token=task_token,
+            dt=dt_bubble,
+            energy=energy_payload,
+            settings=settings_payload,
+            pulse=pulse_payload,
+            source_ts=source_ts,
+            authored_ts=now_ts,
+        )
+        if accepted:
+            cadence.note_submission_succeeded()
+        else:
+            widget._bubble_active_task_token = None
+            widget._bubble_compute_pending = False
+            cadence.note_submission_failure()
+            if not getattr(widget, "_bubble_lane_rejection_logged", False):
+                logger.warning(
+                    "[SPOTIFY_VIS][FALLBACK] Persistent Bubble lane rejected a lane-free step"
+                )
+                widget._bubble_lane_rejection_logged = True
+        return
+
+    def _on_done(
+        task_result,
+        *,
+        _task_token=task_token,
+        _source_ts=source_ts,
+        _authored_ts=now_ts,
+    ) -> None:
+        widget._bubble_compute_done(
+            task_result,
+            task_token=_task_token,
+            source_ts=_source_ts,
+            authored_ts=_authored_ts,
+        )
 
     try:
         widget._thread_manager.submit_compute_task(
@@ -597,6 +652,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
             energy_payload,
             settings_payload,
             pulse_payload,
+            task_token=task_token,
             callback=_on_done,
             task_id=getattr(widget, "_bubble_sim_task_id", f"bubble_sim_{id(widget)}"),
             category="visualizer.bubble_simulation",

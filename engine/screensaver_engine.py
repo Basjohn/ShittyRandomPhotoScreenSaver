@@ -751,39 +751,59 @@ class ScreensaverEngine(QObject):
                 image_accounting_publisher=self._set_display_image_accounting_snapshot,
             )
             
-            # Connect exit signal
-            self.display_manager.exit_requested.connect(self._on_exit_requested)
-            self.display_manager.transition_completed.connect(self._on_display_transition_completed)
-            
-            # Connect hotkey signals
-            self.display_manager.previous_requested.connect(self._on_previous_requested)
-            self.display_manager.next_requested.connect(self._on_next_requested)
-            self.display_manager.cycle_transition_requested.connect(self._on_cycle_transition)
-            self.display_manager.settings_requested.connect(self._on_settings_requested)
-            self.display_manager.custom_layout_reload_requested.connect(self._on_custom_layout_reload_requested)
-            self.display_manager.monitors_changed.connect(self._on_monitors_changed)
             display_manager = self.display_manager
+
+            def _connect_runtime_signal(signal_name: str, callback) -> None:
+                signal = getattr(display_manager, signal_name)
+                signal.connect(callback)
+                tracker = getattr(
+                    display_manager,
+                    "track_runtime_signal_connection",
+                    None,
+                )
+                if callable(tracker):
+                    tracker(signal_name, callback)
+
+            # Engine-owned routes are retired exactly once before the old
+            # DisplayManager is queued for destruction.
+            _connect_runtime_signal("exit_requested", self._on_exit_requested)
+            _connect_runtime_signal(
+                "transition_completed",
+                self._on_display_transition_completed,
+            )
+            _connect_runtime_signal("previous_requested", self._on_previous_requested)
+            _connect_runtime_signal("next_requested", self._on_next_requested)
+            _connect_runtime_signal("cycle_transition_requested", self._on_cycle_transition)
+            _connect_runtime_signal("settings_requested", self._on_settings_requested)
+            _connect_runtime_signal(
+                "custom_layout_reload_requested",
+                self._on_custom_layout_reload_requested,
+            )
+            _connect_runtime_signal("monitors_changed", self._on_monitors_changed)
             runtime_generation = int(getattr(self, "_runtime_generation", 0))
-            self.display_manager.displays_ready.connect(
+            _connect_runtime_signal(
+                "displays_ready",
                 lambda generation, manager=display_manager, runtime=runtime_generation: self._on_displays_ready(
                     generation,
                     manager,
                     runtime,
-                )
+                ),
             )
-            self.display_manager.authoritative_first_frames_ready.connect(
+            _connect_runtime_signal(
+                "authoritative_first_frames_ready",
                 lambda generation, manager=display_manager, runtime=runtime_generation: self._on_authoritative_first_frames_ready(
                     generation,
                     manager,
                     runtime,
-                )
+                ),
             )
-            self.display_manager.startup_reveal_completed.connect(
+            _connect_runtime_signal(
+                "startup_reveal_completed",
                 lambda generation, manager=display_manager, runtime=runtime_generation: self._on_startup_reveal_completed(
                     generation,
                     manager,
                     runtime,
-                )
+                ),
             )
             
             # Initialize displays
@@ -1217,6 +1237,7 @@ class ScreensaverEngine(QObject):
             )
             self._schedule_startup_first_image_retry(attempt + 1)
 
+        _retry._srpss_runtime_generation = runtime_generation
         ThreadManager.single_shot(delay_ms, _retry)
     def _load_image_via_worker(
         self,

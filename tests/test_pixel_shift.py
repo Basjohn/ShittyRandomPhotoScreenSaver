@@ -5,6 +5,30 @@ from PySide6.QtWidgets import QLabel
 from widgets.pixel_shift_manager import PixelShiftManager
 
 
+class _TimerStub:
+    def __init__(self) -> None:
+        self.stopped = False
+        self.deleted = False
+
+    def stop(self) -> None:
+        self.stopped = True
+
+    def deleteLater(self) -> None:  # noqa: N802 - Qt-compatible test stub
+        self.deleted = True
+
+
+class _ThreadManagerStub:
+    def __init__(self) -> None:
+        self.callback = None
+        self.interval_ms = 0
+        self.timer = _TimerStub()
+
+    def schedule_recurring(self, interval_ms, callback):
+        self.interval_ms = int(interval_ms)
+        self.callback = callback
+        return self.timer
+
+
 @pytest.fixture
 def pixel_shift_manager():
     """Create a PixelShiftManager for testing."""
@@ -21,6 +45,29 @@ def test_pixel_shift_manager_creation():
     assert manager._offset_x == 0
     assert manager._offset_y == 0
     manager.cleanup()
+
+
+def test_pixel_shift_timer_is_runtime_generation_owned_and_cleanup_breaks_display_route():
+    thread_manager = _ThreadManagerStub()
+    manager = PixelShiftManager(
+        thread_manager=thread_manager,
+        runtime_generation=27,
+    )
+    manager.set_defer_check(lambda: False)
+
+    manager.set_enabled(True)
+
+    assert thread_manager.callback is not None
+    assert thread_manager.callback.__self__ is manager
+    assert thread_manager.callback.__self__._runtime_generation == 27
+
+    manager.cleanup()
+
+    assert manager._enabled is False
+    assert manager._defer_check is None
+    assert manager._thread_manager is None
+    assert thread_manager.timer.stopped is True
+    assert thread_manager.timer.deleted is True
 
 
 def test_pixel_shift_max_drift_constant():

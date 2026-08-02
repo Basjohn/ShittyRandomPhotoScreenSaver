@@ -83,6 +83,17 @@ def _compact_field(value, fallback: str = "<none>") -> str:
     return "_".join(text.split())
 
 
+def _timestamp_age_ms(now_ts: float, timestamp) -> float | None:
+    """Return passive wall-clock age, or None when no authority exists yet."""
+    try:
+        source_ts = float(timestamp or 0.0)
+    except Exception:
+        return None
+    if source_ts <= 0.0:
+        return None
+    return max(0.0, (float(now_ts) - source_ts) * 1000.0)
+
+
 def _frame_owner_snapshot(widget) -> dict:
     """Read passive cumulative owner counters without scheduling any work."""
     try:
@@ -145,7 +156,16 @@ def _frame_owner_snapshot(widget) -> dict:
             getattr(visualizer, "_bubble_compute_pending", False)
         ),
         "bubble_result_pending": bool(
-            getattr(visualizer, "_pending_bubble_result", None) is not None
+            getattr(visualizer, "_bubble_pending_result", None) is not None
+        ),
+        "bubble_visible_source_ts": float(
+            getattr(visualizer, "_bubble_visible_source_ts", 0.0) or 0.0
+        ),
+        "bubble_visible_simulation_ts": float(
+            getattr(visualizer, "_bubble_visible_simulation_ts", 0.0) or 0.0
+        ),
+        "bubble_visible_render_state_ts": float(
+            getattr(visualizer, "_bubble_visible_render_state_ts", 0.0) or 0.0
         ),
     }
     return snapshot
@@ -159,7 +179,7 @@ def _transition_label(stall_context: dict | None) -> str:
         return _compact_field(current)
     display_transition = stall_context.get("display_transition")
     if isinstance(display_transition, dict):
-        for key in ("transition", "current_transition", "last_transition"):
+        for key in ("name", "transition", "current_transition", "last_transition"):
             value = display_transition.get(key)
             if value:
                 return _compact_field(value)
@@ -190,16 +210,30 @@ def _log_frame_gap_owner(
         gc_counts = "/".join(str(value) for value in gc.get_count())
     except Exception:
         gc_counts = "na"
+    wall_now_ts = time.time()
     ui_completed_ts = float(current.get("ui_last_completed_ts", 0.0) or 0.0)
     ui_callback_age_ms = (
-        max(0.0, (time.time() - ui_completed_ts) * 1000.0)
+        max(0.0, (wall_now_ts - ui_completed_ts) * 1000.0)
         if ui_completed_ts > 0.0
         else -1.0
+    )
+    source_age_ms = _timestamp_age_ms(
+        wall_now_ts,
+        current.get("bubble_visible_source_ts"),
+    )
+    simulation_age_ms = _timestamp_age_ms(
+        wall_now_ts,
+        current.get("bubble_visible_simulation_ts"),
+    )
+    render_state_age_ms = _timestamp_age_ms(
+        wall_now_ts,
+        current.get("bubble_visible_render_state_ts"),
     )
     severity = "over_50" if gap_ms > 50.0 else "over_33"
     logger.warning(
         "[PERF][FRAME_GAP_OWNER] severity=%s screen=%s gap_ms=%.2f "
-        "paint_ms=%.2f request_age_ms=%s target_hz=%d "
+        "paint_ms=%.2f request_age_ms=%s source_age_ms=%s "
+        "simulation_age_ms=%s render_state_age_ms=%s target_hz=%d "
         "transition_active=%d transition=%s vis_mode=%s vis_phase=%d "
         "waiting_engine=%d waiting_frame=%d bubble_worker=%d bubble_result=%d "
         "io_queue=%d compute_queue=%d io_active=%d compute_active=%d "
@@ -217,6 +251,9 @@ def _log_frame_gap_owner(
         gap_ms,
         paint_duration_ms,
         f"{request_age_ms:.2f}" if request_age_ms is not None else "na",
+        f"{source_age_ms:.2f}" if source_age_ms is not None else "na",
+        f"{simulation_age_ms:.2f}" if simulation_age_ms is not None else "na",
+        f"{render_state_age_ms:.2f}" if render_state_age_ms is not None else "na",
         target_hz,
         int(active_transition_window),
         _transition_label(stall_context),

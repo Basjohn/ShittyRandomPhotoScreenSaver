@@ -4,6 +4,7 @@ These cover filtering, age label formatting, hide-on-error behaviour, and
 click handling for posts and the header.
 """
 
+import logging
 import time
 from datetime import datetime, timedelta
 import json
@@ -95,6 +96,33 @@ def test_reddit_filters_daily_weekly_question_threads(qt_app, qtbot):  # noqa: A
     assert "daily" not in remaining.title.lower()
     assert "weekly" not in remaining.title.lower()
     assert "question thread" not in remaining.title.lower()
+
+
+@pytest.mark.qt
+def test_reddit_successful_refresh_logs_no_warning(qt_app, qtbot, caplog):  # noqa: ARG001
+    """A normal refresh is cache diagnostics, not a warning-visible failure."""
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    try:
+        caplog.clear()
+        with caplog.at_level(logging.INFO, logger=reddit_module.__name__):
+            widget._on_feed_fetched(  # type: ignore[attr-defined]
+                [{
+                    "title": "Normal post",
+                    "url": "https://example.com/post",
+                    "score": 42,
+                    "created_utc": time.time(),
+                }],
+                source_id="rss",
+                attempted_sources=("rss",),
+            )
+
+        reddit_records = [record for record in caplog.records if record.name == reddit_module.__name__]
+        assert not [record for record in reddit_records if record.levelno >= logging.WARNING]
+        assert any("Cache refreshed" in record.getMessage() for record in reddit_records)
+    finally:
+        widget.cleanup()
 
 
 @pytest.mark.qt
@@ -284,7 +312,7 @@ def test_reddit_age_lane_budget_reserves_full_suffix_width(qt_app, qtbot):  # no
 
 
 @pytest.mark.qt
-def test_reddit_error_hides_before_first_success(qt_app, qtbot):  # noqa: ARG001
+def test_reddit_error_hides_before_first_success(qt_app, qtbot, caplog):  # noqa: ARG001
     """On fetch error before any valid data, the widget should hide itself."""
 
     widget = RedditWidget()
@@ -293,10 +321,17 @@ def test_reddit_error_hides_before_first_success(qt_app, qtbot):  # noqa: ARG001
     # Sanity: no valid data yet.
     assert not widget._has_displayed_valid_data  # type: ignore[attr-defined]
 
-    widget._on_fetch_error("boom")  # type: ignore[attr-defined]
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger=reddit_module.__name__):
+        widget._on_fetch_error("boom")  # type: ignore[attr-defined]
 
     assert not widget.isVisible()
     assert not widget._has_displayed_valid_data  # type: ignore[attr-defined]
+    assert any(
+        record.levelno >= logging.WARNING and "Fetch error: boom" in record.getMessage()
+        for record in caplog.records
+        if record.name == reddit_module.__name__
+    )
 
 
 @pytest.mark.qt

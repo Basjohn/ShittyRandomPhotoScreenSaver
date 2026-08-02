@@ -93,3 +93,17 @@ def test_unavailable_registered_participant_does_not_strand_completion():
     assert coord.get_state() == FadeState.COMPLETE
     assert completed == ["done"]
     assert "media" not in coord.describe()["completed"]
+
+
+def test_cleanup_releases_pending_starters_and_completion_callbacks():
+    coord = FadeCoordinator(screen_index=0)
+    coord.register_participant("media")
+    coord.request_fade("media", lambda: None)
+    coord.add_completion_callback(lambda: None)
+
+    coord.cleanup()
+
+    assert coord.describe()["participants"] == []
+    assert coord.describe()["pending"] == []
+    assert coord._completion_callbacks == []
+    assert coord._request_queue.is_empty()

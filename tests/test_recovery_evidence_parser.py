@@ -80,6 +80,45 @@ def _write_archive(path: Path) -> None:
             'resources_json=[{"dimensions":[4,8],"format":"RGBA8","generation":9,'
             '"lease_count":null,"owner":"compositor:1","resource_id":"texture-1",'
             '"resource_kind":"texture","source":"resource_manager","tracked_bytes":128}]',
+            "2026-07-23 19:38:04 - metrics - WARNING - "
+            "[PERF][FRAME_GAP_OWNER] severity=over_50 screen=0 gap_ms=52.00 "
+            "paint_ms=4.00 request_age_ms=8.00 source_age_ms=12.00 "
+            "simulation_age_ms=9.00 render_state_age_ms=7.00 target_hz=60 "
+            "transition_active=1 transition=fade vis_mode=bubble",
+            "2026-07-23 19:38:05 - metrics - INFO - "
+            "[ADAPTIVE_TIMER] Metrics: frames=120, transitions=4, "
+            "time_idle=10.0ms, time_paused=20.0ms, time_running=2000.0ms, "
+            "idle_waits=2 paused_waits=1 total_runtime=2.1s",
+            "2026-07-23 19:38:06 - metrics - INFO - "
+            "[PERF] [SPOTIFY_VIS][BUBBLE_LANE] lane_registrations=1 "
+            "executor_tasks=3 logical_steps=12 completed=12 published=11 "
+            "rejected_busy=1 rejected_stopped=0 cancelled=0 handoff_ms_mean=1.000 "
+            "handoff_ms_max=2.000 execution_ms_mean=3.000 execution_ms_max=4.000 "
+            "callback_ms_mean=0.500 callback_ms_max=1.000",
+            "2026-07-23 19:38:07 - metrics - INFO - "
+            "[PERF] [SPOTIFY_VIS][AUDIO_LANE] lane_registrations=1 "
+            "executor_tasks=2 logical_steps=10 completed=10 published=10 "
+            "rejected_busy=0 rejected_stopped=0 cancelled=0 handoff_ms_mean=2.000 "
+            "handoff_ms_max=3.000 execution_ms_mean=4.000 execution_ms_max=5.000 "
+            "callback_ms_mean=1.000 callback_ms_max=2.000",
+            "2026-07-23 19:38:08 - metrics - INFO - "
+            "[PERF][MEDIA_PRESENTATION] event=unchanged_refresh_suppressed "
+            "deferred_for_transition=False update_requested=False layout_mutations=0",
+            "2026-07-23 19:38:09 - metrics - INFO - "
+            "[PERF][MEDIA_PRESENTATION] event=published metadata_changed=True "
+            "presentation_changed=True deferred_for_transition=False transition_active=False "
+            "layout_mutations=1 update_requested=True layout_ms=2.00 emit_ms=1.00 "
+            "subscriber_count=3 generation=4",
+            "2026-07-23 19:38:10 - metrics - INFO - "
+            "[PERF] [CACHE] ImageCacheRepresentations: raw_items=2 raw_mb=4.0 "
+            "scaled_items=3 scaled_mb=6.0 raw_evictions=1 scaled_evictions=2 "
+            "raw_evicted_mb=1.0 scaled_evicted_mb=2.0 replacements=1 "
+            "idempotent_puts_avoided=2",
+            "2026-07-23 19:38:11 - metrics - INFO - "
+            "[PERF] [CACHE] ImageCacheFlow: raw_hits=8 raw_misses=2 scaled_hits=6 "
+            "scaled_misses=3 worker_fallbacks=1 scaled_prefetch_requests=4 "
+            "scaled_prefetch_completed=3 scaled_derivations=2 raw_released_after_scaled=1 "
+            "scaled_reuses_without_put=5 prefetch_resume_scheduled=1 prefetch_resume_runs=1",
         ]
     )
     visualizer = (
@@ -88,9 +127,16 @@ def _write_archive(path: Path) -> None:
         "context=steady_idle gap_samples=30 gap_p95_ms=33.0 "
         "gap_max_ms=80.0 wait_p95_ms=20.0 wait_max_ms=40.0"
     )
-    lifecycle = (
-        "2026-07-23 19:38:03 - runtime - WARNING - "
-        "Settings cleanup started context_generation=2"
+    lifecycle = "\n".join(
+        [
+            "2026-07-23 19:38:03 - runtime - WARNING - "
+            "Settings cleanup started context_generation=2",
+            "2026-07-23 19:38:12 - runtime - INFO - "
+            "[LIFECYCLE_BARRIER] armed reason=settings retiring_generation=4 "
+            "qobjects=3 python_owners=2 python_owner_classes={'WidgetManager': 1}",
+            "2026-07-23 19:38:13 - runtime - INFO - "
+            "[LIFECYCLE_BARRIER] complete reason=settings retiring_generation=4 elapsed_ms=15.5",
+        ]
     )
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("screensaver_usage.log", usage)
@@ -128,7 +174,16 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     assert analysis.resource_rows[0]["cpu_display_bytes"] == 64
     assert analysis.resource_rows[0]["resource_detail_count"] == 1
     assert analysis.visualizer_rows[0]["p95_ms"] == 33.0
-    assert len(analysis.errors_and_warnings) == 1
+    assert analysis.summary["phase5"]["frame_gap_owner"]["severity_counts"] == {"over_50": 1}
+    assert analysis.summary["phase5"]["adaptive_timer"]["frames"]["maximum"] == 120.0
+    assert analysis.summary["phase5"]["visualizer_lanes"]["bubble_lane"]["published"]["maximum"] == 11.0
+    assert analysis.summary["phase5"]["media_presentation"] == {
+        "applied": 1,
+        "unchanged_refresh_suppressed": 1,
+    }
+    assert analysis.summary["phase5"]["cache"]["raw_hits"]["maximum"] == 8.0
+    assert analysis.summary["phase5"]["lifecycle_barrier"]["complete"] == 1
+    assert len(analysis.errors_and_warnings) == 2
 
 
 def test_write_analysis_emits_required_recovery_artifacts(tmp_path: Path) -> None:
@@ -148,6 +203,7 @@ def test_write_analysis_emits_required_recovery_artifacts(tmp_path: Path) -> Non
         "resource_snapshots.csv",
         "lifecycle_events.csv",
         "visualizer_gaps.csv",
+        "phase5_telemetry.csv",
         "errors_and_warnings.txt",
         "unknown_lines.txt",
     }

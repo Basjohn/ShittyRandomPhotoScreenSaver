@@ -26,7 +26,7 @@ Across all 61 low-rate usage samples in the run, application CPU averaged about 
 
 - [!] The 60 submissions/s maximum-two batching attempt failed the 2026-08-01 installed run. Of 2,566 offered steps, only 1,723 tasks were submitted: 842 were artificial cadence deferrals versus one worker-busy deferral. Only the terminal snapshot of each batch was published, so an impulse could be integrated and already decaying before its first visible result; the older packet could also consume a live scheduler edge intended for the newer packet.
 - [x] Validate the restored lane-free path: the latest installed run reached 50,106 offered and 50,106 submitted lane-free steps (ratio 1.000) with no artificial cadence deferrals and roughly 1–2 ms worker execution. Later intervals stayed near 89 FPS with only isolated genuine worker/result ownership deferrals. The operator confirmed restored immediate Bubble reaction and elasticity.
-- [ ] Add a runtime-shaped source/discrete-edge-to-first-visible temporal oracle. The failed batching change passed final-state/order/task-bound checks because they could not see an impulse decay before its first publication; those proxies are no longer sufficient authorization for cadence work.
+- [x] Add a runtime-shaped source/discrete-edge-to-first-visible temporal oracle. The 100 Hz recurring-tick test authors a discrete kick at the exact phase deferred by the rejected 60 Hz token gate and requires that edge to appear in the first lane-free visible state. It fails terminal-only edge-plus-quiet batching while preserving the current one-step authored path.
 - [ ] Compare input-to-visible latency, p99/max delivery, and CPU/task cost before/after any new design. Do not reintroduce a second cadence authority, terminal-only multi-step batching, or live scheduler capture merely to improve the counter.
 - [ ] Exercise Spectrum on its unchanged shared newest-only path and Bubble → Spectrum → Bubble; do not retune Spectrum smoothing or Bubble authored behaviour without mode-owned failure evidence.
 - [ ] Reject any optimization that turns paint delivery, feedback animation, or a retry timer into the visualizer clock.
@@ -35,13 +35,15 @@ Across all 61 low-rate usage samples in the run, application CPU averaged about 
 
 - [-] Add/passively consume owner-labelled render, submission, GUI callback, update-request, and paint timestamps without creating UI work or a new timer/queue.
 - [-] The latest run supplied 286 owner-labelled frame gaps, all with transition work active; 105 exceeded 50 ms, mean was 48.96 ms, p95 was 84.43 ms, and max was 109.4 ms. Paint peaked near 8 ms and compute execution near 4.5 ms, so prioritize Qt/event-loop update delivery, request age/coalescing, and transition-boundary callback clustering rather than shader or Bubble-worker retuning.
-- [ ] Resolve the 62 transition-active gap records with no transition label so owner classification is complete, then correlate logical scene age, event-loop lateness, queue/callback tails, and per-display request-to-paint delay.
+- [x] Resolve the known transition-label hole: owner telemetry now accepts the compositor display-transition `name`, which was present on the 62 active records but previously ignored.
+- [ ] Correlate the now-labelled transition owner with logical scene age, event-loop lateness, queue/callback tails, and per-display request-to-paint delay in the next installed capture.
 - [ ] Attribute delayed delivery to its actual owner before changing cadence mechanics; a healthy render clock with delayed paint is event-loop delivery starvation, not permission to add repaint retries.
 
 ## P5.2 — False visualizer-latency diagnostics
 
 - [x] The latest run has no impossible uptime-linear latency values and no false visualizer ERROR flood. Nine bounded WARNING samples remained at roughly 81–100 ms with matching engine/frame generations and activation identities.
-- [ ] Separate logical audio/simulation age from render-state age and Qt paint delay in sampled diagnostics.
+- [x] Separate passive Bubble source age, logical simulation-step age, render-state application age, and existing request-to-paint age in frame-gap owner diagnostics. These timestamps are observation-only and create no timer, queue, repaint, or scheduling dependency.
+- [ ] Validate the separated ages in an installed transition capture and classify the remaining 81–100 ms warnings against request-to-paint delivery.
 - [ ] Prove diagnostic warnings neither claim a mode regression from presentation delay nor hide a real first-frame, mode-switch, or audio-input failure.
 
 ## P5.3 — Unchanged media repaint churn

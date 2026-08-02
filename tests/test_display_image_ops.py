@@ -322,6 +322,7 @@ def test_schedule_startup_first_frame_ready_flushes_visible_compositor_before_em
 
     widget = SimpleNamespace(
         screen_index=1,
+        _runtime_generation=13,
         _gl_compositor=_FakeCompositor(),
         _has_rendered_first_frame=False,
         image_displayed=_FakeSignal(),
@@ -333,6 +334,7 @@ def test_schedule_startup_first_frame_ready_flushes_visible_compositor_before_em
     display_image_ops._schedule_startup_first_frame_ready(widget, "first.png")
 
     assert len(scheduled) == 1
+    assert scheduled[0][1]._srpss_runtime_generation == 13
     scheduled.pop(0)[1]()
 
     assert widget._has_rendered_first_frame is True

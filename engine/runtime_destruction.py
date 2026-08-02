@@ -131,6 +131,7 @@ def collect_runtime_roots(manager: object) -> tuple[list[QObject], list[object]]
             "_widget_manager",
             "_custom_layout_manager",
             "_transition_factory",
+            "_pixel_shift_manager",
         ):
             _append_unique(python_owners, getattr(display, attr_name, None))
 
@@ -334,11 +335,12 @@ class RuntimeDestructionBarrier:
         self._timeout_timer.start(self._timeout_ms)
         logger.info(
             "[LIFECYCLE_BARRIER] armed reason=%s retiring_generation=%s "
-            "qobjects=%d python_owners=%d",
+            "qobjects=%d python_owners=%d python_owner_classes=%s",
             self.reason,
             self.retiring_generation,
             len(self._qobject_labels),
             len(self._python_labels),
+            dict(Counter(self._python_labels.values())),
         )
         self._maybe_complete()
 
@@ -493,7 +495,7 @@ class RuntimeDestructionBarrier:
         if not qt_replacement_may_run(self._engine_ref()):
             self.cancel_for_terminal_shutdown()
             return
-        if self._qobject_labels:
+        if self._qobject_labels or self._python_labels:
             return
         resources = self._remaining_generation_resources()
         thread_work = self._remaining_thread_work()
@@ -522,6 +524,7 @@ class RuntimeDestructionBarrier:
         self._completion_scheduled = False
         if (
             self._qobject_labels
+            or self._python_labels
             or self._remaining_generation_resources()
             or self._remaining_thread_work()
             or self._remaining_global_subscriptions()
@@ -538,16 +541,8 @@ class RuntimeDestructionBarrier:
             self.retiring_generation,
             elapsed_ms,
         )
-        if self._python_labels:
-            logger.info(
-                "[LIFECYCLE_BARRIER] diagnostic_python_owners_remaining "
-                "reason=%s retiring_generation=%s owners=%s",
-                self.reason,
-                self.retiring_generation,
-                dict(Counter(self._python_labels.values())),
-            )
-        # Plain-Python owners are diagnostic only.  Their weakref callbacks
-        # must not create a self-cycle after the Qt destruction proof passes.
+        # Every watched runtime root has now been released.  Weakref callbacks
+        # are no longer needed and must not leave a barrier self-cycle behind.
         self._python_labels.clear()
         self._python_refs.clear()
         if engine is not None:

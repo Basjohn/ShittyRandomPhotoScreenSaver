@@ -54,6 +54,9 @@ def _bind_runtime_dependencies(widget, engine: Optional[_SpotifyBeatEngine]) -> 
         thread_manager = getattr(widget, "_thread_manager", None)
         if thread_manager is not None:
             engine.set_thread_manager(thread_manager)
+        set_generation = getattr(engine, "set_runtime_generation", None)
+        if callable(set_generation):
+            set_generation(getattr(widget, "_runtime_generation", None))
     except Exception:
         logger.debug(
             "[SPOTIFY_VIS] Failed to bind ThreadManager to beat engine",

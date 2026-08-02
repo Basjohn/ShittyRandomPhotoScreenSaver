@@ -10,6 +10,7 @@ Tests cover:
 - ResourceManager integration
 """
 import time
+import warnings
 import pytest
 from unittest.mock import MagicMock
 from typing import Dict, Any
@@ -729,7 +730,12 @@ class TestStartupCoordination:
 
             assert manager._fade_coordinator.get_state() == FadeState.FADING
 
-            QTest.qWait(40)
+            deadline = time.monotonic() + 0.5
+            while (
+                manager._fade_coordinator.get_state() != FadeState.COMPLETE
+                and time.monotonic() < deadline
+            ):
+                QTest.qWait(10)
 
             assert manager._fade_coordinator.get_state() == FadeState.COMPLETE
         finally:
@@ -1617,6 +1623,61 @@ class TestCleanup:
         
         assert widget._lifecycle_state == "CLEANED"
 
+    def test_compositor_ready_connection_is_disconnected_once_and_released(self):
+        """First-frame readiness and terminal cleanup must not double-disconnect."""
+        from rendering.widget_manager import WidgetManager
+
+        class _Signal:
+            def __init__(self):
+                self.callbacks = []
+                self.disconnect_calls = 0
+
+            def connect(self, callback):
+                self.callbacks.append(callback)
+
+            def disconnect(self, callback):
+                self.disconnect_calls += 1
+                if callback not in self.callbacks:
+                    raise AssertionError("duplicate compositor-ready disconnect")
+                self.callbacks.remove(callback)
+
+        parent = MagicMock()
+        parent._has_rendered_first_frame = False
+        parent.image_displayed = _Signal()
+        manager = WidgetManager(parent)
+
+        manager._on_compositor_ready("first-image")
+        manager.cleanup()
+
+        assert parent.image_displayed.disconnect_calls == 1
+        assert manager._compositor_ready_signal_connected is False
+        assert manager._fade_coordinator is None
+
+    def test_terminal_cleanup_has_no_pyside_disconnect_warning(self, qt_app):
+        """Exercise the actual PySide signal path, not only a signal double."""
+        from PySide6.QtCore import QObject, Signal
+        from rendering.widget_manager import WidgetManager
+
+        class _Parent(QObject):
+            image_displayed = Signal(str)
+
+        parent = _Parent()
+        parent.screen_index = 0
+        parent._has_rendered_first_frame = False
+        manager = WidgetManager(parent)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            parent.image_displayed.emit("first-image")
+            manager.cleanup()
+
+        assert not [
+            warning
+            for warning in caught
+            if issubclass(warning.category, RuntimeWarning)
+            and "disconnect" in str(warning.message).lower()
+        ]
+
     def test_cleanup_stops_and_clears_raise_timer(self, monkeypatch):
         """Deferred raise timer should be stopped and cleared during cleanup."""
         from rendering.widget_manager import WidgetManager
@@ -1650,7 +1711,7 @@ class TestCleanup:
 
         fake_timer_instances: list[_FakeTimer] = []
 
-        def _timer_factory():
+        def _timer_factory(*_args):
             timer = _FakeTimer()
             fake_timer_instances.append(timer)
             return timer
@@ -1715,7 +1776,7 @@ class TestCleanup:
 
         fake_timer_instances = []
 
-        def _timer_factory():
+        def _timer_factory(*_args):
             timer = _FakeTimer()
             fake_timer_instances.append(timer)
             return timer

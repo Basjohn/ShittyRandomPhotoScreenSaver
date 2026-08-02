@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+import weakref
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from PySide6.QtCore import Qt
@@ -221,6 +222,12 @@ def show_on_screen(widget) -> None:
                     "startup_show_on_screen",
                     focus_reason=Qt.FocusReason.ActiveWindowFocusReason,
                 )
+
+            _restore_focus._srpss_runtime_generation = getattr(
+                widget,
+                "_runtime_generation",
+                None,
+            )
 
             if widget._thread_manager is not None and hasattr(widget._thread_manager, "single_shot"):
                 widget._thread_manager.single_shot(0, _restore_focus)
@@ -464,10 +471,25 @@ def setup_pixel_shift(widget) -> None:
         widget._pixel_shift_manager = PixelShiftManager(
             resource_manager=widget._resource_manager,
             thread_manager=widget._thread_manager,
+            runtime_generation=getattr(widget, "_runtime_generation", None),
         )
         if widget._thread_manager is not None:
             widget._pixel_shift_manager.set_thread_manager(widget._thread_manager)
-        widget._pixel_shift_manager.set_defer_check(lambda: widget.has_running_transition())
+        widget_ref = weakref.ref(widget)
+
+        def _transition_work_pending() -> bool:
+            live_widget = widget_ref()
+            return bool(
+                live_widget is not None
+                and live_widget.has_running_transition()
+            )
+
+        _transition_work_pending._srpss_runtime_generation = getattr(
+            widget,
+            "_runtime_generation",
+            None,
+        )
+        widget._pixel_shift_manager.set_defer_check(_transition_work_pending)
     
     widget._pixel_shift_manager.set_shifts_per_minute(pixel_shift_rate)
     

@@ -3123,18 +3123,32 @@ def test_bubble_compute_done_stages_pending_result_until_ui_tick_consumes_it(qt_
     task_token = (widget._bubble_cadence_state.activation_token, 1)
     widget._bubble_active_task_token = task_token
 
-    widget._bubble_compute_done(result, task_token=task_token)
+    source_ts = time.time() - 0.050
+    authored_ts = time.time() - 0.020
+    widget._bubble_compute_done(
+        result,
+        task_token=task_token,
+        source_ts=source_ts,
+        authored_ts=authored_ts,
+    )
 
     assert widget._bubble_compute_pending is False
     assert widget._has_pending_bubble_result() is True
     assert widget._bubble_pos_data == []
+    assert widget._bubble_visible_source_ts == 0.0
+    assert widget._bubble_visible_simulation_ts == 0.0
+    assert widget._bubble_visible_render_state_ts == 0.0
 
+    render_state_before = time.time()
     assert widget._consume_pending_bubble_result() is True
     assert widget._has_pending_bubble_result() is False
     assert widget._bubble_pos_data == [1.0, 2.0]
     assert widget._bubble_extra_data == [3.0]
     assert widget._bubble_trail_data == [4.0]
     assert widget._bubble_count == 5
+    assert widget._bubble_visible_source_ts == pytest.approx(source_ts)
+    assert widget._bubble_visible_simulation_ts == pytest.approx(authored_ts)
+    assert widget._bubble_visible_render_state_ts >= render_state_before
     assert widget._bubble_last_perf_diag["worker_total_ms"] == pytest.approx(1.25)
     assert widget._bubble_last_perf_diag["collision_pairs"] == pytest.approx(12.0)
 

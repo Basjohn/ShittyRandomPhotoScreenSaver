@@ -48,6 +48,12 @@ def _defer_update_position(widget) -> None:
         except RuntimeError:
             return
 
+    _retry._srpss_runtime_generation = getattr(
+        widget,
+        "_runtime_generation",
+        None,
+    )
+
     ThreadManager.single_shot(16, _retry)
 
 

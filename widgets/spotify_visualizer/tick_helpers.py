@@ -489,6 +489,74 @@ def log_perf_snapshot(widget: Any, reset: bool = False) -> None:
                     widget._bubble_stale_result_count = 0
         except Exception:
             logger.debug("[SPOTIFY_VIS] Bubble cadence PERF logging failed", exc_info=True)
+        try:
+            lane = getattr(widget, "_bubble_compute_lane", None)
+            if lane is not None:
+                lane_diag = lane.diagnostic_snapshot()
+                logger.info(
+                    "[PERF] [SPOTIFY_VIS][BUBBLE_LANE] lane_registrations=%d "
+                    "executor_tasks=%d logical_steps=%d completed=%d published=%d "
+                    "rejected_busy=%d rejected_stopped=%d cancelled=%d "
+                    "handoff_ms_mean=%.3f handoff_ms_max=%.3f "
+                    "execution_ms_mean=%.3f execution_ms_max=%.3f "
+                    "callback_ms_mean=%.3f callback_ms_max=%.3f",
+                    int(lane_diag.get("lane_registrations", 0)),
+                    int(lane_diag.get("executor_task_submissions", 0)),
+                    int(lane_diag.get("logical_steps_accepted", 0)),
+                    int(lane_diag.get("logical_steps_completed", 0)),
+                    int(lane_diag.get("logical_steps_published", 0)),
+                    int(lane_diag.get("submit_rejected_busy", 0)),
+                    int(lane_diag.get("submit_rejected_stopped", 0)),
+                    int(lane_diag.get("pending_cancelled", 0)),
+                    float(lane_diag.get("handoff_ms_mean", 0.0)),
+                    float(lane_diag.get("handoff_ms_max", 0.0)),
+                    float(lane_diag.get("execution_ms_mean", 0.0)),
+                    float(lane_diag.get("execution_ms_max", 0.0)),
+                    float(lane_diag.get("callback_ms_mean", 0.0)),
+                    float(lane_diag.get("callback_ms_max", 0.0)),
+                )
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Bubble lane PERF logging failed", exc_info=True)
+        try:
+            engine = getattr(widget, "_engine", None)
+            take_lane_diag = getattr(
+                engine,
+                "take_analysis_lane_diagnostics_for_log",
+                None,
+            )
+            analysis_diag = (
+                take_lane_diag(min_interval_seconds=2.0)
+                if callable(take_lane_diag)
+                else {}
+            )
+            if analysis_diag:
+                logger.info(
+                    "[PERF] [SPOTIFY_VIS][AUDIO_LANE] lane_registrations=%d "
+                    "executor_tasks=%d logical_steps=%d completed=%d published=%d "
+                    "rejected_busy=%d rejected_stopped=%d cancelled=%d "
+                    "handoff_ms_mean=%.3f handoff_ms_max=%.3f "
+                    "execution_ms_mean=%.3f execution_ms_max=%.3f "
+                    "callback_ms_mean=%.3f callback_ms_max=%.3f",
+                    int(analysis_diag.get("lane_registrations", 0)),
+                    int(analysis_diag.get("executor_task_submissions", 0)),
+                    int(analysis_diag.get("logical_steps_accepted", 0)),
+                    int(analysis_diag.get("logical_steps_completed", 0)),
+                    int(analysis_diag.get("logical_steps_published", 0)),
+                    int(analysis_diag.get("submit_rejected_busy", 0)),
+                    int(analysis_diag.get("submit_rejected_stopped", 0)),
+                    int(analysis_diag.get("pending_cancelled", 0)),
+                    float(analysis_diag.get("handoff_ms_mean", 0.0)),
+                    float(analysis_diag.get("handoff_ms_max", 0.0)),
+                    float(analysis_diag.get("execution_ms_mean", 0.0)),
+                    float(analysis_diag.get("execution_ms_max", 0.0)),
+                    float(analysis_diag.get("callback_ms_mean", 0.0)),
+                    float(analysis_diag.get("callback_ms_max", 0.0)),
+                )
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] Audio-analysis lane PERF logging failed",
+                exc_info=True,
+            )
     except Exception:
         logger.debug("[SPOTIFY_VIS] PERF metrics logging failed", exc_info=True)
     finally:
