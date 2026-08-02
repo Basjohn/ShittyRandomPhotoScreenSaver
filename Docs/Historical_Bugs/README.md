@@ -14,16 +14,23 @@ The migration is copy-first and one incident per commit:
 
 During migration, `Docs/Historical_Bugs.md` remains the canonical fallback for entries not listed here. Do not delete or shorten an original entry merely because a partial or reconstructed standalone record exists.
 
+For migrated active records, the standalone file is the current evidence record; the embedded monolithic entry remains an earlier snapshot until final cutover.
+
 ## Active / Pending Records
 
-- `R-53` remains in `Docs/Historical_Bugs.md` while fresh Settings/Edit lifecycle evidence is being gathered. Its status and technical conclusions may still change.
+- [R-57 — Scaled Prefetch Popped Selection Order Instead Of Descending Indices](R-57_Image_Prefetch_Selected_Index_Order.md) — exact cause identified; code repair and validation pending.
+- [R-56 — Settings Close Path Retouched An Already-Deleted Dialog Wrapper](R-56_Settings_Dialog_Deleted_Wrapper_Retouch.md) — Settings returns successfully, but dialog lifetime bookkeeping is invalid.
+- [R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation](R-53_Runtime_Recreation_Ownership_And_Memory.md) — Settings barrier now passes and no linear two-cycle staircase reproduced; CUSTOM/Edit remains fail-closed on two managers.
 
 ## Standalone Records
 
 ### 2026-08
 
+- [R-57 — Scaled Prefetch Popped Selection Order Instead Of Descending Indices](R-57_Image_Prefetch_Selected_Index_Order.md)
+- [R-56 — Settings Close Path Retouched An Already-Deleted Dialog Wrapper](R-56_Settings_Dialog_Deleted_Wrapper_Retouch.md)
 - [R-55 — Spectrum Paint-Local Smoothing Created A Second Cadence](R-55_Spectrum_Presentation_Smoothing.md)
 - [R-54 — Phase 5 Bubble Cadence Gate Delayed And Flattened Visible Reactions](R-54_Bubble_Cadence_Gate.md)
+- [R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation](R-53_Runtime_Recreation_Ownership_And_Memory.md)
 
 ### 2026-07
 
