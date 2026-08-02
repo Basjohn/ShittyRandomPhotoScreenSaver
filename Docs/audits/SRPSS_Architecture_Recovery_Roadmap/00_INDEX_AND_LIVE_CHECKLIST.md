@@ -1,254 +1,166 @@
 # 00 — Index and Live Checklist
 
-This file is the project control surface. Codex must keep it current.
+Last reconciled: 2026-08-02
+
+This file is the compact status ledger for the architecture roadmap. Detailed active tasks belong in `Current_Plan.md`; completed evidence belongs in phase reports and historical bug records.
 
 ## Status legend
 
-- `[ ]` Not started
-- `[-]` In progress
-- `[x]` Complete and evidence-backed
-- `[!]` Blocked or failed
-- `[~]` Deferred by an explicit decision record
+- `[ ]` not started
+- `[-]` active
+- `[x]` complete with accepted evidence
+- `[!]` reopened, failed, or blocked
+- `[~]` explicitly deferred
 
-A phase may be marked `[x]` only after:
+A roadmap phase can have implemented architecture while still being reopened by later installed evidence. Do not treat an old `[x]` or phase report as permission to ignore a newer failure.
 
-1. code is committed on `main` or an explicitly scoped child feature branch;
-2. tests pass;
-3. the required runtime scenario has been run;
-4. the phase report records before/after evidence;
-5. rollback instructions are known;
-6. visualizer fidelity has not regressed.
+## Authority and references
 
-## Authoritative document order
+```text
+working branch:                 main
+original recovery baseline:     00edb57a3076b845cb8ee4b6cb7f36ea83411f0c
+approved visual behaviour:      ff93461685476bd0657aa88312fc2e35e9037880
+restored executor behaviour:    4bde89e8e39177dc4dd7b5e64b9ac99256ab9486
+rejected persistent lane:       666624d421b08f978c5f610571a078570150a1e7
+rejected Spectrum smoothing:    ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
+donor/reference only:           7376bb9bb380253f3bd14079e65d7bdbca062fad
+active task owner:              Current_Plan.md
+latest installed evidence:      logs/evidence_chest/08_02_3877b2c7_20_27/
+```
 
-1. [Executive audit and decisions](01_EXECUTIVE_AUDIT_AND_DECISIONS.md)
-2. [Codex operating contract](02_CODEX_OPERATING_CONTRACT.md)
+## Document order
+
+1. [Executive audit and current decisions](01_EXECUTIVE_AUDIT_AND_DECISIONS.md)
+2. [Operating contract](02_CODEX_OPERATING_CONTRACT.md)
 3. [Work order and phase gates](03_WORK_ORDER_AND_PHASE_GATES.md)
 4. [Target architecture and ownership](04_TARGET_ARCHITECTURE_AND_OWNERSHIP.md)
 5. [Visualizer fidelity contract](05_VISUALIZER_FIDELITY_CONTRACT.md)
 6. [Presentation and compositor design](06_PRESENTATION_AND_COMPOSITOR_DESIGN.md)
 7. [GL lifecycle and reconfiguration](07_GL_LIFECYCLE_AND_RECONFIGURATION.md)
 8. [CPU, threading, and workload plan](08_CPU_THREADING_AND_WORKLOAD_PLAN.md)
-9. [RAM, VRAM, cache, and texture plan](09_MEMORY_GPU_RESOURCE_AND_CACHE_PLAN.md)
+9. [RAM, VRAM, resource, and cache plan](09_MEMORY_GPU_RESOURCE_AND_CACHE_PLAN.md)
 10. [Donor extraction matrix](10_DONOR_EXTRACTION_MATRIX.md)
 11. [Guardrails and prohibited patterns](11_GUARDRAILS_AND_PROHIBITED_PATTERNS.md)
 12. [Test and benchmark protocol](12_TEST_AND_BENCHMARK_PROTOCOL.md)
-13. [Evidence chest guide](13_EVIDENCE_CHEST_AND_LOG_GUIDE.md)
+13. [Evidence chest and log guide](13_EVIDENCE_CHEST_AND_LOG_GUIDE.md)
 14. [Failure triage map](14_FAILURE_TRIAGE_MAP.md)
 15. [Completion and release gates](15_COMPLETION_AND_RELEASE_GATES.md)
 
-Templates:
+Templates are under `templates/`.
 
-- [Phase report](templates/PHASE_REPORT_TEMPLATE.md)
-- [Decision record](templates/DECISION_RECORD_TEMPLATE.md)
-- [Benchmark report](templates/BENCHMARK_REPORT_TEMPLATE.md)
-- [Visualizer change declaration](templates/VISUALIZER_CHANGE_DECLARATION.md)
-
----
-
-# Live recovery checklist
+# Roadmap status
 
 ## Phase 0 — Freeze, inventory, and evidence preservation
 
-- [x] Freeze baseline evidence, archive hashes, environment limits, and source ownership inventory.
-- [x] Establish the clean committed checkpoint on `main`, based on baseline `00edb57a3076b845cb8ee4b6cb7f36ea83411f0c`.
+- [x] Original baseline/donor evidence, hashes, ownership inventory, and recovery checkpoint were recorded.
+- [x] Historical phase reports remain valid as the starting forensic record.
 
-**Gate 0:** complete. Evidence and ownership inventory: `Docs/phase_reports/P00_FREEZE_INVENTORY_AND_EVIDENCE.md` and `Docs/phase_reports/P00_SOURCE_OWNERSHIP_INVENTORY.md`; clean checkpoint closure: `Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md`.
+**Current interpretation:** complete historical foundation. It does not define the working branch or active behavioural baseline today.
 
-## Phase 1 — Measurement foundation without behavioural change
+## Phase 1 — Measurement foundation
 
-- [x] Add bounded compositor frame-delivery metrics for render request, paint start/end, scene generation, and p50/p90/p95/p99/max tails.
-- [x] Add the single app-owned, opt-in, bounded 20 Hz event-loop lateness sampler.
-- [x] Add passive bounded task-category accounting.
-- [x] Add exact logical CPU-image and known GL resource-byte accounting with resource metadata and lifecycle snapshots.
-- [x] Preserve sampled, non-control diagnostics and no per-frame INFO output.
-- [x] Validate overhead, real-GL enabled/disabled comparison, runtime-shaped visualizer coverage, parser outputs, and compilation.
-- [x] Produce `Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md`.
+- [x] Bounded frame, event-loop, task, CPU-image, GL-resource, lifecycle, and usage instrumentation exists.
+- [x] Diagnostics are intended to remain sampled and non-controlling.
+- [!] Whole-process attribution remains incomplete: current RSS/private-commit/VRAM substantially exceed tracked application-owned bytes.
 
-**Gate 1:** complete. Measurement is trustworthy, bounded in overhead, and does not change feel; validated results are recorded in `Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md`.
-## Phase 2 — Visualizer fidelity lock before infrastructure changes
+**Current interpretation:** measurement plumbing exists; absolute-memory attribution is active work.
 
-- [x] Build deterministic audio-input replay.
-- [x] Capture representative input clips for silence, beats, sustained tones, transients, noisy music, and volume changes.
-- [x] Capture baseline output series for Spectrum, Bubble, and every supported visualizer mode.
-- [x] Record response latency, peak amplitude, decay curve, overshoot, elasticity, settling time, and low-energy behaviour.
-- [x] Record baseline frame-state sequence independently of actual paint cadence.
-- [x] Add perceptual review artifacts or replay videos for manual comparison.
-- [x] Define pass tolerances per mode.
-- [x] Prevent infrastructure tests from rewriting baseline golden data.
-- [x] Require a visualizer change declaration for any intentional algorithm change.
-- [x] Produce Phase 2 report.
+## Phase 2 — Visualizer fidelity lock
 
-**Gate 2:** complete. Visualizer feel is protected by deterministic all-mode replay, immutable baseline goldens, cadence-separation tests, quantitative metrics, and manually reviewed Spectrum/Bubble logical artifacts; see `Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md`.
+- [x] Deterministic logical replay and versioned baseline artifacts were created.
+- [x] Infrastructure changes are not allowed to rewrite visualizer behaviour silently.
+- [!] The original logical package did not prevent rejected scheduler/cadence regressions.
+- [!] A stronger production-executor temporal package, first-visible response checks, known-bad negative controls, and exact installed approval manifest remain required under P5.0.
+- [x] `ff934616` is the current user-approved Bubble/Spectrum behavioural authority.
 
-## Phase 3 — Restore and formalize lifecycle safety
+**Current interpretation:** logical protection exists; temporal and operator-approval protection is reopened.
 
-- [x] Inventory Settings and Edit entry/exit order.
-- [x] Restore full stop–destroy–recreate lifecycle semantics.
-- [x] Stop producers before deleting render resources.
-- [x] Disconnect callbacks before destruction.
-- [x] Cancel or reject worker tasks without unbounded waits.
-- [x] Destroy all GL resources on the owning GUI thread with the correct context current.
-- [x] Destroy compositor surfaces only after child resources are gone.
-- [x] Apply settings only after the old runtime is fully quiescent.
-- [x] Recreate resources under a new runtime/context generation boundary.
-- [x] Reject stale worker publications from prior generations and manager identities.
-- [x] Run at least 50 Settings cycles.
-- [x] Run at least 50 Edit cycles.
-- [x] Run mixed Settings/Edit cycles.
-- [x] Confirm zero `QOpenGLContext` cross-thread errors.
-- [x] Confirm zero stopped-resource growth per cycle.
+## Phase 3 — Full lifecycle and GL ownership
 
-**Gate 3:** complete. Lifecycle is full-stop, repeatable, and fail-loud; 150 hostile Settings/Edit/mixed cycles completed with zero stale publications, context-affinity errors, or stopped-resource growth. See `Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md`.
+- [x] Full stop–destroy–recreate, owner-context GL deletion, generation rejection, and destruction barriers were implemented.
+- [x] Settings now completes full teardown/recreation in current installed evidence.
+- [!] R-56: the Settings close path retouches an already-deleted `SettingsDialog` wrapper.
+- [!] R-53: CUSTOM/Edit begins full teardown synchronously from inside the retiring manager save graph and fails closed on two surviving `CustomLayoutManager` wrappers.
+- [ ] Repair Edit admission by persisting/retiring the temporary edit session, returning from its frames, then queueing one engine-owned immutable reload intent.
+- [ ] Preserve full reinit, graph-based placement/replay, generation barriers, and authoritative-first-frame reveal.
 
-## Phase 4 — Remove baseline resource leaks and establish budgets
+**Current interpretation:** architecture retained; installed lifecycle closure reopened.
 
-- [x] Produce a resource-lifetime map for each displayed image.
-- [x] Identify encoded, decoded, scaled, pixmap, upload-buffer, texture, FBO, and transition copies.
-- [x] Define one owner for each representation.
-- [x] Add byte-budgeted CPU caches.
-- [x] Add byte-budgeted GPU resource storage.
-- [x] Remove unbounded or count-only caches.
-- [x] Release transition source resources after terminal presentation.
-- [x] Release resized/replaced FBOs immediately on the GL thread.
-- [x] Eliminate duplicate per-display copies where dimensions and transforms match.
-- [x] Ensure ten minutes of cycling reaches a stable plateau.
-- [x] Ensure Settings/Edit returns to the expected post-rebuild plateau.
-- [x] Produce Phase 4 memory report.
+## Phase 4 — Resource containment
 
-**Gate 4:** complete. Exact application-owned CPU image/display and per-compositor texture/PBO bytes are bounded and explainable; the 45-cycle pressure run is non-monotonic and returns full owners to zero. Driver-reported VRAM remains the explicit Phase 11 platform gate. See `Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md`.
+- [x] CPU image caches, textures, PBOs, and shared-memory transfer ownership gained explicit accounting and bounded policies.
+- [x] Known historical monotonic image/worker/GL leaks were corrected and recorded.
+- [x] Full display teardown can reduce tracked GL bytes to zero and dedicated VRAM to near idle-driver levels.
+- [!] Active steady-state usage remains excessive: roughly 847–1074 MiB whole-app RSS, 2.86–3.17 GiB private commit, and 554–777 MiB dedicated VRAM in latest evidence.
+- [!] Plateau is not sufficient; absolute physical RAM, commitment, and VRAM must fall without visible quality loss.
+- [ ] Attribute the gap between tracked resources and whole-process usage before changing budgets or introducing trimming/recycling.
 
-## Phase 5 — Reduce task rate and main-thread pressure
+**Current interpretation:** tracked containment implemented; whole-process efficiency and explainability reopened.
 
-- [ ] Categorize all thread-pool tasks.
-- [ ] Remove tiny recurring jobs whose queueing overhead exceeds their useful work.
-- [ ] Batch visualizer numeric work where safe.
-- [ ] Replace high-frequency Python loops with vectorized/native operations where measured.
-- [ ] Coalesce duplicate state publications.
-- [ ] Ensure only the latest non-critical visual state is retained.
-- [ ] Stop scheduling work when state is static or hidden.
-- [ ] Keep GUI and GL mutation on the GUI thread.
-- [ ] Do not “solve” the GIL by adding more Python threads.
-- [ ] Run idle, visualizer, transition, and background-load scenarios.
-- [ ] Produce Phase 5 CPU report.
+## Phase 5 — CPU, task, delivery, recreation, and resource recovery
 
-**Gate 5:** CPU and task rate fall without visualizer or pacing regression.
+- [-] Active phase. `Current_Plan.md` is the detailed owner.
+- [x] Rejected persistent audio/Bubble lanes were removed from production.
+- [x] Ordinary general COMPUTE executor behaviour was restored and visually approved.
+- [x] Rejected paint-local Spectrum smoothing was reverted and documented.
+- [ ] Create the stronger temporal visualizer approval package.
+- [ ] Repair R-57 scaled-prefetch selection/removal ordering.
+- [ ] Repair R-56 Settings wrapper lifetime.
+- [ ] Repair R-53 CUSTOM/Edit admission and deterministic shell callback retirement.
+- [ ] Establish clean alternating lifecycle cycles before drawing final leak conclusions.
+- [ ] Attribute and lower absolute RAM/private-commit/VRAM while preserving perceivable fidelity.
+- [ ] Reduce only measured duplicate, idle, unchanged, allocation, callback, logging, and representation work.
+- [ ] Validate all supported visualizer modes against the shared restored source.
 
-## Phase 6 — Introduce explicit GPU resource store
+**Gate 5:** user-approved visual behaviour preserved; lifecycle complete; task/CPU work reduced; memory both plateaus and reaches an evidence-backed reasonable level; normal and Media Center installed evidence passes.
 
-- [ ] Implement a small, metadata-first texture/FBO registry.
-- [ ] Keep GL calls outside registry locks.
-- [ ] Use explicit leases or references.
-- [ ] Track share group/context generation.
-- [ ] Implement deterministic deletion on the owning context.
-- [ ] Add LRU eviction only for unleased resources.
-- [ ] Add hard byte caps and diagnostic dumps.
-- [ ] Prove shared reuse does not retain stale resources.
-- [ ] Prove context recreation invalidates old entries.
-- [ ] Compare against baseline and donor memory behaviour.
-- [ ] Produce Phase 6 report.
+## Phase 6 — Explicit GPU resource store
 
-**Gate 6:** Resource reuse is bounded and cannot outlive its GL generation.
+- [~] Future architecture work.
+- [ ] Reassess necessity against the current per-compositor ownership and measured active-VRAM gap before implementation.
+- [ ] Any store must remain metadata-first, byte-bounded, lease-based, context-generation aware, and incapable of GL calls under registry locks.
 
-## Phase 7 — Decouple visualizer simulation from presentation
+## Phase 7 — Visualizer/presentation decoupling
 
-- [ ] Define narrow immutable visualizer frame/state DTOs.
-- [ ] Keep simulation cadence independent from image-transition cadence.
-- [ ] Ensure visualizer producers never wait for paint acknowledgement.
-- [ ] Coalesce publication to latest state.
-- [ ] Preserve simulation timing during skipped paints.
-- [ ] Preserve baseline response curves and elasticity.
-- [ ] Remove any compositor-owned visualizer scheduler.
-- [ ] Test under idle and artificial main-thread stalls.
-- [ ] Produce Phase 7 fidelity and pacing report.
+- [~] Future architecture work after stronger goldens.
+- [ ] Preserve the accepted ordinary executor and logical integration semantics.
+- [ ] No second cadence, paint acknowledgement, paint-local authoritative mutation, or compositor-owned visualizer scheduler.
 
-**Gate 7:** Visualizer feel survives presentation pressure.
+## Phase 8 — Narrow one-surface compositor
 
-## Phase 8 — Rebuild single-surface compositor narrowly
+- [~] Future architecture work.
+- [ ] One surface per display remains a product/architecture target only if it can be implemented without importing donor orchestration or harming visual fidelity.
 
-- [ ] Implement one compositor surface per display.
-- [ ] Keep compositor free of simulation and application lifecycle logic.
-- [ ] Feed it an immutable scene snapshot.
-- [ ] Draw base image, optional transition, visualizer, and overlays in explicit order.
-- [ ] Request continued frames only while something is animated.
-- [ ] Use ordinary latest-state coalescing, not producer blocking.
-- [ ] Remove compatibility attribute forwarding.
-- [ ] Remove widget-shaped visualizer façade.
-- [ ] Remove adaptive timer and paint-acknowledgement handshake.
-- [ ] Confirm cursor halo and UI overlays remain smooth.
-- [ ] Produce Phase 8 report.
+## Phase 9 — Local transition completion
 
-**Gate 8:** Single-surface composition improves ownership without coupling clocks.
+- [~] Future architecture work.
+- [ ] Completion stays local, deterministic, and resource-releasing; no producer/pipeline terminal acknowledgement.
 
-## Phase 9 — Simplify transition completion
+## Phase 10 — Temporary and legacy scaffolding removal
 
-- [ ] Replace distributed terminal transaction with local transition state.
-- [ ] Define source, destination, start time, duration, easing, and active flag.
-- [ ] Finalize destination on the first paint at or beyond completion.
-- [ ] Release source/temporary resources immediately after finalization.
-- [ ] Ensure no image pipeline, widget, worker, or scheduler acknowledgement is needed.
-- [ ] Test interruption, replacement, resize, monitor change, Settings, and Edit.
-- [ ] Produce Phase 9 report.
+- [~] Future cleanup after current recovery gates.
+- [ ] Remove only after production-use, dynamic-import, frozen-build, fallback, and rollback audits.
 
-**Gate 9:** Transition completion is local, deterministic, and leak-free.
+## Phase 11 — Hostile and long-duration validation
 
-## Phase 10 — Remove obsolete compatibility and donor scaffolding
+- [ ] Normal and Media Center variants.
+- [ ] Idle, visualizer, transitions, combined work, CPU/disk/GPU/mixed load, Settings/Edit during activity, display topology, and long soak.
+- [ ] Exact environment and source/cache state recorded.
 
-- [ ] Remove dynamic `__getattr__`/`__setattr__` forwarding.
-- [ ] Remove `_LOCAL_ATTRS`-style compatibility state registries.
-- [ ] Remove widget-instance free-function seams.
-- [ ] Remove dead retry/backoff branches.
-- [ ] Remove obsolete overlay/widget implementation only after parity proof.
-- [ ] Remove stale diagnostics that measure deleted machinery.
-- [ ] Confirm no hidden fallback silently activates old architecture.
-- [ ] Produce Phase 10 report.
+## Phase 12 — Release and documentation
 
-**Gate 10:** One understandable runtime path remains.
+- [ ] Canonical docs match code and current evidence.
+- [ ] Remaining weaknesses and provisional budgets stated honestly.
+- [ ] Rollback point and release candidate identified.
 
-## Phase 11 — Full regression, soak, and hostile-load validation
+# Immediate blockers summary
 
-- [ ] Run all deterministic visualizer replays.
-- [ ] Run 30-minute normal screensaver scenario.
-- [ ] Run 2-hour image-cycling soak.
-- [ ] Run background CPU, disk, GPU, and mixed-load scenarios.
-- [ ] Run repeated Settings/Edit cycles during active visualizer and transitions.
-- [ ] Run monitor sleep/wake, resolution change, and display reconnect scenarios where supported.
-- [ ] Verify no monotonically increasing RAM/VRAM.
-- [ ] Verify p99 and maximum frame gaps meet gates.
-- [ ] Verify visualizer manual review.
-- [ ] Produce final benchmark report.
+| ID | State | Required result |
+|---|---|---|
+| P5.0 | Open | Strong temporal visualizer goldens and installed approval manifest |
+| R-53 | Blocking | Edit full reinit admitted after temporary session retirement; zero manager survivors |
+| R-56 | Open | No post-modal calls on invalid `SettingsDialog` wrapper |
+| R-57 | Open | Stable scaled-prefetch selection/removal with exact regression fixture |
+| Memory | Open | Explain and reduce whole-app RSS/commit/VRAM without fidelity cuts |
 
-**Gate 11:** The recovery is demonstrably better than both evidence versions.
-
-## Phase 12 — Release preparation
-
-- [ ] Update architecture documentation to match actual code.
-- [ ] Archive benchmark artifacts.
-- [ ] Record final resource budgets.
-- [ ] Record known limitations.
-- [ ] Record rollback commit.
-- [ ] Tag release candidate.
-- [ ] Do not merge donor branch.
-- [ ] Do not delete evidence or donor history.
-
-**Gate 12:** Release candidate is reproducible and auditable.
-
----
-
-# Current global blockers
-
-- [x] Logged baseline and donor runtime timelines are documented; uncontrolled external load remains an evidence limitation.
-- [ ] Deterministic visualizer input capture does not yet exist.
-- [x] Phase 1 exact logical CPU-image and known application-owned GL byte accounting is available; broader plateau work remains Phase 4.
-- [x] Baseline and donor GL lifecycle ownership maps are recorded in the Phase 0 ownership inventory.
-- [x] Phase 1 task categories are recorded with a bounded `other` overflow bucket; reduction remains Phase 5.
-
-# Decisions that require explicit approval before changing
-
-- Visualizer equations, smoothing, decay, spring, elasticity, normalization, amplitude mapping, or mode-specific behaviour.
-- User-visible transition timing or easing.
-- Image quality, scaling, crop, color handling, or fidelity.
-- Cache budgets that materially reduce image quality or cause repeated decode thrashing.
-- Removal of a supported visualizer mode.
-- Any plan to reintroduce partial GL reinitialization.
-- Any producer-to-paint blocking handshake.
+Do not add new active detail here when it belongs in `Current_Plan.md`.
