@@ -1,104 +1,103 @@
 # SRPSS Architecture Recovery Roadmap
 
+Last reconciled: 2026-08-02
+
 ## Purpose
 
-This document set is the authoritative recovery and reconstruction plan for **Shitty Random Photo Screen Saver (SRPSS)** after the compositor work between the known behavioural baseline and the current donor branch produced severe presentation, lifecycle, and architectural regressions.
+This package records the architecture-recovery rationale, phase model, target ownership, validation rules, and release gates for **Shitty Random Photo Screen Saver (SRPSS)**.
 
-This is not a bug-fix list. It is a controlled architecture recovery program designed to:
+It began as a comparison between behavioural baseline `00edb57` and donor/reference `7376bb9`. The project has since advanced well beyond that starting comparison. These documents must therefore be read as a maintained roadmap, not as instructions to return to an old branch or blindly complete an untouched original plan.
 
-1. restore the reliable behaviour and visualizer fidelity of the baseline;
-2. preserve only the donor ideas that demonstrably improve the system;
-3. eliminate the presentation and lifecycle machinery that caused regressions;
-4. fix the serious CPU, RAM, VRAM, task-rate, and cache problems that exist in both versions;
-5. create guardrails strong enough that later optimization cannot silently damage visualizer feel, frame pacing, or GL ownership again.
+## Authority order
 
-## Authoritative Git references
+When documents disagree, use this order:
 
-| Role | Branch | Commit |
-|---|---|---|
-| Working recovery base | `recovery-00edb57` | `00edb57a3076b845cb8ee4b6cb7f36ea83411f0c` |
-| Donor/reference branch | `donor-7376bb9` | `7376bb9bb380253f3bd14079e65d7bdbca062fad` |
+1. `Current_Plan.md` — active unfinished work, current evidence, and immediate implementation order.
+2. `Spec.md` — stable product and architecture contracts.
+3. `Docs/Guardrails.md` and focused guardrails — durable prohibitions and stop conditions.
+4. this roadmap — architecture rationale, phase boundaries, target design, and validation gates.
+5. `Docs/Historical_Bugs/` — dated failure evidence and anti-regression history.
+6. `Docs/audits/OLD/` — historical audits only; never current authority.
 
-The donor branch must remain intact. Do not repair it in place. Do not merge it wholesale into the recovery branch.
+The live checklist in `00_INDEX_AND_LIVE_CHECKLIST.md` is a compact roadmap status ledger. It must not duplicate the detailed active plan.
 
-## Evidence location
+## Current Git and behavioural references
 
-Place the two supplied runtime archives here:
+| Role | Reference |
+|---|---|
+| Working branch | `main` |
+| Original recovery baseline | `00edb57a3076b845cb8ee4b6cb7f36ea83411f0c` |
+| Pre-persistent-lane behaviour reference | `6f188adadabb77b1a9d47a0fe1685c86ad39fb77` |
+| Rejected persistent-lane checkpoint | `666624d421b08f978c5f610571a078570150a1e7` |
+| Restored executor behaviour | `4bde89e8e39177dc4dd7b5e64b9ac99256ab9486` |
+| Current user-approved visual behaviour | `ff93461685476bd0657aa88312fc2e35e9037880` |
+| Donor/reference only | `7376bb9bb380253f3bd14079e65d7bdbca062fad` |
 
-```text
-logs/evidence_chest/logs7376bb9.zip
-logs/evidence_chest/logs00edb57.zip
-```
+`ff934616` is code-equivalent to `4bde89e` for Bubble/Spectrum behaviour and remains the visual approval authority until the user explicitly approves another exact commit.
 
-Interpretation:
+Work is performed directly on `main`. Do not create recovery branches, forks, or pull requests unless the user explicitly changes that instruction.
 
-- `logs7376bb9.zip` is the `7376bb9` donor/head runtime evidence.
-- `logs00edb57.zip` is the `00edb57` baseline runtime evidence.
+## Current recovery reality
 
-The evidence is not optional reading. It is the basis for the architectural decisions in this package.
+The original roadmap produced useful measurement, lifecycle, and resource-accounting work, but later installed evidence reopened important completion claims:
 
-## How Codex must use this package
+- shared audio analysis and Bubble were restored from rejected persistent lanes to the ordinary general COMPUTE executor;
+- Bubble and Spectrum are currently user-approved and must not be retuned by infrastructure or memory work;
+- Settings full teardown/recreation now succeeds, but its modal close path still retouches an already-deleted `SettingsDialog` wrapper (R-56);
+- CUSTOM/Edit Save-and-Continue still starts teardown synchronously from inside the retiring `CustomLayoutManager` save graph and fails closed on two surviving manager wrappers (R-53);
+- scaled prefetch contains a proven selected-index deletion-order bug (R-57);
+- tracked resources may plateau while the absolute active footprint remains excessive: roughly 847–1074 MiB whole-app resident RAM, 2.86–3.17 GiB private commit, and 554–777 MiB dedicated VRAM in the latest evidence;
+- stronger production-executor temporal visualizer goldens are still required despite the earlier logical replay package.
 
-Read in this order:
-
-1. `00_INDEX_AND_LIVE_CHECKLIST.md`
-2. `01_EXECUTIVE_AUDIT_AND_DECISIONS.md`
-3. `02_CODEX_OPERATING_CONTRACT.md`
-4. `03_WORK_ORDER_AND_PHASE_GATES.md`
-5. the phase-specific document named by the live checklist;
-6. `12_TEST_AND_BENCHMARK_PROTOCOL.md` before claiming any phase complete.
-
-Codex must update the live checklist and create a phase report after each completed phase. A source change is not completion. Completion requires runtime evidence and explicit pass/fail results.
+Therefore Phase 3 and Phase 4 retain valuable implemented architecture, but their installed closure is reopened under the current Phase 5 plan.
 
 ## Non-negotiable product priorities
 
 Priority order:
 
-1. **Visualizer fidelity and reactivity**
-2. **Lifecycle safety**
-3. **Frame pacing and perceived smoothness**
-4. **Bounded RAM and VRAM**
-5. **CPU efficiency**
-6. **Average FPS**
-7. **Code elegance**
+1. visualizer fidelity and reactivity;
+2. lifecycle safety;
+3. frame pacing and perceived smoothness;
+4. lower and bounded RAM/VRAM/commit;
+5. CPU and task efficiency;
+6. average FPS;
+7. code elegance.
 
-Average FPS is deliberately below perceived smoothness. The failed architecture demonstrated that higher average FPS can coexist with worse motion.
+All supported visualizer modes are protected as a family. Aggregate load is presumed to come from shared/runtime ownership unless direct evidence proves a mode-specific owner. Bubble is not a default optimization target.
 
-## Central recovery decision
+No resource target may be met by lowering perceivable fidelity, cadence, source sampling, resolution, buffer precision, transition quality, artwork/shadow quality, widget content, or first-frame responsiveness.
 
-The recovery branch is the behavioural and lifecycle foundation. It is not the final performance architecture.
+## How to use this package
 
-The donor branch is a source of selected ideas, particularly:
+For active work:
 
-- explicit GPU resource accounting and bounded reuse;
-- immutable worker-to-render data boundaries;
-- context-affinity assertions;
-- useful performance instrumentation;
-- the long-term goal of one compositor surface per display.
+1. read `Current_Plan.md`;
+2. read `00_INDEX_AND_LIVE_CHECKLIST.md`;
+3. read the phase-specific roadmap document;
+4. read the relevant focused guardrail and historical bug record;
+5. inspect current `main`, not only baseline/donor code;
+6. gather deterministic and installed evidence before claiming completion.
 
-The donor branch is not a valid source for:
+For architectural history, consult `01_EXECUTIVE_AUDIT_AND_DECISIONS.md` and `10_DONOR_EXTRACTION_MATRIX.md`.
 
-- adaptive timer and paint-acknowledgement scheduling;
-- compositor-owned visualizer cadence;
-- partial GL reinitialization;
-- compatibility mega-layers;
-- distributed terminal-frame transactions;
-- broad dynamic attribute forwarding;
-- hot-path whole-buffer hashing;
-- lifecycle state spread across widgets, compositor, controller, workers, and resource registries.
+For any visualizer-adjacent change, read `05_VISUALIZER_FIDELITY_CONTRACT.md` and `Docs/Guardrails/Visualizer_Presentation.md`.
+
+For memory work, read `09_MEMORY_GPU_RESOURCE_AND_CACHE_PLAN.md`; plateau and absolute footprint are separate gates.
 
 ## Definition of success
 
-The reconstruction succeeds only when all of the following are true:
+Recovery succeeds only when:
 
-- visualizer modes preserve baseline feel under deterministic replay and live Spotify input;
-- frame-time tails remain controlled under idle and background-load scenarios;
-- Settings and Edit can be entered and exited repeatedly without GL ownership errors;
-- RAM and VRAM reach a bounded plateau instead of climbing with image changes;
-- CPU usage is materially lower than both evidence runs;
-- no producer waits for a Qt paint acknowledgement;
-- all GL creation and destruction occurs on the owning GUI/context thread;
-- no compatibility façade hides ownership or silently forwards state;
-- every accepted optimization has a rollback point and benchmark evidence.
+- current approved visualizer behaviour survives deterministic temporal tests and installed user review;
+- no producer waits for paint and no second presentation cadence exists;
+- Settings and Edit repeatedly complete full stop–destroy–recreate with zero retired owners;
+- Qt/PySide wrapper lifetime is handled explicitly;
+- graph-based CUSTOM placement and replay remain intact;
+- RAM, private commit, and VRAM both plateau and fall to evidence-backed reasonable levels;
+- CPU/task work falls without mode-specific fidelity cuts;
+- all GL creation and destruction occurs on the owner GUI/context thread;
+- resource and whole-process usage gaps are explainable;
+- normal and Media Center variants pass hostile and long-duration validation;
+- failed experiments and remaining weaknesses are recorded honestly.
 
-Start with the index.
+Start with the live checklist, but treat `Current_Plan.md` as the active execution authority.
