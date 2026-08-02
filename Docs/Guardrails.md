@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-08-01
+Last updated: 2026-08-02
 
 Durable cross-cutting rules for SRPSS.
 
@@ -55,9 +55,10 @@ State what existing mechanism is removed or replaced. Complexity may not merely 
 
 Stop and reassess when:
 
-- Spectrum becomes flatter;
-- Bubble becomes less reactive or elastic;
+- Spectrum becomes flatter, less reliable, more stepped, or less smooth;
+- Bubble becomes less reactive, less elastic, less expansive, or less correctly song-sensitive;
 - any visualizer becomes visibly less smooth;
+- a visualizer continues moving while reacting to stale or irregular source data;
 - p99/max frame delivery worsens despite better averages;
 - cursor halo or unrelated UI becomes choppy;
 - a producer waits for paint completion;
@@ -69,6 +70,7 @@ Stop and reassess when:
 - a silent fallback is required;
 - a fix needs broad dynamic forwarding or widget impersonation;
 - tests pass while the known user-visible failure remains;
+- proxy counters claim equivalence after the operator reports a visualizer regression;
 - one phase starts changing lifecycle, compositor, visualizer behaviour, memory, and threading together.
 
 Do not answer these failures with another flag or retry.
@@ -108,6 +110,7 @@ Do not force:
 
 - every GUI timer through `ThreadManager`;
 - visualizer simulation through `AnimationManager`;
+- every high-rate computation through one generic persistent scheduler;
 - per-frame state through `EventSystem`;
 - GL context decisions through `ResourceManager`;
 - unrelated responsibilities into a generic manager.
@@ -180,7 +183,10 @@ Protected mode behaviour includes:
 - settling;
 - low-energy response;
 - spatial distribution;
-- continuity under irregular presentation.
+- continuity under irregular presentation;
+- source freshness;
+- transient and onset timing;
+- mode-specific personality under different song dynamics.
 
 Before and after shared visualizer/audio/timing/render changes:
 
@@ -191,13 +197,32 @@ Before and after shared visualizer/audio/timing/render changes:
 - perform manual review;
 - do not rewrite expected output merely to pass.
 
+### Scheduler substitution is a behavioural change
+
+Moving an existing visualizer path between the general executor, a persistent lane, a dedicated scheduler, a queue, a recurring worker, or a different callback sequence is a behavioural change even when the equations and final packet values are unchanged.
+
+Such a substitution can change source sampling, worker competition, event consumption, callback ordering, publication timing, teardown ownership, and first-frame authority.
+
+Never migrate both the shared audio source and a mode-owned simulation path in one acceptance slice. Change and validate one causal boundary at a time.
+
+A visualizer scheduler substitution is rejected when either:
+
+- the operator reports a fidelity regression; or
+- lifecycle ownership becomes less deterministic.
+
+Zero rejected submissions, cheap means, high throughput, exact final state, and green logical goldens do not overrule those failures.
+
+When a substitution fails, restore the exact previously approved execution semantics from the named commit before attempting tuning or a replacement scheduler.
+
+No further Bubble or Spectrum scheduling, smoothing, cadence, or task-reduction optimization may begin until the user has explicitly approved a named restored build and the stronger baseline required by `Current_Plan.md` has been captured.
+
 ### Reactive visualizer task-reduction stop rule
 
 Task-count reduction is subordinate to authored reaction timing. Never add a second cadence authority, token bucket, deadline gate, or paint/transition-derived clock between an authored visualizer tick and its simulation. Never batch multiple logical simulation steps when only the terminal snapshot will be published, and never place a live mutable scheduler or event source inside a deferred or batched payload.
 
-Coalescing is permitted only after each logical input has been integrated and the mode's visible publication semantics remain intact. A lower submission count is a failed optimization if it delays first visible attack, hides or decays a discrete edge before publication, reduces loud-passage expansion or elasticity, repeats unchanged state while the ownership lane is free, or changes Spectrum smoothing. Do not revive such a design under a different scheduler name.
+Coalescing is permitted only after each logical input has been integrated and the mode's visible publication semantics remain intact. A lower submission count is a failed optimization if it delays first visible attack, hides or decays a discrete edge before publication, reduces loud-passage expansion or elasticity, repeats unchanged state while the ownership lane is free, changes Spectrum smoothing, or increases source age while the visualizer continues moving. Do not revive such a design under a different scheduler name.
 
-Before accepting visualizer cadence or task-frequency work, require a runtime-shaped source-tick-to-first-visible oracle, discrete-edge accounting, irregular-stall and transition coverage, 60 Hz and high-refresh coverage, Bubble and Spectrum comparison, and installed manual review. Final-state equality, packet ordering, average FPS, worker duration, and task-cap tests are not sufficient. If the visible complaint reproduces while those tests remain green, the optimization fails and the validation bar must be strengthened.
+Before accepting visualizer cadence or task-frequency work, require a runtime-shaped source-tick-to-first-visible oracle, discrete-edge accounting, irregular-stall and transition coverage, 60 Hz and high-refresh coverage, Bubble and Spectrum comparison, and installed manual review. Final-state equality, packet ordering, average FPS, worker duration, accepted-step totals, and task-cap tests are not sufficient. If the visible complaint reproduces while those tests remain green, the optimization fails and the validation bar must be strengthened.
 
 Visualizer simulation is independent of paint and transition cadence.
 
@@ -276,7 +301,7 @@ Before adding a worker:
 - stop hidden/static work;
 - coalesce latest non-critical state.
 
-Do not use a general COMPUTE task per presentation frame, worker-to-paint handshake, busy-spin timing, or one UI callback per diagnostic event. Where an existing reactive mode already uses one bounded compute lane, task reduction must preserve every lane-free authored step and every discrete input edge; do not add a second token clock or publish only an already-decayed terminal batch state.
+Do not use a general COMPUTE task per presentation frame, worker-to-paint handshake, busy-spin timing, or one UI callback per diagnostic event. Where an explicitly operator-approved reactive path uses a bounded compute lane, task reduction must preserve every lane-free authored step and every discrete input edge; do not add a second token clock or publish only an already-decayed terminal batch state.
 
 Measure GUI timer lateness, callback duration, paint duration, scene age, signal backlog, synchronous I/O, and logging overhead.
 
@@ -352,6 +377,8 @@ Visual/timing work requires:
 - p95/p99/max;
 - manual review.
 
+Logical goldens protect equations and state after accepted input. They do not, by themselves, authorize scheduler, callback-order, cadence, smoothing, or task-frequency changes. Detailed visualizer baseline creation and stronger-golden requirements live in `Current_Plan.md`.
+
 Performance reports include scenario, environment, average FPS, p50/p90/p95/p99/max, gap counts, CPU, task rate, RSS/private commit, tracked GL bytes, driver VRAM, visualizer result, and lifecycle result.
 
 Recovery evidence:
@@ -383,6 +410,7 @@ Until recovery completes, do not preserve or reintroduce:
 - full-buffer SHA-256 hot-path identity;
 - silent child-surface or `QPainter` fallback;
 - general worker tasks used as GUI timers;
+- unapproved visualizer persistent-lane or scheduler substitutions;
 - garbage-collection-owned GL lifetime;
 - unbounded or count-only image/GPU caches;
 - unbounded prefetch queues or unbounded future decoded bytes;
@@ -406,6 +434,7 @@ Donor ideas may be reconstructed only after isolated review and benchmark:
 - [ ] No hidden fallback
 - [ ] No unexplained timer/thread/queue/generation/retry
 - [ ] Visualizer fidelity protected
+- [ ] Named operator-approved visualizer baseline exists before visualizer optimization
 - [ ] p95/p99/max measured
 - [ ] RAM/VRAM plateau tested
 - [ ] Settings/Edit exercised
