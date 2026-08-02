@@ -1,26 +1,64 @@
-# Package File Inventory
+# Roadmap Package Map
 
-| File | SHA-256 | Bytes |
-|---|---|---:|
-| `00_INDEX_AND_LIVE_CHECKLIST.md` | `12ca56f6dda908d29c8ca7b349d1132134853efc51774c4575ef1aaa7cb3ec4f` | 12828 |
-| `01_EXECUTIVE_AUDIT_AND_DECISIONS.md` | `317175c23280a98a5cf9bdba224693d67a4abb6d74057919f0033c40eb549483` | 9236 |
-| `02_CODEX_OPERATING_CONTRACT.md` | `1b5cc4f9848835a16b7685f8b8f3927874dd27d66db42ad86218db2d45a024f1` | 6028 |
-| `03_WORK_ORDER_AND_PHASE_GATES.md` | `d0685c6a8e480dbf74ab3b61b57da95c73f6b0997f31ad0e12bbe03d91579875` | 6739 |
-| `04_TARGET_ARCHITECTURE_AND_OWNERSHIP.md` | `a23dfd093ca518f5d839e2739ffd0cb9c571ae75a430180e17fc15d83e1ac27b` | 5816 |
-| `05_VISUALIZER_FIDELITY_CONTRACT.md` | `349bcb828400b8b63d22ab7f94bd7e780c3f4a525a6b3c05e1fcbd7a987dd9e6` | 5959 |
-| `06_PRESENTATION_AND_COMPOSITOR_DESIGN.md` | `6c13deb2043af37a4010ab42eddd645307f26356e74a0116f1f09c2f029381d6` | 4963 |
-| `07_GL_LIFECYCLE_AND_RECONFIGURATION.md` | `682846d59260f602b0249b4eb56ba32a421a9dcc1f9021f2a905060c3ef75b33` | 4894 |
-| `08_CPU_THREADING_AND_WORKLOAD_PLAN.md` | `4b4102528d5ed43ea36f89eb088c55c97248751147038a2adaa8848bbfd509bd` | 4758 |
-| `09_MEMORY_GPU_RESOURCE_AND_CACHE_PLAN.md` | `5ba17ede0896b8d28d279e6660000ff09721632b28bb5b935cfa9d2abe553394` | 6160 |
-| `10_DONOR_EXTRACTION_MATRIX.md` | `ef88953b4b4df367adf36c0c0b091d01466cba7356b6e7ab2335fda5f575024f` | 6051 |
-| `11_GUARDRAILS_AND_PROHIBITED_PATTERNS.md` | `9130649204ebdee6ecaed8478a342f2a567859c535327c309ebf0e7367e3f425` | 4801 |
-| `12_TEST_AND_BENCHMARK_PROTOCOL.md` | `454378ad7950d5dfc702243f31e49ca82f4e1490a145effac8aa0b259f6d6f1a` | 5557 |
-| `13_EVIDENCE_CHEST_AND_LOG_GUIDE.md` | `fc9f9f694292e3d3b99902dc8c009c2aea9447aa77394abb4a65052138b990a6` | 4230 |
-| `14_FAILURE_TRIAGE_MAP.md` | `cb73d583a3278b45b93e0ff633670d067059f4d32216b48dc4a7ad795f21c4ad` | 3647 |
-| `15_COMPLETION_AND_RELEASE_GATES.md` | `3f2dca3f91c96a963b6cb722154f2656c68ea07bb023e5d35c7ec40904d6847a` | 3349 |
-| `README.md` | `3ea025e7768770250a266ec5ef1ba6e4d525a2adf09af60cb2fd160cc859e941` | 4232 |
-| `ROADMAP_MANIFEST.json` | `b51085c6d161a229fa330815f0df17e40b3836ccfffe37ac88ec978c3fc4a777` | 540 |
-| `templates/BENCHMARK_REPORT_TEMPLATE.md` | `33fb9dae96ed80593a95bfe94ad85351637e550db4254693eff4d085e42f73fd` | 1266 |
-| `templates/DECISION_RECORD_TEMPLATE.md` | `2c1ccdff318bea17070fe776cf291020d59c0a1b04bf803118ca6531b63ac4d2` | 357 |
-| `templates/PHASE_REPORT_TEMPLATE.md` | `a5e9875987d2f009513aad5f2e4fb1a95c18c8c1ebc509f6bbd7230cacc70a48` | 1163 |
-| `templates/VISUALIZER_CHANGE_DECLARATION.md` | `902943578efdd82470945140bf00e5b134b6a86dc08931a3d6858731343bfacb` | 572 |
+Last reconciled: 2026-08-02
+
+The previous version stored SHA-256 and byte counts for every Markdown file. That inventory became false whenever any roadmap document was legitimately maintained and created unnecessary hash churn.
+
+Git already provides exact content identity and history. This file now records purpose and authority instead.
+
+## Core package
+
+| File | Purpose |
+|---|---|
+| `README.md` | Package purpose, authority order, current references, and success definition |
+| `00_INDEX_AND_LIVE_CHECKLIST.md` | Compact phase/status ledger; `Current_Plan.md` remains active task owner |
+| `01_EXECUTIVE_AUDIT_AND_DECISIONS.md` | Historical baseline/donor audit plus current architecture decision amendments |
+| `02_CODEX_OPERATING_CONTRACT.md` | Execution discipline for work on `main` |
+| `03_WORK_ORDER_AND_PHASE_GATES.md` | Phase dependency model and reopened/current gates |
+| `04_TARGET_ARCHITECTURE_AND_OWNERSHIP.md` | One-owner target model and current lifecycle/resource boundaries |
+| `05_VISUALIZER_FIDELITY_CONTRACT.md` | Approved visual reference, all-mode protections, temporal goldens, and negative controls |
+| `06_PRESENTATION_AND_COMPOSITOR_DESIGN.md` | One-cadence latest-state presentation and future compositor boundary |
+| `07_GL_LIFECYCLE_AND_RECONFIGURATION.md` | Full teardown/recreate, R-53/R-56 corrections, barriers, and first-frame separation |
+| `08_CPU_THREADING_AND_WORKLOAD_PLAN.md` | Evidence-led work reduction without persistent lanes or cadence/fidelity cuts |
+| `09_MEMORY_GPU_RESOURCE_AND_CACHE_PLAN.md` | RAM/commit/VRAM definitions, current footprint, attribution, budgets, and quality boundary |
+| `10_DONOR_EXTRACTION_MATRIX.md` | Reference-only donor lessons and current extraction policy |
+| `11_GUARDRAILS_AND_PROHIBITED_PATTERNS.md` | Roadmap-level architecture rules and anti-patterns |
+| `12_TEST_AND_BENCHMARK_PROTOCOL.md` | Equivalent scenarios, temporal/lifecycle/resource metrics, and pass gates |
+| `13_EVIDENCE_CHEST_AND_LOG_GUIDE.md` | Original/current evidence identity, manifests, parser use, and epistemic rules |
+| `14_FAILURE_TRIAGE_MAP.md` | Evidence-led routing from symptom to ownership seam |
+| `15_COMPLETION_AND_RELEASE_GATES.md` | Final architecture, visualizer, lifecycle, performance, resource, product, and evidence gates |
+| `ROADMAP_MANIFEST.json` | Machine-readable package references and authority metadata |
+
+## Templates
+
+| File | Purpose |
+|---|---|
+| `templates/BENCHMARK_REPORT_TEMPLATE.md` | Repeatable scenario/environment/timing/resource report |
+| `templates/DECISION_RECORD_TEMPLATE.md` | Architecture decision, confidence, alternatives, consequences, validation, rollback |
+| `templates/PHASE_REPORT_TEMPLATE.md` | Phase objective, invariants, changes, evidence, failures, and gate decision |
+| `templates/VISUALIZER_CHANGE_DECLARATION.md` | Explicit user-authorized visual behaviour change record |
+
+## External canonical dependencies
+
+| Path | Role |
+|---|---|
+| `Current_Plan.md` | Active unfinished work and exact implementation order |
+| `Spec.md` | Stable architecture/product contracts |
+| `Docs/Guardrails.md` | Compact cross-cutting rules |
+| `Docs/Guardrails/Visualizer_Presentation.md` | Focused visualizer cadence/presentation rules |
+| `Docs/Historical_Bugs/` | Detailed dated incident evidence |
+| `Docs/phase_reports/` | Completed phase evidence and implementation reports |
+| `Docs/benchmark_reports/` | Benchmark summaries where present |
+| `logs/evidence_chest/` | Raw/derived installed evidence |
+
+## Historical audit boundary
+
+`Docs/audits/OLD/` contains historical Architecture/Bubble/geometry/Oscilloscope audits. Those files may contain unique forensic value but are not current authority and are not part of the live roadmap maintenance surface.
+
+## Integrity policy
+
+- use Git commit/blob identity when exact content verification is needed;
+- do not maintain hand-copied hashes for frequently edited documentation;
+- canonical links must be repository-relative and use exact path capitalization;
+- adding/removing a live roadmap file requires updating this map, `README.md`, and the live checklist/document order where applicable;
+- do not add `/OLD` documents to active reading order unless a current task explicitly requires their historical evidence.
