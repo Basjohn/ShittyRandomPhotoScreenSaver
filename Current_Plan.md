@@ -15,7 +15,7 @@ restored executor behaviour: 4bde89e8e39177dc4dd7b5e64b9ac99256ab9486
 rejected Spectrum smoothing: ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
 current approved visual behaviour: ff93461685476bd0657aa88312fc2e35e9037880
 current lifecycle/cache evidence code state: 3877b2c76791892cd5cb18c43d66a90a29c64d33
-current audit-doc checkpoint: 10c9536271dd1eaec1bac2ec04c400e6d055e66d
+current audit-doc checkpoint: d7ddb9063ebf9c8a42739e541400a8508b2941bf
 latest evidence: logs/evidence_chest/08_02_3877b2c7_20_27/
 owning report: Docs/phase_reports/P05_CPU_TASK_REDUCTION.md
 audit roadmap: Docs/audits/SRPSS_Architecture_Recovery_Roadmap/00_INDEX_AND_LIVE_CHECKLIST.md
@@ -114,7 +114,7 @@ shared GPU memory:        approximately 84–121 MiB
 8. Capture a controlled warm resource baseline with fixed displays, source images, cache state, transitions, widgets, duration, and supported visualizer scenarios.
 9. Attribute the whole-app RAM/commit/VRAM gap by owner and representation, then implement only measured reductions that preserve visible output and responsiveness.
 10. Run the full alternating Settings/Edit lifecycle, memory plateau, image churn, and pressure matrix.
-11. Remove unused visualizer lane facades, diagnostics, tests, and generic scheduler integration only after stronger goldens and repository-use audit.
+11. Audit current generic scheduler/lane consumers and preserve the recovered blocked-worker poison cases. Repair only a live production consumer; otherwise delete dead lane facades, diagnostics, tests, and scheduler integration after the stronger-golden and repository-use gates.
 12. Complete delivery-tail, unchanged-media, broader cache-representation, and logging work.
 13. Close Phase 5 only after installed normal and Media Center evidence passes.
 
@@ -451,12 +451,19 @@ Every memory change must prove:
 - [ ] All warnings and errors remain visible in `screensaver.log`.
 - [ ] A critical lifecycle timeout always marks the run failed.
 
-# Undocumented Adversarial Findings
+# Recovered Adversarial Lane Findings
 
-- [!] Recover the exact two adversarial-lane findings previously reported by Codex.
-- [ ] Record interleaving, owner, failure, missing test, reproduction, repair, rollback, deterministic acceptance, and installed evidence.
-- [ ] If no production consumer remains for the generic scheduler, document these findings before deleting it.
-- [ ] If the exact findings are unrecoverable, state that and rerun the adversarial audit rather than inventing them.
+The exact findings were recovered from Codex's final recorded statement before that session stalled. They describe races in the rejected persistent-lane/generic-lane architecture; they do not by themselves prove that current approved production execution still contains either race.
+
+- [x] **Finding 1 — stale Bubble step consumes a new kick:** an old Bubble-authored step can remain blocked across a mode/reset/activation boundary, then consume or clear a newly armed kick when the stale step resumes. The stale work may also attempt publication into the new activation unless the execution boundary rejects it.
+- [x] **Finding 2 — timed shutdown hides a running lane worker:** a timed shutdown can unregister or stop accounting for a lane while its worker is still executing, allowing lifecycle ownership to report zero too early.
+- [!] Current production applicability confidence is **below 90%** until all remaining generic scheduler/lane consumers are audited. Persistent audio-analysis and Bubble lanes are already rejected and absent from the approved runtime.
+- [ ] Add the stale-step poison case: block an old Bubble step, cross mode/reset/activation and generation boundaries, arm a new kick, then release the old step. The stale step must not consume, clear, or publish the new event/state.
+- [ ] Add the shutdown-accounting poison case: block a lane worker, begin timed shutdown, allow the timeout to expire, and prove the worker/lane remains visible as a lifecycle blocker until actual worker exit.
+- [ ] Audit every current production consumer of the generic scheduler/lane API before changing that infrastructure.
+- [ ] If a production consumer remains, correct both races at the execution boundary and prove the blocked-worker poison cases before release.
+- [ ] If no production consumer remains, preserve the findings and poison cases as negative-control evidence, then delete the dead lane scaffolding only after the P5.0 golden and repository-use gates. Do not repair abandoned infrastructure merely to keep it alive.
+- [ ] Once current ownership is verified, archive the exact interleavings, owners, missing tests, chosen repair or deletion, rollback, deterministic result, and installed relevance in a historical incident record.
 
 # Phase 5 Gate
 
@@ -477,7 +484,7 @@ Phase 5 passes only when:
 - p99/max delivery is equal or better;
 - diagnostics create no meaningful work;
 - normal and Media Center variants pass;
-- adversarial findings are documented and resolved or explicitly active.
+- the recovered adversarial findings are covered by poison tests and either fixed for live consumers or preserved before dead lane scaffolding is deleted.
 
 # Later Phases
 
