@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-02
 
-Active unfinished work only. Stable architecture belongs in `Spec.md`; durable rules belong in `Docs/Guardrails.md` and focused guardrails; dated failures belong in historical documentation; completed narratives leave this file once accepted and archived.
+Active unfinished work only. Stable architecture belongs in `Spec.md`; durable rules belong in guardrails; dated failures and detailed evidence belong in `Docs/Historical_Bugs/`; completed narratives leave this file once accepted and archived.
 
 ## Recovery And Approval Boundary
 
@@ -13,15 +13,17 @@ pre-persistent-lane behaviour: 6f188adadabb77b1a9d47a0fe1685c86ad39fb77
 failed persistent-lane checkpoint: 666624d421b08f978c5f610571a078570150a1e7
 restored executor behaviour: 4bde89e8e39177dc4dd7b5e64b9ac99256ab9486
 rejected Spectrum smoothing: ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
-current approved behaviour: ff93461685476bd0657aa88312fc2e35e9037880
-failed smoothing evidence supplied: logsspectsmoo.zip
-lifecycle evidence: logs/evidence_chest/08_01_666624d4_22_05/
+current approved visual behaviour: ff93461685476bd0657aa88312fc2e35e9037880
+current lifecycle/cache evidence code state: 3877b2c76791892cd5cb18c43d66a90a29c64d33
+latest evidence: logs/evidence_chest/08_02_3877b2c7_20_27/
 owning report: Docs/phase_reports/P05_CPU_TASK_REDUCTION.md
-focused presentation guardrail: Docs/Guardrails/Visualizer_Presentation.md
-smoothing incident: Docs/Historical_Bugs/R-55_Spectrum_Presentation_Smoothing.md
+visualizer guardrail: Docs/Guardrails/Visualizer_Presentation.md
+R-53 recreation/memory: Docs/Historical_Bugs/R-53_Runtime_Recreation_Ownership_And_Memory.md
+R-56 Settings wrapper: Docs/Historical_Bugs/R-56_Settings_Dialog_Deleted_Wrapper_Retouch.md
+R-57 scaled prefetch: Docs/Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Order.md
 ```
 
-`ff934616` is code-equivalent to `4bde89e` and preserves the accepted restored Bubble/Spectrum behaviour while recording the rejected smoothing experiment and exact revert in history.
+`ff934616` is code-equivalent to `4bde89e` and remains the user-approved Bubble/Spectrum behaviour. The commits after it through the evidence state are documentation-only apart from the already reverted smoothing experiment.
 
 ## Status Legend
 
@@ -35,12 +37,14 @@ smoothing incident: Docs/Historical_Bugs/R-55_Spectrum_Presentation_Smoothing.md
 
 - User-observed visualizer feel outranks task counts, mean timings, paint counts, and green logical tests.
 - Bubble and Spectrum are independently protected.
-- No visualizer optimization begins before the stronger approved goldens in this plan exist.
+- No visualizer optimization begins before the stronger approved goldens exist.
 - No future optimization silently changes cadence, scheduler, source sampling, attack, decay, elasticity, or presentation authority.
 - No second visualizer cadence, self-requested Spectrum repaint loop, paint-derived clock, or `paintGL()` mutation authority.
 - Settings/Edit destruction remains fail-closed; no timeout extension, ignored owner, retry sleep, nested event pumping, forced garbage collection, or fake zero count.
-- Full runtime teardown may not begin from inside a retiring widget/session owner call stack. Persist and retire the local graph first; engine-owned recreation admission runs on a later GUI turn.
-- Runtime generation, exact `DisplayManager` identity, engine generation, activation identity, first-frame authority, and owner-context GL deletion remain mandatory.
+- Full runtime teardown may not begin from inside a retiring widget/session owner call stack. Persist and retire the local edit session first; engine-owned recreation admission runs on a later GUI turn.
+- Full runtime reinitialization, graph-based CUSTOM placement, graph replay, exact `DisplayManager` identity, generation checks, owner-context GL deletion, and authoritative-first-frame reveal remain mandatory.
+- A Python wrapper is not proof of a live Qt object. Validate the underlying C++ object before every post-modal or post-delete touch.
+- Multi-index removal from a mutable sequence must use explicitly descending numeric indices or stable-identity partitioning; priority order is not deletion order.
 - Do not rename or move existing files.
 - Do not regenerate expected outputs merely to make a change pass.
 
@@ -54,46 +58,50 @@ smoothing incident: Docs/Historical_Bugs/R-55_Spectrum_Presentation_Smoothing.md
 - [x] Bubble simulation restored from persistent lane scheduling to the approved general COMPUTE executor semantics.
 - [x] Production visualizer paths no longer register persistent audio-analysis or Bubble compute lanes.
 - [x] Operator confirmed Spectrum became significantly better after restoration.
-- [x] Operator now describes Bubble and Spectrum as well behaving at `ff934616`.
+- [x] Operator describes Bubble and Spectrum as well behaving at `ff934616`.
 - [x] Spectrum paint-local decay smoothing was attempted, made Spectrum significantly less smooth, and was exactly reverted.
-- [x] Failed smoothing logs identified a second presentation cadence: roughly 977–1000 authoritative state updates versus 1417–1544 paints per 10 seconds.
-- [!] Stronger goldens are still missing. Accepted behaviour exists, but automated hazard lights remain incomplete.
+- [x] Latest evidence again shows `lane_registrations=0`; Bubble reached a `1.000` offered/submitted/published ratio with ordinary executor tasks.
+- [!] Stronger goldens are still missing. Accepted behaviour exists, but automated temporal hazard lights remain incomplete.
 
-### Lifecycle investigation result
+### Lifecycle and cache evidence
 
-- [x] The old Settings timeout had zero surviving Python owners and only the rejected idle `visualizer.audio_analysis` persistent lane. That known blocker has been removed from production. Confidence that the identified blocker is gone: **98%**. Confidence that Settings now passes installed recreation: **below 90% until rerun**.
-- [x] The old CUSTOM/Edit timeout reached zero watched QObjects, zero tracked resources, zero global subscriptions, and retained exactly two `CustomLayoutManager` Python owners—one per display—plus the same rejected audio lane.
-- [x] Source tracing proves the CUSTOM save path synchronously enters full engine teardown from the retiring edit graph: `EditShell/key event → CustomLayoutManager.save_session() → DisplayWidget signal → DisplayManager relay → engine.stop()`.
-- [x] During that direct call, `commit_session_without_reload()` still owns `self`, a copied `active_managers` list, grouped manager/state collections, loop locals, and its `finally` block. Every `EditShellWidget` also stores two lambdas closing over its manager and connects manager-bound slots without an explicit release contract.
-- [!] Cause boundary confidence: **95%** that CUSTOM recreation is admitted too early from inside the retiring manager/session graph and therefore relies on incidental Python/PySide release timing.
-- [!] Exact final strong-reference edge confidence: **85%**. The most likely persistent edge is the deleted shell wrapper retaining manager-closing resolver/applier lambdas and/or bound signal callback records; the active save/key-filter frames unquestionably contribute during admission but should unwind quickly. A live referrer capture was not present in the evidence.
-- [x] Existing tests do not exercise this failure. Their reload stub only increments a counter, so no synchronous engine teardown occurs, and they do not assert manager/shell weakref death before replacement admission.
-- [ ] Replacement initialization currently has no demonstrated separate cause defect: `_initialize_display()` rejects construction while a barrier is pending, display creation is generation/manager guarded, and reveal remains authoritative-first-frame gated. Treat initialization as a validation target, not a redesign target, unless fresh evidence contradicts this.
-- [ ] Equivalent-state RAM/private-commit/VRAM growth has no cause above 90% until clean repeated Settings/Edit recreation exists. Do not change caches, allocators, budgets, or process lifetime to guess at it.
+- [x] **Settings recreation:** two consecutive installed Settings cycles completed runtime barrier, dialog barrier, replacement construction, authoritative first frame, and coordinated reveal.
+- [x] The former Settings blocker—the idle persistent audio-analysis lane—is confirmed absent from the current production path.
+- [!] **R-56:** Settings succeeds but the close path touches an already-deleted `SettingsDialog` wrapper three times per cycle. Cause confidence: **100%**.
+- [!] **CUSTOM/Edit:** Save-and-Continue persists the scene, then synchronously tears down the runtime from inside `CustomLayoutManager.commit_session_without_reload()`.
+- [x] The logs directly prove re-entry: cleanup clears `manager._display`, then control returns to the save function's `finally` block and attempts to touch that already-cleaned manager.
+- [!] Cause confidence for the CUSTOM admission defect: **greater than 99%**.
+- [!] Exact final eight-second manager-retention edge confidence: **below 90%**. Shell/action/key-filter Python callback records remain the leading candidates, but no live referrer dump exists.
+- [!] The fail-closed barrier reaches zero QObjects, resources, tasks, and subscriptions, then times out on exactly two `CustomLayoutManager` wrappers and exits code 1.
+- [x] **Settings memory:** the former linear per-cycle staircase did not reproduce across two Settings replacements.
+- [!] One-time post-first-recreation process uplift remains unexplained; confidence in allocator/cache/driver/retained-owner cause is below 90%.
+- [ ] Edit memory/plateau evidence remains blocked because CUSTOM exits before replacement construction.
+- [!] **R-57:** scaled prefetch has an exact selected-index deletion-order bug. Cause confidence: **greater than 99%**.
+- [x] Replacement initialization itself still has no demonstrated separate defect; preserve it and validate it rather than redesigning it.
 
 ## Required Work Order
 
-1. Freeze `ff934616` as the current user-approved visualizer behavioural baseline.
-2. Capture the mandatory stronger Bubble/Spectrum approval manifest and temporal hazard lights described below before visualizer optimization or lane-scaffolding deletion.
-3. Run one fresh Settings recreation on current main. If it passes, record that the removed persistent lane was the complete observed Settings blocker; if it fails, investigate the new owner list without changing initialization architecture speculatively.
-4. Repair the proven CUSTOM/Edit admission and callback-retention boundary described in P5.4.
-5. Run the focused two-display weakref/barrier tests and one installed Edit Save-and-Continue cycle before any memory conclusions.
-6. Remove unused visualizer lane facades, diagnostics, tests, and generic scheduler integration only after repository search proves no valid production consumer remains.
-7. Run the full alternating Settings/Edit lifecycle and memory plateau matrix.
-8. Complete delivery-tail, unchanged-media, cache-representation, and logging work.
-9. Close Phase 5 only after installed normal and Media Center evidence passes.
+1. Freeze `ff934616` as the user-approved visualizer behavioural baseline.
+2. Record the immutable approval/environment manifest before production code changes; full temporal goldens remain mandatory before visualizer optimization or lane-scaffolding deletion.
+3. Repair R-57 with its exact missing preferred-index regression fixture.
+4. Repair R-56 without weakening `WA_DeleteOnClose`, dialog destruction observation, or fail-closed replacement admission.
+5. Repair R-53 CUSTOM/Edit persistence-to-recreation admission and deterministic shell callback retirement.
+6. Run focused tests for R-57, R-56, and the two-display CUSTOM weakref/barrier path.
+7. Run one installed Settings cycle and one dual-display Edit Save-and-Continue cycle.
+8. Run the full alternating Settings/Edit lifecycle and memory plateau matrix.
+9. Remove unused visualizer lane facades, diagnostics, tests, and generic scheduler integration only after stronger goldens and repository-use audit.
+10. Complete delivery-tail, unchanged-media, broader cache-representation, and logging work.
+11. Close Phase 5 only after installed normal and Media Center evidence passes.
 
 # P5.0 — Visualizer Fidelity And Mandatory Goldens
 
 ## Accepted baseline
 
-The approved comparison point is:
-
 ```text
 ff93461685476bd0657aa88312fc2e35e9037880
 ```
 
-No later build replaces it as the visualizer golden authority until the user explicitly approves the exact new commit after installed testing.
+No later build replaces it as visualizer golden authority until the user explicitly approves the exact new commit after installed testing.
 
 ## Mandatory stronger golden package
 
@@ -210,7 +218,7 @@ A golden package that also accepts these known-bad shapes is not strong enough.
 
 # Deferred Visualizer Optimizations
 
-These are **not current priority work**. None may begin until all P5.0 stronger-golden tasks are complete and the user explicitly authorizes the individual experiment.
+These are not current-priority work. None may begin until all P5.0 stronger-golden tasks are complete and the user explicitly authorizes the individual experiment.
 
 Potentially acceptable later experiments:
 
@@ -262,116 +270,52 @@ Explicitly rejected unless separately re-proposed after new evidence:
 
 # P5.4 — Recreation Ownership, Initialization, And Memory
 
-## Evidence and confidence
+## Settings result and R-56
 
-### Settings
+- [x] Two installed Settings cycles prove runtime destruction completes before dialog construction and dialog destruction completes before replacement construction.
+- [x] The production visualizer lane blocker is absent.
+- [x] Both replacements used current-generation authoritative first frames and coordinated reveal.
+- [!] Move dialog destruction observation before `dialog.exec()` can trigger `WA_DeleteOnClose`.
+- [!] Replace `isinstance(dialog, QObject)` liveness assumptions with actual Shiboken/QPointer validity checks.
+- [!] Do not call `findChildren`, `close`, or `deleteLater` on an invalid wrapper.
+- [ ] Add a production-shaped test that fails on any deleted-wrapper warning/trace and proves exactly one replacement runtime.
 
-- The prior Settings barrier armed with one `PixelShiftManager`; that owner released normally.
-- At timeout, QObjects, Python owners, resources, and global subscriptions were already zero. The only blocker was an idle persistent `visualizer.audio_analysis` lane.
-- That production lane no longer exists after the approved executor restoration.
-- **98% confidence:** the complete previously observed Settings blocker was removed.
-- **Below 90% confidence that Settings now passes:** no installed post-restoration Settings recreation has yet proved the full current path.
+## CUSTOM/Edit result and required implementation
 
-### CUSTOM/Edit
+The full runtime reinit and graph placement/replay architecture stay unchanged. Only the admission boundary changes.
 
-- The prior two-display Edit barrier armed with two `CustomLayoutManager` and two `PixelShiftManager` owners.
-- Both PixelShift owners and every watched QObject released. At timeout, exactly two `CustomLayoutManager` owners remained, plus the now-removed idle audio lane.
-- `CustomLayoutManager.commit_session_without_reload()` calls the runtime reload synchronously before its manager-bearing locals and `finally` block have returned.
-- The signal route remains direct on the GUI thread through DisplayWidget, DisplayManager, and the engine handler.
-- Each `EditShellWidget` stores manager-closing `live_geometry_resolver` and `live_geometry_applier` lambdas. Shell signals are connected to manager bound methods. No explicit shell callback/signal release method exists before `deleteLater()`.
-- **95% confidence:** the lifecycle defect is admission of teardown from inside the retiring edit-session graph, combined with reliance on incidental PySide/Python callback release.
-- **85% confidence:** the exact final eight-second strong edge is a shell Python wrapper/callback registry retaining its manager. The evidence lacks a live `gc.get_referrers` or equivalent referrer snapshot, so do not claim a more exact edge as fact.
+### Stage 1 — persist and retire the edit session
 
-### Replacement initialization
+- [ ] Calculate and save the complete CUSTOM scene.
+- [ ] Retire every `EditShellWidget` idempotently before display teardown: release pointer grabs, disconnect manager-bound signals, clear resolver/applier closures, remove temporary event filters where required, and clear snapshots/guides.
+- [ ] Destroy grid overlays and clear temporary shell/state collections.
+- [ ] Empty `CustomLayoutManager._active_managers` and uninstall the global key filter.
+- [ ] Neutralize pending restack/menu state and manager-bound deferred state.
+- [ ] Clear edit-active and reload-pending flags while displays are still valid.
+- [ ] Return from every manager/action/key-filter save/reset/slot frame.
+- [ ] Discard a deferred processed image for save/reset/slot actions that will replace the runtime; only cancel may restore it into the unchanged runtime.
 
-- `_initialize_display()` already rejects replacement construction while the retiring barrier is incomplete.
-- The current display path creates the complete participating display set before staggered show, tags delayed shows with runtime generation, checks exact manager/display membership, and gates reveal on current authoritative first frames.
-- No evidence currently shows replacement construction beginning too early or stale first-frame state satisfying readiness after the barrier.
-- Do not redesign initialization unless a fresh run shows a separate failure. Preserve and test the existing boundaries.
+### Stage 2 — engine-owned reload admission
 
-## Required CUSTOM/Edit implementation
+- [ ] Queue a later-turn callback owned by the process-lifetime engine.
+- [ ] Carry only immutable primitive intent: request kind, expected runtime generation, exact `DisplayManager` identity, and optional settings/scene revision.
+- [ ] Capture no manager, display, shell, widget, shell state, pixmap, or bound manager method.
+- [ ] Reject stale generation/manager identity and coalesce duplicate admissions.
+- [ ] Then execute the same full `engine.stop(exit_app=False, reason="custom_edit")`, fail-closed destruction barrier, complete runtime reconstruction, graph replay, and authoritative-first-frame reveal.
+- [ ] Keep `CustomLayoutManager` in runtime-root observation; never remove it to make the barrier pass.
 
-### 1. Separate persistence from recreation admission
+## Focused lifecycle tests
 
-Refactor the save/reset/slot-commit paths into two explicit stages:
+1. Two-display Save-and-Continue uses the real relay shape and proves teardown begins only on a later GUI turn after the originating save/action frame returns.
+2. Weakrefs to both managers and every shell clear without `gc.collect()` before the engine continuation runs.
+3. Shell retirement clears callbacks/signals idempotently.
+4. The queued callback closure contains no retiring graph owner.
+5. Duplicate requests coalesce; stale generation or manager identity is rejected.
+6. Save/reset/slot discards deferred image; cancel restores it.
+7. The barrier reaches zero owners before constructing exactly one replacement runtime.
+8. Saved positions, sizes, screen routes, and graph replay remain correct after reinit.
 
-1. **Persist and retire edit session:** calculate and save the CUSTOM scene, then completely detach edit-session UI and manager-owned callbacks.
-2. **Engine-owned reload admission:** on a later GUI event-loop turn, validate an immutable request and begin `engine.stop(exit_app=False, reason="custom_edit")`.
-
-The synchronous signal handler may accept the request, set a duplicate-admission guard, and queue the later engine callback. It may not call `stop()` directly.
-
-### 2. Immutable reload intent
-
-Create a narrow immutable intent containing only primitive identity needed to reject stale requests, for example:
-
-- request kind (`save`, `reset`, `slot_load`, or `slot_save`);
-- expected runtime generation;
-- expected `DisplayManager` identity;
-- settings revision or committed scene identity if available.
-
-The queued callback may retain the process-lifetime engine and the immutable intent. It must not retain a `CustomLayoutManager`, `DisplayWidget`, `DisplayManager`, `EditShellWidget`, edited widget, shell state, deferred pixmap, bound manager method, or closure over any of those objects.
-
-The callback must reject stale generation/manager identity and coalesce duplicate CUSTOM admissions.
-
-### 3. Deterministic shell callback release
-
-Add one explicit EditShell retirement contract and call it before `hide()`, `deleteLater()`, or display teardown:
-
-- cancel mouse/pointer interaction and release grabs;
-- disconnect every shell signal connected to manager bound methods;
-- clear `_live_geometry_resolver` and `_live_geometry_applier`;
-- remove installed button event filters if needed for clean wrapper release;
-- clear snapshot and guide payloads that are not needed after retirement;
-- make repeated retirement harmless.
-
-Do not rely on QObject destruction, automatic PySide signal cleanup, Python cyclic GC, or the barrier timeout to release these callbacks.
-
-### 4. Finish managers before queuing teardown
-
-The persist stage must, before requesting engine work:
-
-- retire every active manager and shell;
-- empty `CustomLayoutManager._active_managers`;
-- uninstall and clear the global key filter;
-- cancel or neutralize pending restack/menu callbacks and class flags;
-- clear manager shell/state collections and manager-bound deferred state;
-- clear each display's edit-active and reload-pending flags;
-- remove display → manager ownership only during normal display cleanup, not prematurely while persistence still needs it;
-- return from all manager-owned save/reset/key-filter frames before engine teardown starts.
-
-Do not keep a manager-bearing `active_managers`, `grouped_states`, `survivors`, or equivalent collection alive across the queued admission boundary.
-
-### 5. Deferred image rule
-
-A deferred processed image captured during Edit belongs to the retiring runtime:
-
-- **Cancel without runtime replacement:** it may be flushed back to the still-current display after session state is restored.
-- **Save/reset/slot action followed by full runtime reload:** discard it; do not publish it immediately before generation invalidation and teardown.
-
-### 6. Preserve the fail-closed barrier
-
-- Keep `CustomLayoutManager` in `collect_runtime_roots()` and barrier observation.
-- Do not weaken the timeout, ignore manager owners, remove weakref watches, or invoke production `gc.collect()`.
-- Barrier completion remains the permission for replacement construction, not the mechanism used to force owner release.
-
-## Required focused tests
-
-Add tests that fail on the current implementation:
-
-1. Two-display Save-and-Continue uses the real signal relay shape and proves engine teardown is not called until a later GUI turn after `save_session()` and the key-filter/event frame return.
-2. Weakrefs to both retired managers and all edit shells clear without `gc.collect()` before the runtime barrier continuation runs.
-3. Shell retirement clears resolver/applier callbacks and disconnects manager-bound signals idempotently.
-4. The queued engine callback closure contains no manager/display/shell/widget owner and carries only engine plus immutable intent.
-5. Duplicate requests coalesce; stale runtime generation or `DisplayManager` identity is rejected.
-6. Save/reset/slot reload discards deferred processed image; cancel restores it.
-7. Two-display barrier integration reaches zero `CustomLayoutManager` Python owners and then constructs exactly one replacement runtime.
-8. Settings recreation reaches zero ownership with no persistent visualizer lane and does not use the CUSTOM admission path.
-
-The existing counter-only `_request_custom_layout_runtime_reload()` stub tests remain useful for persistence, but they are not lifecycle evidence.
-
-## First-frame and initialization invariants
-
-For every recreation:
+## Initialization invariants
 
 - retired generation reaches zero before replacement construction;
 - `_initialize_display()` fails closed if any destruction barrier remains pending;
@@ -383,48 +327,42 @@ For every recreation:
 - `FadeCoordinator` remains the sole reveal coordinator;
 - missing fresh data keeps presentation hidden rather than showing stale state.
 
-## Runtime validation order
+## Memory result and validation
 
-### Pass A — current Settings path
+Current settled snapshots:
 
-Run Settings once on current main before CUSTOM code changes. Require:
+```text
+state                    main RSS   main private   handles   threads   tracked known   RM total/unknown
+cold generation 0         848.4       2093.2        1790       61        424.7 MiB         61 / 50
+Settings generation 1     949.5       2188.4        1838       67        424.6 MiB         56 / 45
+Settings generation 2     946.6       2179.1        1823       62        413.4 MiB         54 / 43
+```
 
-- no persistent visualizer lane ownership;
-- barrier completion;
-- Settings dialog construction only after completion;
-- dialog destruction barrier completion;
-- exactly one replacement runtime;
-- correct authoritative first-frame reveal.
+- [x] The second Settings cycle did not add another RSS/private/handle/thread/resource step.
+- [!] Do not interpret the first one-time uplift as a leak or allocator explanation; the cold state differed in warm-up and visualizer mode, and cause confidence is below 90%.
+- [ ] After R-53 repair, run at least five alternating Edit and Settings cycles in normal and Media Center variants.
+- [ ] Include Bubble, Spectrum, Bubble → Spectrum → Bubble, playing/paused, transition-time teardown, pending image work, pending ordinary audio/Bubble executor work, dual display, and one selected display.
+- [ ] Every retired generation must reach zero QObjects, Python owners, resources, timers, animations, subscriptions, callbacks, tasks, lanes, registrations, pixmaps, textures, PBOs, and tracked GL bytes.
+- [ ] Equivalent settled RSS, private commit, dedicated VRAM, handles, threads, CPU, and GPU must stop rising approximately linearly per cycle.
+- [ ] If ownership reaches zero but memory still rises, begin a new evidence-led retention investigation. Do not alter cache budgets, trim working sets, recycle processes, or weaken teardown without evidence.
 
-If it fails, use the new owner/resource/task list as evidence. Do not apply the CUSTOM fix to an unrelated Settings owner.
+# P5.5 — Cache Representations And R-57
 
-### Pass B — repaired CUSTOM path
+R-57 is a narrow correctness fix and is not blocked by the broader P5.4 plateau matrix.
 
-Run dual-display Edit Save-and-Continue and require:
+## R-57 required change
 
-- persist stage completes and returns before teardown begins;
-- no manager/shell/display object appears in the queued request closure;
-- zero retiring `CustomLayoutManager` owners;
-- zero QObjects/resources/tasks/subscriptions before replacement;
-- exactly one replacement runtime;
-- saved layout replays correctly;
-- no stale deferred image or old visualizer frame appears.
+- [ ] Replace `reversed(selected_indices)` with explicitly descending unique numeric deletion or stable-identity queue partitioning.
+- [ ] Preserve preferred-path priority, bounded concurrency, generation rejection, exact key/byte accounting, raw-source lifetime, and no duplicate submission.
+- [ ] Add the decisive fixture: nonpreferred cache-ready request at index 0, preferred cache-ready request at index 1, two available slots.
+- [ ] Cover preferred first/middle/last positions, stale generation, mixed ready/not-ready rows, and late callbacks after `clear_inflight()`.
+- [ ] Run installed transition/image rotation and require no callback failure or unexpected worker fallback increase.
 
-### Pass C — alternating lifecycle and plateau matrix
+## Broader cache audit
 
-Run at least five alternating Edit and Settings cycles in normal and Media Center variants, including Bubble, Spectrum, Bubble → Spectrum → Bubble, playing/paused, transition-time teardown, pending image work, pending ordinary audio/Bubble executor work, dual display, and one selected display.
+Blocked until clean lifecycle cycles exist.
 
-Every retired generation must reach zero QObjects, Python owner roots, resources, timers, animations, subscriptions, callbacks, tasks, lanes, visualizer owners, CustomLayoutManagers, registrations, pixmaps, textures, PBOs, and tracked GL bytes.
-
-Equivalent settled RSS, private commit, dedicated VRAM, handles, threads, CPU, and GPU must stop rising approximately linearly per cycle.
-
-If ownership reaches zero but memory still rises, begin a new evidence-led retention investigation. Current confidence in any remaining allocator/cache/driver cause is below 90%; do not alter cache budgets, add trimming, recycle processes, or weaken teardown without that evidence.
-
-# P5.5 — Cache Representations
-
-Blocked by P5.4.
-
-- [ ] Audit raw/scaled/display co-retention, exact-transform duplication, unused prefetch results, and eviction churn only after clean lifecycle cycles exist.
+- [ ] Audit raw/scaled/display co-retention, exact-transform duplication, unused prefetch results, and eviction churn.
 - [ ] Keep the 256 MiB production CPU-cache limit.
 - [ ] Do not add pins or raise budgets without a proven readiness failure.
 
@@ -434,6 +372,7 @@ Blocked by P5.4.
 - [-] Keep lifecycle ownership detail in `screensaver_lifecycle.log`.
 - [ ] Add one authoritative startup record distinguishing `main` and `main_mc`.
 - [ ] Add bounded CUSTOM admission diagnostics: request identity, queued turn, persist-complete timestamp, teardown-start timestamp, stale/duplicate rejection, and manager/shell weakref counts.
+- [ ] Deleted Qt-wrapper touches and worker callback failures must be visible as actionable warnings/errors, not only suppressed DEBUG traces.
 - [ ] Keep high-volume diagnostics bounded and passive.
 - [ ] All warnings and errors remain visible in `screensaver.log`.
 - [ ] A critical lifecycle timeout always marks the run failed.
@@ -452,8 +391,10 @@ Phase 5 passes only when:
 - the stronger user-approved visualizer golden package exists;
 - Bubble and Spectrum remain equal or better than `ff934616`;
 - all five visualizer modes pass restored shared-source validation;
+- R-57 passes deterministic and installed prefetch validation;
+- R-56 closes without invalid wrapper touches;
 - Settings and Edit recreation pass repeatedly;
-- CUSTOM teardown begins only after the retiring edit graph is explicitly retired and its manager-owned call stacks return;
+- CUSTOM teardown begins only after the retiring edit session is explicitly retired and its owner call stacks return;
 - no retired generation survives;
 - memory, VRAM, handles, threads, and ownership plateau;
 - first-frame poison does not return;
