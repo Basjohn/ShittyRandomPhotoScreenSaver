@@ -1,176 +1,207 @@
 # 07 — GL Lifecycle and Reconfiguration
 
-## Problem statement
+Last reconciled: 2026-08-02
 
-The donor branch attempts partial teardown/reinitialization but still reaches the same class of failure:
+## Current boundary
 
-```text
-Cannot make QOpenGLContext current in a different thread
-```
+Full stop–destroy–recreate remains mandatory for Settings and committed CUSTOM Edit.
 
-The baseline evidence does not reproduce this after Settings/Edit.
+The core owner-context GL teardown architecture is valuable and retained. Current installed evidence nevertheless reopens lifecycle closure through:
 
-The recovery must prioritize explicit ownership over fast reconfiguration.
+- R-56: post-modal calls on an already-deleted `SettingsDialog` C++ object;
+- R-53: synchronous full teardown from inside the retiring `CustomLayoutManager` save/action graph, followed by two surviving manager wrappers and fail-closed exit.
 
-## Lifecycle states
+These are lifecycle ownership failures even though tracked GL deletion itself reaches zero.
 
-Use a small runtime state machine:
+## Runtime states
+
+Use a small process/runtime state model:
 
 ```text
 STOPPED
 STARTING
 RUNNING
 STOPPING
+FAILED (only when needed)
 ```
 
-Optional:
-
-```text
-FAILED
-```
-
-Do not add separate overlapping states for compositor, visualizer, renderer, scheduler, warmup, and registry unless each has a real independent lifetime and documented transitions.
+Subsystem-local states are allowed only for real independent lifetimes with documented ownership/transitions. Do not replace clear sequencing with overlapping scheduler, renderer, warmup, registry, or presentation state machines.
 
 ## Full stop sequence
 
-All steps are initiated by the runtime coordinator.
+The process/runtime coordinator initiates full stop only after the request is owned by the coordinator rather than a retiring session graph.
 
-1. Mark runtime `STOPPING`.
-2. Prevent new decode/prefetch/visualizer publications for the old runtime generation.
-3. Stop GUI timers.
-4. Disconnect producer-to-scene callbacks.
-5. Cancel queued worker requests where possible.
-6. Wait bounded time for in-flight coarse worker operations.
-7. Reject any late worker completion by runtime generation.
-8. On GUI thread, make each compositor context current.
+1. Admit one immutable stop/reload intent; reject stale/duplicate requests.
+2. Mark runtime `STOPPING` and invalidate old runtime/publication generation.
+3. Prevent new decode/prefetch/visualizer publications for the retiring runtime.
+4. Stop GUI timers and recurring producer work.
+5. Disconnect/reject producer-to-runtime callbacks and subscriptions.
+6. Cancel queued work where possible; do not block unboundedly.
+7. Reject late completions by generation and exact manager/owner identity.
+8. On the GUI thread, clean display-local widgets/producers and make each compositor context current.
 9. Destroy visualizer GL renderer resources.
-10. Destroy transition GL resources.
-11. Release texture/FBO/PBO leases.
-12. Flush deterministic deletion queues.
-13. Destroy compositor-owned GL programs and buffers.
-14. call `doneCurrent()` where appropriate.
-15. Destroy compositor widgets/surfaces.
-16. Clear CPU-side scene snapshots and Qt objects.
-17. Assert zero live GL resources for the old generation.
-18. Mark runtime `STOPPED`.
+10. Finalize/cancel transitions and release terminal ownership.
+11. Delete textures/FBOs/PBOs/programs/buffers through their sole deletion owners.
+12. Flush deterministic owner-context deletion queues.
+13. Verify zero live tracked GL ownership for the retiring generation.
+14. Call `doneCurrent()` where appropriate.
+15. Destroy compositor surfaces/widgets only after child GL ownership is gone.
+16. Clear scene/display/cache sidecars and Qt owners according to their contracts.
+17. Arm/seal the runtime-destruction barrier and wait asynchronously for all watched ownership to reach zero.
+18. Admit replacement construction only after barrier completion.
+19. On failure/timeout, retain diagnostic ownership and exit/fail closed; never fake zero.
 
-## Start sequence
+Do not use nested `processEvents()`, production `gc.collect()`, retry sleeps, longer timeout, ignored owners, or handle clearing after failed deletion.
+
+## Destruction barrier contract
+
+The barrier observes:
+
+- retiring QObjects;
+- weak-observed Python roots;
+- generation-owned resources;
+- tasks/timers/animations/subscriptions/callbacks;
+- visualizer and display owners.
+
+It proves release. It does not force release.
+
+Replacement construction while any destruction barrier is pending is forbidden.
+
+## Start/replacement sequence
 
 1. Allocate a new runtime generation.
-2. Discover displays and geometry.
-3. Create compositor surfaces on GUI thread.
-4. Initialize GL contexts and capability state.
-5. Create minimal compositor resources.
-6. Create/rebind GPU resource store for current context/share groups.
-7. Create visualizer model/controller without requiring GL.
-8. Create visualizer renderer resources on GUI thread.
-9. Build initial scene snapshots.
-10. Connect producers.
-11. Start logical timers/workers.
-12. Mark runtime `RUNNING`.
+2. Discover requested displays and complete participating display registration.
+3. Create exact `DisplayManager`/display ownership on the GUI thread.
+4. Create compositor surfaces/contexts and minimal resources.
+5. Create/rebind display-local resource owners for the new context generation.
+6. Create shared visualizer source/controller without requiring GL.
+7. Create display renderer resources on owner contexts.
+8. Build current-generation scene/widget state.
+9. Connect producers with runtime generation and exact-manager identity.
+10. Start logical timers/workers.
+11. Keep displays hidden until fresh current-generation authoritative first frames arrive.
+12. Reveal through the sole coordinated reveal authority.
+13. Mark runtime `RUNNING`.
 
-## Settings workflow
+Delayed display/show callbacks validate runtime generation, exact manager, and display membership.
 
-1. Perform full stop.
-2. Open Settings dialog.
-3. Validate and persist settings.
-4. Start a completely new runtime.
-5. If start fails, remain in a known stopped/failed state and report clearly.
+## Settings workflow and R-56
 
-The old GL runtime must not remain half-alive behind the dialog.
+Correct sequence:
 
-## Edit workflow
+1. fully stop and destroy the old display runtime;
+2. construct the Settings dialog/animation graph;
+3. create and populate its destruction barrier while the QObjects are valid;
+4. set `WA_DeleteOnClose` as intended;
+5. execute the modal dialog;
+6. after `exec()` returns, validate the underlying C++ wrapper before any QObject method call;
+7. do not call `findChildren()`, `close()`, or `deleteLater()` on an invalid/deleted dialog wrapper;
+8. clean/cancel the separately owned animation/timer/generation callbacks;
+9. seal the pre-registered dialog barrier;
+10. construct exactly one replacement runtime only after dialog ownership reaches zero.
 
-Edit may have separate user-facing behavior, but it follows the same ownership principles.
+`isinstance(dialog, QObject)` is not a liveness test. Use a Shiboken-validity or equivalent explicit contract.
 
-Do not retain an old context or renderer merely to reduce reentry cost until full lifecycle correctness is proven.
+Do not remove `WA_DeleteOnClose` or bypass the dialog barrier merely to avoid the error.
 
-## Thread-affinity assertions
+## CUSTOM/Edit workflow and R-53
 
-Development builds must assert before every GL mutation:
+The full reinit and graph-based placement/replay architecture stay unchanged.
 
-- current thread ID;
-- expected GUI/render thread ID;
-- current `QOpenGLContext`;
-- expected context or share group;
-- resource context generation;
-- runtime generation;
-- resource not already destroyed.
+### Stage A — persist and retire temporary Edit ownership
 
-Assertions should include resource identity and owner.
+While displays/managers are valid:
 
-## Deferred deletion
+1. calculate and persist the complete CUSTOM graph/scene;
+2. retire each shell idempotently: release pointer grabs, disconnect manager-bound signals, clear resolver/applier closures, remove temporary event filters, clear snapshots/guides;
+3. destroy grid overlays and manager-owned temporary state;
+4. empty class-level active-manager participation;
+5. uninstall the global key filter;
+6. neutralize restack/menu/deferred manager state;
+7. clear edit-active and reload-pending flags;
+8. discard deferred old-runtime image state for committed reload actions;
+9. return from all save/reset/slot/action/key-filter frames.
 
-If a resource becomes unreferenced outside a current GL scope:
+The session manager does not call `engine.stop()` synchronously.
 
-- enqueue metadata for deletion;
-- schedule a GUI-thread deletion pass;
-- make the correct context current;
-- delete;
-- update byte accounting;
-- record deletion reason.
+### Stage B — engine-owned queued admission
 
-Do not rely on object destructors or garbage collection.
+On a later GUI turn:
 
-## Worker cancellation
+1. receive an immutable intent containing request kind, expected runtime generation, exact manager identity, and optional settings/scene revision;
+2. capture no manager, display, shell, widget, pixmap, shell state, or bound manager method;
+3. coalesce duplicates and reject stale identity;
+4. execute the normal full stop sequence;
+5. wait for zero retiring ownership;
+6. construct one complete replacement runtime;
+7. replay the persisted graph-based layout;
+8. reveal only from fresh authoritative state.
 
-Workers receive:
+The current installed logs prove synchronous re-entry above 99% confidence: manager cleanup clears `_display`, then the still-running save `finally` tries to touch that cleaned manager. The exact final wrapper referrer remains below 90% confidence; explicit callback retirement plus later admission are required regardless.
 
-- runtime generation;
-- request generation;
-- cancellation token.
+## GL thread-affinity and deletion
 
-Workers return immutable results.
+Development checks include:
 
-The GUI thread validates generations before applying.
+- current versus expected thread;
+- current versus expected context/share group;
+- runtime/context generation;
+- resource identity, owner, bytes, and deletion state.
 
-A stale result is discarded without touching GL or widgets.
+A failed delete retains ownership and blocks successful teardown. Do not transfer the same numeric handle into two deletion-owner records.
 
-## Reconfiguration tests
+## Worker cancellation/publication
 
-Required automated/manual loop scenarios:
+Work carries the necessary runtime/request/source identity. Completions return immutable results. GUI/runtime owners reject stale results before touching widgets or GL.
 
-- open/close Settings 50 times;
-- enter/exit Edit 50 times;
-- alternate Settings/Edit 50 times;
-- do so during active transition;
-- do so during active Spectrum;
-- do so during active Bubble;
-- do so while image decode/prefetch is in flight;
-- do so after display resolution change;
-- do so after sleep/wake where supported.
+Cancellation is bounded. No worker is allowed to publish into a destroyed or replaced runtime merely because its task completed successfully.
 
-For each cycle record:
+## First-frame separation
 
-- context IDs/generations;
-- live GL resource count and bytes;
-- worker count;
-- timer count;
-- callbacks connected;
-- RSS;
-- VRAM;
-- errors/warnings.
+Destruction completion authorizes replacement construction. It does not authorize reveal.
+
+The replacement remains hidden until its own current runtime, exact manager/display, visualizer engine generation, and activation identity produce authoritative state. Old cached state, GL initialization, timer ticks, stale callbacks, or prior mode state cannot satisfy readiness.
+
+## Required tests
+
+### Settings
+
+- real `WA_DeleteOnClose` modal shape;
+- dialog barrier populated before execution;
+- no invalid-wrapper touch after execution;
+- animation/timer ownership reaches zero;
+- exactly one replacement;
+- stale/cancel paths do not replace.
+
+### Edit
+
+- two-display real relay shape;
+- teardown begins only on a later GUI turn after originating frames return;
+- manager/shell weakrefs die without `gc.collect()` before continuation;
+- shell callback retirement is idempotent;
+- queued closure contains no retiring owner;
+- stale/duplicate intent rejected;
+- committed reload discards deferred image; cancel restores it;
+- graph placement/replay remains correct;
+- exactly one replacement after zero ownership.
+
+### Installed loops
+
+After focused fixes, run alternating Settings/Edit under transitions, image work, all supported visualizer modes, mode switches, playing/paused, dual/selected display, normal and Media Center.
 
 ## Pass criteria
 
-- zero cross-thread context operations;
-- zero callback into destroyed runtime;
-- zero retained resource from prior generation;
-- resource bytes return to expected plateau;
-- no cumulative timer/worker growth;
-- visualizer resumes with correct behavior;
-- display overlays remain attached to correct display.
+- zero invalid Qt-wrapper touches;
+- zero cross-thread/context ownership errors;
+- zero callback/publication into retired runtime;
+- zero retired Python/QObject/resource/task/subscription owners;
+- no cumulative timer/worker/handle/thread growth;
+- tracked GL bytes reach zero before surface destruction;
+- full graph-based layout replays correctly;
+- replacement reveals from current authoritative state only;
+- equivalent-state RSS/private commit/VRAM plateau;
+- full lifecycle does not rely on GC, trimming, retries, or hidden fallback.
 
 ## Deferred optimization
 
-Partial reinit may be reconsidered only through a separate architecture proposal after release-quality lifecycle stability.
-
-The proposal must prove:
-
-- which resources are safe to retain;
-- who owns them;
-- how contexts remain valid;
-- how callbacks and workers are isolated;
-- why the latency benefit is worth the additional states.
-
-Until then, full rebuild is the required behavior.
+Partial reinit remains prohibited until release-quality full-rebuild stability and a separate approved design prove retained ownership, context validity, callback isolation, resource savings, and a product benefit worth the additional states.
