@@ -878,9 +878,15 @@ class SettingsDialog(QDialog):
     ) -> None:
         """Track dialog-owned delayed work through the runtime scheduler."""
 
-        callback._srpss_timer_owner = self
-        callback._srpss_runtime_generation = self._runtime_generation
-        ThreadManager.single_shot(delay_ms, callback)
+        # Python bound-method objects do not allow arbitrary attributes.  Wrap
+        # every callback in a plain function so lifecycle ownership metadata is
+        # attached consistently for both bound methods and local closures.
+        def _run_callback():
+            callback()
+
+        _run_callback._srpss_timer_owner = self
+        _run_callback._srpss_runtime_generation = self._runtime_generation
+        ThreadManager.single_shot(delay_ms, _run_callback)
 
     def _style_tab_widget(self, widget: Optional[QWidget]) -> None:
         if widget is None:

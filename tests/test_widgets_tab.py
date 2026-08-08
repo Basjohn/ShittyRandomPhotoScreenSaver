@@ -26,6 +26,7 @@ from core.settings import SettingsManager
 from core.settings.defaults import get_default_settings
 from core.settings.visualizer_mode_registry import (
     get_default_visualizer_mode_id,
+    get_preset_slider_attr,
     iter_visualizer_mode_descriptors,
 )
 from core.settings.visualizer_presets import MODE_KEY_PREFIXES
@@ -1819,6 +1820,80 @@ def test_move_to_custom_preserves_current_visualizer_colors(qt_app, settings_man
             tab._bubble_gradient_light.blue(),
             tab._bubble_gradient_light.alpha(),
         ] == resolved_light
+    finally:
+        tab.deleteLater()
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_bar_count", "expected_sensitivity", "expected_floor", "expected_block"),
+    (
+        ("spectrum", 35, 0.97, 0.42, 128),
+        ("oscilloscope", 32, 0.40, 0.12, 256),
+        ("sine_wave", 40, 1.20, 0.40, 128),
+        ("bubble", 48, 0.55, 0.30, 128),
+        ("devcurve", 35, 1.35, 0.15, 256),
+    ),
+)
+def test_move_to_custom_uses_runtime_resolved_curated_state_for_every_mode(
+    qt_app,
+    settings_manager,
+    mode,
+    expected_bar_count,
+    expected_sensitivity,
+    expected_floor,
+    expected_block,
+):
+    """Every mode must fork the curated UI state, not stale backing values."""
+    from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
+
+    stale = {
+        f"{mode}_bar_count": 7,
+        f"{mode}_sensitivity": 0.11,
+        f"{mode}_manual_floor": 0.07,
+        f"{mode}_audio_block_size": 512,
+    }
+    widgets_cfg = settings_manager.get("widgets", {}) or {}
+    spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
+    spotify_vis.update(
+        {
+            "mode": mode,
+            f"preset_{mode}": 0,
+            **stale,
+        }
+    )
+    settings_manager.set("widgets", widgets_cfg)
+    settings_manager.set(
+        "visualizer_custom_presets",
+        {
+            mode: {
+                "mode": mode,
+                **stale,
+            }
+        },
+    )
+
+    tab = WidgetsTab(settings_manager)
+    try:
+        tab._save_settings = tab._save_settings_now
+        tab._load_settings()
+        slider = getattr(tab, get_preset_slider_attr(mode))
+        controls = get_per_mode_controls_for_mode(tab, mode)
+        assert controls is not None
+
+        assert controls["bar_count"].value() == expected_bar_count
+        assert controls["sensitivity_slider"].value() == round(expected_sensitivity * 100)
+        assert controls["manual_floor"].value() == round(expected_floor * 100)
+        assert controls["block_size"].currentData() == expected_block
+
+        slider._move_to_custom()
+
+        saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+        custom = settings_manager.get("visualizer_custom_presets", {})[mode]
+        assert saved[f"preset_{mode}"] == slider.custom_index()
+        assert custom[f"{mode}_bar_count"] == expected_bar_count
+        assert custom[f"{mode}_sensitivity"] == pytest.approx(expected_sensitivity)
+        assert custom[f"{mode}_manual_floor"] == pytest.approx(expected_floor)
+        assert custom[f"{mode}_audio_block_size"] == expected_block
     finally:
         tab.deleteLater()
 

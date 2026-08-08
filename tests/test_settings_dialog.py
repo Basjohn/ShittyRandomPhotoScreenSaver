@@ -322,6 +322,45 @@ def test_settings_dialog_scheduled_background_build_respects_closing(
         dialog.deleteLater()
 
 
+def test_settings_dialog_runtime_single_shot_wraps_bound_method_with_owner(
+    qapp,
+    settings_manager,
+    animation_manager,
+    monkeypatch,
+):
+    """Bound callbacks retain dialog lifecycle ownership without attribute errors."""
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    scheduled = []
+    calls = []
+
+    class _Receiver:
+        def callback(self):
+            calls.append(True)
+
+    receiver = _Receiver()
+    try:
+        monkeypatch.setattr(
+            settings_dialog_module.ThreadManager,
+            "single_shot",
+            staticmethod(lambda delay, callback: scheduled.append((delay, callback))),
+        )
+
+        dialog._schedule_runtime_single_shot(7, receiver.callback)
+
+        assert len(scheduled) == 1
+        delay, callback = scheduled[0]
+        assert delay == 7
+        assert getattr(callback, "_srpss_timer_owner", None) is dialog
+        assert (
+            getattr(callback, "_srpss_runtime_generation", None)
+            == dialog._runtime_generation
+        )
+        callback()
+        assert calls == [True]
+    finally:
+        dialog.deleteLater()
+
+
 def test_settings_dialog_move_does_not_schedule_shell_shadow_refresh():
     """moveEvent should not trigger shell-shadow refresh churn."""
     source = inspect.getsource(SettingsDialog.moveEvent)
