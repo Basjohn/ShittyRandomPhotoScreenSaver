@@ -248,6 +248,13 @@ def _parse_usage(
                     values.get("shm_unlink_failures")
                 ),
                 "private_app_mb": _number(values.get("private_app_mb")),
+                "private_main_mb": _number(values.get("private_main_mb")),
+                "private_children_mb": _number(
+                    values.get("private_children_mb")
+                ),
+                "uss_app_mb": _number(values.get("uss_app_mb")),
+                "uss_main_mb": _number(values.get("uss_main_mb")),
+                "uss_children_mb": _number(values.get("uss_children_mb")),
                 "vms_app_mb": _number(values.get("vms_app_mb")),
                 "threads_app": _integer(values.get("threads_app")),
                 "handles_app": _integer(values.get("handles_app")),
@@ -889,6 +896,21 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
             ),
             "private_app_mb": _metric_summary(
                 row.get("private_app_mb") for row in memory_rows
+            ),
+            "private_main_mb": _metric_summary(
+                row.get("private_main_mb") for row in memory_rows
+            ),
+            "private_children_mb": _metric_summary(
+                row.get("private_children_mb") for row in memory_rows
+            ),
+            "uss_app_mb": _metric_summary(
+                row.get("uss_app_mb") for row in memory_rows
+            ),
+            "uss_main_mb": _metric_summary(
+                row.get("uss_main_mb") for row in memory_rows
+            ),
+            "uss_children_mb": _metric_summary(
+                row.get("uss_children_mb") for row in memory_rows
             ),
             "vram_dedicated_mb": _metric_summary(
                 row.get("vram_dedicated_mb") for row in gpu_rows

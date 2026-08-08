@@ -43,6 +43,11 @@ class ProcessUsageSnapshot:
     rss_main_mb: float
     rss_children_mb: float
     private_app_mb: float | None
+    private_main_mb: float | None
+    private_children_mb: float | None
+    uss_app_mb: float | None
+    uss_main_mb: float | None
+    uss_children_mb: float | None
     vms_app_mb: float
     threads_app: int
     handles_app: int | None
@@ -111,7 +116,11 @@ class ProcessUsageCollector:
         rss_main = 0
         rss_app = 0
         private_app = 0
+        private_main = 0
         private_available = True
+        uss_app = 0
+        uss_main = 0
+        uss_available = True
         vms_app = 0
         threads_app = 0
         handles_app = 0
@@ -142,6 +151,20 @@ class ProcessUsageCollector:
                 private_available = False
             else:
                 private_app += int(private_value)
+                if process.pid == self._main.pid:
+                    private_main = int(private_value)
+
+            try:
+                full_memory = process.memory_full_info()
+                uss_value = getattr(full_memory, "uss", None)
+            except (psutil.Error, OSError, AttributeError):
+                uss_value = None
+            if uss_value is None:
+                uss_available = False
+            else:
+                uss_app += int(uss_value)
+                if process.pid == self._main.pid:
+                    uss_main = int(uss_value)
 
             try:
                 threads_app += int(process.num_threads())
@@ -172,6 +195,17 @@ class ProcessUsageCollector:
             rss_main_mb=_mb(rss_main),
             rss_children_mb=_mb(max(0, rss_app - rss_main)),
             private_app_mb=_mb(private_app) if private_available else None,
+            private_main_mb=_mb(private_main) if private_available else None,
+            private_children_mb=(
+                _mb(max(0, private_app - private_main))
+                if private_available
+                else None
+            ),
+            uss_app_mb=_mb(uss_app) if uss_available else None,
+            uss_main_mb=_mb(uss_main) if uss_available else None,
+            uss_children_mb=(
+                _mb(max(0, uss_app - uss_main)) if uss_available else None
+            ),
             vms_app_mb=_mb(vms_app),
             threads_app=threads_app,
             handles_app=handles_app if handles_available else None,
@@ -532,6 +566,11 @@ class UsageTelemetryService:
                 "rss_main_mb": process.rss_main_mb,
                 "rss_children_mb": process.rss_children_mb,
                 "private_app_mb": process.private_app_mb,
+                "private_main_mb": process.private_main_mb,
+                "private_children_mb": process.private_children_mb,
+                "uss_app_mb": process.uss_app_mb,
+                "uss_main_mb": process.uss_main_mb,
+                "uss_children_mb": process.uss_children_mb,
                 "vms_app_mb": process.vms_app_mb,
                 "threads_app": process.threads_app,
                 "handles_app": process.handles_app,
@@ -545,7 +584,9 @@ class UsageTelemetryService:
                 "cpu_primed=%d cpu_app_pct=%s cpu_main_pct=%s cpu_system_pct=%s "
                 "processes=%d children=%d rss_app_mb=%s rss_main_mb=%s "
                 "rss_children_mb=%s "
-                "private_app_mb=%s vms_app_mb=%s threads_app=%d handles_app=%s "
+                "private_app_mb=%s private_main_mb=%s private_children_mb=%s "
+                "uss_app_mb=%s uss_main_mb=%s uss_children_mb=%s "
+                "vms_app_mb=%s threads_app=%d handles_app=%s "
                 "io_read_mb=%s io_write_mb=%s gpu_supported=%d gpu_active=%d "
                 "gpu_status=%s gpu_busy_pct=%s gpu_engine_sum_pct=%s "
                 "vram_supported=%d vram_dedicated_mb=%s vram_shared_mb=%s "
@@ -581,6 +622,11 @@ class UsageTelemetryService:
                 _fmt(process.rss_main_mb),
                 _fmt(process.rss_children_mb),
                 _fmt(process.private_app_mb),
+                _fmt(process.private_main_mb),
+                _fmt(process.private_children_mb),
+                _fmt(process.uss_app_mb),
+                _fmt(process.uss_main_mb),
+                _fmt(process.uss_children_mb),
                 _fmt(process.vms_app_mb),
                 process.threads_app,
                 _fmt(process.handles_app),

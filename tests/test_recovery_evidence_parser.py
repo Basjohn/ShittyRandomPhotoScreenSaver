@@ -22,7 +22,9 @@ def _write_archive(path: Path) -> None:
             "image_worker_pid=123 image_worker_rss_mb=80.0 image_worker_vms_mb=160.0 "
             "shm_segments_created=4 shm_segments_live=0 shm_live_bytes=0 "
             "shm_segments_consumed=3 shm_segments_reclaimed_late=1 shm_unlink_failures=0 "
-            "private_app_mb=700.0 vram_dedicated_mb=250.0 "
+            "private_app_mb=700.0 private_main_mb=620.0 private_children_mb=80.0 "
+            "uss_app_mb=480.0 uss_main_mb=420.0 uss_children_mb=60.0 "
+            "vram_dedicated_mb=250.0 "
             "gpu_busy_pct=5.0 tracked_resources=5 tracked_known_bytes=1248 "
             "cpu_cache_resources=1 cpu_cache_bytes=800 cpu_display_resources=1 cpu_display_bytes=64 rm_resources=3 rm_known_bytes=384 "
             "rm_unknown_resources=1 gl_resources=3 gl_known_bytes=384 gl_unknown_resources=1 "
@@ -40,7 +42,9 @@ def _write_archive(path: Path) -> None:
             "image_worker_pid=123 image_worker_rss_mb=85.0 image_worker_vms_mb=165.0 "
             "shm_segments_created=5 shm_segments_live=0 shm_live_bytes=0 "
             "shm_segments_consumed=4 shm_segments_reclaimed_late=1 shm_unlink_failures=0 "
-            "private_app_mb=760.0 vram_dedicated_mb=275.0 "
+            "private_app_mb=760.0 private_main_mb=675.0 private_children_mb=85.0 "
+            "uss_app_mb=525.0 uss_main_mb=465.0 uss_children_mb=60.0 "
+            "vram_dedicated_mb=275.0 "
             "gpu_busy_pct=8.0 tracked_resources=5 tracked_known_bytes=1248 "
             "cpu_cache_resources=1 cpu_cache_bytes=800 cpu_display_resources=1 cpu_display_bytes=64 rm_resources=3 rm_known_bytes=384 "
             "rm_unknown_resources=1 gl_resources=3 gl_known_bytes=384 gl_unknown_resources=1 "
@@ -165,6 +169,9 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     assert analysis.frame_rows[0]["request_age_p99_ms"] == 7.0
     assert analysis.memory_rows[0]["tracked_known_bytes"] == 1248
     assert analysis.memory_rows[0]["rss_children_mb"] == 80.0
+    assert analysis.memory_rows[0]["private_main_mb"] == 620.0
+    assert analysis.memory_rows[0]["private_children_mb"] == 80.0
+    assert analysis.memory_rows[0]["uss_app_mb"] == 480.0
     assert analysis.memory_rows[0]["image_worker_rss_mb"] == 80.0
     assert analysis.memory_rows[0]["shm_segments_created"] == 4
     assert analysis.memory_rows[0]["shm_segments_reclaimed_late"] == 1
@@ -217,6 +224,9 @@ def test_write_analysis_emits_required_recovery_artifacts(tmp_path: Path) -> Non
     assert summary["counts"]["resource_snapshots"] == 1
     assert summary["resources"]["tracked_known_bytes"]["maximum"] == 1248.0
     assert summary["usage"]["image_worker_rss_mb"]["maximum"] == 85.0
+    assert summary["usage"]["private_main_mb"]["maximum"] == 675.0
+    assert summary["usage"]["private_children_mb"]["maximum"] == 85.0
+    assert summary["usage"]["uss_app_mb"]["maximum"] == 525.0
     assert summary["usage"]["shm_live_bytes"]["maximum"] == 0.0
 
 

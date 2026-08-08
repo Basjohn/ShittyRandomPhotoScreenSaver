@@ -89,6 +89,11 @@ class _ProcessCollector:
             rss_main_mb=350.0,
             rss_children_mb=70.0,
             private_app_mb=380.0,
+            private_main_mb=320.0,
+            private_children_mb=60.0,
+            uss_app_mb=360.0,
+            uss_main_mb=300.0,
+            uss_children_mb=60.0,
             vms_app_mb=800.0,
             threads_app=17,
             handles_app=640,
@@ -167,6 +172,11 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     assert "cpu_app_pct=42.5" in sample
     assert "rss_app_mb=420.0" in sample
     assert "rss_children_mb=70.0" in sample
+    assert "private_main_mb=320.0" in sample
+    assert "private_children_mb=60.0" in sample
+    assert "uss_app_mb=360.0" in sample
+    assert "uss_main_mb=300.0" in sample
+    assert "uss_children_mb=60.0" in sample
     assert "gpu_busy_pct=67.0" in sample
     assert "vram_dedicated_mb=512.0" in sample
     assert "tracked_known_bytes=4096" in sample
@@ -191,6 +201,8 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     assert lifecycle["sequence"] == 1
     assert lifecycle["rss_app_mb"] == 420.0
     assert lifecycle["private_app_mb"] == 380.0
+    assert lifecycle["private_main_mb"] == 320.0
+    assert lifecycle["uss_app_mb"] == 360.0
     assert lifecycle["vram_dedicated_mb"] == 512.0
     assert lifecycle["sample_age_ms"] >= 0.0
 

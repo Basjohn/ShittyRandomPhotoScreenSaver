@@ -621,6 +621,13 @@ def _process_ownership_summary(engine: Any) -> dict[str, Any]:
                     "usage_sample_age_ms": latest_usage.get("sample_age_ms"),
                     "total_rss_mb": latest_usage.get("rss_app_mb"),
                     "total_private_commit_mb": latest_usage.get("private_app_mb"),
+                    "main_private_commit_mb": latest_usage.get("private_main_mb"),
+                    "children_private_commit_mb": latest_usage.get(
+                        "private_children_mb"
+                    ),
+                    "total_uss_mb": latest_usage.get("uss_app_mb"),
+                    "main_uss_mb": latest_usage.get("uss_main_mb"),
+                    "children_uss_mb": latest_usage.get("uss_children_mb"),
                     "total_threads": latest_usage.get("threads_app"),
                     "total_handles": latest_usage.get("handles_app"),
                     "dedicated_vram_mb": latest_usage.get("vram_dedicated_mb"),

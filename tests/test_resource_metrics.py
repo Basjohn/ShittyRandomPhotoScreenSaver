@@ -295,6 +295,11 @@ def test_lifecycle_detail_is_sidecar_gated_and_summarizes_ownership(
                 "sample_age_ms": 250.0,
                 "rss_app_mb": 900.0,
                 "private_app_mb": 3100.0,
+                "private_main_mb": 3000.0,
+                "private_children_mb": 100.0,
+                "uss_app_mb": 720.0,
+                "uss_main_mb": 650.0,
+                "uss_children_mb": 70.0,
                 "threads_app": 23,
                 "handles_app": 712,
                 "vram_dedicated_mb": 775.0,
@@ -328,6 +333,11 @@ def test_lifecycle_detail_is_sidecar_gated_and_summarizes_ownership(
     assert ownership["display"]["by_generation"]["7"]["fade_states"] == {"READY": 1}
     assert ownership["process"]["total_rss_mb"] == 900.0
     assert ownership["process"]["total_private_commit_mb"] == 3100.0
+    assert ownership["process"]["main_private_commit_mb"] == 3000.0
+    assert ownership["process"]["children_private_commit_mb"] == 100.0
+    assert ownership["process"]["total_uss_mb"] == 720.0
+    assert ownership["process"]["main_uss_mb"] == 650.0
+    assert ownership["process"]["children_uss_mb"] == 70.0
     assert ownership["process"]["dedicated_vram_mb"] == 775.0
     detail_records = json.loads(resource_metrics.collect_resource_accounting(engine).resources_json())
     timer_record = next(record for record in detail_records if record["resource_id"] == "active-timer")
