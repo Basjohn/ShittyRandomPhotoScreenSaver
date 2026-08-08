@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-07-29
+Last updated: 2026-08-08
 
 Compact routing for recurring investigation commands.
 
@@ -13,6 +13,13 @@ python tests/run_chunked.py --chunks 4 --timeout-seconds 900
 pytest --collect-only tests -q
 pytest path/to/test_file.py -q
 ```
+
+Do not run the complete repository as one `pytest -q` process. On 2026-08-08 that
+monolithic invocation remained CPU-active rather than deadlocked, but accumulated
+about 2.54 GiB working set, 3.28 GiB private memory, 133 threads, and no incremental
+result visibility before it was stopped. Full-suite validation must use
+`tests/run_chunked.py` so each Qt/GL singleton graph and worker population is
+released between bounded subprocesses and a slow chunk is identifiable.
 
 Use `Docs/TestSuite.md` to select the required validation level.
 

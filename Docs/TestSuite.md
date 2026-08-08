@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-07-29
+Last updated: 2026-08-08
 
 Testing strategy, execution commands, and minimum quality gates.
 
@@ -76,6 +76,13 @@ Full bounded suite:
 ```powershell
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900
 ```
+
+The complete suite is not supported as one long-lived `pytest -q` process. Use the
+chunked runner even for local validation. A monolithic 2026-08-08 diagnostic run
+was still actively computing, not deadlocked, but reached approximately 2.54 GiB
+working set, 3.28 GiB private memory, and 133 threads before termination. Chunking
+is the isolation contract for Qt/GL state, worker threads, memory, timeout reporting,
+and usable per-chunk progress.
 
 Collect:
 

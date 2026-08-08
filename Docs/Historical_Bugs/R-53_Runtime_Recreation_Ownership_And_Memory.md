@@ -161,7 +161,7 @@ The test double had used identity `0`, so the production-shaped relay tests did 
 
 The manager's old exception-only fallback to `_reload_widgets_across_instances()` was also removed. A committed Save/Reset that cannot request mandatory full recreation now logs the failure and exits with code 1. A widget-only teardown/setup is not a valid substitute for engine-owned full reconstruction.
 
-Mechanical validation proves pointer-width identity survives the relay and a request failure performs no local widget rebuild. Installed dual-display validation remains mandatory; this section does not claim recreation or memory success.
+Mechanical validation proves pointer-width identity survives the relay and a request failure performs no local widget rebuild. The later 17:07 installed capture completed one dual-display CUSTOM Save-and-Continue, admitted exactly one full replacement, crossed the retired-runtime barrier, and revealed only after the replacement generation's authoritative first frame. This closes the admission defect, not the five-cycle memory/resource gate.
 
 ## Settings Dialog Sibling Defect
 
@@ -171,9 +171,9 @@ Both successful Settings cycles emitted three caught `RuntimeError` traces after
 
 The same run emitted one `ImagePrefetcher._pump_scaled_prefetch()` `IndexError: pop index out of range`. This is independent of recreation ownership and is tracked separately as R-57.
 
-## Signal-Bookkeeping Note
+## Signal-Bookkeeping Resolution
 
-`WidgetManager._on_compositor_ready()` disconnects its one-shot `image_displayed` connection after first readiness, while `cleanup()` may attempt the same disconnect again. A PySide warning here indicates redundant disconnect bookkeeping, not by itself a retained signal or leak. Track explicit connection ownership and clear it after the one-shot disconnect without weakening first-frame readiness.
+`WidgetManager` now tracks explicit ownership of its one-shot `image_displayed` connection. The ownership bit is cleared before touching Qt, so first readiness and terminal cleanup cannot attempt the same disconnect twice; disposed-sender cleanup remains fail-safe. A real PySide signal regression proves exactly one disconnect, and the 17:07 installed capture contains no repeat warning. This changes signal bookkeeping only and does not weaken authoritative first-frame readiness.
 
 ## Presentation Guardrail
 
@@ -192,7 +192,7 @@ The destruction barrier is separate from the authoritative-first-frame barrier. 
 
 ## Validation Still Required
 
-- Run installed dual-display Save-and-Continue and verify exactly one replacement runtime with no manager-owner timeout.
+- Completed once: installed dual-display Save-and-Continue produced exactly one replacement runtime with no manager-owner timeout. Repeat it inside the mandatory alternating-cycle matrix below.
 - Run at least five alternating installed Edit and Settings cycles with image work, Bubble/Spectrum/mode switches, transition overlap, media/artwork, and pending callbacks.
 - Require every retired generation to reach zero roots, timers, animations, subscriptions, ThreadManager work, and generation-scoped ResourceManager entries.
 - Require equivalent-state RSS, private commit, VRAM, handles, and threads to plateau.

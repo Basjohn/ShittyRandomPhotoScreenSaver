@@ -15,10 +15,10 @@ restored executor behaviour: 4bde89e8e39177dc4dd7b5e64b9ac99256ab9486
 rejected Spectrum smoothing: ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
 current approved visual behaviour: ff93461685476bd0657aa88312fc2e35e9037880
 current lifecycle/cache evidence code state: 3877b2c76791892cd5cb18c43d66a90a29c64d33
-current unvalidated Phase 5 resource candidate: faa0feee
+current assessed Phase 5 candidate: 849f78e8 (resource improvement; performance gate failed)
 current audit-doc checkpoint: d7ddb9063ebf9c8a42739e541400a8508b2941bf
 latest preserved evidence: logs/evidence_chest/08_02_3877b2c7_20_27/
-latest mutable run: logs/ (2026-08-08 15:51:39 through 15:55:47, code state 927da57f)
+latest mutable run: logs/ (2026-08-08 17:07:43 through 17:10:53, code state 849f78e8)
 owning report: Docs/phase_reports/P05_CPU_TASK_REDUCTION.md
 audit roadmap: Docs/audits/SRPSS_Architecture_Recovery_Roadmap/00_INDEX_AND_LIVE_CHECKLIST.md
 audit memory plan: Docs/audits/SRPSS_Architecture_Recovery_Roadmap/09_MEMORY_GPU_RESOURCE_AND_CACHE_PLAN.md
@@ -80,21 +80,23 @@ R-57 scaled prefetch: Docs/Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Or
 - [x] The admission signals now preserve pointer-width identity as a Python object; a mandatory reload-admission failure exits fail-closed and cannot fall back to a widget-only rebuild.
 - [x] Runtime generation and exact `DisplayManager` identity travel with the request; stale requests are rejected and duplicate admissions coalesce.
 - [x] Production-shaped tests prove two shells and two `CustomLayoutManager` owners release without `gc.collect()`, the barrier reaches zero owners before continuation, the complete two-display graph replays, and exactly one replacement is admitted.
-- [ ] Repeat one installed dual-display Save-and-Continue cycle and require exactly one full replacement, no stale-identity rejection, no widget-only rebuild, no former eight-second barrier timeout, and reveal from the replacement generation's authoritative first frame.
-- [!] **Settings memory growth:** the newest two-cycle run no longer supports the earlier plateau claim. Equivalent Bubble replacement snapshots rose from generation 1 to 2 by about 59.6 MiB main RSS and 74.0 MiB main private bytes while tracked known bytes rose only about 13.6 MiB.
-- [!] Two cycles are insufficient to call that linear, but memory containment is unproven and the unexplained post-recreation increase is again an active blocker.
-- [ ] Edit memory/plateau evidence remains blocked on installed validation of the repaired CUSTOM path, not on a known mechanical admission defect.
+- [x] One installed dual-display Save-and-Continue cycle admitted exactly one full replacement with no stale-identity rejection or widget-only fallback and revealed from the replacement generation's authoritative first frame.
+- [x] `WidgetManager` now owns its one-shot compositor-ready signal explicitly; first readiness and terminal cleanup cannot disconnect it twice, the real-signal regression passes, and the latest installed run contains no disconnect warning.
+- [!] The latest CUSTOM + Settings sequence did not reproduce the former large RSS/private-memory staircase, but two recreations are insufficient for closure and handles rose by approximately 52 instead of returning to baseline.
+- [ ] Run the mandatory five-cycle alternating lifecycle/resource matrix; Edit memory evidence is no longer blocked on a known admission defect.
 - [x] Replacement initialization itself still has no demonstrated separate defect; preserve it and validate it rather than redesigning it.
 
 ### Absolute resource footprint
 
-The latest active run was contained but still far too heavy for a screensaver:
+The latest active run materially reduced tracked and driver resources but still
+remains too heavy for a screensaver and failed presentation performance:
 
 ```text
-whole-app resident RAM:   approximately 849–1133 MiB after warm-up
-whole-app private commit: approximately 2.77–3.23 GiB after warm-up
-dedicated VRAM:           approximately 555–792 MiB while displays are active
-shared GPU memory:        approximately 84–121 MiB
+whole-app resident RAM:   approximately 848–1004 MiB after warm-up
+whole-app private commit: approximately 2.75–2.98 GiB after warm-up
+whole-app USS:            approximately 713–820 MiB after warm-up
+dedicated VRAM:           approximately 496–624 MiB while displays are active
+shared GPU memory:        approximately 37–87 MiB
 ```
 
 - [!] Plateauing near one GiB of physical RAM and over half a GiB of dedicated VRAM is not an acceptable completion state.
@@ -104,12 +106,13 @@ shared GPU memory:        approximately 84–121 MiB
 - [x] The 2026-08-08 resource detail identified approximately 235.7 MiB of historical transition textures plus approximately 45.7 MiB of upload PBO storage retained after terminal presentation; ownership is now released at the terminal compositor boundary without changing transition frames.
 - [x] The same evidence identified approximately 117.6 MiB of raw cache forms alongside display-ready derivatives. Worker prescale is now attempted before parent raw decode, and raw prefetch is skipped when no planned scaled consumer needs it.
 - [x] Always-on ThreadManager mutation delivery no longer posts diagnostic/accounting work to the GUI thread. The ordinary general COMPUTE executor and visualizer authored/publication cadence are unchanged.
-- [ ] Installed evidence must confirm the expected whole-app reduction; tracked-byte or synthetic improvements alone do not close the resource gate.
+- [x] The latest installed run confirms real resource reduction against `08_02`: median private commit `3018 -> 2822 MiB`, median dedicated VRAM `623 -> 559 MiB`, maximum dedicated VRAM `777 -> 624 MiB`, and maximum tracked GL `313 -> 144 MiB`.
+- [!] Those savings are not acceptable closure because frame delivery and CPU regressed substantially. Do not keep a memory optimization that repeatedly recreates transition resources or stalls presentation.
 
 ## Required Work Order
 
-1. Install the current Phase 5 resource candidate and repeat one dual-display Edit Save-and-Continue cycle against the pointer-width admission repair.
-2. Capture a controlled warm before/after resource baseline with fixed displays, source images, cache state, transitions, widgets, duration, system load, and supported visualizer scenarios; require material whole-app CPU/RSS/VRAM improvement without visual change.
+1. Correct the failed resource/performance tradeoff by isolating terminal texture retirement from terminal PBO retirement. Preserve a bounded reusable upload resource and current-image texture only where stable identity proves reuse; do not restore historical texture accumulation.
+2. Capture a controlled warm A/B baseline with fixed displays, source images, cache state, transition sequence, widgets, duration, and low system load. Require the resource reduction to remain while CPU, visualizer tick delivery, and frame tails return at least to the `08_02`/Phase 4 level.
 3. Run at least five alternating installed Edit/Settings cycles and require clean ownership, first-frame/mode-switch poison protection, and equivalent-state resource plateau.
 4. Use the new main/child commit and USS split to attribute any remaining whole-app RAM/commit gap, then implement only measured reductions that preserve visible output and responsiveness.
 5. Run the full lifecycle, memory plateau, image churn, and pressure matrix.
@@ -279,15 +282,18 @@ Explicitly rejected unless separately re-proposed after new evidence:
 
 - [-] Correlate owner-labelled transition gaps with event-loop lateness, callback tails, update-request age, and per-display request-to-paint delay.
 - [x] Preserve compositor transition names in owner telemetry.
-- [!] The 2026-08-08 run regressed versus the preserved 08_02 comparator: median paint-window FPS `96.0 -> 72.5`, paint interval p99 `32.9 -> 41.0 ms`, request-age p99 `20.3 -> 30.3 ms`, event-loop lateness p99 `38.9 -> 57.6 ms`, and worst owner-labelled gap `127.7 -> 186.2 ms`.
-- [!] Median application CPU rose `79.3% -> 103.2%` while median compute submission cadence remained broadly comparable (`122.1/s -> 117.0/s`). Do not infer that reducing authored visualizer cadence is the correction.
-- [!] This is not a controlled code-regression comparison: the newest final runtime spent about 70% of its measured life rendering transitions versus about 35% in the comparator, and machine-wide CPU was commonly about 35–39% versus about 14–18%. The observed delivery failure is real, but attribution must separate workload/environment from code state.
+- [!] The 17:07 candidate regressed further versus `08_02`: median paint-window FPS `96.0 -> 64.4`, paint interval p99 `32.9 -> 53.4 ms`, request-age p99 `20.3 -> 44.0 ms`, event-loop lateness p99 `38.9 -> 79.6 ms`, and owner-labelled gaps `123 -> 217` with `85` over 50 ms.
+- [!] Median application CPU rose `79.3% -> 103.0%`; Phase 4 close was approximately `65.8%`. The current state is worse than the pre-Phase-5 accepted performance level.
+- [!] Machine-wide CPU was also much higher (`42.5%` median versus `14.7%` in `08_02`), so this is not a clean code-only A/B. That environmental load can explain some delivery loss but does not make an installed failure acceptable.
+- [!] Bubble worker cost stayed roughly `1–2 ms`, publication remained `0.996–1.000`, and settled tick FPS still reached roughly `90–94`. The failure appears in event-loop/tick/presentation delivery, especially around transitions; do not retune Bubble physics, source cadence, or elasticity.
+- [!] Visualizer tick FPS reached `49.2` early versus a `75.5` minimum in `08_02`; tick-spike median rose `48.6 -> 66.9 ms`. The operator-observed visualizer slowdown is supported by the logs.
 - [x] Parser 1.5 recovers the existing nested task-category counters even when `tm_delivery` follows them on the same line. The comparable high-rate intervals identify approximately `69–70/s` audio analysis plus `92–93/s` Bubble simulation in both runs, so task frequency itself did not newly increase.
 - [x] Remove the always-on ThreadManager mutation queue, GUI drain timer, and GUI-published statistics snapshot. Task accounting is now updated atomically at admission/terminal ownership boundaries with no per-completion UI callback.
 - [x] Preserve perf-only frame-owner attribution after measuring the exact passive snapshot at approximately `6.5 us/call`, projecting approximately `0.15%` of one core at a 225 Hz dual-display ceiling. Removing that evidence would not explain the observed CPU regression.
 - [ ] Installed evidence must confirm that the removed GUI accounting delivery reduces callback clustering/event-loop tails under the authored workload.
 - [ ] Attribute the increased cost per event-loop/delivery cycle and the approximately doubled owner-labelled gap count; current last-callback labels are mostly sub-millisecond and are correlation, not sufficient causal attribution.
 - [ ] Attribute remaining p99/max transition gaps before changing visualizer cadence or shader behaviour.
+- [ ] A/B terminal GL retention first: one current-image texture with stable presentation identity, one bounded reusable PBO per compositor where measured useful, and immediate deletion of genuinely historical textures. Record upload count/bytes/allocation/delete/stall by transition.
 - [ ] Reject repaint retries and transition-derived visualizer clocks.
 
 # P5.2 — Latency Truthfulness
@@ -357,18 +363,26 @@ The full runtime reinit and graph placement/replay architecture stay unchanged. 
 
 ## Memory growth result and validation
 
-Current settled snapshots:
+The 17:07 run completed one full CUSTOM recreation and one Settings recreation.
+Both retired-runtime barriers completed (`266 ms` and `282 ms`), CUSTOM admitted
+exactly one full reload, and Settings crossed its separate dialog destruction
+barrier before one replacement. No exception, deleted-wrapper warning, or signal
+disconnect warning occurred.
+
+Comparable idle samples with terminal GL near zero were:
 
 ```text
-state                    main RSS   main private   handles   threads   tracked known   RM total/unknown
-cold generation 0         786.6       1994.7        1782       61        338.6 MiB         60 / 49
-Settings generation 1     917.6       2103.7        1862       68        403.1 MiB         55 / 45
-Settings generation 2     977.2       2177.8        1841       64        416.7 MiB         55 / 44
+state                     app RSS   private commit   USS     handles   threads
+generation 0 pre-Edit      954.9       2822.3       782.6     2116       90
+generation 1 post-Edit     934.8       2818.4       753.0     2163       93
+generation 2 post-Settings 960.6       2828.8       776.3     2168       90
 ```
 
-- [!] Both replacements used Bubble, so the generation 1 to 2 increase is more comparable than the earlier cold-Spectrum comparison. It remains only a two-cycle sample and does not yet prove a linear retained-owner staircase.
-- [x] ResourceManager totals/unknowns did not climb, handles fell by 21, threads fell by 4, retired runtime ownership cleared, and tracked GL/display bytes still reached zero during teardown.
-- [!] Those ownership successes do not explain or excuse the additional approximately 59.6 MiB RSS and 74.0 MiB private bytes between equivalent active generations.
+This short run does not show the former approximately 80–90 MiB-per-recreation
+memory staircase. Cache occupancy differed between samples, and handles failed to
+return to the initial baseline (`+52` by generation 2), so the five-cycle gate
+remains open.
+
 - [ ] After R-53 repair, run at least five alternating Edit and Settings cycles in normal and Media Center variants.
 - [ ] Include all supported visualizer modes as comparison scenarios, playing/paused, transition-time teardown, pending image work, pending ordinary executor work, dual display, and one selected display.
 - [ ] Every retired generation must reach zero QObjects, Python owners, resources, timers, animations, subscriptions, callbacks, tasks, lanes, registrations, pixmaps, textures, PBOs, and tracked GL bytes.
@@ -407,9 +421,10 @@ Only promote a candidate after its owner, bytes, lifetime, and visible role are 
 
 - [x] Prefer ImageWorker prescale before exact local raw-decode fallback, avoiding simultaneous parent and worker full-image decode plus unnecessary raw-cache residency when a display-ready derivative is the consumer.
 - [x] Skip raw prefetch work when no planned scaled consumer is missing; preserve raw fallback when it remains the only useful result.
-- [x] Release historical transition textures and idle upload PBOs immediately at terminal presentation in their sole owner context; retain only the current authoritative image texture.
+- [!] Terminal texture/PBO retirement reduced active GL/VRAM materially but failed the performance gate. Idle snapshots often reached zero tracked textures/PBOs, while later transitions repeatedly logged paired 4K uploads around `20–31 ms`; startup/rebuild reached `42–57 ms`. Stable current-image reuse is not proven, and deleting every idle PBO forces allocator/driver work back onto later transitions.
+- [ ] Replace the failed all-idle-resource retirement policy with measured bounded reuse: retain no historical image set, but preserve exactly the current presentation texture through stable identity and retain at most one size-appropriate idle PBO per compositor when it demonstrably removes repeated allocation/upload stalls.
 - [x] Avoid allocating full PBO storage once at creation and immediately reallocating it for the first upload.
-- [ ] Confirm the candidate materially lowers whole-app RSS/commit/VRAM and does not increase decode misses, transition tails, or first-frame delay in installed evidence.
+- [!] Whole-app RSS/commit/VRAM improved, but transition tails and presentation delivery worsened. The candidate cannot pass until both sides improve under the same workload.
 - [ ] Deduplicate exact same-size/same-transform per-display image backing without collapsing different DPR or transform outputs.
 - [ ] Right-size prefetch and image-cache occupancy by measured hit rate, fallback cost, active-transition reserve, and future-byte pressure; do not create decode storms to save resident bytes.
 - [ ] Audit process-lifetime worker mappings, queue buffers, thread-pool/thread-stack reservation, callback history, metrics history, and log retention.
@@ -447,6 +462,13 @@ Every memory change must prove:
 - [ ] Keep high-volume diagnostics bounded and passive.
 - [ ] All warnings and errors remain visible in `screensaver.log`.
 - [ ] A critical lifecycle timeout always marks the run failed.
+
+# Phase 5 Test Isolation
+
+- [x] Focused threading/image/resource, lifecycle/media, visualizer-family, replay-golden, 45-cycle resource, and 50x4K shared-memory gates pass at `849f78e8`.
+- [!] A monolithic full-suite `pytest -q` process is not an acceptable gate: while still CPU-active it reached approximately 2.54 GiB working set, 3.28 GiB private memory, and 133 threads without incremental result visibility.
+- [ ] Run the complete suite only through `tests/run_chunked.py --chunks 4 --timeout-seconds 900`; preserve per-chunk results and identify any timeout, failure, or abnormal per-chunk resource growth instead of treating the whole suite as hung.
+- [ ] If one chunk still grows excessively, split that chunk by owning subsystem and identify the retained Qt/GL/worker owner before changing tests or production lifetime.
 
 # Recovered Adversarial Lane Findings
 
