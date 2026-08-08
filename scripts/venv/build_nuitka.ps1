@@ -378,34 +378,19 @@ if (-not $Exe) {
     exit 1
 }
 
-# Validate visualizer shader files in the final output.
+# A onefile payload embeds data; validate the source-derived packaging
+# declaration instead of looking for an adjacent dist directory that Nuitka
+# removes after assembly.
 try {
-    $ShaderDest = Join-Path $Exe.DirectoryName "widgets\spotify_visualizer\shaders"
-    $ExpectedShaders = @(
-        "spectrum.frag",
-        "oscilloscope.frag",
-        "blob.frag",
-        "sine_wave.frag",
-        "bubble.frag",
-        "devcurve.frag"
+    $EmbeddedShaders = @(
+        Assert-SRPSSOnefileVisualizerShaderContract `
+            -RepoRoot $Root `
+            -NuitkaArguments $argsList
     )
-
-    $MissingShaders = @()
-    foreach ($ShaderName in $ExpectedShaders) {
-        $ShaderPath = Join-Path $ShaderDest $ShaderName
-        if (-not (Test-Path $ShaderPath)) {
-            $MissingShaders += $ShaderName
-        }
-    }
-
-    if ($MissingShaders.Count -gt 0) {
-        Write-Host "[BUILD-VENV] Warning: Missing visualizer shaders in dist: $($MissingShaders -join ', ')"
-        Write-Host "[BUILD-VENV] Expected shader directory: $ShaderDest"
-    } else {
-        Write-Host "[BUILD-VENV] Visualizer shaders present: $ShaderDest"
-    }
+    Write-Host "[BUILD-VENV] Visualizer shaders declared for onefile embedding: $($EmbeddedShaders -join ', ')"
 } catch {
-    Write-Host "[BUILD-VENV] Warning: Shader validation failed - $($_.Exception.Message)"
+    Write-Host "[BUILD-VENV] Shader contract validation failed - $($_.Exception.Message)"
+    exit 1
 }
 
 $primaryArtifact = $Exe

@@ -373,34 +373,17 @@ if (-not $Exe) {
     exit 1
 }
 
-# Validate visualizer shader files in the final output.
+# Validate the onedir payload against the current source shader set.
 try {
-    $ShaderDest = Join-Path $Exe.DirectoryName "widgets\spotify_visualizer\shaders"
-    $ExpectedShaders = @(
-        "spectrum.frag",
-        "oscilloscope.frag",
-        "blob.frag",
-        "sine_wave.frag",
-        "bubble.frag",
-        "devcurve.frag"
+    $PackagedShaders = @(
+        Assert-SRPSSOnedirVisualizerShaders `
+            -RepoRoot $Root `
+            -DistributionRoot $Exe.DirectoryName
     )
-
-    $MissingShaders = @()
-    foreach ($ShaderName in $ExpectedShaders) {
-        $ShaderPath = Join-Path $ShaderDest $ShaderName
-        if (-not (Test-Path $ShaderPath)) {
-            $MissingShaders += $ShaderName
-        }
-    }
-
-    if ($MissingShaders.Count -gt 0) {
-        Write-Host "[BUILD-VENV] Warning: Missing visualizer shaders in dist: $($MissingShaders -join ', ')"
-        Write-Host "[BUILD-VENV] Expected shader directory: $ShaderDest"
-    } else {
-        Write-Host "[BUILD-VENV] Visualizer shaders present: $ShaderDest"
-    }
+    Write-Host "[BUILD-VENV] Visualizer shaders present in onedir payload: $($PackagedShaders -join ', ')"
 } catch {
-    Write-Host "[BUILD-VENV] Warning: Shader validation failed - $($_.Exception.Message)"
+    Write-Host "[BUILD-VENV] Shader payload validation failed - $($_.Exception.Message)"
+    exit 1
 }
 
 $loggingCfgPath = Join-Path $Exe.DirectoryName "$($Exe.BaseName).logging.cfg"

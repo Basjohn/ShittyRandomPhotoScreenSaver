@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-08-08
+Last updated: 2026-08-09
 
 Compact routing for recurring investigation commands.
 
@@ -415,6 +415,12 @@ release/
   reddit_helper/
   installers/
 ```
+
+Shader validation derives its expected files from the current
+`widgets/spotify_visualizer/shaders/*.frag` sources. Onefile builds validate the
+embedded Nuitka data declarations; onedir builds validate the published shader
+files. Never restore retired names such as `blob.frag` to satisfy a stale
+hard-coded validator.
 
 Validate routing and helper-fingerprint status without opening the GUI or
 starting a build:

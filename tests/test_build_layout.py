@@ -22,7 +22,7 @@ def _run_layout_command(command: str, **paths: Path) -> subprocess.CompletedProc
     for name, path in paths.items():
         env[f"SRPSS_{name.upper()}"] = str(path)
     return subprocess.run(
-        [pwsh, "-NoProfile", "-Command", command],
+        [pwsh, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
         capture_output=True,
         check=False,
         env=env,
@@ -126,3 +126,70 @@ Remove-SRPSSBuildDirectory `
 
     assert cleanup.returncode == 0, cleanup.stderr
     assert not build_root.exists()
+
+
+def test_shader_contract_is_derived_from_live_source_assets(tmp_path):
+    repo_root = tmp_path / "repo"
+    shader_source = repo_root / "widgets" / "spotify_visualizer" / "shaders"
+    shader_source.mkdir(parents=True)
+    (shader_source / "spectrum.frag").write_text("spectrum", encoding="utf-8")
+    (shader_source / "bubble.frag").write_text("bubble", encoding="utf-8")
+
+    result = _run_layout_command(
+        """
+. $env:SRPSS_LAYOUT_SCRIPT
+@(Get-SRPSSVisualizerShaderNames -RepoRoot $env:SRPSS_REPO_ROOT) -join ','
+""",
+        repo_root=repo_root,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "bubble.frag,spectrum.frag"
+    assert "blob.frag" not in result.stdout
+
+
+def test_onedir_shader_contract_rejects_a_missing_live_shader(tmp_path):
+    repo_root = tmp_path / "repo"
+    shader_source = repo_root / "widgets" / "spotify_visualizer" / "shaders"
+    shader_source.mkdir(parents=True)
+    (shader_source / "spectrum.frag").write_text("spectrum", encoding="utf-8")
+    (shader_source / "bubble.frag").write_text("bubble", encoding="utf-8")
+
+    dist_root = tmp_path / "dist"
+    shader_dist = dist_root / "widgets" / "spotify_visualizer" / "shaders"
+    shader_dist.mkdir(parents=True)
+    (shader_dist / "spectrum.frag").write_text("spectrum", encoding="utf-8")
+
+    result = _run_layout_command(
+        """
+. $env:SRPSS_LAYOUT_SCRIPT
+Assert-SRPSSOnedirVisualizerShaders `
+    -RepoRoot $env:SRPSS_REPO_ROOT `
+    -DistributionRoot $env:SRPSS_DIST_ROOT | Out-Null
+""",
+        repo_root=repo_root,
+        dist_root=dist_root,
+    )
+
+    assert result.returncode != 0
+    assert "bubble.frag" in (result.stdout + result.stderr)
+
+
+def test_onefile_shader_contract_requires_embedded_data_declaration(tmp_path):
+    repo_root = tmp_path / "repo"
+    shader_source = repo_root / "widgets" / "spotify_visualizer" / "shaders"
+    shader_source.mkdir(parents=True)
+    (shader_source / "spectrum.frag").write_text("spectrum", encoding="utf-8")
+
+    result = _run_layout_command(
+        """
+. $env:SRPSS_LAYOUT_SCRIPT
+Assert-SRPSSOnefileVisualizerShaderContract `
+    -RepoRoot $env:SRPSS_REPO_ROOT `
+    -NuitkaArguments @('--onefile') | Out-Null
+""",
+        repo_root=repo_root,
+    )
+
+    assert result.returncode != 0
+    assert "does not declare" in (result.stdout + result.stderr)

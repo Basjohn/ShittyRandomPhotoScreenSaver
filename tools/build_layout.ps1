@@ -163,3 +163,61 @@ function Remove-SRPSSLegacyReleasePath {
         Write-Host "[BUILD] Retired legacy release path: $safePath"
     }
 }
+
+function Get-SRPSSVisualizerShaderNames {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot
+    )
+
+    $shaderSource = Join-Path $RepoRoot 'widgets\spotify_visualizer\shaders'
+    if (-not (Test-Path -LiteralPath $shaderSource -PathType Container)) {
+        throw "Visualizer shader source directory does not exist: $shaderSource"
+    }
+
+    $shaderNames = @(
+        Get-ChildItem -LiteralPath $shaderSource -Filter '*.frag' -File |
+            Sort-Object Name |
+            Select-Object -ExpandProperty Name
+    )
+    if ($shaderNames.Count -eq 0) {
+        throw "Visualizer shader source directory contains no .frag files: $shaderSource"
+    }
+    return $shaderNames
+}
+
+function Assert-SRPSSOnefileVisualizerShaderContract {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][object[]]$NuitkaArguments
+    )
+
+    $includeArgument = '--include-data-dir=widgets/spotify_visualizer/shaders=widgets/spotify_visualizer/shaders'
+    if ($NuitkaArguments -notcontains $includeArgument) {
+        throw "Onefile build does not declare the visualizer shader data directory."
+    }
+
+    return @(Get-SRPSSVisualizerShaderNames -RepoRoot $RepoRoot)
+}
+
+function Assert-SRPSSOnedirVisualizerShaders {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$DistributionRoot
+    )
+
+    $shaderNames = @(Get-SRPSSVisualizerShaderNames -RepoRoot $RepoRoot)
+    $shaderDestination = Join-Path $DistributionRoot 'widgets\spotify_visualizer\shaders'
+    $missingShaders = @(
+        $shaderNames | Where-Object {
+            -not (Test-Path -LiteralPath (Join-Path $shaderDestination $_) -PathType Leaf)
+        }
+    )
+    if ($missingShaders.Count -gt 0) {
+        throw "Onedir payload is missing visualizer shaders: $($missingShaders -join ', ')"
+    }
+
+    return $shaderNames
+}

@@ -208,6 +208,22 @@ def test_workers_and_installers_share_the_canonical_output_layout():
             assert "if ($BuildExit -ne 0)" in worker
 
 
+def test_visualizer_shader_validation_tracks_source_assets_without_retired_blob():
+    scripts = build_runner.REPO_ROOT / "scripts" / "venv"
+    onefile = (scripts / "build_nuitka.ps1").read_text(encoding="utf-8")
+    onedir = (scripts / "build_nuitka_mc_onedir.ps1").read_text(encoding="utf-8")
+    shared = (build_runner.REPO_ROOT / "tools" / "build_layout.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Assert-SRPSSOnefileVisualizerShaderContract" in onefile
+    assert "Assert-SRPSSOnedirVisualizerShaders" in onedir
+    assert "Get-SRPSSVisualizerShaderNames" in shared
+    assert "blob.frag" not in onefile
+    assert "blob.frag" not in onedir
+    assert "blob.frag" not in shared
+
+
 def test_helper_state_record_is_bounded_metadata(tmp_path):
     artifact = tmp_path / "helper.exe"
     artifact.write_bytes(b"binary")
