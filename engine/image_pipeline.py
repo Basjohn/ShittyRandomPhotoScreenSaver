@@ -971,21 +971,20 @@ def _process_display_image_candidate(
             else:
                 _bump_cache_runtime_stat(engine, "raw_misses")
 
-    if processed_qimage is None and (qimage is None or qimage.isNull()):
-        if not Path(img_path).exists():
-            logger.warning("%s Image file not found: %s", TAG_ASYNC, img_path)
-            return None
-        loaded = QImage(img_path)
-        if not loaded.isNull():
-            qimage = loaded
-            if cache is not None:
-                cache.put(img_path, qimage)
+    worker_available = bool(
+        getattr(engine, "_process_supervisor", None)
+        and engine._process_supervisor.is_running(WorkerType.IMAGE)
+    )
+    if (
+        processed_qimage is None
+        and (qimage is None or qimage.isNull())
+        and not Path(img_path).exists()
+    ):
+        logger.warning("%s Image file not found: %s", TAG_ASYNC, img_path)
+        return None
 
     if processed_qimage is None:
-        if (
-            engine._process_supervisor
-            and engine._process_supervisor.is_running(WorkerType.IMAGE)
-        ):
+        if worker_available:
             _bump_cache_runtime_stat(engine, "worker_fallbacks")
             worker_qimage = load_image_via_worker(
                 engine,
@@ -1000,14 +999,24 @@ def _process_display_image_candidate(
                 processed_qimage = worker_qimage
             elif qimage is None or qimage.isNull():
                 logger.warning(
-                    "%s ImageWorker rejected candidate for display %d: %s",
+                    "%s ImageWorker rejected candidate for display %d; "
+                    "using parent decode fallback: %s",
                     TAG_ASYNC,
                     display_index,
                     img_path,
                 )
-                return None
 
         if processed_qimage is None:
+            # The child prescale is authoritative when available. Decode a raw
+            # parent representation only on the real fallback path; eagerly
+            # doing both decoded the same source twice and retained the unused
+            # full image beside its display-ready derivative.
+            if qimage is None or qimage.isNull():
+                loaded = QImage(img_path)
+                if not loaded.isNull():
+                    qimage = loaded
+                    if cache is not None:
+                        cache.put(img_path, qimage)
             if qimage is None or qimage.isNull():
                 return None
             processed_qimage = AsyncImageProcessor.process_qimage(

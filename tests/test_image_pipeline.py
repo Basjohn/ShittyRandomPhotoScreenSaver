@@ -384,6 +384,93 @@ def test_exact_scaled_hit_does_not_probe_raw_or_rewrite_cache():
     assert engine._cache_runtime_stats["raw_misses"] == 0
 
 
+def test_worker_success_does_not_decode_or_cache_redundant_raw(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "worker-first.png"
+    source = _solid_qimage(8, 8, QColor("navy"))
+    assert source.save(str(path))
+    store = {}
+    puts = []
+    cache = SimpleNamespace(
+        get=lambda key: store.get(key),
+        put=lambda key, value: (puts.append(key), store.__setitem__(key, value)),
+    )
+    engine = SimpleNamespace(
+        _image_cache=cache,
+        _process_supervisor=SimpleNamespace(is_running=lambda _worker: True),
+    )
+    worker_image = _solid_qimage(4, 4, QColor("green"))
+    monkeypatch.setattr(
+        "engine.image_pipeline.load_image_via_worker",
+        lambda *_args, **_kwargs: worker_image,
+    )
+    monkeypatch.setattr(
+        "engine.image_pipeline.AsyncImageProcessor.process_qimage",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("parent fallback must not run")
+        ),
+    )
+    display = SimpleNamespace(
+        get_target_size=lambda: QSize(4, 4),
+        display_mode=DisplayMode.FILL,
+        device_pixel_ratio=1.0,
+    )
+
+    result = _process_display_image_candidate(
+        engine,
+        display,
+        0,
+        SimpleNamespace(local_path=str(path), url=None),
+        False,
+        False,
+    )
+
+    assert result is not None
+    assert result.image is worker_image
+    assert str(path) not in store
+    assert len(puts) == 1
+    assert "|scaled:" in puts[0]
+
+
+def test_worker_failure_preserves_parent_raw_decode_fallback(tmp_path, monkeypatch):
+    path = tmp_path / "worker-fallback.png"
+    source = _solid_qimage(8, 8, QColor("purple"))
+    assert source.save(str(path))
+    store = {}
+    cache = SimpleNamespace(
+        get=lambda key: store.get(key),
+        put=lambda key, value: store.__setitem__(key, value),
+    )
+    engine = SimpleNamespace(
+        _image_cache=cache,
+        _process_supervisor=SimpleNamespace(is_running=lambda _worker: True),
+    )
+    monkeypatch.setattr(
+        "engine.image_pipeline.load_image_via_worker",
+        lambda *_args, **_kwargs: None,
+    )
+    display = SimpleNamespace(
+        get_target_size=lambda: QSize(4, 4),
+        display_mode=DisplayMode.FILL,
+        device_pixel_ratio=1.0,
+    )
+
+    result = _process_display_image_candidate(
+        engine,
+        display,
+        0,
+        SimpleNamespace(local_path=str(path), url=None),
+        False,
+        False,
+    )
+
+    assert result is not None
+    assert str(path) in store
+    assert any("|scaled:" in key for key in store)
+
+
 def test_previous_async_reports_rejection_when_submit_and_fallback_fail(
     monkeypatch,
 ):
