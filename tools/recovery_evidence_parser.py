@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.4"
+PARSER_VERSION = "1.5"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _KV_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>[^,\s]+)")
@@ -38,7 +38,6 @@ _LATENCY_RE = re.compile(
 _EVENT_LOOP_RE = re.compile(r"\[EVENT LOOP\] summary\s+(?P<payload>.*)")
 _RESOURCE_RE = re.compile(r"\[RESOURCE\] snapshot\s+(?P<payload>.*)")
 _RESOURCE_DETAILS_RE = re.compile(r"\bresources_json=(?P<payload>\[.*\])\s*$")
-_TASK_CATEGORIES_RE = re.compile(r"\btm_categories=(?P<payload>\{.*\})\s*$")
 _MODE_RE = re.compile(r"\bmode=(?P<mode>[A-Za-z0-9_-]+)")
 _DISPLAY_RE = re.compile(
     r"Showing on screen (?P<screen>\d+): "
@@ -112,6 +111,20 @@ def _kv(payload: str) -> dict[str, str]:
         match.group("key"): match.group("value")
         for match in _KV_RE.finditer(payload)
     }
+
+
+def _json_object_after_marker(line: str, marker: str) -> dict[str, object]:
+    """Decode one nested JSON object without assuming it ends the log line."""
+
+    marker_index = line.find(marker)
+    if marker_index < 0:
+        return {}
+    payload = line[marker_index + len(marker):].lstrip()
+    try:
+        decoded, _end = json.JSONDecoder().raw_decode(payload)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return decoded if isinstance(decoded, dict) else {}
 
 
 def _number(value: str | None) -> float | None:
@@ -294,15 +307,7 @@ def _parse_usage(
                 "vram_shared_mb": _number(values.get("vram_shared_mb")),
             }
         )
-        category_match = _TASK_CATEGORIES_RE.search(line)
-        category_payload: dict[str, object] = {}
-        if category_match:
-            try:
-                decoded = json.loads(category_match.group("payload"))
-                if isinstance(decoded, dict):
-                    category_payload = decoded
-            except (TypeError, ValueError, json.JSONDecodeError):
-                category_payload = {}
+        category_payload = _json_object_after_marker(line, "tm_categories=")
         category_submitted = {
             str(category): int(counts.get("submitted", 0) or 0)
             for category, counts in category_payload.items()

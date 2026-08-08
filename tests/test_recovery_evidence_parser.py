@@ -32,7 +32,8 @@ def _write_archive(path: Path) -> None:
             "tm_compute_submitted=100 tm_io_submitted=10 "
             'tm_categories={"diagnostics.usage":{"submitted":1},'
             '"uncategorized":{"submitted":19},'
-            '"visualizer.audio_analysis":{"submitted":90}}',
+            '"visualizer.audio_analysis":{"submitted":90}} '
+            'tm_delivery={"pools":{"compute":{"callbacks_delivered":90}}}',
             "2026-07-23 19:38:00 - usage - INFO - [USAGE] sample "
             "seq=2 cpu_app_pct=20.0 cpu_main_pct=15.0 cpu_system_pct=7.0 "
             "rss_app_mb=550.0 rss_main_mb=465.0 rss_children_mb=85.0 "
@@ -49,7 +50,8 @@ def _write_archive(path: Path) -> None:
             "tm_compute_submitted=1600 tm_io_submitted=25 "
             'tm_categories={"diagnostics.usage":{"submitted":2},'
             '"uncategorized":{"submitted":43},'
-            '"visualizer.audio_analysis":{"submitted":1580}}',
+            '"visualizer.audio_analysis":{"submitted":1580}} '
+            'tm_delivery={"pools":{"compute":{"callbacks_delivered":1580}}}',
         ]
     )
     perf = "\n".join(
