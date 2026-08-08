@@ -290,6 +290,51 @@ class TestPassiveGLAccounting:
         assert kwargs["tracked_bytes"] == 13 * 7 * 4
         assert manager._texture_resource_ids[55] == "texture-rid"
 
+    def test_failed_upload_reconciles_texture_allocation_and_delete_bytes(
+        self,
+        monkeypatch,
+    ):
+        from unittest.mock import MagicMock
+        from rendering.gl_programs import texture_manager as module
+
+        fake_gl = MagicMock()
+        fake_gl.glGenTextures.return_value = 55
+        fake_gl.glTexImage2D.side_effect = RuntimeError("upload failed")
+        fake_gl.GL_TEXTURE_2D = 1
+        fake_gl.GL_UNPACK_ALIGNMENT = 2
+        fake_gl.GL_TEXTURE_MIN_FILTER = 3
+        fake_gl.GL_TEXTURE_MAG_FILTER = 4
+        fake_gl.GL_LINEAR = 5
+        fake_gl.GL_TEXTURE_WRAP_S = 6
+        fake_gl.GL_TEXTURE_WRAP_T = 7
+        fake_gl.GL_CLAMP_TO_EDGE = 8
+        fake_gl.GL_RGBA8 = 9
+        fake_gl.GL_BGRA = 10
+        fake_gl.GL_UNSIGNED_BYTE = 11
+        image = MagicMock()
+        image.convertToFormat.return_value = image
+        image.width.return_value = 13
+        image.height.return_value = 7
+        image.constBits.return_value.tobytes.return_value = b"x" * (13 * 7 * 4)
+        pixmap = MagicMock()
+        pixmap.isNull.return_value = False
+        pixmap.toImage.return_value = image
+        monkeypatch.setattr(module, "gl", fake_gl)
+        manager = module.GLTextureManager()
+        monkeypatch.setattr(manager, "_get_or_create_pbo", lambda size: 0)
+
+        assert manager.upload_pixmap(pixmap) == 0
+
+        stats = manager.get_stats()
+        assert stats["texture_allocations"] == 1
+        assert stats["texture_allocation_bytes"] == 13 * 7 * 4
+        assert stats["texture_upload_failures"] == 1
+        assert stats["texture_deletions"] == 1
+        assert stats["texture_deleted_bytes"] == 13 * 7 * 4
+        assert stats["texture_uploads"] == 0
+        assert stats["upload_bytes"] == 0
+        fake_gl.glDeleteTextures.assert_called_once_with(55)
+
     def test_owner_delete_releases_tracking_only_after_success(self, monkeypatch):
         from unittest.mock import MagicMock
         from core.resources.manager import ResourceManager
@@ -321,4 +366,77 @@ class TestPassiveGLAccounting:
 
         manager._cleanup_pbo_pool()
 
+        registry.release_tracking.assert_not_called()
+
+    def test_strict_cleanup_deletes_retained_texture_and_pbo_and_counts(
+        self,
+        monkeypatch,
+    ):
+        from unittest.mock import MagicMock, call
+        from core.resources.manager import ResourceManager
+        from rendering.gl_programs import texture_manager as module
+
+        fake_gl = MagicMock()
+        registry = MagicMock()
+        monkeypatch.setattr(module, "gl", fake_gl)
+        monkeypatch.setattr(
+            ResourceManager,
+            "get_app_shared",
+            classmethod(lambda cls: registry),
+        )
+        manager = module.GLTextureManager()
+        manager._initialized = True
+        manager._texture_cache = {1: 11}
+        manager._texture_lru = [1]
+        manager._texture_bytes_by_id = {11: 128}
+        manager._current_texture_bytes = 128
+        manager._texture_resource_ids = {11: "texture-retained"}
+        manager._pbo_pool = [
+            module.PBOEntry(9, 256, resource_id="pbo-retained")
+        ]
+
+        manager.cleanup(strict=True)
+
+        assert manager.is_initialized() is False
+        assert manager.get_stats()["texture_count"] == 0
+        assert manager.get_stats()["pbo_count"] == 0
+        assert manager.get_stats()["texture_deletions"] == 1
+        assert manager.get_stats()["texture_deleted_bytes"] == 128
+        assert manager.get_stats()["pbo_deletions"] == 1
+        assert manager.get_stats()["pbo_deleted_bytes"] == 256
+        fake_gl.glDeleteTextures.assert_called_once()
+        fake_gl.glDeleteBuffers.assert_called_once_with(1, [9])
+        registry.release_tracking.assert_has_calls(
+            [call("texture-retained"), call("pbo-retained")]
+        )
+
+    def test_strict_cleanup_retains_failed_pbo_ownership_and_initialized_state(
+        self,
+        monkeypatch,
+    ):
+        from unittest.mock import MagicMock
+        from core.resources.manager import ResourceManager
+        from rendering.gl_programs import texture_manager as module
+
+        fake_gl = MagicMock()
+        fake_gl.glDeleteBuffers.side_effect = RuntimeError("delete failed")
+        registry = MagicMock()
+        monkeypatch.setattr(module, "gl", fake_gl)
+        monkeypatch.setattr(
+            ResourceManager,
+            "get_app_shared",
+            classmethod(lambda cls: registry),
+        )
+        manager = module.GLTextureManager()
+        manager._initialized = True
+        retained = module.PBOEntry(9, 256, resource_id="pbo-live")
+        manager._pbo_pool = [retained]
+
+        with pytest.raises(RuntimeError, match="GLTextureManager cleanup incomplete"):
+            manager.cleanup(strict=True)
+
+        assert manager.is_initialized() is True
+        assert manager._pbo_pool == [retained]
+        assert manager.get_stats()["pbo_deletions"] == 0
+        assert manager.get_stats()["pbo_deleted_bytes"] == 0
         registry.release_tracking.assert_not_called()

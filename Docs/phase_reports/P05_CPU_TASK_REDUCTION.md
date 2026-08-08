@@ -1,6 +1,7 @@
 # Phase 5 — CPU and Task Reduction
 
 Date: 2026-08-01
+Last updated: 2026-08-08
 Branch: `main`
 Foundation: closed Phase 4 (`Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md`)
 
@@ -11,6 +12,57 @@ Phase 5 reduces measured CPU, task, publication, and diagnostic work without cha
 Phase 4 is closed by `logs/evidence_chest/07_30_dc8d1741_00_26/`, including startup artwork and media-next during transitions. Older captures that reported a whole-process slope or media/startup collision remain useful historical failed-run evidence, but are superseded as Phase 4 gate evidence. Their CPU/frame-delivery and accounting questions transfer here.
 
 ## Current implementation state
+
+### 2026-08-08 bounded terminal-retention recovery — deterministic candidate
+
+The failed-run evidence supports terminal upload-resource retirement as a plausible
+transition-local contributor, not a proved sole cause. The `17:07` candidate logged
+15 slow texture uploads totalling about `411.7 ms`, versus two cold-start uploads
+totalling about `46.0 ms` in `08_02`; one later `21.7 ms` upload immediately preceded
+request-age/event-loop gaps around `67–109 ms`. The candidate machine was also much
+busier, so controlled installed evidence remains the causal authority.
+
+Starting from rollback checkpoint `97ff0619`, the isolated recovery candidate changes
+only compositor-local GL resource ownership and its deterministic diagnostics:
+
+- terminal presentation retains the exact selected destination texture by existing
+  `QPixmap.cacheKey()` identity and deletes every genuinely historical cached texture;
+- an upload release retains at most one idle PBO per compositor under the existing
+  `64 MiB` production cap; a larger upload creates a replacement and production pool
+  trimming deletes the smaller entry;
+- full owner/context teardown still deletes the retained texture and PBO, preserves
+  failed ownership in strict mode, and cannot claim initialization ended after a
+  failed buffer deletion;
+- one bounded `[PERF] [GL RETENTION]` record per completed transition reports local
+  cache hits, texture allocation/upload/delete counts and bytes, PBO create/reuse/
+  delete counts and bytes, PBO-versus-direct uploads, upload time/max, and `>20 ms`
+  slow-upload count/time as a stall proxy. These counters are observation only and
+  create no timer, queue, callback, repaint, or scheduling dependency.
+
+The changed-area gate currently passes `35/35` focused texture/PBO/resource tests.
+The strengthened 45-cycle harness now calls the production PBO acquire/release/trim
+seams rather than injecting a synthetic idle buffer; it proves retained texture/PBO
+ID reuse on a later transition, larger-size PBO replacement, one sufficient bounded
+terminal PBO, exact current-texture retention, and zero texture/PBO bytes after
+strict owner resets.
+Independent review found no functional blocker after failed-upload delete-byte
+accounting was reconciled.
+
+The required four-process full-suite sweep was also run with per-chunk logs. Chunks
+1–3 completed without timeout with `10`, `7`, and `15` existing unrelated failures;
+chunk 4 reproduced native status `0xC0000409` in
+`test_base_transition_actual_start_updates_widget_timing`, which aborts the same way
+alone because it constructs a `QWidget` without an application fixture. No changed
+GL test failed, but the repository-wide suite is not a passing release gate; the
+failure families remain actionable in `Future_Cleanup.md`.
+
+This is not installed acceptance. The required falsifier is a fixed-display/image/
+cache/transition A/B at low background load. If retained IDs remove later PBO
+allocations and slow uploads but request-age, event-loop, paint/FPS, tick delivery,
+CPU, and rebuild tails do not return to at least the `08_02`/Phase 4 level, this
+hypothesis fails and the candidate rolls back to `97ff0619`. Historical texture
+accumulation, larger budgets, visualizer cadence changes, repaint retries, and shared
+cross-context GPU storage remain out of scope.
 
 ### 2026-08-08 17:07 installed assessment — resource win, performance failure
 
@@ -51,12 +103,12 @@ around `42–57 ms`. The terminal cleanup currently depends on `QPixmap.cacheKey
 reuse while also deleting idle PBO storage; installed evidence does not show that
 the committed current texture is actually reused at the next transition.
 
-Next implementation must isolate these two policies. Preserve immediate deletion
-of genuinely historical textures, but provide stable presentation identity for
-exactly the current image and retain at most one size-appropriate upload PBO per
-compositor when A/B evidence proves it removes repeated driver allocation/upload
-stalls. Do not restore the former historical texture staircase, enlarge budgets,
-or change visualizer cadence/behaviour.
+The deterministic candidate above now isolates these two policies. It preserves
+immediate deletion of genuinely historical textures, exact current-image identity,
+and at most one size-appropriate upload PBO per compositor. Installed A/B evidence
+must still prove that this removes repeated driver allocation/upload stalls without
+restoring the former historical texture staircase, enlarging budgets, or changing
+visualizer cadence/behaviour.
 
 Lifecycle behavior in this run was mechanically healthy: one CUSTOM and one
 Settings full recreation completed, all runtime barriers passed, first-frame reveal
@@ -98,8 +150,9 @@ slices exercised by the 2026-08-08 regression capture:
   visualizer cadence are unchanged.
 - Raw image prefetch is omitted when no planned scaled consumer needs it, and
   display prescale now uses the ImageWorker before exact parent raw-decode fallback.
-- Terminal compositors retain only the authoritative current image texture and
-  release idle upload PBO storage in the owning GL context.
+- The assessed `849f78e8` terminal policy retained only the authoritative current
+  image texture and released idle upload PBO storage in the owning GL context; the
+  bounded recovery candidate above supersedes that all-idle PBO mechanic pending A/B.
 - New PBOs no longer allocate full storage once at construction and immediately
   orphan/reallocate the same storage on their first upload.
 - Usage evidence now separates whole/main/child private commit and USS in addition
@@ -147,6 +200,8 @@ Parser 1.5 repaired a derived-evidence defect: nested `tm_categories` JSON had b
 - [-] Add/passively consume owner-labelled render, submission, GUI callback, update-request, and paint timestamps without creating UI work or a new timer/queue.
 - [-] The 17:07 run supplied 217 owner-labelled frame gaps: 132 exceeded 33 ms, 85 exceeded 50 ms, and the maximum was 140.7 ms. Last-callback labels remained mostly cheap media-consumption and cursor-halo callbacks; they correlate with delayed delivery but do not account for the missing tens of milliseconds. Prioritize the terminal upload/resource boundary and controlled event-loop attribution rather than Bubble-worker retuning.
 - [x] Resolve the known transition-label hole: owner telemetry now accepts the compositor display-transition `name`, which was present on the 62 active records but previously ignored.
+- [x] Add one transition-local GL retention record with cache-hit, allocation/upload/delete byte, PBO/direct, retained-capacity, and slow-upload fields; deterministic tests prove each record resets at the terminal boundary.
+- [ ] Correlate those GL records with request-age, event-loop lateness, paint delivery, CPU, and resource snapshots in the fixed-workload installed A/B; lifetime totals or unmatched-machine comparisons are not causal proof.
 - [ ] Correlate the now-labelled transition owner with logical scene age, event-loop lateness, queue/callback tails, and per-display request-to-paint delay in the next installed capture.
 - [ ] Attribute delayed delivery to its actual owner before changing cadence mechanics; a healthy render clock with delayed paint is event-loop delivery starvation, not permission to add repaint retries.
 

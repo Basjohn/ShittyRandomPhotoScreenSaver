@@ -50,6 +50,33 @@ class GLTextureManager:
     MAX_CACHED_TEXTURE_BYTES = 128 * 1024 * 1024
     MAX_PBO_POOL_ENTRIES = 1
     MAX_PBO_POOL_BYTES = 64 * 1024 * 1024
+    UPLOAD_STALL_THRESHOLD_MS = 20.0
+    _TRANSITION_METRIC_NAMES = (
+        "texture_cache_hits",
+        "texture_allocations",
+        "texture_allocation_bytes",
+        "texture_uploads",
+        "texture_upload_failures",
+        "upload_bytes",
+        "texture_deletions",
+        "texture_deleted_bytes",
+        "pbo_creations",
+        "pbo_created_bytes",
+        "pbo_reuses",
+        "pbo_deletions",
+        "pbo_deleted_bytes",
+        "pbo_uploads",
+        "direct_uploads",
+        "upload_total_ms",
+        "upload_max_ms",
+        "slow_upload_count",
+        "slow_upload_total_ms",
+        "slow_upload_max_ms",
+        "pbo_slow_upload_count",
+        "pbo_slow_upload_total_ms",
+        "direct_slow_upload_count",
+        "direct_slow_upload_total_ms",
+    )
     
     def __init__(
         self,
@@ -77,7 +104,32 @@ class GLTextureManager:
         self._texture_bytes_by_id: Dict[int, int] = {}
         self._current_texture_bytes = 0
         self._terminal_textures_reclaimed = 0
-        self._terminal_pbos_reclaimed = 0
+        self._terminal_transitions = 0
+        self._texture_cache_hits = 0
+        self._texture_allocations = 0
+        self._texture_allocation_bytes = 0
+        self._texture_uploads = 0
+        self._texture_upload_failures = 0
+        self._upload_bytes = 0
+        self._texture_deletions = 0
+        self._texture_deleted_bytes = 0
+        self._pbo_creations = 0
+        self._pbo_created_bytes = 0
+        self._pbo_reuses = 0
+        self._pbo_deletions = 0
+        self._pbo_deleted_bytes = 0
+        self._pbo_uploads = 0
+        self._direct_uploads = 0
+        self._upload_total_ms = 0.0
+        self._upload_max_ms = 0.0
+        self._slow_upload_count = 0
+        self._slow_upload_total_ms = 0.0
+        self._slow_upload_max_ms = 0.0
+        self._pbo_slow_upload_count = 0
+        self._pbo_slow_upload_total_ms = 0.0
+        self._direct_slow_upload_count = 0
+        self._direct_slow_upload_total_ms = 0.0
+        self._transition_metrics: Optional[dict[str, int | float]] = None
         
         # Current transition textures
         self._old_tex_id: int = 0
@@ -108,6 +160,38 @@ class GLTextureManager:
     def is_initialized(self) -> bool:
         """Check if manager is initialized."""
         return self._initialized
+
+    def _begin_transition_metrics(self) -> None:
+        """Open one passive diagnostic window around a texture transition."""
+        if is_perf_metrics_enabled():
+            self._transition_metrics = {
+                name: 0 for name in self._TRANSITION_METRIC_NAMES
+            }
+        else:
+            self._transition_metrics = None
+
+    def _record_transition_metric(
+        self,
+        name: str,
+        value: int | float = 1,
+    ) -> None:
+        metrics = self._transition_metrics
+        if metrics is not None:
+            metrics[name] = metrics.get(name, 0) + value
+
+    def _record_texture_deletion(self, tracked_bytes: int = 0) -> None:
+        tracked_bytes = max(0, int(tracked_bytes))
+        self._texture_deletions += 1
+        self._texture_deleted_bytes += tracked_bytes
+        self._record_transition_metric("texture_deletions")
+        self._record_transition_metric("texture_deleted_bytes", tracked_bytes)
+
+    def _record_pbo_deletion(self, tracked_bytes: int) -> None:
+        tracked_bytes = max(0, int(tracked_bytes))
+        self._pbo_deletions += 1
+        self._pbo_deleted_bytes += tracked_bytes
+        self._record_transition_metric("pbo_deletions")
+        self._record_transition_metric("pbo_deleted_bytes", tracked_bytes)
     
     # -------------------------------------------------------------------------
     # Texture Upload
@@ -121,7 +205,7 @@ class GLTextureManager:
         if gl is None or pixmap is None or pixmap.isNull():
             return 0
         
-        _upload_start = time.time()
+        _upload_start = time.perf_counter()
         
         # Convert to ARGB32 + GL_BGRA for correct channel ordering
         image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
@@ -150,8 +234,17 @@ class GLTextureManager:
             return 0
         
         data_size = len(data)
+        texture_bytes = w * h * 4
         tex = gl.glGenTextures(1)
         tex_id = int(tex)
+        if tex_id > 0:
+            self._texture_allocations += 1
+            self._texture_allocation_bytes += texture_bytes
+            self._record_transition_metric("texture_allocations")
+            self._record_transition_metric(
+                "texture_allocation_bytes",
+                texture_bytes,
+            )
         
         # Try PBO upload for better performance
         use_pbo = False
@@ -214,8 +307,12 @@ class GLTextureManager:
                 )
         except Exception:
             logger.debug("[GL TEXTURE] Upload failed", exc_info=True)
+            self._texture_upload_failures += 1
+            self._record_transition_metric("texture_upload_failures")
             try:
                 gl.glDeleteTextures(int(tex_id))
+                if tex_id > 0:
+                    self._record_texture_deletion(texture_bytes)
             except Exception as e:
                 logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
             if pbo_id > 0:
@@ -235,8 +332,56 @@ class GLTextureManager:
                     logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
         
         # Log slow uploads
-        _upload_elapsed = (time.time() - _upload_start) * 1000.0
-        if _upload_elapsed > 20.0 and is_perf_metrics_enabled():
+        _upload_elapsed = (time.perf_counter() - _upload_start) * 1000.0
+        self._texture_uploads += 1
+        self._upload_bytes += data_size
+        self._upload_total_ms += _upload_elapsed
+        self._upload_max_ms = max(self._upload_max_ms, _upload_elapsed)
+        if use_pbo:
+            self._pbo_uploads += 1
+            self._record_transition_metric("pbo_uploads")
+        else:
+            self._direct_uploads += 1
+            self._record_transition_metric("direct_uploads")
+        self._record_transition_metric("texture_uploads")
+        self._record_transition_metric("upload_bytes", data_size)
+        self._record_transition_metric("upload_total_ms", _upload_elapsed)
+        if self._transition_metrics is not None:
+            self._transition_metrics["upload_max_ms"] = max(
+                float(self._transition_metrics["upload_max_ms"]),
+                _upload_elapsed,
+            )
+        if _upload_elapsed > self.UPLOAD_STALL_THRESHOLD_MS:
+            self._slow_upload_count += 1
+            self._slow_upload_total_ms += _upload_elapsed
+            self._slow_upload_max_ms = max(
+                self._slow_upload_max_ms,
+                _upload_elapsed,
+            )
+            self._record_transition_metric("slow_upload_count")
+            self._record_transition_metric("slow_upload_total_ms", _upload_elapsed)
+            if self._transition_metrics is not None:
+                self._transition_metrics["slow_upload_max_ms"] = max(
+                    float(self._transition_metrics["slow_upload_max_ms"]),
+                    _upload_elapsed,
+                )
+            if use_pbo:
+                self._pbo_slow_upload_count += 1
+                self._pbo_slow_upload_total_ms += _upload_elapsed
+                self._record_transition_metric("pbo_slow_upload_count")
+                self._record_transition_metric(
+                    "pbo_slow_upload_total_ms",
+                    _upload_elapsed,
+                )
+            else:
+                self._direct_slow_upload_count += 1
+                self._direct_slow_upload_total_ms += _upload_elapsed
+                self._record_transition_metric("direct_slow_upload_count")
+                self._record_transition_metric(
+                    "direct_slow_upload_total_ms",
+                    _upload_elapsed,
+                )
+        if _upload_elapsed > self.UPLOAD_STALL_THRESHOLD_MS and is_perf_metrics_enabled():
             logger.warning("[PERF] [GL TEXTURE] Slow upload: %.2fms (%dx%d, pbo=%s)", 
                           _upload_elapsed, w, h, use_pbo)
         
@@ -258,7 +403,6 @@ class GLTextureManager:
         except Exception as e:
             logger.debug("[GL TEXTURE] Exception suppressed: %s", e)  # Non-critical - texture still usable
         
-        texture_bytes = w * h * 4
         self._texture_bytes_by_id[tex_id] = texture_bytes
         self._current_texture_bytes += texture_bytes
         return tex_id
@@ -282,6 +426,8 @@ class GLTextureManager:
         if key > 0:
             texture_id = int(self._texture_cache.get(key, 0) or 0)
             if texture_id:
+                self._texture_cache_hits += 1
+                self._record_transition_metric("texture_cache_hits")
                 if key in self._texture_lru:
                     self._texture_lru.remove(key)
                 self._texture_lru.append(key)
@@ -319,6 +465,8 @@ class GLTextureManager:
                 exc_info=True,
             )
             return False
+        texture_bytes = self._texture_bytes_by_id.get(texture_id, 0)
+        self._record_texture_deletion(texture_bytes)
         self._texture_cache.pop(cache_key, None)
         if cache_key in self._texture_lru:
             self._texture_lru.remove(cache_key)
@@ -351,7 +499,7 @@ class GLTextureManager:
             if not self._delete_cached_texture(candidate):
                 failed_keys.add(candidate)
 
-    def get_stats(self) -> dict[str, int]:
+    def get_stats(self) -> dict[str, int | float]:
         """Return exact compositor-owned texture and PBO retention."""
         return {
             "texture_count": len(self._texture_cache),
@@ -361,7 +509,31 @@ class GLTextureManager:
             "pbo_bytes": sum(entry.size for entry in self._pbo_pool),
             "max_pbo_bytes": self._max_pbo_pool_bytes,
             "terminal_textures_reclaimed": self._terminal_textures_reclaimed,
-            "terminal_pbos_reclaimed": self._terminal_pbos_reclaimed,
+            "terminal_transitions": self._terminal_transitions,
+            "texture_cache_hits": self._texture_cache_hits,
+            "texture_allocations": self._texture_allocations,
+            "texture_allocation_bytes": self._texture_allocation_bytes,
+            "texture_uploads": self._texture_uploads,
+            "texture_upload_failures": self._texture_upload_failures,
+            "upload_bytes": self._upload_bytes,
+            "texture_deletions": self._texture_deletions,
+            "texture_deleted_bytes": self._texture_deleted_bytes,
+            "pbo_creations": self._pbo_creations,
+            "pbo_created_bytes": self._pbo_created_bytes,
+            "pbo_reuses": self._pbo_reuses,
+            "pbo_deletions": self._pbo_deletions,
+            "pbo_deleted_bytes": self._pbo_deleted_bytes,
+            "pbo_uploads": self._pbo_uploads,
+            "direct_uploads": self._direct_uploads,
+            "upload_total_ms": self._upload_total_ms,
+            "upload_max_ms": self._upload_max_ms,
+            "slow_upload_count": self._slow_upload_count,
+            "slow_upload_total_ms": self._slow_upload_total_ms,
+            "slow_upload_max_ms": self._slow_upload_max_ms,
+            "pbo_slow_upload_count": self._pbo_slow_upload_count,
+            "pbo_slow_upload_total_ms": self._pbo_slow_upload_total_ms,
+            "direct_slow_upload_count": self._direct_slow_upload_count,
+            "direct_slow_upload_total_ms": self._direct_slow_upload_total_ms,
         }
     # -------------------------------------------------------------------------
     # Transition Texture Management
@@ -373,6 +545,7 @@ class GLTextureManager:
             return False
         
         self.release_transition_textures()
+        self._begin_transition_metrics()
         
         try:
             self._old_tex_id = self.get_or_create_texture(old_pixmap)
@@ -408,6 +581,7 @@ class GLTextureManager:
         self._old_tex_id = 0
         self._new_tex_id = 0
         if retain_active in {"new", "old"}:
+            self._terminal_transitions += 1
             before = len(self._texture_cache)
             for cache_key, texture_id in tuple(self._texture_cache.items()):
                 if int(texture_id or 0) != retained_id:
@@ -416,8 +590,64 @@ class GLTextureManager:
                 0,
                 before - len(self._texture_cache),
             )
-            self._release_idle_pbos_at_terminal_boundary()
         self._evict_cache_to_budget()
+        if retain_active in {"new", "old"} and is_perf_metrics_enabled():
+            stats = self.get_stats()
+            metrics = self._transition_metrics or {
+                name: 0 for name in self._TRANSITION_METRIC_NAMES
+            }
+            logger.info(
+                "[PERF] [GL RETENTION] owner=%s terminal=%d retain_active=%s "
+                "retained_texture=%d texture_count=%d texture_bytes=%d "
+                "texture_cache_hits=%d texture_allocations=%d "
+                "texture_allocation_bytes=%d texture_uploads=%d "
+                "texture_upload_failures=%d upload_bytes=%d "
+                "texture_deletions=%d texture_deleted_bytes=%d "
+                "terminal_historical_deletions=%d pbo_count=%d "
+                "pbo_idle_count=%d pbo_capacity_bytes=%d "
+                "pbo_creations=%d pbo_created_bytes=%d pbo_reuses=%d "
+                "pbo_deletions=%d pbo_deleted_bytes=%d pbo_uploads=%d "
+                "direct_uploads=%d upload_total_ms=%.2f upload_max_ms=%.2f "
+                "slow_upload_count=%d slow_upload_total_ms=%.2f "
+                "slow_upload_max_ms=%.2f pbo_slow_upload_count=%d "
+                "pbo_slow_upload_total_ms=%.2f direct_slow_upload_count=%d "
+                "direct_slow_upload_total_ms=%.2f",
+                self._owner,
+                stats["terminal_transitions"],
+                retain_active,
+                retained_id,
+                stats["texture_count"],
+                stats["texture_bytes"],
+                metrics["texture_cache_hits"],
+                metrics["texture_allocations"],
+                metrics["texture_allocation_bytes"],
+                metrics["texture_uploads"],
+                metrics["texture_upload_failures"],
+                metrics["upload_bytes"],
+                metrics["texture_deletions"],
+                metrics["texture_deleted_bytes"],
+                max(0, before - len(self._texture_cache)),
+                stats["pbo_count"],
+                sum(1 for entry in self._pbo_pool if not entry.in_use),
+                stats["pbo_bytes"],
+                metrics["pbo_creations"],
+                metrics["pbo_created_bytes"],
+                metrics["pbo_reuses"],
+                metrics["pbo_deletions"],
+                metrics["pbo_deleted_bytes"],
+                metrics["pbo_uploads"],
+                metrics["direct_uploads"],
+                metrics["upload_total_ms"],
+                metrics["upload_max_ms"],
+                metrics["slow_upload_count"],
+                metrics["slow_upload_total_ms"],
+                metrics["slow_upload_max_ms"],
+                metrics["pbo_slow_upload_count"],
+                metrics["pbo_slow_upload_total_ms"],
+                metrics["direct_slow_upload_count"],
+                metrics["direct_slow_upload_total_ms"],
+            )
+        self._transition_metrics = None
     
     def has_transition_textures(self) -> bool:
         """Check if transition textures are ready."""
@@ -436,6 +666,8 @@ class GLTextureManager:
         for entry in self._pbo_pool:
             if not entry.in_use and entry.size >= required_size:
                 entry.in_use = True
+                self._pbo_reuses += 1
+                self._record_transition_metric("pbo_reuses")
                 return entry.pbo_id
         
         # Create new PBO
@@ -449,6 +681,10 @@ class GLTextureManager:
                 # allocation for every newly-created staging buffer.
                 entry = PBOEntry(pbo_id, required_size, True)
                 self._pbo_pool.append(entry)
+                self._pbo_creations += 1
+                self._pbo_created_bytes += required_size
+                self._record_transition_metric("pbo_creations")
+                self._record_transition_metric("pbo_created_bytes", required_size)
                 
                 # Register PBO with ResourceManager for VRAM leak prevention
                 try:
@@ -510,32 +746,12 @@ class GLTextureManager:
             try:
                 gl.glDeleteBuffers(1, [entry.pbo_id])
                 self._release_resource_tracking(entry.resource_id)
+                self._record_pbo_deletion(entry.size)
             except Exception:
                 logger.debug("[GL TEXTURE] Failed to trim idle PBO", exc_info=True)
                 retained.append(entry)
         self._pbo_pool = retained
 
-    def _release_idle_pbos_at_terminal_boundary(self) -> None:
-        """Delete upload-only staging buffers once presentation is committed."""
-        retained: List[PBOEntry] = []
-        reclaimed = 0
-        for entry in self._pbo_pool:
-            if entry.in_use:
-                retained.append(entry)
-                continue
-            try:
-                gl.glDeleteBuffers(1, [entry.pbo_id])
-                self._release_resource_tracking(entry.resource_id)
-                reclaimed += 1
-            except Exception:
-                logger.debug(
-                    "[GL TEXTURE] Failed to release terminal idle PBO",
-                    exc_info=True,
-                )
-                retained.append(entry)
-        self._pbo_pool = retained
-        self._terminal_pbos_reclaimed += reclaimed
-    
     def _cleanup_pbo_pool(self, *, strict: bool = False) -> None:
         """Delete all PBOs, retaining failed entries in strict teardown."""
         if gl is None:
@@ -548,6 +764,7 @@ class GLTextureManager:
             try:
                 gl.glDeleteBuffers(1, [entry.pbo_id])
                 self._release_resource_tracking(entry.resource_id)
+                self._record_pbo_deletion(entry.size)
             except Exception as exc:
                 failed_entries.append(entry)
                 errors.append(f"pbo={entry.pbo_id}:{type(exc).__name__}:{exc}")
@@ -574,10 +791,21 @@ class GLTextureManager:
 
         try:
             if ids:
+                deleted_bytes = sum(
+                    self._texture_bytes_by_id.get(texture_id, 0)
+                    for texture_id in ids
+                )
                 arr = (ctypes.c_uint * len(ids))(*ids)
                 gl.glDeleteTextures(len(ids), arr)
                 for texture_id in ids:
                     self._release_texture_tracking(texture_id)
+                self._texture_deletions += len(ids)
+                self._texture_deleted_bytes += deleted_bytes
+                self._record_transition_metric("texture_deletions", len(ids))
+                self._record_transition_metric(
+                    "texture_deleted_bytes",
+                    deleted_bytes,
+                )
         except Exception as exc:
             logger.debug("[GL TEXTURE] Cached texture deletion failed", exc_info=True)
             if strict:

@@ -111,11 +111,112 @@ def test_terminal_transition_retires_history_and_retains_destination(monkeypatch
     assert list(manager._texture_cache.values()) == [104]
     assert manager._current_texture_bytes == 60
     assert manager.get_stats()["terminal_textures_reclaimed"] == 3
-    assert manager.get_stats()["terminal_pbos_reclaimed"] == 1
-    assert manager.get_stats()["pbo_count"] == 0
+    assert manager.get_stats()["terminal_transitions"] == 1
+    assert manager.get_stats()["pbo_count"] == 1
+    assert manager.get_stats()["pbo_bytes"] == 240
     assert fake_gl.glDeleteTextures.call_count == 3
-    fake_gl.glDeleteBuffers.assert_called_once_with(1, [200])
-    assert manager._release_resource_tracking.call_args_list[-1].args == ("pbo",)
+    fake_gl.glDeleteBuffers.assert_not_called()
+    assert [item.args for item in manager._release_resource_tracking.call_args_list] == [
+        (None,),
+        (None,),
+        (None,),
+    ]
+
+    retained_pixmap = MagicMock()
+    retained_pixmap.isNull.return_value = False
+    retained_pixmap.cacheKey.return_value = 4
+    manager.upload_pixmap = MagicMock(return_value=999)
+
+    assert manager.get_or_create_texture(retained_pixmap) == 104
+    manager.upload_pixmap.assert_not_called()
+    assert manager._get_or_create_pbo(200) == 200
+    assert manager.get_stats()["texture_cache_hits"] == 1
+    assert manager.get_stats()["pbo_reuses"] == 1
+    assert manager.get_stats()["pbo_creations"] == 0
+
+
+def test_terminal_retention_log_is_transition_local_and_byte_aware(
+    monkeypatch,
+    qt_app,
+):
+    fake_gl = MagicMock()
+    fake_gl.glGenTextures.side_effect = [51, 52]
+    fake_gl.glGenBuffers.return_value = 41
+    fake_gl.glMapBuffer.return_value = None
+    fake_gl.GL_PIXEL_UNPACK_BUFFER = 1
+    fake_gl.GL_STREAM_DRAW = 2
+    fake_gl.GL_WRITE_ONLY = 3
+    fake_gl.GL_TEXTURE_2D = 4
+    fake_gl.GL_UNPACK_ALIGNMENT = 5
+    fake_gl.GL_TEXTURE_MIN_FILTER = 6
+    fake_gl.GL_TEXTURE_MAG_FILTER = 7
+    fake_gl.GL_LINEAR = 8
+    fake_gl.GL_TEXTURE_WRAP_S = 9
+    fake_gl.GL_TEXTURE_WRAP_T = 10
+    fake_gl.GL_CLAMP_TO_EDGE = 11
+    fake_gl.GL_RGBA8 = 12
+    fake_gl.GL_BGRA = 13
+    fake_gl.GL_UNSIGNED_BYTE = 14
+    registry = MagicMock()
+    registry.register_gl_texture.side_effect = ["texture-old", "texture-new"]
+    registry.register_gl_vbo.return_value = "pbo-retained"
+    info = MagicMock()
+
+    from core.resources.manager import ResourceManager
+
+    monkeypatch.setattr(texture_module, "gl", fake_gl)
+    monkeypatch.setattr(texture_module, "is_perf_metrics_enabled", lambda: True)
+    monkeypatch.setattr(texture_module.logger, "info", info)
+    monkeypatch.setattr(
+        ResourceManager,
+        "get_or_create_app_shared",
+        classmethod(lambda cls: registry),
+    )
+    monkeypatch.setattr(
+        ResourceManager,
+        "get_app_shared",
+        classmethod(lambda cls: registry),
+    )
+
+    old = QPixmap.fromImage(QImage(17, 9, QImage.Format.Format_ARGB32))
+    new = QPixmap.fromImage(QImage(13, 7, QImage.Format.Format_ARGB32))
+    manager = GLTextureManager(owner="display:diagnostic")
+
+    assert manager.prepare_transition_textures(old, new) is True
+    manager.release_transition_textures(retain_active="new")
+
+    fmt, *args = info.call_args.args
+    message = fmt % tuple(args)
+    assert "owner=display:diagnostic terminal=1" in message
+    assert "texture_cache_hits=0" in message
+    assert "texture_allocations=2" in message
+    assert f"texture_allocation_bytes={(13 * 7 + 17 * 9) * 4}" in message
+    assert "texture_uploads=2" in message
+    assert f"upload_bytes={(13 * 7 + 17 * 9) * 4}" in message
+    assert "texture_deletions=1" in message
+    assert "terminal_historical_deletions=1" in message
+    assert "pbo_creations=1" in message
+    assert "pbo_reuses=1" in message
+    assert "pbo_deletions=0" in message
+    assert "pbo_uploads=2" in message
+    assert "direct_uploads=0" in message
+    assert "slow_upload_count=" in message
+    assert manager._transition_metrics is None
+
+    assert manager.prepare_transition_textures(new, new) is True
+    manager.release_transition_textures(retain_active="new")
+
+    fmt, *args = info.call_args.args
+    next_message = fmt % tuple(args)
+    assert "terminal=2" in next_message
+    assert "texture_cache_hits=2" in next_message
+    assert "texture_allocations=0" in next_message
+    assert "texture_uploads=0" in next_message
+    assert "upload_bytes=0" in next_message
+    assert "texture_deletions=0" in next_message
+    assert "pbo_creations=0" in next_message
+    assert "pbo_reuses=0" in next_message
+    assert info.call_count == 2
 
 
 def test_cancel_retains_base_side_selected_by_snap_policy(qt_app):

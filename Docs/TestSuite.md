@@ -257,19 +257,19 @@ Count-only cache tests are insufficient.
 
 Phase 4 owns these concrete automated bars:
 
-- `tests/test_phase4_resource_containment.py` — exact texture-byte eviction with active-pair pinning, independent PBO bounds, Particle/Burn cancellation, and cross-display QPixmap alias deduplication;
+- `tests/test_phase4_resource_containment.py` — exact texture-byte eviction with active-pair pinning, exact terminal current-texture retention, one bounded reusable terminal PBO, transition-local allocation/upload/delete and slow-upload proxy diagnostics, Particle/Burn cancellation, and cross-display QPixmap alias deduplication;
 - `tests/test_image_cache_accounting.py` — exact QImage/QPixmap logical-byte eviction and detached metadata;
 - `tests/test_image_prefetcher.py` — concurrency/count/future-byte backlog bounds, worker-safe QImage results, source-generation invalidation, and rejection of stale raw/scaled callbacks that would otherwise repopulate the cache or release a newer same-key owner;
 - `tests/test_image_pipeline.py` — exact transform sharing plus non-sharing across differing source/target/DPR identity, including previous-image replay and DPR-aware scaled-cache keys;
 - `tests/test_image_worker_shared_memory.py` — per-transfer attachment/close ownership, one-copy parent consumption, zero live-byte accounting, timeout/late response, cancellation, runtime-generation rejection, buffered/queue shutdown disposal, publish failure, and orphan-name probes;
 - `tests/test_process_supervisor.py` and `tests/test_usage_sampler.py` — correlated response buffering/lifecycle plus labelled ImageWorker/shared-memory telemetry;
-- `tests/test_gl_texture_streaming.py` and `tests/test_memory_pooling.py` — upload/PBO reuse and cleanup regressions;
+- `tests/test_gl_texture_streaming.py` and `tests/test_memory_pooling.py` — upload/PBO reuse, failed-upload byte reconciliation, and strict retained-PBO cleanup success/failure regressions;
 - `tests/test_media_command_ingress.py`, `tests/test_media_artwork_layout.py`, `tests/test_media_display_update.py`, `tests/test_media_transition_deferral.py`, and `tests/test_media_widget_runtime_methods.py` — process-wide Qt/native/raw media-route deduplication with once-only visualizer wake, authoritative in-flight artwork generations, worker QImage decode, pre-diff generation promotion, retention of the sole decoded image until a same-key current query can promote it, key-owned GUI pixmap replacement, newest-only all-display transition deferral, card-before-artwork startup fade ownership with transition-idle resumption, static transition-time feedback with one-shot-only cleanup even beside animated feedback, playback-state repaint without redundant Qt layout setters, DPR-sized header-logo reuse, and split feedback/presentation lifecycle telemetry;
 - `tests/test_transition_distribution.py` — accepted manual-change timer rebasing, rejected-submission handling, and timer-expiry coalescing before image acquisition while any image-change owner is active;
-- `tools/phase4_resource_harness.py` — 45-cycle owner/allocator plateau gate with real Qt image allocations and RSS.
+- `tools/phase4_resource_harness.py` — 45-cycle owner/allocator plateau gate with real Qt image allocations/RSS and production PBO acquire/release/trim, including retained-ID reuse and larger-size replacement.
 - `tools/phase4_image_worker_shm_harness.py` — real spawned-worker 50×4K transfer plateau plus shutdown-during-transfer and orphan-name gate.
 
-The deterministic cache/texture/PBO artifact remains authoritative for those owners, and both the 50×4K harness and `fresh_20260729_2140` close the ImageWorker/shared-memory slice. Phase 4 nevertheless remains open because the fresh full run did not plateau in main-process RSS, total RSS, or private commit. `fresh_20260729_2233` proves artwork ownership but fails Media Next/Previous transition presentation; the post-correction installed comparator must prove the feedback repaint burst is gone alongside bounded artwork/rotation lifecycle events and unchanged visualizer/transition presentation. The two-hour soak remains a Phase 11 gate.
+The deterministic cache/texture/PBO artifact remains authoritative for those owners, and both the 50×4K harness and `fresh_20260729_2140` close the ImageWorker/shared-memory slice. Phase 4 is closed by `Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md`; later equivalent-state recreation memory, whole-process private-commit attribution, and terminal-resource performance tradeoffs belong to Phase 5. The two-hour soak remains a Phase 11 gate.
 
 ## 9. CPU/Task Gate
 

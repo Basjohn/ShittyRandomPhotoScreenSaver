@@ -22,7 +22,7 @@ from PySide6.QtGui import QColor, QGuiApplication, QImage, QPixmap
 
 from core.performance.resource_metrics import collect_resource_accounting
 from rendering.gl_programs import texture_manager as texture_module
-from rendering.gl_programs.texture_manager import GLTextureManager, PBOEntry
+from rendering.gl_programs.texture_manager import GLTextureManager
 from rendering.image_resource_accounting import (
     aggregate_display_image_accounting,
     refresh_display_image_accounting,
@@ -46,6 +46,14 @@ class _FakeGL:
     def __init__(self) -> None:
         self.deleted_textures: list[int] = []
         self.deleted_buffers: list[int] = []
+        self.created_buffers: list[int] = []
+        self._next_buffer = 100_000
+
+    def glGenBuffers(self, _count: int) -> int:
+        value = self._next_buffer
+        self._next_buffer += 1
+        self.created_buffers.append(value)
+        return value
 
     def glDeleteTextures(self, *args) -> None:
         value = args[-1]
@@ -115,6 +123,10 @@ def _texture_manager(fake_gl: _FakeGL, generation: int) -> GLTextureManager:
         texture_id = next_texture["value"]
         next_texture["value"] += 1
         size = int(pixmap.width()) * int(pixmap.height()) * 4
+        pbo_id = manager._get_or_create_pbo(size)
+        if pbo_id <= 0:
+            raise RuntimeError("production PBO pool failed to provide an upload buffer")
+        manager._release_pbo(pbo_id)
         manager._texture_bytes_by_id[texture_id] = size
         manager._current_texture_bytes += size
         return texture_id
@@ -217,20 +229,23 @@ def run_harness(cycles: int) -> dict[str, Any]:
             display._image_presenter._seed_pixmap = next_pixmap
             refresh_display_image_accounting(display)
 
+        before_gl = manager.get_stats()
         manager.prepare_transition_textures(old_pixmap, next_pixmap)
         active_resources = collect_resource_accounting(engine)
         active_gl = manager.get_stats()
+        active_old_texture_id = manager.old_tex_id
 
-        manager.release_transition_textures()
+        pbo_deletes_before_terminal = len(fake_gl.deleted_buffers)
+        manager.release_transition_textures(retain_active="new")
+        terminal_pbo_deletes = (
+            len(fake_gl.deleted_buffers) - pbo_deletes_before_terminal
+        )
         _terminal_display_snapshot(displays, next_pixmap)
         terminal_resources = collect_resource_accounting(engine)
         terminal_gl = manager.get_stats()
         required_pbo = width * height * 4
-        manager._pbo_pool.append(
-            PBOEntry(cycle + 50_000, required_pbo, in_use=False)
-        )
-        manager._trim_pbo_pool()
-        terminal_gl = manager.get_stats()
+        terminal_texture_ids = list(manager._texture_cache.values())
+        terminal_pbo_ids = [entry.pbo_id for entry in manager._pbo_pool]
         current = next_pixmap
         if cycle % 5 == 0:
             gc.collect()
@@ -245,8 +260,23 @@ def run_harness(cycles: int) -> dict[str, Any]:
                 "active_display_bytes": active_resources.cpu_display_bytes,
                 "terminal_display_bytes": terminal_resources.cpu_display_bytes,
                 "active_texture_bytes": active_gl["texture_bytes"],
+                "active_old_texture_id": active_old_texture_id,
                 "terminal_texture_bytes": terminal_gl["texture_bytes"],
+                "terminal_texture_ids": terminal_texture_ids,
+                "terminal_pbo_count": terminal_gl["pbo_count"],
                 "pbo_bytes": terminal_gl["pbo_bytes"],
+                "required_pbo_bytes": required_pbo,
+                "terminal_pbo_ids": terminal_pbo_ids,
+                "pbo_creations": (
+                    terminal_gl["pbo_creations"] - before_gl["pbo_creations"]
+                ),
+                "pbo_reuses": (
+                    terminal_gl["pbo_reuses"] - before_gl["pbo_reuses"]
+                ),
+                "pbo_deletions": (
+                    terminal_gl["pbo_deletions"] - before_gl["pbo_deletions"]
+                ),
+                "terminal_pbo_deletes": terminal_pbo_deletes,
             }
         )
 
@@ -298,6 +328,19 @@ def run_harness(cycles: int) -> dict[str, Any]:
         if tail_high_waters
         else 0
     )
+    stable_terminal_reuses = [
+        current_record
+        for previous_record, current_record in zip(records, records[1:])
+        if current_record["pbo_reuses"] > 0
+        and current_record["terminal_pbo_ids"]
+        == previous_record["terminal_pbo_ids"]
+    ]
+    stable_terminal_texture_reuses = [
+        current_record
+        for previous_record, current_record in zip(records, records[1:])
+        if current_record["active_old_texture_id"]
+        in previous_record["terminal_texture_ids"]
+    ]
     criteria = {
         "cpu_cache_within_byte_budget": all(
             item["cache_bytes"] <= _CPU_CACHE_BUDGET for item in records
@@ -305,8 +348,33 @@ def run_harness(cycles: int) -> dict[str, Any]:
         "texture_cache_within_byte_budget_after_terminal": all(
             item["terminal_texture_bytes"] <= _GL_TEXTURE_BUDGET for item in records
         ),
+        "terminal_texture_is_exact_current_frame": all(
+            item["terminal_texture_bytes"]
+            == item["resolution"][0] * item["resolution"][1] * 4
+            for item in records
+        ),
+        "later_transition_reuses_terminal_texture": bool(
+            stable_terminal_texture_reuses
+        ),
         "pbo_pool_within_byte_budget": all(
             item["pbo_bytes"] <= _PBO_BUDGET for item in records
+        ),
+        "terminal_retains_one_sufficient_idle_pbo": all(
+            item["terminal_pbo_count"] == 1
+            and item["pbo_bytes"] >= item["required_pbo_bytes"]
+            for item in records
+        ),
+        "terminal_transition_preserves_idle_pbo": all(
+            item["terminal_pbo_deletes"] == 0 for item in records
+        ),
+        "later_transition_reuses_terminal_pbo": bool(stable_terminal_reuses),
+        "larger_upload_replaces_smaller_pbo_through_pool": any(
+            item["pbo_creations"] > 0 and item["pbo_deletions"] > 0
+            for item in records
+        ),
+        "retained_pbos_were_created_by_production_pool": all(
+            all(pbo_id in fake_gl.created_buffers for pbo_id in item["terminal_pbo_ids"])
+            for item in records
         ),
         "terminal_display_is_single_unique_frame": all(
             item["terminal_display_bytes"] == item["resolution"][0] * item["resolution"][1] * 4
@@ -320,7 +388,7 @@ def run_harness(cycles: int) -> dict[str, Any]:
         "rss_tail_high_water_range_under_8_mib": high_water_range <= 8 * _MIB,
     }
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "cycles": cycles,
         "virtual_interval_seconds": _VIRTUAL_INTERVAL_SECONDS,
         "virtual_duration_minutes": cycles * _VIRTUAL_INTERVAL_SECONDS / 60.0,
@@ -344,6 +412,9 @@ def run_harness(cycles: int) -> dict[str, Any]:
             "alternating_large_small": True,
             "portrait_landscape_ultrawide": True,
             "active_transition": True,
+            "terminal_current_texture_retention": True,
+            "terminal_current_texture_reuse": bool(stable_terminal_texture_reuses),
+            "terminal_idle_pbo_reuse": bool(stable_terminal_reuses),
             "two_display_shared_backing": True,
             "modeled_full_owner_resets": len(lifecycle_returns),
             "driver_vram": "unsupported_in_deterministic_offscreen_harness",

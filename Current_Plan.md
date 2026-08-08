@@ -15,10 +15,10 @@ restored executor behaviour: 4bde89e8e39177dc4dd7b5e64b9ac99256ab9486
 rejected Spectrum smoothing: ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
 current approved visual behaviour: ff93461685476bd0657aa88312fc2e35e9037880
 current lifecycle/cache evidence code state: 3877b2c76791892cd5cb18c43d66a90a29c64d33
-current assessed Phase 5 candidate: 849f78e8 (resource improvement; performance gate failed)
+current assessed Phase 5 candidate: 97ff0619 + uncommitted bounded-retention working tree (installed recovery candidate; not commit-addressable)
 current audit-doc checkpoint: d7ddb9063ebf9c8a42739e541400a8508b2941bf
-latest preserved evidence: logs/evidence_chest/08_02_3877b2c7_20_27/
-latest mutable run: logs/ (2026-08-08 17:07:43 through 17:10:53, code state 849f78e8)
+latest preserved evidence: logs/evidence_chest/08_08_after_97ff0619_gl_retention_18_59/
+latest mutable run: logs/ (2026-08-08 18:59:25 through 19:05:58, same uncommitted working-tree state)
 owning report: Docs/phase_reports/P05_CPU_TASK_REDUCTION.md
 audit roadmap: Docs/audits/SRPSS_Architecture_Recovery_Roadmap/00_INDEX_AND_LIVE_CHECKLIST.md
 audit memory plan: Docs/audits/SRPSS_Architecture_Recovery_Roadmap/09_MEMORY_GPU_RESOURCE_AND_CACHE_PLAN.md
@@ -70,6 +70,7 @@ R-57 scaled prefetch: Docs/Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Or
 - [x] Operator describes Bubble and Spectrum as well behaving at `ff934616`.
 - [x] Spectrum paint-local decay smoothing was attempted, made Spectrum significantly less smooth, and was exactly reverted.
 - [x] Latest evidence again shows `lane_registrations=0`; Bubble reached a `1.000` offered/submitted/published ratio with ordinary executor tasks.
+- [x] The 18:59 installed run kept Bubble publication at `0.997–1.000`, roughly `1–2 ms` worker cost, and `85.7–89.4` final-segment tick FPS; the operator judged its response good enough to preserve as a stronger-golden candidate.
 - [!] Stronger goldens are still missing. Accepted behaviour exists, but automated temporal hazard lights remain incomplete.
 
 ### Lifecycle and cache evidence
@@ -82,37 +83,40 @@ R-57 scaled prefetch: Docs/Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Or
 - [x] Production-shaped tests prove two shells and two `CustomLayoutManager` owners release without `gc.collect()`, the barrier reaches zero owners before continuation, the complete two-display graph replays, and exactly one replacement is admitted.
 - [x] One installed dual-display Save-and-Continue cycle admitted exactly one full replacement with no stale-identity rejection or widget-only fallback and revealed from the replacement generation's authoritative first frame.
 - [x] `WidgetManager` now owns its one-shot compositor-ready signal explicitly; first readiness and terminal cleanup cannot disconnect it twice, the real-signal regression passes, and the latest installed run contains no disconnect warning.
-- [!] The latest CUSTOM + Settings sequence did not reproduce the former large RSS/private-memory staircase, but two recreations are insufficient for closure and handles rose by approximately 52 instead of returning to baseline.
+- [x] The 18:59 installed run completed one dual-display CUSTOM Save-and-Continue plus four Settings recreations with no timeout, stale identity, invalid-wrapper, disconnect, exception, or failed first-frame reveal. Every strict GL teardown reached zero texture/PBO bytes.
+- [!] This is five recreations but not the required five-cycle alternating Edit/Settings matrix. Whole-app RSS reached `1085.7 MiB`, handles reached `2219`, and several first screen-0 rebuild frames took `609–718 ms`, so plateau and first-frame-tail closure remain open.
 - [ ] Run the mandatory five-cycle alternating lifecycle/resource matrix; Edit memory evidence is no longer blocked on a known admission defect.
 - [x] Replacement initialization itself still has no demonstrated separate defect; preserve it and validate it rather than redesigning it.
 
 ### Absolute resource footprint
 
-The latest active run materially reduced tracked and driver resources but still
-remains too heavy for a screensaver and failed presentation performance:
+The latest active run materially reduced tracked and driver resources and recovered
+presentation performance, but remains too heavy for a screensaver:
 
 ```text
-whole-app resident RAM:   approximately 848–1004 MiB after warm-up
-whole-app private commit: approximately 2.75–2.98 GiB after warm-up
-whole-app USS:            approximately 713–820 MiB after warm-up
-dedicated VRAM:           approximately 496–624 MiB while displays are active
-shared GPU memory:        approximately 37–87 MiB
+whole-app resident RAM:   approximately 782–1086 MiB after warm-up
+whole-app private commit: approximately 2.74–3.13 GiB after warm-up
+whole-app USS:            approximately 650–950 MiB after warm-up
+dedicated VRAM:           approximately 555–624 MiB while displays are active
+shared GPU memory:        approximately 80–95 MiB
 ```
 
 - [!] Plateauing near one GiB of physical RAM and over half a GiB of dedicated VRAM is not an acceptable completion state.
 - [!] The gap between tracked application-owned bytes and whole-process usage remains too large and must be attributed rather than dismissed as runtime/driver overhead.
 - [!] Multi-gigabyte private commit must be decomposed into resident private pages, mapped/reserved regions, child-process commitment, thread stacks, Qt/native allocations, driver mappings, and genuinely retained application state.
 - [x] Dedicated VRAM falls to roughly idle-driver levels during full display teardown, proving that deterministic GL deletion is broadly effective even though active steady-state VRAM remains excessive.
-- [x] The 2026-08-08 resource detail identified approximately 235.7 MiB of historical transition textures plus approximately 45.7 MiB of upload PBO storage retained after terminal presentation; ownership is now released at the terminal compositor boundary without changing transition frames.
+- [x] The 2026-08-08 resource detail identified approximately 235.7 MiB of historical transition textures plus approximately 45.7 MiB of upload PBO storage. The failed `849f78e8` candidate retired both historical textures and idle PBOs at terminal presentation.
+- [x] The isolated recovery candidate now retains only the exact committed destination texture and at most one idle PBO per compositor under the existing byte cap. Historical textures still delete immediately, growth still trims through the production pool, and strict teardown still returns texture/PBO ownership to zero.
+- [!] The 18:59 run logged zero `>20 ms` slow texture uploads and nearly restored/exceeded `08_02` delivery tails while preserving low tracked GL. However, duplicate terminal-release records delete the supposedly retained current texture, and the diagnostic window is reset before it can report real PBO reuse. Fix terminal idempotency and metric bracketing before the controlled acceptance A/B.
 - [x] The same evidence identified approximately 117.6 MiB of raw cache forms alongside display-ready derivatives. Worker prescale is now attempted before parent raw decode, and raw prefetch is skipped when no planned scaled consumer needs it.
 - [x] Always-on ThreadManager mutation delivery no longer posts diagnostic/accounting work to the GUI thread. The ordinary general COMPUTE executor and visualizer authored/publication cadence are unchanged.
-- [x] The latest installed run confirms real resource reduction against `08_02`: median private commit `3018 -> 2822 MiB`, median dedicated VRAM `623 -> 559 MiB`, maximum dedicated VRAM `777 -> 624 MiB`, and maximum tracked GL `313 -> 144 MiB`.
-- [!] Those savings are not acceptable closure because frame delivery and CPU regressed substantially. Do not keep a memory optimization that repeatedly recreates transition resources or stalls presentation.
+- [x] The latest installed run confirms real resource reduction against `08_02`: median private commit `3018 -> 2920 MiB`, median dedicated VRAM `623 -> 557 MiB`, maximum dedicated VRAM `777 -> 624 MiB`, and maximum tracked GL `313 -> 144 MiB`.
+- [!] Those savings and recovered median delivery are not closure: worst transition/event-loop tails, absolute RSS/commit/VRAM, handles, and controlled source identity remain open.
 
 ## Required Work Order
 
-1. Correct the failed resource/performance tradeoff by isolating terminal texture retirement from terminal PBO retirement. Preserve a bounded reusable upload resource and current-image texture only where stable identity proves reuse; do not restore historical texture accumulation.
-2. Capture a controlled warm A/B baseline with fixed displays, source images, cache state, transition sequence, widgets, duration, and low system load. Require the resource reduction to remain while CPU, visualizer tick delivery, and frame tails return at least to the `08_02`/Phase 4 level.
+1. Make terminal retention idempotent so the exact current texture survives one completed transition boundary, and bracket one diagnostic window per real transition without duplicate reset/terminal records. Preserve strict full-teardown zero ownership.
+2. Capture a controlled warm A/B baseline with fixed displays, source images, cache state, transition sequence, widgets, duration, and low system load. Require retained texture/PBO ID reuse, zero/fewer later slow uploads, no historical accumulation, and CPU/frame/visualizer tails at least equal to `08_02`/Phase 4.
 3. Run at least five alternating installed Edit/Settings cycles and require clean ownership, first-frame/mode-switch poison protection, and equivalent-state resource plateau.
 4. Use the new main/child commit and USS split to attribute any remaining whole-app RAM/commit gap, then implement only measured reductions that preserve visible output and responsiveness.
 5. Run the full lifecycle, memory plateau, image churn, and pressure matrix.
@@ -241,13 +245,13 @@ A golden package that also accepts these known-bad shapes is not strong enough.
 - [ ] Add production-executor temporal replay/capture.
 - [ ] Add source-to-first-visible Bubble and Spectrum assertions.
 - [ ] Add known-bad `666624d`, batching, and `ebfec397` negative controls.
-- [ ] Archive installed visual scenario evidence and separate Bubble/Spectrum approval.
+- [-] Archive installed visual scenario evidence and separate Bubble/Spectrum approval. Preserve the 18:59 Bubble-positive run as candidate evidence, but capture deterministic source identity/playback offsets against a named commit before promoting it to immutable authority.
 - [ ] Validate Sine, Oscilloscope, and Dev Curve against the restored shared source.
 - [ ] Remove inert visualizer lane scaffolding after golden capture and repository-use audit.
 
 # Deferred Visualizer Optimizations
 
-These are not current-priority work. None may begin until all P5.0 stronger-golden tasks are complete and the user explicitly authorizes the individual experiment.
+These are not current-priority work. None may begin until all P5.0 stronger-golden tasks are complete. The user has explicitly authorized a future isolated Spectrum presentation-smoothing experiment; implementation remains gated on those goldens.
 
 Resource profiling may compare scenarios across modes, but a difference in whole-process usage does not prove mode-specific ownership. Default to shared audio, render, cache, compositor, process, and lifecycle causes. A mode-specific production change requires direct owner-level evidence and explicit user authorization.
 
@@ -256,17 +260,19 @@ Potentially acceptable later experiments:
 1. Remove bookkeeping, diagnostics, allocations, or copies while preserving the exact approved executor, authored-step, publication, and paint cadence.
 2. Reuse bounded immutable buffers where values, ordering, ownership, and publication remain identical.
 3. Coalesce render snapshots only after every logical input and discrete event has already been integrated.
-4. Explore Spectrum smoothing only as an isolated presentation experiment on the existing authoritative visualizer tick.
+4. Extend visual-only Spectrum smoothing to ordinary `bars` mode as an isolated presentation experiment on the existing authoritative visualizer tick. The current run's `bars` preset does not use the existing solid/single-piece presentation hysteresis.
 
 Any future Spectrum smoothing must:
 
 - add no timer, scheduler, queue, self-requested paint loop, or paint-derived clock;
 - never mutate authoritative bars inside `paintGL()` or a render callback;
-- preserve immediate attack unless explicitly approved otherwise;
+- suppress sudden one-tick rises/drops and rapid alternation with no more than one authoritative-tick of additional response and an imperceptible installed latency verdict;
+- preserve immediate or near-immediate transient attack unless the installed A/B explicitly approves otherwise;
 - preserve source, generation, activation, and first-frame authority;
 - reset presentation state at mode/activation/generation/teardown boundaries;
 - leave Bubble and shared-source scheduling untouched;
 - compare publication and paint cadence against `ff934616`;
+- add deterministic ordinary-bars attack, drop, rapid-alternation, reset, irregular-paint, and no-extra-update goldens before installed review;
 - revert immediately if the user reports worse behaviour.
 
 Explicitly rejected unless separately re-proposed after new evidence:
@@ -282,18 +288,18 @@ Explicitly rejected unless separately re-proposed after new evidence:
 
 - [-] Correlate owner-labelled transition gaps with event-loop lateness, callback tails, update-request age, and per-display request-to-paint delay.
 - [x] Preserve compositor transition names in owner telemetry.
-- [!] The 17:07 candidate regressed further versus `08_02`: median paint-window FPS `96.0 -> 64.4`, paint interval p99 `32.9 -> 53.4 ms`, request-age p99 `20.3 -> 44.0 ms`, event-loop lateness p99 `38.9 -> 79.6 ms`, and owner-labelled gaps `123 -> 217` with `85` over 50 ms.
-- [!] Median application CPU rose `79.3% -> 103.0%`; Phase 4 close was approximately `65.8%`. The current state is worse than the pre-Phase-5 accepted performance level.
-- [!] Machine-wide CPU was also much higher (`42.5%` median versus `14.7%` in `08_02`), so this is not a clean code-only A/B. That environmental load can explain some delivery loss but does not make an installed failure acceptable.
-- [!] Bubble worker cost stayed roughly `1–2 ms`, publication remained `0.996–1.000`, and settled tick FPS still reached roughly `90–94`. The failure appears in event-loop/tick/presentation delivery, especially around transitions; do not retune Bubble physics, source cadence, or elasticity.
-- [!] Visualizer tick FPS reached `49.2` early versus a `75.5` minimum in `08_02`; tick-spike median rose `48.6 -> 66.9 ms`. The operator-observed visualizer slowdown is supported by the logs.
+- [-] The 18:59 recovery run nearly restored/exceeded `08_02` median delivery: paint FPS `92.1` versus `96.0`, paint interval p99 `29.9` versus `32.9 ms`, request-age p99 `20.1` versus `20.3 ms`, event-loop lateness p99 `36.4` versus `38.9 ms`, and render dtmax median `66.2` versus `66.5 ms`.
+- [!] Worst tails remain open: paint dtmax reached `138.0 ms` on Crumble, render dtmax `129.8 ms`, and event-loop max `1251.3 ms`, versus `96.4`, `127.1`, and `1103.6 ms` in `08_02`.
+- [!] Median application CPU was `83.4%` versus `79.3%` in `08_02`, while machine-wide CPU was also higher (`21.6%` versus `14.7%`). The run is strong recovery evidence, not a controlled CPU win.
+- [x] Bubble worker cost stayed roughly `1–2 ms`, final-segment publication remained `0.997–1.000`, and Bubble/Spectrum tick medians were `87.5`/`90.6 FPS`. Do not retune Bubble physics, source cadence, or elasticity.
 - [x] Parser 1.5 recovers the existing nested task-category counters even when `tm_delivery` follows them on the same line. The comparable high-rate intervals identify approximately `69–70/s` audio analysis plus `92–93/s` Bubble simulation in both runs, so task frequency itself did not newly increase.
 - [x] Remove the always-on ThreadManager mutation queue, GUI drain timer, and GUI-published statistics snapshot. Task accounting is now updated atomically at admission/terminal ownership boundaries with no per-completion UI callback.
 - [x] Preserve perf-only frame-owner attribution after measuring the exact passive snapshot at approximately `6.5 us/call`, projecting approximately `0.15%` of one core at a 225 Hz dual-display ceiling. Removing that evidence would not explain the observed CPU regression.
-- [ ] Installed evidence must confirm that the removed GUI accounting delivery reduces callback clustering/event-loop tails under the authored workload.
-- [ ] Attribute the increased cost per event-loop/delivery cycle and the approximately doubled owner-labelled gap count; current last-callback labels are mostly sub-millisecond and are correlation, not sufficient causal attribution.
+- [x] The installed recovery run no longer shows the failed run's generalized delivery collapse; owner gaps normalized to about `18.9/min` versus `29.5/min` in `08_02` and `68.5/min` at 17:07.
+- [ ] Attribute remaining cost per event-loop/delivery cycle and worst tails; current last-callback labels are mostly sub-millisecond and are correlation, not sufficient causal attribution.
 - [ ] Attribute remaining p99/max transition gaps before changing visualizer cadence or shader behaviour.
-- [ ] A/B terminal GL retention first: one current-image texture with stable presentation identity, one bounded reusable PBO per compositor where measured useful, and immediate deletion of genuinely historical textures. Record upload count/bytes/allocation/delete/stall by transition.
+- [x] Implement the bounded terminal GL candidate: one exact current-image texture, one size/budget-bounded reusable PBO per compositor, immediate historical-texture deletion, and passive transition-local cache-hit/upload-byte/allocation/delete/PBO/direct/`>20 ms` slow-upload proxy diagnostics.
+- [!] The 18:59 run had zero slow texture uploads versus 15/`411.7 ms` at 17:07, but two terminal records per display/transition delete the retained current texture and reset the metric window. Repair terminal idempotency/bracketing, then run the fixed low-load A/B and require retained texture/PBO IDs plus no historical accumulation.
 - [ ] Reject repaint retries and transition-derived visualizer clocks.
 
 # P5.2 — Latency Truthfulness
@@ -409,7 +415,8 @@ private commit:     no unexplained multi-GiB commitment; every large region has 
 
 - [ ] Capture cold, post-warm-up, active-transition, steady image, Settings-gap, post-Settings, and full-teardown snapshots under one fixed workload.
 - [x] Add low-rate background collection and parser support for main/child RSS, main/child private commit, and main/child USS (private working-set proxy where available), retaining whole-app totals and sample age.
-- [ ] Record the new split in an installed run and continue attribution of virtual/mapped/reserved regions, thread-stack reservation, GDI/USER handles, and driver mappings where commitment remains unexplained.
+- [x] Record the new main/child RSS/private-commit/USS split in an installed run; the 18:59 capture reports whole-app medians `940.7/2919.9/807.2 MiB` and keeps the image worker near `96–97 MiB` RSS.
+- [ ] Continue attribution of virtual/mapped/reserved regions, thread-stack reservation, GDI/USER handles, and driver mappings where commitment remains unexplained.
 - [ ] Reconcile process totals against exact CPU cache, QImage/QPixmap/display backing, upload/staging buffers, textures, FBOs, PBOs, visualizer surfaces, transition resources, worker mappings, and passive ResourceManager records.
 - [ ] Split one-time warm-up/high-water retention from active live ownership and from true per-cycle growth.
 - [ ] Compare supported visualizer scenarios only to distinguish shared from genuinely mode-owned resources. Do not infer a mode-specific cause from whole-process totals.
@@ -421,10 +428,11 @@ Only promote a candidate after its owner, bytes, lifetime, and visible role are 
 
 - [x] Prefer ImageWorker prescale before exact local raw-decode fallback, avoiding simultaneous parent and worker full-image decode plus unnecessary raw-cache residency when a display-ready derivative is the consumer.
 - [x] Skip raw prefetch work when no planned scaled consumer is missing; preserve raw fallback when it remains the only useful result.
-- [!] Terminal texture/PBO retirement reduced active GL/VRAM materially but failed the performance gate. Idle snapshots often reached zero tracked textures/PBOs, while later transitions repeatedly logged paired 4K uploads around `20–31 ms`; startup/rebuild reached `42–57 ms`. Stable current-image reuse is not proven, and deleting every idle PBO forces allocator/driver work back onto later transitions.
-- [ ] Replace the failed all-idle-resource retirement policy with measured bounded reuse: retain no historical image set, but preserve exactly the current presentation texture through stable identity and retain at most one size-appropriate idle PBO per compositor when it demonstrably removes repeated allocation/upload stalls.
+- [x] Retaining one bounded idle PBO removed the observed slow-upload signature in the 18:59 run: zero `>20 ms` texture uploads versus 15 totalling `411.7 ms` at 17:07, while maximum tracked GL remained about `143.7 MiB`.
+- [x] Replace the failed all-idle-resource retirement mechanics with bounded reuse: retain no historical image set, preserve exactly the current presentation texture through stable identity, and retain at most one size-appropriate idle PBO per compositor under the existing cap.
+- [!] Installed benefit is promising but not yet correctly owned: the idle PBO survives and delivery recovers, while a duplicate terminal release deletes the current texture and prevents reliable per-transition reuse counters. Make terminal release idempotent, then demonstrate retained IDs under the controlled A/B.
 - [x] Avoid allocating full PBO storage once at creation and immediately reallocating it for the first upload.
-- [!] Whole-app RSS/commit/VRAM improved, but transition tails and presentation delivery worsened. The candidate cannot pass until both sides improve under the same workload.
+- [!] Median delivery and VRAM improved, but whole-app RSS still reached `1085.7 MiB`, private commit `3133.4 MiB`, and worst transition/event-loop tails remain above `08_02`. The candidate cannot pass until all sides improve under the same workload.
 - [ ] Deduplicate exact same-size/same-transform per-display image backing without collapsing different DPR or transform outputs.
 - [ ] Right-size prefetch and image-cache occupancy by measured hit rate, fallback cost, active-transition reserve, and future-byte pressure; do not create decode storms to save resident bytes.
 - [ ] Audit process-lifetime worker mappings, queue buffers, thread-pool/thread-stack reservation, callback history, metrics history, and log retention.
@@ -467,7 +475,9 @@ Every memory change must prove:
 
 - [x] Focused threading/image/resource, lifecycle/media, visualizer-family, replay-golden, 45-cycle resource, and 50x4K shared-memory gates pass at `849f78e8`.
 - [!] A monolithic full-suite `pytest -q` process is not an acceptable gate: while still CPU-active it reached approximately 2.54 GiB working set, 3.28 GiB private memory, and 133 threads without incremental result visibility.
-- [ ] Run the complete suite only through `tests/run_chunked.py --chunks 4 --timeout-seconds 900`; preserve per-chunk results and identify any timeout, failure, or abnormal per-chunk resource growth instead of treating the whole suite as hung.
+- [x] Run the complete suite only through `tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log`; the 2026-08-08 sweep preserved all four logs and completed chunks 1–3 without timeout, then reproduced the known chunk-4 native `0xC0000409` failure.
+- [!] The repository-wide gate is not green: chunks 1–3 retain 10, 7, and 15 unrelated failures, while chunk 4 aborts in `test_base_transition_actual_start_updates_widget_timing`. The retained-GL focused tests and production-path 45-cycle harness pass independently; do not mislabel the full-suite result as acceptance.
+- [ ] Classify or repair the existing full-suite failure families and the standalone chunk-4 QWidget-without-application native abort under `Future_Cleanup.md` before treating the chunked suite as a clean release gate.
 - [ ] If one chunk still grows excessively, split that chunk by owning subsystem and identify the retained Qt/GL/worker owner before changing tests or production lifetime.
 
 # Recovered Adversarial Lane Findings
