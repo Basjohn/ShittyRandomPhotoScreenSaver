@@ -568,6 +568,7 @@ def test_factory_widget_descriptors_cover_factory_backed_widget_families():
         "reddit2",
         "gmail",
         "achievement_pulse",
+        "abandonment_issues",
     ]
     if any(descriptor.settings_key == "imgur" for descriptor in descriptors):
         expected.insert(7, "imgur")
