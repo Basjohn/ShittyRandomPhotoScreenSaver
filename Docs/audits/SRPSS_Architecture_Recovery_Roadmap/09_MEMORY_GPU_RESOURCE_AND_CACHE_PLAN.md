@@ -1,6 +1,6 @@
 # 09 — RAM, Commit, VRAM, GPU Resource, and Cache Plan
 
-Last reconciled: 2026-08-02
+Last reconciled: 2026-08-08
 
 ## Current conclusion
 
@@ -49,7 +49,7 @@ The latest Settings comparison showed:
 
 Cause of the one-time uplift and absolute residual footprint is below 90% confidence. Do not label it allocator, driver, Qt, cache, or leak without attribution evidence.
 
-Edit plateau testing remains blocked until R-53 is repaired.
+R-53 is repaired mechanically. Edit plateau conclusions remain blocked until the repaired path passes installed dual-display Save-and-Continue and alternating lifecycle validation.
 
 ## Provisional engineering targets
 

@@ -222,9 +222,9 @@ Do not add RSS and private commit. Do not treat stale asynchronous GPU samples a
 2. Original baseline behaviour was better but resource/task architecture was not acceptable.
 3. Persistent shared-analysis/Bubble lanes changed approved timing and were rejected.
 4. Paint-local Spectrum decay created a second cadence and was visually worse.
-5. Current Settings full runtime recreation succeeds; R-56 wrapper lifetime remains invalid.
-6. Current Edit full teardown is admitted from inside the retiring manager graph; R-53 cause boundary is above 99% confidence.
-7. R-57 selected-index deletion order is a proven prefetch correctness defect.
+5. The preserved 08-02 Settings evidence succeeds but contains the R-56 invalid-wrapper failure; the later mechanical repair still needs installed confirmation.
+6. The preserved 08-02 Edit evidence admits teardown from inside the retiring manager graph and proves the R-53 cause boundary above 99% confidence; the later mechanical repair still needs installed confirmation.
+7. The preserved evidence proves the R-57 selected-index deletion defect; the later deterministic repair still needs installed image/transition confirmation.
 8. The old linear Settings memory staircase did not reproduce in the latest two cycles.
 9. Current absolute active RSS/private commit/VRAM remains excessive and not fully attributed.
 10. Tracked-zero GL teardown and low teardown VRAM do not alone explain residual process memory.

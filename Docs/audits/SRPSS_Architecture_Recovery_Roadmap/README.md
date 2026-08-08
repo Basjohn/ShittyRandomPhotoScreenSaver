@@ -1,6 +1,6 @@
 # SRPSS Architecture Recovery Roadmap
 
-Last reconciled: 2026-08-02
+Last reconciled: 2026-08-08
 
 ## Purpose
 
@@ -43,9 +43,9 @@ The original roadmap produced useful measurement, lifecycle, and resource-accoun
 
 - shared audio analysis and Bubble were restored from rejected persistent lanes to the ordinary general COMPUTE executor;
 - Bubble and Spectrum are currently user-approved and must not be retuned by infrastructure or memory work;
-- Settings full teardown/recreation now succeeds, but its modal close path still retouches an already-deleted `SettingsDialog` wrapper (R-56);
-- CUSTOM/Edit Save-and-Continue still starts teardown synchronously from inside the retiring `CustomLayoutManager` save graph and fails closed on two surviving manager wrappers (R-53);
-- scaled prefetch contains a proven selected-index deletion-order bug (R-57);
+- Settings full teardown/recreation succeeds, and R-56 invalid-wrapper handling is mechanically repaired; installed Settings confirmation remains open;
+- CUSTOM/Edit R-53 now retires the temporary session and queues immutable engine-owned admission on a later GUI turn; installed dual-display confirmation remains open;
+- R-57 scaled-prefetch selection/removal ordering is mechanically repaired with the decisive preferred-index fixture; installed image/transition confirmation remains open;
 - tracked resources may plateau while the absolute active footprint remains excessive: roughly 847–1074 MiB whole-app resident RAM, 2.86–3.17 GiB private commit, and 554–777 MiB dedicated VRAM in the latest evidence;
 - stronger production-executor temporal visualizer goldens are still required despite the earlier logical replay package.
 

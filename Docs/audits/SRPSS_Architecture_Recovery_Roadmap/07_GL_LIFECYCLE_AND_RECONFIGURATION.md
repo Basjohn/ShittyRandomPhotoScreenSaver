@@ -1,17 +1,17 @@
 # 07 — GL Lifecycle and Reconfiguration
 
-Last reconciled: 2026-08-02
+Last reconciled: 2026-08-08
 
 ## Current boundary
 
 Full stop–destroy–recreate remains mandatory for Settings and committed CUSTOM Edit.
 
-The core owner-context GL teardown architecture is valuable and retained. Current installed evidence nevertheless reopens lifecycle closure through:
+The core owner-context GL teardown architecture is valuable and retained. The latest installed evidence reopened lifecycle closure through:
 
 - R-56: post-modal calls on an already-deleted `SettingsDialog` C++ object;
 - R-53: synchronous full teardown from inside the retiring `CustomLayoutManager` save/action graph, followed by two surviving manager wrappers and fail-closed exit.
 
-These are lifecycle ownership failures even though tracked GL deletion itself reaches zero.
+These were lifecycle ownership failures even though tracked GL deletion itself reached zero. Both have subsequent production-shaped mechanical repairs; installed Settings and dual-display Edit confirmation remain mandatory.
 
 ## Runtime states
 
@@ -137,7 +137,7 @@ On a later GUI turn:
 7. replay the persisted graph-based layout;
 8. reveal only from fresh authoritative state.
 
-The current installed logs prove synchronous re-entry above 99% confidence: manager cleanup clears `_display`, then the still-running save `finally` tries to touch that cleaned manager. The exact final wrapper referrer remains below 90% confidence; explicit callback retirement plus later admission are required regardless.
+The preserved installed logs prove the former synchronous re-entry above 99% confidence: manager cleanup cleared `_display`, then the still-running save `finally` touched that cleaned manager. The implemented repair now performs explicit callback/session retirement and later immutable engine admission; production-shaped zero-owner tests pass, while installed dual-display confirmation remains open.
 
 ## GL thread-affinity and deletion
 

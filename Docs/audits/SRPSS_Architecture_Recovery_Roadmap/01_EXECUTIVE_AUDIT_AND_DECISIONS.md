@@ -55,8 +55,8 @@ Later evidence established:
 
 1. A dedicated/persistent analysis lane and persistent Bubble lane changed scheduling semantics and degraded behaviour despite plausible throughput goals. The ordinary general COMPUTE executor is the approved production model.
 2. Paint-local Spectrum decay created a second presentation cadence and visibly reduced smoothness. Presentation may not self-schedule from paint or mutate authoritative state in `paintGL()`.
-3. Settings full runtime destruction/recreation now succeeds, but modal wrapper lifetime remains invalid in R-56.
-4. CUSTOM/Edit still admits teardown synchronously from inside the retiring manager save graph. R-53 proves the admission boundary failure above 99% confidence.
+3. Settings full runtime destruction/recreation succeeds; R-56 modal-wrapper handling is mechanically repaired and awaits installed confirmation.
+4. R-53 proved that CUSTOM/Edit admitted teardown synchronously from inside the retiring manager save graph. The admission/session-retirement repair now passes production-shaped tests and awaits installed dual-display confirmation.
 5. Application-owned resource accounting and deterministic GL teardown improved substantially, but active whole-process usage remains excessive even when it plateaus.
 6. Logical visualizer goldens alone were insufficient to detect scheduling and first-visible-response damage. Stronger temporal and installed approval artifacts are mandatory.
 

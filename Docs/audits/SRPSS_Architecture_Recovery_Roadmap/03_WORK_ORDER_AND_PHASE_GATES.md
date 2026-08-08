@@ -1,6 +1,6 @@
 # 03 — Work Order and Phase Gates
 
-Last reconciled: 2026-08-02
+Last reconciled: 2026-08-08
 
 ## Purpose
 
@@ -13,7 +13,7 @@ The phase model exists to prevent unrelated architecture changes from being mixe
 | 0 — Freeze/evidence | Historical foundation complete |
 | 1 — Measurement | Implemented; whole-process attribution still active |
 | 2 — Visualizer fidelity | Logical package complete; temporal/installed protection reopened under P5.0 |
-| 3 — Lifecycle | Core full-teardown architecture implemented; R-53/R-56 reopen installed closure |
+| 3 — Lifecycle | Core full-teardown architecture and mechanical R-53/R-56 repairs implemented; installed closure open |
 | 4 — Resource containment | Known leaks/budgets improved; absolute whole-process footprint reopened |
 | 5 — Workload, recreation, and resource recovery | Active |
 | 6–10 | Future architecture/cleanup; blocked by Phase 5 |
@@ -78,10 +78,10 @@ Implemented architecture retained:
 - replacement construction only after retiring ownership reaches zero;
 - authoritative-first-frame reveal for the new runtime.
 
-**Reopened gates:**
+**Reopened installed gates:**
 
-- R-56: observe/retire the Settings dialog graph without touching an invalid wrapper after modal deletion;
-- R-53: persist and retire the temporary Edit session, return from manager/action/key-filter frames, then queue engine-owned full-reload admission on a later GUI turn;
+- R-56: confirm the mechanically repaired Settings path observes/retires the dialog graph without touching an invalid wrapper after modal deletion;
+- R-53: confirm the mechanically repaired Edit path persists/retires the temporary session, returns from manager/action/key-filter frames, and admits engine-owned full reload on a later GUI turn;
 - zero surviving `CustomLayoutManager` wrappers;
 - full graph-based placement/replay preserved.
 
@@ -104,7 +104,7 @@ Implemented foundations retained:
 
 - absolute active whole-app RSS, private commit, and dedicated VRAM must fall substantially from current evidence;
 - tracked/untracked gap must be attributed;
-- R-57 prefetch correctness must close;
+- R-57 installed prefetch correctness must close after the deterministic repair;
 - lifecycle cycles must reach a stable equivalent plateau after R-53/R-56 repair;
 - no quality, cadence, resolution, precision, artwork, shadow, widget, or visualizer cuts.
 

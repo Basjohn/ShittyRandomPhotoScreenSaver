@@ -1,6 +1,6 @@
 # 00 — Index and Live Checklist
 
-Last reconciled: 2026-08-02
+Last reconciled: 2026-08-08
 
 This file is the compact status ledger for the architecture roadmap. Detailed active tasks belong in `Current_Plan.md`; completed evidence belongs in phase reports and historical bug records.
 
@@ -70,7 +70,8 @@ Templates are under `templates/`.
 - [x] Deterministic logical replay and versioned baseline artifacts were created.
 - [x] Infrastructure changes are not allowed to rewrite visualizer behaviour silently.
 - [!] The original logical package did not prevent rejected scheduler/cadence regressions.
-- [!] A stronger production-executor temporal package, first-visible response checks, known-bad negative controls, and exact installed approval manifest remain required under P5.0.
+- [x] The immutable approval/environment manifest is frozen for `ff934616`.
+- [!] A stronger production-executor temporal package, first-visible response checks, known-bad negative controls, and installed scenario archive remain required under P5.0.
 - [x] `ff934616` is the current user-approved Bubble/Spectrum behavioural authority.
 
 **Current interpretation:** logical protection exists; temporal and operator-approval protection is reopened.
@@ -79,10 +80,9 @@ Templates are under `templates/`.
 
 - [x] Full stop–destroy–recreate, owner-context GL deletion, generation rejection, and destruction barriers were implemented.
 - [x] Settings now completes full teardown/recreation in current installed evidence.
-- [!] R-56: the Settings close path retouches an already-deleted `SettingsDialog` wrapper.
-- [!] R-53: CUSTOM/Edit begins full teardown synchronously from inside the retiring manager save graph and fails closed on two surviving `CustomLayoutManager` wrappers.
-- [ ] Repair Edit admission by persisting/retiring the temporary edit session, returning from its frames, then queueing one engine-owned immutable reload intent.
-- [ ] Preserve full reinit, graph-based placement/replay, generation barriers, and authoritative-first-frame reveal.
+- [!] R-56: invalid-wrapper handling is repaired mechanically; one installed Settings cycle remains required.
+- [!] R-53: later-turn immutable admission and deterministic temporary-session retirement are repaired mechanically; one installed dual-display Save-and-Continue remains required.
+- [x] Preserve full reinit, graph-based placement/replay, generation barriers, and authoritative-first-frame reveal in both repairs.
 
 **Current interpretation:** architecture retained; installed lifecycle closure reopened.
 
@@ -104,9 +104,9 @@ Templates are under `templates/`.
 - [x] Ordinary general COMPUTE executor behaviour was restored and visually approved.
 - [x] Rejected paint-local Spectrum smoothing was reverted and documented.
 - [ ] Create the stronger temporal visualizer approval package.
-- [ ] Repair R-57 scaled-prefetch selection/removal ordering.
-- [ ] Repair R-56 Settings wrapper lifetime.
-- [ ] Repair R-53 CUSTOM/Edit admission and deterministic shell callback retirement.
+- [x] Repair R-57 scaled-prefetch selection/removal ordering mechanically; installed image/transition validation remains open.
+- [x] Repair R-56 Settings wrapper lifetime mechanically; installed Settings validation remains open.
+- [x] Repair R-53 CUSTOM/Edit admission and deterministic shell callback retirement mechanically; installed dual-display validation remains open.
 - [ ] Establish clean alternating lifecycle cycles before drawing final leak conclusions.
 - [ ] Attribute and lower absolute RAM/private-commit/VRAM while preserving perceivable fidelity.
 - [ ] Reduce only measured duplicate, idle, unchanged, allocation, callback, logging, and representation work.
@@ -157,10 +157,10 @@ Templates are under `templates/`.
 
 | ID | State | Required result |
 |---|---|---|
-| P5.0 | Open | Strong temporal visualizer goldens and installed approval manifest |
-| R-53 | Blocking | Edit full reinit admitted after temporary session retirement; zero manager survivors |
-| R-56 | Open | No post-modal calls on invalid `SettingsDialog` wrapper |
-| R-57 | Open | Stable scaled-prefetch selection/removal with exact regression fixture |
+| P5.0 | Open | Strong temporal visualizer goldens and installed scenario archive |
+| R-53 | Awaiting installed evidence | Dual-display Edit full reinit after temporary session retirement; zero manager survivors |
+| R-56 | Awaiting installed evidence | No post-modal calls on invalid `SettingsDialog` wrapper |
+| R-57 | Awaiting installed evidence | Stable scaled-prefetch behavior during installed image/transition rotation |
 | Memory | Open | Explain and reduce whole-app RSS/commit/VRAM without fidelity cuts |
 
 Do not add new active detail here when it belongs in `Current_Plan.md`.
