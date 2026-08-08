@@ -40,8 +40,9 @@ affected-path temporal hazard lights were added. It is not a new approved baseli
 - `spectrum_visual_smoothing` is a `0.00–1.00` strength, default `0.50`;
 - interpolation runs only on the existing authoritative UI visualizer tick before GPU
   publication, never inside paint;
-- it is symmetric and time-compensated, with a `2–14 ms` time constant (`8 ms` at the
-  default), and snaps after a `100 ms` UI stall;
+- it is symmetric and time-compensated; slider `0` is an effective bypass, positive
+  strengths map from just above `2 ms` through `14 ms`, the default is `8 ms`, and it
+  snaps after a `100 ms` UI stall;
 - first-frame, mode, activation, engine generation, bar-count, render-style, strength,
   pause/disable, and teardown boundaries reset or snap presentation state;
 - it creates no timer, queue, scheduler, independent update/repaint, source decimation,

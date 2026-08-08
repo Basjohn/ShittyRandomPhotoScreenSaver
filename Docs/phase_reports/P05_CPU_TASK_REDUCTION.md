@@ -70,8 +70,9 @@ The run confirms that ordinary Spectrum `bars` mode was not using a display-only
 filter over the main rendered bar heights. A new explicitly user-authorized candidate
 now supplies optional Spectrum-only presentation interpolation at the existing
 authoritative UI visualizer tick, before the GPU frame push. It applies to both Spectrum
-render styles, defaults enabled at `0.50`, and is symmetric/time-compensated over a
-`2–14 ms` time constant (`8 ms` at default). It adds no timer, scheduler, queue,
+render styles, defaults enabled at `0.50`, and is symmetric/time-compensated. Slider
+`0` is an effective bypass; positive strengths map from just above `2 ms` through
+`14 ms`, with `8 ms` at default. It adds no timer, scheduler, queue,
 paint-local mutation, self-requested repaint, source decimation, Bubble change, or
 shared-analysis change. First-frame/identity/pause/disable/teardown boundaries and
 UI stalls of at least `100 ms` snap or reset to source. Deterministic attack/drop/

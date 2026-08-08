@@ -102,8 +102,9 @@ behaviour until installed visual review.
 
 The candidate runs immediately before GPU-frame publication on the existing
 authoritative UI visualizer tick, never in `paintGL()`. It uses symmetric,
-time-compensated rise/fall interpolation with a `2–14 ms` time constant (`8 ms` at
-default), and snaps/resets on first-frame, mode/activation/generation/bar-count/
+time-compensated rise/fall interpolation: slider `0` is an effective bypass, positive
+strengths map from just above `2 ms` through `14 ms`, and the default is `8 ms`. It
+snaps/resets on first-frame, mode/activation/generation/bar-count/
 render-style/strength, pause/disable/teardown, and at least `100 ms` GUI-stall
 boundaries. It adds no timer, queue, independent repaint request, scheduler, source
 decimation, or Bubble/shared-source change. The versioned trace covers rise, settling,

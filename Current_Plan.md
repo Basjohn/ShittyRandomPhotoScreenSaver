@@ -259,7 +259,7 @@ The user explicitly authorized an isolated optional Spectrum presentation candid
 - setting: `spectrum_visual_smoothing_enabled`, default `true`;
 - slider: `spectrum_visual_smoothing`, range `0.00–1.00`, default `0.50`;
 - applies to Spectrum presentation bars only on the existing authoritative UI visualizer tick, before the GPU frame push;
-- symmetric time-compensated rise/fall interpolation; default time constant `8 ms` (`2–14 ms` over the slider);
+- symmetric time-compensated rise/fall interpolation; slider `0` is an effective bypass, positive strengths map from just above `2 ms` through `14 ms`, and the default time constant is `8 ms`;
 - first frame, mode/activation/generation/bar-count/render-style/strength changes, pause/disable, teardown, and GUI stalls of at least `100 ms` snap/reset to source;
 - no timer, scheduler, queue, `paintGL()` mutation, self-requested repaint, source decimation, Bubble change, or shared-analysis change.
 - frozen Phase 2 replay schema v1 explicitly disables this later presentation candidate and excludes only its two new fields from the v1 preset hash; all 66 approved replay artifacts remain byte-for-byte unchanged, while `visualizer_temporal/v1` owns the candidate trace.
