@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-08-02
+Last updated: 2026-08-08
 
 Active unfinished work only. Stable architecture belongs in `Spec.md`; durable rules belong in guardrails; dated failures and detailed evidence belong in `Docs/Historical_Bugs/`; completed narratives leave this file once accepted and archived.
 
@@ -75,14 +75,13 @@ R-57 scaled prefetch: Docs/Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Or
 - [x] **Settings recreation:** two consecutive installed Settings cycles completed runtime barrier, dialog barrier, replacement construction, authoritative first frame, and coordinated reveal.
 - [x] The former Settings blocker—the idle persistent audio-analysis lane—is confirmed absent from the current production path.
 - [!] **R-56:** pre-exec destruction observation and Shiboken-valid cleanup now pass production-shaped tests; one installed Settings cycle must confirm no deleted-wrapper trace.
-- [!] **CUSTOM/Edit:** Save-and-Continue persists the scene, then synchronously tears down the runtime from inside `CustomLayoutManager.commit_session_without_reload()`.
-- [x] The logs directly prove re-entry: cleanup clears `manager._display`, then control returns to the save function's `finally` block and attempts to touch that already-cleaned manager.
-- [!] Cause confidence for the CUSTOM admission defect: **greater than 99%**.
-- [!] Exact final eight-second manager-retention edge confidence: **below 90%**. Shell/action/key-filter Python callback records remain the leading candidates, but no live referrer dump exists.
-- [!] The fail-closed barrier reaches zero QObjects, resources, tasks, and subscriptions, then times out on exactly two `CustomLayoutManager` wrappers and exits code 1.
+- [!] **CUSTOM/Edit:** the synchronous re-entry defect is repaired mechanically. Save/reset/slot commits retire Edit-session state, return through the manager-owned frame, and queue one immutable engine-owned reload intent for a later GUI turn.
+- [x] Runtime generation and exact `DisplayManager` identity travel with the request; stale requests are rejected and duplicate admissions coalesce.
+- [x] Production-shaped tests prove two shells and two `CustomLayoutManager` owners release without `gc.collect()`, the barrier reaches zero owners before continuation, the complete two-display graph replays, and exactly one replacement is admitted.
+- [ ] One installed dual-display Save-and-Continue cycle must still prove the former eight-second barrier timeout is absent and the replacement reveals from its own authoritative first frame.
 - [x] **Settings memory growth:** the former linear per-cycle staircase did not reproduce across two Settings replacements.
 - [!] One-time post-first-recreation process uplift remains unexplained; confidence in allocator/cache/driver/retained-owner cause is below 90%.
-- [ ] Edit memory/plateau evidence remains blocked because CUSTOM exits before replacement construction.
+- [ ] Edit memory/plateau evidence remains blocked on installed validation of the repaired CUSTOM path, not on a known mechanical admission defect.
 - [!] **R-57:** stable-identity selection/removal and boundary regressions now pass mechanically; installed transition/image rotation remains required.
 - [x] Replacement initialization itself still has no demonstrated separate defect; preserve it and validate it rather than redesigning it.
 
@@ -315,34 +314,34 @@ The full runtime reinit and graph placement/replay architecture stay unchanged. 
 
 ### Stage 1 — persist and retire the edit session
 
-- [ ] Calculate and save the complete CUSTOM scene.
-- [ ] Retire every `EditShellWidget` idempotently before display teardown: release pointer grabs, disconnect manager-bound signals, clear resolver/applier closures, remove temporary event filters where required, and clear snapshots/guides.
-- [ ] Destroy grid overlays and clear temporary shell/state collections.
-- [ ] Empty `CustomLayoutManager._active_managers` and uninstall the global key filter.
-- [ ] Neutralize pending restack/menu state and manager-bound deferred state.
-- [ ] Clear edit-active and reload-pending flags while displays are still valid.
-- [ ] Return from every manager/action/key-filter save/reset/slot frame.
-- [ ] Discard a deferred processed image for save/reset/slot actions that will replace the runtime; only cancel may restore it into the unchanged runtime.
+- [x] Calculate and save the complete CUSTOM scene.
+- [x] Retire every `EditShellWidget` idempotently before display teardown: release pointer grabs, disconnect manager-bound signals, clear resolver/applier closures, remove temporary event filters where required, and clear snapshots/guides.
+- [x] Destroy grid overlays and clear temporary shell/state collections.
+- [x] Empty `CustomLayoutManager._active_managers` and uninstall the global key filter.
+- [x] Neutralize pending restack/menu state and manager-bound deferred state.
+- [x] Clear edit-active and reload-pending flags while displays are still valid.
+- [x] Return from every manager/action/key-filter save/reset/slot frame before teardown admission.
+- [x] Discard a deferred processed image for save/reset/slot actions that will replace the runtime; only cancel may restore it into the unchanged runtime.
 
 ### Stage 2 — engine-owned reload admission
 
-- [ ] Queue a later-turn callback owned by the process-lifetime engine.
-- [ ] Carry only immutable primitive intent: request kind, expected runtime generation, exact `DisplayManager` identity, and optional settings/scene revision.
-- [ ] Capture no manager, display, shell, widget, shell state, pixmap, or bound manager method.
-- [ ] Reject stale generation/manager identity and coalesce duplicate admissions.
-- [ ] Then execute the same full `engine.stop(exit_app=False, reason="custom_edit")`, fail-closed destruction barrier, complete runtime reconstruction, graph replay, and authoritative-first-frame reveal.
-- [ ] Keep `CustomLayoutManager` in runtime-root observation; never remove it to make the barrier pass.
+- [x] Queue a later-turn callback owned by the process-lifetime engine.
+- [x] Carry only immutable primitive intent: request kind, expected runtime generation, and exact `DisplayManager` identity; no scene revision is currently required.
+- [x] Capture no manager, display, shell, widget, shell state, pixmap, or bound manager method.
+- [x] Reject stale generation/manager identity and coalesce duplicate admissions.
+- [x] Then execute the same full `engine.stop(exit_app=False, reason="custom_edit")`, fail-closed destruction barrier, complete runtime reconstruction, graph replay, and authoritative-first-frame reveal.
+- [x] Keep `CustomLayoutManager` in runtime-root observation; never remove it to make the barrier pass.
 
 ## Focused lifecycle tests
 
-1. Two-display Save-and-Continue uses the real relay shape and proves teardown begins only on a later GUI turn after the originating save/action frame returns.
-2. Weakrefs to both managers and every shell clear without `gc.collect()` before the engine continuation runs.
-3. Shell retirement clears callbacks/signals idempotently.
-4. The queued callback closure contains no retiring graph owner.
-5. Duplicate requests coalesce; stale generation or manager identity is rejected.
-6. Save/reset/slot discards deferred image; cancel restores it.
-7. The barrier reaches zero owners before constructing exactly one replacement runtime.
-8. Saved positions, sizes, screen routes, and graph replay remain correct after reinit.
+- [x] Two-display Save-and-Continue uses the real relay shape and proves teardown begins only on a later GUI turn after the originating save/action frame returns.
+- [x] Weakrefs to both managers and every shell clear without `gc.collect()` before the replacement continuation runs.
+- [x] Shell retirement clears callbacks/signals idempotently.
+- [x] The queued callback closure contains no retiring graph owner.
+- [x] Duplicate requests coalesce; stale generation or manager identity is rejected.
+- [x] Save/reset/slot discards deferred image; cancel restores it.
+- [x] The barrier reaches zero owners before constructing exactly one replacement runtime.
+- [x] Saved positions, sizes, screen routes, and graph replay remain correct after reinit.
 
 ## Initialization invariants
 

@@ -174,6 +174,7 @@ class ScreensaverEngine(QObject):
         # stack cannot publish into a newly-created stack.
         self._runtime_generation: int = 0
         self._pending_runtime_destruction_barrier = None
+        self._pending_custom_layout_reload_intent = None
         self._terminal_shutdown_requested = False
         self._active_settings_dialog = None
         self._runtime_lifecycle_event = "cold_start"
@@ -1551,10 +1552,20 @@ class ScreensaverEngine(QObject):
         from engine.engine_handlers import on_settings_requested
         on_settings_requested(self)
 
-    def _on_custom_layout_reload_requested(self) -> None:
+    def _on_custom_layout_reload_requested(
+        self,
+        request_kind: str,
+        runtime_generation: int,
+        display_manager_identity: int,
+    ) -> None:
         """Delegates to engine.engine_handlers."""
         from engine.engine_handlers import on_custom_layout_reload_requested
-        on_custom_layout_reload_requested(self)
+        on_custom_layout_reload_requested(
+            self,
+            request_kind,
+            runtime_generation,
+            display_manager_identity,
+        )
 
     def _on_exit_requested(self) -> None:
         """Handle exit request coming from any display window."""

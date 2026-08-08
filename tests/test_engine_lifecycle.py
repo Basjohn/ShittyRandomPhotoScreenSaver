@@ -313,12 +313,18 @@ def test_settings_handler_terminal_close_cancels_barrier_without_replacement(
     assert engine._pending_runtime_destruction_barrier is None
 
 
-def test_custom_edit_reload_snapshots_real_lifecycle_boundaries(monkeypatch):
+def test_custom_edit_reload_returns_then_admits_exactly_one_replacement(
+    monkeypatch,
+    qt_app,
+):
     from engine import engine_handlers
 
     events = []
+    scheduled = []
 
     class _DisplayManager:
+        _runtime_generation = 7
+
         def cleanup(self):
             events.append(("display_cleanup", None))
 
@@ -335,6 +341,11 @@ def test_custom_edit_reload_snapshots_real_lifecycle_boundaries(monkeypatch):
             self.display_manager = _DisplayManager()
             self.settings_manager = _Settings()
             self._display_initialized = True
+            self._runtime_generation = 7
+            self._pending_custom_layout_reload_intent = None
+            self._pending_runtime_destruction_barrier = None
+            self._settings_dialog_active = False
+            self._terminal_shutdown_requested = False
 
         def stop(self, exit_app=False, *, reason=None):
             events.append(("engine_stop", exit_app))
@@ -366,13 +377,90 @@ def test_custom_edit_reload_snapshots_real_lifecycle_boundaries(monkeypatch):
         "rendering.multi_monitor_coordinator.get_coordinator",
         lambda: _Coordinator(),
     )
+    monkeypatch.setattr(
+        engine_handlers.ThreadManager,
+        "single_shot",
+        staticmethod(lambda delay_ms, callback: scheduled.append((delay_ms, callback))),
+    )
 
-    engine_handlers.on_custom_layout_reload_requested(_Engine())
+    engine = _Engine()
+    manager = engine.display_manager
+    engine_handlers.on_custom_layout_reload_requested(
+        engine,
+        "save_continue",
+        7,
+        id(manager),
+    )
+
+    assert events == []
+    assert len(scheduled) == 1
+    delay_ms, callback = scheduled[0]
+    assert delay_ms == 0
+    assert callback.func is engine_handlers._admit_custom_layout_reload
+    assert callback.args[0] is engine
+    assert isinstance(callback.args[1], engine_handlers.CustomLayoutReloadIntent)
+    assert manager not in callback.args
+
+    callback()
+    callback()
 
     assert events.index(("snapshot", "custom_edit", "before_stop")) < events.index(("engine_stop", False))
     assert events.index(("engine_stop", False)) < events.index(("snapshot", "custom_edit", "after_stop"))
     assert events.index(("display_cleanup", None)) < events.index(("snapshot", "custom_edit", "after_display_cleanup"))
     assert events.index(("engine_start", None)) < events.index(("snapshot", "custom_edit", "after_restart"))
+    assert events.count(("initialize_display", None)) == 1
+    assert events.count(("engine_start", None)) == 1
+    assert engine._pending_custom_layout_reload_intent is None
+
+
+def test_custom_layout_reload_coalesces_duplicates_and_rejects_stale_owner(monkeypatch):
+    from engine import engine_handlers
+
+    scheduled = []
+    stop_calls = []
+    manager = SimpleNamespace(_runtime_generation=11)
+    engine = SimpleNamespace(
+        display_manager=manager,
+        _runtime_generation=11,
+        _display_initialized=True,
+        _pending_custom_layout_reload_intent=None,
+        _pending_runtime_destruction_barrier=None,
+        _settings_dialog_active=False,
+        _terminal_shutdown_requested=False,
+        stop=lambda *args, **kwargs: stop_calls.append((args, kwargs)),
+    )
+    monkeypatch.setattr(
+        engine_handlers.ThreadManager,
+        "single_shot",
+        staticmethod(lambda delay_ms, callback: scheduled.append((delay_ms, callback))),
+    )
+
+    engine_handlers.on_custom_layout_reload_requested(
+        engine,
+        "save_continue",
+        10,
+        id(manager),
+    )
+    assert scheduled == []
+
+    engine_handlers.on_custom_layout_reload_requested(
+        engine,
+        "save_continue",
+        11,
+        id(manager),
+    )
+    engine_handlers.on_custom_layout_reload_requested(
+        engine,
+        "save_continue",
+        11,
+        id(manager),
+    )
+    assert len(scheduled) == 1
+
+    engine.display_manager = SimpleNamespace(_runtime_generation=11)
+    scheduled[0][1]()
+    assert stop_calls == []
+    assert engine._pending_custom_layout_reload_intent is None
 
 
 def test_custom_layout_reload_is_rejected_while_settings_owns_recreation():

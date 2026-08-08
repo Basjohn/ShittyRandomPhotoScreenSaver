@@ -529,8 +529,9 @@ class CustomLayoutManager:
                 manager._finish_session(
                     restore_live_visibility=False,
                     restore_special_widgets=False,
+                    discard_deferred_image=True,
                 )
-            if request_reload and not self._request_runtime_reload():
+            if request_reload and not self._request_runtime_reload("save_continue"):
                 self._reload_widgets_across_instances()
             return True
         finally:
@@ -576,8 +577,9 @@ class CustomLayoutManager:
                 manager._finish_session(
                     restore_live_visibility=False,
                     restore_special_widgets=False,
+                    discard_deferred_image=True,
                 )
-            if not self._request_runtime_reload():
+            if not self._request_runtime_reload("reset_authored"):
                 self._reload_widgets_across_instances()
             return True
         finally:
@@ -624,12 +626,12 @@ class CustomLayoutManager:
         self._finish_session()
         return False
 
-    def _request_runtime_reload(self) -> bool:
+    def _request_runtime_reload(self, request_kind: str) -> bool:
         requester = getattr(self._display, "_request_custom_layout_runtime_reload", None)
         if not callable(requester):
             return False
         try:
-            requester()
+            requester(str(request_kind))
             return True
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to request runtime reload; falling back to local rebuild", exc_info=True)
@@ -641,8 +643,11 @@ class CustomLayoutManager:
         active: bool,
     ) -> None:
         for manager in managers:
+            display = getattr(manager, "_display", None)
+            if display is None:
+                continue
             try:
-                setattr(manager._display, "_custom_layout_runtime_reload_pending", bool(active))
+                setattr(display, "_custom_layout_runtime_reload_pending", bool(active))
             except Exception:
                 logger.debug("[CUSTOM_LAYOUT] Failed to set runtime reload pending flag", exc_info=True)
 
@@ -1056,9 +1061,11 @@ class CustomLayoutManager:
         *,
         restore_live_visibility: bool = True,
         restore_special_widgets: bool = True,
+        discard_deferred_image: bool = False,
     ) -> None:
         for state in list(self._shell_states.values()):
             try:
+                state.shell.retire_session()
                 state.shell.hide()
                 state.shell.deleteLater()
             except Exception:
@@ -1093,9 +1100,17 @@ class CustomLayoutManager:
             ]
         if not CustomLayoutManager._active_managers:
             CustomLayoutManager._uninstall_global_key_filter()
-        setattr(self._display, "_custom_layout_edit_active", False)
+            CustomLayoutManager._restack_scheduled = False
+            CustomLayoutManager._menu_interaction_depth = 0
+            CustomLayoutManager._restack_pending_during_menu = False
+        display = self._display
+        if display is not None:
+            setattr(display, "_custom_layout_edit_active", False)
         self._geo_session_id = None
-        self.flush_deferred_processed_image()
+        if discard_deferred_image:
+            self._deferred_processed_image = None
+        else:
+            self.flush_deferred_processed_image()
 
     def _suspend_interaction_cursor_state(self) -> None:
         coordinator = get_coordinator()

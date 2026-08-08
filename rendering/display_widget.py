@@ -163,7 +163,7 @@ class DisplayWidget(QWidget):
     next_requested = Signal()  # X key - go to next image
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # S key - open settings
-    custom_layout_reload_requested = Signal()
+    custom_layout_reload_requested = Signal(str, int, int)
     dimming_changed = Signal(bool, float)  # enabled, opacity - sync dimming across displays
     
     # Phase 5: Class-level state has been migrated to MultiMonitorCoordinator.
@@ -246,6 +246,7 @@ class DisplayWidget(QWidget):
         self._runtime_generation = (
             int(runtime_generation) if runtime_generation is not None else None
         )
+        self._runtime_manager_identity = 0
         
         self.screen_index = screen_index
         self.display_mode = display_mode
@@ -807,8 +808,16 @@ class DisplayWidget(QWidget):
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to reapply saved layouts", exc_info=True)
 
-    def _request_custom_layout_runtime_reload(self) -> None:
-        self.custom_layout_reload_requested.emit()
+    def _request_custom_layout_runtime_reload(
+        self,
+        request_kind: str = "custom_layout_commit",
+    ) -> None:
+        runtime_generation = self._runtime_generation
+        self.custom_layout_reload_requested.emit(
+            str(request_kind),
+            int(runtime_generation) if runtime_generation is not None else -1,
+            int(self._runtime_manager_identity),
+        )
 
     def _save_layout_slot(self, slot_id: str, *, commit_edit_session: bool = False) -> bool:
         settings_manager = self.settings_manager
@@ -828,7 +837,7 @@ class DisplayWidget(QWidget):
             settings_manager.save()
             logger.info("[LAYOUT_SLOT] Saved layout slot %s", slot_id)
             if commit_edit_session:
-                self._request_custom_layout_runtime_reload()
+                self._request_custom_layout_runtime_reload("slot_save")
             return True
         except Exception:
             logger.debug("[LAYOUT_SLOT] Failed to save layout slot %s", slot_id, exc_info=True)
@@ -851,7 +860,7 @@ class DisplayWidget(QWidget):
             settings_manager.set_widgets_map(widgets_map)
             settings_manager.save()
             logger.info("[LAYOUT_SLOT] Loaded layout slot %s", slot_id)
-            self._request_custom_layout_runtime_reload()
+            self._request_custom_layout_runtime_reload("slot_load")
             return True
         except Exception:
             logger.debug("[LAYOUT_SLOT] Failed to load layout slot %s", slot_id, exc_info=True)

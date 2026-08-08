@@ -261,6 +261,11 @@ def stop(
     """
     from engine.screensaver_engine import EngineState
 
+    # Any queued CUSTOM admission belongs to the runtime that is about to be
+    # invalidated.  The admitted CUSTOM path clears its own intent before it
+    # calls stop(); all other stop owners reject that queued request here.
+    engine._pending_custom_layout_reload_intent = None
+
     if exit_app:
         engine._terminal_shutdown_requested = True
         pending_barrier = getattr(

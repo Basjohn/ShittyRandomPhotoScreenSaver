@@ -7,6 +7,7 @@ All functions accept the engine instance as the first parameter.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING
 import time
@@ -28,6 +29,15 @@ if TYPE_CHECKING:
     from engine.screensaver_engine import ScreensaverEngine
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class CustomLayoutReloadIntent:
+    """Primitive-only handoff from an Edit frame to the engine GUI turn."""
+
+    request_kind: str
+    runtime_generation: int
+    display_manager_identity: int
 
 
 def _qobject_wrapper_is_valid(value: object) -> bool:
@@ -490,8 +500,13 @@ def _construct_and_start_replacement_runtime(
     return True
 
 
-def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
-    """Handle committed CUSTOM layout changes with a full clean runtime reload."""
+def on_custom_layout_reload_requested(
+    engine: ScreensaverEngine,
+    request_kind: str = "custom_layout_commit",
+    runtime_generation: int | None = None,
+    display_manager_identity: int | None = None,
+) -> None:
+    """Queue a committed CUSTOM reload for a later engine-owned GUI turn."""
     if bool(getattr(engine, "_settings_dialog_active", False)):
         logger.info(
             "[LIFECYCLE] CUSTOM reload ignored while Settings owns runtime recreation"
@@ -502,15 +517,102 @@ def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
             "[LIFECYCLE] Duplicate CUSTOM reload ignored while recreation is active"
         )
         return
-    if (
-        getattr(engine, "display_manager", None) is None
-        or not bool(getattr(engine, "_display_initialized", False))
-    ):
+    manager = getattr(engine, "display_manager", None)
+    if manager is None or not bool(getattr(engine, "_display_initialized", False)):
         logger.info(
             "[LIFECYCLE] Stale CUSTOM reload ignored without a current display runtime"
         )
         return
-    logger.info("CUSTOM layout reload requested")
+
+    current_generation = int(
+        getattr(manager, "_runtime_generation", getattr(engine, "_runtime_generation", -1))
+    )
+    current_manager_identity = id(manager)
+    source_generation = (
+        current_generation if runtime_generation is None else int(runtime_generation)
+    )
+    source_manager_identity = (
+        current_manager_identity
+        if display_manager_identity is None
+        else int(display_manager_identity)
+    )
+    if (
+        source_generation != current_generation
+        or source_manager_identity != current_manager_identity
+    ):
+        logger.info(
+            "[LIFECYCLE] Stale CUSTOM reload rejected source_generation=%s "
+            "current_generation=%s source_manager=%s current_manager=%s",
+            source_generation,
+            current_generation,
+            source_manager_identity,
+            current_manager_identity,
+        )
+        return
+
+    intent = CustomLayoutReloadIntent(
+        request_kind=str(request_kind or "custom_layout_commit"),
+        runtime_generation=source_generation,
+        display_manager_identity=source_manager_identity,
+    )
+    pending = getattr(engine, "_pending_custom_layout_reload_intent", None)
+    if pending is not None:
+        logger.info(
+            "[LIFECYCLE] Duplicate CUSTOM reload admission ignored pending=%s requested=%s",
+            pending,
+            intent,
+        )
+        return
+
+    engine._pending_custom_layout_reload_intent = intent
+    logger.info(
+        "CUSTOM layout reload queued kind=%s generation=%s manager=%s",
+        intent.request_kind,
+        intent.runtime_generation,
+        intent.display_manager_identity,
+    )
+    ThreadManager.single_shot(
+        0,
+        partial(_admit_custom_layout_reload, engine, intent),
+    )
+
+
+def _admit_custom_layout_reload(
+    engine: ScreensaverEngine,
+    intent: CustomLayoutReloadIntent,
+) -> None:
+    """Validate and admit one immutable CUSTOM intent after Edit returns."""
+
+    if getattr(engine, "_pending_custom_layout_reload_intent", None) != intent:
+        logger.info("[LIFECYCLE] Superseded CUSTOM reload admission rejected")
+        return
+    engine._pending_custom_layout_reload_intent = None
+
+    manager = getattr(engine, "display_manager", None)
+    if (
+        bool(getattr(engine, "_terminal_shutdown_requested", False))
+        or bool(getattr(engine, "_settings_dialog_active", False))
+        or getattr(engine, "_pending_runtime_destruction_barrier", None) is not None
+        or manager is None
+        or not bool(getattr(engine, "_display_initialized", False))
+        or int(getattr(manager, "_runtime_generation", -1)) != intent.runtime_generation
+        or id(manager) != intent.display_manager_identity
+    ):
+        logger.info(
+            "[LIFECYCLE] CUSTOM reload admission rejected after runtime ownership changed "
+            "kind=%s generation=%s manager=%s",
+            intent.request_kind,
+            intent.runtime_generation,
+            intent.display_manager_identity,
+        )
+        return
+
+    logger.info(
+        "CUSTOM layout reload admitted kind=%s generation=%s manager=%s",
+        intent.request_kind,
+        intent.runtime_generation,
+        intent.display_manager_identity,
+    )
 
     try:
         log_lifecycle_resource_snapshot(

@@ -196,7 +196,7 @@ def test_display_save_slot_while_editing_commits_once_then_reloads():
     assert DisplayWidget._save_layout_slot(display, "1", commit_edit_session=True) is True
 
     manager.commit_session_without_reload.assert_called_once_with()
-    display._request_custom_layout_runtime_reload.assert_called_once_with()
+    display._request_custom_layout_runtime_reload.assert_called_once_with("slot_save")
     assert settings.saved == 1
     assert "1" in settings.widgets["layout_slots"]["slots"]
     assert settings.emit_changes == [False]
@@ -246,7 +246,7 @@ def test_display_load_slot_while_editing_commits_applies_and_preserves_slot():
     assert DisplayWidget._load_layout_slot(display, "1", commit_edit_session=True) is True
 
     manager.commit_session_without_reload.assert_called_once_with()
-    display._request_custom_layout_runtime_reload.assert_called_once_with()
+    display._request_custom_layout_runtime_reload.assert_called_once_with("slot_load")
     assert settings.widgets["clock"] == {
         "position": "Bottom Right",
         "font_size": 64,

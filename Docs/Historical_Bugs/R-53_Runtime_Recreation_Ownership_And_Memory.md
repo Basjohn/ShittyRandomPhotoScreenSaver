@@ -2,7 +2,7 @@
 
 Date opened: 2026-08-01  
 Latest evidence: 2026-08-02  
-Status: Partially resolved; CUSTOM/Edit repair and plateau proof pending
+Status: CUSTOM/Edit repair implemented mechanically; installed lifecycle and plateau proof pending
 
 ## Classification
 
@@ -133,6 +133,24 @@ Confidence in the exact final eight-second strong-reference edge: **below 90%**.
 
 The full runtime reinitialization and graph-based placement/replay systems remain mandatory. This correction changes only the admission boundary.
 
+## 2026-08-08 Mechanical Repair
+
+The production path now persists the same complete scene graph, explicitly retires each temporary Edit shell, and returns through the manager-owned save/reset/slot frame before teardown is eligible to begin. Shell retirement is idempotent and releases pointer grabs, manager-bound signals, resolver/applier closures, temporary event filters, snapshots, guides, and transfer state. Save/reset/slot replacement paths discard deferred image payloads owned by the retiring runtime; cancel still restores the deferred image into the unchanged runtime.
+
+`custom_layout_reload_requested` now carries request kind, runtime generation, and exact `DisplayManager` identity. The engine converts that data into a frozen primitive-only intent, coalesces duplicates, and admits it through a zero-delay `ThreadManager` GUI callback. The admission callback revalidates generation, exact manager identity, Settings/barrier ownership, terminal state, and current runtime availability before invoking the unchanged full stop → destruction barrier → reconstruction path. The callback captures the process-lifetime engine and immutable intent only; it does not capture a manager, display, shell, widget, pixmap, shell state, or bound manager method.
+
+Focused production-shaped regressions prove:
+
+- complete two-display positions, sizes, routes, and graph replay;
+- both temporary shells die without `gc.collect()` after committed retirement;
+- both barrier-observed `CustomLayoutManager` owners die without `gc.collect()` before replacement continuation;
+- stale generation and manager identity are rejected;
+- duplicate requests produce one queued admission and exactly one replacement;
+- committed reload discards deferred image state while cancel restores it;
+- `CustomLayoutManager` remains part of runtime-root observation.
+
+The focused CUSTOM/lifecycle set passed 161 tests, and the adjacent display/widget lifecycle set passed 104 tests with four environment skips. This is mechanical evidence only. No installed dual-display Save-and-Continue or memory-plateau evidence has yet been collected for this repair.
+
 ## Settings Dialog Sibling Defect
 
 Both successful Settings cycles emitted three caught `RuntimeError` traces after `dialog.exec()` returned because the close path touched a `SettingsDialog` wrapper whose C++ object had already been deleted by `WA_DeleteOnClose`. This is tracked separately as R-56. It did not block Settings recreation, but it is not acceptable lifecycle bookkeeping.
@@ -162,9 +180,7 @@ The destruction barrier is separate from the authoritative-first-frame barrier. 
 
 ## Validation Still Required
 
-- Repair CUSTOM admission and deterministic shell callback retirement.
-- Prove both retired manager weakrefs clear without `gc.collect()` before the queued engine continuation runs.
-- Run dual-display Save-and-Continue and verify exactly one replacement runtime.
+- Run installed dual-display Save-and-Continue and verify exactly one replacement runtime with no manager-owner timeout.
 - Run at least five alternating installed Edit and Settings cycles with image work, Bubble/Spectrum/mode switches, transition overlap, media/artwork, and pending callbacks.
 - Require every retired generation to reach zero roots, timers, animations, subscriptions, ThreadManager work, and generation-scoped ResourceManager entries.
 - Require equivalent-state RSS, private commit, VRAM, handles, and threads to plateau.

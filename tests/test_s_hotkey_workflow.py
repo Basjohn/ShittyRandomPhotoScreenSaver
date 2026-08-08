@@ -298,13 +298,23 @@ def test_custom_layout_reload_arms_pointer_guard(monkeypatch, qt_app):
     )
 
     engine = SimpleNamespace(
-        display_manager=SimpleNamespace(cleanup=lambda: None),
+        display_manager=SimpleNamespace(cleanup=lambda: None, _runtime_generation=0),
         settings_manager=SimpleNamespace(load=lambda: load_calls.append("load")),
+        _runtime_generation=0,
         _display_initialized=True,
+        _pending_custom_layout_reload_intent=None,
+        _pending_runtime_destruction_barrier=None,
+        _settings_dialog_active=False,
+        _terminal_shutdown_requested=False,
         stop=lambda exit_app=False, reason=None: None,
         _initialize_display=lambda: True,
         _setup_rotation_timer=lambda: None,
         start=lambda: True,
+    )
+    monkeypatch.setattr(
+        engine_handlers.ThreadManager,
+        "single_shot",
+        staticmethod(lambda _delay_ms, callback: callback()),
     )
 
     engine_handlers.on_custom_layout_reload_requested(engine)

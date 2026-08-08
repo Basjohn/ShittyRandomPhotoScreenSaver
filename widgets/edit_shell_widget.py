@@ -69,6 +69,7 @@ class EditShellWidget(QWidget):
         self._active_horizontal_guides: tuple[tuple[int, str], ...] = ()
         self._active_vertical_assists: tuple[tuple[int, str], ...] = ()
         self._active_horizontal_assists: tuple[tuple[int, str], ...] = ()
+        self._session_retired = False
 
         button_stylesheet = """
             QPushButton {
@@ -141,6 +142,69 @@ class EditShellWidget(QWidget):
         self.set_shell_geometry(initial_global_rect)
         self._reposition_reset_button()
         self._update_hover_cursor()
+
+    def retire_session(self) -> None:
+        """Release every Edit-session callback and heavyweight snapshot.
+
+        The shell is a temporary runtime object.  Retirement is deliberately
+        explicit so queued deletion never leaves manager-bound signals,
+        geometry closures, pointer grabs, or widget snapshots retaining the
+        runtime graph until cyclic collection.
+        """
+
+        if self._session_retired:
+            return
+        self._session_retired = True
+
+        self._dragging = False
+        self._resizing = False
+        self._resize_corner = None
+        self._pressed_button = None
+        try:
+            self.releaseMouse()
+        except (RuntimeError, TypeError):
+            pass
+
+        for signal in (
+            self.drag_finished,
+            self.geometry_live_changed,
+            self.resize_wheel_requested,
+            self.resize_drag_started,
+            self.resize_drag_live_changed,
+            self.resize_drag_finished,
+            self.reset_size_requested,
+            self.reset_position_requested,
+            self.reset_visualizer_requested,
+            self.remove_requested,
+            self.context_menu_requested,
+        ):
+            try:
+                signal.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+
+        for button in (
+            self._reset_size_btn,
+            self._reset_position_btn,
+            self._reset_visualizer_btn,
+            self._remove_btn,
+        ):
+            try:
+                button.removeEventFilter(self)
+            except (RuntimeError, TypeError):
+                pass
+
+        self._live_geometry_resolver = None
+        self._live_geometry_applier = None
+        self._snapshot = QPixmap()
+        self._active_vertical_guides = ()
+        self._active_horizontal_guides = ()
+        self._active_vertical_assists = ()
+        self._active_horizontal_assists = ()
+        self._transfer_blocked = False
+        self._transfer_block_reason = ""
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.unsetCursor()
 
     def _global_rect_to_local(self, global_rect: QRect) -> QRect:
         parent = self.parentWidget()

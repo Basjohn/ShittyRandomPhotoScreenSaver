@@ -17,6 +17,7 @@ from engine.runtime_destruction import (
     RuntimeDestructionBarrier,
     continue_after_runtime_destruction,
 )
+from rendering.custom_layout_manager import CustomLayoutManager
 from rendering.widget_manager import WidgetManager
 from widgets.clock_ticker import GlobalClockTicker
 from widgets.clock_widget import ClockWidget
@@ -119,12 +120,13 @@ def test_display_teardown_releases_widget_manager_and_fade_owner_before_replacem
     class _Display(QObject):
         image_displayed = Signal(str)
 
-        def __init__(self, parent):
+        def __init__(self, parent, screen_index):
             super().__init__(parent)
-            self.screen_index = 0
+            self.screen_index = int(screen_index)
             self._has_rendered_first_frame = False
             self._runtime_cleanup_complete = False
             self._widget_manager = WidgetManager(self, resource_manager=object())
+            self._custom_layout_manager = CustomLayoutManager(self)
 
         def describe_runtime_state(self):
             return {"screen": self.screen_index}
@@ -138,6 +140,8 @@ def test_display_teardown_releases_widget_manager_and_fade_owner_before_replacem
         def cleanup_runtime(self, _reason):
             self._widget_manager.cleanup()
             self._widget_manager = None
+            self._custom_layout_manager.cleanup()
+            self._custom_layout_manager = None
             self._runtime_cleanup_complete = True
 
         def close(self):
@@ -148,10 +152,17 @@ def test_display_teardown_releases_widget_manager_and_fade_owner_before_replacem
         thread_manager=None,
         runtime_generation=301,
     )
-    display = _Display(manager)
-    manager.displays = [display]
-    widget_manager_ref = weakref.ref(display._widget_manager)
-    fade_coordinator_ref = weakref.ref(display._widget_manager._fade_coordinator)
+    displays = [_Display(manager, 0), _Display(manager, 1)]
+    manager.displays = displays
+    widget_manager_refs = [weakref.ref(display._widget_manager) for display in displays]
+    fade_coordinator_refs = [
+        weakref.ref(display._widget_manager._fade_coordinator)
+        for display in displays
+    ]
+    custom_layout_manager_refs = [
+        weakref.ref(display._custom_layout_manager)
+        for display in displays
+    ]
     engine = SimpleNamespace(
         display_manager=manager,
         resource_manager=_EmptyResourceManager(),
@@ -164,17 +175,23 @@ def test_display_teardown_releases_widget_manager_and_fade_owner_before_replacem
         _loading_in_progress=False,
         _runtime_generation=302,
     )
-    del display
+    del displays
     del manager
 
     barrier = teardown_display_runtime(engine, reason="settings")
     completed = []
-    continue_after_runtime_destruction(engine, lambda: completed.append(True))
+    continue_after_runtime_destruction(
+        engine,
+        lambda: completed.append(
+            all(owner_ref() is None for owner_ref in custom_layout_manager_refs)
+        ),
+    )
 
     assert barrier is not None
     qtbot.waitUntil(lambda: completed == [True], timeout=1000)
-    assert widget_manager_ref() is None
-    assert fade_coordinator_ref() is None
+    assert all(owner_ref() is None for owner_ref in widget_manager_refs)
+    assert all(owner_ref() is None for owner_ref in fade_coordinator_refs)
+    assert all(owner_ref() is None for owner_ref in custom_layout_manager_refs)
     assert barrier.describe()["python_owners_pending"] == 0
 
 

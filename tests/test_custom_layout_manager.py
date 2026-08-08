@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, QEvent
+from PySide6.QtCore import QPoint, QRect, QSize, Qt, QEvent, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QPixmap, QKeyEvent
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -86,6 +86,8 @@ class _FakeScreen:
 
 
 class _DisplayStub(QWidget):
+    custom_layout_reload_requested = Signal(str, int, int)
+
     def __init__(self, settings_stub: _SettingsStub, *, screen=None, screen_index: int = 0) -> None:
         super().__init__()
         self.settings_manager = settings_stub
@@ -96,6 +98,9 @@ class _DisplayStub(QWidget):
         self._setup_widgets_calls = 0
         self._apply_saved_layouts_calls = 0
         self._runtime_reload_requests = 0
+        self._runtime_reload_kinds: list[str] = []
+        self._runtime_generation = 0
+        self._runtime_manager_identity = 0
         self._custom_layout_manager_proxy = None
         self._custom_layout_manager = None
         self._dimming_enabled = False
@@ -135,8 +140,17 @@ class _DisplayStub(QWidget):
         if proxy is not None:
             proxy.apply_saved_layouts_to_display()
 
-    def _request_custom_layout_runtime_reload(self) -> None:
+    def _request_custom_layout_runtime_reload(
+        self,
+        request_kind: str = "custom_layout_commit",
+    ) -> None:
         self._runtime_reload_requests += 1
+        self._runtime_reload_kinds.append(str(request_kind))
+        self.custom_layout_reload_requested.emit(
+            str(request_kind),
+            int(self._runtime_generation),
+            int(self._runtime_manager_identity),
+        )
 
 
 class _RedditLikeTestWidget(_EditableTestWidget):
@@ -380,6 +394,7 @@ def test_custom_layout_manager_saves_and_reapplies_clock_geometry(qtbot):
     assert settings_stub.get_widgets_map()["clock"]["position"] == "Custom"
 
     assert display._runtime_reload_requests == 1
+    assert display._runtime_reload_kinds == ["save_continue"]
     assert clock.isVisible() is False
 
 
@@ -1034,6 +1049,65 @@ def test_custom_layout_manager_defers_and_flushes_processed_images(qtbot):
 
     manager.cancel_session()
     assert display._last_processed[2] == "example.png"
+
+
+def test_custom_layout_manager_discards_deferred_image_on_committed_reload(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    pm = QPixmap(40, 40)
+    pm.fill(QColor("red"))
+    manager.defer_processed_image(pm, pm, "retired-runtime.png")
+
+    assert manager.save_session() is True
+    assert manager._deferred_processed_image is None
+    assert not hasattr(display, "_last_processed")
+
+
+def test_custom_layout_save_retires_shell_callbacks_before_reload_signal_returns(
+    qtbot,
+):
+    import weakref
+
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    shell = manager._shell_states["clock"].shell
+    shell_ref = weakref.ref(shell)
+    observed: list[tuple[str, bool, bool]] = []
+    display.custom_layout_reload_requested.connect(
+        lambda kind, _generation, _identity: observed.append(
+            (kind, manager.is_active(), bool(manager._shell_states))
+        )
+    )
+
+    assert manager.save_session() is True
+
+    assert observed == [("save_continue", False, False)]
+    assert shell._session_retired is True
+    assert shell._live_geometry_resolver is None
+    assert shell._live_geometry_applier is None
+    assert shell._snapshot.isNull()
+    shell.retire_session()
+    del shell
+    qtbot.waitUntil(lambda: shell_ref() is None, timeout=2000)
 
 
 def test_custom_layout_manager_saves_and_reapplies_spotify_volume_geometry(qtbot):
@@ -2397,6 +2471,100 @@ def test_custom_layout_manager_cross_display_transfer_updates_monitor_and_reload
     assert get_screen_signature(screen1) not in custom_layout or "clock2" not in custom_layout[get_screen_signature(screen1)]
     assert display0._runtime_reload_requests == 0
     assert display1._runtime_reload_requests == 1
+
+
+def test_custom_layout_manager_persists_and_replays_complete_two_display_graph(
+    qtbot,
+    monkeypatch,
+):
+    import weakref
+
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "clock": {"position": "Top Left", "monitor": "1"},
+        "weather": {"position": "Bottom Right", "monitor": "2"},
+    }
+    screen_a = _FakeScreen("graph-a", QRect(0, 0, 800, 600))
+    screen_b = _FakeScreen("graph-b", QRect(800, 0, 800, 600))
+    display_a = _DisplayStub(settings_stub, screen=screen_a, screen_index=0)
+    display_b = _DisplayStub(settings_stub, screen=screen_b, screen_index=1)
+    display_a.setGeometry(screen_a.geometry())
+    display_b.setGeometry(screen_b.geometry())
+    qtbot.addWidget(display_a)
+    qtbot.addWidget(display_b)
+    display_a.show()
+    display_b.show()
+    display_a.clock_widget = _EditableTestWidget(display_a, font_size=48)
+    display_b.weather_widget = _EditableTestWidget(display_b, font_size=18)
+
+    manager_a = CustomLayoutManager(display_a)
+    manager_b = CustomLayoutManager(display_b)
+    _attach_manager(display_a, manager_a)
+    _attach_manager(display_b, manager_b)
+    instances = [display_a, display_b]
+
+    class _CoordinatorStub:
+        def get_all_instances(self):
+            return list(instances)
+
+    monkeypatch.setattr(
+        "rendering.custom_layout_manager.get_coordinator",
+        lambda: _CoordinatorStub(),
+    )
+
+    assert manager_a.start_session() is True
+    clock_state = manager_a._shell_states["clock"]
+    weather_state = manager_b._shell_states["weather"]
+    shell_refs = [weakref.ref(clock_state.shell), weakref.ref(weather_state.shell)]
+    clock_state.current_global_rect = QRect(70, 90, 240, 120)
+    clock_state.current_size_payload = {"font_size": 64}
+    weather_state.current_global_rect = QRect(880, 110, 300, 160)
+    weather_state.current_size_payload = {"font_size": 24}
+
+    assert manager_a.save_session() is True
+    del clock_state
+    del weather_state
+    qtbot.waitUntil(
+        lambda: all(shell_ref() is None for shell_ref in shell_refs),
+        timeout=2000,
+    )
+    saved = settings_stub.get_widgets_map()
+    layouts = saved["custom_layout"]["displays"]
+    assert set(layouts) == {
+        get_screen_signature(screen_a),
+        get_screen_signature(screen_b),
+    }
+    assert set(layouts[get_screen_signature(screen_a)]) == {"clock"}
+    assert set(layouts[get_screen_signature(screen_b)]) == {"weather"}
+    assert saved["clock"]["position"] == "Custom"
+    assert saved["clock"]["monitor"] == "1"
+    assert saved["weather"]["position"] == "Custom"
+    assert saved["weather"]["monitor"] == "2"
+
+    replacement_a = _DisplayStub(settings_stub, screen=screen_a, screen_index=0)
+    replacement_b = _DisplayStub(settings_stub, screen=screen_b, screen_index=1)
+    replacement_a.setGeometry(screen_a.geometry())
+    replacement_b.setGeometry(screen_b.geometry())
+    qtbot.addWidget(replacement_a)
+    qtbot.addWidget(replacement_b)
+    replacement_a.show()
+    replacement_b.show()
+    replacement_a.clock_widget = _EditableTestWidget(replacement_a, font_size=20)
+    replacement_b.weather_widget = _EditableTestWidget(replacement_b, font_size=12)
+    replacement_manager_a = CustomLayoutManager(replacement_a)
+    replacement_manager_b = CustomLayoutManager(replacement_b)
+    _attach_manager(replacement_a, replacement_manager_a)
+    _attach_manager(replacement_b, replacement_manager_b)
+    instances[:] = [replacement_a, replacement_b]
+
+    replacement_manager_a.apply_saved_layouts_to_display()
+    replacement_manager_b.apply_saved_layouts_to_display()
+
+    assert replacement_a.clock_widget._custom_layout_local_rect == QRect(70, 90, 240, 120)
+    assert replacement_a.clock_widget._font_size == 64
+    assert replacement_b.weather_widget._custom_layout_local_rect == QRect(80, 110, 300, 160)
+    assert replacement_b.weather_widget._font_size == 24
 
 
 def test_custom_layout_manager_blocks_all_widget_cross_display_transfer(qtbot, monkeypatch):

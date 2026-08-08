@@ -53,7 +53,7 @@ class DisplayManager(QObject):
     next_requested = Signal()  # X key - go to next image
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # S key - open settings
-    custom_layout_reload_requested = Signal()
+    custom_layout_reload_requested = Signal(str, int, int)
     
     def __init__(
         self,
@@ -526,6 +526,7 @@ class DisplayManager(QObject):
             )
             display._image_resource_owner = f"display:{screen_index}:manager:{id(self)}"
             display._image_resource_generation = id(self)
+            display._runtime_manager_identity = id(self)
             manager_ref = weakref.ref(self)
 
             def _publish_image_accounting(display_obj, snapshot) -> None:
