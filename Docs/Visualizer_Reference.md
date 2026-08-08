@@ -1,6 +1,6 @@
 # Visualizer Reference
 
-Last updated: 2026-07-15
+Last updated: 2026-08-08
 
 Focused architecture reference for the Spotify visualizer subsystem.
 
@@ -39,6 +39,11 @@ Blob was removed end to end on 2026-07-15 and is not selectable, gated, rendered
 
 Runtime and saved settings use mode-owned keys. Legacy global visualizer keys may be accepted as import/migration inputs, but normalized payloads must not re-emit them. `SettingsManager.set_spotify_visualizer_settings()` persists one normalized visualizer section through an atomic `widgets`-root write while preserving sibling widgets.
 
+Settings and runtime must resolve a selected curated preset through the same
+`apply_preset_to_config()` replace-overlay before mode-owned values are loaded.
+Move To Custom is registry-shared: it snapshots the already resolved controls,
+never stale backing fields hidden beneath a curated preset index.
+
 ## 4. Presets
 
 - Active curated tree: `core/settings/visualizer_presets.get_visualizer_presets_dir()`.
@@ -61,6 +66,23 @@ Curated presets are supported-mode folders containing JSON payloads. Folder/zip 
 - Mode renderers/shaders: mode-owned math and uniforms.
 
 Visualizer tick cadence has one steady-state owner: the dedicated recurring timer. Shared audio extraction, timer cadence, compositor ownership, and accepted mode tuning must not change as a side effect of retired-mode cleanup.
+
+### Spectrum presentation smoothing
+
+- `spectrum_visual_smoothing_enabled` is optional and defaults to `true`.
+- `spectrum_visual_smoothing` ranges from `0.00` to `1.00` and defaults to
+  `0.50`; zero is an effective bypass.
+- `widgets/spotify_visualizer/spectrum_presentation_smoothing.py` applies one
+  symmetric, time-compensated presentation filter to Spectrum bars only on the
+  existing authoritative visualizer tick, before the normal GPU frame push.
+- Strength maps to a `2–14 ms` time constant. It adds no timer, queue, worker,
+  paint mutation, self-requested repaint, source decimation, or Bubble/shared
+  analysis change.
+- First frame, activation/generation/bar-count/render-style identity change,
+  pause/disable, and UI stalls of at least `100 ms` reset or snap to current
+  source so stale filter history cannot add recovery latency.
+- The filter applies to both Spectrum render styles and does not alter the
+  authoritative source bars used by fidelity diagnostics.
 
 ## 6. CUSTOM Geometry
 

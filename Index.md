@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-08-02
+Last updated: 2026-08-08
 
 Navigation and ownership map for SRPSS.
 
@@ -18,7 +18,7 @@ This file is not a specification and must not accumulate implementation narrativ
 | Compositor/GL/performance recovery | `Docs/Compositor_Architecture.md` |
 | Test selection | `Docs/TestSuite.md` |
 | Existing harness command | `Docs/Harness_Index.md` |
-| Prior regression in fragile area | `Docs/Historical_Bugs.md` |
+| Prior regression in fragile area | `Docs/Historical_Bugs/README.md` |
 | Documentation cleanup | `Docs/Documentation_Maintenance.md` |
 
 Do not read every document by default.
@@ -36,7 +36,8 @@ Do not read every document by default.
 | `Docs/Compositor_Architecture.md` | Compositor recovery target and validation |
 | `Docs/TestSuite.md` | Test levels and release gates |
 | `Docs/Harness_Index.md` | Recurring commands/probes |
-| `Docs/Historical_Bugs.md` | Dated bug narratives |
+| `Docs/Historical_Bugs/README.md` | Standalone current/pending bug records and migration index |
+| `Docs/Historical_Bugs.md` | Canonical fallback for records not yet migrated |
 | `Docs/Regression_Notes.md` | Small resolved regression notes |
 | `Docs/Documentation_Maintenance.md` | Drift and document-size control |
 | `Future_Cleanup.md` | Deferred low-priority cleanup |

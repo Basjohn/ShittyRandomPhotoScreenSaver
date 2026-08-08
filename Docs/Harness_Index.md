@@ -181,6 +181,22 @@ New captures are plain disposable subfolders. Parse the folder directly; do not 
 python tools/recovery_evidence_parser.py --source logs/evidence_chest/phase4plus_a2f7bd89 --output-dir logs/evidence_chest/derived/phase4plus_a2f7bd89
 ```
 
+Parser 1.7 joins copied sidecar rotations oldest-first and then reads the active
+`.log`, so a session that crosses `screensaver_verbose.log.1` or
+`screensaver_lifecycle.log.1` remains continuous. Copy only the rotations needed
+to cover the authoritative live session. The generated `summary.json` describes
+the complete copied time range; when system load or multiple runs share the
+folder, record the accepted timestamp interval in a `MANIFEST.md` and calculate
+that interval's frame, event-loop, visualizer, and usage result separately.
+
+For UI-delivery attribution, correlate `[PERF] [FRAME_GAP_OWNER]` with the new
+`[PERF] [IMAGE_UI_DELAY]` and `[PERF] [IMAGE_UI_SEGMENT]` records. The former
+identifies delayed-work reason/display/due lateness, runtime-identity guard cost,
+actual payload duration, monotonic interval bounds, total age, and outcome. The
+latter separates `QImage→QPixmap` conversion from display
+setter/transition-start cost. Do not change display staggering from a
+last-callback correlation alone.
+
 `--archive` remains a legacy ZIP alias for frozen historical comparisons only.
 
 Phase 1 measurement benchmark:
@@ -201,8 +217,10 @@ python tools/phase5_frame_owner_benchmark.py --invocations 50000 --repeats 7
 The first runs the production general COMPUTE executor and reports process CPU plus
 queued/delivered UI callbacks. The second measures the exact perf-gated passive
 frame-owner snapshot and projects it at the 165 Hz + 60 Hz dual-display ceiling.
-Both are headless attribution aids; neither replaces installed visual, delivery,
-RSS/private-commit, or driver-VRAM evidence.
+Both are headless attribution aids; neither replaces ordinary `main.py` or
+`main_mc.py` visual, delivery, RSS/private-commit, or driver-VRAM evidence.
+Frozen executables are required only for failures or packaging contracts that
+cannot be exercised faithfully from those live entry points.
 For official comparisons, preserve:
 
 - raw logs;

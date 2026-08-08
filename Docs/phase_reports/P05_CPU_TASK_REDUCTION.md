@@ -13,6 +13,138 @@ Phase 4 is closed by `logs/evidence_chest/07_30_dc8d1741_00_26/`, including star
 
 ## Current implementation state
 
+### 2026-08-08 22:03–23:05 live source assessment — best current checkpoint, final gates open
+
+The current rollback chain is now:
+
+- `ff934616`: earlier user-approved Bubble/Spectrum behavioural authority;
+- `3b6082dd`: user-created bounded-resource recovery checkpoint;
+- `94798add`: queued runtime Settings admission, shared curated-preset Settings
+  authority, parser 1.6 rotation support, truthful worker-fallback accounting,
+  and transition-local GL telemetry;
+- `1621e564`: bound-callback lifecycle ownership plus explicit curated-to-CUSTOM
+  coverage for all five registered visualizer modes;
+- `e6f24ca5`: passive delayed-image UI attribution, parser 1.7 support, explicit
+  startup entrypoint identity, and bounded Move To Custom action telemetry.
+
+The useful live evidence is preserved at:
+
+- `logs/evidence_chest/08_08_30fff2c8_mainpy_pressure_to_modest_22_07/`
+  (`75D08574E925246F940F50B02AAB2D997EE411133B3DE2619FD20C4FE6FDE6B5`);
+- `logs/evidence_chest/08_08_224a6817_main_mc_custom_settings_22_27/`
+  (`C46854B6E97494DEEB405472AF25D9FB19D2665FC2373256523FEEC91B55C797`);
+- `logs/evidence_chest/08_08_94798add_main_settings3_custom_spectrum_23_05/`
+  (`5C168C4D9640DF6636A6C291A3B612D5EAEF35CD0E72E648073DBA85C5994982`).
+
+These are ordinary `main.py`/Media Center runtime captures. Package-only
+validation is required only for the frozen-executable Settings crash; it is not
+the general performance evidence source.
+
+The first run deliberately varied whole-machine pressure until approximately
+22:03. It confirms that UI delivery remains the principal performance risk under
+contention: across the pressure-bearing history a paint window fell to `23.0 FPS`,
+paint dtmax reached `231.96 ms`, request age reached `145.29 ms`, and retained
+event-loop lateness reached `3072.03 ms`. Paint work itself was much smaller than
+those gaps. This is useful hostile-load evidence, not a reason to retune
+visualizer cadence or to attribute every stall to application CPU.
+
+Once system pressure became modest, the same runtime recovered without a restart:
+
+```text
+metric                         165 Hz display              60 Hz display
+paint FPS                      139.1–155.8                 58.3–59.6
+paint dt p99                   13.70–26.91 ms              24.31–46.02 ms
+paint dt maximum               20.44–83.42 ms              43.68–60.23 ms
+paint-cost p99                  3.12–3.54 ms                6.32–8.04 ms
+request-age p99                 7.95–21.79 ms               8.55–31.16 ms
+```
+
+After the older rolling samples aged out, event-loop p99 was `6.25–12.93 ms`,
+maximum lateness was `50.46–73.54 ms`, and no retained sample exceeded `100 ms`.
+Spectrum settled around `94.5–95.6 FPS` with dtmax approximately `74.7 ms`;
+Bubble after the mode switch remained around `94.4–94.9 FPS` with final dtmax
+`78.07 ms`. Ten-second overlay windows commonly delivered roughly `881–1000`
+state pushes and `826–999` paints. The user judged Spectrum smoothing visually
+successful under this modest-load portion.
+
+The performance win does not close absolute-resource work. During the same
+22:03–22:07 interval whole-app RSS remained `1015–1212 MiB`, private commit
+`3077–3321 MiB`, USS `867–1089 MiB`, handles `2225–2249`, and threads `87–92`.
+UI-thread/request-delivery tails and process/native memory attribution therefore
+remain ahead of cadence or shader experimentation.
+
+The final `94798add` source run closes the shared runtime Settings sequencing
+question. Three consecutive Settings requests were queued and admitted exactly
+once, crossed runtime and dialog barriers, reconstructed the full display graph,
+reached a current-generation authoritative first frame, continued rendering,
+and exited with code 0. Total lifecycle durations were `13.158`, `14.503`, and
+`13.807 s`, dominated by `10.8–12.2 s` of dialog dwell. Runtime stop itself was
+approximately `141–150 ms`; dialog construction was approximately `1.35–1.39 s`.
+The background build logs subsequently completed with exit code 0 and produced
+both executables and installers. That proves package construction only. Standard
+and Media Center Settings-from-runtime execution remain pending the user's live
+result.
+
+The same run proves Custom Spectrum and smoothing settings survive recreation:
+smoothing remained enabled and replayed as `0.55`, `0.50`, `0.50`, then `0.60`
+across successive generations. A separate mode-general runtime-shaped regression
+now seeds stale backing and Custom values for all five registered modes and proves
+Move To Custom copies the resolved curated UI state. The authority correction is
+therefore not Spectrum-specific. The live log does not emit the button click
+itself and is not cited as proof of that action.
+
+The safest final transition/tail window (`23:04:46–23:05:19`) reports:
+
+```text
+Block Puzzle Flip elapsed/target            5502.2 / 5500 ms
+compositor render FPS / dtmax               58.4 / 75.54 ms
+paint FPS                                   58.2
+paint dt p50/p90/p95/p99/max                16.69/19.52/20.69/42.63/76.12 ms
+paint work p99/max                           9.69/14.16 ms
+request age p50/p90/p95/p99/max              0.49/2.71/3.66/28.41/74.20 ms
+Spectrum tick FPS / dtmax                   97.9 / 62.88 ms
+event-loop late p50/p90/p95/p99             0.05/2.12/5.15/18.63 ms
+latest CPU / RSS / private commit            48.0% / 973.5 / 2797.8 MiB
+latest GPU / dedicated / shared VRAM          2.8% / 425.9 / 72.4 MiB
+```
+
+The `76.12 ms` transition gap was delivery-bound: request age was `74.20 ms`
+while paint work was only `0.84 ms`. The event-loop maximum of `1353 ms` is
+retained pre-tail history, not steady-state behaviour. Final cache telemetry
+reports `worker_fallbacks=0`; `fallback_on_failure=True` is only configured
+capability, not an observed fallback. Strict exit cleanup moves from 13 GL
+resources / `66.3 MiB` to exactly zero GL resources and bytes.
+
+One repeated nonfatal Settings diagnostic was found and corrected after the
+capture: a bound method could not accept `_srpss_timer_owner` metadata. The
+single-shot helper now wraps every callback in a plain owned function, and the
+focused regression passes. The next live/package run must show that message is
+absent. Subsequent bounded diagnostics now identify `main` versus `main_mc`
+directly at startup and record each Move To Custom mode/source/destination
+without serializing the settings payload.
+
+The current checkpoint is materially better than `97ff0619`/the failed 17:07
+candidate: resource containment, modest-load delivery, visualizer response,
+Settings reconstruction, Custom replay, and strict teardown are all stronger.
+Phase 5 remains open because package Settings validation, five alternating
+Edit/Settings plateau cycles, hostile-load robustness on less capable hardware,
+absolute memory attribution, and the complete stronger golden package remain.
+
+A follow-up read-only tail attribution did not justify a production timing
+change. The strongest correlation was the image pipeline's delayed UI wrapper,
+which took approximately `24.8`, `35.4`, and `38.8 ms` near several request-age
+tails, but that wrapper previously hid whether it was applying a staggered
+display image, resuming prefetch, or running another delayed reason. Existing
+image application is already staggered by `200 ms` per display and compositor
+start by at most `180 ms`; changing either without ownership evidence would be
+speculative. Perf-gated records now expose delayed-work reason/display/callable,
+due lateness, runtime-identity guard cost, actual payload duration, monotonic
+interval bounds, total age, and outcome, plus separate `QImage→QPixmap` and
+display-setter/transition-start segment durations. Stale callbacks explicitly
+report zero payload cost. Parser 1.7 exports and summarizes these records. The
+next timestamp-marked pressure-to-modest run owns the decision; no cadence,
+stagger, cache, or visualizer behavior changed.
+
 ### 2026-08-08 18:59 installed assessment — strong recovery checkpoint, final gate open
 
 The exact run is preserved at

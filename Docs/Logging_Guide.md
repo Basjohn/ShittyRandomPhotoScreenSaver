@@ -1,6 +1,6 @@
 # Logging Guide
 
-Last updated: 2026-08-01
+Last updated: 2026-08-08
 
 Operator-facing logging guide for SRPSS.
 
@@ -55,6 +55,12 @@ Legacy compatibility:
 - Startup logs should advertise both:
   - the available specific logs
   - the specific logs active for the current run
+- Each launch emits one bounded `[STARTUP]` identity record with
+  `entrypoint=main|main_mc`, parsed mode, frozen/script state, and executable
+  basename. Use it instead of inferring Media Center from later window flags.
+- Move To Custom emits one bounded `[VIS_PRESETS]` INFO record with mode,
+  source preset index/name, and destination Custom index. It deliberately does
+  not serialize the complete settings payload.
 
 ## Correlation Workflow
 1. Start with `screensaver.log` for the high-level sequence and all warnings/errors.
@@ -87,6 +93,13 @@ Legacy compatibility:
 - Bounded ResourceManager generation/owner/creation-site records belong to `screensaver_lifecycle.log` as `[LIFECYCLE] [RESOURCE_DETAIL]`. The ordinary `[PERF] [RESOURCE]` record contains aggregate counts/bytes only and does not duplicate the resource list.
 - Lifecycle snapshots reuse the latest background `--usage` totals for whole-app RSS/private commit/VRAM and state their sample age. They do not run a new driver query or inspect live Qt pixmaps, QObjects, or Qt-wrapper validity from the usage worker.
 - `[SPOTIFY_VIS][BUBBLE_CADENCE]` distinguishes lane-free submissions from `worker_busy_deferrals` and `result_waiting_deferrals`. It is passive accounting, not a task-rate controller; a low publish ratio must be explained by an existing owner, never an artificial cadence token.
+- `[PERF] [IMAGE_UI_DELAY]` identifies delayed image-pipeline UI work by reason,
+  display, nested callable, scheduled delay, due lateness, runtime-identity
+  guard duration, actual callback duration, monotonic start/end bounds, total
+  age, generation, and outcome. Stale callbacks report zero callback cost.
+  `[PERF] [IMAGE_UI_SEGMENT]` separately times GUI `QImage→QPixmap` conversion
+  and display image application. These records are attribution only; they do
+  not alter the existing display stagger.
 
 ## Guardrails
 - Do not reintroduce environment-variable activation for diagnostic families.

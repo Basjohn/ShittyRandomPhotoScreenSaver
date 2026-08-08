@@ -18,14 +18,15 @@ For migrated active records, the standalone file is the current evidence record;
 
 ## Active / Pending Records
 
-- [R-57 — Scaled Prefetch Popped Selection Order Instead Of Descending Indices](R-57_Image_Prefetch_Selected_Index_Order.md) — exact cause identified; code repair and validation pending.
-- [R-56 — Settings Close Path Retouched An Already-Deleted Dialog Wrapper](R-56_Settings_Dialog_Deleted_Wrapper_Retouch.md) — Settings returns successfully, but dialog lifetime bookkeeping is invalid.
-- [R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation](R-53_Runtime_Recreation_Ownership_And_Memory.md) — Settings barrier now passes and no linear two-cycle staircase reproduced; CUSTOM/Edit remains fail-closed on two managers.
+- [R-59 — Runtime Settings Request Tore Down The Emitting Qt Input Stack](R-59_Runtime_Settings_Request_Input_Stack_Teardown.md) — source runtime passes three cycles; standard and Media Center packaged validation remains pending.
+- [R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation](R-53_Runtime_Recreation_Ownership_And_Memory.md) — mechanical Settings/CUSTOM ownership is repaired; the alternating normal/Media Center plateau matrix remains open.
 
 ## Standalone Records
 
 ### 2026-08
 
+- [R-59 — Runtime Settings Request Tore Down The Emitting Qt Input Stack](R-59_Runtime_Settings_Request_Input_Stack_Teardown.md)
+- [R-58 — Move To Custom Copied Stale Backing Values Instead Of The Curated Runtime State](R-58_Visualizer_Move_To_Custom_Preset_Authority.md)
 - [R-57 — Scaled Prefetch Popped Selection Order Instead Of Descending Indices](R-57_Image_Prefetch_Selected_Index_Order.md)
 - [R-56 — Settings Close Path Retouched An Already-Deleted Dialog Wrapper](R-56_Settings_Dialog_Deleted_Wrapper_Retouch.md)
 - [R-55 — Spectrum Paint-Local Smoothing Created A Second Cadence](R-55_Spectrum_Presentation_Smoothing.md)

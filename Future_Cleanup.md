@@ -11,6 +11,7 @@ Last updated: 2026-08-08
 
 Low-priority cleanup items discovered during unrelated work. These are not active tasks unless promoted into `Current_Plan.md`.
 
+- [ ] Repair the frozen-build shader validator so it reports the actual packaging contract. The 2026-08-08 successful standard onefile build warned that every shader was missing because it inspected a removed adjacent dist directory, while the successful Media Center onedir build warned only about `blob.frag`, a retired source asset still hard-coded in both expected lists. Derive the onedir expectation from current source assets and give onefile an embedded-data-aware check; do not treat these warnings as evidence of the runtime Settings crash.
 - [ ] Make `tools/perf_integration_harness.py` safe to inspect and select: `--help` currently launches an approximately 85-second GUI sequence instead of printing help. Add argparse-backed help, scenario selection, and duration controls, and guarantee process/window cleanup for every path (including help/error/interrupt). Keep the harness opt-in and do not use it as a runtime control mechanism.
 
 
