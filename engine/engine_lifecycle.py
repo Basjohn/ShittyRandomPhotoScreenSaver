@@ -469,7 +469,9 @@ def stop(
                         "[PERF] [CACHE] ImageCacheFlow: raw_hits=%d raw_misses=%d scaled_hits=%d "
                         "scaled_misses=%d worker_fallbacks=%d scaled_prefetch_requests=%d "
                         "scaled_prefetch_completed=%d scaled_derivations=%d "
-                        "raw_released_after_scaled=%d scaled_reuses_without_put=%d "
+                        "raw_released_after_scaled=%d raw_prefetch_paths=%d "
+                        "raw_prefetch_skipped_display_ready=%d "
+                        "scaled_reuses_without_put=%d "
                         "prefetch_resume_scheduled=%d prefetch_resume_runs=%d",
                         int(cache_flow.get("raw_hits", 0)),
                         int(cache_flow.get("raw_misses", 0)),
@@ -480,6 +482,13 @@ def stop(
                         int(cache_flow.get("scaled_prefetch_completed", 0)),
                         int(cache_flow.get("scaled_derivations", 0)),
                         int(cache_flow.get("raw_released_after_scaled", 0)),
+                        int(cache_flow.get("raw_prefetch_paths", 0)),
+                        int(
+                            cache_flow.get(
+                                "raw_prefetch_skipped_display_ready",
+                                0,
+                            )
+                        ),
                         int(cache_flow.get("scaled_reuses_without_put", 0)),
                         int(cache_flow.get("prefetch_resume_scheduled", 0)),
                         int(cache_flow.get("prefetch_resume_runs", 0)),

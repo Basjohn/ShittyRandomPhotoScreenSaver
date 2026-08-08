@@ -181,6 +181,8 @@ def _ensure_cache_runtime_stats(engine: ScreensaverEngine) -> Dict[str, int]:
         "scaled_prefetch_completed": 0,
         "scaled_derivations": 0,
         "raw_released_after_scaled": 0,
+        "raw_prefetch_paths": 0,
+        "raw_prefetch_skipped_display_ready": 0,
         "scaled_reuses_without_put": 0,
     }
     setattr(engine, "_cache_runtime_stats", stats)
@@ -1795,14 +1797,41 @@ def schedule_prefetch(engine: ScreensaverEngine) -> None:
         if not paths:
             return
 
-        engine._prefetcher.prefetch_paths(paths)
+        scaled_requests = _build_prefetch_scaled_requests(engine, paths)
+        raw_prefetch_paths: List[str] = []
+        raw_prefetch_seen: set[str] = set()
+        for request in scaled_requests:
+            raw_path = str(request.get("path") or "")
+            if raw_path and raw_path not in raw_prefetch_seen:
+                raw_prefetch_seen.add(raw_path)
+                raw_prefetch_paths.append(raw_path)
+
+        # A cached display-ready derivative is sufficient for its planned
+        # preview slot. Decoding the raw source again creates a representation
+        # with no scaled consumer, increases cache pressure, and leaves that raw
+        # image resident until unrelated LRU eviction. Raw prefetch producers
+        # therefore exist only for the missing scaled requests planned below.
+        if raw_prefetch_paths:
+            engine._prefetcher.prefetch_paths(raw_prefetch_paths)
+        _bump_cache_runtime_stat(
+            engine,
+            "raw_prefetch_paths",
+            len(raw_prefetch_paths),
+        )
+        _bump_cache_runtime_stat(
+            engine,
+            "raw_prefetch_skipped_display_ready",
+            max(0, len(paths) - len(raw_prefetch_paths)),
+        )
         _cache_trace(
-            "Prefetch preview source=%s path_count=%d paths=%s",
+            "Prefetch preview source=%s path_count=%d raw_producers=%d "
+            "display_ready_skips=%d paths=%s",
             preview_source,
             len(paths),
+            len(raw_prefetch_paths),
+            max(0, len(paths) - len(raw_prefetch_paths)),
             " | ".join(paths[:5]),
         )
-        scaled_requests = _build_prefetch_scaled_requests(engine, paths)
         if scaled_requests:
             _bump_cache_runtime_stat(engine, "scaled_prefetch_requests", len(scaled_requests))
             register_scaled_requests = getattr(engine._prefetcher, "register_scaled_requests", None)
@@ -1820,8 +1849,10 @@ def schedule_prefetch(engine: ScreensaverEngine) -> None:
 
         if is_perf_metrics_enabled():
             logger.info(
-                "[PERF] [PREFETCH] scheduled paths=%d scaled_requests=%d source=%s",
+                "[PERF] [PREFETCH] scheduled preview_paths=%d raw_producers=%d "
+                "scaled_requests=%d source=%s",
                 len(paths),
+                len(raw_prefetch_paths),
                 len(scaled_requests),
                 preview_source,
             )

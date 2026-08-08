@@ -631,6 +631,151 @@ def test_schedule_prefetch_uses_preview_upcoming_and_registers_scaled_requests()
     assert engine._cache_runtime_stats["scaled_prefetch_requests"] == 2
 
 
+def test_schedule_prefetch_does_not_decode_raw_for_display_ready_preview():
+    ready_path = r"C:\wall\ready.jpg"
+    missing_path = r"C:\wall\missing.jpg"
+    previewed = [
+        SimpleNamespace(local_path=ready_path, url=None),
+        SimpleNamespace(local_path=missing_path, url=None),
+    ]
+
+    class _FakeQueue:
+        def preview_upcoming(self, _count):
+            return previewed
+
+    ready_key = _build_scaled_cache_key(
+        ready_path,
+        3840,
+        2160,
+        DisplayMode.FILL,
+        True,
+        False,
+    )
+
+    class _FakeCache:
+        def contains(self, key):
+            return key == ready_key
+
+    class _FakePrefetcher:
+        def __init__(self):
+            self.paths = []
+            self.requests = []
+
+        def prefetch_paths(self, paths):
+            self.paths.extend(paths)
+
+        def register_scaled_requests(self, requests):
+            self.requests.extend(requests)
+            return len(requests)
+
+    prefetcher = _FakePrefetcher()
+    display = SimpleNamespace(
+        get_target_size=lambda: QSize(3840, 2160),
+        display_mode=DisplayMode.FILL,
+    )
+    settings_manager = SimpleNamespace(
+        get=lambda key, default=None: {
+            "display.use_lanczos": True,
+            "display.sharpen_downscale": False,
+            "display.same_image_all_monitors": False,
+        }.get(key, default)
+    )
+    engine = SimpleNamespace(
+        image_queue=_FakeQueue(),
+        _prefetcher=prefetcher,
+        _prefetch_ahead=2,
+        display_manager=SimpleNamespace(
+            has_running_transition=lambda: False,
+            has_transition_work_pending=lambda: False,
+            displays=[display],
+        ),
+        _image_cache=_FakeCache(),
+        settings_manager=settings_manager,
+        _cache_runtime_stats={},
+    )
+
+    schedule_prefetch(engine)
+
+    assert prefetcher.paths == [missing_path]
+    assert [request["path"] for request in prefetcher.requests] == [missing_path]
+    assert engine._cache_runtime_stats["raw_prefetch_paths"] == 1
+    assert (
+        engine._cache_runtime_stats["raw_prefetch_skipped_display_ready"]
+        == 1
+    )
+
+
+def test_schedule_prefetch_with_all_display_ready_variants_creates_no_work():
+    paths = [r"C:\wall\ready-one.jpg", r"C:\wall\ready-two.jpg"]
+    previewed = [SimpleNamespace(local_path=path, url=None) for path in paths]
+
+    class _FakeQueue:
+        def preview_upcoming(self, _count):
+            return previewed
+
+    ready_keys = {
+        _build_scaled_cache_key(
+            path,
+            1920,
+            1080,
+            DisplayMode.FIT,
+            True,
+            False,
+        )
+        for path in paths
+    }
+
+    class _FakeCache:
+        def contains(self, key):
+            return key in ready_keys
+
+    class _FakePrefetcher:
+        def __init__(self):
+            self.prefetch_calls = []
+            self.register_calls = []
+
+        def prefetch_paths(self, paths):
+            self.prefetch_calls.append(list(paths))
+
+        def register_scaled_requests(self, requests):
+            self.register_calls.append(list(requests))
+
+    prefetcher = _FakePrefetcher()
+    display = SimpleNamespace(
+        get_target_size=lambda: QSize(1920, 1080),
+        display_mode=DisplayMode.FIT,
+    )
+    engine = SimpleNamespace(
+        image_queue=_FakeQueue(),
+        _prefetcher=prefetcher,
+        _prefetch_ahead=2,
+        display_manager=SimpleNamespace(
+            has_running_transition=lambda: False,
+            has_transition_work_pending=lambda: False,
+            displays=[display],
+        ),
+        _image_cache=_FakeCache(),
+        settings_manager=SimpleNamespace(
+            get=lambda key, default=None: {
+                "display.use_lanczos": True,
+                "display.sharpen_downscale": False,
+                "display.same_image_all_monitors": False,
+            }.get(key, default)
+        ),
+        _cache_runtime_stats={},
+    )
+
+    schedule_prefetch(engine)
+
+    assert prefetcher.prefetch_calls == []
+    assert prefetcher.register_calls == []
+    assert engine._cache_runtime_stats["raw_prefetch_paths"] == 0
+    assert (
+        engine._cache_runtime_stats["raw_prefetch_skipped_display_ready"]
+        == 2
+    )
+
+
 def test_schedule_prefetch_different_images_aligns_requests_to_display_order():
     paths = [
         r"C:\wall\one.jpg",
