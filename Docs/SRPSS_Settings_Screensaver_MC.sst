@@ -463,6 +463,8 @@
           255
         ],
         "border_opacity": 1.0,
+        "calendar_font_size": 20,
+        "calendar_layout": "shared_line",
         "color": [
           255,
           255,
@@ -479,6 +481,8 @@
         "position": "Top Right",
         "shared_tick": true,
         "show_background": false,
+        "show_date": false,
+        "show_day_of_week": false,
         "show_numerals": true,
         "show_seconds": true,
         "show_timezone": true,

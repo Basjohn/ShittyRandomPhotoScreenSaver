@@ -33,7 +33,7 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver t
 
 - **Overlay widgets**
   - **GMAIL** Via Imap with customizable notifications, control from inside the app/saver etc.
-  - **Clock Widgets** (up to three): 12h/24h, multiple time zones, analogue or digital
+  - **Clock Widgets** (up to three): 12h/24h, multiple time zones, analogue or digital, with optional centred weekday/date rows
   - **Weather Widget** using Open‑Meteo (no API key) with location autodetect on first run
   - **Media Widget** (Spotify/Musicbee now‑playing) with optional controls and artwork. Auto detection for which app is open, link to Musicbee plugin in settings.
   - **Beat Visualizer** paired with the media widget – Overly robust and feature filled af. 5 Distinct OpenGL modes with a full user friendly preset and custom system to make your own.

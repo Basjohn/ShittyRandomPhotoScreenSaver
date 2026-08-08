@@ -1019,6 +1019,10 @@ def test_stack_preview_descriptors_capture_live_widgets_tab_preview_contract():
         "enabled",
         "display_mode",
         "show_timezone_label",
+        "show_day_of_week",
+        "show_date",
+        "calendar_layout",
+        "calendar_font_size",
     }
     assert achievement.family_enabled_attr_name == "steam_enabled"
 
@@ -1055,6 +1059,12 @@ def test_build_widget_stack_preview_config_reads_live_clock_controls(qt_app, set
         tab.clock_enabled.setChecked(True)
         tab.clock_analog_mode.setChecked(True)
         tab.clock_show_tz.setChecked(True)
+        tab.clock_show_day_of_week.setChecked(True)
+        tab.clock_show_date.setChecked(True)
+        tab.clock_calendar_layout.setCurrentIndex(
+            tab.clock_calendar_layout.findData("two_lines")
+        )
+        tab.clock_calendar_font_size.setValue(29)
         tab.clock_position.setCurrentText("Bottom Left")
         tab.clock_monitor_combo.setCurrentText("ALL")
         tab.clock_font_size.setValue(64)
@@ -1064,6 +1074,10 @@ def test_build_widget_stack_preview_config_reads_live_clock_controls(qt_app, set
         assert config["clock"]["enabled"] is True
         assert config["clock"]["display_mode"] == "analog"
         assert config["clock"]["show_timezone_label"] is True
+        assert config["clock"]["show_day_of_week"] is True
+        assert config["clock"]["show_date"] is True
+        assert config["clock"]["calendar_layout"] == "two_lines"
+        assert config["clock"]["calendar_font_size"] == 29
         assert config["clock"]["position"] == "Bottom Left"
         assert config["clock"]["font_size"] == 64
     finally:

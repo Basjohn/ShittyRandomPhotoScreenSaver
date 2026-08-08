@@ -2449,6 +2449,12 @@ def test_build_current_widgets_config_uses_live_clock_preview_fields(qt_app, set
         tab.clock_enabled.setChecked(True)
         tab.clock_analog_mode.setChecked(True)
         tab.clock_show_tz.setChecked(True)
+        tab.clock_show_day_of_week.setChecked(True)
+        tab.clock_show_date.setChecked(True)
+        tab.clock_calendar_layout.setCurrentIndex(
+            tab.clock_calendar_layout.findData("two_lines")
+        )
+        tab.clock_calendar_font_size.setValue(26)
         tab.clock_position.setCurrentText("Bottom Left")
         tab.clock_monitor_combo.setCurrentText("ALL")
         tab.clock_font_size.setValue(52)
@@ -2458,9 +2464,45 @@ def test_build_current_widgets_config_uses_live_clock_preview_fields(qt_app, set
         assert built["enabled"] is True
         assert built["display_mode"] == "analog"
         assert built["show_timezone_label"] is True
+        assert built["show_day_of_week"] is True
+        assert built["show_date"] is True
+        assert built["calendar_layout"] == "two_lines"
+        assert built["calendar_font_size"] == 26
         assert built["position"] == "Bottom Left"
         assert built["monitor"] == "ALL"
         assert built["font_size"] == 52
+    finally:
+        tab.deleteLater()
+
+
+def test_clock_calendar_controls_are_conditioned_and_save_canonical_keys(
+    qt_app,
+    settings_manager,
+):
+    from ui.tabs.widgets_tab_clock import save_clock_settings
+
+    tab = WidgetsTab(settings_manager)
+    try:
+        tab.clock_show_day_of_week.setChecked(False)
+        tab.clock_show_date.setChecked(False)
+        assert tab._clock_calendar_controls_container.isHidden() is True
+
+        tab.clock_show_day_of_week.setChecked(True)
+        assert tab._clock_calendar_controls_container.isHidden() is False
+        assert tab._clock_calendar_layout_row.isHidden() is True
+
+        tab.clock_show_date.setChecked(True)
+        assert tab._clock_calendar_layout_row.isHidden() is False
+        tab.clock_calendar_layout.setCurrentIndex(
+            tab.clock_calendar_layout.findData("two_lines")
+        )
+        tab.clock_calendar_font_size.setValue(31)
+
+        clock, _, _ = save_clock_settings(tab)
+        assert clock["show_day_of_week"] is True
+        assert clock["show_date"] is True
+        assert clock["calendar_layout"] == "two_lines"
+        assert clock["calendar_font_size"] == 31
     finally:
         tab.deleteLater()
 

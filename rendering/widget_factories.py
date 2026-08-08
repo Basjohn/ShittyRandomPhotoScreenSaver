@@ -157,6 +157,16 @@ class ClockWidgetFactory(WidgetFactory):
             show_seconds = SettingsManager.to_bool(_resolve_style('show_seconds', False), False)
             timezone_str = config.get('timezone', 'local')
             show_timezone = SettingsManager.to_bool(_resolve_style('show_timezone', False), False)
+            show_day_of_week = SettingsManager.to_bool(
+                _resolve_style('show_day_of_week', False),
+                False,
+            )
+            show_date = SettingsManager.to_bool(_resolve_style('show_date', False), False)
+            calendar_layout = str(_resolve_style('calendar_layout', 'shared_line'))
+            try:
+                calendar_font_size = max(8, int(_resolve_style('calendar_font_size', 20)))
+            except (TypeError, ValueError):
+                calendar_font_size = 20
             
             # Create widget
             widget = ClockWidget(
@@ -166,6 +176,10 @@ class ClockWidgetFactory(WidgetFactory):
                 show_seconds=show_seconds,
                 timezone_str=timezone_str,
                 show_timezone=show_timezone,
+                show_day_of_week=show_day_of_week,
+                show_date=show_date,
+                calendar_layout=calendar_layout,
+                calendar_font_size=calendar_font_size,
             )
             
             # Configure styling with inheritance (canonical defaults from defaults.py)

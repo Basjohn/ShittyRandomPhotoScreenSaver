@@ -25,6 +25,144 @@ def test_analog_hand_angles_use_exact_one_second_steps_without_callback_jitter()
     assert next_second[0] > early[0]
 
 
+def test_clock_calendar_formats_optional_shared_and_two_line_content(qtbot) -> None:
+    clock = ClockWidget(show_day_of_week=True, show_date=True)
+    qtbot.addWidget(clock)
+    now = datetime(2025, 1, 1, 12, 0, 0)
+
+    assert clock._calendar_lines_for_datetime(now) == (
+        "WEDNESDAY - 01/01/2025",
+    )
+
+    clock.set_calendar_layout("two_lines")
+    assert clock._calendar_lines_for_datetime(now) == (
+        "WEDNESDAY",
+        "01/01/2025",
+    )
+
+    clock.set_show_day_of_week(False)
+    assert clock._calendar_lines_for_datetime(now) == ("01/01/2025",)
+
+
+def test_digital_clock_calendar_rows_are_centered_and_preserve_custom_rect(qtbot) -> None:
+    parent = QWidget()
+    parent.resize(900, 600)
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(
+        parent=parent,
+        show_timezone=True,
+        show_day_of_week=True,
+        show_date=True,
+        calendar_layout="two_lines",
+        calendar_font_size=22,
+    )
+    qtbot.addWidget(clock)
+    custom_rect = QRect(120, 80, 460, 250)
+    clock.setGeometry(custom_rect)
+    clock._custom_layout_local_rect = QRect(custom_rect)
+    clock.show()
+    clock._update_time()
+
+    assert clock._calendar_label is not None
+    assert clock._tz_label is not None
+    assert "\n" in clock._calendar_label.text()
+    assert abs(clock._calendar_label.geometry().center().x() - clock.rect().center().x()) <= 1
+    assert clock._calendar_label.y() < clock._tz_label.y()
+
+    clock.set_calendar_font_size(28)
+    clock.set_calendar_layout("shared_line")
+
+    assert clock.geometry() == custom_rect
+    assert " - " in clock._calendar_label.text()
+
+
+def test_analog_clock_calendar_reserves_footer_space(qtbot) -> None:
+    parent = QWidget()
+    parent.resize(900, 700)
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(parent=parent)
+    qtbot.addWidget(clock)
+    clock.set_display_mode("analog")
+    clock.resize(360, 460)
+    base_bottom_margin = clock._compute_analog_padding()[2]
+
+    clock.set_show_day_of_week(True)
+    clock.set_show_date(True)
+    clock.set_calendar_layout("two_lines")
+    clock.set_calendar_font_size(24)
+    metrics = clock._compute_analog_layout_metrics()
+
+    assert clock._compute_analog_padding()[2] > base_bottom_margin
+    assert metrics is not None
+    assert 8 <= metrics.calendar_font_size <= 24
+    assert metrics.calendar_line_height > 0
+
+
+@pytest.mark.parametrize("show_timezone", [False, True])
+def test_tight_custom_analog_calendar_keeps_face_and_footer_in_bounds(
+    qtbot,
+    show_timezone,
+) -> None:
+    parent = QWidget()
+    parent.resize(900, 700)
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(
+        parent=parent,
+        show_timezone=show_timezone,
+        show_day_of_week=True,
+        show_date=True,
+        calendar_layout="two_lines",
+        calendar_font_size=96,
+    )
+    qtbot.addWidget(clock)
+    clock.set_display_mode("analog")
+    clock.setMinimumSize(0, 0)
+    clock.setMaximumSize(16777215, 16777215)
+    clock.resize(240, 280)
+    clock._current_dt = datetime(2025, 1, 1, 12, 0, 0)
+    clock._update_stylesheet()
+
+    metrics = clock._compute_analog_layout_metrics()
+
+    assert metrics is not None
+    assert metrics.side > 0
+    assert metrics.calendar_font_size < 96
+    footer_bottom = (
+        clock._compute_analog_timezone_top(
+            metrics.center_y,
+            metrics.radius,
+            metrics.numeral_height,
+            metrics,
+        )
+        + (metrics.calendar_line_height * 2)
+    )
+    if show_timezone:
+        footer_bottom += clock.ANALOG_FOOTER_ROW_GAP_PX
+        footer_bottom += QFontMetrics(
+            QFont(clock._font_family, metrics.tz_font_size, QFont.Weight.Bold)
+        ).height()
+    assert footer_bottom <= clock.height() + 4
+
+    image = QImage(clock.size(), QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(0)
+    painter = QPainter(image)
+    try:
+        clock.render(painter, QPoint(0, 0))
+    finally:
+        painter.end()
+    assert any(
+        image.pixelColor(x, y).alpha() > 0
+        for x in range(0, image.width(), 8)
+        for y in range(0, image.height(), 8)
+    )
+
+
 def test_analog_clock_fade_in_uses_shared_fade_without_direct_show(qtbot, monkeypatch):
     parent = QWidget()
     qtbot.addWidget(parent)

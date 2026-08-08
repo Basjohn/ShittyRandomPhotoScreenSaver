@@ -24,6 +24,7 @@ from ui.tabs.shared_styles import (
     add_swatch_label,
     style_group_box,
     add_aligned_row,
+    add_aligned_row_widget,
     create_inline_label,
     build_bucket_toggle,
 )
@@ -58,6 +59,24 @@ def _update_clock_mode_visibility(tab: WidgetsTab) -> None:
         analog_container.setVisible(bool(is_analog))
     if digital_container is not None:
         digital_container.setVisible(not bool(is_analog))
+
+
+def _update_clock_calendar_visibility(tab: WidgetsTab) -> None:
+    """Expose only meaningful weekday/date controls."""
+    show_day = bool(
+        getattr(tab, 'clock_show_day_of_week', None)
+        and tab.clock_show_day_of_week.isChecked()
+    )
+    show_date = bool(
+        getattr(tab, 'clock_show_date', None)
+        and tab.clock_show_date.isChecked()
+    )
+    controls = getattr(tab, '_clock_calendar_controls_container', None)
+    layout_row = getattr(tab, '_clock_calendar_layout_row', None)
+    if controls is not None:
+        controls.setVisible(show_day or show_date)
+    if layout_row is not None:
+        layout_row.setVisible(show_day and show_date)
 
 
 def _sync_clock_swatch(tab: WidgetsTab, btn_attr: str, color_attr: str) -> None:
@@ -202,6 +221,80 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_show_tz.stateChanged.connect(tab._save_settings)
     tab.clock_show_tz.stateChanged.connect(tab._update_stack_status)
     time_layout.addWidget(tab.clock_show_tz)
+
+    tab.clock_show_day_of_week = QCheckBox("Show Day of the Week")
+    tab.clock_show_day_of_week.setProperty("circleIndicator", True)
+    tab.clock_show_day_of_week.setChecked(
+        tab._default_bool('clock', 'show_day_of_week', False)
+    )
+    tab.clock_show_day_of_week.setToolTip(
+        "Show the timezone-aware weekday below the clock."
+    )
+    tab.clock_show_day_of_week.stateChanged.connect(tab._save_settings)
+    tab.clock_show_day_of_week.stateChanged.connect(tab._update_stack_status)
+    time_layout.addWidget(tab.clock_show_day_of_week)
+
+    tab.clock_show_date = QCheckBox("Show Date")
+    tab.clock_show_date.setProperty("circleIndicator", True)
+    tab.clock_show_date.setChecked(tab._default_bool('clock', 'show_date', False))
+    tab.clock_show_date.setToolTip("Show the timezone-aware date as DD/MM/YYYY.")
+    tab.clock_show_date.stateChanged.connect(tab._save_settings)
+    tab.clock_show_date.stateChanged.connect(tab._update_stack_status)
+    time_layout.addWidget(tab.clock_show_date)
+
+    tab._clock_calendar_controls_container = QWidget()
+    calendar_controls_layout = QVBoxLayout(tab._clock_calendar_controls_container)
+    calendar_controls_layout.setContentsMargins(0, 0, 0, 8)
+    calendar_controls_layout.setSpacing(8)
+
+    (
+        tab._clock_calendar_layout_row,
+        calendar_layout_row,
+        _,
+    ) = add_aligned_row_widget(
+        calendar_controls_layout,
+        "Day / Date Layout:",
+        label_width=LABEL_WIDTH,
+    )
+    tab.clock_calendar_layout = StyledComboBox(size_variant="compact")
+    tab.clock_calendar_layout.addItem("Shared Line", "shared_line")
+    tab.clock_calendar_layout.addItem("Two Lines", "two_lines")
+    tab._set_combo_data(
+        tab.clock_calendar_layout,
+        tab._default_str('clock', 'calendar_layout', 'shared_line'),
+    )
+    tab.clock_calendar_layout.setMinimumWidth(140)
+    tab.clock_calendar_layout.setToolTip(
+        "Shared Line: WEDNESDAY - 01/01/2026. Two Lines: one row for each."
+    )
+    tab.clock_calendar_layout.currentTextChanged.connect(tab._save_settings)
+    tab.clock_calendar_layout.currentTextChanged.connect(tab._update_stack_status)
+    calendar_layout_row.addWidget(tab.clock_calendar_layout)
+    calendar_layout_row.addStretch()
+
+    calendar_font_row = _aligned_row(calendar_controls_layout, "Day / Date Font Size:")
+    tab.clock_calendar_font_size = QSpinBox()
+    tab.clock_calendar_font_size.setRange(8, 96)
+    tab.clock_calendar_font_size.setValue(
+        tab._default_int('clock', 'calendar_font_size', 20)
+    )
+    tab.clock_calendar_font_size.setAccelerated(True)
+    tab.clock_calendar_font_size.valueChanged.connect(tab._save_settings)
+    tab.clock_calendar_font_size.valueChanged.connect(tab._update_stack_status)
+    calendar_font_row.addWidget(tab.clock_calendar_font_size)
+    calendar_font_px = _inline_label("px")
+    calendar_font_px.setMinimumWidth(24)
+    calendar_font_row.addWidget(calendar_font_px)
+    calendar_font_row.addStretch()
+
+    time_layout.addWidget(tab._clock_calendar_controls_container)
+    tab.clock_show_day_of_week.stateChanged.connect(
+        lambda: _update_clock_calendar_visibility(tab)
+    )
+    tab.clock_show_date.stateChanged.connect(
+        lambda: _update_clock_calendar_visibility(tab)
+    )
+    _update_clock_calendar_visibility(tab)
 
     # Analogue mode options
     tab.clock_analog_mode = QCheckBox("Use Analogue Clock")
@@ -464,6 +557,22 @@ def load_clock_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.clock_timezone.setCurrentIndex(tz_index)
 
     tab.clock_show_tz.setChecked(tab._config_bool('clock', clock_config, 'show_timezone', True))
+    tab.clock_show_day_of_week.setChecked(
+        tab._config_bool('clock', clock_config, 'show_day_of_week', False)
+    )
+    tab.clock_show_date.setChecked(
+        tab._config_bool('clock', clock_config, 'show_date', False)
+    )
+    calendar_layout = tab._config_str(
+        'clock',
+        clock_config,
+        'calendar_layout',
+        'shared_line',
+    )
+    tab._set_combo_data(tab.clock_calendar_layout, calendar_layout)
+    tab.clock_calendar_font_size.setValue(
+        tab._config_int('clock', clock_config, 'calendar_font_size', 20)
+    )
 
     display_mode = tab._config_str('clock', clock_config, 'display_mode', 'analog').lower()
     tab.clock_analog_mode.setChecked(display_mode == 'analog')
@@ -509,6 +618,7 @@ def load_clock_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.clock_border_opacity_label.setText(f"{border_opacity_pct}%")
 
     _update_clock_mode_visibility(tab)
+    _update_clock_calendar_visibility(tab)
     _update_clock_enabled_visibility(tab)
 
     # Clock 2
@@ -556,6 +666,10 @@ def save_clock_settings(tab: WidgetsTab) -> tuple[dict, dict, dict]:
         'show_seconds': tab.clock_seconds.isChecked(),
         'timezone': timezone_str,
         'show_timezone': tab.clock_show_tz.isChecked(),
+        'show_day_of_week': tab.clock_show_day_of_week.isChecked(),
+        'show_date': tab.clock_show_date.isChecked(),
+        'calendar_layout': tab.clock_calendar_layout.currentData() or 'shared_line',
+        'calendar_font_size': tab.clock_calendar_font_size.value(),
         'position': tab.clock_position.currentText(),
         'font_family': tab.clock_font_combo.currentFont().family(),
         'font_size': tab.clock_font_size.value(),

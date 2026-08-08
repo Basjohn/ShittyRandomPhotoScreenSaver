@@ -434,7 +434,9 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         persisted_widget_keys=("clock", "clock2", "clock3"),
         signal_block_attrs=(
             "clock_enabled", "clock_format", "clock_seconds", "clock_timezone",
-            "clock_show_tz", "clock_position", "clock_font_combo", "clock_font_size",
+            "clock_show_tz", "clock_show_day_of_week", "clock_show_date",
+            "clock_calendar_layout", "clock_calendar_font_size",
+            "clock_position", "clock_font_combo", "clock_font_size",
             "clock_margin", "clock_show_background", "clock_bg_opacity",
             "clock_border_opacity", "clock_monitor_combo",
             "clock2_enabled", "clock2_timezone", "clock2_monitor_combo",
@@ -2122,6 +2124,8 @@ def _read_preview_attr(owner: Any, field: WidgetPreviewFieldDescriptor) -> Any:
             return widget.value()
         if field.reader == "current_text":
             return widget.currentText()
+        if field.reader == "current_data":
+            return widget.currentData()
         if field.reader == "current_text_int":
             return int(widget.currentText())
         if field.reader == "clock_display_mode":
@@ -2232,6 +2236,10 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
             WidgetPreviewFieldDescriptor("font_size", "clock_font_size", "value", 48),
             WidgetPreviewFieldDescriptor("show_seconds", "clock_seconds", "checked", False),
             WidgetPreviewFieldDescriptor("show_timezone_label", "clock_show_tz", "checked", False),
+            WidgetPreviewFieldDescriptor("show_day_of_week", "clock_show_day_of_week", "checked", False),
+            WidgetPreviewFieldDescriptor("show_date", "clock_show_date", "checked", False),
+            WidgetPreviewFieldDescriptor("calendar_layout", "clock_calendar_layout", "current_data", "shared_line"),
+            WidgetPreviewFieldDescriptor("calendar_font_size", "clock_calendar_font_size", "value", 20),
         ),
     ),
     WidgetStackPreviewDescriptor(

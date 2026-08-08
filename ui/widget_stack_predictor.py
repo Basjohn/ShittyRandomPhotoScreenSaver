@@ -133,6 +133,10 @@ def estimate_clock_size(
     show_seconds: bool = True,
     show_tz: bool = False,
     display_mode: str = "digital",
+    show_day_of_week: bool = False,
+    show_date: bool = False,
+    calendar_layout: str = "shared_line",
+    calendar_font_size: int = 20,
 ) -> Tuple[int, int]:
     """Estimate clock widget size based on settings.
     
@@ -143,9 +147,28 @@ def estimate_clock_size(
         show_seconds: Whether seconds are shown (digital only)
         show_tz: Whether timezone label is shown
         display_mode: "digital" or "analogue" - analogue clocks are square and larger
+        show_day_of_week: Whether the weekday footer is shown
+        show_date: Whether the DD/MM/YYYY footer is shown
+        calendar_layout: Shared line or two-line weekday/date layout
+        calendar_font_size: Weekday/date font size
     """
     # Try to use actual font metrics
     actual_font_height = None
+    calendar_height = 0
+    calendar_width = 0
+    calendar_lines = 0
+    if show_day_of_week or show_date:
+        calendar_lines = (
+            2
+            if show_day_of_week and show_date and calendar_layout == "two_lines"
+            else 1
+        )
+        if show_day_of_week and show_date and calendar_layout != "two_lines":
+            calendar_sample = "WEDNESDAY - 31/12/2026"
+        elif show_day_of_week:
+            calendar_sample = "WEDNESDAY"
+        else:
+            calendar_sample = "31/12/2026"
     try:
         from PySide6.QtWidgets import QApplication
         from PySide6.QtGui import QFont, QFontMetrics
@@ -155,12 +178,19 @@ def estimate_clock_size(
             font = QFont('Segoe UI', font_size)
             metrics = QFontMetrics(font)
             actual_font_height = metrics.height()
+            if calendar_lines:
+                calendar_metrics = QFontMetrics(QFont('Segoe UI', calendar_font_size))
+                calendar_height = calendar_metrics.height() * calendar_lines
+                calendar_width = calendar_metrics.horizontalAdvance(calendar_sample)
     except Exception as e:
         logger.debug("[UI] Exception suppressed: %s", e)
     
     if actual_font_height is None:
         # Fallback formula
         actual_font_height = int(font_size * 1.8)
+    if calendar_lines and calendar_height <= 0:
+        calendar_height = int(calendar_font_size * 1.8) * calendar_lines
+        calendar_width = int(len(calendar_sample) * calendar_font_size * 0.6)
     
     if display_mode == "analogue" or display_mode == "analog":
         # Analogue clocks are square, sized based on font_size as a scaling factor
@@ -171,6 +201,9 @@ def estimate_clock_size(
         
         if show_tz:
             height += actual_font_height + 10
+        if calendar_lines:
+            height += calendar_height + 10
+            width = max(width, calendar_width + 40)
         
         return (width, height)
     
@@ -186,6 +219,9 @@ def estimate_clock_size(
     
     if show_tz:
         height += actual_font_height + 10
+    if calendar_lines:
+        height += calendar_height + 10
+        width = max(width, calendar_width + 40)
     
     return (width, height)
 
@@ -373,7 +409,20 @@ def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
         show_seconds = clock.get('show_seconds', False)
         show_tz = clock.get('show_timezone_label', False)
         display_mode = clock.get('display_mode', 'digital')
-        w, h = estimate_clock_size(font_size, show_seconds, show_tz, display_mode)
+        show_day_of_week = clock.get('show_day_of_week', False)
+        show_date = clock.get('show_date', False)
+        calendar_layout = clock.get('calendar_layout', 'shared_line')
+        calendar_font_size = clock.get('calendar_font_size', 20)
+        w, h = estimate_clock_size(
+            font_size,
+            show_seconds,
+            show_tz,
+            display_mode,
+            show_day_of_week,
+            show_date,
+            calendar_layout,
+            calendar_font_size,
+        )
         estimates.append(WidgetEstimate(
             widget_type=WidgetType.CLOCK,
             position=clock.get('position', 'Top Right'),
@@ -389,7 +438,16 @@ def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
         # Clock 2/3 inherit font and display_mode from Clock 1
         font_size = clock.get('font_size', 48)
         display_mode = clock.get('display_mode', 'digital')
-        w, h = estimate_clock_size(font_size, display_mode=display_mode)
+        w, h = estimate_clock_size(
+            font_size,
+            show_seconds=clock.get('show_seconds', False),
+            show_tz=clock.get('show_timezone_label', False),
+            display_mode=display_mode,
+            show_day_of_week=clock.get('show_day_of_week', False),
+            show_date=clock.get('show_date', False),
+            calendar_layout=clock.get('calendar_layout', 'shared_line'),
+            calendar_font_size=clock.get('calendar_font_size', 20),
+        )
         estimates.append(WidgetEstimate(
             widget_type=WidgetType.CLOCK2,
             position=clock.get('position', 'Top Right'),  # Same position as Clock 1
@@ -404,7 +462,16 @@ def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
     if clock3.get('enabled', False) and str(clock.get('position', '')).strip().lower() != "custom":
         font_size = clock.get('font_size', 48)
         display_mode = clock.get('display_mode', 'digital')
-        w, h = estimate_clock_size(font_size, display_mode=display_mode)
+        w, h = estimate_clock_size(
+            font_size,
+            show_seconds=clock.get('show_seconds', False),
+            show_tz=clock.get('show_timezone_label', False),
+            display_mode=display_mode,
+            show_day_of_week=clock.get('show_day_of_week', False),
+            show_date=clock.get('show_date', False),
+            calendar_layout=clock.get('calendar_layout', 'shared_line'),
+            calendar_font_size=clock.get('calendar_font_size', 20),
+        )
         estimates.append(WidgetEstimate(
             widget_type=WidgetType.CLOCK3,
             position=clock.get('position', 'Top Right'),  # Same position as Clock 1

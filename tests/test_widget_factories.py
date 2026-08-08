@@ -166,6 +166,32 @@ class TestClockWidgetFactory:
         assert widget._display_mode == "analog"
         widget.deleteLater()
 
+    def test_secondary_clock_inherits_calendar_style_but_uses_own_timezone(
+        self,
+        mock_settings,
+        parent_widget,
+    ):
+        factory = ClockWidgetFactory(mock_settings)
+        widget = factory.create(
+            parent_widget,
+            {"enabled": True, "timezone": "UTC+02:00"},
+            settings_key="clock2",
+            base_clock_settings={
+                "show_day_of_week": True,
+                "show_date": True,
+                "calendar_layout": "two_lines",
+                "calendar_font_size": 27,
+            },
+        )
+
+        assert widget is not None
+        assert widget._timezone_str == "UTC+02:00"
+        assert widget._show_day_of_week is True
+        assert widget._show_date is True
+        assert widget._calendar_layout == "two_lines"
+        assert widget._calendar_font_size == 27
+        widget.deleteLater()
+
 
 # ---------------------------------------------------------------------------
 # Weather Widget Factory Tests

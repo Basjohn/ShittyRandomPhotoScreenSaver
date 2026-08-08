@@ -340,8 +340,8 @@ class TestRaiseOperations:
 
         assert order == ["main-window", "clock", "media"]
 
-    def test_raise_all_widgets_re_raises_clock_tz_label_after_widget(self):
-        """Clock timezone labels should be re-raised after their parent widget."""
+    def test_raise_all_widgets_re_raises_clock_auxiliary_labels_after_widget(self):
+        """Clock footer labels should be re-raised after their parent widget."""
         from rendering.widget_manager import WidgetManager
 
         order: list[str] = []
@@ -351,20 +351,16 @@ class TestRaiseOperations:
                 order.append(self._name)
                 super().raise_()
 
-        class OrderedLabel:
-            def raise_(self):
-                order.append("clock_tz_label")
-
         parent = MagicMock()
         manager = WidgetManager(parent)
 
         clock = OrderedWidget("clock")
-        clock._tz_label = OrderedLabel()  # type: ignore[attr-defined]
+        clock.raise_auxiliary_labels = lambda: order.append("clock_auxiliary_labels")  # type: ignore[attr-defined]
         manager.register_widget("clock", clock)
 
         manager.raise_all_widgets()
 
-        assert order == ["clock", "clock_tz_label"]
+        assert order == ["clock", "clock_auxiliary_labels"]
 
 
 class TestFadeCallbacks:

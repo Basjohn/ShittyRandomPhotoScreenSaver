@@ -1448,9 +1448,9 @@ class WidgetManager:
             if widget is not None:
                 try:
                     widget.raise_()
-                    # Handle clock timezone labels
-                    if hasattr(widget, '_tz_label') and widget._tz_label:
-                        widget._tz_label.raise_()
+                    raise_auxiliary = getattr(widget, 'raise_auxiliary_labels', None)
+                    if callable(raise_auxiliary):
+                        raise_auxiliary()
                 except Exception as e:
                     logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 

@@ -1,6 +1,34 @@
 from __future__ import annotations
 
 
+def test_clock_stack_predictor_reserves_weekday_and_date_rows():
+    from ui.widget_stack_predictor import estimate_clock_size
+
+    base = estimate_clock_size(48, show_tz=True, display_mode="digital")
+    shared = estimate_clock_size(
+        48,
+        show_tz=True,
+        display_mode="digital",
+        show_day_of_week=True,
+        show_date=True,
+        calendar_layout="shared_line",
+        calendar_font_size=24,
+    )
+    two_lines = estimate_clock_size(
+        48,
+        show_tz=True,
+        display_mode="digital",
+        show_day_of_week=True,
+        show_date=True,
+        calendar_layout="two_lines",
+        calendar_font_size=24,
+    )
+
+    assert shared[0] >= base[0]
+    assert shared[1] > base[1]
+    assert two_lines[1] > shared[1]
+
+
 def test_widget_stack_predictor_includes_gmail_and_modern_reddit2_limit():
     from ui.widget_stack_predictor import WidgetType, build_widget_estimates
 

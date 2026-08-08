@@ -233,6 +233,10 @@ class ClockWidgetSettings:
     show_seconds: bool = True
     timezone: str = "local"
     show_timezone: bool = False
+    show_day_of_week: bool = False
+    show_date: bool = False
+    calendar_layout: str = "shared_line"
+    calendar_font_size: int = 20
     font_family: str = "Inter"
     font_size: int = 48
     text_color: str = "#FFFFFF"
@@ -260,6 +264,10 @@ class ClockWidgetSettings:
             show_seconds=settings.get(f"{prefix}.show_seconds", True),
             timezone=settings.get(f"{prefix}.timezone", "local"),
             show_timezone=settings.get(f"{prefix}.show_timezone", False),
+            show_day_of_week=settings.get(f"{prefix}.show_day_of_week", False),
+            show_date=settings.get(f"{prefix}.show_date", False),
+            calendar_layout=settings.get(f"{prefix}.calendar_layout", "shared_line"),
+            calendar_font_size=settings.get(f"{prefix}.calendar_font_size", 20),
             font_family=settings.get(f"{prefix}.font_family", "Inter"),
             font_size=settings.get(f"{prefix}.font_size", 48),
             text_color=settings.get(f"{prefix}.text_color", "#FFFFFF"),
