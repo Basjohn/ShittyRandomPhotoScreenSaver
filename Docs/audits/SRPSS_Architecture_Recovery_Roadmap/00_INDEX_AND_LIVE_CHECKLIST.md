@@ -25,6 +25,7 @@ rejected persistent lane:       666624d421b08f978c5f610571a078570150a1e7
 rejected Spectrum smoothing:    ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
 donor/reference only:           7376bb9bb380253f3bd14079e65d7bdbca062fad
 current recovery checkpoint:    3b6082dd
+uninstalled implementation:     afde215d
 active task owner:              Current_Plan.md
 latest installed evidence:      logs/evidence_chest/08_08_after_97ff0619_gl_retention_18_59/
 current performance comparator: logs/evidence_chest/08_02_3877b2c7_20_27/

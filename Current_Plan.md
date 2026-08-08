@@ -16,6 +16,7 @@ rejected Spectrum smoothing: ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
 current approved visual behaviour: ff93461685476bd0657aa88312fc2e35e9037880
 current lifecycle/cache evidence code state: 3877b2c76791892cd5cb18c43d66a90a29c64d33
 current assessed Phase 5 candidate: 3b6082dd (installed recovery checkpoint; final performance gate open)
+current uninstalled implementation candidate: afde215d (terminal idempotency, temporal gates, optional Spectrum smoothing)
 current audit-doc checkpoint: d7ddb9063ebf9c8a42739e541400a8508b2941bf
 latest preserved evidence: logs/evidence_chest/08_08_after_97ff0619_gl_retention_18_59/
 latest mutable run: logs/ (2026-08-08 18:59:25 through 19:05:58, code-equivalent pre-commit working tree now captured by 3b6082dd)

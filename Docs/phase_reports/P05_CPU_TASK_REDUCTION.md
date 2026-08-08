@@ -24,6 +24,11 @@ The run used the bounded-retention working tree subsequently captured without a
 production-code change by commit `3b6082dd`. It is therefore a commit-addressable
 recovery checkpoint, though not yet the immutable performance or visual authority.
 
+Commit `afde215d` is the current uninstalled candidate. It adds completed-transition
+idempotency, affected-path Bubble/Spectrum temporal gates, and optional adjustable
+Spectrum presentation smoothing. No metric below is attributed to that commit until
+the fixed-workload installed A/B; `3b6082dd` remains its hard rollback checkpoint.
+
 The generalized 17:07 delivery failure is substantially recovered:
 
 ```text
