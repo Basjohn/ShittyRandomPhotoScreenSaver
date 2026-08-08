@@ -46,7 +46,7 @@ def main() -> int:
         logger.debug("[MISC] Exception suppressed: %s", e)
 
     result = 0
-    result = core_main()
+    result = core_main(entrypoint="main_mc")
     return result
 
 

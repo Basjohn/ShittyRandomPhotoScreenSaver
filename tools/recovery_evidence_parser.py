@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.6"
+PARSER_VERSION = "1.7"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
@@ -74,6 +74,12 @@ _CACHE_FLOW_RE = re.compile(
 )
 _LIFECYCLE_BARRIER_RE = re.compile(
     r"\[LIFECYCLE_BARRIER\]\s+(?P<event>armed|complete)\s+(?P<payload>.*)"
+)
+_IMAGE_UI_DELAY_RE = re.compile(
+    r"\[PERF\]\s*\[IMAGE_UI_DELAY\]\s+(?P<payload>.*)"
+)
+_IMAGE_UI_SEGMENT_RE = re.compile(
+    r"\[PERF\]\s*\[IMAGE_UI_SEGMENT\]\s+(?P<payload>.*)"
 )
 
 
@@ -699,6 +705,12 @@ def _parse_phase5_telemetry(
                 if match:
                     extra["barrier_event"] = match.group("event")
             if not match:
+                match = _IMAGE_UI_DELAY_RE.search(line)
+                kind = "image_ui_delay"
+            if not match:
+                match = _IMAGE_UI_SEGMENT_RE.search(line)
+                kind = "image_ui_segment"
+            if not match:
                 continue
             seen.add(normalized)
             values = _kv(match.group("payload"))
@@ -712,6 +724,11 @@ def _parse_phase5_telemetry(
                     "lane": extra.get("lane", ""),
                     "barrier_event": extra.get("barrier_event", ""),
                     "event": values.get("event", ""),
+                    "display": values.get("display", ""),
+                    "callable": values.get("callable", ""),
+                    "stage": values.get("stage", ""),
+                    "generation": _integer(values.get("generation")),
+                    "outcome": values.get("outcome", ""),
                     "update_requested": values.get("update_requested", ""),
                     "reason": values.get("reason", ""),
                     "transition": values.get("transition", ""),
@@ -724,6 +741,17 @@ def _parse_phase5_telemetry(
                     "render_state_age_ms": _number(values.get("render_state_age_ms")),
                     "owner_age_ms": _number(values.get("last_ui_age_ms")),
                     "elapsed_ms": _number(values.get("elapsed_ms")),
+                    "delay_ms": _number(values.get("delay_ms")),
+                    "queue_late_ms": _number(values.get("queue_late_ms")),
+                    "guard_ms": _number(values.get("guard_ms")),
+                    "callback_ms": _number(values.get("callback_ms")),
+                    "total_age_ms": _number(values.get("total_age_ms")),
+                    "scheduled_mono_ms": _number(values.get("scheduled_mono_ms")),
+                    "due_mono_ms": _number(values.get("due_mono_ms")),
+                    "start_mono_ms": _number(values.get("start_mono_ms")),
+                    "end_mono_ms": _number(values.get("end_mono_ms")),
+                    "duration_ms": _number(values.get("duration_ms")),
+                    "size": values.get("size", ""),
                     "frames": _integer(values.get("frames")),
                     "transitions": _integer(values.get("transitions")),
                     "time_idle_ms": _number(values.get("time_idle")),
@@ -1093,6 +1121,41 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                 "armed": sum(row["kind"] == "lifecycle_barrier" and row["barrier_event"] == "armed" for row in phase5_rows),
                 "complete": sum(row["kind"] == "lifecycle_barrier" and row["barrier_event"] == "complete" for row in phase5_rows),
                 "elapsed_ms": _metric_summary(row.get("elapsed_ms") for row in phase5_rows if row["kind"] == "lifecycle_barrier" and row["barrier_event"] == "complete"),
+            },
+            "image_ui": {
+                "delay_records": sum(row["kind"] == "image_ui_delay" for row in phase5_rows),
+                "segment_records": sum(row["kind"] == "image_ui_segment" for row in phase5_rows),
+                "queue_late_ms": _metric_summary(
+                    row.get("queue_late_ms") for row in phase5_rows
+                    if row["kind"] == "image_ui_delay"
+                ),
+                "guard_ms": _metric_summary(
+                    row.get("guard_ms") for row in phase5_rows
+                    if row["kind"] == "image_ui_delay"
+                ),
+                "callback_ms": _metric_summary(
+                    row.get("callback_ms") for row in phase5_rows
+                    if row["kind"] == "image_ui_delay"
+                ),
+                "total_age_ms": _metric_summary(
+                    row.get("total_age_ms") for row in phase5_rows
+                    if row["kind"] == "image_ui_delay"
+                ),
+                "segment_duration_ms": _metric_summary(
+                    row.get("duration_ms") for row in phase5_rows
+                    if row["kind"] == "image_ui_segment"
+                ),
+                "outcomes": {
+                    outcome: sum(
+                        row["kind"] == "image_ui_delay" and row["outcome"] == outcome
+                        for row in phase5_rows
+                    )
+                    for outcome in sorted({
+                        str(row["outcome"])
+                        for row in phase5_rows
+                        if row["kind"] == "image_ui_delay" and row["outcome"]
+                    })
+                },
             },
         },
     }

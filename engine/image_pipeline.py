@@ -82,41 +82,163 @@ def _schedule_engine_delay(
     func: Callable[[], None],
     *,
     reason: str,
+    display_index: int | None = None,
+    callable_label: str | None = None,
 ) -> None:
     """Route delayed UI work through ThreadManager with runtime ownership."""
     scheduler = getattr(engine, "thread_manager", None)
     runtime_generation, display_manager = _capture_runtime_identity(engine)
+    normalized_delay_ms = max(0, int(delay_ms))
+    perf_enabled = is_perf_metrics_enabled()
+    scheduled_ts = time.perf_counter() if perf_enabled else 0.0
+    due_ts = scheduled_ts + (normalized_delay_ms / 1000.0)
+    callback_name = ""
+    if perf_enabled:
+        callback_name = str(
+            callable_label
+            or getattr(func, "__qualname__", None)
+            or getattr(func, "__name__", None)
+            or type(func).__name__
+        )[-160:]
 
     def _run_if_current() -> None:
-        if not _runtime_identity_is_current(
-            engine,
-            runtime_generation,
-            display_manager,
-            label=reason,
-        ):
-            return
-        func()
+        started_ts = time.perf_counter() if perf_enabled else 0.0
+        guard_finished_ts: float | None = None
+        callback_started_ts: float | None = None
+        outcome = "stale"
+        try:
+            is_current = _runtime_identity_is_current(
+                engine,
+                runtime_generation,
+                display_manager,
+                label=reason,
+            )
+            guard_finished_ts = time.perf_counter() if perf_enabled else 0.0
+            if not is_current:
+                return
+            outcome = "completed"
+            callback_started_ts = guard_finished_ts
+            func()
+        except Exception:
+            outcome = "error"
+            raise
+        finally:
+            if perf_enabled:
+                finished_ts = time.perf_counter()
+                effective_guard_finished_ts = (
+                    guard_finished_ts
+                    if guard_finished_ts is not None
+                    else finished_ts
+                )
+                guard_ms = max(
+                    0.0,
+                    (effective_guard_finished_ts - started_ts) * 1000.0,
+                )
+                callback_ms = (
+                    max(0.0, (finished_ts - callback_started_ts) * 1000.0)
+                    if callback_started_ts is not None
+                    else 0.0
+                )
+                logger.info(
+                    "[PERF] [IMAGE_UI_DELAY] reason=%s display=%s callable=%s "
+                    "generation=%d delay_ms=%d queue_late_ms=%.2f "
+                    "guard_ms=%.2f callback_ms=%.2f total_age_ms=%.2f "
+                    "scheduled_mono_ms=%.3f due_mono_ms=%.3f "
+                    "start_mono_ms=%.3f end_mono_ms=%.3f outcome=%s",
+                    reason,
+                    display_index if display_index is not None else "shared",
+                    callback_name,
+                    runtime_generation,
+                    normalized_delay_ms,
+                    max(0.0, (started_ts - due_ts) * 1000.0),
+                    guard_ms,
+                    callback_ms,
+                    max(0.0, (finished_ts - scheduled_ts) * 1000.0),
+                    scheduled_ts * 1000.0,
+                    due_ts * 1000.0,
+                    started_ts * 1000.0,
+                    finished_ts * 1000.0,
+                    outcome,
+                )
 
     _run_if_current._srpss_runtime_generation = runtime_generation
 
     try:
         if scheduler is not None and hasattr(scheduler, "single_shot"):
-            scheduler.single_shot(max(0, int(delay_ms)), _run_if_current)
+            scheduler.single_shot(normalized_delay_ms, _run_if_current)
             return
         logger.warning(
             "[CACHE] [FALLBACK] Image pipeline delayed work using app ThreadManager "
             "reason=%s delay_ms=%d",
             reason,
-            max(0, int(delay_ms)),
+            normalized_delay_ms,
         )
-        ThreadManager.single_shot(max(0, int(delay_ms)), _run_if_current)
+        ThreadManager.single_shot(normalized_delay_ms, _run_if_current)
     except Exception:
         logger.exception(
             "[CACHE] [FALLBACK] Image pipeline delayed work scheduling failed "
             "reason=%s delay_ms=%d",
             reason,
-            max(0, int(delay_ms)),
+            normalized_delay_ms,
         )
+
+
+def _pixmap_from_image_with_perf(
+    image: QImage,
+    *,
+    reason: str,
+    display_index: int,
+) -> QPixmap:
+    """Convert one GUI-thread image while exposing bounded segment cost."""
+    perf_enabled = is_perf_metrics_enabled()
+    started_ts = time.perf_counter() if perf_enabled else 0.0
+    try:
+        return QPixmap.fromImage(image)
+    finally:
+        if perf_enabled:
+            logger.info(
+                "[PERF] [IMAGE_UI_SEGMENT] reason=%s display=%d "
+                "stage=qimage_to_qpixmap duration_ms=%.2f size=%dx%d",
+                reason,
+                display_index,
+                max(0.0, (time.perf_counter() - started_ts) * 1000.0),
+                image.width(),
+                image.height(),
+            )
+
+
+def _apply_display_pixmap_with_perf(
+    display: object,
+    processed_pixmap: QPixmap,
+    original_pixmap: QPixmap,
+    image_path: str,
+    *,
+    reason: str,
+    display_index: int,
+) -> None:
+    """Apply one display image while exposing setter/transition-start cost."""
+    use_processed_setter = hasattr(display, "set_processed_image")
+    stage = "set_processed_image" if use_processed_setter else "set_image"
+    perf_enabled = is_perf_metrics_enabled()
+    started_ts = time.perf_counter() if perf_enabled else 0.0
+    try:
+        if use_processed_setter:
+            display.set_processed_image(processed_pixmap, original_pixmap, image_path)
+        else:
+            display.set_image(processed_pixmap, image_path)
+    finally:
+        if perf_enabled:
+            logger.info(
+                "[PERF] [IMAGE_UI_SEGMENT] reason=%s display=%d stage=%s "
+                "duration_ms=%.2f size=%dx%d",
+                reason,
+                display_index,
+                stage,
+                max(0.0, (time.perf_counter() - started_ts) * 1000.0),
+                processed_pixmap.width(),
+                processed_pixmap.height(),
+            )
+
 
 def _cache_trace(message: str, *args: Any, level: int = logging.INFO) -> None:
     if is_cache_logging_enabled():
@@ -1420,7 +1542,11 @@ def load_and_display_image_async(
                 reuse_token = id(proc_data)
                 processed_pixmap = shared_gui_pixmaps.get(reuse_token)
                 if processed_pixmap is None:
-                    processed_pixmap = QPixmap.fromImage(proc_data.image)
+                    processed_pixmap = _pixmap_from_image_with_perf(
+                        proc_data.image,
+                        reason="current_image",
+                        display_index=i,
+                    )
                     shared_gui_pixmaps[reuse_token] = processed_pixmap
                 original_pixmap = processed_pixmap
                 img_path = proc_data.path
@@ -1431,22 +1557,38 @@ def load_and_display_image_async(
 
                 delay_ms = i * stagger_ms
                 if delay_ms > 0:
-                    def _delayed_set(d=display, pp=processed_pixmap, op=original_pixmap, ip=img_path):
-                        if hasattr(d, 'set_processed_image'):
-                            d.set_processed_image(pp, op, ip)
-                        else:
-                            d.set_image(pp, ip)
+                    def _delayed_set(
+                        d=display,
+                        pp=processed_pixmap,
+                        op=original_pixmap,
+                        ip=img_path,
+                        screen_index=i,
+                    ):
+                        _apply_display_pixmap_with_perf(
+                            d,
+                            pp,
+                            op,
+                            ip,
+                            reason="transition_display_stagger",
+                            display_index=screen_index,
+                        )
                     _schedule_engine_delay(
                         engine,
                         delay_ms,
                         _delayed_set,
                         reason="transition_display_stagger",
+                        display_index=i,
+                        callable_label="display_image_apply",
                     )
                 else:
-                    if hasattr(display, 'set_processed_image'):
-                        display.set_processed_image(processed_pixmap, original_pixmap, img_path)
-                    else:
-                        display.set_image(processed_pixmap, img_path)
+                    _apply_display_pixmap_with_perf(
+                        display,
+                        processed_pixmap,
+                        original_pixmap,
+                        img_path,
+                        reason="transition_display_immediate",
+                        display_index=i,
+                    )
 
                 displayed_paths.append(img_path)
 
@@ -1606,27 +1748,47 @@ def load_and_display_image_async_with_metas(
                 reuse_token = id(proc)
                 processed_pixmap = shared_gui_pixmaps.get(reuse_token)
                 if processed_pixmap is None:
-                    processed_pixmap = QPixmap.fromImage(proc.image)
+                    processed_pixmap = _pixmap_from_image_with_perf(
+                        proc.image,
+                        reason="previous_image",
+                        display_index=i,
+                    )
                     shared_gui_pixmaps[reuse_token] = processed_pixmap
                 original_pixmap = processed_pixmap
                 delay_ms = i * stagger_ms
                 if delay_ms > 0:
-                    def _delayed(d=display, pp=processed_pixmap, op=original_pixmap, ip=proc.path):
-                        if hasattr(d, 'set_processed_image'):
-                            d.set_processed_image(pp, op, ip)
-                        else:
-                            d.set_image(pp, ip)
+                    def _delayed(
+                        d=display,
+                        pp=processed_pixmap,
+                        op=original_pixmap,
+                        ip=proc.path,
+                        screen_index=i,
+                    ):
+                        _apply_display_pixmap_with_perf(
+                            d,
+                            pp,
+                            op,
+                            ip,
+                            reason="previous_image_display_stagger",
+                            display_index=screen_index,
+                        )
                     _schedule_engine_delay(
                         engine,
                         delay_ms,
                         _delayed,
                         reason="previous_image_display_stagger",
+                        display_index=i,
+                        callable_label="previous_image_apply",
                     )
                 else:
-                    if hasattr(display, 'set_processed_image'):
-                        display.set_processed_image(processed_pixmap, original_pixmap, proc.path)
-                    else:
-                        display.set_image(processed_pixmap, proc.path)
+                    _apply_display_pixmap_with_perf(
+                        display,
+                        processed_pixmap,
+                        original_pixmap,
+                        proc.path,
+                        reason="previous_image_display_immediate",
+                        display_index=i,
+                    )
                 displayed.append(proc.path)
             if displayed:
                 engine.image_changed.emit(displayed[0])
@@ -1939,6 +2101,8 @@ def notify_transition_complete(engine: ScreensaverEngine, screen_index: Optional
                     recheck_delay_ms,
                     _resume_prefetch,
                     reason="prefetch_resume_transition_pending",
+                    display_index=screen_index,
+                    callable_label="prefetch_resume",
                 )
                 return
 
@@ -1961,6 +2125,8 @@ def notify_transition_complete(engine: ScreensaverEngine, screen_index: Optional
                     recheck_delay_ms,
                     _resume_prefetch,
                     reason="prefetch_resume_cooldown",
+                    display_index=screen_index,
+                    callable_label="prefetch_resume",
                 )
                 return
 
@@ -1976,4 +2142,6 @@ def notify_transition_complete(engine: ScreensaverEngine, screen_index: Optional
         delay_ms,
         _resume_prefetch,
         reason="prefetch_resume_initial",
+        display_index=screen_index,
+        callable_label="prefetch_resume",
     )

@@ -1837,6 +1837,7 @@ def test_move_to_custom_preserves_current_visualizer_colors(qt_app, settings_man
 def test_move_to_custom_uses_runtime_resolved_curated_state_for_every_mode(
     qt_app,
     settings_manager,
+    caplog,
     mode,
     expected_bar_count,
     expected_sensitivity,
@@ -1845,6 +1846,8 @@ def test_move_to_custom_uses_runtime_resolved_curated_state_for_every_mode(
 ):
     """Every mode must fork the curated UI state, not stale backing values."""
     from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
+
+    caplog.set_level(logging.INFO, logger="ui.tabs.media.preset_slider")
 
     stale = {
         f"{mode}_bar_count": 7,
@@ -1889,6 +1892,13 @@ def test_move_to_custom_uses_runtime_resolved_curated_state_for_every_mode(
 
         saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
         custom = settings_manager.get("visualizer_custom_presets", {})[mode]
+        assert any(
+            "[VIS_PRESETS] Move To Custom" in record.getMessage()
+            and f"mode={mode}" in record.getMessage()
+            and "source_index=0" in record.getMessage()
+            and f"custom_index={slider.custom_index()}" in record.getMessage()
+            for record in caplog.records
+        )
         assert saved[f"preset_{mode}"] == slider.custom_index()
         assert custom[f"{mode}_bar_count"] == expected_bar_count
         assert custom[f"{mode}_sensitivity"] == pytest.approx(expected_sensitivity)

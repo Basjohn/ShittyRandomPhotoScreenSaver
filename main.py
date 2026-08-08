@@ -569,7 +569,7 @@ def run_config(app: QApplication) -> int:
         return 1
 
 
-def main():
+def main(*, entrypoint: str = "main"):
     """Main entry point for the screensaver application."""
     fresh_mode = '--fresh' in sys.argv
     fresh_result: tuple[Path, int] | None = None
@@ -632,6 +632,14 @@ def main():
     
     # Parse command-line arguments
     mode, preview_hwnd = parse_screensaver_args()
+    entrypoint_name = "main_mc" if str(entrypoint).strip().lower() == "main_mc" else "main"
+    logger.info(
+        "[STARTUP] entrypoint=%s mode=%s frozen=%s executable=%s",
+        entrypoint_name,
+        mode.value,
+        _is_frozen_build(),
+        Path(getattr(sys, "executable", "") or "").name or "<unknown>",
+    )
     
     # Enable High DPI scaling BEFORE creating QApplication
     QApplication.setHighDpiScaleFactorRoundingPolicy(

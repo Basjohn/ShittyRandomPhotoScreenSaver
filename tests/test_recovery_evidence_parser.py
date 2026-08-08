@@ -126,6 +126,15 @@ def _write_archive(path: Path) -> None:
             "scaled_prefetch_requests=4 "
             "scaled_prefetch_completed=3 scaled_derivations=2 raw_released_after_scaled=1 "
             "scaled_reuses_without_put=5 prefetch_resume_scheduled=1 prefetch_resume_runs=1",
+            "2026-07-23 19:38:14 - metrics - INFO - "
+            "[PERF] [IMAGE_UI_DELAY] reason=transition_display_stagger display=1 "
+            "callable=display_image_apply generation=4 delay_ms=200 "
+            "queue_late_ms=3.50 guard_ms=0.25 callback_ms=24.75 "
+            "total_age_ms=228.25 scheduled_mono_ms=1000.000 due_mono_ms=1200.000 "
+            "start_mono_ms=1203.500 end_mono_ms=1228.250 outcome=completed",
+            "2026-07-23 19:38:14 - metrics - INFO - "
+            "[PERF] [IMAGE_UI_SEGMENT] reason=transition_display_stagger display=1 "
+            "stage=set_processed_image duration_ms=23.50 size=3840x2160",
         ]
     )
     visualizer = (
@@ -195,6 +204,28 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     assert analysis.summary["phase5"]["cache"]["worker_requests"]["maximum"] == 4.0
     assert analysis.summary["phase5"]["cache"]["worker_fallbacks"]["maximum"] == 1.0
     assert analysis.summary["phase5"]["lifecycle_barrier"]["complete"] == 1
+    image_delay = next(row for row in analysis.phase5_rows if row["kind"] == "image_ui_delay")
+    assert image_delay["reason"] == "transition_display_stagger"
+    assert image_delay["display"] == "1"
+    assert image_delay["callable"] == "display_image_apply"
+    assert image_delay["generation"] == 4
+    assert image_delay["queue_late_ms"] == 3.5
+    assert image_delay["guard_ms"] == 0.25
+    assert image_delay["callback_ms"] == 24.75
+    assert image_delay["scheduled_mono_ms"] == 1000.0
+    assert image_delay["due_mono_ms"] == 1200.0
+    assert image_delay["start_mono_ms"] == 1203.5
+    assert image_delay["end_mono_ms"] == 1228.25
+    image_segment = next(row for row in analysis.phase5_rows if row["kind"] == "image_ui_segment")
+    assert image_segment["stage"] == "set_processed_image"
+    assert image_segment["duration_ms"] == 23.5
+    assert image_segment["size"] == "3840x2160"
+    assert analysis.summary["phase5"]["image_ui"]["delay_records"] == 1
+    assert analysis.summary["phase5"]["image_ui"]["segment_records"] == 1
+    assert analysis.summary["phase5"]["image_ui"]["guard_ms"]["maximum"] == 0.25
+    assert analysis.summary["phase5"]["image_ui"]["callback_ms"]["maximum"] == 24.75
+    assert analysis.summary["phase5"]["image_ui"]["segment_duration_ms"]["maximum"] == 23.5
+    assert analysis.summary["phase5"]["image_ui"]["outcomes"] == {"completed": 1}
     assert len(analysis.errors_and_warnings) == 2
 
 

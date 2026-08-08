@@ -310,9 +310,18 @@ class VisualizerPresetSlider(QWidget):
         if idx == self._custom_index:
             return
 
-        logger.debug(
-            "[VIS_PRESETS] Move To Custom: %s preset %d → Custom (%d)",
-            self._mode, idx, self._custom_index,
+        source_name = (
+            self._preset_names[idx]
+            if 0 <= idx < len(self._preset_names)
+            else "<unknown>"
+        )
+        logger.info(
+            "[VIS_PRESETS] Move To Custom mode=%s source_index=%d "
+            "source_name=%s custom_index=%d",
+            self._mode,
+            idx,
+            source_name,
+            self._custom_index,
         )
 
         setattr(self, "_pending_move_to_custom", True)

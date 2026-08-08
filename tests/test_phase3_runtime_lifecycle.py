@@ -6,7 +6,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from engine.image_pipeline import _schedule_engine_delay
+from engine import image_pipeline as image_pipeline_module
+from engine.image_pipeline import (
+    _apply_display_pixmap_with_perf,
+    _pixmap_from_image_with_perf,
+    _schedule_engine_delay,
+)
 from rendering.gl_compositor_pkg import gl_lifecycle
 from rendering.gl_programs import texture_manager as texture_manager_module
 from rendering.gl_programs.texture_manager import GLTextureManager
@@ -63,6 +68,208 @@ def test_delayed_image_publication_rejects_old_runtime_manager() -> None:
 
     assert published == []
     assert engine.rejections == [("phase3_test_delay", 4)]
+
+
+def test_delayed_image_publication_logs_reason_display_and_nested_cost(monkeypatch) -> None:
+    scheduled = []
+    published = []
+    records = []
+    manager = object()
+
+    class _Scheduler:
+        def single_shot(self, delay_ms, callback):
+            scheduled.append((delay_ms, callback))
+
+    engine = SimpleNamespace(
+        thread_manager=_Scheduler(),
+        display_manager=manager,
+        _runtime_generation=9,
+        _shutting_down=False,
+    )
+    ticks = iter((10.000, 10.012, 10.014, 10.020))
+    monkeypatch.setattr(image_pipeline_module, "is_perf_metrics_enabled", lambda: True)
+    monkeypatch.setattr(image_pipeline_module.time, "perf_counter", lambda: next(ticks))
+    monkeypatch.setattr(
+        image_pipeline_module.logger,
+        "info",
+        lambda message, *args: records.append(message % args),
+    )
+
+    _schedule_engine_delay(
+        engine,
+        10,
+        lambda: published.append("current-runtime-publication"),
+        reason="phase3_perf_delay",
+        display_index=1,
+        callable_label="display_image_apply",
+    )
+
+    assert scheduled[0][0] == 10
+    scheduled[0][1]()
+
+    assert published == ["current-runtime-publication"]
+    assert len(records) == 1
+    assert "[PERF] [IMAGE_UI_DELAY]" in records[0]
+    assert "reason=phase3_perf_delay" in records[0]
+    assert "display=1" in records[0]
+    assert "callable=display_image_apply" in records[0]
+    assert "generation=9" in records[0]
+    assert "queue_late_ms=2.00" in records[0]
+    assert "guard_ms=2.00" in records[0]
+    assert "callback_ms=6.00" in records[0]
+    assert "total_age_ms=20.00" in records[0]
+    assert "scheduled_mono_ms=10000.000" in records[0]
+    assert "due_mono_ms=10010.000" in records[0]
+    assert "start_mono_ms=10012.000" in records[0]
+    assert "end_mono_ms=10020.000" in records[0]
+    assert "outcome=completed" in records[0]
+
+
+def test_delayed_image_publication_logs_stale_without_callback_cost(monkeypatch) -> None:
+    scheduled = []
+    records = []
+    old_manager = object()
+
+    class _Scheduler:
+        def single_shot(self, _delay_ms, callback):
+            scheduled.append(callback)
+
+    engine = SimpleNamespace(
+        thread_manager=_Scheduler(),
+        display_manager=old_manager,
+        _runtime_generation=3,
+        _shutting_down=False,
+    )
+    ticks = iter((20.000, 20.012, 20.013, 20.014))
+    monkeypatch.setattr(image_pipeline_module, "is_perf_metrics_enabled", lambda: True)
+    monkeypatch.setattr(image_pipeline_module.time, "perf_counter", lambda: next(ticks))
+    monkeypatch.setattr(
+        image_pipeline_module.logger,
+        "info",
+        lambda message, *args: records.append(message % args),
+    )
+
+    _schedule_engine_delay(engine, 10, lambda: pytest.fail("stale payload ran"), reason="stale")
+    engine._runtime_generation = 4
+    engine.display_manager = object()
+    scheduled.pop()()
+
+    delay_record = next(record for record in records if "[IMAGE_UI_DELAY]" in record)
+    assert "guard_ms=1.00" in delay_record
+    assert "callback_ms=0.00" in delay_record
+    assert "outcome=stale" in delay_record
+
+
+def test_delayed_image_publication_logs_payload_error_cost(monkeypatch) -> None:
+    scheduled = []
+    records = []
+    manager = object()
+
+    class _Scheduler:
+        def single_shot(self, _delay_ms, callback):
+            scheduled.append(callback)
+
+    engine = SimpleNamespace(
+        thread_manager=_Scheduler(),
+        display_manager=manager,
+        _runtime_generation=7,
+        _shutting_down=False,
+    )
+    ticks = iter((30.000, 30.011, 30.012, 30.017))
+    monkeypatch.setattr(image_pipeline_module, "is_perf_metrics_enabled", lambda: True)
+    monkeypatch.setattr(image_pipeline_module.time, "perf_counter", lambda: next(ticks))
+    monkeypatch.setattr(
+        image_pipeline_module.logger,
+        "info",
+        lambda message, *args: records.append(message % args),
+    )
+
+    def _fail() -> None:
+        raise RuntimeError("payload failed")
+
+    _schedule_engine_delay(engine, 10, _fail, reason="error")
+    with pytest.raises(RuntimeError, match="payload failed"):
+        scheduled.pop()()
+
+    assert "guard_ms=1.00" in records[0]
+    assert "callback_ms=5.00" in records[0]
+    assert "outcome=error" in records[0]
+
+
+def test_image_ui_conversion_segment_logs_bounded_cost(monkeypatch) -> None:
+    records = []
+    image = SimpleNamespace(width=lambda: 3840, height=lambda: 2160)
+    pixmap = object()
+    ticks = iter((40.000, 40.004))
+    monkeypatch.setattr(image_pipeline_module, "is_perf_metrics_enabled", lambda: True)
+    monkeypatch.setattr(image_pipeline_module.time, "perf_counter", lambda: next(ticks))
+    monkeypatch.setattr(
+        image_pipeline_module,
+        "QPixmap",
+        SimpleNamespace(fromImage=lambda candidate: pixmap if candidate is image else None),
+    )
+    monkeypatch.setattr(
+        image_pipeline_module.logger,
+        "info",
+        lambda message, *args: records.append(message % args),
+    )
+
+    assert _pixmap_from_image_with_perf(
+        image,
+        reason="current_image",
+        display_index=1,
+    ) is pixmap
+    assert records == [
+        "[PERF] [IMAGE_UI_SEGMENT] reason=current_image display=1 "
+        "stage=qimage_to_qpixmap duration_ms=4.00 size=3840x2160"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("processed_setter", "expected_stage"),
+    ((True, "set_processed_image"), (False, "set_image")),
+)
+def test_image_ui_apply_segment_preserves_both_setter_paths(
+    monkeypatch,
+    processed_setter,
+    expected_stage,
+) -> None:
+    calls = []
+    records = []
+    processed = SimpleNamespace(width=lambda: 1920, height=lambda: 1080)
+    original = object()
+
+    class _Display:
+        def set_image(self, pixmap, path):
+            calls.append(("set_image", pixmap, path))
+
+    display = _Display()
+    if processed_setter:
+        display.set_processed_image = lambda pixmap, original_pixmap, path: calls.append(
+            ("set_processed_image", pixmap, original_pixmap, path)
+        )
+    ticks = iter((50.000, 50.003))
+    monkeypatch.setattr(image_pipeline_module, "is_perf_metrics_enabled", lambda: True)
+    monkeypatch.setattr(image_pipeline_module.time, "perf_counter", lambda: next(ticks))
+    monkeypatch.setattr(
+        image_pipeline_module.logger,
+        "info",
+        lambda message, *args: records.append(message % args),
+    )
+
+    _apply_display_pixmap_with_perf(
+        display,
+        processed,
+        original,
+        "image.jpg",
+        reason="transition_display_immediate",
+        display_index=0,
+    )
+
+    assert calls[0][0] == expected_stage
+    assert f"stage={expected_stage}" in records[0]
+    assert "duration_ms=3.00" in records[0]
+    assert "size=1920x1080" in records[0]
 
 
 def test_deferred_gl_warmup_rejects_stopped_generation(monkeypatch) -> None:
