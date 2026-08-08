@@ -244,6 +244,43 @@ class TestThreadManagerSubmit:
             original_executor.shutdown(wait=False, cancel_futures=True)
             manager.shutdown()
 
+    def test_executor_rejection_rolls_back_pool_total_but_keeps_category_evidence(self):
+        class RejectingExecutor:
+            def submit(self, _fn):
+                raise RuntimeError("executor rejected")
+
+            def shutdown(self, wait=True, cancel_futures=False):
+                return None
+
+        manager = ThreadManager()
+        original_executor = manager._executors[ThreadPoolType.COMPUTE]
+        manager._executors[ThreadPoolType.COMPUTE] = RejectingExecutor()
+        try:
+            with pytest.raises(RuntimeError, match="executor rejected"):
+                manager.submit_compute_task(
+                    lambda: None,
+                    task_id="rejected_task",
+                    category="benchmark.rejected",
+                )
+
+            assert manager.get_active_tasks() == []
+            assert manager.get_pool_stats()["compute"] == {
+                "submitted": 0,
+                "completed": 0,
+                "failed": 0,
+            }
+            assert manager.get_task_category_stats()["benchmark.rejected"] == {
+                "submitted": 1,
+                "completed": 0,
+                "failed": 0,
+                "cancelled": 0,
+                "rejected": 1,
+                "active": 0,
+            }
+        finally:
+            original_executor.shutdown(wait=False, cancel_futures=True)
+            manager.shutdown()
+
     def test_delivery_diagnostics_separate_queue_worker_and_callback_cost(self):
         class InlineExecutor:
             def submit(self, fn):

@@ -589,8 +589,13 @@ class ThreadManager:
         
         self._executors: Dict[ThreadPoolType, ThreadPoolExecutor] = {}
         self._active_tasks: Dict[str, Task] = {}
-        self._active_tasks_lock = threading.RLock()
-        self._category_stats_lock = threading.RLock()
+        # Active ownership, category totals, and public pool totals describe
+        # one task lifecycle. Keep them under one authority so admission and
+        # terminal updates are atomic and do not acquire three independent
+        # locks for every short-lived task.
+        self._task_accounting_lock = threading.RLock()
+        self._active_tasks_lock = self._task_accounting_lock
+        self._category_stats_lock = self._task_accounting_lock
         self._category_stats: Dict[str, Dict[str, int]] = {}
         self._diagnostic_lock = threading.Lock()
         self._diagnostic_pools: Dict[str, Dict[str, Any]] = {
@@ -618,7 +623,7 @@ class ThreadManager:
         }
         self._stats = {pool_type: {'submitted': 0, 'completed': 0, 'failed': 0} 
                       for pool_type in ThreadPoolType}
-        self._stats_lock = threading.Lock()
+        self._stats_lock = self._task_accounting_lock
         
         self._resource_manager = resource_manager
         self._resource_id = None
@@ -728,7 +733,6 @@ class ThreadManager:
                     execution_time=execution_time,
                     task_id=task.task_id
                 )
-                self._record_pool_stat(pool_type, "completed")
                 outcome = "completed"
             except Exception as e:
                 execution_time = time.time() - start_time
@@ -739,7 +743,6 @@ class ThreadManager:
                     task_id=task.task_id
                 )
                 logger.error(f"Task {task.task_id} failed: {e}")
-                self._record_pool_stat(pool_type, "failed")
                 outcome = "failed"
             finally:
                 self._unregister_active_task(task.task_id, outcome=outcome)
@@ -807,12 +810,14 @@ class ThreadManager:
         # Active-task bookkeeping is authoritative at submit time. Register before
         # the executor can run a fast task and unregister itself.
         self._register_active_task(task)
-        self._record_pool_stat(pool_type, "submitted")
         try:
             future = executor.submit(wrapped_func)
         except Exception:
-            self._record_pool_stat(pool_type, "submitted", delta=-1)
-            self._unregister_active_task(task.task_id, outcome="rejected")
+            self._unregister_active_task(
+                task.task_id,
+                outcome="rejected",
+                undo_pool_submission=True,
+            )
             raise
         task.future = future
         
@@ -1201,9 +1206,8 @@ class ThreadManager:
 
     def _register_active_task(self, task: Task) -> None:
         """Synchronously register an in-flight task so bookkeeping is immediately authoritative."""
-        with self._active_tasks_lock:
+        with self._task_accounting_lock:
             self._active_tasks[task.task_id] = task
-        with self._category_stats_lock:
             category = task.category.strip()[: self._max_task_category_length] or "uncategorized"
             if (
                 category not in self._category_stats
@@ -1224,25 +1228,36 @@ class ThreadManager:
             )
             counts["submitted"] += 1
             counts["active"] += 1
+            pool_counts = self._stats.get(getattr(task, "pool_type", None))
+            if pool_counts is not None:
+                pool_counts["submitted"] += 1
 
     def _unregister_active_task(
         self,
         task_id: str,
         *,
         outcome: str | None = None,
+        undo_pool_submission: bool = False,
     ) -> None:
         """Synchronously remove an in-flight task from the authoritative registry."""
-        with self._active_tasks_lock:
+        with self._task_accounting_lock:
             task = self._active_tasks.pop(task_id, None)
-        if task is None:
-            return
-        with self._category_stats_lock:
-            counts = self._category_stats.get(task.category)
-            if counts is None:
+            if task is None:
                 return
-            counts["active"] = max(0, int(counts.get("active", 0)) - 1)
-            if outcome in {"completed", "failed", "cancelled", "rejected"}:
-                counts[outcome] = int(counts.get(outcome, 0)) + 1
+            counts = self._category_stats.get(task.category)
+            if counts is not None:
+                counts["active"] = max(0, int(counts.get("active", 0)) - 1)
+                if outcome in {"completed", "failed", "cancelled", "rejected"}:
+                    counts[outcome] = int(counts.get(outcome, 0)) + 1
+            pool_counts = self._stats.get(getattr(task, "pool_type", None))
+            if pool_counts is not None:
+                if undo_pool_submission:
+                    pool_counts["submitted"] = max(
+                        0,
+                        int(pool_counts["submitted"]) - 1,
+                    )
+                elif outcome in {"completed", "failed"}:
+                    pool_counts[outcome] = int(pool_counts[outcome]) + 1
 
     # Internal: pool statistics ------------------------------------------
     def _record_pool_stat(
