@@ -573,6 +573,8 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings, *, app
         osc_glow_reactivity=model.osc_glow_reactivity,
         spectrum_growth=model.spectrum_growth,
         spectrum_single_piece=spectrum_single_piece,
+        spectrum_visual_smoothing_enabled=model.spectrum_visual_smoothing_enabled,
+        spectrum_visual_smoothing=model.spectrum_visual_smoothing,
         spectrum_glow_enabled=model.spectrum_glow_enabled,
         spectrum_glow_intensity=model.spectrum_glow_intensity,
         spectrum_glow_color=model.spectrum_glow_color,

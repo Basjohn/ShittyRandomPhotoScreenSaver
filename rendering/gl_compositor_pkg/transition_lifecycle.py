@@ -28,6 +28,7 @@ def cancel_current_transition(widget, snap_to_new: bool = True) -> None:
     interrupted.
     """
 
+    had_animation_id = bool(widget._current_anim_id)
     if widget._animation_manager and widget._current_anim_id:
         try:
             widget._animation_manager.cancel_animation(widget._current_anim_id)
@@ -36,6 +37,23 @@ def cancel_current_transition(widget, snap_to_new: bool = True) -> None:
     widget._current_anim_id = None
 
     new_pm: Optional[QPixmap] = None
+    had_transition_state = had_animation_id or any(
+        getattr(widget, attr_name, None) is not None
+        for attr_name in (
+            "_crossfade",
+            "_slide",
+            "_wipe",
+            "_warp",
+            "_blockflip",
+            "_blockspin",
+            "_blinds",
+            "_diffuse",
+            "_raindrops",
+            "_crumble",
+            "_particle",
+            "_burn",
+        )
+    )
     if widget._crossfade is not None:
         try:
             new_pm = widget._crossfade.new_pixmap
@@ -133,15 +151,23 @@ def cancel_current_transition(widget, snap_to_new: bool = True) -> None:
     widget._particle = None
     widget._burn = None
 
-    # Ensure any transition textures are freed when a transition is
-    # cancelled so we do not leak VRAM across many rotations.
-    try:
-        widget._release_transition_textures(
-            retain_active="new" if snap_to_new else "old",
-        )
-    except Exception:
-        logger.debug("[GL COMPOSITOR] Failed to release blockspin textures on cancel", exc_info=True)
-    widget.update()
+    # A completed compositor clears its transition state before the outer
+    # BaseTransition emits ``finished``.  That synchronous cleanup re-enters
+    # this helper, but it is not another terminal boundary: releasing again
+    # would delete the just-retained base texture, reset transition metrics,
+    # and enqueue a redundant GUI update.  Real cancellation still owns one
+    # terminal release while state is live.
+    if had_transition_state:
+        try:
+            widget._release_transition_textures(
+                retain_active="new" if snap_to_new else "old",
+            )
+        except Exception:
+            logger.debug(
+                "[GL COMPOSITOR] Failed to release transition textures on cancel",
+                exc_info=True,
+            )
+        widget.update()
 
 # ------------------------------------------------------------------
 # QOpenGLWidget hooks

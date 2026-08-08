@@ -92,6 +92,8 @@
         "spectrum_rainbow_enabled": true,
         "spectrum_rainbow_speed": 0.6,
         "spectrum_render_mode": "bars",
+        "spectrum_visual_smoothing_enabled": true,
+        "spectrum_visual_smoothing": 0.5,
         "spectrum_sensitivity": 1.4,
         "spectrum_shape_nodes": [
           [

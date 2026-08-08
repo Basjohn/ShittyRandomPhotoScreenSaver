@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "package": "srpss_visualizer_temporal_v1",
+  "approved_baseline_commit": "ff93461685476bd0657aa88312fc2e35e9037880",
+  "rollback_checkpoint": "3b6082dd",
+  "mutation_policy": "Read-only verification. Changes require an intentional visualizer declaration and installed approval.",
+  "artifacts": [
+    {
+      "kind": "approval_environment",
+      "path": "tests/goldens/visualizer_temporal/v1/approval_environment_manifest.json",
+      "sha256": "3531aa407e04f79e1b3bcf9bc66fc9ededbfdda7300a427fbf5e8544654c475a"
+    },
+    {
+      "kind": "deterministic_source_fixture",
+      "path": "tests/fixtures/visualizer_temporal/v1/bubble_discrete_edge.json",
+      "sha256": "6adac2d93d98b6f3e9c5ece82bf331b13b45a59542314221319f581213c84a8c"
+    },
+    {
+      "kind": "production_executor_temporal_golden",
+      "path": "tests/goldens/visualizer_temporal/v1/bubble_discrete_edge_general_compute.json",
+      "sha256": "7933c12865ca9aa86ad0f6bcbaa7bbb3ebabcb420259b6a6b40d91db41dcc721"
+    },
+    {
+      "kind": "deterministic_source_fixture",
+      "path": "tests/fixtures/visualizer_temporal/v1/spectrum_authoritative_smoothing.json",
+      "sha256": "3d3c70da037e8f69d891b92679a7a2576db2b9d0eeb43760ddc6ce08b38634b8"
+    },
+    {
+      "kind": "authoritative_tick_temporal_golden",
+      "path": "tests/goldens/visualizer_temporal/v1/spectrum_authoritative_smoothing.json",
+      "sha256": "5ed7121e7d9210ee216c29874b86e2a8aadbf1fb406190ea90e5fd3c8f9d6e6b"
+    }
+  ],
+  "remaining_scope": [
+    "transition-overlap temporal trace under real display ownership",
+    "installed scenario archive with exact source identity and playback offset",
+    "installed cadence comparison proving no set-state or paint amplification"
+  ]
+}

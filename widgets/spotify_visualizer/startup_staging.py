@@ -348,6 +348,11 @@ def deactivate_impl(widget: Any) -> None:
     """Deactivate visualizer — lifecycle hook."""
     from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
     from widgets.spotify_visualizer.media_bridge import clear_pending_playback_pause
+    from widgets.spotify_visualizer.spectrum_presentation_smoothing import (
+        reset_widget_spectrum_presentation_smoothing,
+    )
+
+    reset_widget_spectrum_presentation_smoothing(widget)
 
     try:
         clear_pending_playback_pause(widget)

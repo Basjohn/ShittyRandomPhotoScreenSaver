@@ -125,6 +125,12 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_ghost_alpha: float = 0.0
         self._bubble_ghost_decay: float = 0.4
         self._spectrum_single_piece: bool = False
+        self._spectrum_visual_smoothing_enabled: bool = True
+        self._spectrum_visual_smoothing: float = 0.5
+        self._spectrum_presentation_bars: list[float] = []
+        self._spectrum_presentation_last_ts: float = 0.0
+        self._spectrum_presentation_identity: tuple | None = None
+        self._spectrum_presentation_pending: bool = False
         self._spectrum_border_radius: float = 0.0
         self._spectrum_glow_enabled: bool = False
         self._spectrum_glow_intensity: float = 0.55

@@ -325,6 +325,11 @@ def reset_mode_owned_runtime_state(widget: Any, *, reason: str = "mode_activatio
     that can bleed when switching modes or presets without reconstructing the
     widget.
     """
+    from widgets.spotify_visualizer.spectrum_presentation_smoothing import (
+        reset_widget_spectrum_presentation_smoothing,
+    )
+
+    reset_widget_spectrum_presentation_smoothing(widget)
 
     for attr in (
         "_last_visual_smooth_ts",

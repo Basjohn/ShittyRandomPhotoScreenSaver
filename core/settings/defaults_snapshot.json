@@ -1563,6 +1563,8 @@
             "spectrum_transient_clamp": 1.5,
             "spectrum_transient_pulse_gain": 1.0,
             "spectrum_unique_colors": true,
+            "spectrum_visual_smoothing": 0.5,
+            "spectrum_visual_smoothing_enabled": true,
             "spectrum_wave_amplitude": 0.5,
             "visualizers_enabled": true
         },

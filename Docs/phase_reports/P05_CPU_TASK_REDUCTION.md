@@ -13,6 +13,102 @@ Phase 4 is closed by `logs/evidence_chest/07_30_dc8d1741_00_26/`, including star
 
 ## Current implementation state
 
+### 2026-08-08 18:59 installed assessment — strong recovery checkpoint, final gate open
+
+The exact run is preserved at
+`logs/evidence_chest/08_08_after_97ff0619_gl_retention_18_59/`; parser 1.5 output,
+the same-parser `08_02` and `849f78e8` comparisons, and all rotated source logs are
+stored with it. The parsed source SHA-256 is
+`C76A4CEF2A5C84D9AD6D4DA81C90670AD5DB93BE178973E493B94026250E8647`.
+The run used the bounded-retention working tree subsequently captured without a
+production-code change by commit `3b6082dd`. It is therefore a commit-addressable
+recovery checkpoint, though not yet the immutable performance or visual authority.
+
+The generalized 17:07 delivery failure is substantially recovered:
+
+```text
+metric                         08_02 Phase 4    17:07 failed      18:59 recovery
+app CPU median/max             79.3 / 113.9%   103.0 / 122.3%     83.4 / 102.5%
+system CPU median/max          14.7 / 18.1%     42.5 / n/a        21.6 / 25.9%
+paint FPS median               96.0              64.4              92.1
+paint interval p99 median      32.9 ms           53.4 ms           29.9 ms
+paint dtmax median/max         59.8 / 96.4 ms   104.0 / 140.7 ms  58.1 / 138.0 ms
+paint-cost p99 median/max       5.3 / 7.7 ms      8.9 / 14.0 ms    5.5 / 9.0 ms
+request-age p99 median/max     20.3 / 51.6 ms    44.0 / 68.1 ms   20.1 / 41.7 ms
+render FPS median              96.0              64.4              92.2
+render dtmax median/max        66.5 / 127.1 ms  106.4 / 141.2 ms  66.2 / 129.8 ms
+event-loop late p99 median     38.9 ms           79.6 ms           36.4 ms
+event-loop late max          1103.6 ms         1574.5 ms         1251.3 ms
+tick-spike median/max          48.6 / 175.6 ms   66.9 / 130.5 ms  51.0 / 94.8 ms
+```
+
+The 18:59 PAINT windows span `54.4–151.2 FPS` with median `92.1`; interval p99
+spans `15.8–55.2 ms`, dtmax `20.9–138.0 ms`, paint-cost p99 `3.3–9.0 ms`, and
+request-age p99 `10.2–41.7 ms`. The worst paint dtmax is a Crumble window. RENDER
+windows span `54.5–151.3 FPS`, with dtmax `33.5–129.8 ms`. There is no 165 Hz
+display collapse to a 60 Hz divisor, no 60 Hz under-target window, shader fallback,
+pending-paint retry/stall, or incomplete transition. Raw owner gaps normalize to
+about `18.9/min` total, `10.2/min` over 33 ms, and `8.7/min` over 50 ms, versus
+about `29.5/18.7/10.8` in `08_02` and `68.5/41.7/26.8` at 17:07.
+
+Visualizer delivery is healthy enough to preserve as candidate golden evidence.
+Bubble tick snapshots span `78.9–117.5 FPS` with median `87.5` and maximum dtmax
+`94.8 ms`; final Bubble segments settle at `85.7–89.4 FPS`. Spectrum snapshots span
+`84.9–92.7 FPS` with median `90.6` and maximum dtmax `89.0 ms`; its final segments
+are `88.8–92.0 FPS`. Bubble final-segment offered/submitted/published ratios remain
+`0.997–1.000`, worker work remains roughly `1–2 ms`, and there are no lane
+registrations or visualizer safeguard failures. The operator judged Bubble response
+good enough for the stricter-golden work, but exact source fixtures and playback
+offsets are still required before commit `3b6082dd` can replace `ff934616`.
+
+The run confirms that ordinary Spectrum `bars` mode was not using a display-only
+filter over the main rendered bar heights. A new explicitly user-authorized candidate
+now supplies optional Spectrum-only presentation interpolation at the existing
+authoritative UI visualizer tick, before the GPU frame push. It applies to both Spectrum
+render styles, defaults enabled at `0.50`, and is symmetric/time-compensated over a
+`2–14 ms` time constant (`8 ms` at default). It adds no timer, scheduler, queue,
+paint-local mutation, self-requested repaint, source decimation, Bubble change, or
+shared-analysis change. First-frame/identity/pause/disable/teardown boundaries and
+UI stalls of at least `100 ms` snap or reset to source. Deterministic attack/drop/
+alternation/reset/stall/no-independent-update artifacts pass, but the candidate remains
+unapproved until an installed disabled/default/stronger comparison establishes
+imperceptible latency and a positive visual verdict.
+
+GL evidence strongly supports bounded PBO retention as a contributor: the recovery
+run has zero `[GL TEXTURE] Slow upload` records, versus 15 totalling `411.7 ms` at
+17:07. That installed binary exposed two terminal calls per display per transition.
+The code-level cause is now corrected: completed-transition cleanup re-entry observes
+no live compositor transition and cannot issue a second release or redundant GUI
+`update()`, while an empty texture-manager terminal pair cannot reopen/reset metrics.
+Focused lifecycle/resource tests and the 45-cycle production-PBO harness prove the
+exact current texture and one bounded PBO survive and are reused, larger growth trims
+the old PBO, and strict teardown reaches zero textures/PBOs/bytes. The 18:59 evidence
+predates this correction, so a fixed low-load installed A/B still owns acceptance.
+
+Resource containment improves but absolute efficiency does not pass:
+
+```text
+metric                         08_02 median/max     18:59 median/max
+whole-app RSS                  958.9 / 1074.1 MiB   940.7 / 1085.7 MiB
+whole-app USS                         unavailable   807.2 / 949.9 MiB
+private commit                3018.3 / 3165.4 MiB  2920.0 / 3133.4 MiB
+dedicated VRAM                 623.0 / 776.6 MiB    556.9 / 623.8 MiB
+shared VRAM                           unavailable     86.5 / 94.5 MiB
+tracked GL maximum              313.1 MB / 298.6 MiB  143.7 MB / 137.1 MiB
+threads median/max                    89 / 94               91 / 98
+handles median/max                  2138 / 2156           2166 / 2219
+```
+
+One CUSTOM and four Settings full recreations completed without barrier timeout,
+stale identity, invalid-wrapper/disconnect warning, exception, or failed reveal.
+Runtime barriers were `235 ms` for CUSTOM and `203–218 ms` for Settings. Settings
+dialog-close totals were dominated by `3.4–6.9 s` of user/dialog dwell rather than
+runtime teardown. First-frame times for screen 0 were `93, 718, 609, 657, 31, 47 ms`
+across cold/CUSTOM/four Settings generations; screen 1 was `0–31 ms`. Equivalent
+settled tracked-resource plateaus and exact zero-GL teardown are encouraging, but
+this is not the required alternating Edit/Settings matrix and the early screen-0
+rebuild tail, handle maximum, RSS maximum, and commitment remain open.
+
 ### 2026-08-08 bounded terminal-retention recovery — deterministic candidate
 
 The failed-run evidence supports terminal upload-resource retirement as a plausible
@@ -33,20 +129,52 @@ only compositor-local GL resource ownership and its deterministic diagnostics:
 - full owner/context teardown still deletes the retained texture and PBO, preserves
   failed ownership in strict mode, and cannot claim initialization ended after a
   failed buffer deletion;
-- one bounded `[PERF] [GL RETENTION]` record per completed transition reports local
+- the intended one bounded `[PERF] [GL RETENTION]` record per completed transition reports local
   cache hits, texture allocation/upload/delete counts and bytes, PBO create/reuse/
   delete counts and bytes, PBO-versus-direct uploads, upload time/max, and `>20 ms`
   slow-upload count/time as a stall proxy. These counters are observation only and
-  create no timer, queue, callback, repaint, or scheduling dependency.
+  create no timer, queue, callback, repaint, or scheduling dependency. The installed
+  18:59 run exposed duplicate terminal calls that reset/reopened this window. The
+  completed-transition cleanup path and empty-manager terminal path are now idempotent;
+  one installed bracket remains required.
 
-The changed-area gate currently passes `35/35` focused texture/PBO/resource tests.
-The strengthened 45-cycle harness now calls the production PBO acquire/release/trim
+The terminal-idempotency focused gate passes `53` tests with `13` environment skips.
+The strengthened 45-cycle harness calls the production PBO acquire/release/trim
 seams rather than injecting a synthetic idle buffer; it proves retained texture/PBO
 ID reuse on a later transition, larger-size PBO replacement, one sufficient bounded
 terminal PBO, exact current-texture retention, and zero texture/PBO bytes after
 strict owner resets.
 Independent review found no functional blocker after failed-upload delete-byte
 accounting was reconciled.
+
+The affected visualizer temporal gate adds versioned synthetic inputs and immutable
+expected traces for Bubble discrete-edge publication and Spectrum authoritative-tick
+presentation. Bubble runs through the real ordinary `ThreadManager` COMPUTE executor,
+publishes the discrete event exactly once on the first lane-free tick, and rejects the
+terminal-batching shape. Spectrum records source and presentation values across rise,
+settle, drop, a `110 ms` stall snap, and generation reset; it asserts zero independent
+timers, paint-local mutations, overlay self-updates, or Bubble/shared-source changes.
+The original 66 Phase 2 replay goldens remain unchanged.
+Replay schema v1 explicitly disables this later Spectrum presentation candidate and
+omits only its two new dotted model fields from the frozen authored-preset hash; the
+read-only verifier passes all 66 outputs plus the original manifest. The separate
+temporal package therefore adds the candidate hazard light without laundering a new
+default into the approved baseline.
+
+Current focused verification after the idempotency/replay corrections:
+
+```text
+Spotify visualizer runtime:                 201 passed, 7 skipped
+temporal/settings/default/repaint:           178 passed
+widgets tab/Spectrum shaping/presets:        187 passed, 1 skipped
+GL texture/compositor/resource lifecycle:     53 passed, 13 skipped
+Bubble/Spectrum temporal + replay tests:      34 passed
+protected Phase 2 replay CLI:                 66 goldens + manifest verified
+45-cycle resource harness:                    passed all 14 criteria; 8 KiB repeat RSS drift
+```
+
+These are deterministic/harness gates, not substitutes for the installed visual,
+fixed-workload performance, lifecycle-matrix, or absolute-resource gates.
 
 The required four-process full-suite sweep was also run with per-chunk logs. Chunks
 1–3 completed without timeout with `10`, `7`, and `15` existing unrelated failures;
@@ -93,7 +221,7 @@ metric                         08_02 median/max     17:07 median/max
 whole-app RSS                  958.9 / 1074.1 MiB   939.6 / 1004.0 MiB
 private commit                3018.3 / 3165.4 MiB  2822.3 / 2980.8 MiB
 dedicated VRAM                 623.0 / 776.6 MiB    559.3 / 623.9 MiB
-tracked GL maximum                    313.1 MiB             143.7 MiB
+tracked GL maximum              313.1 MB / 298.6 MiB  143.7 MB / 137.1 MiB
 ```
 
 The same logs expose the likely unacceptable tradeoff. Between transitions,
@@ -192,15 +320,16 @@ Parser 1.5 repaired a derived-evidence defect: nested `tm_categories` JSON had b
 - [x] Validate the restored lane-free path: the dedicated restored-path run reached 50,106 offered and 50,106 submitted lane-free steps (ratio 1.000) with no artificial cadence deferrals and roughly 1–2 ms worker execution. Later intervals stayed near 89 FPS with only isolated genuine worker/result ownership deferrals. The operator confirmed restored immediate Bubble reaction and elasticity.
 - [x] Add a runtime-shaped source/discrete-edge-to-first-visible temporal oracle. The 100 Hz recurring-tick test authors a discrete kick at the exact phase deferred by the rejected 60 Hz token gate and requires that edge to appear in the first lane-free visible state. It fails terminal-only edge-plus-quiet batching while preserving the current one-step authored path.
 - [ ] Compare input-to-visible latency, p99/max delivery, and CPU/task cost before/after any new design. Do not reintroduce a second cadence authority, terminal-only multi-step batching, or live scheduler capture merely to improve the counter.
-- [ ] Exercise Spectrum on its unchanged shared newest-only path and Bubble → Spectrum → Bubble; do not retune Spectrum smoothing or Bubble authored behaviour without mode-owned failure evidence.
+- [-] Exercise Spectrum on its unchanged shared newest-only path and Bubble → Spectrum → Bubble. The optional candidate now smooths presentation bars only on the existing UI visualizer tick, with disabled/default/stronger settings and deterministic hazard lights; installed paint receipt, mode-switch review, and user approval remain open.
 - [ ] Reject any optimization that turns paint delivery, feedback animation, or a retry timer into the visualizer clock.
 
 ## P5.1 — Frame-delivery owner telemetry
 
 - [-] Add/passively consume owner-labelled render, submission, GUI callback, update-request, and paint timestamps without creating UI work or a new timer/queue.
-- [-] The 17:07 run supplied 217 owner-labelled frame gaps: 132 exceeded 33 ms, 85 exceeded 50 ms, and the maximum was 140.7 ms. Last-callback labels remained mostly cheap media-consumption and cursor-halo callbacks; they correlate with delayed delivery but do not account for the missing tens of milliseconds. Prioritize the terminal upload/resource boundary and controlled event-loop attribution rather than Bubble-worker retuning.
+- [-] The 18:59 recovery run supplied 124 owner-labelled gaps over 393 seconds: 67 exceeded 33 ms, 57 exceeded 50 ms, and the maximum was 138.0 ms. Normalized rates improve over both `08_02` and the 17:07 failure, but the Crumble and event-loop maxima remain open. Last-callback labels remain correlation rather than sufficient causal attribution.
 - [x] Resolve the known transition-label hole: owner telemetry now accepts the compositor display-transition `name`, which was present on the 62 active records but previously ignored.
-- [x] Add one transition-local GL retention record with cache-hit, allocation/upload/delete byte, PBO/direct, retained-capacity, and slow-upload fields; deterministic tests prove each record resets at the terminal boundary.
+- [x] Make the transition-local GL retention bracket mechanically singular. Completed cleanup re-entry and an empty manager pair are idempotent; deterministic tests and the 45-cycle production-PBO harness prove retained IDs/reuse, growth trim, and strict zero teardown without a redundant GUI update.
+- [!] Capture the corrected bracket installed. The 18:59 binary still has duplicate terminal records, so do not use its counters causally until the fixed A/B shows exactly one terminal record per real transition.
 - [ ] Correlate those GL records with request-age, event-loop lateness, paint delivery, CPU, and resource snapshots in the fixed-workload installed A/B; lifetime totals or unmatched-machine comparisons are not causal proof.
 - [ ] Correlate the now-labelled transition owner with logical scene age, event-loop lateness, queue/callback tails, and per-display request-to-paint delay in the next installed capture.
 - [ ] Attribute delayed delivery to its actual owner before changing cadence mechanics; a healthy render clock with delayed paint is event-loop delivery starvation, not permission to add repaint retries.

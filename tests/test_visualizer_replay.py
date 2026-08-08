@@ -26,7 +26,9 @@ from widgets.spotify_visualizer.feature_frame import (  # noqa: E402
 )
 from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine  # noqa: E402
 from widgets.spotify_visualizer.replay_runtime import (  # noqa: E402
+    build_replay_v1_settings_model,
     load_clips,
+    replay_v1_authored_preset_payload,
     replay_clip,
     sample_presentation_trace,
     stable_digest,
@@ -85,6 +87,16 @@ def _clip(name: str = "representative", *, modes=("spectrum",), frame_count: int
             )
         )
     return FeatureClip(name, tuple(frames))
+
+
+def test_replay_v1_keeps_candidate_smoothing_out_of_the_approved_baseline():
+    spectrum = build_replay_v1_settings_model("spectrum")
+    assert spectrum.spectrum_visual_smoothing_enabled is False
+
+    for mode in ("spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve"):
+        payload = replay_v1_authored_preset_payload(mode)
+        assert "widgets.spotify_visualizer.spectrum_visual_smoothing_enabled" not in payload
+        assert "widgets.spotify_visualizer.spectrum_visual_smoothing" not in payload
 
 
 @pytest.mark.qt

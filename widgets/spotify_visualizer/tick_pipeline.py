@@ -23,6 +23,10 @@ from core.logging.logger import (
     is_viz_logging_enabled,
 )
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
+from widgets.spotify_visualizer.spectrum_presentation_smoothing import (
+    reset_widget_spectrum_presentation_smoothing,
+    resolve_widget_spectrum_presentation,
+)
 
 logger = get_logger(__name__)
 
@@ -867,6 +871,19 @@ def push_gpu_frame(
     if parent is None or not hasattr(parent, "push_spotify_visualizer_frame"):
         return False
 
+    mode_str = widget._vis_mode_str
+    if mode_str == "spectrum":
+        presentation_bars, presentation_changed = resolve_widget_spectrum_presentation(
+            widget,
+            widget._display_bars,
+            now_ts=now_ts,
+            first_frame=first_frame,
+        )
+        changed = changed or presentation_changed
+    else:
+        presentation_bars = list(widget._display_bars)
+        reset_widget_spectrum_presentation_smoothing(widget)
+
     try:
         resolve_gpu_target_rect = getattr(widget, "_resolve_gpu_target_rect", None)
         if callable(resolve_gpu_target_rect):
@@ -897,8 +914,6 @@ def push_gpu_frame(
         return False
 
     _gpu_push_start = time.time()
-    mode_str = widget._vis_mode_str
-
     from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
     extra = build_gpu_push_extra_kwargs(widget, mode_str, widget._engine)
 
@@ -957,7 +972,7 @@ def push_gpu_frame(
     effective_fade = 0.0 if primer_problems else fade
 
     used_gpu = parent.push_spotify_visualizer_frame(
-        bars=list(widget._display_bars),
+        bars=presentation_bars,
         bar_count=widget._bar_count,
         segments=widget._dynamic_bar_segments(),
         fill_color=widget._bar_fill_color,

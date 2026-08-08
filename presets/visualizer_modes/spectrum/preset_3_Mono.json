@@ -10,6 +10,8 @@
         "monitor": "2",
         "spectrum_growth": 5.0,
         "spectrum_render_mode": "segment",
+        "spectrum_visual_smoothing_enabled": true,
+        "spectrum_visual_smoothing": 0.5,
         "spectrum_unique_colors": false,
         "spectrum_rainbow_border": false,
         "spectrum_border_radius": 1.0,

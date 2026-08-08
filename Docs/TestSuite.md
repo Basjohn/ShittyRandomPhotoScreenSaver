@@ -190,6 +190,17 @@ The Phase 2 lock is owned by:
 - `tests/fixtures/visualizer_replay/v1/`;
 - `tests/goldens/visualizer_replay/v1/`.
 
+The stronger affected-path temporal hazard lights are owned by:
+
+- `tests/test_bubble_cadence.py` for the real ordinary-executor discrete edge and first lane-free publication;
+- `tests/test_spectrum_presentation_smoothing.py` for authoritative-tick Spectrum rise/drop/settle/reset/stall behaviour and absence of an independent presentation cadence;
+- `tests/fixtures/visualizer_temporal/v1/`;
+- `tests/goldens/visualizer_temporal/v1/manifest.json` and its immutable expected traces.
+
+These artifacts supplement rather than replace the Phase 2 logical goldens. Installed
+source identity, actual paint receipt, remaining modes, and user visual acceptance are
+still required before promoting a new behavioural baseline.
+
 Run `\.venv\Scripts\python.exe tools\visualizer_replay.py verify` for infrastructure work. Expected output is exact canonical JSON after seven-decimal normalization. Golden mutation requires the explicit policy documented in `Docs/Harness_Index.md` and the Phase 2 report.
 
 ## 6. Frame-Pacing Gate

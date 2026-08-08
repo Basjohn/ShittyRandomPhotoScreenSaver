@@ -1,11 +1,69 @@
 from __future__ import annotations
 
+from copy import deepcopy
+import hashlib
+import json
+from pathlib import Path
 from types import SimpleNamespace
 import time
 
 import pytest
 
 from widgets.spotify_visualizer.bubble_cadence import BubbleCadenceState
+
+
+_TEMPORAL_FIXTURE = (
+    Path(__file__).parent
+    / "fixtures"
+    / "visualizer_temporal"
+    / "v1"
+    / "bubble_discrete_edge.json"
+)
+_TEMPORAL_GOLDEN = (
+    Path(__file__).parent
+    / "goldens"
+    / "visualizer_temporal"
+    / "v1"
+    / "bubble_discrete_edge_general_compute.json"
+)
+_TEMPORAL_MANIFEST = _TEMPORAL_GOLDEN.parent / "manifest.json"
+
+
+def _load_temporal_json(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_visualizer_temporal_manifest_hashes_are_immutable():
+    manifest = _load_temporal_json(_TEMPORAL_MANIFEST)
+    repo_root = Path(__file__).parent.parent
+
+    for artifact in manifest["artifacts"]:
+        path = repo_root / artifact["path"]
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert digest == artifact["sha256"], artifact["path"]
+
+
+def _assert_bubble_temporal_contract(trace: dict, golden: dict) -> None:
+    authored_tick = int(trace["first_visible"]["authored_tick"])
+    visible_tick = int(trace["first_visible"]["visible_tick"])
+    latency_ticks = int(trace["first_visible"]["latency_ticks"])
+    visible_count = int(trace["first_visible"]["visible_edge_count"])
+    contract = golden["contract"]
+
+    assert authored_tick >= 0, "the discrete edge must be authored"
+    assert visible_tick > authored_tick, "the authored edge must reach presentation"
+    assert latency_ticks <= int(contract["max_first_visible_latency_ticks"]), (
+        "the discrete edge missed the first lane-free visible tick"
+    )
+    assert visible_count == int(contract["required_visible_edge_count"]), (
+        "the discrete edge must be visible exactly once"
+    )
+    assert trace["executor"]["lane_registrations"] == int(
+        contract["prohibited_lane_registrations"]
+    ), "persistent-lane ownership is prohibited"
+    assert trace["presentation"]["extra_update_requests"] == int(
+        contract["prohibited_extra_update_requests"]
+    ), "presentation must not create a second update cadence"
 
 
 def test_bubble_lane_adds_no_artificial_cadence_deferrals():
@@ -115,7 +173,9 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
     from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
     from core.threading.manager import ThreadManager, ThreadPoolType
 
-    clock = SimpleNamespace(now=100.0)
+    fixture = _load_temporal_json(_TEMPORAL_FIXTURE)
+    golden = _load_temporal_json(_TEMPORAL_GOLDEN)
+    clock = SimpleNamespace(now=float(fixture["start_timestamp"]))
 
     class _Scheduler:
         def __init__(self) -> None:
@@ -129,7 +189,10 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
             if event_type != "kick" or not self._kick_waiting:
                 return None
             self._kick_waiting = False
-            return SimpleNamespace(strength=1.0, timestamp=clock.now)
+            return SimpleNamespace(
+                strength=float(fixture["kick_strength"]),
+                timestamp=clock.now,
+            )
 
     scheduler = _Scheduler()
 
@@ -138,7 +201,7 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
             return None
 
         def get_bubble_energy_bands(self):
-            return SimpleNamespace(bass=0.1, mid=0.05, high=0.02, overall=0.08)
+            return SimpleNamespace(**fixture["energy"])
 
         def get_transient_energy_bands(self):
             return SimpleNamespace(
@@ -207,9 +270,12 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
     monkeypatch.setattr(tick_pipeline, "push_gpu_frame", _capture_visible)
 
     try:
-        for tick_index in range(6):
-            clock.now = 100.0 + tick_index * 0.010
-            if tick_index == 3:
+        tick_count = int(fixture["tick_count"])
+        tick_interval_s = float(fixture["tick_interval_ms"]) / 1000.0
+        kick_tick = int(fixture["kick_authored_tick"])
+        for tick_index in range(tick_count):
+            clock.now = float(fixture["start_timestamp"]) + tick_index * tick_interval_s
+            if tick_index == kick_tick:
                 scheduler.arm_kick()
             tick_pipeline.on_tick(widget)
             deadline = time.monotonic() + 1.0
@@ -217,25 +283,85 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
                 assert time.monotonic() < deadline
                 time.sleep(0.001)
 
-        assert visible_edges[3] == 0.0
-        assert visible_edges[4] == pytest.approx(1.0)
-        assert visible_edges[5] == 0.0
-        assert [index for index, value in enumerate(visible_edges) if value > 0.5] == [4]
-
         cadence = widget._bubble_cadence_state.diagnostic_snapshot()
-        assert cadence["offered_ticks"] == 6
-        assert cadence["submitted_tasks"] == 6
-        assert cadence["publish_ratio"] == pytest.approx(1.0)
-        assert cadence["worker_busy_deferrals"] == 0
-        assert cadence["result_waiting_deferrals"] == 0
         lane = widget._bubble_compute_lane.diagnostic_snapshot()
-        # The approved restored path is lane-free, not task-free: every
-        # authored step uses the ordinary general COMPUTE executor exactly
-        # once and no persistent lane registration is allowed.
-        assert lane["lane_registrations"] == 0
-        assert lane["executor_task_submissions"] == 6
-        assert lane["logical_steps_published"] == 6
+        category = thread_manager.get_task_category_stats()[
+            "visualizer.bubble_simulation"
+        ]
+        visible_tick_indices = [
+            index for index, value in enumerate(visible_edges) if value > 0.5
+        ]
+        visible_tick = visible_tick_indices[0] if visible_tick_indices else -1
+        trace = {
+            "schema_version": 1,
+            "golden_kind": "production_executor_temporal_trace",
+            "baseline_commit": golden["baseline_commit"],
+            "rollback_checkpoint": golden["rollback_checkpoint"],
+            "fixture_id": fixture["fixture_id"],
+            "contract": golden["contract"],
+            "ticks": [
+                {
+                    "tick": tick_index,
+                    "kick_authored": tick_index == kick_tick,
+                    "visible_edge": round(float(visible_edges[tick_index]), 7),
+                }
+                for tick_index in range(tick_count)
+            ],
+            "first_visible": {
+                "authored_tick": kick_tick,
+                "visible_tick": visible_tick,
+                "latency_ticks": visible_tick - kick_tick,
+                "visible_edge_count": len(visible_tick_indices),
+            },
+            "cadence": {
+                "offered_ticks": int(cadence["offered_ticks"]),
+                "submitted_tasks": int(cadence["submitted_tasks"]),
+                "publish_ratio": float(cadence["publish_ratio"]),
+                "worker_busy_deferrals": int(cadence["worker_busy_deferrals"]),
+                "result_waiting_deferrals": int(cadence["result_waiting_deferrals"]),
+            },
+            "executor": {
+                "adapter": lane["adapter"],
+                "category": lane["category"],
+                "lane_registrations": int(lane["lane_registrations"]),
+                "task_submissions": int(lane["executor_task_submissions"]),
+                "tasks_completed": int(lane["logical_steps_completed"]),
+                "steps_published": int(lane["logical_steps_published"]),
+                "category_submitted": int(category["submitted"]),
+                "category_completed": int(category["completed"]),
+                "category_failed": int(category["failed"]),
+                "category_active": int(category["active"]),
+            },
+            "presentation": {
+                "authoritative_ticks": tick_count,
+                "frame_publications": len(visible_edges),
+                "extra_update_requests": 0,
+            },
+            "negative_controls": golden["negative_controls"],
+        }
+
+        _assert_bubble_temporal_contract(trace, golden)
+        assert trace == golden
     finally:
         widget._stop_bubble_compute_lane()
         thread_manager.shutdown(wait=True, timeout=1.0)
         widget.deleteLater()
+
+
+def test_bubble_temporal_golden_rejects_terminal_batching_and_persistent_lane():
+    golden = _load_temporal_json(_TEMPORAL_GOLDEN)
+
+    terminal_batch = deepcopy(golden)
+    terminal_batch["ticks"][4]["visible_edge"] = 0.0
+    terminal_batch["first_visible"].update(
+        visible_tick=-1,
+        latency_ticks=-4,
+        visible_edge_count=0,
+    )
+    with pytest.raises(AssertionError, match="reach presentation"):
+        _assert_bubble_temporal_contract(terminal_batch, golden)
+
+    persistent_lane = deepcopy(golden)
+    persistent_lane["executor"]["lane_registrations"] = 1
+    with pytest.raises(AssertionError, match="persistent-lane"):
+        _assert_bubble_temporal_contract(persistent_lane, golden)

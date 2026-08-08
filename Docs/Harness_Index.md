@@ -107,6 +107,28 @@ $env:QT_QPA_PLATFORM='offscreen'
 
 `verify` is the normal infrastructure gate and is read-only. `bootstrap-goldens` is only for an empty baseline directory. `update-goldens` requires an acknowledged intentional behaviour change and an approved visualizer change declaration. Review the Spectrum/Bubble artifacts under `Docs/phase_reports/artifacts/P02/` and the Phase 2 evidence in `Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md`.
 
+Replay schema v1 predates the optional Spectrum presentation filter. Its model builder
+therefore explicitly disables that candidate and excludes only the two later dotted
+presentation fields from the frozen authored-preset hash. Do not enable the candidate
+or rewrite v1 outputs; its expected behaviour belongs in the temporal package below.
+
+### Affected-path temporal hazard lights
+
+Run the Bubble/Spectrum temporal checks without regenerating their versioned artifacts:
+
+```powershell
+$env:QT_QPA_PLATFORM='offscreen'
+.\.venv\Scripts\python.exe -m pytest tests\test_bubble_cadence.py tests\test_spectrum_presentation_smoothing.py -q
+```
+
+The Bubble trace uses the ordinary production-shaped `ThreadManager` COMPUTE executor
+and requires a discrete event exactly once on the first lane-free visible publication.
+The Spectrum trace records authoritative source and presentation publications on the
+existing UI visualizer tick and rejects independent timers, paint-local mutation, and
+overlay self-updates. The manifest under `tests/goldens/visualizer_temporal/v1/` is
+hand-reviewed evidence: do not auto-regenerate it. These checks do not replace the
+installed source/paint-receipt/operator gate.
+
 ## 4. Compositor Recovery
 
 Use when touching compositor, GL lifecycle, visualizer integration, image upload, transition completion, or resource sharing.

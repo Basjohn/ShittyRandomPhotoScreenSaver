@@ -1,6 +1,6 @@
 # 05 — Visualizer Fidelity Contract
 
-Last reconciled: 2026-08-02
+Last reconciled: 2026-08-08
 
 ## Why this contract exists
 
@@ -93,6 +93,26 @@ Every supported mode must preserve, as applicable:
 
 The rejected `ebfec397` experiment is a mandatory negative control: roughly 977–1000 authoritative state publications versus 1417–1544 paints per ten seconds exposed a second cadence and the user reported significantly worse smoothness.
 
+The 2026-08-08 18:59 installed run used ordinary Spectrum `bars` mode. That path did
+not have a display-only filter over its main bar heights. The user subsequently
+authorized an optional adjustable Spectrum-only presentation candidate after adding
+affected-path temporal hazard lights. It is implemented for both Spectrum render
+styles, defaults enabled at strength `0.50`, and remains unapproved production
+behaviour until installed visual review.
+
+The candidate runs immediately before GPU-frame publication on the existing
+authoritative UI visualizer tick, never in `paintGL()`. It uses symmetric,
+time-compensated rise/fall interpolation with a `2–14 ms` time constant (`8 ms` at
+default), and snaps/resets on first-frame, mode/activation/generation/bar-count/
+render-style/strength, pause/disable/teardown, and at least `100 ms` GUI-stall
+boundaries. It adds no timer, queue, independent repaint request, scheduler, source
+decimation, or Bubble/shared-source change. The versioned trace covers rise, settling,
+drop, stall and generation reset and asserts zero paint-local mutations, overlay
+self-updates, and independent timers. Installed acceptance still requires no more
+than one authoritative-tick of added response and an imperceptible-latency visual
+verdict; the prior immediate-rise/paint-local smoothed-fall shape remains a negative
+control.
+
 ## Bubble-specific protections
 
 - Elasticity, rebound, overshoot, and settling remain equal or better than the approved runtime.
@@ -104,7 +124,7 @@ The rejected `ebfec397` experiment is a mandatory negative control: roughly 977�
 
 ## Stronger golden package
 
-The existing Phase 2 logical replay package remains useful but was insufficient to detect real scheduling/publication hazards.
+The existing Phase 2 logical replay package remains useful but was insufficient to detect real scheduling/publication hazards. The versioned temporal package now adds a real-ordinary-executor Bubble discrete-edge trace and an existing-tick Spectrum presentation trace without rewriting the 66 approved Phase 2 goldens. It remains incomplete until installed source identity/paint receipt, the full scheduler-ownership negative control, remaining modes, and separate operator approval are archived.
 
 The current package must add:
 

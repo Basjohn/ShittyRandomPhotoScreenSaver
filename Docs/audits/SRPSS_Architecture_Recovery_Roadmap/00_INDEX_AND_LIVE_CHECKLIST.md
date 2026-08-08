@@ -24,8 +24,10 @@ restored executor behaviour:    4bde89e8e39177dc4dd7b5e64b9ac99256ab9486
 rejected persistent lane:       666624d421b08f978c5f610571a078570150a1e7
 rejected Spectrum smoothing:    ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
 donor/reference only:           7376bb9bb380253f3bd14079e65d7bdbca062fad
+current recovery checkpoint:    3b6082dd
 active task owner:              Current_Plan.md
-latest installed evidence:      logs/evidence_chest/08_02_3877b2c7_20_27/
+latest installed evidence:      logs/evidence_chest/08_08_after_97ff0619_gl_retention_18_59/
+current performance comparator: logs/evidence_chest/08_02_3877b2c7_20_27/
 ```
 
 ## Document order
@@ -71,7 +73,7 @@ Templates are under `templates/`.
 - [x] Infrastructure changes are not allowed to rewrite visualizer behaviour silently.
 - [!] The original logical package did not prevent rejected scheduler/cadence regressions.
 - [x] The immutable approval/environment manifest is frozen for `ff934616`.
-- [!] A stronger production-executor temporal package, first-visible response checks, known-bad negative controls, and installed scenario archive remain required under P5.0.
+- [-] The stronger package now includes Bubble's real-executor discrete-edge/first-visible trace and Spectrum's authoritative-tick presentation trace, with affected known-bad hazard lights. Installed source/paint-receipt scenarios, the `666624d` ownership fixture, and remaining-mode coverage remain required under P5.0.
 - [x] `ff934616` is the current user-approved Bubble/Spectrum behavioural authority.
 
 **Current interpretation:** logical protection exists; temporal and operator-approval protection is reopened.
@@ -80,18 +82,18 @@ Templates are under `templates/`.
 
 - [x] Full stop–destroy–recreate, owner-context GL deletion, generation rejection, and destruction barriers were implemented.
 - [x] Settings now completes full teardown/recreation in current installed evidence.
-- [!] R-56: invalid-wrapper handling is repaired mechanically; one installed Settings cycle remains required.
-- [!] R-53: later-turn immutable admission and deterministic temporary-session retirement are repaired mechanically; one installed dual-display Save-and-Continue remains required.
+- [x] R-56: invalid-wrapper handling is repaired mechanically and four installed Settings cycles complete without invalid-wrapper/disconnect warnings.
+- [x] R-53: later-turn immutable admission and deterministic temporary-session retirement are repaired mechanically; one installed dual-display Save-and-Continue completes exactly one full replacement.
 - [x] Preserve full reinit, graph-based placement/replay, generation barriers, and authoritative-first-frame reveal in both repairs.
 
-**Current interpretation:** architecture retained; installed lifecycle closure reopened.
+**Current interpretation:** the named R-53/R-56 installed gates pass; the broader alternating five-cycle plateau and first-frame-tail gate remains open.
 
 ## Phase 4 — Resource containment
 
 - [x] CPU image caches, textures, PBOs, and shared-memory transfer ownership gained explicit accounting and bounded policies.
 - [x] Known historical monotonic image/worker/GL leaks were corrected and recorded.
 - [x] Full display teardown can reduce tracked GL bytes to zero and dedicated VRAM to near idle-driver levels.
-- [!] Active steady-state usage remains excessive: roughly 847–1074 MiB whole-app RSS, 2.86–3.17 GiB private commit, and 554–777 MiB dedicated VRAM in latest evidence.
+- [!] Active steady-state usage remains excessive: roughly 782–1086 MiB warm whole-app RSS, 2.74–3.13 GiB private commit, and 555–624 MiB dedicated VRAM in latest evidence.
 - [!] Plateau is not sufficient; absolute physical RAM, commitment, and VRAM must fall without visible quality loss.
 - [ ] Attribute the gap between tracked resources and whole-process usage before changing budgets or introducing trimming/recycling.
 
@@ -103,11 +105,14 @@ Templates are under `templates/`.
 - [x] Rejected persistent audio/Bubble lanes were removed from production.
 - [x] Ordinary general COMPUTE executor behaviour was restored and visually approved.
 - [x] Rejected paint-local Spectrum smoothing was reverted and documented.
-- [ ] Create the stronger temporal visualizer approval package.
+- [-] Complete the stronger temporal visualizer approval package. The Bubble/Spectrum affected-path synthetic artifacts are present; installed source identity, paint receipt, remaining modes, and operator approval remain open.
 - [x] Repair R-57 scaled-prefetch selection/removal ordering mechanically; installed image/transition validation remains open.
-- [x] Repair R-56 Settings wrapper lifetime mechanically; installed Settings validation remains open.
-- [x] Repair R-53 CUSTOM/Edit admission and deterministic shell callback retirement mechanically; installed dual-display validation remains open.
+- [x] Repair R-56 Settings wrapper lifetime mechanically and validate it across four installed Settings cycles.
+- [x] Repair R-53 CUSTOM/Edit admission and deterministic shell callback retirement mechanically and validate one dual-display Save-and-Continue replacement.
+- [x] Capture one installed CUSTOM plus four Settings recreations with exact zero-GL teardown and no lifecycle warning/exception.
 - [ ] Establish clean alternating lifecycle cycles before drawing final leak conclusions.
+- [x] Make terminal GL retention mechanically idempotent. Completed cleanup re-entry now performs no second release/update, the manager ignores an empty terminal pair, and the 45-cycle production-PBO harness proves retained texture/PBO reuse, growth trim, and strict zero teardown.
+- [!] Validate the corrected terminal bracket and retained IDs in the fixed-workload installed A/B; the 18:59 binary predates the fix.
 - [ ] Attribute and lower absolute RAM/private-commit/VRAM while preserving perceivable fidelity.
 - [ ] Reduce only measured duplicate, idle, unchanged, allocation, callback, logging, and representation work.
 - [ ] Validate all supported visualizer modes against the shared restored source.
@@ -157,10 +162,10 @@ Templates are under `templates/`.
 
 | ID | State | Required result |
 |---|---|---|
-| P5.0 | Open | Strong temporal visualizer goldens and installed scenario archive |
-| R-53 | Awaiting installed evidence | Dual-display Edit full reinit after temporary session retirement; zero manager survivors |
-| R-56 | Awaiting installed evidence | No post-modal calls on invalid `SettingsDialog` wrapper |
+| P5.0 | Partial | Complete installed source/paint-receipt scenarios, remaining modes, negative-control ownership coverage, and separate Bubble/Spectrum approval |
 | R-57 | Awaiting installed evidence | Stable scaled-prefetch behavior during installed image/transition rotation |
+| Terminal GL | Awaiting installed evidence | Mechanical idempotency and deterministic retained-ID reuse pass; prove one bracket and retained texture/PBO IDs in controlled A/B |
+| Lifecycle matrix | Open | Five alternating installed Edit/Settings cycles with equivalent-state owner/resource plateau |
 | Memory | Open | Explain and reduce whole-app RSS/commit/VRAM without fidelity cuts |
 
 Do not add new active detail here when it belongs in `Current_Plan.md`.

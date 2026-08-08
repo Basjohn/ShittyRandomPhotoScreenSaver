@@ -1,0 +1,121 @@
+"""Spectrum-owned presentation smoothing on the authoritative UI tick.
+
+The filter in this module deliberately has no timer, Qt paint callback, or
+repaint authority.  ``tick_pipeline.push_gpu_frame`` calls it once per normal
+visualizer tick and decides whether the resulting presentation changed.
+"""
+from __future__ import annotations
+
+import math
+from typing import Any, Sequence
+
+
+_MIN_TIME_CONSTANT_SECONDS = 0.002
+_MAX_TIME_CONSTANT_SECONDS = 0.014
+_STALL_SNAP_SECONDS = 0.100
+_SETTLED_EPSILON = 1.0e-4
+
+
+def reset_widget_spectrum_presentation_smoothing(widget: Any) -> None:
+    """Discard presentation-only Spectrum history without touching source bars."""
+    widget._spectrum_presentation_bars = []
+    widget._spectrum_presentation_last_ts = 0.0
+    widget._spectrum_presentation_identity = None
+    widget._spectrum_presentation_pending = False
+
+
+def _clamp_strength(value: Any) -> float:
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return 0.5
+
+
+def _presentation_identity(widget: Any, strength: float) -> tuple[Any, ...]:
+    return (
+        int(getattr(widget, "_display_bars_source_generation", -1) or -1),
+        int(getattr(widget, "_display_bars_source_activation", -1) or -1),
+        int(getattr(widget, "_bar_count", 0) or 0),
+        bool(getattr(widget, "_spectrum_single_piece", False)),
+        round(strength, 4),
+    )
+
+
+def resolve_widget_spectrum_presentation(
+    widget: Any,
+    source_bars: Sequence[float],
+    *,
+    now_ts: float,
+    first_frame: bool = False,
+) -> tuple[list[float], bool]:
+    """Return Spectrum bars for the current authoritative presentation tick.
+
+    The second return value reports whether the filtered presentation changed
+    since the preceding tick.  This lets the normal tick publish the remaining
+    one-pole settling steps without introducing another scheduler or paint loop.
+    First frames, identity changes, disabled/paused states, and long UI stalls
+    snap directly to source so stale history cannot add startup or recovery lag.
+    """
+    values = [max(0.0, min(1.0, float(value))) for value in source_bars]
+    enabled = bool(getattr(widget, "_spectrum_visual_smoothing_enabled", True))
+    strength = _clamp_strength(getattr(widget, "_spectrum_visual_smoothing", 0.5))
+    active = (
+        str(getattr(widget, "_vis_mode_str", "") or "").lower() == "spectrum"
+        and bool(getattr(widget, "_spotify_playing", False))
+        and enabled
+        and strength > 0.0
+    )
+    if not active:
+        reset_widget_spectrum_presentation_smoothing(widget)
+        return values, False
+
+    identity = _presentation_identity(widget, strength)
+    previous = getattr(widget, "_spectrum_presentation_bars", []) or []
+    previous_identity = getattr(widget, "_spectrum_presentation_identity", None)
+    try:
+        last_ts = float(getattr(widget, "_spectrum_presentation_last_ts", 0.0) or 0.0)
+        current_ts = float(now_ts)
+    except (TypeError, ValueError):
+        last_ts = 0.0
+        current_ts = 0.0
+
+    reset_boundary = (
+        first_frame
+        or previous_identity != identity
+        or len(previous) != len(values)
+    )
+    dt = current_ts - last_ts
+    if reset_boundary or dt <= 0.0 or dt >= _STALL_SNAP_SECONDS:
+        changed = len(previous) == len(values) and any(
+            abs(current - prior) > _SETTLED_EPSILON
+            for current, prior in zip(values, previous)
+        )
+        widget._spectrum_presentation_bars = list(values)
+        widget._spectrum_presentation_last_ts = current_ts
+        widget._spectrum_presentation_identity = identity
+        widget._spectrum_presentation_pending = False
+        return values, changed
+
+    time_constant = _MIN_TIME_CONSTANT_SECONDS + (
+        _MAX_TIME_CONSTANT_SECONDS - _MIN_TIME_CONSTANT_SECONDS
+    ) * strength
+    alpha = 1.0 - math.exp(-dt / max(time_constant, 1.0e-6))
+
+    resolved: list[float] = []
+    changed = False
+    pending = False
+    for prior, target in zip(previous, values):
+        next_value = prior + (target - prior) * alpha
+        if abs(target - next_value) <= _SETTLED_EPSILON:
+            next_value = target
+        else:
+            pending = True
+        if abs(next_value - prior) > _SETTLED_EPSILON:
+            changed = True
+        resolved.append(next_value)
+
+    widget._spectrum_presentation_bars = resolved
+    widget._spectrum_presentation_last_ts = current_ts
+    widget._spectrum_presentation_identity = identity
+    widget._spectrum_presentation_pending = pending
+    return list(resolved), changed

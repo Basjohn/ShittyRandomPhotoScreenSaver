@@ -636,6 +636,8 @@ class TestCreatorKwargs:
         model = SpotifyVisualizerSettings(
             mode="spectrum",
             spectrum_render_mode="segment",
+            spectrum_visual_smoothing_enabled=False,
+            spectrum_visual_smoothing=0.73,
             spectrum_unique_colors=False,
         )
 
@@ -643,6 +645,8 @@ class TestCreatorKwargs:
 
         assert captured["mode"] == "spectrum"
         assert captured["spectrum_single_piece"] is False
+        assert captured["spectrum_visual_smoothing_enabled"] is False
+        assert captured["spectrum_visual_smoothing"] == pytest.approx(0.73)
         assert captured["spectrum_rainbow_per_bar"] is False
         assert captured["spectrum_lane_strengths_mirrored"] == model.spectrum_lane_strengths_mirrored
         assert captured["spectrum_lane_strengths_linear"] == model.spectrum_lane_strengths_linear
@@ -4567,6 +4571,9 @@ class TestSpectrumSettingsBinding:
                 self.spectrum_growth = _Slider()
                 self.spectrum_growth_label = _Label()
                 self._spectrum_render_mode = None
+                self.spectrum_visual_smoothing_enabled = _Check()
+                self.spectrum_visual_smoothing = _Slider()
+                self.spectrum_visual_smoothing_label = _Label()
                 self.spectrum_rainbow_per_bar = _Check()
                 self.spectrum_rainbow_border = _Check()
                 self.spectrum_wave_amplitude = _Slider()
@@ -4606,6 +4613,8 @@ class TestSpectrumSettingsBinding:
             {
                 "spectrum_growth": 2.4,
                 "spectrum_render_mode": "bars",
+                "spectrum_visual_smoothing_enabled": False,
+                "spectrum_visual_smoothing": 0.72,
                 "spectrum_unique_colors": True,
                 "spectrum_rainbow_border": True,
                 "spectrum_lane_strengths_mirrored": {"Mid": 0.52, "Vocal": 0.67, "Low-Mid": 0.72, "Bass": 0.88},
@@ -4632,6 +4641,9 @@ class TestSpectrumSettingsBinding:
         assert tab.spectrum_growth.value == 240
         assert tab.spectrum_growth_label.text == "2.4x"
         assert tab._spectrum_render_mode == "bars"
+        assert tab.spectrum_visual_smoothing_enabled.checked is False
+        assert tab.spectrum_visual_smoothing.value == 72
+        assert tab.spectrum_visual_smoothing_label.text == "72%"
         assert tab.spectrum_rainbow_per_bar.checked is True
         assert tab.spectrum_rainbow_border.checked is True
         assert tab.spectrum_wave_amplitude.value == 55
@@ -4695,6 +4707,8 @@ class TestSpectrumSettingsBinding:
             vis_ghost_decay_slider = _Slider(38)
             spectrum_growth = _Slider(260)
             _spectrum_render_mode = "bars"
+            spectrum_visual_smoothing_enabled = _Check(False)
+            spectrum_visual_smoothing = _Slider(64)
             spectrum_rainbow_per_bar = _Check(False)
             spectrum_rainbow_border = _Check(True)
             spectrum_border_radius = _Slider(6)
@@ -4714,6 +4728,8 @@ class TestSpectrumSettingsBinding:
         assert payload["spectrum_ghost_decay"] == pytest.approx(0.38)
         assert payload["spectrum_growth"] == pytest.approx(2.6)
         assert payload["spectrum_render_mode"] == "bars"
+        assert payload["spectrum_visual_smoothing_enabled"] is False
+        assert payload["spectrum_visual_smoothing"] == pytest.approx(0.64)
         assert payload["spectrum_unique_colors"] is False
         assert payload["spectrum_rainbow_border"] is True
         assert payload["spectrum_border_radius"] == pytest.approx(6.0)

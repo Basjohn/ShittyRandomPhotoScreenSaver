@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "fixture_id": "spectrum_authoritative_tick_smoothing",
+  "description": "Symmetric Spectrum spike/drop steps, an unchanged-source settling tick, a UI stall, and a generation boundary.",
+  "baseline_commit": "ff93461685476bd0657aa88312fc2e35e9037880",
+  "rollback_checkpoint": "3b6082dd",
+  "smoothing_enabled": true,
+  "smoothing_strength": 0.5,
+  "ticks": [
+    {"tick": 0, "timestamp": 1.00, "source": 0.0, "source_changed": true, "first_frame": true, "generation": 7},
+    {"tick": 1, "timestamp": 1.01, "source": 1.0, "source_changed": true, "first_frame": false, "generation": 7},
+    {"tick": 2, "timestamp": 1.02, "source": 1.0, "source_changed": false, "first_frame": false, "generation": 7},
+    {"tick": 3, "timestamp": 1.03, "source": 0.0, "source_changed": true, "first_frame": false, "generation": 7},
+    {"tick": 4, "timestamp": 1.04, "source": 0.0, "source_changed": false, "first_frame": false, "generation": 7},
+    {"tick": 5, "timestamp": 1.15, "source": 0.8, "source_changed": true, "first_frame": false, "generation": 7},
+    {"tick": 6, "timestamp": 1.16, "source": 0.2, "source_changed": true, "first_frame": false, "generation": 8}
+  ]
+}

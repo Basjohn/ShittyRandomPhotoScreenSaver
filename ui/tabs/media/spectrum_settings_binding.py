@@ -117,6 +117,35 @@ def load_spectrum_mode_settings(
         tab._spectrum_render_mode = spectrum_render_mode
         for key, button in getattr(tab, "spectrum_render_mode_buttons", {}).items():
             button.setChecked(key == spectrum_render_mode)
+    if hasattr(tab, "spectrum_visual_smoothing_enabled"):
+        tab.spectrum_visual_smoothing_enabled.setChecked(
+            tab._config_bool(
+                "spotify_visualizer",
+                config,
+                "spectrum_visual_smoothing_enabled",
+                True,
+            )
+        )
+    if hasattr(tab, "spectrum_visual_smoothing"):
+        spectrum_visual_smoothing = max(
+            0,
+            min(
+                100,
+                int(
+                    tab._config_float(
+                        "spotify_visualizer",
+                        config,
+                        "spectrum_visual_smoothing",
+                        0.5,
+                    )
+                    * 100
+                ),
+            ),
+        )
+        tab.spectrum_visual_smoothing.setValue(spectrum_visual_smoothing)
+        tab.spectrum_visual_smoothing_label.setText(
+            f"{spectrum_visual_smoothing}%"
+        )
     if hasattr(tab, "spectrum_rainbow_per_bar"):
         tab.spectrum_rainbow_per_bar.setChecked(
             bool(config.get("spectrum_unique_colors", config.get("spectrum_rainbow_per_bar", False)))
@@ -226,6 +255,16 @@ def collect_spectrum_mode_settings(tab) -> dict[str, Any]:
         "spectrum_ghost_decay": max(0.1, tab.vis_ghost_decay_slider.value() / 100.0),
         "spectrum_growth": (tab.spectrum_growth.value() if hasattr(tab, "spectrum_growth") else 100) / 100.0,
         "spectrum_render_mode": getattr(tab, "_spectrum_render_mode", "bars"),
+        "spectrum_visual_smoothing_enabled": (
+            tab.spectrum_visual_smoothing_enabled.isChecked()
+            if hasattr(tab, "spectrum_visual_smoothing_enabled")
+            else True
+        ),
+        "spectrum_visual_smoothing": (
+            tab.spectrum_visual_smoothing.value()
+            if hasattr(tab, "spectrum_visual_smoothing")
+            else 50
+        ) / 100.0,
         "spectrum_unique_colors": (
             tab.spectrum_rainbow_per_bar.isChecked() if hasattr(tab, "spectrum_rainbow_per_bar") else False
         ),

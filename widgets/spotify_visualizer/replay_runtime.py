@@ -43,6 +43,12 @@ REPLAY_SCHEMA_VERSION = 1
 BASELINE_BEHAVIOR_COMMIT = "00edb57a3076b845cb8ee4b6cb7f36ea83411f0c"
 DEFAULT_RANDOM_SEED = 0x53525053
 MODE_ORDER = ("spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve")
+REPLAY_V1_EXCLUDED_MODEL_FIELDS = frozenset(
+    {
+        "widgets.spotify_visualizer.spectrum_visual_smoothing_enabled",
+        "widgets.spotify_visualizer.spectrum_visual_smoothing",
+    }
+)
 _MODE_ENUM = {
     "spectrum": VisualizerMode.SPECTRUM,
     "oscilloscope": VisualizerMode.OSCILLOSCOPE,
@@ -517,10 +523,30 @@ def _widget_state(
     return _normalise(state)
 
 
+def build_replay_v1_settings_model(mode: str) -> SpotifyVisualizerSettings:
+    """Build the immutable Phase 2 baseline model for one replay mode.
+
+    Replay schema v1 predates Spectrum presentation smoothing. Keep that
+    approved baseline explicitly unsmoothed; the separate visualizer-temporal
+    package owns the new candidate's expected presentation trace.
+    """
+    values: dict[str, Any] = {"mode": mode, f"preset_{mode}": 0}
+    model = SpotifyVisualizerSettings.from_mapping(values)
+    if mode == "spectrum":
+        model = replace(model, spectrum_visual_smoothing_enabled=False)
+    return model
+
+
+def replay_v1_authored_preset_payload(mode: str) -> dict[str, Any]:
+    """Return the model payload covered by the frozen replay-v1 manifest."""
+    payload = build_replay_v1_settings_model(mode).to_dict()
+    for field_name in REPLAY_V1_EXCLUDED_MODEL_FIELDS:
+        payload.pop(field_name, None)
+    return payload
+
+
 def _apply_authored_preset_zero(widget: SpotifyVisualizerWidget, mode: str) -> None:
-    model = SpotifyVisualizerSettings.from_mapping(
-        {"mode": mode, f"preset_{mode}": 0}
-    )
+    model = build_replay_v1_settings_model(mode)
     widget.set_settings_model(model, apply_now=False)
     widget.set_visualization_mode(_MODE_ENUM[mode])
     apply_spotify_vis_model_config(widget, model, apply_mode=False)

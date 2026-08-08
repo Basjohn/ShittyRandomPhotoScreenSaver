@@ -89,6 +89,15 @@ Use existing bounded executors for coarse thread-safe work such as:
 
 Do not create a worker task per bar/bubble/group or per paint.
 
+When the same heavy, non-latency-critical periodic worker activity exists once per
+display, phase it with a small deterministic offset derived from stable display
+identity so all displays do not submit/complete together. This applies to maintenance,
+prefetch, diagnostics, or equivalent background work only. It must not delay user
+input, authoritative first frame, visualizer ticks, transition completion, lifecycle
+barriers, or change logical source ordering. Measure queue age and first-visible tails
+before accepting the offset; random drift and accumulating timers are not substitutes
+for deterministic phase separation.
+
 ### Process workers
 
 Use multiprocessing only for already-justified isolated heavy work where IPC/copy/commit cost is measured and bounded. The ImageWorker is not permission to move latency-sensitive visualizer state into another process.

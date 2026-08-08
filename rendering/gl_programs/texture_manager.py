@@ -573,6 +573,16 @@ class GLTextureManager:
         and failure cleanup omit it and retain the ordinary byte-budgeted
         cache semantics.
         """
+        # Terminal release is idempotent.  The compositor's outer transition
+        # cleanup may defensively re-enter after the real terminal boundary;
+        # with no pinned pair there is no second transition to retire or log.
+        if (
+            retain_active in {"new", "old"}
+            and not self._old_tex_id
+            and not self._new_tex_id
+        ):
+            return
+
         retained_id = 0
         if retain_active == "new":
             retained_id = int(self._new_tex_id or 0)

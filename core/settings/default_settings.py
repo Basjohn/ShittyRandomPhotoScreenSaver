@@ -1112,6 +1112,8 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 4
                                     'spectrum_rainbow_enabled': False,
                                     'spectrum_rainbow_speed': 0.5,
                                     'spectrum_render_mode': 'bars',
+                                    'spectrum_visual_smoothing': 0.5,
+                                    'spectrum_visual_smoothing_enabled': True,
                                     'spectrum_sensitivity': 0.4,
                                     'spectrum_shape_nodes': [[0.0, 0.4],
                                                              [0.35, 0.75],

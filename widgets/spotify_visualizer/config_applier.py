@@ -172,6 +172,15 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     # --- Spectrum -----------------------------------------------------
     if 'spectrum_single_piece' in kwargs:
         widget._spectrum_single_piece = bool(kwargs['spectrum_single_piece'])
+    if 'spectrum_visual_smoothing_enabled' in kwargs:
+        widget._spectrum_visual_smoothing_enabled = bool(
+            kwargs['spectrum_visual_smoothing_enabled']
+        )
+    if 'spectrum_visual_smoothing' in kwargs:
+        widget._spectrum_visual_smoothing = max(
+            0.0,
+            min(1.0, float(kwargs['spectrum_visual_smoothing'])),
+        )
     if 'spectrum_rainbow_per_bar' in kwargs:
         widget._rainbow_per_bar = bool(kwargs['spectrum_rainbow_per_bar'])
     if 'spectrum_rainbow_border' in kwargs:

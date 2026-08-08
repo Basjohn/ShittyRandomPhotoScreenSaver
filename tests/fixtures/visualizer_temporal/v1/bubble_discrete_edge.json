@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "fixture_id": "bubble_discrete_edge_general_compute",
+  "description": "A kick is authored on the phase previously deferred by the rejected 60 Hz terminal-batching gate.",
+  "baseline_commit": "ff93461685476bd0657aa88312fc2e35e9037880",
+  "tick_count": 6,
+  "tick_interval_ms": 10,
+  "start_timestamp": 100.0,
+  "kick_authored_tick": 3,
+  "energy": {
+    "bass": 0.1,
+    "mid": 0.05,
+    "high": 0.02,
+    "overall": 0.08
+  },
+  "kick_strength": 1.0
+}

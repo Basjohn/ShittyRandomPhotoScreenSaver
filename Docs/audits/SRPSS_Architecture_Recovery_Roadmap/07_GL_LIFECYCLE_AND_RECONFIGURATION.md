@@ -6,12 +6,23 @@ Last reconciled: 2026-08-08
 
 Full stop–destroy–recreate remains mandatory for Settings and committed CUSTOM Edit.
 
-The core owner-context GL teardown architecture is valuable and retained. The latest installed evidence reopened lifecycle closure through:
+The core owner-context GL teardown architecture is valuable and retained. Earlier installed evidence reopened lifecycle closure through:
 
 - R-56: post-modal calls on an already-deleted `SettingsDialog` C++ object;
 - R-53: synchronous full teardown from inside the retiring `CustomLayoutManager` save/action graph, followed by two surviving manager wrappers and fail-closed exit.
 
-These were lifecycle ownership failures even though tracked GL deletion itself reached zero. Both have subsequent production-shaped mechanical repairs; installed Settings and dual-display Edit confirmation remain mandatory.
+These were lifecycle ownership failures even though tracked GL deletion itself reached zero. Both now have production-shaped mechanical repairs plus installed confirmation: four Settings recreations complete without invalid-wrapper/disconnect warnings and one dual-display Save-and-Continue admits exactly one full replacement. The broader alternating five-cycle owner/resource plateau and first-frame-tail gate remains mandatory.
+
+The GL-specific mechanical blocker is corrected: when outer transition cleanup
+synchronously re-enters after compositor completion, cleared transition state now
+causes no second terminal release or redundant GUI `update()`. The texture manager also
+ignores a terminal request with no pinned old/new pair. Focused tests and the 45-cycle
+production-PBO harness prove exact-current texture retention/reuse, bounded PBO reuse,
+growth trimming, and strict full-teardown zero ownership.
+
+Installed acceptance remains open because the 18:59 binary predates the correction.
+A controlled A/B must show exactly one terminal diagnostic bracket and retained
+texture/PBO IDs, with no historical accumulation or delivery/resource regression.
 
 ## Runtime states
 

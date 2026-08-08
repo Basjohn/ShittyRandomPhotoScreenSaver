@@ -350,6 +350,66 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     for key, button in tab.spectrum_render_mode_buttons.items():
         button.setChecked(key == ("segment" if tab._spectrum_render_mode == "segment" else "bars"))
 
+    smoothing_toggle_row = _aligned_row(render_bucket, "")
+    tab.spectrum_visual_smoothing_enabled = QCheckBox("Smooth Sudden Bar Changes")
+    tab.spectrum_visual_smoothing_enabled.setProperty("circleIndicator", True)
+    tab.spectrum_visual_smoothing_enabled.setChecked(
+        tab._default_bool(
+            'spotify_visualizer',
+            'spectrum_visual_smoothing_enabled',
+            True,
+        )
+    )
+    tab.spectrum_visual_smoothing_enabled.setToolTip(
+        "Apply presentation-only interpolation on Spectrum's existing visualizer tick. "
+        "It does not smooth the audio analysis or create another repaint cadence."
+    )
+    bind_setting_signal(tab, tab.spectrum_visual_smoothing_enabled.stateChanged)
+    smoothing_toggle_row.addWidget(tab.spectrum_visual_smoothing_enabled)
+    smoothing_toggle_row.addStretch()
+
+    smoothing_widget, smoothing_row = _aligned_row_widget(render_bucket, "Smoothing Strength:")
+    tab.spectrum_visual_smoothing = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.spectrum_visual_smoothing.setMinimum(0)
+    tab.spectrum_visual_smoothing.setMaximum(100)
+    smoothing_default = max(
+        0,
+        min(
+            100,
+            int(
+                tab._default_float(
+                    'spotify_visualizer',
+                    'spectrum_visual_smoothing',
+                    0.5,
+                )
+                * 100
+            ),
+        ),
+    )
+    tab.spectrum_visual_smoothing.setValue(smoothing_default)
+    tab.spectrum_visual_smoothing.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.spectrum_visual_smoothing.setTickInterval(10)
+    tab.spectrum_visual_smoothing.setToolTip(
+        "Higher values soften one-tick spikes and drops more strongly. "
+        "The 50% default is intentionally subtle and snaps to source after a UI stall."
+    )
+    bind_setting_signal(
+        tab,
+        tab.spectrum_visual_smoothing.valueChanged,
+        updater=lambda value: tab.spectrum_visual_smoothing_label.setText(f"{value}%"),
+    )
+    smoothing_row.addWidget(tab.spectrum_visual_smoothing)
+    tab.spectrum_visual_smoothing_label = QLabel(f"{smoothing_default}%")
+    smoothing_row.addWidget(tab.spectrum_visual_smoothing_label)
+
+    def _update_spectrum_smoothing_visibility(_state=None):
+        smoothing_widget.setVisible(tab.spectrum_visual_smoothing_enabled.isChecked())
+
+    tab.spectrum_visual_smoothing_enabled.stateChanged.connect(
+        _update_spectrum_smoothing_visibility
+    )
+    _update_spectrum_smoothing_visibility()
+
     # Unique Colours Per Bar (rainbow per-bar mode, only relevant when rainbow is on)
     rainbow_row = _aligned_row(render_bucket, "")
     tab.spectrum_rainbow_per_bar = QCheckBox("Unique Colours Per Bar")

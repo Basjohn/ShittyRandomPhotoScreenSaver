@@ -134,6 +134,17 @@ def test_terminal_transition_retires_history_and_retains_destination(monkeypatch
     assert manager.get_stats()["pbo_reuses"] == 1
     assert manager.get_stats()["pbo_creations"] == 0
 
+    terminal_stats = manager.get_stats().copy()
+    delete_count = fake_gl.glDeleteTextures.call_count
+    manager.release_transition_textures(retain_active="new")
+
+    assert list(manager._texture_cache.values()) == [104]
+    assert manager.get_stats()["terminal_transitions"] == 1
+    assert manager.get_stats()["terminal_textures_reclaimed"] == 3
+    assert manager.get_stats()["texture_count"] == terminal_stats["texture_count"]
+    assert manager.get_stats()["texture_bytes"] == terminal_stats["texture_bytes"]
+    assert fake_gl.glDeleteTextures.call_count == delete_count
+
 
 def test_terminal_retention_log_is_transition_local_and_byte_aware(
     monkeypatch,
@@ -240,6 +251,31 @@ def test_cancel_retains_base_side_selected_by_snap_policy(qt_app):
     keep_old._release_transition_textures.assert_called_once_with(
         retain_active="old"
     )
+
+
+def test_completed_transition_cleanup_is_not_a_second_terminal_boundary(qt_app):
+    completed = _transition_widget("particle", None)
+
+    cancel_current_transition(completed, snap_to_new=True)
+
+    completed._release_transition_textures.assert_not_called()
+    completed.update.assert_not_called()
+
+
+def test_orphaned_animation_id_still_owns_one_terminal_release(qt_app):
+    interrupted = _transition_widget("particle", None)
+    interrupted._animation_manager = MagicMock()
+    interrupted._current_anim_id = "animation:orphaned-state"
+
+    cancel_current_transition(interrupted, snap_to_new=True)
+
+    interrupted._animation_manager.cancel_animation.assert_called_once_with(
+        "animation:orphaned-state"
+    )
+    interrupted._release_transition_textures.assert_called_once_with(
+        retain_active="new"
+    )
+    interrupted.update.assert_called_once_with()
 
 
 def test_pbo_pool_retains_only_one_idle_buffer_inside_byte_cap(monkeypatch):

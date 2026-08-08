@@ -18,7 +18,6 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.settings.models import SpotifyVisualizerSettings  # noqa: E402
 from widgets.spotify_visualizer.feature_frame import (  # noqa: E402
     canonical_json,
 )
@@ -26,6 +25,7 @@ from widgets.spotify_visualizer.replay_runtime import (  # noqa: E402
     BASELINE_BEHAVIOR_COMMIT,
     MODE_ORDER,
     REPLAY_SCHEMA_VERSION,
+    replay_v1_authored_preset_payload,
     replay_directory,
 )
 
@@ -55,11 +55,8 @@ def _sha256_file(path: Path) -> str:
 def _authored_preset_hashes() -> dict[str, str]:
     hashes = {}
     for mode in MODE_ORDER:
-        model = SpotifyVisualizerSettings.from_mapping(
-            {"mode": mode, f"preset_{mode}": 0}
-        )
         hashes[mode] = hashlib.sha256(
-            canonical_json(model.to_dict())
+            canonical_json(replay_v1_authored_preset_payload(mode))
         ).hexdigest()
     return hashes
 

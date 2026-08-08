@@ -81,6 +81,45 @@ The smoothing implementation and its authorizing tests were removed completely i
 
 The accepted state is the executor-restored, unsmoothed presentation path. Bubble was not changed by either the experiment or the revert.
 
+## 2026-08-08 Follow-Up Candidate — Not Yet Accepted
+
+After later installed evidence confirmed that ordinary Spectrum bars had no
+presentation-only filter, the user authorized a new optional adjustable experiment.
+This candidate deliberately does **not** revive the rejected mechanism:
+
+- state advances only on the existing authoritative UI visualizer tick before the GPU
+  frame push;
+- rise and fall use one symmetric time-compensated filter rather than immediate-rise/
+  paint-local-fall authorities;
+- no timer, scheduler, queue, overlay self-update, repaint loop, paint mutation,
+  source decimation, Bubble change, or shared-analysis change exists;
+- disabled/default/stronger settings are available, with `true`/`0.50` as the candidate
+  default;
+- first-frame/identity/pause/disable/teardown boundaries and UI stalls of at least
+  `100 ms` snap or reset to authoritative source.
+
+Versioned temporal fixtures now cover rise, residual settling on existing ticks, drop,
+stall snap, generation reset, and zero independent presentation cadence. These tests
+make the implementation structurally safer; they do not establish installed visual
+acceptance. `ff934616` remains the behavioural authority and `3b6082dd` is the hard
+checkpoint if this candidate produces visible delay, transient flattening, pumping,
+extra UI churn, or any Bubble/Spectrum regression.
+
+### Method blacklist and whitelist
+
+Blacklisted for this problem:
+
+- interpolation or decay mutation in `paintGL()`/render callbacks;
+- unfinished smoothing that requests its own repaint;
+- asymmetric snap-rise/smooth-fall tuning that can hold drops then jump on rises;
+- a new timer, cadence cap, scheduler lane, source decimation, or paint acknowledgement;
+- accepting increased paint/update counts as proof of smoothness.
+
+The only currently admissible method shape is mode-owned presentation state on the
+existing authoritative tick, bounded reset identities, no independent GUI work, exact
+temporal negative controls, and installed operator approval. The specific 2026-08-08
+filter constants are still experimental, not a generally approved recipe.
+
 ## Durable Prevention
 
 Future Spectrum smoothing or interpolation must:

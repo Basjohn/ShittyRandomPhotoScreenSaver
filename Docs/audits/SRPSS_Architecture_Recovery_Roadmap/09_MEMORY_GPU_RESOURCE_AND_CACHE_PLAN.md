@@ -9,10 +9,11 @@ The project has corrected several known monotonic leaks and can return tracked G
 Latest active installed evidence reports approximately:
 
 ```text
-whole-app resident RAM:   847–1074 MiB
-whole-app private commit: 2.86–3.17 GiB
-dedicated VRAM:           554–777 MiB
-shared GPU memory:        84–121 MiB
+whole-app resident RAM:   782–1086 MiB after warm-up
+whole-app USS:            650–950 MiB after warm-up
+whole-app private commit: 2.74–3.13 GiB after warm-up
+dedicated VRAM:           555–624 MiB while displays are active
+shared GPU memory:        80–95 MiB
 ```
 
 This is too heavy for a screensaver even when the values plateau.
@@ -39,17 +40,30 @@ Every official report must state exactly which metric a value represents.
 
 ## Current evidence interpretation
 
-The latest Settings comparison showed:
+The latest one-CUSTOM/four-Settings installed sequence showed:
 
-- the old approximately linear per-cycle Settings staircase did not reproduce across two replacements;
-- a one-time post-first-recreation uplift remained;
-- tracked resources, handles, and threads did not add another step on the second cycle;
+- the old approximately linear tracked-resource staircase did not reproduce;
+- equivalent settled tracked ownership repeated at about `350–398 MB` (`334–379 MiB`), including
+  `143.7 MB` (`137.1 MiB`) GL while active, and every strict display teardown reached zero GL;
+- whole-app RSS still reached `1085.7 MiB`, private commit `3133.4 MiB`, handles
+  `2219`, and threads `98`, so process-level plateau/efficiency is not closed;
 - dedicated VRAM fell near idle-driver levels while the display runtime was absent;
 - substantial process RAM/commit remained even without active display GL ownership.
 
 Cause of the one-time uplift and absolute residual footprint is below 90% confidence. Do not label it allocator, driver, Qt, cache, or leak without attribution evidence.
 
-R-53 is repaired mechanically. Edit plateau conclusions remain blocked until the repaired path passes installed dual-display Save-and-Continue and alternating lifecycle validation.
+R-53 now has one installed dual-display Save-and-Continue replacement and R-56 has
+four clean installed Settings replacements. Edit/Settings plateau conclusions remain
+blocked on the required alternating matrix and equivalent source/workload controls.
+
+The same run isolates a promising GL result without closing installed acceptance:
+maximum tracked GL remains `143.7 MB` (`137.1 MiB`) and later `>20 ms` texture uploads
+fall from 15 totalling `411.7 ms` in the failed run to zero. Its duplicate terminal
+cleanup is now mechanically idempotent in source: completed-state re-entry performs no
+second release/update and an empty manager pair cannot reopen the metric window.
+Focused tests and the 45-cycle production-PBO harness retain/reuse the exact texture
+and PBO IDs, trim on growth, and reach strict zero teardown. A controlled installed
+retained-ID A/B remains required because the 18:59 binary predates the correction.
 
 ## Provisional engineering targets
 
@@ -248,7 +262,8 @@ Do not assume Bubble is responsible for shared visualizer resources. Do not remo
 
 ## Lifecycle interaction
 
-R-53/R-56 must close before final lifecycle memory slopes are trusted.
+The named R-53/R-56 installed gates now pass, but final lifecycle memory slopes still
+require the controlled alternating Edit/Settings matrix.
 
 For every Settings/Edit cycle record:
 
@@ -280,7 +295,7 @@ Alternate large/small images, aspect ratios, transitions, route changes, and cac
 
 ### Lifecycle
 
-After R-53/R-56 repair, at least five alternating installed cycles for current Phase 5, followed by the larger release matrix.
+At least five controlled alternating installed Edit/Settings cycles for current Phase 5, followed by the larger release matrix.
 
 ### Pressure
 

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "golden_kind": "authoritative_tick_temporal_trace",
+  "baseline_commit": "ff93461685476bd0657aa88312fc2e35e9037880",
+  "rollback_checkpoint": "3b6082dd",
+  "fixture_id": "spectrum_authoritative_tick_smoothing",
+  "contract": {
+    "first_frame_snaps_to_source": true,
+    "symmetric_rise_and_fall_filtering": true,
+    "minimum_default_first_tick_step": 0.70,
+    "maximum_default_first_tick_step": 0.72,
+    "stall_snap_threshold_ms": 100,
+    "generation_change_snaps_to_source": true,
+    "independent_timer_count": 0,
+    "paint_local_mutation_count": 0,
+    "overlay_self_update_requests": 0
+  },
+  "ticks": [
+    {"tick": 0, "source": 0.0, "presented": 0.0, "presentation_changed": false, "settling": false},
+    {"tick": 1, "source": 1.0, "presented": 0.713495203, "presentation_changed": true, "settling": true},
+    {"tick": 2, "source": 1.0, "presented": 0.917915001, "presentation_changed": true, "settling": true},
+    {"tick": 3, "source": 0.0, "presented": 0.262987051, "presentation_changed": true, "settling": true},
+    {"tick": 4, "source": 0.0, "presented": 0.075347052, "presentation_changed": true, "settling": true},
+    {"tick": 5, "source": 0.8, "presented": 0.8, "presentation_changed": true, "settling": false},
+    {"tick": 6, "source": 0.2, "presented": 0.2, "presentation_changed": true, "settling": false}
+  ],
+  "cadence": {
+    "authoritative_ticks": 7,
+    "source_change_ticks": 5,
+    "presentation_only_settling_ticks": 2,
+    "gpu_frame_publications": 7,
+    "independent_timer_count": 0,
+    "paint_local_mutation_count": 0,
+    "overlay_self_update_requests": 0
+  },
+  "negative_controls": [
+    "ebfec397 paint-local decay and self-requested repaint loop",
+    "asymmetric immediate-rise and held-fall motion"
+  ]
+}
