@@ -1,12 +1,38 @@
 # 06 — Presentation and Compositor Design
 
-Last reconciled: 2026-08-02
+Last reconciled: 2026-08-09
 
 ## Design objective
 
 Provide predictable display-local presentation without recreating donor scheduling failure or the rejected Spectrum second-cadence experiment.
 
 One surface per display remains a later architecture target. It is not required for current Phase 5 fixes and does not authorize moving simulation, lifecycle, or scheduling into the compositor.
+
+## 2026-08-09 readiness decision
+
+Do not start the Phase 7/8 implementation yet. The latest canonical main
+evidence makes the potential benefit clearer—the visualizer currently owns a
+second card-sized `QOpenGLWidget`/context per display, with separate paint,
+geometry, stacking, and teardown—but the measured bottleneck is synchronous
+image installation and GUI request age, not visualizer compute or paint cost.
+A surface merge would therefore add GL/context/lifecycle risk before it owns the
+largest measured delay.
+
+The safe order is:
+
+1. rebuild and validate the stale standard Settings-from-runtime package route;
+2. finish separate Bubble/Spectrum real-source goldens and manual approval;
+3. complete the canonical-main five-cycle lifecycle/resource plateau and
+   image-install/texture-key attribution;
+4. reassess whether Phase 6 resource sharing is necessary;
+5. implement Phase 7 as a narrow reversible immutable-latest-state extraction;
+6. only after irregular-presentation, lifecycle, fidelity, and resource gates
+   pass, consider Phase 8's one-compositor-surface-per-display merge.
+
+The decisive Phase 7 oracle is: if ten paints are missed, visualizer logical
+state is unchanged by that fact; the next paint consumes only the latest valid
+generation/activation packet. Any paint acknowledgement, catch-up replay,
+paint-local smoothing, or compositor-owned visualizer schedule fails the design.
 
 ## Absolute presentation rules
 

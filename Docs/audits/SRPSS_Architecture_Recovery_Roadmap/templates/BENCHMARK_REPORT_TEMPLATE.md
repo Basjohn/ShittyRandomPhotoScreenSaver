@@ -15,7 +15,7 @@
 
 ## Environment
 
-- Entry point: Normal / Media Center
+- Entry point: canonical `main.py` (Media Center is not an evidence-capture variant)
 - Windows:
 - Python:
 - PySide6:

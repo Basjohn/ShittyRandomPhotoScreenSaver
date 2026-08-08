@@ -39,6 +39,112 @@ logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
 
 
+def _texture_cache_perf_probe(
+    compositor,
+    old_pixmap: Optional[QPixmap],
+    new_pixmap: Optional[QPixmap],
+) -> dict[str, int | bool]:
+    """Read exact texture-cache identity without changing GL/cache state."""
+    probe = getattr(compositor, "get_texture_cache_perf_probe", None)
+    if callable(probe):
+        try:
+            return dict(probe(old_pixmap, new_pixmap))
+        except Exception:
+            logger.debug("[PERF] Texture cache probe failed", exc_info=True)
+    return {
+        "manager_present": False,
+        "cache_size": 0,
+        "sole_cache_key": 0,
+        "old_key": 0,
+        "new_key": 0,
+        "old_texture": 0,
+        "new_texture": 0,
+        "old_cached": False,
+        "new_cached": False,
+        "texture_cache_hits": 0,
+        "texture_allocations": 0,
+        "texture_uploads": 0,
+    }
+
+
+def _log_image_ui_stage(
+    widget,
+    *,
+    stage: str,
+    started_ts: float,
+    transition: str = "none",
+    outcome: str = "completed",
+    cold_compositor: bool = False,
+    before_probe: Optional[dict[str, int | bool]] = None,
+    after_probe: Optional[dict[str, int | bool]] = None,
+) -> None:
+    """Emit one bounded, perf-only substage record for image installation."""
+    if not started_ts:
+        return
+    before = before_probe or {}
+    after = after_probe or before
+
+    def _ival(values: dict[str, int | bool], key: str) -> int:
+        try:
+            return int(values.get(key, 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    cache_hits_delta = max(
+        0,
+        _ival(after, "texture_cache_hits") - _ival(before, "texture_cache_hits"),
+    )
+    allocations_delta = max(
+        0,
+        _ival(after, "texture_allocations") - _ival(before, "texture_allocations"),
+    )
+    uploads_delta = max(
+        0,
+        _ival(after, "texture_uploads") - _ival(before, "texture_uploads"),
+    )
+    pixmap = getattr(widget, "current_pixmap", None)
+    width = 0
+    height = 0
+    try:
+        if pixmap is not None and not pixmap.isNull():
+            width = int(pixmap.width())
+            height = int(pixmap.height())
+    except Exception:
+        width = 0
+        height = 0
+    logger.info(
+        "[PERF] [IMAGE_UI_SEGMENT] reason=display_setter_detail display=%s "
+        "stage=%s duration_ms=%.2f transition=%s outcome=%s size=%dx%d "
+        "cold_compositor=%s manager_before=%s manager_after=%s "
+        "cache_size_before=%d cache_size_after=%d retained_key_before=%d "
+        "old_key=%d new_key=%d old_cached_before=%s new_cached_before=%s "
+        "old_texture_before=%d new_texture_before=%d cache_hits_delta=%d "
+        "texture_allocations_delta=%d texture_uploads_delta=%d",
+        getattr(widget, "screen_index", "?"),
+        stage,
+        max(0.0, (time.perf_counter() - started_ts) * 1000.0),
+        transition or "none",
+        outcome,
+        width,
+        height,
+        str(bool(cold_compositor)).lower(),
+        str(bool(before.get("manager_present", False))).lower(),
+        str(bool(after.get("manager_present", False))).lower(),
+        _ival(before, "cache_size"),
+        _ival(after, "cache_size"),
+        _ival(before, "sole_cache_key"),
+        _ival(before, "old_key"),
+        _ival(before, "new_key"),
+        str(bool(before.get("old_cached", False))).lower(),
+        str(bool(before.get("new_cached", False))).lower(),
+        _ival(before, "old_texture"),
+        _ival(before, "new_texture"),
+        cache_hits_delta,
+        allocations_delta,
+        uploads_delta,
+    )
+
+
 def _raise_runtime_widgets_above_compositor(widget, *, stage: str) -> None:
     """Synchronously restore runtime widget stacking after compositor use.
 
@@ -184,6 +290,8 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
         widget.update()
         return
 
+    perf_enabled = is_perf_metrics_enabled()
+
     # Use the pre-processed pixmap directly - no UI thread blocking
     new_pixmap = processed_pixmap
     
@@ -199,6 +307,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
     
     # Stop any running transition via TransitionController
+    retire_started = time.perf_counter() if perf_enabled else 0.0
     if widget._transition_controller is not None:
         widget._transition_controller.stop_current()
     elif widget._current_transition:
@@ -209,6 +318,11 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
             transition_to_stop.cleanup()
         except Exception as e:
             logger.warning(f"Error stopping transition: {e}")
+    _log_image_ui_stage(
+        widget,
+        stage="retire_previous_transition",
+        started_ts=retire_started,
+    )
     
     # Cache previous pixmap reference before we mutate current_pixmap
     previous_pixmap_ref = widget.current_pixmap
@@ -246,32 +360,88 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
         # its GL surface is active before any animated transition starts.
         # This reduces first-use flicker, especially on secondary
         # displays, by avoiding late compositor initialization.
+        cold_compositor = not isinstance(
+            getattr(widget, "_gl_compositor", None),
+            GLCompositorWidget,
+        )
+        ensure_started = time.perf_counter() if perf_enabled else 0.0
         try:
             widget._ensure_gl_compositor()
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         comp = getattr(widget, "_gl_compositor", None)
+        _log_image_ui_stage(
+            widget,
+            stage="ensure_compositor",
+            started_ts=ensure_started,
+            cold_compositor=cold_compositor,
+            after_probe=(
+                _texture_cache_perf_probe(comp, previous_pixmap_ref, new_pixmap)
+                if perf_enabled and isinstance(comp, GLCompositorWidget)
+                else None
+            ),
+        )
         if isinstance(comp, GLCompositorWidget):
+            compositor_setup_ok = True
+            setup_started = time.perf_counter() if perf_enabled else 0.0
             try:
                 comp.setGeometry(0, 0, widget.width(), widget.height())
                 comp.set_base_pixmap(widget.current_pixmap)
                 comp.show()
                 comp.raise_()
+            except Exception:
+                compositor_setup_ok = False
+                logger.debug("[GL COMPOSITOR] Failed to pre-warm compositor with base frame", exc_info=True)
+            _log_image_ui_stage(
+                widget,
+                stage="compositor_setup",
+                started_ts=setup_started,
+                outcome="completed" if compositor_setup_ok else "error",
+                cold_compositor=cold_compositor,
+            )
+            if compositor_setup_ok:
                 # Prewarm shader textures for the upcoming transition so
                 # GLSL paths (Slide, Wipe, Diffuse, etc.) do not pay the
                 # full texture upload cost on their first animated frame.
+                warm_before = (
+                    _texture_cache_perf_probe(comp, previous_pixmap_ref, new_pixmap)
+                    if perf_enabled
+                    else None
+                )
+                warm_started = time.perf_counter() if perf_enabled else 0.0
+                warm_outcome = "completed"
                 try:
                     comp.warm_shader_textures(previous_pixmap_ref, new_pixmap)
                 except Exception:
+                    warm_outcome = "error"
                     logger.debug(
                         "[GL COMPOSITOR] warm_shader_textures failed during pre-warm",
                         exc_info=True,
                     )
+                warm_after = (
+                    _texture_cache_perf_probe(comp, previous_pixmap_ref, new_pixmap)
+                    if perf_enabled
+                    else None
+                )
+                _log_image_ui_stage(
+                    widget,
+                    stage="generic_pair_warm",
+                    started_ts=warm_started,
+                    outcome=warm_outcome,
+                    cold_compositor=cold_compositor,
+                    before_probe=warm_before,
+                    after_probe=warm_after,
+                )
                 # Restore runtime widget stacking after compositor prewarm
                 # without maintaining a stale handwritten widget inventory.
+                prewarm_raise_started = time.perf_counter() if perf_enabled else 0.0
                 _raise_runtime_widgets_above_compositor(widget, stage="compositor_prewarm")
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Failed to pre-warm compositor with base frame", exc_info=True)
+                _log_image_ui_stage(
+                    widget,
+                    stage="prewarm_overlay_raise",
+                    started_ts=prewarm_raise_started,
+                    cold_compositor=cold_compositor,
+                )
 
         use_transition = bool(widget.settings_manager) and widget._has_rendered_first_frame
         if widget.settings_manager and not widget._has_rendered_first_frame:
@@ -281,7 +451,17 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
             use_transition = False
 
         if use_transition:
+            construct_started = time.perf_counter() if perf_enabled else 0.0
             transition = widget._create_transition()
+            transition_name = transition.__class__.__name__ if transition else "none"
+            _log_image_ui_stage(
+                widget,
+                stage="transition_construct",
+                started_ts=construct_started,
+                transition=transition_name,
+                outcome="completed" if transition else "none",
+                cold_compositor=cold_compositor,
+            )
             if transition:
                 # Set previous pixmap for transition
                 widget.previous_pixmap = previous_pixmap_ref or processed_pixmap
@@ -300,11 +480,31 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     except Exception as e:
                         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
+                transition_warm_before = (
+                    _texture_cache_perf_probe(comp, widget.previous_pixmap, new_pixmap)
+                    if perf_enabled and isinstance(comp, GLCompositorWidget)
+                    else None
+                )
+                transition_warm_started = time.perf_counter() if perf_enabled else 0.0
                 widget._warm_transition_if_needed(
                     comp,
                     transition.__class__.__name__,
                     widget.previous_pixmap,
                     new_pixmap,
+                )
+                transition_warm_after = (
+                    _texture_cache_perf_probe(comp, widget.previous_pixmap, new_pixmap)
+                    if perf_enabled and isinstance(comp, GLCompositorWidget)
+                    else None
+                )
+                _log_image_ui_stage(
+                    widget,
+                    stage="transition_specific_warm",
+                    started_ts=transition_warm_started,
+                    transition=transition.__class__.__name__,
+                    cold_compositor=cold_compositor,
+                    before_probe=transition_warm_before,
+                    after_probe=transition_warm_after,
                 )
 
                 # Store pending finish args
@@ -324,6 +524,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
 
                 # Delegate transition start to TransitionController
                 overlay_key = widget._resolve_overlay_key_for_transition(transition)
+                transition_start_started = time.perf_counter() if perf_enabled else 0.0
                 if widget._transition_controller is not None:
                     success = widget._transition_controller.start_transition(
                         transition, widget.previous_pixmap, new_pixmap,
@@ -333,6 +534,14 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     # Fallback: direct start
                     transition.finished.connect(_finish_handler)
                     success = transition.start(widget.previous_pixmap, new_pixmap, widget)
+                _log_image_ui_stage(
+                    widget,
+                    stage="transition_controller_start",
+                    started_ts=transition_start_started,
+                    transition=transition.__class__.__name__,
+                    outcome="completed" if success else "refused",
+                    cold_compositor=cold_compositor,
+                )
                 
                 if success:
                     widget._current_transition = transition
@@ -361,8 +570,16 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     if overlay_key:
                         widget._overlay_timeouts[overlay_key] = widget._current_transition_started_at
                     # Raise widgets SYNCHRONOUSLY after compositor start.
+                    post_start_started = time.perf_counter() if perf_enabled else 0.0
                     _raise_runtime_widgets_above_compositor(widget, stage="transition_start")
                     widget.refresh_image_resource_accounting()
+                    _log_image_ui_stage(
+                        widget,
+                        stage="post_start_overlay_accounting",
+                        started_ts=post_start_started,
+                        transition=transition.__class__.__name__,
+                        cold_compositor=cold_compositor,
+                    )
                     logger.debug(f"Transition started: {transition.__class__.__name__}")
                     return
                 else:
@@ -384,6 +601,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                 use_transition = False
 
         if not use_transition:
+            immediate_started = time.perf_counter() if perf_enabled else 0.0
             widget._pending_transition_finish_args = None
             widget._cancel_transition_watchdog()
             # No transition - display immediately
@@ -410,6 +628,13 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                 _schedule_startup_first_frame_ready(widget, image_path)
 
         widget.refresh_image_resource_accounting()
+        _log_image_ui_stage(
+            widget,
+            stage="immediate_display_accounting",
+            started_ts=immediate_started,
+            transition="none",
+            cold_compositor=cold_compositor,
+        )
 
 def _on_transition_finished(
     widget,

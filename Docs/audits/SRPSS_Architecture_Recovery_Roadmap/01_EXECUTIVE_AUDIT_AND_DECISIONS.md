@@ -205,4 +205,4 @@ The architecture succeeds only when it is:
 - both bounded and appropriately low in RSS/private commit/VRAM;
 - explainable from resource plus process-level diagnostics;
 - simpler in authority, state machines, callbacks, and generations;
-- validated in normal and Media Center builds under hostile and long-duration scenarios.
+- validated through canonical `main.py` hostile/long-duration evidence plus bounded shared package-route smoke coverage; Media Center never owns a duplicate capture.

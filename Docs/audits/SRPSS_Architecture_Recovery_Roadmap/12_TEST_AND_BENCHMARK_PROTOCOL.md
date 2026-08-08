@@ -1,6 +1,6 @@
 # 12 — Test and Benchmark Protocol
 
-Last reconciled: 2026-08-02
+Last reconciled: 2026-08-09
 
 ## Objective
 
@@ -15,7 +15,7 @@ Record for every official run:
 - exact commit and working branch (`main` unless explicitly changed);
 - clean/dirty state;
 - date/time and run duration;
-- normal or Media Center entry point;
+- canonical `main.py` entry point (Media Center never owns an official benchmark/capture);
 - Windows, Python, PySide6;
 - CPU, installed RAM, GPU/driver;
 - display count, resolution, refresh, DPR, primary/route;

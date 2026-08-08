@@ -196,9 +196,17 @@ def test_terminal_retention_log_is_transition_local_and_byte_aware(
     assert manager.prepare_transition_textures(old, new) is True
     manager.release_transition_textures(retain_active="new")
 
+    probe = manager.get_texture_cache_perf_probe(new, old)
+    assert probe["sole_cache_key"] == new.cacheKey()
+    assert probe["old_key"] == new.cacheKey()
+    assert probe["old_cached"] is True
+    assert probe["old_texture"] == 52
+    assert probe["new_cached"] is False
+
     fmt, *args = info.call_args.args
     message = fmt % tuple(args)
     assert "owner=display:diagnostic terminal=1" in message
+    assert f"retained_cache_key={new.cacheKey()}" in message
     assert "texture_cache_hits=0" in message
     assert "texture_allocations=2" in message
     assert f"texture_allocation_bytes={(13 * 7 + 17 * 9) * 4}" in message
@@ -248,6 +256,37 @@ def test_terminal_retention_log_is_transition_local_and_byte_aware(
     assert "interval_pbo_creations=0" in next_message
     assert "interval_pbo_reuses=1" in next_message
     assert info.call_count == 2
+
+
+def test_terminal_retained_key_lookup_is_dormant_without_perf(monkeypatch):
+    class _CountingCache(dict):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.items_calls = 0
+
+        def items(self):
+            self.items_calls += 1
+            return super().items()
+
+    fake_gl = MagicMock()
+    monkeypatch.setattr(texture_module, "gl", fake_gl)
+    monkeypatch.setattr(texture_module, "is_perf_metrics_enabled", lambda: False)
+
+    manager = GLTextureManager(owner="display:no-perf")
+    cache = _CountingCache({11: 101, 22: 102})
+    manager._texture_cache = cache
+    manager._texture_lru = [11, 22]
+    manager._texture_bytes_by_id = {101: 64, 102: 64}
+    manager._current_texture_bytes = 128
+    manager._old_tex_id = 101
+    manager._new_tex_id = 102
+
+    manager.release_transition_textures(retain_active="new")
+
+    # One traversal is production retirement itself. There is no additional
+    # retained-cache-key diagnostic traversal while --perf is disabled.
+    assert cache.items_calls == 1
+    assert manager._texture_cache == {22: 102}
 
 
 def test_cancel_retains_base_side_selected_by_snap_policy(qt_app):

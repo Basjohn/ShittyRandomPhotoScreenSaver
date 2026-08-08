@@ -147,7 +147,7 @@ Do not:
 - p99/max and first-visible response do not regress;
 - RAM/private commit/VRAM both plateau and meet evidence-backed reasonable targets;
 - all supported visualizer modes pass shared-source validation;
-- normal and Media Center variants pass.
+- canonical `main.py` evidence passes; Media Center owns no parallel capture and receives shared route/build smoke coverage only.
 
 ## Phase 6 — Explicit GPU resource store
 
@@ -211,7 +211,7 @@ Scenarios include:
 - image churn and memory pressure;
 - display topology/sleep-wake where supported;
 - two-hour soak;
-- normal and Media Center entry points.
+- canonical `main.py` only; Media Center receives no duplicate hostile/soak capture.
 
 ## Phase 12 — Release and documentation
 

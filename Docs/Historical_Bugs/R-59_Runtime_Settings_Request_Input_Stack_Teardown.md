@@ -1,8 +1,8 @@
 # R-59 — Runtime Settings Request Tore Down The Emitting Qt Input Stack
 
 Date: 2026-08-08
-Last updated: 2026-08-08
-Status: Source runtime validated; packaged executable validation pending
+Last updated: 2026-08-09
+Status: Current source validated; installed standard artifact proven stale and awaiting rebuild validation
 
 ## Classification
 
@@ -53,11 +53,33 @@ owned plain function in `1621e564`, and a focused regression proves the owner/ge
 metadata and callback invocation. That defect did not cause the three runtime
 cycles to fail, but it must be absent from the next capture.
 
+The later canonical `e6f24ca5` `23:44:52–23:49:13` main run confirms that
+follow-up. It completed two more Settings replacements plus one CUSTOM/Edit
+replacement, continued transitions/visualizer delivery, and exited with code
+0. The bound-method metadata exception is absent, as are lifecycle timeouts,
+invalid-wrapper access, tracebacks, and native/critical Qt messages.
+
+## Installed Artifact Drift
+
+The currently installed standard `C:\Windows\System32\SRPSS.scr` is
+`62,540,800` bytes with timestamp `2026-08-08 21:53:56`. It predates both the
+later-turn Settings admission fix (`94798add`) and the bound-callback wrapper
+fix (`1621e564`). The standard release SCR is also stale: its `23:23:29`
+timestamp precedes `1621e564` by roughly eleven seconds. An installer built
+afterward therefore still packages the stale SCR; rebuilding the installer
+alone cannot validate or repair this failure.
+
+This is direct evidence that the reported installed standard crash is not a
+failure of the current source path. The installed binary still owns the exact
+synchronous teardown shape this record prohibits. It must be rebuilt from
+current source before another source change is considered.
+
 ## Remaining Validation
 
-- Open and close Settings from the newly built standard executable while the
-  runtime is active.
-- Repeat from the Media Center executable.
+- Rebuild the standard SCR from current source, then rebuild/reinstall its
+  installer and open/close Settings while the runtime is active.
+- Keep Media Center to a minimal shared packaged-route parity smoke check. It
+  never receives an independent capture, baseline, golden, matrix, or soak.
 - Require one queued/admitted request, clean runtime and dialog barriers, one
   replacement, fresh first-frame reveal, continued rendering, and no native
   termination or bound-method metadata exception.
@@ -69,6 +91,7 @@ not claim frozen-binary closure.
 ## Evidence
 
 - `logs/evidence_chest/08_08_94798add_main_settings3_custom_spectrum_23_05/`
+- `logs/evidence_chest/08_08_e6f24ca5_main_settings3_perf_23_49/`
 - `engine/engine_handlers.py`
 - `ui/settings_dialog.py`
 - `tests/test_s_hotkey_workflow.py`

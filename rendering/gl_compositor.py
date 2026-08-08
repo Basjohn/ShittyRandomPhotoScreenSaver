@@ -1704,6 +1704,30 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception as e:
                 logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
+    def get_texture_cache_perf_probe(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: Optional[QPixmap],
+    ) -> dict[str, int | bool]:
+        """Expose a read-only texture-key snapshot to perf-gated UI telemetry."""
+        manager = self._texture_manager
+        if manager is None:
+            return {
+                "manager_present": False,
+                "cache_size": 0,
+                "sole_cache_key": 0,
+                "old_key": 0,
+                "new_key": 0,
+                "old_texture": 0,
+                "new_texture": 0,
+                "old_cached": False,
+                "new_cached": False,
+                "texture_cache_hits": 0,
+                "texture_allocations": 0,
+                "texture_uploads": 0,
+            }
+        return manager.get_texture_cache_perf_probe(old_pixmap, new_pixmap)
+
     def warm_transition_resources(
         self,
         transition_name: str,

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.7"
+PARSER_VERSION = "1.8"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
@@ -80,6 +80,9 @@ _IMAGE_UI_DELAY_RE = re.compile(
 )
 _IMAGE_UI_SEGMENT_RE = re.compile(
     r"\[PERF\]\s*\[IMAGE_UI_SEGMENT\]\s+(?P<payload>.*)"
+)
+_GL_RETENTION_RE = re.compile(
+    r"\[PERF\]\s*\[GL RETENTION\]\s+(?P<payload>.*)"
 )
 
 
@@ -711,6 +714,9 @@ def _parse_phase5_telemetry(
                 match = _IMAGE_UI_SEGMENT_RE.search(line)
                 kind = "image_ui_segment"
             if not match:
+                match = _GL_RETENTION_RE.search(line)
+                kind = "gl_retention"
+            if not match:
                 continue
             seen.add(normalized)
             values = _kv(match.group("payload"))
@@ -732,7 +738,7 @@ def _parse_phase5_telemetry(
                     "update_requested": values.get("update_requested", ""),
                     "reason": values.get("reason", ""),
                     "transition": values.get("transition", ""),
-                    "owner": values.get("last_ui", ""),
+                    "owner": values.get("owner", values.get("last_ui", "")),
                     "gap_ms": _number(values.get("gap_ms")),
                     "paint_ms": _number(values.get("paint_ms")),
                     "request_age_ms": _number(values.get("request_age_ms")),
@@ -752,6 +758,40 @@ def _parse_phase5_telemetry(
                     "end_mono_ms": _number(values.get("end_mono_ms")),
                     "duration_ms": _number(values.get("duration_ms")),
                     "size": values.get("size", ""),
+                    "cold_compositor": values.get("cold_compositor", ""),
+                    "manager_before": values.get("manager_before", ""),
+                    "manager_after": values.get("manager_after", ""),
+                    "cache_size_before": _integer(values.get("cache_size_before")),
+                    "cache_size_after": _integer(values.get("cache_size_after")),
+                    "retained_key_before": _integer(values.get("retained_key_before")),
+                    "old_key": _integer(values.get("old_key")),
+                    "new_key": _integer(values.get("new_key")),
+                    "old_cached_before": values.get("old_cached_before", ""),
+                    "new_cached_before": values.get("new_cached_before", ""),
+                    "old_texture_before": _integer(values.get("old_texture_before")),
+                    "new_texture_before": _integer(values.get("new_texture_before")),
+                    "cache_hits_delta": _integer(values.get("cache_hits_delta")),
+                    "texture_allocations_delta": _integer(values.get("texture_allocations_delta")),
+                    "texture_uploads_delta": _integer(values.get("texture_uploads_delta")),
+                    "terminal": _integer(values.get("terminal")),
+                    "retain_active": values.get("retain_active", ""),
+                    "retained_texture": _integer(values.get("retained_texture")),
+                    "retained_cache_key": _integer(values.get("retained_cache_key")),
+                    "texture_count": _integer(values.get("texture_count")),
+                    "texture_cache_hits": _integer(values.get("texture_cache_hits")),
+                    "texture_allocations": _integer(values.get("texture_allocations")),
+                    "texture_uploads": _integer(values.get("texture_uploads")),
+                    "texture_deletions": _integer(values.get("texture_deletions")),
+                    "pbo_count": _integer(values.get("pbo_count")),
+                    "pbo_creations": _integer(values.get("pbo_creations")),
+                    "pbo_reuses": _integer(values.get("pbo_reuses")),
+                    "upload_total_ms": _number(values.get("upload_total_ms")),
+                    "interval_scope": values.get("interval_scope", ""),
+                    "interval_texture_uploads": _integer(values.get("interval_texture_uploads")),
+                    "interval_texture_allocations": _integer(values.get("interval_texture_allocations")),
+                    "interval_pbo_creations": _integer(values.get("interval_pbo_creations")),
+                    "interval_pbo_reuses": _integer(values.get("interval_pbo_reuses")),
+                    "interval_upload_total_ms": _number(values.get("interval_upload_total_ms")),
                     "frames": _integer(values.get("frames")),
                     "transitions": _integer(values.get("transitions")),
                     "time_idle_ms": _number(values.get("time_idle")),
@@ -1145,6 +1185,31 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                     row.get("duration_ms") for row in phase5_rows
                     if row["kind"] == "image_ui_segment"
                 ),
+                "segments_by_stage": {
+                    stage: {
+                        "count": sum(
+                            row["kind"] == "image_ui_segment" and row["stage"] == stage
+                            for row in phase5_rows
+                        ),
+                        "duration_ms": _metric_summary(
+                            row.get("duration_ms") for row in phase5_rows
+                            if row["kind"] == "image_ui_segment" and row["stage"] == stage
+                        ),
+                        "texture_allocations_delta": _metric_summary(
+                            row.get("texture_allocations_delta") for row in phase5_rows
+                            if row["kind"] == "image_ui_segment" and row["stage"] == stage
+                        ),
+                        "texture_uploads_delta": _metric_summary(
+                            row.get("texture_uploads_delta") for row in phase5_rows
+                            if row["kind"] == "image_ui_segment" and row["stage"] == stage
+                        ),
+                    }
+                    for stage in sorted({
+                        str(row["stage"])
+                        for row in phase5_rows
+                        if row["kind"] == "image_ui_segment" and row["stage"]
+                    })
+                },
                 "outcomes": {
                     outcome: sum(
                         row["kind"] == "image_ui_delay" and row["outcome"] == outcome
@@ -1156,6 +1221,34 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                         if row["kind"] == "image_ui_delay" and row["outcome"]
                     })
                 },
+            },
+            "gl_retention": {
+                "records": sum(row["kind"] == "gl_retention" for row in phase5_rows),
+                "retained_cache_keys": sorted({
+                    int(row["retained_cache_key"])
+                    for row in phase5_rows
+                    if row["kind"] == "gl_retention" and row.get("retained_cache_key")
+                }),
+                "texture_uploads": _metric_summary(
+                    row.get("texture_uploads") for row in phase5_rows
+                    if row["kind"] == "gl_retention"
+                ),
+                "interval_texture_uploads": _metric_summary(
+                    row.get("interval_texture_uploads") for row in phase5_rows
+                    if row["kind"] == "gl_retention"
+                ),
+                "interval_pbo_creations": _metric_summary(
+                    row.get("interval_pbo_creations") for row in phase5_rows
+                    if row["kind"] == "gl_retention"
+                ),
+                "interval_pbo_reuses": _metric_summary(
+                    row.get("interval_pbo_reuses") for row in phase5_rows
+                    if row["kind"] == "gl_retention"
+                ),
+                "interval_upload_total_ms": _metric_summary(
+                    row.get("interval_upload_total_ms") for row in phase5_rows
+                    if row["kind"] == "gl_retention"
+                ),
             },
         },
     }

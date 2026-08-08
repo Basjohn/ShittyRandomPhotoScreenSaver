@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-08-08
+Last updated: 2026-08-09
 Branch: `main`
 Active phase: Phase 5 — delivery, visualizer fidelity, recreation, and resource efficiency
 
@@ -16,8 +16,8 @@ This file is the live checklist. Completed analysis and measurements belong in
 - [x] Preserve `1621e564` as the bound-callback ownership and five-mode CUSTOM regression checkpoint.
 - [x] Preserve `e6f24ca5` as the passive image-delivery attribution, startup identity, and bounded action-telemetry checkpoint.
 - [x] Preserve pressure-to-modest live evidence at `logs/evidence_chest/08_08_30fff2c8_mainpy_pressure_to_modest_22_07/`.
-- [x] Preserve the original Media Center CUSTOM/Settings report at `logs/evidence_chest/08_08_224a6817_main_mc_custom_settings_22_27/`.
 - [x] Preserve three clean source Settings cycles at `logs/evidence_chest/08_08_94798add_main_settings3_custom_spectrum_23_05/`.
+- [x] Preserve the strongest combined main-runtime checkpoint at `logs/evidence_chest/08_08_e6f24ca5_main_settings3_perf_23_49/` with parser 1.7 output and manifest.
 - [ ] Promote a later checkpoint over `ff934616` only after separate Bubble and Spectrum visual approval plus the stronger temporal package.
 
 ## Non-Negotiable Guardrails
@@ -30,6 +30,7 @@ This file is the live checklist. Completed analysis and measurements belong in
 - Strict GL teardown must reach zero textures, PBOs, tracked GL resources, and known GL bytes. Do not weaken accounting to make a gate pass.
 - Keep the production CPU-cache cap at 256 MiB until measured hit/fallback evidence justifies a deliberate change.
 - UI-thread pressure is the primary performance hazard. Heavy background work for multiple displays must be slightly desynchronised where evidence shows simultaneous churn, without changing visual cadence or correctness.
+- `main.py` is the sole performance, soak, golden, and evidence-capture authority. Media Center never gets a parallel capture; it receives only bounded shared build/route smoke coverage when packaging parity is relevant.
 - Do not add sleeps, nested event pumping, forced garbage collection, working-set trimming, process recycling, timeout extensions, ignored owners, or hidden fallback paths.
 
 # Phase 5 — Active Exit Checklist
@@ -38,11 +39,12 @@ This file is the live checklist. Completed analysis and measurements belong in
 
 - [x] Three consecutive live runtime Settings opens/closes queue and admit once, complete both barriers, rebuild once, reveal a fresh frame, continue rendering, and exit cleanly.
 - [x] Fix the nonfatal bound-method `_srpss_timer_owner` diagnostic and cover owner/generation propagation.
-- [ ] Confirm the next live run contains no bound-method ownership exception.
-- [ ] Validate Settings-from-runtime in the newly built standard executable; `--s` alone is not sufficient.
-- [ ] Validate Settings-from-runtime in the newly built Media Center executable.
-- [ ] Preserve package logs if either route crashes, rejects admission, duplicates reconstruction, or fails to continue rendering.
-- [ ] If both package routes pass, mark R-59 solved and remove the package blocker from this plan.
+- [x] Confirm the next live run contains no bound-method ownership exception.
+- [ ] Rebuild the standard SCR from current source before rebuilding its installer; the installed and release SCR artifacts both predate the relevant fixes.
+- [ ] Validate Settings-from-runtime in the rebuilt standard executable; `--s` alone is not sufficient.
+- [ ] Keep Media Center to a minimal shared packaged-route smoke check with no independent capture, baseline, soak, or golden.
+- [ ] Preserve the standard package log only if its current rebuilt route crashes, rejects admission, duplicates reconstruction, or fails to continue rendering.
+- [ ] If the rebuilt standard route passes and shared packaged-route smoke remains clean, mark R-59 solved and remove this package blocker.
 
 ## P5.1 Visualizer Fidelity And Stronger Goldens
 
@@ -60,19 +62,22 @@ This file is the live checklist. Completed analysis and measurements belong in
 
 ## P5.2 UI Delivery And Host-Pressure Robustness
 
-Current modest-load evidence is positive but not closure: the 165 Hz display
-delivered `139–156 FPS`, the 60 Hz display `58.3–59.6 FPS`, Spectrum/Bubble
-settled around `94–98 FPS`, and event-loop p99 was generally about `6–19 ms`.
+Current modest-load evidence is positive but not closure: completed transition
+windows on the 165 Hz display delivered `110.5–148.7 FPS` and the 60 Hz display
+`52.4–59.2 FPS`; Spectrum/Bubble commonly settled around `88–99 FPS`.
 Under heavier host pressure, paint fell to `23 FPS`, dtmax reached `232 ms`,
 request age `145 ms`, and event-loop lateness `3.07 s`. Paint work was usually
 small relative to request age.
 
-- [ ] Keep using ordinary `main.py` and `main_mc.py` sessions as performance authority; reserve packaged runs for package-only failures.
+- [x] Use ordinary `main.py` as the sole performance/evidence authority; never request or retain a separate Media Center capture.
 - [ ] Mark load-change timestamps and assess hostile-pressure and modest-pressure intervals separately.
 - [ ] Attribute transition gaps to request age, event-loop lateness, callback/queue wait, source age, and paint cost before changing rendering or visualizer code.
 - [ ] Identify the UI-thread work responsible for the remaining request-age/max tails; last-callback labels alone are correlation.
 - [x] Add perf-gated delayed-image UI records with reason, display, nested callable, due lateness, runtime-guard cost, actual payload cost, monotonic interval bounds, total age, and stale/error outcome; separately time `QImage→QPixmap` and display setter/transition-start segments.
-- [ ] Use the next marked pressure→modest run to correlate those image UI segments with every 25/33/50 ms frame gap before changing the existing 200 ms display stagger.
+- [x] Correlate the newest image UI segments with 25/33/50 ms frame gaps: delivery/request age dominates paint, and synchronous `set_processed_image` is the largest measured GUI-owner segment, especially after recreation.
+- [x] Add perf-only `set_processed_image` substage timings plus exact retained/old/new texture cache keys and upload/allocation deltas; parser output groups the new records by stage.
+- [ ] Use the next main run to distinguish compositor setup, generic pair warm, transition construction/specific warm, controller start, overlay raises, and accounting before changing behaviour.
+- [ ] Prove whether the terminally retained texture key equals and cache-hits the next transition's old-image key; the newest run's repeated two steady uploads per display is suspicious but not yet causal proof.
 - [ ] Audit simultaneous per-display image decode/prefetch, transition preparation, widget hydration, and diagnostics; desynchronise only independently safe heavy work.
 - [ ] Preserve transition names and one terminal GL metric bracket per real transition.
 - [ ] Reject repaint retries, transition-derived visualizer clocks, scheduler cadence gates, and speculative shader/visualizer tuning.
@@ -84,7 +89,6 @@ small relative to request age.
 - [x] CUSTOM/Edit persists and retires its edit session before later-turn full runtime admission; no widget-only fallback is permitted.
 - [x] Real destruction tests release display, manager, shell, widget, timer, animation, resource, task, and subscription owners without `gc.collect()`.
 - [ ] Run at least five alternating Settings/Edit cycles in normal runtime.
-- [ ] Repeat the five-cycle matrix in Media Center.
 - [ ] Include dual display, one selected display, active transition, pending image work, pending ordinary executor work, playing/paused media, and mode switches.
 - [ ] Require exactly one continuation per generation and zero retiring QObjects, Python owners, resources, timers, animations, subscriptions, callbacks, tasks, registrations, pixmaps, textures, PBOs, and tracked GL bytes.
 - [ ] Require equivalent settled RSS, private commit, USS, dedicated/shared VRAM, handles, threads, CPU, and GPU to stop rising approximately linearly per cycle.
@@ -93,7 +97,8 @@ small relative to request age.
 ## P5.4 Absolute Memory, VRAM, And Cache Efficiency
 
 The current code is a real improvement over the failed resource candidate, but
-roughly `1.0–1.2 GiB` RSS and `2.8–3.3 GiB` private commit remain too high.
+the newest main run still reached `1070.1 MiB` whole-app RSS, `3123.3 MiB`
+private commit, and `623.9 MiB` dedicated VRAM.
 
 - [ ] Capture cold, warm, active-transition, steady-image, Settings-gap, post-Settings, and full-teardown snapshots in one live scenario.
 - [ ] Reconcile whole/main/child RSS, private commit, USS, worker mappings, thread stacks, Qt/native heaps, driver mappings, and tracked application bytes.
@@ -113,6 +118,7 @@ roughly `1.0–1.2 GiB` RSS and `2.8–3.3 GiB` private commit remain too high.
 - [x] Add one bounded startup record that distinguishes `main.py` from `main_mc.py` without inference from window flags.
 - [x] Add bounded Move To Custom action telemetry: mode, source preset index/name, and Custom index without logging the full settings payload.
 - [x] Document parser 1.7 rotation/time-range semantics so appended multi-session folders cannot make whole-folder medians look session-specific; a native filter remains optional tooling work.
+- [x] Parser 1.8 extends passive image-install output with per-stage duration, cold-compositor identity, exact texture-key reuse, and upload/allocation deltas.
 - [ ] Keep all warnings/errors visible in `screensaver.log`; lifecycle timeout is always a failed run.
 - [ ] Keep high-volume lifecycle/performance diagnostics passive and bounded.
 
@@ -124,6 +130,9 @@ roughly `1.0–1.2 GiB` RSS and `2.8–3.3 GiB` private commit remain too high.
 - [x] Startup identity, fresh-log, RUN lifetime, and CUSTOM telemetry focus: `14 passed`.
 - [x] Delayed image UI telemetry, parser, and image/display ownership focus: `76 passed`.
 - [x] Production PBO lifecycle 45-cycle harness retains/reuses bounded IDs, trims growth, and reaches strict zero ownership.
+- [x] Clock/calendar UI, factory, descriptor, stack predictor, defaults, and manager gate: `293 passed` on 2026-08-09.
+- [x] Dynamic onefile/onedir shader-contract validator gate: `16 passed` on 2026-08-09.
+- [x] Image-install substage, exact texture-key probe, GL lifecycle, parser 1.8, and image-pipeline gate: `110 passed` on 2026-08-09.
 - [ ] Run any new owning-subsystem tests after each further change; do not use a monolithic `pytest -q` process.
 - [ ] Classify or repair the existing chunked-suite failure families and the QWidget-without-application native abort tracked in `Future_Cleanup.md`.
 - [ ] Re-run the complete suite only through `tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log` when the owning failures are ready for a release gate.
@@ -131,8 +140,8 @@ roughly `1.0–1.2 GiB` RSS and `2.8–3.3 GiB` private commit remain too high.
 ## Phase 5 Exit Gate
 
 - [ ] Bubble and Spectrum are separately approved equal or better than `ff934616`; other supported modes are current-good.
-- [ ] Standard and Media Center runtime Settings routes pass in packaged builds.
-- [ ] Five-cycle normal and Media Center recreation matrices pass ownership and plateau checks.
+- [ ] Rebuilt standard runtime Settings route passes; shared Media Center packaging parity remains a no-capture smoke check only.
+- [ ] Five-cycle canonical main recreation matrix passes ownership and plateau checks.
 - [ ] Host-pressure delivery tails are attributed and acceptable without cadence hacks.
 - [ ] Absolute RAM/private-commit/VRAM excess is either reduced to target or fully attributed in a decision record.
 - [ ] Cache work has no fallback/decode storm and GL/cache ownership remains bounded.
@@ -165,8 +174,8 @@ roughly `1.0–1.2 GiB` RSS and `2.8–3.3 GiB` private commit remain too high.
 # Later Phases
 
 - Phase 6: explicit GPU resource store with context/share-group ownership and budgeted eviction.
-- Phase 7: immutable visualizer render state and presentation decoupling, only after Phase 5 goldens.
-- Phase 8: narrow single-surface compositor after resource-store ownership is proven.
+- Phase 7: immutable latest visualizer render state with generation/activation rejection, only after Phase 5 goldens and lifecycle/resource gates.
+- Phase 8: one compositor surface per display (not one global surface), only after Phase 7 proves missed paints never alter logical state and measured A/B evidence justifies the merge.
 - Phase 9: local transition completion and deterministic temporary-resource release.
 - Phase 10: remove temporary and dead compatibility scaffolding.
 - Phase 11: full normal/soak/all-mode/hostile-load/topology validation.

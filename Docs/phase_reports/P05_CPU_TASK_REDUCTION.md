@@ -1,7 +1,7 @@
 # Phase 5 — CPU and Task Reduction
 
 Date: 2026-08-01
-Last updated: 2026-08-08
+Last updated: 2026-08-09
 Branch: `main`
 Foundation: closed Phase 4 (`Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md`)
 
@@ -13,7 +13,113 @@ Phase 4 is closed by `logs/evidence_chest/07_30_dc8d1741_00_26/`, including star
 
 ## Current implementation state
 
-### 2026-08-08 22:03–23:05 live source assessment — best current checkpoint, final gates open
+### 2026-08-08 23:44–23:49 canonical main checkpoint — strongest current baseline, final gates open
+
+The canonical evidence is preserved at
+`logs/evidence_chest/08_08_e6f24ca5_main_settings3_perf_23_49/` with parser 1.7
+output, source hash
+`F81DF2F28EC508F2F440D623D8A84BAA1E7CFD8108D7B450FED71AF4673F2723`, and a
+manifest. The process started from `e6f24ca5`; `623b04e0` was committed while
+the process was already running and is not attributed to this run. This
+`main.py` session is the sole performance/evidence authority. Media Center does
+not receive a parallel capture, matrix, soak, baseline, or golden.
+
+Two Settings requests and one CUSTOM/Edit replacement completed full teardown,
+zero-owner barriers, one reconstruction, and current-generation first-frame
+reveal. Rendering then continued until an orderly code-0 exit. The later run
+contains no bound-method `_srpss_timer_owner` exception, traceback,
+invalid-wrapper access, native/critical Qt message, lifecycle timeout, or GL
+teardown failure.
+
+Completed transition paint windows were:
+
+| Transition | 165 Hz display FPS / p99 / max | paint p99 / request p99 | 60 Hz display FPS / p99 / max | paint p99 / request p99 |
+|---|---:|---:|---:|---:|
+| Slide 1 | 145.2 / 18.40 / 64.88 ms | 3.96 / 14.66 ms | 57.0 / 48.49 / 73.35 ms | 8.38 / 33.77 ms |
+| Blockflip 1 | 147.2 / 23.89 / 47.86 ms | 3.51 / 18.35 ms | 57.8 / 46.79 / 63.45 ms | 7.89 / 29.71 ms |
+| Slide 2 | 148.7 / 16.30 / 51.45 ms | 3.52 / 9.40 ms | 59.2 / 32.05 / 46.45 ms | 7.99 / 15.73 ms |
+| Raindrops | 138.4 / 30.72 / 111.71 ms | 3.93 / 25.87 ms | 56.7 / 32.91 / 84.27 ms | 7.21 / 28.34 ms |
+| Blockspin | 131.7 / 27.85 / 61.08 ms | 4.28 / 22.72 ms | 57.4 / 39.11 / 69.08 ms | 7.63 / 24.06 ms |
+| Particle | 137.3 / 23.16 / 63.65 ms | 4.15 / 19.45 ms | 57.6 / 40.69 / 85.60 ms | 7.81 / 26.23 ms |
+| Warp | 134.5 / 20.31 / 44.70 ms | 4.03 / 14.18 ms | 57.8 / 42.96 / 55.61 ms | 7.77 / 26.53 ms |
+| Diffuse | 135.8 / 22.82 / 70.37 ms | 4.06 / 19.73 ms | 56.6 / 52.16 / 56.12 ms | 7.47 / 35.40 ms |
+| Blockflip 2 | 110.5 / 36.23 / 86.91 ms | 3.90 / 32.58 ms | 52.4 / 60.69 / 88.81 ms | 7.73 / 50.63 ms |
+
+Across those windows, paint FPS min/median/max was
+`52.4/84.85/148.7`; dt p95 `10.94/21.09/30.46 ms`; dt p99
+`16.30/32.48/60.69 ms`; dt maximum `44.70/64.27/111.71 ms`; paint-cost p99
+`3.51/5.75/8.38 ms`; and request-age p99 `9.40/24.97/50.63 ms`. One
+RainDrops render-only window interrupted by CUSTOM/Edit recorded render dtmax
+`145.11/202.34 ms` and is not misreported as a complete paint window.
+
+The dominant problem is still GUI delivery, not paint execution. There are 143
+frame-gap owner records: 72 over 33 ms and 71 over 50 ms. Gap
+min/median/max is `33.06/49.45/182.72 ms`; matching request age is
+`6.21/41.73/168.59 ms`. The worst gap carried `168.59 ms` request age and
+only `8.72 ms` paint work. Last-callback labels are temporal correlation only;
+cheap media, cursor, and deferred-start callbacks are not blamed from those
+labels.
+
+The new image telemetry identifies the highest-value next seam. `QImage` to
+`QPixmap` conversion was `2.50/5.40/9.82/11.43 ms`
+(min/median/p95/max), while synchronous `set_processed_image` was
+`14.65/38.16/128.00/132.25 ms`. Initial and post-recreation per-display setter
+pairs were approximately `87–132 ms`; ordinary later pairs were commonly
+`15–27 ms` on display 0 and `25–43 ms` on display 1. Prefetch-resume callbacks
+were small. A diagnostic-only follow-up now divides the setter into compositor
+setup, generic pair warm, transition construction/specific warm, controller
+start, overlay raises, and accounting. It also logs the retained/old/new
+texture cache keys plus upload/allocation deltas. No cadence, stagger, cache
+budget, context affinity, visual quality, or transition behaviour changed.
+
+Transition-local GL data is encouraging but exposes one unanswered exact-reuse
+question. Steady terminal-to-terminal intervals reused the retained PBO,
+created no new PBO, and emitted zero slow-upload records. Across twelve
+per-display steady intervals there were nevertheless exactly 24 texture
+uploads (two per interval), totaling `228.19 ms`; the median per-display
+interval total was `24.24 ms`, maximum single upload `14.62 ms`. Because only
+the new image should require upload if the retained destination becomes the
+next old image, the new key telemetry must prove or falsify actual texture
+reuse before changing retention or warmup behaviour.
+
+Visualizer delivery is healthy enough to preserve while stronger goldens are
+finished:
+
+- Spectrum smoothing remained optional/on the authoritative tick, replayed
+  Settings changes (`0.80` then `0.50` in this run), and added no paint cadence.
+  Ten-second set/paint windows ranged `58.4–95.1/55.7–94.4 Hz`, with steady
+  windows mostly about `89–95 Hz`. The user judged the modest-load result good.
+- Bubble survived mode switch, CUSTOM/Edit, and Settings. Post-recreation
+  sessions settled near `87.9` and `91.7 FPS`; set/paint windows reached
+  `98.9/98.8 Hz`. The final long session offered `6999`, submitted/published
+  `6994`, and recorded only five ordinary busy deferrals with no failed or
+  stale result.
+- Bounded visualizer latency warnings remain `80.3–113.9 ms`; they are real
+  delivery-tail diagnostics, not shader fallback or evidence for changing the
+  visualizer clock.
+
+Resource containment is materially better than earlier failure candidates but
+absolute usage remains open. Whole-app RSS min/median/max was
+`451.3/972.7/1070.1 MiB`; private commit `1997.6/2995.3/3123.3 MiB`; USS
+`369.4/836.0/933.2 MiB`; dedicated VRAM `7.9/605.0/623.9 MiB`; GPU busy
+`0.9/8.4/32.1%`; and app CPU `55.0/84.0/112.6%`. Active tracked GL commonly
+held four textures plus two PBOs (`143.72 MiB`) and sometimes six textures plus
+two PBOs (`191.59 MiB`). The CPU image cache remained under its 256 MiB cap.
+Every recreation and final teardown reached exact zero texture/PBO/known-GL
+ownership. Worker fallbacks, shared-memory live segments, unlink failures, and
+visualizer shader fallbacks were all zero.
+
+This is a better resource, lifecycle, smoothing, and diagnostic checkpoint than
+`97ff0619`, while `3b6082dd` remains the explicit rollback checkpoint and
+`ff934616` the earlier approved visual-feel authority. Phase 5 remains open for
+the rebuilt standard Settings route, stronger Bubble/Spectrum goldens, the
+five-cycle canonical-main plateau, exact image-install/texture-reuse ownership,
+host-pressure/lower-spec validation, and absolute native/driver memory
+attribution. Phase 7/8 implementation should not begin before those gates: its
+one-surface-per-display upside is real, but it does not currently own the
+measured `set_processed_image`/request-age bottleneck.
+
+### 2026-08-08 22:03–23:05 earlier live source assessment — positive checkpoint, final gates open
 
 The current rollback chain is now:
 
@@ -31,14 +137,13 @@ The useful live evidence is preserved at:
 
 - `logs/evidence_chest/08_08_30fff2c8_mainpy_pressure_to_modest_22_07/`
   (`75D08574E925246F940F50B02AAB2D997EE411133B3DE2619FD20C4FE6FDE6B5`);
-- `logs/evidence_chest/08_08_224a6817_main_mc_custom_settings_22_27/`
-  (`C46854B6E97494DEEB405472AF25D9FB19D2665FC2373256523FEEC91B55C797`);
 - `logs/evidence_chest/08_08_94798add_main_settings3_custom_spectrum_23_05/`
   (`5C168C4D9640DF6636A6C291A3B612D5EAEF35CD0E72E648073DBA85C5994982`).
 
-These are ordinary `main.py`/Media Center runtime captures. Package-only
-validation is required only for the frozen-executable Settings crash; it is not
-the general performance evidence source.
+These are ordinary canonical `main.py` captures. Media Center does not own a
+parallel performance/evidence lane. Package-only validation is required only
+for the frozen-executable Settings route and remains a bounded smoke check, not
+a capture or general performance source.
 
 The first run deliberately varied whole-machine pressure until approximately
 22:03. It confirms that UI delivery remains the principal performance risk under
@@ -81,9 +186,10 @@ and exited with code 0. Total lifecycle durations were `13.158`, `14.503`, and
 `13.807 s`, dominated by `10.8–12.2 s` of dialog dwell. Runtime stop itself was
 approximately `141–150 ms`; dialog construction was approximately `1.35–1.39 s`.
 The background build logs subsequently completed with exit code 0 and produced
-both executables and installers. That proves package construction only. Standard
-and Media Center Settings-from-runtime execution remain pending the user's live
-result.
+executables and installers. That proves package construction only. The later
+artifact audit proves the installed and release standard SCRs predate the
+relevant fixes. A current standard rebuild/reinstall and runtime Settings smoke
+remains pending; the stale package cannot validate current source.
 
 The same run proves Custom Spectrum and smoothing settings survive recreation:
 smoothing remained enabled and replayed as `0.55`, `0.50`, `0.50`, then `0.60`
@@ -119,14 +225,14 @@ One repeated nonfatal Settings diagnostic was found and corrected after the
 capture: a bound method could not accept `_srpss_timer_owner` metadata. The
 single-shot helper now wraps every callback in a plain owned function, and the
 focused regression passes. The next live/package run must show that message is
-absent. Subsequent bounded diagnostics now identify `main` versus `main_mc`
+absent. Subsequent bounded diagnostics identify the process entry point
 directly at startup and record each Move To Custom mode/source/destination
 without serializing the settings payload.
 
 The current checkpoint is materially better than `97ff0619`/the failed 17:07
 candidate: resource containment, modest-load delivery, visualizer response,
 Settings reconstruction, Custom replay, and strict teardown are all stronger.
-Phase 5 remains open because package Settings validation, five alternating
+Phase 5 remains open because current standard package Settings validation, five alternating
 Edit/Settings plateau cycles, hostile-load robustness on less capable hardware,
 absolute memory attribution, and the complete stronger golden package remain.
 
@@ -458,7 +564,7 @@ Parser 1.5 repaired a derived-evidence defect: nested `tm_categories` JSON had b
 - [x] Validate the restored lane-free path: the dedicated restored-path run reached 50,106 offered and 50,106 submitted lane-free steps (ratio 1.000) with no artificial cadence deferrals and roughly 1–2 ms worker execution. Later intervals stayed near 89 FPS with only isolated genuine worker/result ownership deferrals. The operator confirmed restored immediate Bubble reaction and elasticity.
 - [x] Add a runtime-shaped source/discrete-edge-to-first-visible temporal oracle. The 100 Hz recurring-tick test authors a discrete kick at the exact phase deferred by the rejected 60 Hz token gate and requires that edge to appear in the first lane-free visible state. It fails terminal-only edge-plus-quiet batching while preserving the current one-step authored path.
 - [ ] Compare input-to-visible latency, p99/max delivery, and CPU/task cost before/after any new design. Do not reintroduce a second cadence authority, terminal-only multi-step batching, or live scheduler capture merely to improve the counter.
-- [-] Exercise Spectrum on its unchanged shared newest-only path and Bubble → Spectrum → Bubble. The optional candidate now smooths presentation bars only on the existing UI visualizer tick, with disabled/default/stronger settings and deterministic hazard lights; installed paint receipt, mode-switch review, and user approval remain open.
+- [-] Exercise Spectrum on its unchanged shared newest-only path and Bubble → Spectrum → Bubble. The optional candidate smooths presentation bars only on the existing UI visualizer tick, with disabled/default/stronger settings and deterministic hazard lights. Main-runtime mode-switch/recreation evidence and the user's modest-load verdict are positive; the stronger real-source paint-receipt package remains open.
 - [ ] Reject any optimization that turns paint delivery, feedback animation, or a retry timer into the visualizer clock.
 
 ## P5.1 — Frame-delivery owner telemetry
@@ -467,16 +573,17 @@ Parser 1.5 repaired a derived-evidence defect: nested `tm_categories` JSON had b
 - [-] The 18:59 recovery run supplied 124 owner-labelled gaps over 393 seconds: 67 exceeded 33 ms, 57 exceeded 50 ms, and the maximum was 138.0 ms. Normalized rates improve over both `08_02` and the 17:07 failure, but the Crumble and event-loop maxima remain open. Last-callback labels remain correlation rather than sufficient causal attribution.
 - [x] Resolve the known transition-label hole: owner telemetry now accepts the compositor display-transition `name`, which was present on the 62 active records but previously ignored.
 - [x] Make the transition-local GL retention bracket mechanically singular. Completed cleanup re-entry and an empty manager pair are idempotent; deterministic tests and the 45-cycle production-PBO harness prove retained IDs/reuse, growth trim, and strict zero teardown without a redundant GUI update.
-- [!] Capture the corrected bracket installed. The 18:59 binary still has duplicate terminal records, so do not use its counters causally until the fixed A/B shows exactly one terminal record per real transition.
-- [ ] Correlate those GL records with request-age, event-loop lateness, paint delivery, CPU, and resource snapshots in the fixed-workload installed A/B; lifetime totals or unmatched-machine comparisons are not causal proof.
-- [ ] Correlate the now-labelled transition owner with logical scene age, event-loop lateness, queue/callback tails, and per-display request-to-paint delay in the next installed capture.
+- [x] Capture the corrected bracket in canonical main evidence. The 23:44 run emits one terminal record per real transition, retains/reuses the PBO, records zero slow uploads, and reaches strict zero at every reconstruction/exit.
+- [x] Correlate GL records with request age, event-loop lateness, paint delivery, CPU, and resource snapshots in the latest main run. Delivery dominates paint, but exactly two steady texture uploads per display leave retained-old exact reuse unresolved.
+- [x] Correlate the labelled transition owner with logical scene age, event-loop lateness, queue/callback tails, and per-display request-to-paint delay; last-callback identity remains correlation, not callback ownership.
+- [ ] Use the new main-only setter substage and texture-key telemetry to name the exact synchronous image-install owner before removing/deferring any warmup or changing the display stagger.
 - [ ] Attribute delayed delivery to its actual owner before changing cadence mechanics; a healthy render clock with delayed paint is event-loop delivery starvation, not permission to add repaint retries.
 
 ## P5.2 — False visualizer-latency diagnostics
 
-- [x] The latest run has no impossible uptime-linear latency values and no false visualizer ERROR flood. Ten bounded WARNING samples remained at roughly 82–106 ms with matching engine/frame generations and activation identities.
+- [x] The latest run has no impossible uptime-linear latency values and no false visualizer ERROR flood. Bounded warnings remain at `80.3–113.9 ms` with matching engine/frame generations and activation identities.
 - [x] Separate passive Bubble source age, logical simulation-step age, render-state application age, and existing request-to-paint age in frame-gap owner diagnostics. These timestamps are observation-only and create no timer, queue, repaint, or scheduling dependency.
-- [ ] Validate the separated ages in an installed transition capture and classify the remaining 82–106 ms warnings against request-to-paint delivery.
+- [x] Validate the separated ages in canonical main transition evidence: elevated visualizer warnings coexist with request-age/event-loop tails while paint and Bubble computation remain small; they do not justify a visualizer cadence change.
 - [ ] Prove diagnostic warnings neither claim a mode regression from presentation delay nor hide a real first-frame, mode-switch, or audio-input failure.
 
 ## P5.3 — Unchanged media repaint churn

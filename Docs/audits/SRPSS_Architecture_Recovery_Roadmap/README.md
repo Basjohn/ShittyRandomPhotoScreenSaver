@@ -97,7 +97,7 @@ Recovery succeeds only when:
 - CPU/task work falls without mode-specific fidelity cuts;
 - all GL creation and destruction occurs on the owner GUI/context thread;
 - resource and whole-process usage gaps are explainable;
-- normal and Media Center variants pass hostile and long-duration validation;
+- canonical `main.py` passes hostile and long-duration validation, while shared package routes receive bounded no-capture smoke coverage;
 - failed experiments and remaining weaknesses are recorded honestly.
 
 Start with the live checklist, but treat `Current_Plan.md` as the active execution authority.

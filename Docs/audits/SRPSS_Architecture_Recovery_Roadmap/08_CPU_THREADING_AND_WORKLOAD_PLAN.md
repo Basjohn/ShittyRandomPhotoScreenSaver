@@ -241,6 +241,6 @@ For each optimization:
 - task/callback/allocation reduction is measured rather than assumed;
 - whole-app RSS/private commit/VRAM do not worsen;
 - no new lane, scheduler, timer, queue, process, retry, or synchronization authority is added;
-- normal and Media Center behaviour remains correct.
+- canonical-main behaviour remains correct and shared package routes pass bounded smoke coverage without a separate Media Center capture.
 
 A candidate that merely shifts work, reduces task count, or lowers average CPU while harming feel or increasing memory is rejected.

@@ -1,6 +1,6 @@
 # 00 — Index and Live Checklist
 
-Last reconciled: 2026-08-08
+Last reconciled: 2026-08-09
 
 This file is the compact status ledger for the architecture roadmap. Detailed active tasks belong in `Current_Plan.md`; completed evidence belongs in phase reports and historical bug records.
 
@@ -27,7 +27,7 @@ donor/reference only:           7376bb9bb380253f3bd14079e65d7bdbca062fad
 current recovery checkpoint:    3b6082dd
 uninstalled implementation:     afde215d
 active task owner:              Current_Plan.md
-latest installed evidence:      logs/evidence_chest/08_08_after_97ff0619_gl_retention_18_59/
+latest canonical main evidence: logs/evidence_chest/08_08_e6f24ca5_main_settings3_perf_23_49/
 current performance comparator: logs/evidence_chest/08_02_3877b2c7_20_27/
 ```
 
@@ -82,7 +82,7 @@ Templates are under `templates/`.
 ## Phase 3 — Full lifecycle and GL ownership
 
 - [x] Full stop–destroy–recreate, owner-context GL deletion, generation rejection, and destruction barriers were implemented.
-- [x] Settings now completes full teardown/recreation in current installed evidence.
+- [x] Settings now completes full teardown/recreation in current canonical main evidence.
 - [x] R-56: invalid-wrapper handling is repaired mechanically and four installed Settings cycles complete without invalid-wrapper/disconnect warnings.
 - [x] R-53: later-turn immutable admission and deterministic temporary-session retirement are repaired mechanically; one installed dual-display Save-and-Continue completes exactly one full replacement.
 - [x] Preserve full reinit, graph-based placement/replay, generation barriers, and authoritative-first-frame reveal in both repairs.
@@ -110,15 +110,16 @@ Templates are under `templates/`.
 - [x] Repair R-57 scaled-prefetch selection/removal ordering mechanically; installed image/transition validation remains open.
 - [x] Repair R-56 Settings wrapper lifetime mechanically and validate it across four installed Settings cycles.
 - [x] Repair R-53 CUSTOM/Edit admission and deterministic shell callback retirement mechanically and validate one dual-display Save-and-Continue replacement.
-- [x] Capture one installed CUSTOM plus four Settings recreations with exact zero-GL teardown and no lifecycle warning/exception.
+- [x] Capture canonical main CUSTOM/Settings recreations with exact zero-GL teardown and no lifecycle warning/exception.
 - [ ] Establish clean alternating lifecycle cycles before drawing final leak conclusions.
 - [x] Make terminal GL retention mechanically idempotent. Completed cleanup re-entry now performs no second release/update, the manager ignores an empty terminal pair, and the 45-cycle production-PBO harness proves retained texture/PBO reuse, growth trim, and strict zero teardown.
-- [!] Validate the corrected terminal bracket and retained IDs in the fixed-workload installed A/B; the 18:59 binary predates the fix.
+- [x] Validate one corrected terminal bracket per real transition in canonical main evidence, with bounded retained PBO reuse, zero slow uploads, and strict-zero teardown.
+- [!] Prove the terminally retained texture cache key is the exact next old-image key; two steady uploads per display remain suspicious until the new passive key/substage telemetry is exercised.
 - [ ] Attribute and lower absolute RAM/private-commit/VRAM while preserving perceivable fidelity.
 - [ ] Reduce only measured duplicate, idle, unchanged, allocation, callback, logging, and representation work.
 - [ ] Validate all supported visualizer modes against the shared restored source.
 
-**Gate 5:** user-approved visual behaviour preserved; lifecycle complete; task/CPU work reduced; memory both plateaus and reaches an evidence-backed reasonable level; normal and Media Center installed evidence passes.
+**Gate 5:** user-approved visual behaviour preserved; lifecycle complete; task/CPU work reduced; memory both plateaus and reaches an evidence-backed reasonable level; canonical `main.py` evidence passes. Media Center owns no parallel evidence lane and receives only shared packaged-route smoke coverage.
 
 ## Phase 6 — Explicit GPU resource store
 
@@ -129,13 +130,16 @@ Templates are under `templates/`.
 ## Phase 7 — Visualizer/presentation decoupling
 
 - [~] Future architecture work after stronger goldens.
+- [ ] First extract one immutable latest render packet with engine generation and activation identity; keep audio, logical cadence, mode simulation, and authored feel visualizer-owned.
 - [ ] Preserve the accepted ordinary executor and logical integration semantics.
+- [ ] Prove that missed paints do not alter logical state and the next paint consumes only the latest accepted packet.
 - [ ] No second cadence, paint acknowledgement, paint-local authoritative mutation, or compositor-owned visualizer scheduler.
 
 ## Phase 8 — Narrow one-surface compositor
 
 - [~] Future architecture work.
-- [ ] One surface per display remains a product/architecture target only if it can be implemented without importing donor orchestration or harming visual fidelity.
+- [ ] One compositor surface per display—not one global surface—remains a target only after Phase 7 and only if measured evidence justifies removing the separate visualizer GL surface/context.
+- [ ] The compositor may own draw order and presentation only; it may not absorb visualizer simulation/cadence, image selection, Settings/Edit admission, or worker control.
 
 ## Phase 9 — Local transition completion
 
@@ -149,7 +153,7 @@ Templates are under `templates/`.
 
 ## Phase 11 — Hostile and long-duration validation
 
-- [ ] Normal and Media Center variants.
+- [ ] Canonical `main.py` only for captures, host-pressure runs, and long soaks; Media Center receives no duplicate evidence run.
 - [ ] Idle, visualizer, transitions, combined work, CPU/disk/GPU/mixed load, Settings/Edit during activity, display topology, and long soak.
 - [ ] Exact environment and source/cache state recorded.
 
@@ -163,9 +167,9 @@ Templates are under `templates/`.
 
 | ID | State | Required result |
 |---|---|---|
-| P5.0 | Partial | Complete installed source/paint-receipt scenarios, remaining modes, negative-control ownership coverage, and separate Bubble/Spectrum approval |
+| P5.0 | Partial | Rebuild/validate the stale standard package route; complete main source/paint-receipt scenarios, remaining modes, negative controls, and separate Bubble/Spectrum approval |
 | R-57 | Awaiting installed evidence | Stable scaled-prefetch behavior during installed image/transition rotation |
-| Terminal GL | Awaiting installed evidence | Mechanical idempotency and deterministic retained-ID reuse pass; prove one bracket and retained texture/PBO IDs in controlled A/B |
+| Terminal GL | Partial | Singular brackets/PBO reuse pass; prove retained texture key becomes the exact next old-image cache hit with the new main telemetry |
 | Lifecycle matrix | Open | Five alternating installed Edit/Settings cycles with equivalent-state owner/resource plateau |
 | Memory | Open | Explain and reduce whole-app RSS/commit/VRAM without fidelity cuts |
 

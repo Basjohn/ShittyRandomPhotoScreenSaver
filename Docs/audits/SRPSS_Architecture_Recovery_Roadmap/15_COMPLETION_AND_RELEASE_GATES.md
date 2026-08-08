@@ -70,7 +70,7 @@ A release candidate is rejected when a critical gate fails, even when average FP
 - [ ] No repeated unexplained idle 100+ ms gaps.
 - [ ] Average FPS is reported only as context.
 - [ ] Lower task count did not alter logical events/cadence/feel.
-- [ ] Normal and Media Center results pass.
+- [ ] Canonical-main results pass; shared packaged routes pass bounded smoke checks without a separate Media Center capture.
 
 # RAM, commit, VRAM, and resource gate
 

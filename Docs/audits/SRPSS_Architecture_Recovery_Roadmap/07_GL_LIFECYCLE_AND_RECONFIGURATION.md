@@ -198,7 +198,7 @@ The replacement remains hidden until its own current runtime, exact manager/disp
 
 ### Installed loops
 
-After focused fixes, run alternating Settings/Edit under transitions, image work, all supported visualizer modes, mode switches, playing/paused, dual/selected display, normal and Media Center.
+After focused fixes, run the canonical `main.py` alternating Settings/Edit matrix under transitions, image work, all supported visualizer modes, mode switches, playing/paused, and dual/selected display. Media Center receives no duplicate matrix or capture.
 
 ## Pass criteria
 

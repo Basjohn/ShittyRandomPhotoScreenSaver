@@ -330,5 +330,5 @@ Memory/resource work passes only when:
 - tracked/untracked gaps are documented by owner/category;
 - full teardown reaches zero retiring application ownership;
 - no fidelity/cadence/quality trade was used;
-- normal and Media Center variants pass;
+- canonical-main resource evidence passes; Media Center receives no parallel resource capture;
 - the user reports no visual regression.

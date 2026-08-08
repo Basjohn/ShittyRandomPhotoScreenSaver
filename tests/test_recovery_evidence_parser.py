@@ -135,6 +135,23 @@ def _write_archive(path: Path) -> None:
             "2026-07-23 19:38:14 - metrics - INFO - "
             "[PERF] [IMAGE_UI_SEGMENT] reason=transition_display_stagger display=1 "
             "stage=set_processed_image duration_ms=23.50 size=3840x2160",
+            "2026-07-23 19:38:14 - metrics - INFO - "
+            "[PERF] [IMAGE_UI_SEGMENT] reason=display_setter_detail display=1 "
+            "stage=generic_pair_warm duration_ms=18.25 transition=GLCompositorSlideTransition "
+            "outcome=completed size=3840x2160 cold_compositor=false "
+            "manager_before=true manager_after=true cache_size_before=1 cache_size_after=2 "
+            "retained_key_before=111 old_key=111 new_key=222 old_cached_before=true "
+            "new_cached_before=false old_texture_before=7 new_texture_before=0 "
+            "cache_hits_delta=1 texture_allocations_delta=1 texture_uploads_delta=1",
+            "2026-07-23 19:38:15 - metrics - INFO - "
+            "[PERF] [GL RETENTION] owner=display:1 terminal=2 retain_active=new "
+            "retained_texture=7 retained_cache_key=111 texture_count=1 "
+            "texture_cache_hits=4 texture_allocations=2 texture_uploads=2 "
+            "texture_deletions=2 pbo_count=1 pbo_creations=0 pbo_reuses=2 "
+            "upload_total_ms=24.25 interval_scope=terminal_to_terminal "
+            "interval_texture_uploads=2 interval_texture_allocations=2 "
+            "interval_pbo_creations=0 interval_pbo_reuses=2 "
+            "interval_upload_total_ms=24.25",
         ]
     )
     visualizer = (
@@ -216,16 +233,47 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     assert image_delay["due_mono_ms"] == 1200.0
     assert image_delay["start_mono_ms"] == 1203.5
     assert image_delay["end_mono_ms"] == 1228.25
-    image_segment = next(row for row in analysis.phase5_rows if row["kind"] == "image_ui_segment")
+    image_segment = next(
+        row for row in analysis.phase5_rows
+        if row["kind"] == "image_ui_segment" and row["stage"] == "set_processed_image"
+    )
     assert image_segment["stage"] == "set_processed_image"
     assert image_segment["duration_ms"] == 23.5
     assert image_segment["size"] == "3840x2160"
     assert analysis.summary["phase5"]["image_ui"]["delay_records"] == 1
-    assert analysis.summary["phase5"]["image_ui"]["segment_records"] == 1
+    detailed_segment = next(
+        row for row in analysis.phase5_rows
+        if row["kind"] == "image_ui_segment" and row["stage"] == "generic_pair_warm"
+    )
+    assert detailed_segment["old_key"] == 111
+    assert detailed_segment["retained_key_before"] == 111
+    assert detailed_segment["old_cached_before"] == "true"
+    assert detailed_segment["texture_allocations_delta"] == 1
+    assert detailed_segment["texture_uploads_delta"] == 1
+    assert analysis.summary["phase5"]["image_ui"]["segment_records"] == 2
     assert analysis.summary["phase5"]["image_ui"]["guard_ms"]["maximum"] == 0.25
     assert analysis.summary["phase5"]["image_ui"]["callback_ms"]["maximum"] == 24.75
     assert analysis.summary["phase5"]["image_ui"]["segment_duration_ms"]["maximum"] == 23.5
+    pair_warm = analysis.summary["phase5"]["image_ui"]["segments_by_stage"]["generic_pair_warm"]
+    assert pair_warm["count"] == 1
+    assert pair_warm["duration_ms"]["maximum"] == 18.25
+    assert pair_warm["texture_uploads_delta"]["maximum"] == 1.0
     assert analysis.summary["phase5"]["image_ui"]["outcomes"] == {"completed": 1}
+    gl_retention = next(
+        row for row in analysis.phase5_rows if row["kind"] == "gl_retention"
+    )
+    assert gl_retention["owner"] == "display:1"
+    assert gl_retention["terminal"] == 2
+    assert gl_retention["retain_active"] == "new"
+    assert gl_retention["retained_texture"] == 7
+    assert gl_retention["retained_cache_key"] == 111
+    assert gl_retention["interval_scope"] == "terminal_to_terminal"
+    assert gl_retention["interval_texture_uploads"] == 2
+    retention_summary = analysis.summary["phase5"]["gl_retention"]
+    assert retention_summary["records"] == 1
+    assert retention_summary["retained_cache_keys"] == [111]
+    assert retention_summary["interval_texture_uploads"]["maximum"] == 2.0
+    assert retention_summary["interval_pbo_creations"]["maximum"] == 0.0
     assert len(analysis.errors_and_warnings) == 2
 
 

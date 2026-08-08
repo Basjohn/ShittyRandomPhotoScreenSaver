@@ -88,7 +88,7 @@ Every current official folder/archive includes or is paired with:
 
 - exact branch/commit and clean/dirty state;
 - date/time/timezone and duration;
-- normal or Media Center entry point;
+- canonical `main.py` entry point; Media Center is never a parallel evidence source;
 - OS/Python/PySide/CPU/RAM/GPU/driver;
 - displays/resolution/refresh/DPR/route;
 - power profile;

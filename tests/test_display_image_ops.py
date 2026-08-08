@@ -382,6 +382,7 @@ def test_schedule_startup_first_frame_ready_latest_token_wins(monkeypatch):
 
 def test_failed_transition_start_restores_widget_stack(qt_app, monkeypatch):
     calls: list[str] = []
+    perf_messages: list[str] = []
 
     class _FakeSignal:
         def connect(self, _callback):
@@ -410,6 +411,23 @@ def test_failed_transition_start_restores_widget_stack(qt_app, monkeypatch):
         def warm_shader_textures(self, *_args):
             calls.append("comp_warm")
 
+        def get_texture_cache_perf_probe(self, old_pixmap, new_pixmap):
+            warmed = "comp_warm" in calls
+            return {
+                "manager_present": True,
+                "cache_size": 2 if warmed else 1,
+                "sole_cache_key": old_pixmap.cacheKey() if not warmed else 0,
+                "old_key": old_pixmap.cacheKey(),
+                "new_key": new_pixmap.cacheKey(),
+                "old_texture": 10,
+                "new_texture": 11 if warmed else 0,
+                "old_cached": True,
+                "new_cached": warmed,
+                "texture_cache_hits": 1 if warmed else 0,
+                "texture_allocations": 1 if warmed else 0,
+                "texture_uploads": 1 if warmed else 0,
+            }
+
     class _FakeTransition:
         finished = _FakeSignal()
 
@@ -425,6 +443,12 @@ def test_failed_transition_start_restores_widget_stack(qt_app, monkeypatch):
             self.cleaned = True
 
     monkeypatch.setattr(display_image_ops, "GLCompositorWidget", _FakeCompositor)
+    monkeypatch.setattr(display_image_ops, "is_perf_metrics_enabled", lambda: True)
+    monkeypatch.setattr(
+        display_image_ops.logger,
+        "info",
+        lambda fmt, *args: perf_messages.append(fmt % args),
+    )
 
     old_pixmap = QPixmap(8, 8)
     old_pixmap.fill()
@@ -503,6 +527,15 @@ def test_failed_transition_start_restores_widget_stack(qt_app, monkeypatch):
     assert any(idx > calls.index("transition_cleanup") for idx in raise_indices)
     assert max(raise_indices) < calls.index("ensure_stack:display")
     assert widget.current_image_path == "next.png"
+    assert any("stage=generic_pair_warm" in message for message in perf_messages)
+    generic_warm = next(
+        message for message in perf_messages if "stage=generic_pair_warm" in message
+    )
+    assert f"retained_key_before={old_pixmap.cacheKey()}" in generic_warm
+    assert "old_cached_before=true" in generic_warm
+    assert "texture_allocations_delta=1" in generic_warm
+    assert any("stage=transition_specific_warm" in message for message in perf_messages)
+    assert any("stage=transition_controller_start" in message for message in perf_messages)
 
 
 def test_set_processed_image_keeps_animation_manager_owned_until_controller_stop(qt_app, monkeypatch):

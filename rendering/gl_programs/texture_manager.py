@@ -552,6 +552,51 @@ class GLTextureManager:
             "direct_slow_upload_count": self._direct_slow_upload_count,
             "direct_slow_upload_total_ms": self._direct_slow_upload_total_ms,
         }
+
+    def get_texture_cache_perf_probe(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: Optional[QPixmap],
+    ) -> dict[str, int | bool]:
+        """Return a passive exact-key cache snapshot for ``--perf`` attribution.
+
+        This deliberately does not create, upload, pin, evict, or reorder a
+        texture.  It exists so a live run can prove whether the terminally
+        retained destination is the exact cache entry presented as the old
+        image on the next transition.
+        """
+
+        def _cache_key(pixmap: Optional[QPixmap]) -> int:
+            if pixmap is None:
+                return 0
+            try:
+                if pixmap.isNull():
+                    return 0
+                return int(pixmap.cacheKey())
+            except Exception:
+                return 0
+
+        old_key = _cache_key(old_pixmap)
+        new_key = _cache_key(new_pixmap)
+        old_texture = int(self._texture_cache.get(old_key, 0) or 0) if old_key > 0 else 0
+        new_texture = int(self._texture_cache.get(new_key, 0) or 0) if new_key > 0 else 0
+        sole_cache_key = 0
+        if len(self._texture_cache) == 1:
+            sole_cache_key = int(next(iter(self._texture_cache)))
+        return {
+            "manager_present": True,
+            "cache_size": len(self._texture_cache),
+            "sole_cache_key": sole_cache_key,
+            "old_key": old_key,
+            "new_key": new_key,
+            "old_texture": old_texture,
+            "new_texture": new_texture,
+            "old_cached": bool(old_texture),
+            "new_cached": bool(new_texture),
+            "texture_cache_hits": self._texture_cache_hits,
+            "texture_allocations": self._texture_allocations,
+            "texture_uploads": self._texture_uploads,
+        }
     # -------------------------------------------------------------------------
     # Transition Texture Management
     # -------------------------------------------------------------------------
@@ -605,6 +650,19 @@ class GLTextureManager:
             retained_id = int(self._new_tex_id or 0)
         elif retain_active == "old":
             retained_id = int(self._old_tex_id or 0)
+        retention_perf_enabled = (
+            retain_active in {"new", "old"} and is_perf_metrics_enabled()
+        )
+        retained_cache_key = 0
+        if retention_perf_enabled:
+            retained_cache_key = next(
+                (
+                    int(cache_key)
+                    for cache_key, texture_id in self._texture_cache.items()
+                    if int(texture_id or 0) == retained_id
+                ),
+                0,
+            )
         self._old_tex_id = 0
         self._new_tex_id = 0
         if retain_active in {"new", "old"}:
@@ -618,7 +676,7 @@ class GLTextureManager:
                 before - len(self._texture_cache),
             )
         self._evict_cache_to_budget()
-        if retain_active in {"new", "old"} and is_perf_metrics_enabled():
+        if retention_perf_enabled:
             stats = self.get_stats()
             metrics = self._transition_metrics or {
                 name: 0 for name in self._TRANSITION_METRIC_NAMES
@@ -631,7 +689,7 @@ class GLTextureManager:
             )
             logger.info(
                 "[PERF] [GL RETENTION] owner=%s terminal=%d retain_active=%s "
-                "retained_texture=%d texture_count=%d texture_bytes=%d "
+                "retained_texture=%d retained_cache_key=%d texture_count=%d texture_bytes=%d "
                 "texture_cache_hits=%d texture_allocations=%d "
                 "texture_allocation_bytes=%d texture_uploads=%d "
                 "texture_upload_failures=%d upload_bytes=%d "
@@ -663,6 +721,7 @@ class GLTextureManager:
                 stats["terminal_transitions"],
                 retain_active,
                 retained_id,
+                retained_cache_key,
                 stats["texture_count"],
                 stats["texture_bytes"],
                 metrics["texture_cache_hits"],

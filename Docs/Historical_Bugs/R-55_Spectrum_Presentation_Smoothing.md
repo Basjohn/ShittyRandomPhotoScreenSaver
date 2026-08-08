@@ -81,7 +81,7 @@ The smoothing implementation and its authorizing tests were removed completely i
 
 The accepted state is the executor-restored, unsmoothed presentation path. Bubble was not changed by either the experiment or the revert.
 
-## 2026-08-08 Follow-Up Candidate — Not Yet Accepted
+## 2026-08-08 Follow-Up Candidate — Positive Main-Runtime Result, Stronger Golden Still Open
 
 After later installed evidence confirmed that ordinary Spectrum bars had no
 presentation-only filter, the user authorized a new optional adjustable experiment.
@@ -100,10 +100,23 @@ This candidate deliberately does **not** revive the rejected mechanism:
 
 Versioned temporal fixtures now cover rise, residual settling on existing ticks, drop,
 stall snap, generation reset, and zero independent presentation cadence. These tests
-make the implementation structurally safer; they do not establish installed visual
-acceptance. `ff934616` remains the behavioural authority and `3b6082dd` is the hard
-checkpoint if this candidate produces visible delay, transient flattening, pumping,
-extra UI churn, or any Bubble/Spectrum regression.
+make the implementation structurally safer.
+
+The later canonical main runs add a positive operator and runtime result. Under
+modest load the user judged adjustable smoothing around `0.50–0.60` visually
+successful. In the `23:44–23:49` checkpoint Spectrum retained the configured
+strength through Settings, published only on the authoritative tick, recorded
+no geometry/reset failure, and kept overlay paint at or below state publication
+rather than recreating the rejected extra-paint cadence. Ten-second steady
+windows reached roughly `89–95 FPS` for both state and paint. This is meaningful
+acceptance evidence for the implementation shape.
+
+It is not yet the final stronger golden: exact real-source attacks, drops,
+alternation, playback offsets, paused/reset cases, and source-to-paint receipt
+still need the explicit temporal package. `ff934616` therefore remains the
+earlier behavioural authority and `3b6082dd` remains the hard checkpoint if the
+candidate later shows visible delay, transient flattening, pumping, extra UI
+churn, or any Bubble/Spectrum regression.
 
 ### Method blacklist and whitelist
 
@@ -117,8 +130,9 @@ Blacklisted for this problem:
 
 The only currently admissible method shape is mode-owned presentation state on the
 existing authoritative tick, bounded reset identities, no independent GUI work, exact
-temporal negative controls, and installed operator approval. The specific 2026-08-08
-filter constants are still experimental, not a generally approved recipe.
+temporal negative controls, and operator approval. The `0.50` default now has positive
+main-runtime evidence, but it remains guarded by the incomplete stronger golden rather
+than becoming permission for shared or paint-local smoothing.
 
 ## Durable Prevention
 
