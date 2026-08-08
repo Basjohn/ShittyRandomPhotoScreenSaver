@@ -2,14 +2,14 @@
 
 Date: 2026-08-02  
 Last updated: 2026-08-08
-Status: Implemented and mechanically validated; installed validation pending
+Status: Solved after mechanical and installed validation
 
 ## Classification
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 ## Observed Failure
 
@@ -136,7 +136,7 @@ tests/test_image_prefetcher.py                                      20 passed
 test_phase4_resource_containment + image_cache_accounting/pipeline 36 passed
 ```
 
-Installed transition/image-rotation evidence is still required before the incident is marked solved.
+The 2026-08-08 installed run completed 39 scaled prefetch requests during active image rotation and transitions without the former callback failure or `IndexError`. Pending request accounting reached zero after each selected batch, raw sources released after their final derivative, and shared-memory live bytes remained zero. R-57 is therefore solved. The run performed more cache work than the 08_02 comparator, so cache churn and representation efficiency remain open under P5.5; that broader workload question does not reopen this positional-removal defect.
 
 ## Runtime Consequence
 

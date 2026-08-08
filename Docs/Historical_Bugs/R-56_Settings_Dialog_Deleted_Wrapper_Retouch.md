@@ -2,14 +2,14 @@
 
 Date: 2026-08-02  
 Last updated: 2026-08-08
-Status: Implemented and mechanically validated; installed validation pending
+Status: Solved after mechanical and installed validation
 
 ## Classification
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 ## Observed Failure
 
@@ -100,7 +100,7 @@ Mechanical validation on 2026-08-08 now covers:
 engine lifecycle + SettingsDialog + destruction barrier + RUN lifetime: 82 passed
 ```
 
-One installed Settings entry/exit cycle is still required before this record is marked solved.
+The 2026-08-08 installed run completed two Settings entry/exit/replacement cycles without an invalid-wrapper warning, traceback, or deleted `SettingsDialog` retouch. Both full runtime barriers and both dialog barriers completed before replacement construction, and both replacements reached current-generation authoritative first-frame reveal. R-56 is therefore solved; broader process-memory growth remains a separate active P5.4 issue.
 
 ## Current Runtime Result
 

@@ -16,7 +16,8 @@ rejected Spectrum smoothing: ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
 current approved visual behaviour: ff93461685476bd0657aa88312fc2e35e9037880
 current lifecycle/cache evidence code state: 3877b2c76791892cd5cb18c43d66a90a29c64d33
 current audit-doc checkpoint: d7ddb9063ebf9c8a42739e541400a8508b2941bf
-latest evidence: logs/evidence_chest/08_02_3877b2c7_20_27/
+latest preserved evidence: logs/evidence_chest/08_02_3877b2c7_20_27/
+latest mutable run: logs/ (2026-08-08 15:51:39 through 15:55:47, code state 927da57f)
 owning report: Docs/phase_reports/P05_CPU_TASK_REDUCTION.md
 audit roadmap: Docs/audits/SRPSS_Architecture_Recovery_Roadmap/00_INDEX_AND_LIVE_CHECKLIST.md
 audit memory plan: Docs/audits/SRPSS_Architecture_Recovery_Roadmap/09_MEMORY_GPU_RESOURCE_AND_CACHE_PLAN.md
@@ -74,15 +75,14 @@ R-57 scaled prefetch: Docs/Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Or
 
 - [x] **Settings recreation:** two consecutive installed Settings cycles completed runtime barrier, dialog barrier, replacement construction, authoritative first frame, and coordinated reveal.
 - [x] The former Settings blocker—the idle persistent audio-analysis lane—is confirmed absent from the current production path.
-- [!] **R-56:** pre-exec destruction observation and Shiboken-valid cleanup now pass production-shaped tests; one installed Settings cycle must confirm no deleted-wrapper trace.
-- [!] **CUSTOM/Edit:** the synchronous re-entry defect is repaired mechanically. Save/reset/slot commits retire Edit-session state, return through the manager-owned frame, and queue one immutable engine-owned reload intent for a later GUI turn.
+- [!] **CUSTOM/Edit:** the first installed repair failed because exact 64-bit `DisplayManager` identity crossed Qt `Signal(..., int)` and was truncated to a signed 32-bit value. The engine correctly rejected the resulting stale identity, so no recreation began.
+- [x] The admission signals now preserve pointer-width identity as a Python object; a mandatory reload-admission failure exits fail-closed and cannot fall back to a widget-only rebuild.
 - [x] Runtime generation and exact `DisplayManager` identity travel with the request; stale requests are rejected and duplicate admissions coalesce.
 - [x] Production-shaped tests prove two shells and two `CustomLayoutManager` owners release without `gc.collect()`, the barrier reaches zero owners before continuation, the complete two-display graph replays, and exactly one replacement is admitted.
-- [ ] One installed dual-display Save-and-Continue cycle must still prove the former eight-second barrier timeout is absent and the replacement reveals from its own authoritative first frame.
-- [x] **Settings memory growth:** the former linear per-cycle staircase did not reproduce across two Settings replacements.
-- [!] One-time post-first-recreation process uplift remains unexplained; confidence in allocator/cache/driver/retained-owner cause is below 90%.
+- [ ] Repeat one installed dual-display Save-and-Continue cycle and require exactly one full replacement, no stale-identity rejection, no widget-only rebuild, no former eight-second barrier timeout, and reveal from the replacement generation's authoritative first frame.
+- [!] **Settings memory growth:** the newest two-cycle run no longer supports the earlier plateau claim. Equivalent Bubble replacement snapshots rose from generation 1 to 2 by about 59.6 MiB main RSS and 74.0 MiB main private bytes while tracked known bytes rose only about 13.6 MiB.
+- [!] Two cycles are insufficient to call that linear, but memory containment is unproven and the unexplained post-recreation increase is again an active blocker.
 - [ ] Edit memory/plateau evidence remains blocked on installed validation of the repaired CUSTOM path, not on a known mechanical admission defect.
-- [!] **R-57:** stable-identity selection/removal and boundary regressions now pass mechanically; installed transition/image rotation remains required.
 - [x] Replacement initialization itself still has no demonstrated separate defect; preserve it and validate it rather than redesigning it.
 
 ### Absolute resource footprint
@@ -90,9 +90,9 @@ R-57 scaled prefetch: Docs/Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Or
 The latest active run was contained but still far too heavy for a screensaver:
 
 ```text
-whole-app resident RAM:   approximately 847–1074 MiB
-whole-app private commit: approximately 2.86–3.17 GiB
-dedicated VRAM:           approximately 554–777 MiB
+whole-app resident RAM:   approximately 849–1133 MiB after warm-up
+whole-app private commit: approximately 2.77–3.23 GiB after warm-up
+dedicated VRAM:           approximately 555–792 MiB while displays are active
 shared GPU memory:        approximately 84–121 MiB
 ```
 
@@ -103,19 +103,15 @@ shared GPU memory:        approximately 84–121 MiB
 
 ## Required Work Order
 
-1. Freeze `ff934616` as the user-approved visualizer behavioural baseline.
-2. Record the immutable approval/environment manifest before production code changes; full temporal goldens remain mandatory before visualizer optimization or lane-scaffolding deletion.
-3. Repair R-57 with its exact missing preferred-index regression fixture.
-4. Repair R-56 without weakening `WA_DeleteOnClose`, dialog destruction observation, or fail-closed replacement admission.
-5. Repair R-53 CUSTOM/Edit persistence-to-recreation admission and deterministic shell callback retirement.
-6. Run focused tests for R-57, R-56, and the two-display CUSTOM weakref/barrier path.
-7. Run one installed Settings cycle and one dual-display Edit Save-and-Continue cycle.
-8. Capture a controlled warm resource baseline with fixed displays, source images, cache state, transitions, widgets, duration, and supported visualizer scenarios.
-9. Attribute the whole-app RAM/commit/VRAM gap by owner and representation, then implement only measured reductions that preserve visible output and responsiveness.
-10. Run the full alternating Settings/Edit lifecycle, memory plateau, image churn, and pressure matrix.
-11. Audit current generic scheduler/lane consumers and preserve the recovered blocked-worker poison cases. Repair only a live production consumer; otherwise delete dead lane facades, diagnostics, tests, and scheduler integration after the stronger-golden and repository-use gates.
-12. Complete delivery-tail, unchanged-media, broader cache-representation, and logging work.
-13. Close Phase 5 only after installed normal and Media Center evidence passes.
+1. Repeat one installed dual-display Edit Save-and-Continue cycle against the pointer-width admission repair.
+2. Run at least five alternating installed Edit/Settings cycles and require clean ownership, first-frame/mode-switch poison protection, and equivalent-state resource plateau.
+3. Capture a controlled warm resource baseline with fixed displays, source images, cache state, transitions, widgets, duration, system load, and supported visualizer scenarios.
+4. Attribute the whole-app RAM/commit/VRAM gap by owner and representation, then implement only measured reductions that preserve visible output and responsiveness.
+5. Run the full lifecycle, memory plateau, image churn, and pressure matrix.
+6. Complete delivery-tail, unchanged-media, broader cache-representation, and logging work.
+7. Complete the stronger temporal golden package before any visualizer optimization or lane-scaffolding deletion.
+8. Audit current generic scheduler/lane consumers and preserve the recovered blocked-worker poison cases. Repair only a live production consumer; otherwise delete dead lane facades, diagnostics, tests, and scheduler integration after the stronger-golden and repository-use gates.
+9. Close Phase 5 only after installed normal and Media Center evidence passes.
 
 # P5.0 — Visualizer Fidelity And Mandatory Goldens
 
@@ -278,6 +274,11 @@ Explicitly rejected unless separately re-proposed after new evidence:
 
 - [-] Correlate owner-labelled transition gaps with event-loop lateness, callback tails, update-request age, and per-display request-to-paint delay.
 - [x] Preserve compositor transition names in owner telemetry.
+- [!] The 2026-08-08 run regressed versus the preserved 08_02 comparator: median paint-window FPS `96.0 -> 72.5`, paint interval p99 `32.9 -> 41.0 ms`, request-age p99 `20.3 -> 30.3 ms`, event-loop lateness p99 `38.9 -> 57.6 ms`, and worst owner-labelled gap `127.7 -> 186.2 ms`.
+- [!] Median application CPU rose `79.3% -> 103.2%` while median compute submission cadence remained broadly comparable (`122.1/s -> 117.0/s`). Do not infer that reducing authored visualizer cadence is the correction.
+- [!] This is not a controlled code-regression comparison: the newest final runtime spent about 70% of its measured life rendering transitions versus about 35% in the comparator, and machine-wide CPU was commonly about 35–39% versus about 14–18%. The observed delivery failure is real, but attribution must separate workload/environment from code state.
+- [x] Parser 1.5 recovers the existing nested task-category counters even when `tm_delivery` follows them on the same line. The comparable high-rate intervals identify approximately `69–70/s` audio analysis plus `92–93/s` Bubble simulation in both runs, so task frequency itself did not newly increase.
+- [ ] Attribute the increased cost per event-loop/delivery cycle and the approximately doubled owner-labelled gap count; current last-callback labels are mostly sub-millisecond and are correlation, not sufficient causal attribution.
 - [ ] Attribute remaining p99/max transition gaps before changing visualizer cadence or shader behaviour.
 - [ ] Reject repaint retries and transition-derived visualizer clocks.
 
@@ -297,17 +298,6 @@ Explicitly rejected unless separately re-proposed after new evidence:
 
 # P5.4 — Recreation Ownership, Initialization, And Memory Containment
 
-## Settings result and R-56
-
-- [x] Two installed Settings cycles prove runtime destruction completes before dialog construction and dialog destruction completes before replacement construction.
-- [x] The production visualizer lane blocker is absent.
-- [x] Both replacements used current-generation authoritative first frames and coordinated reveal.
-- [x] Move dialog destruction observation before `dialog.exec()` can trigger `WA_DeleteOnClose`.
-- [x] Replace `isinstance(dialog, QObject)` liveness assumptions with actual Shiboken validity checks.
-- [x] Do not call `findChildren`, `close`, or `deleteLater` on an invalid wrapper.
-- [x] Add production-shaped real-signal tests that fail on deleted-wrapper warnings/traces, prove weakref release without `gc.collect()`, and admit exactly one replacement runtime.
-- [ ] Run one installed Settings cycle and require no invalid-wrapper warning/trace before marking R-56 solved.
-
 ## CUSTOM/Edit result and required implementation
 
 The full runtime reinit and graph placement/replay architecture stay unchanged. Only the admission boundary changes.
@@ -326,7 +316,8 @@ The full runtime reinit and graph placement/replay architecture stay unchanged. 
 ### Stage 2 — engine-owned reload admission
 
 - [x] Queue a later-turn callback owned by the process-lifetime engine.
-- [x] Carry only immutable primitive intent: request kind, expected runtime generation, and exact `DisplayManager` identity; no scene revision is currently required.
+- [x] Carry only immutable primitive intent: request kind, expected runtime generation, and exact pointer-width `DisplayManager` identity; no scene revision is currently required.
+- [x] Carry pointer-width identity through Qt as a Python object, not the 32-bit Qt `int` metatype; cover values above `2**32` in both display and manager signal regressions.
 - [x] Capture no manager, display, shell, widget, shell state, pixmap, or bound manager method.
 - [x] Reject stale generation/manager identity and coalesce duplicate admissions.
 - [x] Then execute the same full `engine.stop(exit_app=False, reason="custom_edit")`, fail-closed destruction barrier, complete runtime reconstruction, graph replay, and authoritative-first-frame reveal.
@@ -361,30 +352,21 @@ Current settled snapshots:
 
 ```text
 state                    main RSS   main private   handles   threads   tracked known   RM total/unknown
-cold generation 0         848.4       2093.2        1790       61        424.7 MiB         61 / 50
-Settings generation 1     949.5       2188.4        1838       67        424.6 MiB         56 / 45
-Settings generation 2     946.6       2179.1        1823       62        413.4 MiB         54 / 43
+cold generation 0         786.6       1994.7        1782       61        338.6 MiB         60 / 49
+Settings generation 1     917.6       2103.7        1862       68        403.1 MiB         55 / 45
+Settings generation 2     977.2       2177.8        1841       64        416.7 MiB         55 / 44
 ```
 
-- [x] The second Settings cycle did not add another RSS/private/handle/thread/resource step.
-- [!] Do not interpret the first one-time uplift as a leak or allocator explanation; the cold state differed in warm-up and visualizer mode, and cause confidence is below 90%.
+- [!] Both replacements used Bubble, so the generation 1 to 2 increase is more comparable than the earlier cold-Spectrum comparison. It remains only a two-cycle sample and does not yet prove a linear retained-owner staircase.
+- [x] ResourceManager totals/unknowns did not climb, handles fell by 21, threads fell by 4, retired runtime ownership cleared, and tracked GL/display bytes still reached zero during teardown.
+- [!] Those ownership successes do not explain or excuse the additional approximately 59.6 MiB RSS and 74.0 MiB private bytes between equivalent active generations.
 - [ ] After R-53 repair, run at least five alternating Edit and Settings cycles in normal and Media Center variants.
 - [ ] Include all supported visualizer modes as comparison scenarios, playing/paused, transition-time teardown, pending image work, pending ordinary executor work, dual display, and one selected display.
 - [ ] Every retired generation must reach zero QObjects, Python owners, resources, timers, animations, subscriptions, callbacks, tasks, lanes, registrations, pixmaps, textures, PBOs, and tracked GL bytes.
 - [ ] Equivalent settled RSS, private commit, dedicated VRAM, handles, threads, CPU, and GPU must stop rising approximately linearly per cycle.
 - [ ] If ownership reaches zero but memory still rises, begin a new evidence-led retention investigation. Do not alter cache budgets, trim working sets, recycle processes, or weaken teardown without evidence.
 
-# P5.5 — Absolute Resource Footprint, Cache Representations, And R-57
-
-R-57 is a narrow correctness fix and is not blocked by the broader lifecycle or memory-attribution work.
-
-## R-57 required change
-
-- [x] Replace `reversed(selected_indices)` with stable-identity queue partitioning.
-- [x] Preserve preferred-path priority, bounded concurrency, generation rejection, exact key/byte accounting, raw-source lifetime, and no duplicate submission.
-- [x] Add the decisive fixture: nonpreferred cache-ready request at index 0, preferred cache-ready request at index 1, two available slots.
-- [x] Cover preferred first/middle/last positions, stale generation, mixed ready/not-ready rows, and late callbacks after `clear_inflight()`.
-- [ ] Run installed transition/image rotation and require no callback failure or unexpected worker fallback increase.
+# P5.5 — Absolute Resource Footprint And Cache Representations
 
 ## Provisional engineering targets
 
@@ -443,6 +425,7 @@ Every memory change must prove:
 
 - [-] Keep detailed cache records in `screensaver_cache.log`.
 - [-] Keep lifecycle ownership detail in `screensaver_lifecycle.log`.
+- [x] Parse nested `tm_categories` independently of the trailing `tm_delivery` JSON so owner-rate attribution is not silently emitted as empty dictionaries.
 - [ ] Add one authoritative startup record distinguishing `main` and `main_mc`.
 - [ ] Add bounded CUSTOM admission diagnostics: request identity, queued turn, persist-complete timestamp, teardown-start timestamp, stale/duplicate rejection, and manager/shell weakref counts.
 - [ ] Add bounded resource-baseline summaries that separate physical resident RAM, private commit, private working set when available, child processes, tracked application bytes, dedicated VRAM, shared GPU memory, and sample age.

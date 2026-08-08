@@ -12,15 +12,20 @@ Phase 4 is closed by `logs/evidence_chest/07_30_dc8d1741_00_26/`, including star
 
 ## Current implementation state
 
-- Latency authority/lifecycle resets and WARNING rate limiting removed the impossible uptime-linear ERROR flood. Remaining generation-matched 81–100 ms WARNING samples still need age-source attribution.
+- Latency authority/lifecycle resets and WARNING rate limiting removed the impossible uptime-linear ERROR flood. The newest generation-matched 83.6–125.8 ms WARNING samples track real delivery tails rather than stale uptime.
 - The attempted 60 submissions/s Bubble gate with maximum-two batching failed installed visual review and has been removed. The restored one-step lane-free path reached 50,106/50,106 offered/submitted work and is operator-validated for reaction and elasticity; Spectrum retains its existing shared newest-only path for now.
 - Ordinary unchanged media polling is a no-op, but one redundant unchanged publication remains after startup/rebuild.
 - Frame-gap ownership now points at transition-time Qt/event-loop delivery: 286/286 sampled gaps occurred with transition work active while paint and compute remained cheap.
-- Recreated runtimes now wait on a non-reentrant old-generation QObject/resource/task/subscription destruction barrier before replacement construction. Settings has installed evidence; CUSTOM/Edit now has a later-turn immutable admission repair and zero-owner production-shaped tests, but still needs installed dual-display proof. Private commit, handles, and the five-cycle plateau gate remain open.
+- Recreated runtimes now wait on a non-reentrant old-generation QObject/resource/task/subscription destruction barrier before replacement construction. Settings has installed evidence. The first installed CUSTOM/Edit admission attempt exposed 64-bit manager identity truncation through Qt `int`; pointer-width signal transport is repaired mechanically, but installed dual-display proof remains open. Private commit, handles, and the five-cycle plateau gate remain open.
+- R-56's deleted Settings wrapper retouch and R-57's scaled-prefetch positional removal defect are solved by mechanical tests plus the newest installed run.
 - High-volume image-cache entry detail is routed to the cache sidecar; lifecycle resource ownership detail is routed to the lifecycle sidecar. Warnings and errors remain in the main log.
 - Cache representation churn remains intentionally downstream of the recreation-ownership proof.
 
 Across all 61 low-rate usage samples in the run, application CPU averaged about 59% with p95 about 95.3% and a transition/recreation maximum of 208.3%. Because the workload includes dialogs, rebuilds, transitions, Bubble, Spectrum, and image work, this is not a controlled before/after CPU win. Restoring Bubble correctness also restores its intentionally high task cadence, so P5.0 still needs a different design rather than claiming a CPU reduction from this run.
+
+The mutable 2026-08-08 15:51–15:55 run is a delivery regression against the preserved 08_02 comparator, but not a controlled code-only comparison. Median application CPU rose from 79.3% to 103.2%; median paint-window FPS fell from 96.0 to 72.5; paint interval p99 rose from 32.9 to 41.0 ms; request-age p99 rose from 20.3 to 30.3 ms; event-loop lateness p99 rose from 38.9 to 57.6 ms; and the worst owner-labelled gap rose from 127.7 to 186.2 ms. The newest final runtime spent about 70% of its sampled life rendering transitions versus about 35% in the comparator, and machine-wide CPU was commonly about 35–39% versus about 14–18%.
+
+Parser 1.5 repaired a derived-evidence defect: nested `tm_categories` JSON had been discarded whenever the newer `tm_delivery` object followed it on the same line. Recovered owner rates show comparable high-rate intervals in both runs at roughly 69–70 audio-analysis tasks/sec plus 92–93 Bubble-simulation tasks/sec. Submission frequency therefore did not newly increase, and these logs do not authorize a visualizer cadence change. The remaining regression needs a controlled workload and stronger per-owner execution/delivery attribution.
 
 ## P5.0 — Visualizer authored cadence
 
@@ -34,7 +39,7 @@ Across all 61 low-rate usage samples in the run, application CPU averaged about 
 ## P5.1 — Frame-delivery owner telemetry
 
 - [-] Add/passively consume owner-labelled render, submission, GUI callback, update-request, and paint timestamps without creating UI work or a new timer/queue.
-- [-] The latest run supplied 286 owner-labelled frame gaps, all with transition work active; 105 exceeded 50 ms, mean was 48.96 ms, p95 was 84.43 ms, and max was 109.4 ms. Paint peaked near 8 ms and compute execution near 4.5 ms, so prioritize Qt/event-loop update delivery, request age/coalescing, and transition-boundary callback clustering rather than shader or Bubble-worker retuning.
+- [-] The newest run supplied 222 owner-labelled frame gaps: 136 exceeded 33 ms, 86 exceeded 50 ms, and the maximum was 186.2 ms. Last-callback labels were overwhelmingly cheap mutation-drain, single-shot scheduling, and cursor-halo callbacks; they correlate with the delayed delivery but do not account for the missing tens of milliseconds. Prioritize controlled event-loop/update-delivery attribution rather than shader or Bubble-worker retuning.
 - [x] Resolve the known transition-label hole: owner telemetry now accepts the compositor display-transition `name`, which was present on the 62 active records but previously ignored.
 - [ ] Correlate the now-labelled transition owner with logical scene age, event-loop lateness, queue/callback tails, and per-display request-to-paint delay in the next installed capture.
 - [ ] Attribute delayed delivery to its actual owner before changing cadence mechanics; a healthy render clock with delayed paint is event-loop delivery starvation, not permission to add repaint retries.
@@ -63,6 +68,17 @@ The residual accounting prevents closure. Equivalent total private commit rose a
 
 The same barriers still logged diagnostic-only surviving Python wrappers: two `WidgetManager` plus two `FadeCoordinator` instances after Settings, and those plus two `CustomLayoutManager` instances after CUSTOM. They had no retiring-generation ResourceManager/task/subscription ownership at barrier completion, but the acceptance contract still requires retired Python roots to reach zero. Their explicit release or bounded post-continuation proof remains open; they may not be dismissed as harmless allocator state.
 
+The newest two-Settings run no longer supports a plateau claim. Equivalent Bubble replacement snapshots were:
+
+```text
+state                    main RSS   main private   handles   threads   tracked known   RM total/unknown
+cold generation 0         786.6       1994.7        1782       61        338.6 MiB         60 / 49
+Settings generation 1     917.6       2103.7        1862       68        403.1 MiB         55 / 45
+Settings generation 2     977.2       2177.8        1841       64        416.7 MiB         55 / 44
+```
+
+Generation 1 to 2 therefore added about 59.6 MiB main RSS and 74.0 MiB main private bytes while tracked known bytes added only about 13.6 MiB. ResourceManager totals/unknowns did not climb, handles and threads fell, retired ownership cleared, tracked GL/display bytes reached zero during teardown, the image worker stayed bounded, and shared-memory live bytes/unlink failures remained zero. Two cycles do not prove a linear leak, but whole-process containment remains unproven and active.
+
 - [-] Validate generation-scoped ResourceManager registration metadata, weak passive cleanup observation, QObject-destroyed release, retained-bound-callback reporting, and process/runtime scope separation on the installed runtime.
 - [-] Validate installed zero-owner release for `WidgetManager`, `CustomLayoutManager`, and `FadeCoordinator`. Production-shaped teardown tests now release two of each observed owner before continuation without `gc.collect()`, but installed CUSTOM evidence is still mandatory.
 - [ ] Give `WidgetManager` explicit ownership state for its one-shot `image_displayed` connection. `_on_compositor_ready()` disconnects after first readiness and `cleanup()` currently repeats the disconnect; PySide emits `RuntimeWarning: Failed to disconnect` when no matching connection remains. This is redundant signal bookkeeping, not evidence of a retained connection, and the fix must preserve the authoritative first-frame gate.
@@ -85,6 +101,7 @@ The same barriers still logged diagnostic-only surviving Python wrappers: two `W
 
 ## P5.6 — Logging hygiene
 
+- [x] Recovery parser 1.5 decodes nested task-category counters independently of a trailing delivery JSON object and has a regression fixture for the production log shape.
 - [-] Keep latency diagnostics and warnings bounded, sampled, passively collected, and rate-limited.
 - [-] Verify `--perf`/`--viz` output has owner labels and correlation fields sufficient to diagnose delivery without per-frame INFO logs, whole-state dumps, or new diagnostic work queues.
 - [-] Verify per-entry image-cache hit/miss/put/remove/eviction detail appears only in `screensaver_cache.log` when `--cache` is active; keep one bounded `[PERF] [CACHE]` lifecycle summary for correlation.
