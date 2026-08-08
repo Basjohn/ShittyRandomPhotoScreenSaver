@@ -285,6 +285,84 @@ class TestThreadManagerSubmit:
             original_executor.shutdown(wait=False, cancel_futures=True)
             manager.shutdown()
 
+    def test_task_statistics_never_schedule_gui_callbacks(self):
+        """High-rate worker accounting must not create GUI timer/callback work."""
+
+        class InlineExecutor:
+            def submit(self, fn):
+                future = Future()
+                future.set_result(fn())
+                return future
+
+            def shutdown(self, wait=True, cancel_futures=False):
+                return None
+
+        manager = ThreadManager()
+        original_executor = manager._executors[ThreadPoolType.COMPUTE]
+        manager._executors[ThreadPoolType.COMPUTE] = InlineExecutor()
+        scheduled = []
+        manager.single_shot = lambda *args, **kwargs: scheduled.append((args, kwargs))
+        try:
+            for index in range(50):
+                manager.submit_compute_task(
+                    lambda: None,
+                    task_id=f"no_gui_stats_{index}",
+                    category="benchmark.tiny_compute",
+                )
+
+            assert scheduled == []
+            assert manager.get_pool_stats()["compute"] == {
+                "submitted": 50,
+                "completed": 50,
+                "failed": 0,
+            }
+        finally:
+            original_executor.shutdown(wait=False, cancel_futures=True)
+            manager.shutdown()
+
+    def test_resource_manager_does_not_duplicate_task_future_ownership(self):
+        """ThreadManager owns Futures through its active-task registry alone."""
+
+        class RecordingResourceManager:
+            def __init__(self):
+                self.descriptions = []
+
+            def register(self, _resource, _resource_type, description, **_metadata):
+                self.descriptions.append(description)
+                return f"resource-{len(self.descriptions)}"
+
+        class InlineExecutor:
+            def submit(self, fn):
+                future = Future()
+                future.set_result(fn())
+                return future
+
+            def shutdown(self, wait=True, cancel_futures=False):
+                return None
+
+        resources = RecordingResourceManager()
+        manager = ThreadManager(resource_manager=resources)
+        original_executor = manager._executors[ThreadPoolType.COMPUTE]
+        manager._executors[ThreadPoolType.COMPUTE] = InlineExecutor()
+        try:
+            manager.submit_compute_task(
+                lambda: "done",
+                task_id="sole_task_owner",
+                category="benchmark.tiny_compute",
+            )
+
+            assert not any(
+                description.startswith("Task future for ")
+                for description in resources.descriptions
+            )
+            assert "sole_task_owner" not in manager.get_active_tasks()
+            assert manager.get_task_category_stats()["benchmark.tiny_compute"][
+                "completed"
+            ] == 1
+        finally:
+            original_executor.shutdown(wait=False, cancel_futures=True)
+            manager.shutdown()
+
     def test_category_cardinality_is_bounded_with_overflow_bucket(self):
         class InlineExecutor:
             def submit(self, fn):

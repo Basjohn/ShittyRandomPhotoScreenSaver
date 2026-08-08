@@ -12,7 +12,6 @@ from concurrent.futures import ThreadPoolExecutor, Future, wait as wait_futures
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
-from utils.lockfree import SPSCQueue, TripleBuffer
 from PySide6.QtCore import QTimer, QObject, QThread, QCoreApplication, Signal, Qt
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 
@@ -619,14 +618,7 @@ class ThreadManager:
         }
         self._stats = {pool_type: {'submitted': 0, 'completed': 0, 'failed': 0} 
                       for pool_type in ThreadPoolType}
-        
-        # Lock-free mutation queue
-        self._mut_q: SPSCQueue[tuple] = SPSCQueue(256)
-        self._mut_drain_scheduled = False
-        
-        # Lock-free stats publisher
-        self._stats_tb: TripleBuffer[Dict[str, Dict[str, Any]]] = TripleBuffer()
-        self._stats_pub_interval_ms: int = 250
+        self._stats_lock = threading.Lock()
         
         self._resource_manager = resource_manager
         self._resource_id = None
@@ -635,18 +627,6 @@ class ThreadManager:
         
         # Initialize pools
         self._initialize_pools()
-        
-        # Start stats publisher
-        try:
-            self._schedule_stats_publish()
-        except Exception as e:
-            logger.debug("Stats publisher scheduling failed: %s", e)
-        
-        # Start mutation drain
-        try:
-            self._schedule_mutation_drain()
-        except Exception as e:
-            logger.debug("[THREADING] Exception suppressed: %s", e)
         
         logger.info("ThreadManager initialized with IO=%d, COMPUTE=%d workers",
                    self.config[ThreadPoolType.IO], self.config[ThreadPoolType.COMPUTE])
@@ -748,7 +728,7 @@ class ThreadManager:
                     execution_time=execution_time,
                     task_id=task.task_id
                 )
-                self._enqueue_mutation(('completed', pool_type.value))
+                self._record_pool_stat(pool_type, "completed")
                 outcome = "completed"
             except Exception as e:
                 execution_time = time.time() - start_time
@@ -759,7 +739,7 @@ class ThreadManager:
                     task_id=task.task_id
                 )
                 logger.error(f"Task {task.task_id} failed: {e}")
-                self._enqueue_mutation(('failed', pool_type.value))
+                self._record_pool_stat(pool_type, "failed")
                 outcome = "failed"
             finally:
                 self._unregister_active_task(task.task_id, outcome=outcome)
@@ -827,38 +807,20 @@ class ThreadManager:
         # Active-task bookkeeping is authoritative at submit time. Register before
         # the executor can run a fast task and unregister itself.
         self._register_active_task(task)
+        self._record_pool_stat(pool_type, "submitted")
         try:
             future = executor.submit(wrapped_func)
         except Exception:
+            self._record_pool_stat(pool_type, "submitted", delta=-1)
             self._unregister_active_task(task.task_id, outcome="rejected")
             raise
         task.future = future
         
-        # Register with resource manager
-        if self._resource_manager:
-            try:
-                from core.resources.types import ResourceType
-                self._resource_manager.register(
-                    future,
-                    ResourceType.CUSTOM,
-                    f"Task future for {task.task_id}",
-                    cleanup_handler=lambda f: f.cancel() if not f.done() else None,
-                    task_id=task.task_id,
-                    runtime_generation=task.runtime_generation,
-                    lifetime_scope=(
-                        "runtime"
-                        if task.runtime_generation is not None
-                        else "process"
-                    ),
-                    owner_class=task.owner_class,
-                    owner_id=task.owner_id,
-                )
-            except (TypeError, Exception) as e:
-                logger.debug(f"Skipping resource registration for task {task.task_id}: {e}")
-        
-        # Update tracking
-        self._enqueue_mutation(('submitted', pool_type.value))
-        
+        # ThreadManager's active-task registry is the sole task/future lifetime
+        # authority.  Mirroring every short-lived Future into ResourceManager
+        # duplicated ownership metadata and weakref/UUID allocation on the
+        # highest-rate path without adding cleanup or lifecycle information.
+
         if is_verbose_logging():
             logger.debug(f"Submitted task {task.task_id} to {pool_type.value} pool")
         return task.task_id
@@ -957,8 +919,11 @@ class ThreadManager:
 
     def get_pool_stats(self) -> Dict[str, Dict[str, int]]:
         """Get statistics for all thread pools"""
-        return {pool_type.value: stats.copy() 
-               for pool_type, stats in self._stats.items()}
+        with self._stats_lock:
+            return {
+                pool_type.value: stats.copy()
+                for pool_type, stats in self._stats.items()
+            }
 
     def get_task_category_stats(self) -> Dict[str, Dict[str, int]]:
         """Return an authoritative passive snapshot of task counts by category."""
@@ -1279,94 +1244,41 @@ class ThreadManager:
             if outcome in {"completed", "failed", "cancelled", "rejected"}:
                 counts[outcome] = int(counts.get(outcome, 0)) + 1
 
-    # Internal: mutation queue -------------------------------------------
-    def _enqueue_mutation(self, ev: tuple) -> None:
-        if self._shutdown:
-            return
-        try:
-            self._mut_q.push_drop_oldest(ev)
-        except Exception as e:
-            # FIX: Log silent failure instead of ignoring
-            logger.debug(f"Failed to push mutation to queue: {e}")
-            return
-        self._schedule_mutation_drain()
+    # Internal: pool statistics ------------------------------------------
+    def _record_pool_stat(
+        self,
+        pool_type: ThreadPoolType,
+        kind: str,
+        *,
+        delta: int = 1,
+    ) -> None:
+        """Update low-rate public counters without creating GUI work."""
+        with self._stats_lock:
+            counts = self._stats.get(pool_type)
+            if counts is not None and kind in counts:
+                counts[kind] = max(0, int(counts[kind]) + int(delta))
 
-    def _schedule_mutation_drain(self, delay_ms: int = 10) -> None:
-        if self._shutdown or self._mut_drain_scheduled:
-            return
-        
-        self._mut_drain_scheduled = True
-        if QCoreApplication.instance() is not None:
-            self.single_shot(max(0, int(delay_ms)), self._drain_mutations_on_ui)
-        else:
-            self._mut_drain_scheduled = False
-
-    def _drain_mutations_on_ui(self) -> None:
-        self._mut_drain_scheduled = False
-        try:
-            while True:
-                ok, ev = self._mut_q.try_pop()
-                if not ok:
-                    break
-                
-                try:
-                    kind = ev[0]
-                except Exception as e:
-                    logger.debug("[THREADING] Exception suppressed: %s", e)
-                    continue
-                
-                # Stats mutations
-                try:
-                    pool_value = ev[1]
-                    pt = next((p for p in ThreadPoolType if p.value == pool_value), None)
-                    if pt and kind in self._stats[pt]:
-                        self._stats[pt][kind] += 1
-                except Exception as e:
-                    logger.debug("[THREADING] Exception suppressed: %s", e)
-                    continue
-        finally:
-            if not self._shutdown and not self._mut_q.is_empty():
-                self._schedule_mutation_drain()
-
-    # Internal: stats publisher ------------------------------------------
     def _gather_stats(self) -> Dict[str, Dict[str, Any]]:
         info: Dict[str, Dict[str, Any]] = {}
         try:
-            for pool_type, executor in self._executors.items():
-                info[pool_type.value] = {
-                    'max_workers': executor._max_workers,
-                    'stats': self._stats[pool_type].copy()
-                }
+            with self._stats_lock:
+                for pool_type, executor in self._executors.items():
+                    info[pool_type.value] = {
+                        'max_workers': executor._max_workers,
+                        'stats': self._stats[pool_type].copy()
+                    }
         except Exception as e:
             logger.debug("get_pool_info failed: %s", e)
-            info = {pool.value: self._stats[pool].copy() for pool in ThreadPoolType}
+            with self._stats_lock:
+                info = {
+                    pool.value: self._stats[pool].copy()
+                    for pool in ThreadPoolType
+                }
         return info
 
-    def _publish_stats_once(self) -> None:
-        if self._shutdown:
-            return
-        try:
-            snapshot = self._gather_stats()
-            self._stats_tb.publish(snapshot)
-        except Exception as e:
-            logger.debug("Stats publish failed: %s", e)
-        finally:
-            if not self._shutdown:
-                self._schedule_stats_publish()
-
-    def _schedule_stats_publish(self) -> None:
-        if _qt_dispatch_available():
-            self.single_shot(self._stats_pub_interval_ms, self._publish_stats_once)
-
     def get_stats_snapshot(self) -> Dict[str, Dict[str, Any]]:
-        """Return latest thread pool stats without locking"""
-        latest = None
-        try:
-            latest = self._stats_tb.consume_latest()
-        except Exception as e:
-            logger.debug("[THREADING] Exception suppressed: %s", e)
-            latest = None
-        return latest if latest is not None else self._gather_stats()
+        """Return a current thread-pool statistics snapshot."""
+        return self._gather_stats()
 
     # UI dispatch utilities ----------------------------------------------
     @staticmethod

@@ -229,7 +229,11 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
         assert cadence["worker_busy_deferrals"] == 0
         assert cadence["result_waiting_deferrals"] == 0
         lane = widget._bubble_compute_lane.diagnostic_snapshot()
-        assert lane["executor_task_submissions"] == 0
+        # The approved restored path is lane-free, not task-free: every
+        # authored step uses the ordinary general COMPUTE executor exactly
+        # once and no persistent lane registration is allowed.
+        assert lane["lane_registrations"] == 0
+        assert lane["executor_task_submissions"] == 6
         assert lane["logical_steps_published"] == 6
     finally:
         widget._stop_bubble_compute_lane()
