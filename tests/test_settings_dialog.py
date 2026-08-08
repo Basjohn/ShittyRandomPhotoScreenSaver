@@ -5,11 +5,13 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtWidgets import QApplication, QWidget
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
+from shiboken6 import Shiboken
 import ui.settings_dialog as settings_dialog_module
 from ui.settings_dialog import SettingsDialog, CustomTitleBar, TabButton, ResetDefaultsDialog
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
+from engine.runtime_destruction import RuntimeDestructionBarrier
 
 
 @pytest.fixture
@@ -84,6 +86,42 @@ def test_settings_dialog_creation(qapp, settings_manager, animation_manager):
     assert dialog.windowFlags() & Qt.WindowType.FramelessWindowHint
     assert dialog.minimumSize().width() == 1280
     assert dialog.minimumSize().height() == 700
+
+
+@pytest.mark.qt
+def test_real_settings_dialog_delete_on_close_is_observed_before_modal_exec(
+    qapp,
+    qtbot,
+    settings_manager,
+    animation_manager,
+):
+    class _Engine:
+        _terminal_shutdown_requested = False
+        _pending_runtime_destruction_barrier = None
+
+    engine = _Engine()
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+    signal_order = []
+    barrier = RuntimeDestructionBarrier(
+        engine,
+        reason="settings_dialog_close",
+        retiring_generation=None,
+    )
+    barrier.watch_qobject(dialog, label="SettingsDialog")
+    dialog.destroyed.connect(lambda *_args: signal_order.append("destroyed"))
+    barrier.seal()
+
+    signal_order.append("exec")
+    QTimer.singleShot(0, dialog.accept)
+    dialog.exec()
+    signal_order.append("returned")
+
+    assert signal_order == ["exec", "destroyed", "returned"]
+    assert Shiboken.isValid(dialog) is False
+    qtbot.waitUntil(lambda: barrier.is_complete, timeout=2000)
+
+    animation_manager.cleanup()
 
 
 def test_reset_defaults_toast_owns_and_stops_auto_close_timer(qapp):

@@ -74,7 +74,7 @@ R-57 scaled prefetch: Docs/Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Or
 
 - [x] **Settings recreation:** two consecutive installed Settings cycles completed runtime barrier, dialog barrier, replacement construction, authoritative first frame, and coordinated reveal.
 - [x] The former Settings blocker—the idle persistent audio-analysis lane—is confirmed absent from the current production path.
-- [!] **R-56:** Settings succeeds but the close path touches an already-deleted `SettingsDialog` wrapper three times per cycle. Cause confidence: **100%**.
+- [!] **R-56:** pre-exec destruction observation and Shiboken-valid cleanup now pass production-shaped tests; one installed Settings cycle must confirm no deleted-wrapper trace.
 - [!] **CUSTOM/Edit:** Save-and-Continue persists the scene, then synchronously tears down the runtime from inside `CustomLayoutManager.commit_session_without_reload()`.
 - [x] The logs directly prove re-entry: cleanup clears `manager._display`, then control returns to the save function's `finally` block and attempts to touch that already-cleaned manager.
 - [!] Cause confidence for the CUSTOM admission defect: **greater than 99%**.
@@ -303,10 +303,11 @@ Explicitly rejected unless separately re-proposed after new evidence:
 - [x] Two installed Settings cycles prove runtime destruction completes before dialog construction and dialog destruction completes before replacement construction.
 - [x] The production visualizer lane blocker is absent.
 - [x] Both replacements used current-generation authoritative first frames and coordinated reveal.
-- [!] Move dialog destruction observation before `dialog.exec()` can trigger `WA_DeleteOnClose`.
-- [!] Replace `isinstance(dialog, QObject)` liveness assumptions with actual Shiboken/QPointer validity checks.
-- [!] Do not call `findChildren`, `close`, or `deleteLater` on an invalid wrapper.
-- [ ] Add a production-shaped test that fails on any deleted-wrapper warning/trace and proves exactly one replacement runtime.
+- [x] Move dialog destruction observation before `dialog.exec()` can trigger `WA_DeleteOnClose`.
+- [x] Replace `isinstance(dialog, QObject)` liveness assumptions with actual Shiboken validity checks.
+- [x] Do not call `findChildren`, `close`, or `deleteLater` on an invalid wrapper.
+- [x] Add production-shaped real-signal tests that fail on deleted-wrapper warnings/traces, prove weakref release without `gc.collect()`, and admit exactly one replacement runtime.
+- [ ] Run one installed Settings cycle and require no invalid-wrapper warning/trace before marking R-56 solved.
 
 ## CUSTOM/Edit result and required implementation
 

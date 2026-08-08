@@ -13,6 +13,7 @@ import time
 
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtWidgets import QApplication
+from shiboken6 import isValid as _is_valid_qobject
 
 from core.logging.logger import get_logger
 from core.animation import AnimationManager
@@ -27,6 +28,17 @@ if TYPE_CHECKING:
     from engine.screensaver_engine import ScreensaverEngine
 
 logger = get_logger(__name__)
+
+
+def _qobject_wrapper_is_valid(value: object) -> bool:
+    """Return whether a Python QObject wrapper still owns a live C++ object."""
+
+    if not isinstance(value, QObject):
+        return False
+    try:
+        return bool(_is_valid_qobject(value))
+    except (RuntimeError, TypeError):
+        return False
 
 
 # ------------------------------------------------------------------
@@ -220,6 +232,7 @@ def _open_settings_after_runtime_destroyed(
         engine._settings_dialog_active = False
         return
 
+    dialog_barrier = None
     try:
         dialog_generation = (
             f"settings-dialog:{getattr(engine, '_runtime_generation', 'unknown')}:"
@@ -251,6 +264,39 @@ def _open_settings_after_runtime_destroyed(
             dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         except Exception:
             logger.debug("Settings dialog delete-on-close attribute unavailable", exc_info=True)
+
+        from engine.runtime_destruction import RuntimeDestructionBarrier
+
+        if isinstance(dialog, QObject) or isinstance(animations, QObject):
+            dialog_barrier = RuntimeDestructionBarrier(
+                engine,
+                reason="settings_dialog_close",
+                retiring_generation=dialog_generation,
+            )
+            if isinstance(dialog, QObject):
+                if not _qobject_wrapper_is_valid(dialog):
+                    raise RuntimeError(
+                        "SettingsDialog wrapper became invalid before modal execution"
+                    )
+                dialog_barrier.watch_qobject(dialog, label="SettingsDialog")
+                for child in dialog.findChildren(QObject):
+                    dialog_barrier.watch_qobject(child)
+            if isinstance(animations, QObject):
+                if not _qobject_wrapper_is_valid(animations):
+                    raise RuntimeError(
+                        "Settings AnimationManager wrapper became invalid before modal execution"
+                    )
+                dialog_barrier.watch_qobject(
+                    animations,
+                    label="SettingsAnimationManager",
+                )
+                timer = getattr(animations, "_timer", None)
+                if isinstance(timer, QObject) and _qobject_wrapper_is_valid(timer):
+                    dialog_barrier.watch_qobject(
+                        timer,
+                        label="SettingsAnimationTimer",
+                    )
+
         init_ms = (time.perf_counter() - dialog_init_start) * 1000
         since_request_ms = (time.perf_counter() - request_start) * 1000
         logger.info(
@@ -282,61 +328,44 @@ def _open_settings_after_runtime_destroyed(
             else None
         )
 
-        from engine.runtime_destruction import RuntimeDestructionBarrier
-
-        dialog_barrier = None
-        if replacement_allowed and (
-            isinstance(dialog, QObject) or isinstance(animations, QObject)
-        ):
-            dialog_barrier = RuntimeDestructionBarrier(
-                engine,
-                reason="settings_dialog_close",
-                retiring_generation=dialog_generation,
-            )
-            if isinstance(dialog, QObject):
-                dialog_barrier.watch_qobject(dialog, label="SettingsDialog")
-                try:
-                    for child in dialog.findChildren(QObject):
-                        dialog_barrier.watch_qobject(child)
-                except RuntimeError:
-                    logger.debug(
-                        "Settings dialog children already destroyed",
-                        exc_info=True,
-                    )
-            if isinstance(animations, QObject):
-                dialog_barrier.watch_qobject(
-                    animations,
-                    label="SettingsAnimationManager",
+        animations_touchable = (
+            not isinstance(animations, QObject)
+            or _qobject_wrapper_is_valid(animations)
+        )
+        if animations_touchable:
+            try:
+                animations.cleanup()
+            except Exception:
+                logger.debug(
+                    "Settings dialog AnimationManager cleanup failed",
+                    exc_info=True,
                 )
-                timer = getattr(animations, "_timer", None)
-                if isinstance(timer, QObject):
-                    dialog_barrier.watch_qobject(
-                        timer,
-                        label="SettingsAnimationTimer",
-                    )
+            if (
+                not isinstance(animations, QObject)
+                or _qobject_wrapper_is_valid(animations)
+            ):
+                delete_animations = getattr(animations, "deleteLater", None)
+                if callable(delete_animations):
+                    try:
+                        delete_animations()
+                    except Exception:
+                        logger.debug(
+                            "Settings AnimationManager deleteLater failed",
+                            exc_info=True,
+                        )
 
-        try:
-            animations.cleanup()
-        except Exception:
-            logger.debug(
-                "Settings dialog AnimationManager cleanup failed",
-                exc_info=True,
-            )
-        try:
-            animations.deleteLater()
-        except Exception:
-            logger.debug(
-                "Settings AnimationManager deleteLater failed",
-                exc_info=True,
-            )
-        try:
-            dialog.close()
-        except Exception:
-            logger.debug("Settings dialog close failed", exc_info=True)
-        try:
-            dialog.deleteLater()
-        except Exception:
-            logger.debug("Settings dialog deleteLater failed", exc_info=True)
+        if isinstance(dialog, QObject):
+            if _qobject_wrapper_is_valid(dialog):
+                dialog.close()
+                if _qobject_wrapper_is_valid(dialog):
+                    dialog.deleteLater()
+        else:
+            close_dialog = getattr(dialog, "close", None)
+            if callable(close_dialog):
+                close_dialog()
+            delete_dialog = getattr(dialog, "deleteLater", None)
+            if callable(delete_dialog):
+                delete_dialog()
 
         try:
             ThreadManager.cancel_scheduled_single_shots(dialog_generation)
@@ -345,11 +374,17 @@ def _open_settings_after_runtime_destroyed(
                 "[LIFECYCLE] Settings callbacks could not be cancelled on the UI thread",
                 exc_info=True,
             )
+            if dialog_barrier is not None:
+                dialog_barrier.cancel_for_terminal_shutdown()
+            engine._active_settings_dialog = None
+            engine._settings_dialog_active = False
             QApplication.exit(1)
             return
 
         engine._active_settings_dialog = None
         if continuation is None:
+            if dialog_barrier is not None:
+                dialog_barrier.cancel_for_terminal_shutdown()
             engine._settings_dialog_active = False
             return
 
@@ -360,6 +395,8 @@ def _open_settings_after_runtime_destroyed(
             dialog_barrier.seal()
             dialog_barrier.then(continuation)
     except Exception as e:
+        if dialog_barrier is not None:
+            dialog_barrier.cancel_for_terminal_shutdown()
         engine._active_settings_dialog = None
         engine._settings_dialog_active = False
         logger.exception("Failed to open settings dialog: %s", e)

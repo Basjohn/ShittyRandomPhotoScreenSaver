@@ -12,11 +12,18 @@ Key scenarios tested:
 4. Async RSS loading continues during REINITIALIZING
 5. Actual shutdown properly aborts async tasks
 """
+import logging
+import time
+import warnings
+import weakref
+
 import pytest
 import threading
 from types import SimpleNamespace
 from unittest.mock import patch
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QObject, QTimer
+from PySide6.QtWidgets import QApplication, QDialog
+from shiboken6 import Shiboken
 
 # Import the engine and state enum
 from engine.screensaver_engine import ScreensaverEngine, EngineState
@@ -110,6 +117,200 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
     assert events.index(("display_cleanup", None)) < events.index(("snapshot", "settings", "after_display_cleanup"))
     assert events.index(("engine_start", None)) < events.index(("snapshot", "settings", "after_restart"))
     assert app is not None
+
+
+@pytest.mark.qt
+def test_settings_handler_observes_delete_on_close_before_exec_and_never_retouches_wrapper(
+    monkeypatch,
+    qt_app,
+    qtbot,
+    caplog,
+):
+    from engine import engine_handlers, runtime_destruction
+
+    events = []
+    replacements = []
+    object_refs = {}
+    barriers = []
+
+    class _TrackingBarrier(runtime_destruction.RuntimeDestructionBarrier):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            barriers.append(self)
+
+        def watch_qobject(self, obj, *, label=None):
+            events.append(("watch", label or type(obj).__name__))
+            super().watch_qobject(obj, label=label)
+
+        def _on_qobject_destroyed(self, token, *_args):
+            events.append(("destroyed", self._qobject_labels.get(token, "unknown")))
+            super()._on_qobject_destroyed(token, *_args)
+
+    class _Animations(QObject):
+        def __init__(self, resource_manager=None, owner="<unknown>", runtime_generation=None):
+            super().__init__()
+            self._timer = QTimer(self)
+            object_refs["animations"] = weakref.ref(self)
+
+        def cleanup(self):
+            events.append(("animations_cleanup", None))
+            self._timer.stop()
+            self.deleteLater()
+
+    class _Dialog(QDialog):
+        def __init__(self, _settings, _animations, **_kwargs):
+            super().__init__()
+            object_refs["dialog"] = weakref.ref(self)
+
+        def exec(self):
+            events.append(("dialog_exec", None))
+            QTimer.singleShot(0, self.accept)
+            result = super().exec()
+            events.append(("dialog_exec_return", Shiboken.isValid(self)))
+            return result
+
+    class _Engine:
+        _runtime_generation = 7
+        _terminal_shutdown_requested = False
+        _pending_runtime_destruction_barrier = None
+        _settings_dialog_active = True
+        _sources_changed_during_settings = False
+        _active_settings_dialog = None
+        settings_manager = object()
+        resource_manager = SimpleNamespace(
+            get_resources_by_runtime_generation=lambda _generation: (),
+        )
+        thread_manager = SimpleNamespace(
+            get_lifecycle_ownership_snapshot=lambda: {},
+        )
+
+    engine = _Engine()
+    monkeypatch.setattr(engine_handlers, "AnimationManager", _Animations)
+    monkeypatch.setattr(engine_handlers, "SettingsDialog", _Dialog)
+    monkeypatch.setattr(
+        runtime_destruction,
+        "RuntimeDestructionBarrier",
+        _TrackingBarrier,
+    )
+    monkeypatch.setattr(
+        engine_handlers,
+        "_restart_after_settings_dialog_destroyed",
+        lambda *_args, **_kwargs: replacements.append("replacement"),
+    )
+    monkeypatch.setattr(
+        engine_handlers.ThreadManager,
+        "cancel_scheduled_single_shots",
+        staticmethod(lambda _generation: None),
+    )
+    caplog.set_level(logging.DEBUG)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        engine_handlers._open_settings_after_runtime_destroyed(
+            engine,
+            time.perf_counter(),
+        )
+        qtbot.waitUntil(lambda: replacements == ["replacement"], timeout=2000)
+        qtbot.waitUntil(
+            lambda: object_refs["dialog"]() is None
+            and object_refs["animations"]() is None,
+            timeout=2000,
+        )
+
+    assert events.index(("watch", "SettingsDialog")) < events.index(("dialog_exec", None))
+    assert events.index(("destroyed", "SettingsDialog")) < events.index(
+        ("dialog_exec_return", False)
+    )
+    assert ("dialog_exec_return", False) in events
+    assert ("watch", "SettingsAnimationManager") in events
+    assert ("watch", "SettingsAnimationTimer") in events
+    assert len(barriers) == 1
+    assert barriers[0].is_complete is True
+    assert engine._active_settings_dialog is None
+    assert engine._pending_runtime_destruction_barrier is None
+    assert not any("Internal C++ object" in str(item.message) for item in caught)
+    assert not any(
+        "Internal C++ object" in record.getMessage()
+        or (
+            record.exc_info
+            and "Internal C++ object" in str(record.exc_info[1])
+        )
+        for record in caplog.records
+    )
+
+
+@pytest.mark.qt
+def test_settings_handler_terminal_close_cancels_barrier_without_replacement(
+    monkeypatch,
+    qt_app,
+    qtbot,
+):
+    from engine import engine_handlers
+
+    replacements = []
+    object_refs = {}
+
+    class _Animations(QObject):
+        def __init__(self, resource_manager=None, owner="<unknown>", runtime_generation=None):
+            super().__init__()
+            self._timer = QTimer(self)
+            object_refs["animations"] = weakref.ref(self)
+
+        def cleanup(self):
+            self.deleteLater()
+
+    class _Dialog(QDialog):
+        def __init__(self, _settings, _animations, **_kwargs):
+            super().__init__()
+            object_refs["dialog"] = weakref.ref(self)
+
+        def exec(self):
+            engine._terminal_shutdown_requested = True
+            QTimer.singleShot(0, self.accept)
+            return super().exec()
+
+    engine = SimpleNamespace(
+        _runtime_generation=8,
+        _terminal_shutdown_requested=False,
+        _pending_runtime_destruction_barrier=None,
+        _settings_dialog_active=True,
+        _sources_changed_during_settings=False,
+        _active_settings_dialog=None,
+        settings_manager=object(),
+        resource_manager=SimpleNamespace(
+            get_resources_by_runtime_generation=lambda _generation: (),
+        ),
+        thread_manager=SimpleNamespace(
+            get_lifecycle_ownership_snapshot=lambda: {},
+        ),
+    )
+    monkeypatch.setattr(engine_handlers, "AnimationManager", _Animations)
+    monkeypatch.setattr(engine_handlers, "SettingsDialog", _Dialog)
+    monkeypatch.setattr(
+        engine_handlers,
+        "_restart_after_settings_dialog_destroyed",
+        lambda *_args, **_kwargs: replacements.append("replacement"),
+    )
+    monkeypatch.setattr(
+        engine_handlers.ThreadManager,
+        "cancel_scheduled_single_shots",
+        staticmethod(lambda _generation: None),
+    )
+
+    engine_handlers._open_settings_after_runtime_destroyed(
+        engine,
+        time.perf_counter(),
+    )
+    qtbot.waitUntil(
+        lambda: object_refs["dialog"]() is None
+        and object_refs["animations"]() is None,
+        timeout=2000,
+    )
+
+    assert replacements == []
+    assert engine._active_settings_dialog is None
+    assert engine._settings_dialog_active is False
+    assert engine._pending_runtime_destruction_barrier is None
 
 
 def test_custom_edit_reload_snapshots_real_lifecycle_boundaries(monkeypatch):

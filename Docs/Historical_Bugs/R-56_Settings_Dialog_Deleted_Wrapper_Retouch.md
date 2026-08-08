@@ -1,13 +1,14 @@
 # R-56 — Settings Close Path Retouched An Already-Deleted Dialog Wrapper
 
 Date: 2026-08-02  
-Status: Unresolved; Settings recreation succeeds but lifecycle bookkeeping is invalid
+Last updated: 2026-08-08
+Status: Implemented and mechanically validated; installed validation pending
 
 ## Classification
 
 - [ ] COMPLETELY FUCKED
-- [x] PARTIAL
-- [ ] AWAITING VALIDATION
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
 - [ ] SOLVED
 
 ## Observed Failure
@@ -67,6 +68,14 @@ This means the main Settings entry/exit path currently works, but its dialog-roo
 
 The fix must not remove `WA_DeleteOnClose`, bypass the dialog destruction barrier, add nested event pumping, or merely suppress the RuntimeErrors.
 
+## Implemented Correction
+
+The Settings handler now creates and populates the dialog destruction barrier while the `SettingsDialog`, its child QObjects, the Settings `AnimationManager`, and its timer are valid and before modal execution begins. After `dialog.exec()` returns, every possible QObject touch is guarded by `shiboken6.isValid()` through one narrow wrapper-liveness helper.
+
+If `WA_DeleteOnClose` has already destroyed the dialog, the handler does not enumerate children, close it again, or call `deleteLater()` on the invalid wrapper. If the dialog remains valid, close and deletion retain the existing explicit cleanup path, with validity checked again between those operations. Terminal/stale shutdown cancels the pre-registered barrier and constructs no replacement. Normal completion still seals the barrier and admits exactly one replacement only after the animation/dialog ownership reaches zero.
+
+`WA_DeleteOnClose`, fail-closed barrier behavior, full runtime reconstruction, and the current first-frame/reveal path are unchanged.
+
 ## Required Tests
 
 - Open and close a real `SettingsDialog` with `WA_DeleteOnClose` under the production handler shape.
@@ -76,6 +85,22 @@ The fix must not remove `WA_DeleteOnClose`, bypass the dialog destruction barrie
 - Prove exactly one replacement runtime is admitted after the barrier.
 - Prove cancellation/stale-generation paths do not construct a replacement.
 - Fail the test on any `Internal C++ object ... already deleted` warning or traceback.
+
+Mechanical validation on 2026-08-08 now covers:
+
+- a real Qt modal delete-on-close signal firing before `exec()` returns;
+- a real `SettingsDialog` registered with the destruction barrier before modal execution;
+- no invalid-wrapper warning, traceback, close, or deletion retouch;
+- dialog and animation weakref release without `gc.collect()` in the production handler shape;
+- animation-manager/timer barrier completion;
+- exactly one normal replacement;
+- terminal/stale close cancellation with zero replacements.
+
+```text
+engine lifecycle + SettingsDialog + destruction barrier + RUN lifetime: 82 passed
+```
+
+One installed Settings entry/exit cycle is still required before this record is marked solved.
 
 ## Current Runtime Result
 
