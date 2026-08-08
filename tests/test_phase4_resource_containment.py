@@ -96,6 +96,51 @@ def test_texture_cache_count_never_substitutes_for_byte_budget(monkeypatch):
     assert manager.get_stats()["texture_bytes"] <= manager.get_stats()["max_texture_bytes"]
 
 
+def test_terminal_transition_retires_history_and_retains_destination(monkeypatch):
+    fake_gl = MagicMock()
+    monkeypatch.setattr(texture_module, "gl", fake_gl)
+    manager = GLTextureManager(max_cached_texture_bytes=1024)
+    _seed_texture_cache(manager, [60, 60, 60, 60])
+    manager._old_tex_id = 103
+    manager._new_tex_id = 104
+    manager._release_resource_tracking = MagicMock()
+    manager._pbo_pool = [PBOEntry(200, 240, resource_id="pbo")]
+
+    manager.release_transition_textures(retain_active="new")
+
+    assert list(manager._texture_cache.values()) == [104]
+    assert manager._current_texture_bytes == 60
+    assert manager.get_stats()["terminal_textures_reclaimed"] == 3
+    assert manager.get_stats()["terminal_pbos_reclaimed"] == 1
+    assert manager.get_stats()["pbo_count"] == 0
+    assert fake_gl.glDeleteTextures.call_count == 3
+    fake_gl.glDeleteBuffers.assert_called_once_with(1, [200])
+    assert manager._release_resource_tracking.call_args_list[-1].args == ("pbo",)
+
+
+def test_cancel_retains_base_side_selected_by_snap_policy(qt_app):
+    old = QPixmap.fromImage(QImage(8, 8, QImage.Format.Format_ARGB32))
+    new = QPixmap.fromImage(QImage(9, 9, QImage.Format.Format_ARGB32))
+    keep_new = _transition_widget(
+        "particle",
+        ParticleState(old_pixmap=old, new_pixmap=new),
+    )
+    keep_old = _transition_widget(
+        "particle",
+        ParticleState(old_pixmap=old, new_pixmap=new),
+    )
+
+    cancel_current_transition(keep_new, snap_to_new=True)
+    cancel_current_transition(keep_old, snap_to_new=False)
+
+    keep_new._release_transition_textures.assert_called_once_with(
+        retain_active="new"
+    )
+    keep_old._release_transition_textures.assert_called_once_with(
+        retain_active="old"
+    )
+
+
 def test_pbo_pool_retains_only_one_idle_buffer_inside_byte_cap(monkeypatch):
     fake_gl = MagicMock()
     monkeypatch.setattr(texture_module, "gl", fake_gl)

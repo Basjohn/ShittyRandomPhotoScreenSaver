@@ -120,10 +120,16 @@ def can_use_wipe_shader(comp: "GLCompositorWidget") -> bool:
 # Texture preparation
 # ======================================================================
 
-def release_transition_textures(comp: "GLCompositorWidget") -> None:
+def release_transition_textures(
+    comp: "GLCompositorWidget",
+    *,
+    retain_active: str | None = None,
+) -> None:
     """Release current transition texture references via texture manager."""
     if comp._texture_manager is not None:
-        comp._texture_manager.release_transition_textures()
+        comp._texture_manager.release_transition_textures(
+            retain_active=retain_active,
+        )
 
 
 def prepare_pair_textures(comp: "GLCompositorWidget", old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:

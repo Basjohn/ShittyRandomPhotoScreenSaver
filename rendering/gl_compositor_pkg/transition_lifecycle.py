@@ -136,7 +136,9 @@ def cancel_current_transition(widget, snap_to_new: bool = True) -> None:
     # Ensure any transition textures are freed when a transition is
     # cancelled so we do not leak VRAM across many rotations.
     try:
-        widget._release_transition_textures()
+        widget._release_transition_textures(
+            retain_active="new" if snap_to_new else "old",
+        )
     except Exception:
         logger.debug("[GL COMPOSITOR] Failed to release blockspin textures on cancel", exc_info=True)
     widget.update()
@@ -229,4 +231,3 @@ def set_spotify_visualizer_state(
     except Exception as e:
         logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
         widget._spotify_vis_fade = 1.0
-

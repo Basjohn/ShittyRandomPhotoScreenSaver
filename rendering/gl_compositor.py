@@ -31,7 +31,7 @@ from rendering.adaptive_timer import (
 )
 
 from PySide6.QtCore import Qt, QPoint, QRect, Slot
-from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage, QColor
+from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage, QColor, QOpenGLContext
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
@@ -940,11 +940,11 @@ class GLCompositorWidget(QOpenGLWidget):
             self._stop_frame_pacing()
             self._finalize_animation_metrics(outcome="complete")
             self._finalize_paint_metrics(outcome="complete")
-            # Every terminal presentation releases active pair pins. The
-            # byte-budgeted cache may retain the destination texture, but the
-            # obsolete source is immediately eligible for owner-context delete.
+            # Every terminal presentation retains only its authoritative
+            # destination texture. Historical full-screen textures are deleted
+            # immediately in this compositor's owning context.
             try:
-                self._release_transition_textures()
+                self._release_transition_textures(retain_active="new")
             except Exception as e:
                 logger.debug("[GL COMPOSITOR] Failed to release %s textures: %s", name, e, exc_info=True)
             state = getattr(self, state_attr, None)
@@ -1757,9 +1757,27 @@ class GLCompositorWidget(QOpenGLWidget):
     # Texture preparation — delegates to shader_dispatch
     # ------------------------------------------------------------------
 
-    def _release_transition_textures(self) -> None:
+    def _release_transition_textures(
+        self,
+        *,
+        retain_active: Optional[str] = None,
+    ) -> None:
         from rendering.gl_compositor_pkg.shader_dispatch import release_transition_textures
-        release_transition_textures(self)
+        made_current = False
+        if retain_active is not None:
+            owner_context = self.context()
+            if owner_context is None:
+                raise RuntimeError(
+                    "Cannot retire terminal textures without compositor context"
+                )
+            if QOpenGLContext.currentContext() is not owner_context:
+                self.makeCurrent()
+                made_current = True
+        try:
+            release_transition_textures(self, retain_active=retain_active)
+        finally:
+            if made_current:
+                self.doneCurrent()
 
     def _prepare_pair_textures(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
         from rendering.gl_compositor_pkg.shader_dispatch import prepare_pair_textures

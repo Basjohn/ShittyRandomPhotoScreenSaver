@@ -76,6 +76,8 @@ class GLTextureManager:
         self._texture_lru: List[int] = []
         self._texture_bytes_by_id: Dict[int, int] = {}
         self._current_texture_bytes = 0
+        self._terminal_textures_reclaimed = 0
+        self._terminal_pbos_reclaimed = 0
         
         # Current transition textures
         self._old_tex_id: int = 0
@@ -358,6 +360,8 @@ class GLTextureManager:
             "pbo_count": len(self._pbo_pool),
             "pbo_bytes": sum(entry.size for entry in self._pbo_pool),
             "max_pbo_bytes": self._max_pbo_pool_bytes,
+            "terminal_textures_reclaimed": self._terminal_textures_reclaimed,
+            "terminal_pbos_reclaimed": self._terminal_pbos_reclaimed,
         }
     # -------------------------------------------------------------------------
     # Transition Texture Management
@@ -384,10 +388,35 @@ class GLTextureManager:
         
         return True
     
-    def release_transition_textures(self) -> None:
-        """Release active pair pins and immediately enforce cache budgets."""
+    def release_transition_textures(
+        self,
+        *,
+        retain_active: Optional[str] = None,
+    ) -> None:
+        """Release pair pins and retire obsolete terminal textures.
+
+        A terminal presentation boundary supplies ``retain_active`` so only
+        the texture backing the committed base image survives. Preparation
+        and failure cleanup omit it and retain the ordinary byte-budgeted
+        cache semantics.
+        """
+        retained_id = 0
+        if retain_active == "new":
+            retained_id = int(self._new_tex_id or 0)
+        elif retain_active == "old":
+            retained_id = int(self._old_tex_id or 0)
         self._old_tex_id = 0
         self._new_tex_id = 0
+        if retain_active in {"new", "old"}:
+            before = len(self._texture_cache)
+            for cache_key, texture_id in tuple(self._texture_cache.items()):
+                if int(texture_id or 0) != retained_id:
+                    self._delete_cached_texture(cache_key)
+            self._terminal_textures_reclaimed += max(
+                0,
+                before - len(self._texture_cache),
+            )
+            self._release_idle_pbos_at_terminal_boundary()
         self._evict_cache_to_budget()
     
     def has_transition_textures(self) -> bool:
@@ -484,6 +513,27 @@ class GLTextureManager:
                 logger.debug("[GL TEXTURE] Failed to trim idle PBO", exc_info=True)
                 retained.append(entry)
         self._pbo_pool = retained
+
+    def _release_idle_pbos_at_terminal_boundary(self) -> None:
+        """Delete upload-only staging buffers once presentation is committed."""
+        retained: List[PBOEntry] = []
+        reclaimed = 0
+        for entry in self._pbo_pool:
+            if entry.in_use:
+                retained.append(entry)
+                continue
+            try:
+                gl.glDeleteBuffers(1, [entry.pbo_id])
+                self._release_resource_tracking(entry.resource_id)
+                reclaimed += 1
+            except Exception:
+                logger.debug(
+                    "[GL TEXTURE] Failed to release terminal idle PBO",
+                    exc_info=True,
+                )
+                retained.append(entry)
+        self._pbo_pool = retained
+        self._terminal_pbos_reclaimed += reclaimed
     
     def _cleanup_pbo_pool(self, *, strict: bool = False) -> None:
         """Delete all PBOs, retaining failed entries in strict teardown."""
