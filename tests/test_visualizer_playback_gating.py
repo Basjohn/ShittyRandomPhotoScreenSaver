@@ -282,13 +282,8 @@ def test_visualizer_gating_integration():
     test_instance.test_sparse_polling_simulation(engine)
     
     print("✅ All visualizer playback gating tests passed")
-    return True
 
 
 if __name__ == "__main__":
-    success = test_visualizer_gating_integration()
-    if success:
-        print("✅ Visualizer playback gating implementation verified")
-    else:
-        print("❌ Visualizer playback gating tests failed")
-        exit(1)
+    test_visualizer_gating_integration()
+    print("✅ Visualizer playback gating implementation verified")

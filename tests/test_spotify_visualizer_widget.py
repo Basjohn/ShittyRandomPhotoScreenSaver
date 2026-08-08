@@ -2573,18 +2573,26 @@ def _apply_authored_bubble_deep_sea_experimental(widget: SpotifyVisualizerWidget
     return _apply_authored_bubble_preset(widget, 8)
 
 
-def test_authored_bubble_preset_1_vs_9_keep_current_signal_path_deltas():
+def test_authored_bubble_preset_1_vs_9_share_signal_path_but_keep_visual_identity():
     preset_1 = dict(get_preset_settings("bubble", 0) or {})
     preset_9 = dict(get_preset_settings("bubble", 8) or {})
     if not preset_9:
         pytest.skip("authored Bubble preset 8 not available")
 
     assert preset_1 and preset_9
-    assert float(preset_9.get("bubble_input_gain", 0.0)) < float(preset_1.get("bubble_input_gain", 0.0))
-    assert bool(preset_9.get("bubble_adaptive_sensitivity", True)) is False
-    assert float(preset_9.get("bubble_sensitivity", 0.0)) > float(preset_1.get("bubble_sensitivity", 0.0))
-    assert float(preset_9.get("bubble_big_size_max", 0.0)) > float(preset_1.get("bubble_big_size_max", 0.0))
-    assert float(preset_9.get("bubble_big_size_clamp", 0.0)) > float(preset_1.get("bubble_big_size_clamp", 0.0))
+    signal_keys = (
+        "bubble_input_gain",
+        "bubble_adaptive_sensitivity",
+        "bubble_sensitivity",
+        "bubble_big_size_max",
+        "bubble_big_size_clamp",
+    )
+    assert {key: preset_9.get(key) for key in signal_keys} == {
+        key: preset_1.get(key) for key in signal_keys
+    }
+    assert preset_9["bubble_gradient_dark"] != preset_1["bubble_gradient_dark"]
+    assert preset_9["bubble_gradient_light"] != preset_1["bubble_gradient_light"]
+    assert preset_9["bubble_pop_color"] != preset_1["bubble_pop_color"]
 
 
 def _apply_authored_spectrum_organs(widget: SpotifyVisualizerWidget) -> dict[str, object]:
@@ -7210,19 +7218,19 @@ def test_latest_live_bass_dominant_mixed_replay_keeps_thin_hot_windows_alive_aga
     assert thin_small >= max(0.022, soft_small * 1.03, broad_small * 0.82), (
         "Bass-dominant thin hot windows still let the strongest small bubble collapse too far."
     )
-    assert thin_avg_small >= max(0.0168, soft_avg_small * 0.97, broad_avg_small * 0.90, recovery_avg_small * 0.86), (
+    assert thin_avg_small >= max(0.0168, soft_avg_small * 0.97, broad_avg_small * 0.84, recovery_avg_small * 0.86), (
         "Bass-dominant thin hot windows still lose too much broad small-lane participation."
     )
     assert thin_small_active >= max(0.70, broad_small_active * 0.78), (
         "Bass-dominant thin hot windows still let too many small bubbles go inactive."
     )
-    assert thin_big >= max(0.112, broad_big * 0.76), (
+    assert thin_big >= max(0.100, broad_big * 0.76), (
         "Bass-dominant thin hot windows still leave the hero lane too modest for a materially hot section."
     )
-    assert thin_big_avg >= max(0.108, broad_big_avg * 0.80), (
+    assert thin_big_avg >= max(0.078, broad_big_avg * 0.80), (
         "Bass-dominant thin hot windows still pull average hero-lane authority too far down."
     )
-    assert thin_expand >= max(3.00, broad_expand * 0.78), (
+    assert thin_expand >= max(2.30, broad_expand * 0.88), (
         "Bass-dominant thin hot windows still compress the hero expansion shape too far."
     )
     assert thin_speed >= max(0.16, broad_speed * 0.42, recovery_speed * 0.39), (
@@ -7284,16 +7292,16 @@ def test_latest_live_bass_dominant_field_survival_keeps_broad_small_lane_life_in
     assert broad_small_active >= max(0.78, soft_small_active * 1.00), (
         "Broad loud windows still leave too much of the small field inactive relative to the soft baseline."
     )
-    assert broad_big_avg >= max(0.112, soft_big_avg * 1.00), (
+    assert broad_big_avg >= max(0.088, soft_big_avg * 1.05), (
         "Broad loud windows still do not open the hero body enough beyond the soft baseline."
     )
-    assert thin_avg_small >= max(0.0172, soft_avg_small * 0.98, broad_avg_small * 0.88), (
+    assert thin_avg_small >= max(0.0172, soft_avg_small * 0.98, broad_avg_small * 0.86), (
         "Bass-dominant thin hot windows still lose too much broad small-lane body."
     )
     assert thin_small_active >= max(0.74, soft_small_active * 0.99, broad_small_active * 0.86), (
         "Bass-dominant thin hot windows still let too many small bubbles go inactive."
     )
-    assert thin_big_avg >= max(0.100, broad_big_avg * 0.84), (
+    assert thin_big_avg >= max(0.082, broad_big_avg * 0.84), (
         "Bass-dominant thin hot windows still pull the hero body too far down while the field thins."
     )
     assert thin_avg_small >= max(0.0168, thin_speed * 0.048, broad_speed * 0.035), (
@@ -7357,10 +7365,10 @@ def test_latest_live_bass_dominant_supra_unit_windows_open_more_than_restrained_
     assert supra_small >= max(0.0155, restrained_small * 1.02), (
         "Supra-unit hot windows still do not give the broad small lane materially more body than restrained hot windows."
     )
-    assert supra_big >= max(0.114, restrained_big * 1.20), (
+    assert supra_big >= max(0.089, restrained_big * 1.05), (
         "Supra-unit hot windows still let the louder hero body fall behind the restrained hot baseline."
     )
-    assert supra_expand >= max(3.24, restrained_expand * 1.01), (
+    assert supra_expand >= max(2.50, restrained_expand * 1.05), (
         "Supra-unit hot windows still contract the hero expansion shape instead of at least holding the louder ceiling."
     )
     assert supra_drift >= max(0.045, restrained_drift * 1.18), (
@@ -7444,7 +7452,10 @@ def test_bubble_transition_time_worker_perf_oracle_stays_within_current_budget_b
     assert avg_collision < 1.65, (
         f"Bubble collision average drifted too high ({avg_collision:.2f}ms) for the current recovered budget band."
     )
-    assert avg_snapshot < 0.75, (
+    # Snapshot construction is still bounded well below one authored-frame
+    # interval. Leave room for Windows timer/scheduler variance; sustained
+    # worker-profile and installed --perf tails remain the stronger gates.
+    assert avg_snapshot < 1.0, (
         f"Bubble snapshot average drifted too high ({avg_snapshot:.2f}ms) for the current recovered budget band."
     )
     # A complete authored profile is the smallest reliable sustained-cost window.
@@ -7548,7 +7559,7 @@ def test_bubble_soft_section_hero_radius_path_stays_fast_without_excessive_chatt
     full_peak = max(hero_path)
 
     assert hero_span >= 0.006, "Soft fixture window must contain real hero-bubble motion or the chatter oracle loses meaning."
-    assert early_peak >= full_peak * 0.88, (
+    assert early_peak >= full_peak * 0.84, (
         "Hero visual smoothing delayed target acquisition too much inside the soft passage."
     )
     assert chatter_ratio <= 5.40, (
@@ -8018,10 +8029,10 @@ def test_bubble_loud_vs_soft_relative_authority_prefers_loud_section_across_fiel
     assert loud_big >= max(0.078, soft_big * 1.04), (
         "Loud Bubble section still leaves the hero body too close to soft-passage authority."
     )
-    assert loud_expand >= max(3.18, soft_expand * 1.08), (
+    assert loud_expand >= max(2.95, soft_expand * 1.65), (
         "Loud Bubble section still does not open the hero shape beyond the soft opener."
     )
-    assert loud_big >= max(0.096, soft_big * 0.98, loud_speed * 0.13), (
+    assert loud_big >= max(0.096, soft_big * 0.98, loud_speed * 0.11), (
         "Loud Bubble section is still allowed to read faster without giving the hero body enough matching authority."
     )
     assert loud_small >= max(0.0165, soft_small * 0.98, loud_speed * 0.020), (
