@@ -86,7 +86,7 @@ class _FakeScreen:
 
 
 class _DisplayStub(QWidget):
-    custom_layout_reload_requested = Signal(str, int, int)
+    custom_layout_reload_requested = Signal(str, int, object)
 
     def __init__(self, settings_stub: _SettingsStub, *, screen=None, screen_index: int = 0) -> None:
         super().__init__()
@@ -1108,6 +1108,64 @@ def test_custom_layout_save_retires_shell_callbacks_before_reload_signal_returns
     shell.retire_session()
     del shell
     qtbot.waitUntil(lambda: shell_ref() is None, timeout=2000)
+
+
+def test_custom_layout_save_preserves_pointer_width_manager_identity(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display)
+    display._runtime_generation = 7
+    display._runtime_manager_identity = (1 << 40) + 12345
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    observed: list[tuple[str, int, int]] = []
+    display.custom_layout_reload_requested.connect(
+        lambda kind, generation, identity: observed.append(
+            (kind, generation, identity)
+        )
+    )
+
+    assert manager.save_session() is True
+
+    assert observed == [
+        ("save_continue", 7, display._runtime_manager_identity),
+    ]
+
+
+def test_custom_layout_save_fails_closed_without_local_widget_rebuild(
+    qtbot,
+    monkeypatch,
+):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display)
+    display._request_custom_layout_runtime_reload = lambda _kind: (_ for _ in ()).throw(
+        RuntimeError("signal admission failed")
+    )
+    exit_codes: list[int] = []
+    monkeypatch.setattr(
+        "rendering.custom_layout_manager.QApplication.exit",
+        lambda code: exit_codes.append(code),
+    )
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    assert manager.save_session() is False
+    assert display._setup_widgets_calls == 0
+    assert display._apply_saved_layouts_calls == 0
+    assert exit_codes == [1]
 
 
 def test_custom_layout_manager_saves_and_reapplies_spotify_volume_geometry(qtbot):

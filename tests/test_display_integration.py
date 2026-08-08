@@ -446,6 +446,24 @@ class TestDisplayManagerSync:
         assert dm._sync_enabled is False
         assert dm._transition_ready_queue is None
 
+    def test_custom_reload_signal_preserves_pointer_width_manager_identity(self):
+        dm = DisplayManager(runtime_generation=7)
+        manager_identity = (1 << 40) + 12345
+        observed = []
+        dm.custom_layout_reload_requested.connect(
+            lambda kind, generation, identity: observed.append(
+                (kind, generation, identity)
+            )
+        )
+
+        dm.custom_layout_reload_requested.emit(
+            "save_continue",
+            7,
+            manager_identity,
+        )
+
+        assert observed == [("save_continue", 7, manager_identity)]
+
     def test_enable_and_disable_sync(self, manager):
         manager.enable_transition_sync(True)
         assert manager._sync_enabled is True

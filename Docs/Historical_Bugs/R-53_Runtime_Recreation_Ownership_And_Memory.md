@@ -1,8 +1,8 @@
 # R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation
 
 Date opened: 2026-08-01  
-Latest evidence: 2026-08-02  
-Status: CUSTOM/Edit repair implemented mechanically; installed lifecycle and plateau proof pending
+Latest evidence: 2026-08-08  
+Status: Pointer-width admission correction implemented after failed installed validation; lifecycle and plateau proof pending
 
 ## Classification
 
@@ -150,6 +150,18 @@ Focused production-shaped regressions prove:
 - `CustomLayoutManager` remains part of runtime-root observation.
 
 The focused CUSTOM/lifecycle set passed 161 tests, and the adjacent display/widget lifecycle set passed 104 tests with four environment skips. This is mechanical evidence only. No installed dual-display Save-and-Continue or memory-plateau evidence has yet been collected for this repair.
+
+## 2026-08-08 Installed Admission Failure And Correction
+
+The first installed dual-display Save-and-Continue attempt persisted all eleven graph entries and retired the Edit session, but emitted no `CUSTOM layout reload queued` event and began no runtime teardown. The next teardown in the run was an unrelated Settings action fourteen seconds later.
+
+The exact defect was signal width. Both `DisplayWidget.custom_layout_reload_requested` and `DisplayManager.custom_layout_reload_requested` declared the exact manager identity as Qt `int`. On 64-bit Python the observed object identities are pointer-width values (for example, approximately `1.866e12` in this run), while Qt's registered `int` is signed 32-bit. A project-venv reproduction produced Shiboken's overflow warning and delivered a truncated negative identity. The engine's exact-identity guard then correctly rejected the request as stale.
+
+The test double had used identity `0`, so the production-shaped relay tests did not exercise the platform boundary. Both production signals and the real-signal test double now carry the identity as a Python object, and regressions require an identity above `2**32` to arrive unchanged at both signal layers.
+
+The manager's old exception-only fallback to `_reload_widgets_across_instances()` was also removed. A committed Save/Reset that cannot request mandatory full recreation now logs the failure and exits with code 1. A widget-only teardown/setup is not a valid substitute for engine-owned full reconstruction.
+
+Mechanical validation proves pointer-width identity survives the relay and a request failure performs no local widget rebuild. Installed dual-display validation remains mandatory; this section does not claim recreation or memory success.
 
 ## Settings Dialog Sibling Defect
 

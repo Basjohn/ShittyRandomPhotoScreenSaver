@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from PySide6.QtCore import QPoint, QRect, QSize, QObject, QEvent, Qt
 from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QPixmap, QKeyEvent
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 
 from core.logging.logger import get_logger
 from core.threading.manager import ThreadManager
@@ -532,7 +532,8 @@ class CustomLayoutManager:
                     discard_deferred_image=True,
                 )
             if request_reload and not self._request_runtime_reload("save_continue"):
-                self._reload_widgets_across_instances()
+                self._fail_closed_runtime_reload_request("save_continue")
+                return False
             return True
         finally:
             self._set_runtime_reload_pending_for_managers(active_managers, False)
@@ -580,7 +581,8 @@ class CustomLayoutManager:
                     discard_deferred_image=True,
                 )
             if not self._request_runtime_reload("reset_authored"):
-                self._reload_widgets_across_instances()
+                self._fail_closed_runtime_reload_request("reset_authored")
+                return False
             return True
         finally:
             self._set_runtime_reload_pending_for_managers(active_managers, False)
@@ -634,8 +636,20 @@ class CustomLayoutManager:
             requester(str(request_kind))
             return True
         except Exception:
-            logger.debug("[CUSTOM_LAYOUT] Failed to request runtime reload; falling back to local rebuild", exc_info=True)
+            logger.error(
+                "[CUSTOM_LAYOUT] Failed to request mandatory full runtime reload kind=%s",
+                request_kind,
+                exc_info=True,
+            )
             return False
+
+    @staticmethod
+    def _fail_closed_runtime_reload_request(request_kind: str) -> None:
+        logger.critical(
+            "[CUSTOM_LAYOUT] Mandatory full runtime reload was not admitted kind=%s; exiting fail-closed",
+            request_kind,
+        )
+        QApplication.exit(1)
 
     @staticmethod
     def _set_runtime_reload_pending_for_managers(
@@ -750,29 +764,6 @@ class CustomLayoutManager:
             if screen_signature == exclude_signature:
                 continue
             remove_screen_layout_entry(custom_layout_map, screen_signature, widget_id)
-
-    def _reload_widgets_across_instances(self) -> None:
-        instances: list[Any] = []
-        try:
-            instances = get_coordinator().get_all_instances()
-        except Exception:
-            logger.debug("[CUSTOM_LAYOUT] Failed to enumerate display instances for widget reload", exc_info=True)
-            instances = []
-        if self._display not in instances:
-            instances.append(self._display)
-        for instance in instances:
-            try:
-                self._teardown_display_widgets(instance)
-                instance._setup_widgets()
-            except Exception:
-                logger.debug("[CUSTOM_LAYOUT] Failed to rebuild widgets after custom layout save", exc_info=True)
-                try:
-                    instance._apply_saved_custom_layouts()
-                except Exception:
-                    logger.warning(
-                        "[CUSTOM_LAYOUT][FALLBACK] Failed to apply saved custom layouts after rebuild fallback",
-                        exc_info=True,
-                    )
 
     def _reapply_saved_layouts_across_instances(self) -> None:
         instances: list[Any] = []

@@ -163,7 +163,10 @@ class DisplayWidget(QWidget):
     next_requested = Signal()  # X key - go to next image
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # S key - open settings
-    custom_layout_reload_requested = Signal(str, int, int)
+    # Python object identities are pointer-width values.  Keep the manager
+    # identity as a Python object so PySide cannot truncate it through Qt's
+    # 32-bit ``int`` metatype before the engine validates the request.
+    custom_layout_reload_requested = Signal(str, int, object)
     dimming_changed = Signal(bool, float)  # enabled, opacity - sync dimming across displays
     
     # Phase 5: Class-level state has been migrated to MultiMonitorCoordinator.

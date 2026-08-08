@@ -53,7 +53,8 @@ class DisplayManager(QObject):
     next_requested = Signal()  # X key - go to next image
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # S key - open settings
-    custom_layout_reload_requested = Signal(str, int, int)
+    # The exact DisplayManager identity is a pointer-width Python integer.
+    custom_layout_reload_requested = Signal(str, int, object)
     
     def __init__(
         self,
