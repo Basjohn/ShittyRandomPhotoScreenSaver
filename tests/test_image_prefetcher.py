@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 from PySide6.QtGui import QColor, QImage, QPixmap
 
 from rendering.display_modes import DisplayMode
@@ -52,6 +53,170 @@ class _FakeThreads:
         callback = kwargs.get("callback")
         self.io_callbacks.append((func, path, callback))
         return "io-task"
+
+
+def _scaled_request(path: str, cache_key: str, *, width: int = 16, height: int = 9):
+    return {
+        "stats": {},
+        "path": path,
+        "cache_key": cache_key,
+        "width": width,
+        "height": height,
+        "display_mode": DisplayMode.FILL,
+        "use_lanczos": False,
+        "sharpen": False,
+    }
+
+
+def _block_scaled_slots(prefetcher: ImagePrefetcher, count: int) -> None:
+    prefetcher._scaled_inflight.update(f"busy-{idx}" for idx in range(count))
+
+
+def _release_scaled_slots(prefetcher: ImagePrefetcher) -> None:
+    prefetcher._scaled_inflight.clear()
+
+
+def _submitted_scaled_keys(threads: _FakeThreads) -> list[str]:
+    return [compute()[0] for compute, _callback in threads.compute_callbacks]
+
+
+def test_scaled_prefetch_dispatches_later_preferred_before_earlier_ready_request(qt_app):
+    general_path = r"C:\wall\general.jpg"
+    preferred_path = r"C:\wall\preferred.jpg"
+    cache = _FakeCache(
+        {
+            general_path: _solid_qimage(32, 18, "blue"),
+            preferred_path: _solid_qimage(32, 18, "green"),
+        }
+    )
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=2)
+    _block_scaled_slots(prefetcher, 2)
+
+    assert prefetcher.register_scaled_requests(
+        [
+            _scaled_request(general_path, "general-scaled"),
+            _scaled_request(preferred_path, "preferred-scaled"),
+        ]
+    ) == 2
+
+    _release_scaled_slots(prefetcher)
+    prefetcher._pump_scaled_prefetch(preferred_path=preferred_path)
+
+    assert _submitted_scaled_keys(threads) == ["preferred-scaled", "general-scaled"]
+    assert prefetcher.snapshot_budget_state()["scaled_pending"] == 0
+    assert prefetcher.snapshot_budget_state()["scaled_pending_bytes"] == 0
+    assert prefetcher._pending_scaled_keys == set()
+    assert prefetcher._scaled_inflight == {"preferred-scaled", "general-scaled"}
+
+
+@pytest.mark.parametrize("preferred_index", [0, 1, 2])
+def test_scaled_prefetch_preserves_priority_at_every_queue_position(qt_app, preferred_index):
+    paths = [fr"C:\wall\position-{idx}.jpg" for idx in range(3)]
+    cache = _FakeCache(
+        {path: _solid_qimage(32, 18, color) for path, color in zip(paths, ("red", "green", "blue"))}
+    )
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=3)
+    _block_scaled_slots(prefetcher, 3)
+    requests = [
+        _scaled_request(path, f"position-scaled-{idx}")
+        for idx, path in enumerate(paths)
+    ]
+    prefetcher.register_scaled_requests(requests)
+
+    _release_scaled_slots(prefetcher)
+    prefetcher._pump_scaled_prefetch(preferred_path=paths[preferred_index])
+
+    submitted = _submitted_scaled_keys(threads)
+    assert submitted[0] == f"position-scaled-{preferred_index}"
+    assert len(submitted) == len(set(submitted)) == 3
+    assert set(submitted) == {f"position-scaled-{idx}" for idx in range(3)}
+
+
+@pytest.mark.parametrize("available_slots", [1, 2, 4])
+def test_scaled_prefetch_respects_available_slots_with_preferred_priority(qt_app, available_slots):
+    paths = [fr"C:\wall\slots-{idx}.jpg" for idx in range(4)]
+    cache = _FakeCache({path: _solid_qimage(32, 18, "blue") for path in paths})
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=4)
+    _block_scaled_slots(prefetcher, 4)
+    prefetcher.register_scaled_requests(
+        [_scaled_request(path, f"slots-scaled-{idx}") for idx, path in enumerate(paths)]
+    )
+
+    prefetcher._scaled_inflight = {
+        f"remaining-busy-{idx}" for idx in range(4 - available_slots)
+    }
+    prefetcher._pump_scaled_prefetch(preferred_path=paths[-1])
+
+    submitted = _submitted_scaled_keys(threads)
+    assert submitted[0] == "slots-scaled-3"
+    assert len(submitted) == len(set(submitted)) == available_slots
+    budget = prefetcher.snapshot_budget_state()
+    assert budget["scaled_pending"] == 4 - available_slots
+    assert budget["scaled_pending_bytes"] == (4 - available_slots) * 16 * 9 * 4
+
+
+def test_scaled_prefetch_keeps_not_ready_request_while_dispatching_ready_preferred(qt_app):
+    waiting_path = r"C:\wall\waiting.jpg"
+    preferred_path = r"C:\wall\preferred-ready.jpg"
+    other_path = r"C:\wall\other-ready.jpg"
+    cache = _FakeCache(
+        {
+            preferred_path: _solid_qimage(32, 18, "green"),
+            other_path: _solid_qimage(32, 18, "blue"),
+        }
+    )
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=2)
+    prefetcher._inflight.add(waiting_path)
+    _block_scaled_slots(prefetcher, 2)
+    prefetcher.register_scaled_requests(
+        [
+            _scaled_request(waiting_path, "waiting-scaled"),
+            _scaled_request(preferred_path, "preferred-ready-scaled"),
+            _scaled_request(other_path, "other-ready-scaled"),
+        ]
+    )
+
+    _release_scaled_slots(prefetcher)
+    prefetcher._pump_scaled_prefetch(preferred_path=preferred_path)
+
+    assert _submitted_scaled_keys(threads) == ["preferred-ready-scaled", "other-ready-scaled"]
+    assert [request["cache_key"] for request in prefetcher._pending_scaled_requests] == ["waiting-scaled"]
+    assert prefetcher._pending_scaled_keys == {"waiting-scaled"}
+    assert prefetcher.snapshot_budget_state()["scaled_pending_bytes"] == 16 * 9 * 4
+
+
+def test_scaled_prefetch_rejects_stale_selected_generation_with_exact_accounting(qt_app):
+    stale_path = r"C:\wall\stale-selected.jpg"
+    current_path = r"C:\wall\current-selected.jpg"
+    cache = _FakeCache(
+        {
+            stale_path: _solid_qimage(32, 18, "red"),
+            current_path: _solid_qimage(32, 18, "blue"),
+        }
+    )
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=2)
+    _block_scaled_slots(prefetcher, 2)
+    prefetcher.register_scaled_requests(
+        [
+            _scaled_request(stale_path, "stale-selected-scaled"),
+            _scaled_request(current_path, "current-selected-scaled"),
+        ]
+    )
+    prefetcher._pending_scaled_requests[0]["_prefetch_generation"] -= 1
+
+    _release_scaled_slots(prefetcher)
+    prefetcher._pump_scaled_prefetch(preferred_path=stale_path)
+
+    assert _submitted_scaled_keys(threads) == ["current-selected-scaled"]
+    assert prefetcher.snapshot_budget_state()["scaled_pending"] == 0
+    assert prefetcher.snapshot_budget_state()["scaled_pending_bytes"] == 0
+    assert prefetcher._pending_scaled_keys == set()
+    assert prefetcher._scaled_inflight == {"current-selected-scaled"}
 
 
 def test_scaled_prefetch_requests_use_bounded_parallelism(qt_app):

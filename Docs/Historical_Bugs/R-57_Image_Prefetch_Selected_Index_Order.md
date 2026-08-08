@@ -1,13 +1,14 @@
 # R-57 — Scaled Prefetch Popped Selection Order Instead Of Descending Indices
 
 Date: 2026-08-02  
-Status: Unresolved; exact cause identified
+Last updated: 2026-08-08
+Status: Implemented and mechanically validated; installed validation pending
 
 ## Classification
 
 - [ ] COMPLETELY FUCKED
-- [x] PARTIAL
-- [ ] AWAITING VALIDATION
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
 - [ ] SOLVED
 
 ## Observed Failure
@@ -96,6 +97,12 @@ Whichever form is used must preserve:
 - exact pending-key and pending-byte accounting;
 - no duplicate scaled submission.
 
+## Implemented Correction
+
+`_pump_scaled_prefetch()` now selects requests in preferred-first dispatch order, snapshots those exact request objects, and replaces the pending queue with a stable partition of the unselected entries. Pending keys and logical bytes are retired from the selected objects, while valid current-generation requests enter inflight ownership and are submitted in the original preferred-first selection order.
+
+This removes positional mutation entirely. It does not alter concurrency limits, generation rejection, raw-source derivative ownership, cache budgets, or worker execution.
+
 ## Required Regression Tests
 
 The missing decisive fixture is:
@@ -118,7 +125,18 @@ Additional tests should cover:
 - `clear_inflight()` followed by late raw and scaled callbacks;
 - no duplicate selected key when preferred and general selection overlap.
 
-Existing tests cover bounded parallelism, queueing, generation invalidation, and raw-release ownership, but do not place a later preferred item ahead of an earlier general cache-ready item in the same pump.
+Before this repair, existing tests covered bounded parallelism, queueing, generation invalidation, and raw-release ownership, but did not place a later preferred item ahead of an earlier general cache-ready item in the same pump.
+
+The added production-shaped regressions now cover the decisive later-preferred fixture, preferred first/middle/final placement, one/two/maximum available slots, mixed ready/not-ready rows, stale selected generations with exact accounting, unique dispatch, and the existing late raw/scaled callbacks after `clear_inflight()`.
+
+Mechanical validation on 2026-08-08:
+
+```text
+tests/test_image_prefetcher.py                                      20 passed
+test_phase4_resource_containment + image_cache_accounting/pipeline 36 passed
+```
+
+Installed transition/image-rotation evidence is still required before the incident is marked solved.
 
 ## Runtime Consequence
 

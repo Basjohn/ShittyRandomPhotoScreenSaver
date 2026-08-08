@@ -83,7 +83,7 @@ R-57 scaled prefetch: Docs/Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Or
 - [x] **Settings memory growth:** the former linear per-cycle staircase did not reproduce across two Settings replacements.
 - [!] One-time post-first-recreation process uplift remains unexplained; confidence in allocator/cache/driver/retained-owner cause is below 90%.
 - [ ] Edit memory/plateau evidence remains blocked because CUSTOM exits before replacement construction.
-- [!] **R-57:** scaled prefetch has an exact selected-index deletion-order bug. Cause confidence: **greater than 99%**.
+- [!] **R-57:** stable-identity selection/removal and boundary regressions now pass mechanically; installed transition/image rotation remains required.
 - [x] Replacement initialization itself still has no demonstrated separate defect; preserve it and validate it rather than redesigning it.
 
 ### Absolute resource footprint
@@ -380,10 +380,10 @@ R-57 is a narrow correctness fix and is not blocked by the broader lifecycle or 
 
 ## R-57 required change
 
-- [ ] Replace `reversed(selected_indices)` with explicitly descending unique numeric deletion or stable-identity queue partitioning.
-- [ ] Preserve preferred-path priority, bounded concurrency, generation rejection, exact key/byte accounting, raw-source lifetime, and no duplicate submission.
-- [ ] Add the decisive fixture: nonpreferred cache-ready request at index 0, preferred cache-ready request at index 1, two available slots.
-- [ ] Cover preferred first/middle/last positions, stale generation, mixed ready/not-ready rows, and late callbacks after `clear_inflight()`.
+- [x] Replace `reversed(selected_indices)` with stable-identity queue partitioning.
+- [x] Preserve preferred-path priority, bounded concurrency, generation rejection, exact key/byte accounting, raw-source lifetime, and no duplicate submission.
+- [x] Add the decisive fixture: nonpreferred cache-ready request at index 0, preferred cache-ready request at index 1, two available slots.
+- [x] Cover preferred first/middle/last positions, stale generation, mixed ready/not-ready rows, and late callbacks after `clear_inflight()`.
 - [ ] Run installed transition/image rotation and require no callback failure or unexpected worker fallback increase.
 
 ## Provisional engineering targets

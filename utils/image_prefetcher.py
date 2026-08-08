@@ -376,8 +376,18 @@ class ImagePrefetcher:
             if not selected_indices:
                 return
 
-            for idx in reversed(selected_indices):
-                request = self._pending_scaled_requests.pop(idx)
+            selected_index_set = set(selected_indices)
+            selected_requests = [
+                self._pending_scaled_requests[idx]
+                for idx in selected_indices
+            ]
+            self._pending_scaled_requests = [
+                request
+                for idx, request in enumerate(self._pending_scaled_requests)
+                if idx not in selected_index_set
+            ]
+
+            for request in selected_requests:
                 cache_key = str(request.get("cache_key") or "")
                 self._pending_scaled_keys.discard(cache_key)
                 self._pending_scaled_bytes = max(
@@ -391,8 +401,6 @@ class ImagePrefetcher:
                 self._scaled_inflight_generations[cache_key] = generation
                 self._scaled_inflight_paths[cache_key] = str(request.get("path") or "")
                 requests_to_submit.append(request)
-
-            requests_to_submit.reverse()
 
         for request in requests_to_submit:
             _cache_trace(
