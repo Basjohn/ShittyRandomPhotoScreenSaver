@@ -233,7 +233,7 @@ A golden package that also accepts these known-bad shapes is not strong enough.
 - [x] Restore exact pre-lane production execution behaviour.
 - [x] Obtain user approval of restored Bubble and Spectrum behaviour.
 - [x] Reject and revert paint-local Spectrum smoothing.
-- [ ] Create the immutable approval/environment manifest.
+- [x] Create the immutable approval/environment manifest (`tests/goldens/visualizer_temporal/v1/approval_environment_manifest.json`).
 - [ ] Add deterministic source fixtures and captured approved source-feature sequences.
 - [ ] Add production-executor temporal replay/capture.
 - [ ] Add source-to-first-visible Bubble and Spectrum assertions.

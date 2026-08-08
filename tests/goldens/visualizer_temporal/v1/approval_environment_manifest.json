@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "manifest_kind": "srpss_visualizer_approval_environment",
+  "immutable_baseline": true,
+  "approval": {
+    "approved_commit": "ff93461685476bd0657aa88312fc2e35e9037880",
+    "code_equivalent_executor_commit": "4bde89e8e39177dc4dd7b5e64b9ac99256ab9486",
+    "approval_date": "2026-08-08",
+    "approval_statement": "Preserve the approved visual behaviour at ff934616 and the ordinary general COMPUTE executor restored at 4bde89e.",
+    "approved_modes": [
+      "bubble",
+      "spectrum"
+    ],
+    "approval_scope": "Installed Bubble and Spectrum presentation feel and the ordinary general COMPUTE execution model.",
+    "supersession_policy": "A later commit replaces this baseline only after explicit installed user approval."
+  },
+  "environment": {
+    "captured_at": "2026-08-08",
+    "capture_basis": "The current installed-validation workstation was queried before recovery production changes; the 2026-08-02 installed evidence supplied the runtime route, audio, and preset state.",
+    "windows": {
+      "platform": "Windows-10-10.0.26200-SP0",
+      "registry_product_name": "Windows 10 Pro",
+      "build": "26200"
+    },
+    "python": "3.11.9",
+    "pyside6": "6.9.1",
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4090",
+      "windows_driver_version": "32.0.16.1088"
+    },
+    "power_profile": "Balanced",
+    "entry_point": {
+      "variant": "normal",
+      "mode": "RUN"
+    },
+    "displays": [
+      {
+        "screen_index": 0,
+        "name": "MSI G321Q",
+        "qt_geometry": [
+          0,
+          0,
+          1707,
+          960
+        ],
+        "refresh_hz": 164.835,
+        "device_pixel_ratio": 1.5,
+        "installed_evidence_render_surface": [
+          1707,
+          959
+        ]
+      },
+      {
+        "screen_index": 1,
+        "name": "LG TV",
+        "qt_geometry": [
+          2560,
+          0,
+          2560,
+          1440
+        ],
+        "refresh_hz": 60.0,
+        "device_pixel_ratio": 1.5,
+        "installed_evidence_render_surface": [
+          2560,
+          1439
+        ]
+      }
+    ],
+    "visualizer_route": {
+      "setting": "monitor=2",
+      "custom_routing": true,
+      "screen_index": 1
+    },
+    "audio_capture": {
+      "backend": "PyAudioWPatchBackend",
+      "device": "Speakers (Realtek(R) Audio) [Loopback]",
+      "sample_rate_hz": 48000,
+      "channels": 6,
+      "effective_block_frames": 128,
+      "preferred_block_frames": 128
+    }
+  },
+  "presentation_contract": {
+    "tick_target_ms": 16,
+    "base_max_fps": 90.0,
+    "transition_max_fps": 60.0,
+    "playback_states_observed": [
+      "paused",
+      "playing"
+    ],
+    "transition_states_observed": [
+      "idle",
+      "active"
+    ],
+    "executor": "ordinary general COMPUTE executor",
+    "prohibited_substitutes": [
+      "persistent visualizer lanes",
+      "terminal batching",
+      "source decimation",
+      "paint acknowledgement",
+      "self-requested repaint cadence",
+      "paint-local authoritative state"
+    ]
+  },
+  "modes": {
+    "spectrum": {
+      "preset_index": 0,
+      "preset_name": "Preset 1 (Organs)",
+      "preset_path": "presets/visualizer_modes/spectrum/preset_1_organs.json",
+      "preset_sha256": "7b71e948435c9af8f9240d3fdcdca0a56bf5031462af783994f7e2b7df2e1c86",
+      "bar_count": 35,
+      "audio_block_size": 128,
+      "adaptive_sensitivity": false,
+      "sensitivity": 0.97,
+      "dynamic_floor": true,
+      "manual_floor": 0.42,
+      "dynamic_range_enabled": true,
+      "agc_strength": 0.34,
+      "input_gain": 0.98,
+      "growth": 5.0,
+      "mirrored": true,
+      "glow_enabled": true,
+      "glow_intensity": 0.15,
+      "ghosting_enabled": true,
+      "ghost_alpha": 0.59,
+      "ghost_decay": 0.18
+    },
+    "bubble": {
+      "preset_index": 8,
+      "preset_name": "Preset 9 (Deep Sea Abyss)",
+      "preset_path": "presets/visualizer_modes/bubble/preset_9_deep_sea_abyss.json",
+      "preset_sha256": "2c004e86aaded6a6eb82b8c8c7d665dcd2cd1acdd58d3080abde4a5d44200a9e",
+      "bar_count": 48,
+      "audio_block_size": 128,
+      "adaptive_sensitivity": false,
+      "sensitivity": 0.55,
+      "dynamic_floor": false,
+      "manual_floor": 0.3,
+      "dynamic_range_enabled": false,
+      "agc_strength": 0.0,
+      "input_gain": 0.75,
+      "big_count": 5,
+      "small_count": 44,
+      "stream_reactivity": 1.35,
+      "big_bass_pulse": 0.67,
+      "small_frequency_pulse": 1.1,
+      "big_visual_smoothing": 1.0,
+      "ghosting_enabled": true,
+      "ghost_alpha": 0.15,
+      "ghost_decay": 0.5
+    }
+  },
+  "source_fixtures": {
+    "installed_approval_audio": {
+      "identifier": "user-selected commercial playback; title intentionally not retained",
+      "playback_offset": "not captured",
+      "limitation": "The approval predates deterministic source capture, so no exact commercial-audio offset is asserted or reconstructed."
+    },
+    "deterministic_feature_manifest": {
+      "path": "tests/fixtures/visualizer_replay/v1/manifest.json",
+      "sha256": "e23284be60f0613f5045c63b2a0caf0bbcf5c6b4dc33c568d8cecfb1bd0ed48f",
+      "fixture_ids": [
+        "silence",
+        "isolated_impulse",
+        "sudden_volume_step",
+        "gradual_ramp",
+        "sustained_bass",
+        "sustained_treble",
+        "broadband_noise",
+        "beats_60_bpm",
+        "beats_120_bpm",
+        "beats_180_bpm",
+        "irregular_input_cadence",
+        "mode_visibility_switch",
+        "representative_music_features"
+      ],
+      "playback_offsets": "Fixture timestamps begin at zero and are stored in each JSONL record."
+    }
+  },
+  "evidence": {
+    "installed_configuration_source": "logs/evidence_chest/08_02_3877b2c7_20_27",
+    "logical_golden_manifest": "tests/goldens/visualizer_replay/v1/manifest.json",
+    "logical_golden_manifest_sha256": "d4158b1d9d16af96db2c5034c63ec77ece8cdf21db4cbc53e9ac6bf65b5474b3",
+    "copyright_statement": "No audio is stored. Repository fixtures contain synthetic or numerical feature data only."
+  }
+}
