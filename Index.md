@@ -163,6 +163,8 @@ Read `Docs/Compositor_Architecture.md`.
 | `tools/phase3_lifecycle_harness.py` | Deterministic 50/50/50 full-teardown, generation, callback, and resource plateau gate |
 | `tools/phase4_resource_harness.py` | Deterministic 45-cycle CPU-image/display/texture/PBO budget and allocator plateau gate |
 | `tools/phase4_image_worker_shm_harness.py` | Real spawned-ImageWorker 50×4K shared-memory/RSS plateau and orphan gate |
+| `tools/phase5_thread_manager_benchmark.py` | General COMPUTE executor accounting/callback overhead projection |
+| `tools/phase5_frame_owner_benchmark.py` | Perf-only passive frame-owner snapshot cost projection |
 | `tools/recovery_evidence_parser.py` | Parse current plain evidence subfolders or legacy ZIP comparisons |
 
 ## Navigation Rule

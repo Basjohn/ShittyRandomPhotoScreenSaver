@@ -151,6 +151,17 @@ Adding a compensating state without deleting another requires architecture revie
 
 Every optimization records exact scenario, environment, cache/warmup state, before/after metrics, fidelity result, lifecycle result, resource result, and rollback.
 
+## G-18 — Diagnostics remain evidence, never scheduling
+
+Do not delete or weaken perf-only attribution merely to improve the measured perf
+run. First measure the instrumentation itself; if material, preserve equivalent
+owner and correlation fields through a cheaper passive implementation.
+
+Diagnostic bookkeeping must not enqueue one GUI callback per event, alter task
+admission, become presentation control flow, or run outside its declared gate.
+Ordinary-run scheduling overhead is removable even when the data it was meant to
+support remains mandatory.
+
 # Performance guardrails
 
 - user-observed feel and first-visible response outrank average FPS/task count;

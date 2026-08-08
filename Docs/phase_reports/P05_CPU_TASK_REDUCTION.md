@@ -12,6 +12,35 @@ Phase 4 is closed by `logs/evidence_chest/07_30_dc8d1741_00_26/`, including star
 
 ## Current implementation state
 
+The current unvalidated resource candidate adds six narrow reversible production
+slices after the 2026-08-08 regression capture:
+
+- ThreadManager task accounting no longer queues mutation records and periodic
+  statistics publication through the GUI thread. Admission and terminal ownership
+  counters remain exact and atomic; the ordinary COMPUTE executor and authored
+  visualizer cadence are unchanged.
+- Raw image prefetch is omitted when no planned scaled consumer needs it, and
+  display prescale now uses the ImageWorker before exact parent raw-decode fallback.
+- Terminal compositors retain only the authoritative current image texture and
+  release idle upload PBO storage in the owning GL context.
+- New PBOs no longer allocate full storage once at construction and immediately
+  orphan/reallocate the same storage on their first upload.
+- Usage evidence now separates whole/main/child private commit and USS in addition
+  to RSS. Collection remains a low-rate background `--usage` task.
+
+The latest resource detail gives these changes material targets: approximately
+235.7 MiB of historical transition textures, approximately 45.7 MiB of retained
+upload PBOs, and approximately 117.6 MiB of raw image forms alongside display-ready
+derivatives. These are expected reductions, not installed results. Phase 5 remains
+open until the same authored workload proves lower whole-app CPU/RSS/commit/VRAM.
+
+The perf-only frame-owner snapshot was retained deliberately. Its exact headless
+path measured approximately 6.5 microseconds per call, or about 0.15% of one core at
+the dual-display 225 Hz presentation ceiling. It provides useful owner correlation
+and is not a plausible explanation for the observed regression. Diagnostic evidence
+may not be deleted merely to improve a perf run; diagnostic delivery may likewise
+not create GUI scheduling work.
+
 - Latency authority/lifecycle resets and WARNING rate limiting removed the impossible uptime-linear ERROR flood. The newest generation-matched 83.6–125.8 ms WARNING samples track real delivery tails rather than stale uptime.
 - The attempted 60 submissions/s Bubble gate with maximum-two batching failed installed visual review and has been removed. The restored one-step lane-free path reached 50,106/50,106 offered/submitted work and is operator-validated for reaction and elasticity; Spectrum retains its existing shared newest-only path for now.
 - Ordinary unchanged media polling is a no-op, but one redundant unchanged publication remains after startup/rebuild.

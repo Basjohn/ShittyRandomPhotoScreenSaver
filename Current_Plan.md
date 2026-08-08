@@ -15,6 +15,7 @@ restored executor behaviour: 4bde89e8e39177dc4dd7b5e64b9ac99256ab9486
 rejected Spectrum smoothing: ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
 current approved visual behaviour: ff93461685476bd0657aa88312fc2e35e9037880
 current lifecycle/cache evidence code state: 3877b2c76791892cd5cb18c43d66a90a29c64d33
+current unvalidated Phase 5 resource candidate: faa0feee
 current audit-doc checkpoint: d7ddb9063ebf9c8a42739e541400a8508b2941bf
 latest preserved evidence: logs/evidence_chest/08_02_3877b2c7_20_27/
 latest mutable run: logs/ (2026-08-08 15:51:39 through 15:55:47, code state 927da57f)
@@ -100,13 +101,17 @@ shared GPU memory:        approximately 84–121 MiB
 - [!] The gap between tracked application-owned bytes and whole-process usage remains too large and must be attributed rather than dismissed as runtime/driver overhead.
 - [!] Multi-gigabyte private commit must be decomposed into resident private pages, mapped/reserved regions, child-process commitment, thread stacks, Qt/native allocations, driver mappings, and genuinely retained application state.
 - [x] Dedicated VRAM falls to roughly idle-driver levels during full display teardown, proving that deterministic GL deletion is broadly effective even though active steady-state VRAM remains excessive.
+- [x] The 2026-08-08 resource detail identified approximately 235.7 MiB of historical transition textures plus approximately 45.7 MiB of upload PBO storage retained after terminal presentation; ownership is now released at the terminal compositor boundary without changing transition frames.
+- [x] The same evidence identified approximately 117.6 MiB of raw cache forms alongside display-ready derivatives. Worker prescale is now attempted before parent raw decode, and raw prefetch is skipped when no planned scaled consumer needs it.
+- [x] Always-on ThreadManager mutation delivery no longer posts diagnostic/accounting work to the GUI thread. The ordinary general COMPUTE executor and visualizer authored/publication cadence are unchanged.
+- [ ] Installed evidence must confirm the expected whole-app reduction; tracked-byte or synthetic improvements alone do not close the resource gate.
 
 ## Required Work Order
 
-1. Repeat one installed dual-display Edit Save-and-Continue cycle against the pointer-width admission repair.
-2. Run at least five alternating installed Edit/Settings cycles and require clean ownership, first-frame/mode-switch poison protection, and equivalent-state resource plateau.
-3. Capture a controlled warm resource baseline with fixed displays, source images, cache state, transitions, widgets, duration, system load, and supported visualizer scenarios.
-4. Attribute the whole-app RAM/commit/VRAM gap by owner and representation, then implement only measured reductions that preserve visible output and responsiveness.
+1. Install the current Phase 5 resource candidate and repeat one dual-display Edit Save-and-Continue cycle against the pointer-width admission repair.
+2. Capture a controlled warm before/after resource baseline with fixed displays, source images, cache state, transitions, widgets, duration, system load, and supported visualizer scenarios; require material whole-app CPU/RSS/VRAM improvement without visual change.
+3. Run at least five alternating installed Edit/Settings cycles and require clean ownership, first-frame/mode-switch poison protection, and equivalent-state resource plateau.
+4. Use the new main/child commit and USS split to attribute any remaining whole-app RAM/commit gap, then implement only measured reductions that preserve visible output and responsiveness.
 5. Run the full lifecycle, memory plateau, image churn, and pressure matrix.
 6. Complete delivery-tail, unchanged-media, broader cache-representation, and logging work.
 7. Complete the stronger temporal golden package before any visualizer optimization or lane-scaffolding deletion.
@@ -278,6 +283,9 @@ Explicitly rejected unless separately re-proposed after new evidence:
 - [!] Median application CPU rose `79.3% -> 103.2%` while median compute submission cadence remained broadly comparable (`122.1/s -> 117.0/s`). Do not infer that reducing authored visualizer cadence is the correction.
 - [!] This is not a controlled code-regression comparison: the newest final runtime spent about 70% of its measured life rendering transitions versus about 35% in the comparator, and machine-wide CPU was commonly about 35–39% versus about 14–18%. The observed delivery failure is real, but attribution must separate workload/environment from code state.
 - [x] Parser 1.5 recovers the existing nested task-category counters even when `tm_delivery` follows them on the same line. The comparable high-rate intervals identify approximately `69–70/s` audio analysis plus `92–93/s` Bubble simulation in both runs, so task frequency itself did not newly increase.
+- [x] Remove the always-on ThreadManager mutation queue, GUI drain timer, and GUI-published statistics snapshot. Task accounting is now updated atomically at admission/terminal ownership boundaries with no per-completion UI callback.
+- [x] Preserve perf-only frame-owner attribution after measuring the exact passive snapshot at approximately `6.5 us/call`, projecting approximately `0.15%` of one core at a 225 Hz dual-display ceiling. Removing that evidence would not explain the observed CPU regression.
+- [ ] Installed evidence must confirm that the removed GUI accounting delivery reduces callback clustering/event-loop tails under the authored workload.
 - [ ] Attribute the increased cost per event-loop/delivery cycle and the approximately doubled owner-labelled gap count; current last-callback labels are mostly sub-millisecond and are correlation, not sufficient causal attribution.
 - [ ] Attribute remaining p99/max transition gaps before changing visualizer cadence or shader behaviour.
 - [ ] Reject repaint retries and transition-derived visualizer clocks.
@@ -292,7 +300,8 @@ Explicitly rejected unless separately re-proposed after new evidence:
 
 # P5.3 — Unchanged Media Work
 
-- [-] Prove unchanged polls perform no metadata publication, structural layout mutation, artwork work, or repaint.
+- [x] The latest run contains no recurring unchanged fixed-card publication signature; the changed-artwork layout refresh remains intentional.
+- [ ] Confirm the unchanged no-op in the next installed startup, transition, and long-idle capture.
 - [ ] Preserve changed-track responsiveness and transition-time static feedback.
 - [ ] Preserve startup artwork generation and reveal ordering.
 
@@ -385,7 +394,8 @@ private commit:     no unexplained multi-GiB commitment; every large region has 
 ## Required attribution before optimization
 
 - [ ] Capture cold, post-warm-up, active-transition, steady image, Settings-gap, post-Settings, and full-teardown snapshots under one fixed workload.
-- [ ] Record main and child process RSS, private working set where available, private bytes/commit, virtual/mapped/reserved regions, thread count/stack reservation, GDI/USER handles, dedicated/shared GPU memory, and sampler age.
+- [x] Add low-rate background collection and parser support for main/child RSS, main/child private commit, and main/child USS (private working-set proxy where available), retaining whole-app totals and sample age.
+- [ ] Record the new split in an installed run and continue attribution of virtual/mapped/reserved regions, thread-stack reservation, GDI/USER handles, and driver mappings where commitment remains unexplained.
 - [ ] Reconcile process totals against exact CPU cache, QImage/QPixmap/display backing, upload/staging buffers, textures, FBOs, PBOs, visualizer surfaces, transition resources, worker mappings, and passive ResourceManager records.
 - [ ] Split one-time warm-up/high-water retention from active live ownership and from true per-cycle growth.
 - [ ] Compare supported visualizer scenarios only to distinguish shared from genuinely mode-owned resources. Do not infer a mode-specific cause from whole-process totals.
@@ -395,8 +405,11 @@ private commit:     no unexplained multi-GiB commitment; every large region has 
 
 Only promote a candidate after its owner, bytes, lifetime, and visible role are measured:
 
-- [ ] Remove duplicate raw/decoded/orientation-corrected/scaled/QImage/QPixmap/upload representations where one immutable backing can safely serve the same transform/DPR identity.
-- [ ] Release transition source textures, temporary FBOs/PBOs, upload buffers, fallback frames, and resized resources immediately at their terminal owner boundary.
+- [x] Prefer ImageWorker prescale before exact local raw-decode fallback, avoiding simultaneous parent and worker full-image decode plus unnecessary raw-cache residency when a display-ready derivative is the consumer.
+- [x] Skip raw prefetch work when no planned scaled consumer is missing; preserve raw fallback when it remains the only useful result.
+- [x] Release historical transition textures and idle upload PBOs immediately at terminal presentation in their sole owner context; retain only the current authoritative image texture.
+- [x] Avoid allocating full PBO storage once at creation and immediately reallocating it for the first upload.
+- [ ] Confirm the candidate materially lowers whole-app RSS/commit/VRAM and does not increase decode misses, transition tails, or first-frame delay in installed evidence.
 - [ ] Deduplicate exact same-size/same-transform per-display image backing without collapsing different DPR or transform outputs.
 - [ ] Right-size prefetch and image-cache occupancy by measured hit rate, fallback cost, active-transition reserve, and future-byte pressure; do not create decode storms to save resident bytes.
 - [ ] Audit process-lifetime worker mappings, queue buffers, thread-pool/thread-stack reservation, callback history, metrics history, and log retention.
@@ -428,7 +441,8 @@ Every memory change must prove:
 - [x] Parse nested `tm_categories` independently of the trailing `tm_delivery` JSON so owner-rate attribution is not silently emitted as empty dictionaries.
 - [ ] Add one authoritative startup record distinguishing `main` and `main_mc`.
 - [ ] Add bounded CUSTOM admission diagnostics: request identity, queued turn, persist-complete timestamp, teardown-start timestamp, stale/duplicate rejection, and manager/shell weakref counts.
-- [ ] Add bounded resource-baseline summaries that separate physical resident RAM, private commit, private working set when available, child processes, tracked application bytes, dedicated VRAM, shared GPU memory, and sample age.
+- [x] Add bounded resource-baseline fields that separate whole/main/child RSS, private commit, and USS, while retaining tracked application bytes, dedicated/shared GPU memory, and sample age.
+- [ ] Use an installed capture to verify Windows field semantics and attribute the remaining multi-GiB commitment; do not treat `vms` and private commit as independent additive totals where Windows reports the same counter.
 - [ ] Deleted Qt-wrapper touches and worker callback failures must be visible as actionable warnings/errors, not only suppressed DEBUG traces.
 - [ ] Keep high-volume diagnostics bounded and passive.
 - [ ] All warnings and errors remain visible in `screensaver.log`.

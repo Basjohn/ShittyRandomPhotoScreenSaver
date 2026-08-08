@@ -311,6 +311,15 @@ Diagnostics are CLI-gated, sampled, fixed-memory, aggregated, non-overlapping, a
 
 No per-frame INFO logs or per-frame state dumps.
 
+Diagnostic evidence exists to make later optimization accurate. Do not delete or
+weaken a perf-only attribution path merely to improve its own measured run. Measure
+its cost first and preserve equivalent owner fields if the cost is material.
+
+Conversely, diagnostic bookkeeping may never create one GUI callback per event,
+change task admission, become presentation control flow, or remain active in an
+ordinary run merely because it was originally added for profiling. Remove that
+delivery overhead while retaining passive snapshots and bounded summaries.
+
 ### Memory and resources
 
 Byte-account:

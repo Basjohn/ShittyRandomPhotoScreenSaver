@@ -161,6 +161,19 @@ python tools/phase1_measurement_benchmark.py
 ```
 
 Use this bounded paired-method projection when changing Phase 1 collectors. It is not a substitute for a Qt/GL runtime comparison; pair it with the relevant enabled/disabled runtime-shaped test and retain the resulting Phase 1 report.
+
+Phase 5 scheduler-accounting and passive frame-owner projections:
+
+```powershell
+python tools/phase5_thread_manager_benchmark.py --duration-seconds 5 --tasks-per-second 165
+python tools/phase5_frame_owner_benchmark.py --invocations 50000 --repeats 7
+```
+
+The first runs the production general COMPUTE executor and reports process CPU plus
+queued/delivered UI callbacks. The second measures the exact perf-gated passive
+frame-owner snapshot and projects it at the 165 Hz + 60 Hz dual-display ceiling.
+Both are headless attribution aids; neither replaces installed visual, delivery,
+RSS/private-commit, or driver-VRAM evidence.
 For official comparisons, preserve:
 
 - raw logs;
