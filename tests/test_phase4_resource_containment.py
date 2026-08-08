@@ -212,7 +212,21 @@ def test_terminal_retention_log_is_transition_local_and_byte_aware(
     assert "pbo_uploads=2" in message
     assert "direct_uploads=0" in message
     assert "slow_upload_count=" in message
+    assert "interval_scope=manager_start_to_terminal" in message
+    assert "interval_texture_allocations=2" in message
+    assert "interval_texture_uploads=2" in message
+    assert "interval_pbo_creations=1" in message
+    assert "interval_pbo_reuses=1" in message
     assert manager._transition_metrics is None
+
+    # Production can prewarm between the previous terminal boundary and
+    # prepare_transition_textures().  Those operations must remain visible in
+    # the passive terminal-to-terminal interval even though the local bracket
+    # intentionally reports only transition-owned work.
+    assert manager.get_or_create_texture(new) == 52
+    retained_pbo = manager._get_or_create_pbo(200)
+    assert retained_pbo == 41
+    manager._release_pbo(retained_pbo)
 
     assert manager.prepare_transition_textures(new, new) is True
     manager.release_transition_textures(retain_active="new")
@@ -227,6 +241,12 @@ def test_terminal_retention_log_is_transition_local_and_byte_aware(
     assert "texture_deletions=0" in next_message
     assert "pbo_creations=0" in next_message
     assert "pbo_reuses=0" in next_message
+    assert "interval_scope=terminal_to_terminal" in next_message
+    assert "interval_texture_cache_hits=3" in next_message
+    assert "interval_texture_allocations=0" in next_message
+    assert "interval_texture_uploads=0" in next_message
+    assert "interval_pbo_creations=0" in next_message
+    assert "interval_pbo_reuses=1" in next_message
     assert info.call_count == 2
 
 

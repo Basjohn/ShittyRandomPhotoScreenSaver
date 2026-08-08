@@ -174,6 +174,7 @@ class ScreensaverEngine(QObject):
         # stack cannot publish into a newly-created stack.
         self._runtime_generation: int = 0
         self._pending_runtime_destruction_barrier = None
+        self._pending_settings_request_intent = None
         self._pending_custom_layout_reload_intent = None
         self._terminal_shutdown_requested = False
         self._active_settings_dialog = None
@@ -1549,8 +1550,8 @@ class ScreensaverEngine(QObject):
 
     def _on_settings_requested(self) -> None:
         """Delegates to engine.engine_handlers."""
-        from engine.engine_handlers import on_settings_requested
-        on_settings_requested(self)
+        from engine.engine_handlers import request_settings_requested
+        request_settings_requested(self)
 
     def _on_custom_layout_reload_requested(
         self,

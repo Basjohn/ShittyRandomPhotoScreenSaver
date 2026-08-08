@@ -1080,6 +1080,9 @@ class TestWidgetsTab:
         # Must set mode to sine_wave before saving sine-specific settings
         # (save_media_settings now only collects current mode's settings)
         first_tab.vis_mode_combo.setCurrentIndex(first_tab.vis_mode_combo.findData("sine_wave"))
+        first_tab._sine_preset_slider.set_preset_index(
+            first_tab._sine_preset_slider.custom_index()
+        )
         qt_app.processEvents()
 
         custom_glow = QColor(12, 34, 56, 200)
@@ -1105,6 +1108,13 @@ class TestWidgetsTab:
             return color.red(), color.green(), color.blue(), color.alpha()
 
         first_tab = WidgetsTab(settings_manager)
+        first_tab.vis_mode_combo.setCurrentIndex(
+            first_tab.vis_mode_combo.findData("spectrum")
+        )
+        first_tab._spectrum_preset_slider.set_preset_index(
+            first_tab._spectrum_preset_slider.custom_index()
+        )
+        qt_app.processEvents()
 
         custom_fill = QColor(90, 200, 145, 210)
         custom_border = QColor(30, 60, 90, 255)
@@ -1132,6 +1142,9 @@ class TestWidgetsTab:
 
         # Must set mode to oscilloscope before saving osc-specific settings
         first_tab.vis_mode_combo.setCurrentIndex(first_tab.vis_mode_combo.findData("oscilloscope"))
+        first_tab._osc_preset_slider.set_preset_index(
+            first_tab._osc_preset_slider.custom_index()
+        )
         qt_app.processEvents()
 
         custom_glow = QColor(33, 77, 190, 210)
@@ -1593,9 +1606,14 @@ def test_bubble_custom_snapshot_uses_live_ui_state_for_reactive_speed(qt_app, se
 def test_bubble_stream_reactivity_load_clamps_to_200(qt_app, settings_manager):
     tab = WidgetsTab(settings_manager)
     try:
+        custom_index = tab._bubble_preset_slider.custom_index()
         widgets_cfg = settings_manager.get("widgets", {}) or {}
         spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
-        spotify_vis["bubble_stream_reactivity"] = 2.75
+        spotify_vis.update({
+            "mode": "bubble",
+            "preset_bubble": custom_index,
+            "bubble_stream_reactivity": 2.75,
+        })
         settings_manager.set("widgets", widgets_cfg)
 
         tab._load_settings()
@@ -1768,16 +1786,39 @@ def test_move_to_custom_preserves_current_visualizer_colors(qt_app, settings_man
 
         tab._load_settings()
 
-        assert [tab._bubble_gradient_light.red(), tab._bubble_gradient_light.green(), tab._bubble_gradient_light.blue()] == [10, 20, 30]
+        resolved_light = [
+            tab._bubble_gradient_light.red(),
+            tab._bubble_gradient_light.green(),
+            tab._bubble_gradient_light.blue(),
+            tab._bubble_gradient_light.alpha(),
+        ]
+        resolved_dark = [
+            tab._bubble_gradient_dark.red(),
+            tab._bubble_gradient_dark.green(),
+            tab._bubble_gradient_dark.blue(),
+            tab._bubble_gradient_dark.alpha(),
+        ]
+        resolved_outline = [
+            tab._bubble_outline_color.red(),
+            tab._bubble_outline_color.green(),
+            tab._bubble_outline_color.blue(),
+            tab._bubble_outline_color.alpha(),
+        ]
+        assert resolved_light != [10, 20, 30, 255]
 
         slider.set_preset_index(0)
         slider._move_to_custom()
 
         cache = settings_manager.get("visualizer_custom_presets", {})
-        assert cache[mode]["bubble_gradient_light"] == [10, 20, 30, 255]
-        assert cache[mode]["bubble_gradient_dark"] == [40, 50, 60, 255]
-        assert cache[mode]["bubble_outline_color"] == [70, 80, 90, 255]
-        assert [tab._bubble_gradient_light.red(), tab._bubble_gradient_light.green(), tab._bubble_gradient_light.blue()] == [10, 20, 30]
+        assert cache[mode]["bubble_gradient_light"] == resolved_light
+        assert cache[mode]["bubble_gradient_dark"] == resolved_dark
+        assert cache[mode]["bubble_outline_color"] == resolved_outline
+        assert [
+            tab._bubble_gradient_light.red(),
+            tab._bubble_gradient_light.green(),
+            tab._bubble_gradient_light.blue(),
+            tab._bubble_gradient_light.alpha(),
+        ] == resolved_light
     finally:
         tab.deleteLater()
 
@@ -1828,6 +1869,119 @@ def test_move_to_custom_spectrum_flushes_custom_state_before_followup_edit(qt_ap
         assert custom_cache[mode]["spectrum_render_mode"] == "bars"
         assert custom_cache[mode]["spectrum_unique_colors"] is True
     finally:
+        tab.deleteLater()
+
+
+def test_spectrum_smoothing_edit_forks_curated_state_and_survives_recreation(
+    qt_app,
+    settings_manager,
+):
+    """A smoothing edit must copy the live preset, never restore stale Custom."""
+    from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
+
+    mode = "spectrum"
+    widgets_cfg = settings_manager.get("widgets", {}) or {}
+    spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
+    spotify_vis.update(
+        {
+            "mode": mode,
+            "preset_spectrum": 0,
+            "spectrum_visual_smoothing_enabled": True,
+            "spectrum_visual_smoothing": 0.50,
+            # Stale underlying values from the live MC settings file. Runtime
+            # correctly replaced these with Organs, but Settings previously
+            # displayed and copied them into Custom.
+            "spectrum_bar_count": 33,
+            "spectrum_sensitivity": 0.40,
+            "spectrum_manual_floor": 0.12,
+            "spectrum_audio_block_size": 512,
+        }
+    )
+    settings_manager.set("widgets", widgets_cfg)
+    settings_manager.set(
+        "visualizer_custom_presets",
+        {
+            mode: {
+                "mode": mode,
+                "spectrum_bar_count": 33,
+                "spectrum_sensitivity": 0.40,
+                "spectrum_manual_floor": 0.12,
+                "spectrum_audio_block_size": 512,
+                "spectrum_visual_smoothing_enabled": True,
+                "spectrum_visual_smoothing": 0.90,
+            }
+        },
+    )
+
+    tab = WidgetsTab(settings_manager)
+    recreated = None
+    try:
+        tab._load_settings()
+        slider = tab._spectrum_preset_slider
+        custom_index = slider.custom_index()
+        controls = get_per_mode_controls_for_mode(tab, mode)
+        assert controls is not None
+        curated_state = {
+            "bar_count": controls["bar_count"].value(),
+            "sensitivity": controls["sensitivity_slider"].value() / 100.0,
+            "manual_floor": controls["manual_floor"].value() / 100.0,
+            "block_size": controls["block_size"].currentData(),
+        }
+        assert curated_state == {
+            "bar_count": 35,
+            "sensitivity": 0.97,
+            "manual_floor": 0.42,
+            "block_size": 128,
+        }
+        assert curated_state != {
+            "bar_count": 33,
+            "sensitivity": 0.40,
+            "manual_floor": 0.12,
+            "block_size": 512,
+        }
+
+        # This is the exact explicit-button route from the live MC evidence
+        # (22:25:45): fork first, then tune smoothing while Custom is active.
+        slider._move_to_custom()
+        tab.spectrum_visual_smoothing.setValue(70)
+        tab._save_settings_now()
+
+        saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+        custom = settings_manager.get("visualizer_custom_presets", {})[mode]
+        assert slider.preset_index() == custom_index
+        assert saved["preset_spectrum"] == custom_index
+        assert saved["spectrum_visual_smoothing_enabled"] is True
+        assert saved["spectrum_visual_smoothing"] == pytest.approx(0.70)
+        assert custom["spectrum_visual_smoothing"] == pytest.approx(0.70)
+        assert custom["spectrum_bar_count"] == curated_state["bar_count"]
+        assert custom["spectrum_sensitivity"] == pytest.approx(
+            curated_state["sensitivity"]
+        )
+        assert custom["spectrum_manual_floor"] == pytest.approx(
+            curated_state["manual_floor"]
+        )
+        assert custom["spectrum_audio_block_size"] == curated_state["block_size"]
+
+        # Reconstruct the Settings tab as the runtime Settings-close workflow
+        # does, and require the filter controls plus technical state to replay.
+        recreated = WidgetsTab(settings_manager)
+        recreated._load_settings()
+        recreated_controls = get_per_mode_controls_for_mode(recreated, mode)
+        assert recreated_controls is not None
+        assert recreated._spectrum_preset_slider.preset_index() == custom_index
+        assert recreated.spectrum_visual_smoothing_enabled.isChecked() is True
+        assert recreated.spectrum_visual_smoothing.value() == 70
+        assert recreated_controls["bar_count"].value() == curated_state["bar_count"]
+        assert recreated_controls["sensitivity_slider"].value() == round(
+            curated_state["sensitivity"] * 100
+        )
+        assert recreated_controls["manual_floor"].value() == round(
+            curated_state["manual_floor"] * 100
+        )
+        assert recreated_controls["block_size"].currentData() == curated_state["block_size"]
+    finally:
+        if recreated is not None:
+            recreated.deleteLater()
         tab.deleteLater()
 
 
@@ -2068,10 +2222,11 @@ def test_build_visualizer_preset_payload_strips_retired_compat_keys_for_all_mode
 def test_build_current_widgets_config_uses_live_visualizer_builder(qt_app, settings_manager):
     tab = WidgetsTab(settings_manager)
     try:
+        custom_index = tab._bubble_preset_slider.custom_index()
         widgets_cfg = settings_manager.get("widgets", {}) or {}
         widgets_cfg["spotify_visualizer"] = {
             "mode": "bubble",
-            "preset_bubble": 2,
+            "preset_bubble": custom_index,
             "bubble_gradient_direction": "center_out_reverse",
             "bubble_gradient_semantics_version": 2,
             "bubble_big_bass_pulse": 0.72,

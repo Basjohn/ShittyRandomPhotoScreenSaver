@@ -467,7 +467,8 @@ def stop(
                 if isinstance(cache_flow, dict):
                     logger.info(
                         "[PERF] [CACHE] ImageCacheFlow: raw_hits=%d raw_misses=%d scaled_hits=%d "
-                        "scaled_misses=%d worker_fallbacks=%d scaled_prefetch_requests=%d "
+                        "scaled_misses=%d worker_requests=%d worker_fallbacks=%d "
+                        "scaled_prefetch_requests=%d "
                         "scaled_prefetch_completed=%d scaled_derivations=%d "
                         "raw_released_after_scaled=%d raw_prefetch_paths=%d "
                         "raw_prefetch_skipped_display_ready=%d "
@@ -477,6 +478,7 @@ def stop(
                         int(cache_flow.get("raw_misses", 0)),
                         int(cache_flow.get("scaled_hits", 0)),
                         int(cache_flow.get("scaled_misses", 0)),
+                        int(cache_flow.get("worker_requests", 0)),
                         int(cache_flow.get("worker_fallbacks", 0)),
                         int(cache_flow.get("scaled_prefetch_requests", 0)),
                         int(cache_flow.get("scaled_prefetch_completed", 0)),

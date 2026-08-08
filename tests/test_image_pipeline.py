@@ -432,9 +432,15 @@ def test_worker_success_does_not_decode_or_cache_redundant_raw(
     assert str(path) not in store
     assert len(puts) == 1
     assert "|scaled:" in puts[0]
+    assert engine._cache_runtime_stats["worker_requests"] == 1
+    assert engine._cache_runtime_stats["worker_fallbacks"] == 0
 
 
-def test_worker_failure_preserves_parent_raw_decode_fallback(tmp_path, monkeypatch):
+def test_worker_failure_preserves_parent_raw_decode_fallback(
+    tmp_path,
+    monkeypatch,
+    caplog,
+):
     path = tmp_path / "worker-fallback.png"
     source = _solid_qimage(8, 8, QColor("purple"))
     assert source.save(str(path))
@@ -469,6 +475,10 @@ def test_worker_failure_preserves_parent_raw_decode_fallback(tmp_path, monkeypat
     assert result is not None
     assert str(path) in store
     assert any("|scaled:" in key for key in store)
+    assert engine._cache_runtime_stats["worker_requests"] == 1
+    assert engine._cache_runtime_stats["worker_fallbacks"] == 1
+    assert "[CACHE] [FALLBACK] Worker fallback display=0" in caplog.text
+    assert "reason=worker_rejected raw_state=raw_missing" in caplog.text
 
 
 def test_previous_async_reports_rejection_when_submit_and_fallback_fail(

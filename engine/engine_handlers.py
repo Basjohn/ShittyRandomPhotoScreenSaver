@@ -40,6 +40,14 @@ class CustomLayoutReloadIntent:
     display_manager_identity: int
 
 
+@dataclass(frozen=True, slots=True)
+class SettingsRequestIntent:
+    """Primitive-only handoff from a display input frame to the engine turn."""
+
+    runtime_generation: int
+    display_manager_identity: int
+
+
 def _qobject_wrapper_is_valid(value: object) -> bool:
     """Return whether a Python QObject wrapper still owns a live C++ object."""
 
@@ -124,6 +132,98 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
 # ------------------------------------------------------------------
 # Settings dialog (S key)
 # ------------------------------------------------------------------
+
+def request_settings_requested(engine: ScreensaverEngine) -> None:
+    """Queue Settings admission after the emitting display input frame returns.
+
+    Destroying the display graph synchronously inside ``DisplayWidget``'s key
+    event / Qt signal stack is undefined native ownership. Script builds can
+    appear to tolerate it while frozen PySide builds terminate in Qt. Carry
+    only primitive runtime identity into a zero-delay engine-owned callback,
+    then validate that identity before invoking the existing teardown owner.
+    """
+    if (
+        bool(getattr(engine, "_settings_dialog_active", False))
+        or getattr(engine, "_pending_runtime_destruction_barrier", None) is not None
+    ):
+        logger.info(
+            "[LIFECYCLE] Duplicate Settings request ignored while recreation is active"
+        )
+        return
+
+    manager = getattr(engine, "display_manager", None)
+    if manager is None or not bool(getattr(engine, "_display_initialized", False)):
+        logger.info(
+            "[LIFECYCLE] Stale Settings request ignored without a current display runtime"
+        )
+        return
+
+    intent = SettingsRequestIntent(
+        runtime_generation=int(
+            getattr(
+                manager,
+                "_runtime_generation",
+                getattr(engine, "_runtime_generation", -1),
+            )
+        ),
+        display_manager_identity=id(manager),
+    )
+    pending = getattr(engine, "_pending_settings_request_intent", None)
+    if pending is not None:
+        logger.info(
+            "[LIFECYCLE] Duplicate Settings admission ignored pending=%s requested=%s",
+            pending,
+            intent,
+        )
+        return
+
+    engine._pending_settings_request_intent = intent
+    logger.info(
+        "Settings request queued generation=%s manager=%s",
+        intent.runtime_generation,
+        intent.display_manager_identity,
+    )
+    ThreadManager.single_shot(
+        0,
+        partial(_admit_settings_requested, engine, intent),
+    )
+
+
+def _admit_settings_requested(
+    engine: ScreensaverEngine,
+    intent: SettingsRequestIntent,
+) -> None:
+    """Validate and admit Settings after the originating input frame returns."""
+    if getattr(engine, "_pending_settings_request_intent", None) != intent:
+        logger.info("[LIFECYCLE] Superseded Settings admission rejected")
+        return
+    engine._pending_settings_request_intent = None
+
+    manager = getattr(engine, "display_manager", None)
+    if (
+        bool(getattr(engine, "_terminal_shutdown_requested", False))
+        or bool(getattr(engine, "_settings_dialog_active", False))
+        or getattr(engine, "_pending_runtime_destruction_barrier", None) is not None
+        or manager is None
+        or not bool(getattr(engine, "_display_initialized", False))
+        or int(getattr(manager, "_runtime_generation", -1))
+        != intent.runtime_generation
+        or id(manager) != intent.display_manager_identity
+    ):
+        logger.info(
+            "[LIFECYCLE] Settings admission rejected after runtime ownership changed "
+            "generation=%s manager=%s",
+            intent.runtime_generation,
+            intent.display_manager_identity,
+        )
+        return
+
+    logger.info(
+        "Settings request admitted generation=%s manager=%s",
+        intent.runtime_generation,
+        intent.display_manager_identity,
+    )
+    on_settings_requested(engine)
 
 def on_settings_requested(engine: ScreensaverEngine) -> None:
     """Handle settings request (S key)."""

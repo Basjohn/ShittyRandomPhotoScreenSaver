@@ -18,6 +18,10 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.settings.visualizer_presets import (
+    apply_preset_to_config,
+    resolve_preset_index_from_mapping,
+)
 from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 from ui.styled_popup import ColorSwatchButton
@@ -829,13 +833,44 @@ def load_visualizer_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
                 )
 
     widgets = widgets or {}
-    spotify_vis_config = widgets.get('spotify_visualizer', {}) if isinstance(widgets, dict) else {}
+    raw_spotify_vis_config = (
+        widgets.get('spotify_visualizer', {}) if isinstance(widgets, dict) else {}
+    )
+    spotify_vis_config = (
+        dict(raw_spotify_vis_config)
+        if isinstance(raw_spotify_vis_config, dict)
+        else {}
+    )
+    active_vis_mode = (
+        str(spotify_vis_config.get('mode', 'spectrum')).strip().lower()
+        or 'spectrum'
+    )
+    active_preset_index = resolve_preset_index_from_mapping(
+        active_vis_mode,
+        spotify_vis_config,
+    )
+    # Runtime applies curated presets before constructing the visualizer.  The
+    # Settings controls must display that same authoritative state; otherwise
+    # Move To Custom snapshots stale underlying values that were never active
+    # in runtime (observed in the 2026-08-08 main_mc evidence).
+    resolved_spotify_vis_config = apply_preset_to_config(
+        active_vis_mode,
+        active_preset_index,
+        spotify_vis_config,
+    )
+    if resolved_spotify_vis_config != spotify_vis_config:
+        logger.debug(
+            "[VIS_PRESETS] Settings load applied runtime-authoritative preset "
+            "mode=%s index=%d",
+            active_vis_mode,
+            active_preset_index,
+        )
+    spotify_vis_config = resolved_spotify_vis_config
     tab.vis_enabled_checkbox.setChecked(
         tab._config_bool('spotify_visualizer', spotify_vis_config, 'enabled', True)
     )
     load_per_mode_technical_controls(tab, spotify_vis_config)
 
-    active_vis_mode = str(spotify_vis_config.get('mode', 'spectrum')).strip().lower() or 'spectrum'
     fill_color_key = f'{active_vis_mode}_bar_fill_color'
     border_color_key = f'{active_vis_mode}_bar_border_color'
     border_opacity_key = f'{active_vis_mode}_bar_border_opacity'

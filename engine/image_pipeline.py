@@ -174,6 +174,7 @@ def _ensure_cache_runtime_stats(engine: ScreensaverEngine) -> Dict[str, int]:
         "raw_misses": 0,
         "scaled_hits": 0,
         "scaled_misses": 0,
+        "worker_requests": 0,
         "worker_fallbacks": 0,
         "prefetch_resume_scheduled": 0,
         "prefetch_resume_runs": 0,
@@ -985,7 +986,7 @@ def _process_display_image_candidate(
 
     if processed_qimage is None:
         if worker_available:
-            _bump_cache_runtime_stat(engine, "worker_fallbacks")
+            _bump_cache_runtime_stat(engine, "worker_requests")
             worker_qimage = load_image_via_worker(
                 engine,
                 img_path,
@@ -997,13 +998,24 @@ def _process_display_image_candidate(
             )
             if worker_qimage is not None and not worker_qimage.isNull():
                 processed_qimage = worker_qimage
-            elif qimage is None or qimage.isNull():
+            else:
+                _bump_cache_runtime_stat(engine, "worker_fallbacks")
+                raw_state = (
+                    "raw_hit"
+                    if qimage is not None and not qimage.isNull()
+                    else "raw_missing"
+                )
                 logger.warning(
-                    "%s ImageWorker rejected candidate for display %d; "
-                    "using parent decode fallback: %s",
-                    TAG_ASYNC,
+                    "[CACHE] [FALLBACK] Worker fallback display=%d "
+                    "reason=worker_rejected raw_state=%s %s "
+                    "path=%s target=%dx%d mode=%s",
                     display_index,
+                    raw_state,
+                    _describe_prefetcher_state(engine),
                     img_path,
+                    width,
+                    height,
+                    display_mode_str,
                 )
 
         if processed_qimage is None:

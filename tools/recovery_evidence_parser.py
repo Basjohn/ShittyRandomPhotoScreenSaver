@@ -19,9 +19,10 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.5"
+PARSER_VERSION = "1.6"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
+_LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
 _KV_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>[^,\s]+)")
 _FRAME_RE = re.compile(
     r"\[GL (?P<kind>RENDER|PAINT|ANIM)\](?P<label>.*?)"
@@ -150,10 +151,21 @@ def _file_hash(path: Path) -> str:
     return digest.hexdigest().upper()
 
 
+def _log_file_identity(path: Path) -> tuple[str, int] | None:
+    match = _LOG_FILE_RE.match(path.name)
+    if match is None:
+        return None
+    return match.group("base"), int(match.group("rotation") or 0)
+
+
 def _directory_hash(path: Path) -> str:
     digest = hashlib.sha256()
     for log_path in sorted(
-        path.rglob("*.log"),
+        (
+            candidate
+            for candidate in path.rglob("*")
+            if candidate.is_file() and _log_file_identity(candidate) is not None
+        ),
         key=lambda item: item.relative_to(path).as_posix().lower(),
     ):
         relative = log_path.relative_to(path).as_posix()
@@ -170,32 +182,55 @@ def _source_hash(path: Path) -> str:
 
 
 def _read_source(path: Path) -> tuple[dict[str, list[str]], dict[str, int]]:
-    logs: dict[str, list[str]] = {}
+    rotated_logs: dict[str, dict[int, list[str]]] = {}
     sizes: dict[str, int] = {}
+
+    def add_log(name: str, text: str, size: int) -> None:
+        identity = _log_file_identity(Path(name))
+        if identity is None:
+            return
+        base, rotation = identity
+        versions = rotated_logs.setdefault(base, {})
+        if rotation in versions:
+            raise ValueError(f"Duplicate log rotation in evidence source: {name}")
+        versions[rotation] = text.splitlines()
+        sizes[Path(name).name] = size
+
     if path.is_dir():
         for log_path in sorted(
-            path.rglob("*.log"),
+            (
+                candidate
+                for candidate in path.rglob("*")
+                if candidate.is_file()
+                and _log_file_identity(candidate) is not None
+            ),
             key=lambda item: item.relative_to(path).as_posix().lower(),
         ):
-            name = log_path.name
-            if name in logs:
-                raise ValueError(
-                    f"Duplicate log basename in evidence folder: {name}"
-                )
             text = log_path.read_text(encoding="utf-8", errors="replace")
-            logs[name] = text.splitlines()
-            sizes[name] = log_path.stat().st_size
-        return logs, sizes
+            add_log(log_path.name, text, log_path.stat().st_size)
+        return {
+            base: [
+                line
+                for rotation in sorted(versions, reverse=True)
+                for line in versions[rotation]
+            ]
+            for base, versions in rotated_logs.items()
+        }, sizes
 
     with zipfile.ZipFile(path) as archive:
         for info in archive.infolist():
-            if info.is_dir() or not info.filename.lower().endswith(".log"):
+            if info.is_dir() or _log_file_identity(Path(info.filename)) is None:
                 continue
-            name = Path(info.filename).name
             text = archive.read(info).decode("utf-8", errors="replace")
-            logs[name] = text.splitlines()
-            sizes[name] = info.file_size
-    return logs, sizes
+            add_log(Path(info.filename).name, text, info.file_size)
+    return {
+        base: [
+            line
+            for rotation in sorted(versions, reverse=True)
+            for line in versions[rotation]
+        ]
+        for base, versions in rotated_logs.items()
+    }, sizes
 
 
 def _parse_usage(
@@ -709,6 +744,8 @@ def _parse_phase5_telemetry(
                     "raw_misses": _integer(values.get("raw_misses")),
                     "scaled_hits": _integer(values.get("scaled_hits")),
                     "scaled_misses": _integer(values.get("scaled_misses")),
+                    "worker_requests": _integer(values.get("worker_requests")),
+                    "worker_fallbacks": _integer(values.get("worker_fallbacks")),
                     "qobjects": _integer(values.get("qobjects")),
                     "python_owners": _integer(values.get("python_owners")),
                     "values_json": json.dumps(values, separators=(",", ":"), sort_keys=True),
@@ -853,6 +890,7 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
         },
         "assumptions": [
             "Canonical sidecar logs are parsed by category to avoid double-counting verbose-log duplicates.",
+            "Rotated sidecars are joined oldest rotation first, followed by the active .log file.",
             "Task rates are deltas between cumulative usage-sampler counters.",
             "Frame rows are aggregate metric windows; the archives do not contain every raw frame interval.",
             "Unknown non-empty lines are retained verbatim in unknown_lines.txt.",
@@ -1048,6 +1086,8 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                 "scaled_items": _metric_summary(row.get("scaled_items") for row in phase5_rows if row["kind"] == "cache_representations"),
                 "raw_hits": _metric_summary(row.get("raw_hits") for row in phase5_rows if row["kind"] == "cache_flow"),
                 "scaled_hits": _metric_summary(row.get("scaled_hits") for row in phase5_rows if row["kind"] == "cache_flow"),
+                "worker_requests": _metric_summary(row.get("worker_requests") for row in phase5_rows if row["kind"] == "cache_flow"),
+                "worker_fallbacks": _metric_summary(row.get("worker_fallbacks") for row in phase5_rows if row["kind"] == "cache_flow"),
             },
             "lifecycle_barrier": {
                 "armed": sum(row["kind"] == "lifecycle_barrier" and row["barrier_event"] == "armed" for row in phase5_rows),

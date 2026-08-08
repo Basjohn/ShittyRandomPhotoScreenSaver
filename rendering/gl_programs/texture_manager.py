@@ -130,6 +130,12 @@ class GLTextureManager:
         self._direct_slow_upload_count = 0
         self._direct_slow_upload_total_ms = 0.0
         self._transition_metrics: Optional[dict[str, int | float]] = None
+        # Production prewarms textures before ``prepare_transition_textures``.
+        # Keep a second passive window from one terminal boundary to the next
+        # so those real allocations/uploads/PBO operations are attributable.
+        self._terminal_interval_metrics: dict[str, int | float] = {
+            name: 0 for name in self._TRANSITION_METRIC_NAMES
+        }
         
         # Current transition textures
         self._old_tex_id: int = 0
@@ -175,9 +181,25 @@ class GLTextureManager:
         name: str,
         value: int | float = 1,
     ) -> None:
+        interval_metrics = self._terminal_interval_metrics
+        interval_metrics[name] = interval_metrics.get(name, 0) + value
         metrics = self._transition_metrics
         if metrics is not None:
             metrics[name] = metrics.get(name, 0) + value
+
+    def _record_transition_metric_max(
+        self,
+        name: str,
+        value: int | float,
+    ) -> None:
+        interval_metrics = self._terminal_interval_metrics
+        interval_metrics[name] = max(
+            float(interval_metrics.get(name, 0)),
+            float(value),
+        )
+        metrics = self._transition_metrics
+        if metrics is not None:
+            metrics[name] = max(float(metrics.get(name, 0)), float(value))
 
     def _record_texture_deletion(self, tracked_bytes: int = 0) -> None:
         tracked_bytes = max(0, int(tracked_bytes))
@@ -346,11 +368,7 @@ class GLTextureManager:
         self._record_transition_metric("texture_uploads")
         self._record_transition_metric("upload_bytes", data_size)
         self._record_transition_metric("upload_total_ms", _upload_elapsed)
-        if self._transition_metrics is not None:
-            self._transition_metrics["upload_max_ms"] = max(
-                float(self._transition_metrics["upload_max_ms"]),
-                _upload_elapsed,
-            )
+        self._record_transition_metric_max("upload_max_ms", _upload_elapsed)
         if _upload_elapsed > self.UPLOAD_STALL_THRESHOLD_MS:
             self._slow_upload_count += 1
             self._slow_upload_total_ms += _upload_elapsed
@@ -360,11 +378,10 @@ class GLTextureManager:
             )
             self._record_transition_metric("slow_upload_count")
             self._record_transition_metric("slow_upload_total_ms", _upload_elapsed)
-            if self._transition_metrics is not None:
-                self._transition_metrics["slow_upload_max_ms"] = max(
-                    float(self._transition_metrics["slow_upload_max_ms"]),
-                    _upload_elapsed,
-                )
+            self._record_transition_metric_max(
+                "slow_upload_max_ms",
+                _upload_elapsed,
+            )
             if use_pbo:
                 self._pbo_slow_upload_count += 1
                 self._pbo_slow_upload_total_ms += _upload_elapsed
@@ -606,6 +623,12 @@ class GLTextureManager:
             metrics = self._transition_metrics or {
                 name: 0 for name in self._TRANSITION_METRIC_NAMES
             }
+            interval_metrics = self._terminal_interval_metrics
+            interval_scope = (
+                "manager_start_to_terminal"
+                if stats["terminal_transitions"] == 1
+                else "terminal_to_terminal"
+            )
             logger.info(
                 "[PERF] [GL RETENTION] owner=%s terminal=%d retain_active=%s "
                 "retained_texture=%d texture_count=%d texture_bytes=%d "
@@ -621,7 +644,21 @@ class GLTextureManager:
                 "slow_upload_count=%d slow_upload_total_ms=%.2f "
                 "slow_upload_max_ms=%.2f pbo_slow_upload_count=%d "
                 "pbo_slow_upload_total_ms=%.2f direct_slow_upload_count=%d "
-                "direct_slow_upload_total_ms=%.2f",
+                "direct_slow_upload_total_ms=%.2f interval_scope=%s "
+                "interval_texture_cache_hits=%d interval_texture_allocations=%d "
+                "interval_texture_allocation_bytes=%d interval_texture_uploads=%d "
+                "interval_texture_upload_failures=%d interval_upload_bytes=%d "
+                "interval_texture_deletions=%d interval_texture_deleted_bytes=%d "
+                "interval_pbo_creations=%d interval_pbo_created_bytes=%d "
+                "interval_pbo_reuses=%d interval_pbo_deletions=%d "
+                "interval_pbo_deleted_bytes=%d interval_pbo_uploads=%d "
+                "interval_direct_uploads=%d interval_upload_total_ms=%.2f "
+                "interval_upload_max_ms=%.2f interval_slow_upload_count=%d "
+                "interval_slow_upload_total_ms=%.2f interval_slow_upload_max_ms=%.2f "
+                "interval_pbo_slow_upload_count=%d "
+                "interval_pbo_slow_upload_total_ms=%.2f "
+                "interval_direct_slow_upload_count=%d "
+                "interval_direct_slow_upload_total_ms=%.2f",
                 self._owner,
                 stats["terminal_transitions"],
                 retain_active,
@@ -656,7 +693,36 @@ class GLTextureManager:
                 metrics["pbo_slow_upload_total_ms"],
                 metrics["direct_slow_upload_count"],
                 metrics["direct_slow_upload_total_ms"],
+                interval_scope,
+                interval_metrics["texture_cache_hits"],
+                interval_metrics["texture_allocations"],
+                interval_metrics["texture_allocation_bytes"],
+                interval_metrics["texture_uploads"],
+                interval_metrics["texture_upload_failures"],
+                interval_metrics["upload_bytes"],
+                interval_metrics["texture_deletions"],
+                interval_metrics["texture_deleted_bytes"],
+                interval_metrics["pbo_creations"],
+                interval_metrics["pbo_created_bytes"],
+                interval_metrics["pbo_reuses"],
+                interval_metrics["pbo_deletions"],
+                interval_metrics["pbo_deleted_bytes"],
+                interval_metrics["pbo_uploads"],
+                interval_metrics["direct_uploads"],
+                interval_metrics["upload_total_ms"],
+                interval_metrics["upload_max_ms"],
+                interval_metrics["slow_upload_count"],
+                interval_metrics["slow_upload_total_ms"],
+                interval_metrics["slow_upload_max_ms"],
+                interval_metrics["pbo_slow_upload_count"],
+                interval_metrics["pbo_slow_upload_total_ms"],
+                interval_metrics["direct_slow_upload_count"],
+                interval_metrics["direct_slow_upload_total_ms"],
             )
+        if retain_active in {"new", "old"}:
+            self._terminal_interval_metrics = {
+                name: 0 for name in self._TRANSITION_METRIC_NAMES
+            }
         self._transition_metrics = None
     
     def has_transition_textures(self) -> bool:

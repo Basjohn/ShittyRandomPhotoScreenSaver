@@ -122,7 +122,8 @@ def _write_archive(path: Path) -> None:
             "idempotent_puts_avoided=2",
             "2026-07-23 19:38:11 - metrics - INFO - "
             "[PERF] [CACHE] ImageCacheFlow: raw_hits=8 raw_misses=2 scaled_hits=6 "
-            "scaled_misses=3 worker_fallbacks=1 scaled_prefetch_requests=4 "
+            "scaled_misses=3 worker_requests=4 worker_fallbacks=1 "
+            "scaled_prefetch_requests=4 "
             "scaled_prefetch_completed=3 scaled_derivations=2 raw_released_after_scaled=1 "
             "scaled_reuses_without_put=5 prefetch_resume_scheduled=1 prefetch_resume_runs=1",
         ]
@@ -191,6 +192,8 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
         "unchanged_refresh_suppressed": 1,
     }
     assert analysis.summary["phase5"]["cache"]["raw_hits"]["maximum"] == 8.0
+    assert analysis.summary["phase5"]["cache"]["worker_requests"]["maximum"] == 4.0
+    assert analysis.summary["phase5"]["cache"]["worker_fallbacks"]["maximum"] == 1.0
     assert analysis.summary["phase5"]["lifecycle_barrier"]["complete"] == 1
     assert len(analysis.errors_and_warnings) == 2
 
@@ -243,3 +246,41 @@ def test_analyze_plain_evidence_subfolder_without_archive(tmp_path: Path) -> Non
     assert analysis.summary["source_path"] == str(evidence_dir.resolve())
     assert analysis.summary["source_sha256"]
     assert analysis.summary["counts"]["usage_samples"] == 2
+
+
+def test_plain_evidence_parser_includes_rotated_sidecars_in_chronological_order(
+    tmp_path: Path,
+) -> None:
+    evidence_dir = tmp_path / "rotated_evidence"
+    evidence_dir.mkdir()
+    (evidence_dir / "screensaver_perf.log.1").write_text(
+        "2026-08-08 21:50:00 - metrics - INFO - "
+        "[PERF] [GL PAINT] Slide metrics: screen=0, frames=10, "
+        "avg_fps=20.0, dt_max=80.0ms, target_fps=60, outcome=completed\n",
+        encoding="utf-8",
+    )
+    (evidence_dir / "screensaver_perf.log").write_text(
+        "2026-08-08 22:05:00 - metrics - INFO - "
+        "[PERF] [GL PAINT] Slide metrics: screen=0, frames=60, "
+        "avg_fps=60.0, dt_max=20.0ms, target_fps=60, outcome=completed\n",
+        encoding="utf-8",
+    )
+
+    analysis = analyze_evidence_source(evidence_dir)
+
+    assert [row["timestamp"] for row in analysis.frame_rows] == [
+        "2026-08-08 21:50:00",
+        "2026-08-08 22:05:00",
+    ]
+    assert analysis.summary["time_range"] == {
+        "first": "2026-08-08 21:50:00",
+        "last": "2026-08-08 22:05:00",
+    }
+    assert analysis.summary["source_files"] == {
+        "screensaver_perf.log": (
+            evidence_dir / "screensaver_perf.log"
+        ).stat().st_size,
+        "screensaver_perf.log.1": (
+            evidence_dir / "screensaver_perf.log.1"
+        ).stat().st_size,
+    }
