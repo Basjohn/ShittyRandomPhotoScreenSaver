@@ -443,9 +443,10 @@ class GLTextureManager:
             pbo = gl.glGenBuffers(1)
             pbo_id = int(pbo)
             if pbo_id > 0:
-                gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, pbo_id)
-                gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, required_size, None, gl.GL_STREAM_DRAW)
-                gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
+                # Storage is allocated exactly once by ``upload_pixmap`` after
+                # this name is returned. Allocating here and then immediately
+                # orphaning in the caller duplicated a full-frame driver
+                # allocation for every newly-created staging buffer.
                 entry = PBOEntry(pbo_id, required_size, True)
                 self._pbo_pool.append(entry)
                 

@@ -217,6 +217,8 @@ class TestPassiveGLAccounting:
         assert kwargs["format"] == "PIXEL_UNPACK_BUFFER"
         assert kwargs["tracked_bytes"] == 4097
         assert manager._pbo_pool[0].resource_id == "pbo-rid"
+        fake_gl.glBufferData.assert_not_called()
+        fake_gl.glBindBuffer.assert_not_called()
 
     def test_quad_vbo_registration_records_exact_requested_bytes(self, monkeypatch):
         from unittest.mock import MagicMock
