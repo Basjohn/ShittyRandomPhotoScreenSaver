@@ -1,6 +1,6 @@
 # Project Overview
 
-Last updated: 2026-07-23
+Last updated: 2026-08-09
 
 ## What SRPSS Is
 
@@ -23,7 +23,7 @@ Do **not** read the entire documentation tree for every task.
 4. Read `Spec.md` only when changing stable architecture or product behaviour.
 5. Read `Current_Plan.md` only when working on active planned work.
 6. Read focused documents only for the subsystem being changed.
-7. Read `Docs/Historical_Bugs.md` when touching a fragile area with prior regressions.
+7. Read `Docs/Historical_Bugs/README.md` when touching a fragile area with prior regressions.
 
 For compositor recovery work, also read:
 
@@ -43,7 +43,8 @@ For compositor recovery work, also read:
 | `Docs/Compositor_Architecture.md` | Compositor recovery and target design |
 | `Docs/TestSuite.md` | Testing levels and release bars |
 | `Docs/Harness_Index.md` | Commands for recurring investigations |
-| `Docs/Historical_Bugs.md` | Dated regression narratives and lessons |
+| `Docs/Historical_Bugs/README.md` | Historical incident index and full standalone records |
+| `Docs/Historical_Bugs.md` | Compact historical status/navigation map |
 | `Docs/Documentation_Maintenance.md` | Documentation drift and size control |
 
 ## Core Engineering Priorities
