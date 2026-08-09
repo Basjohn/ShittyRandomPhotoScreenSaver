@@ -1,0 +1,93 @@
+# U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)
+
+## Classification
+
+- [x] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Current symptom matrix (2026-04-23 user validation):**
+  - **MC runtime (`main_mc.py`) after clicking into SRPSS window (any display/setup):**
+    - Media keys fail while SRPSS remains focused.
+    - Media keys begin working again when focus shifts to another application.
+    - Normal control keys do not work in this state.
+  - **Normal mode Windows preview runtime:** all keys work, including media keys.
+  - **Normal mode Winlogon runtime:** all media keys fail; most other keys fail; `S` still works and opens Settings.
+- **Why this is important:** this is no longer a "single MC key bug." It is a cross-runtime input ownership/routing split with different behavior by launch surface and focus state.
+- **Active priority (2026-04-24):** make MC runtime key behavior perfect and reproducible before touching Winlogon. Winlogon may share a root cause, but it is a different runtime surface and should not steer the next fix.
+- **Non-negotiable MC window contract:** fixes must preserve the MC surface as no normal taskbar entry, no Alt-Tab entry, and topmost/no-fall-behind. Normal-window comparisons are reference data only, not candidate fixes.
+- **Critical clue:** `S` working in Winlogon while media keys fail suggests at least one keyboard path remains alive, but media-key capture/dispatch path diverges by runtime.
+- **Constraint note:** do not casually tweak this family without heavy research; keep archived sub-fixes intact unless a replacement model is proven by runtime matrix + harness evidence.
+- **2026-05-13 mitigation landed:** MC now treats Interaction Mode as always-on policy. MC startup/runtime reads force it enabled, and the MC settings tab plus runtime context menu now disable the Interaction Mode toggle instead of allowing a self-trapping off-state. This closes the specific "turn it off and lose the recovery path" UX trap without claiming the broader U-05 focus/input family is solved.
+- **Validation needed:** first isolate the exact MC breakpoint between focused MC failure and external-focus recovery. Preview and Winlogon remain reference points, not the next active target.
+- **False suspects ruled out (2026-04-23 harness split runs):**
+  - Generic app hotkey handling is not dead: focused MC harness captures `C key pressed - cycle transition requested`.
+  - Synthetic media VK route is not dead: focused MC harness captures `InputHandler` media-key detection.
+  - Injected native appcommand dispatch is not dead: focused MC harness captures `[WIN_APPCOMMAND]` in verbose logs.
+  - Therefore, broad "all key plumbing is broken" is not an accurate root-cause model.
+  - Important limit: these are synthetic/injected probe results. They do not reproduce the user's physical-key MC failure.
+- **Live-profile parity update (2026-04-23):**
+  - Harness now validates MC runtime contract before scoring probes (MC tool/splash window class, display creation, `show_on_screen`, GL compositor creation).
+  - In elevated live-profile run, matrix initially showed:
+    - `focused_idle`: Qt media pass, native appcommand pass, `C` pass
+    - `focused_clicked`: Qt media fail, native appcommand pass, `C` fail
+  - This narrows the active breakage to post-click focused input routing/state, while native appcommand ingress remains alive.
+  - Native key-message probe extension (`WM_KEYDOWN/UP` for `C`) passes in `focused_clicked` while synthetic `SendInput` `C` fails, further ruling out downstream transition handler breakage.
+  - Additional evidence review showed these failing `focused_clicked` cells were contaminated by focus theft in setup: click preparation could foreground external browser windows (Firefox) instead of keeping SRPSS focused.
+  - Harness now marks such `focused_clicked` samples as invalid/blocked (`focused_clicked_unstable_focus_or_overlay_focus_steal`) rather than scoring them as real focused-MC failures.
+  - Harness click-safety guard now disables Reddit interaction surfaces in mirrored/isolated harness profiles so focused-click automation cannot trigger outbound Reddit actions during investigation runs.
+  - Mirrored-safe A/B run (`2026-04-23 22:31`) confirms both `focused_idle` and `focused_clicked` pass across strict + realistic policies when scenario validity is enforced.
+  - After edge-first click targeting + invalid-row blocking landed, repeated live-profile runs produced valid focused SRPSS samples where both `focused_idle` and `focused_clicked` passed all probes (Qt media, native appcommand, native key-message `C`, transition `C`) across strict and realistic focus policies.
+  - Result: previously observed `focused_clicked` failures are now treated as harness setup artifacts, not confirmed app-path regressions.
+  - Result limit: the harness has not yet simulated the real-world failure. It has proved controlled synthetic/injected MC paths can work, which means the next harness target is physical/hardware ingress or an observer-backed workflow that captures the user's actual failing input.
+- **What remains unresolved after ruling these out:**
+  - Real hardware media-key ingress under user repro conditions still needs explicit automated/native proof (not only synthetic or injected messages).
+  - Normal control-key failure in focused MC still needs the same physical/hardware-ingress treatment.
+  - Newest user observation (2026-04-24): MC starts with physical keys working while unfocused; bringing MC into focus is the transition that makes keys fail.
+  - Harness response: `tools/media_key_reality_harness.py --scenario focus_transition` now captures unfocused-working and focused-failing phases in one report.
+  - Splash-window experiment is ruled out as a product fix: it shares the key/focus issue and becomes unstable after focus changes. Keep it only as a diagnostic comparison.
+  - Native-style evidence from the current Tool baseline shows the intended guardrail shape (`WS_EX_TOOLWINDOW` + topmost), so the next investigation stays inside that contract rather than testing normal windows.
+  - MC focused-click harness parity is stable only for controlled probes; remaining gap is proving/isolating divergence between synthetic/injected probes and physical hardware key ingress on user machines.
+  - Winlogon asymmetry (`S` works while media keys fail) is deferred until MC is understood or the MC root cause clearly requires Winlogon comparison.
+- **2026-04-25 Research + Code Analysis (new):**
+  - **Hardware ingress validator confirms real-world repro**: manual click into SRPSS on Display 1 causes keys to be "eaten". Programmatic `SetForegroundWindow` and `SendInput` mouse clicks do NOT reproduce the bug.
+  - **PowerToys remapping accounted for**: PgUp/PgDn remapped to Volume Up/Down appear as `injected=true` in `WH_KEYBOARD_LL`.
+  - **Online research findings** (8 independent sources mapped in `Docs/MEDIAKEYDEBUG.md` Section 7.1):
+    - `Qt::Tool` / `WS_EX_TOOLWINDOW` windows exhibit documented anomalous focus/keyboard behavior on Windows.
+    - `activateWindow()` is unreliable when app is not already foreground (QTBUG-14062).
+    - Key events are LOST during focus transitions between Qt widgets.
+    - `WS_EX_TOOLWINDOW` + manual click produces "focus cursor present but no keyboard capture" — direct symptom match.
+    - Tool windows can steal focus unexpectedly on `showNormal()` / activation.
+    - AutoKey issue reveals distinction between **focused window** (keyboard target) vs **active window** (title bar highlight). Manual click may make SRPSS "active" but not "focused".
+    - `Qt::WindowDoesNotAcceptFocus` is insufficient on Windows; native `WS_EX_NOACTIVATE` is required.
+    - Embedded/native child HWNDs cause focus routing problems (Qt forum QTBUG-40320).
+  - **Code analysis identified 8 compounding issues** (full detail in `Docs/MEDIAKEYDEBUG.md` Section 7.2):
+    - **Issue 7 (Severity: HIGH)**: Overlay widgets may have default `StrongFocus`/`ClickFocus` policies. Manual click routes focus to a child widget that doesn't handle keys. Programmatic focus bypasses child routing. This is the **strongest candidate**.
+    - **Issue 6 (Severity: MODERATE-HIGH)**: GL compositor (`QOpenGLWidget`) has its own native window. Click on compositor area may give focus to compositor widget instead of DisplayWidget.
+    - **Issue 2 (Severity: MODERATE)**: `_restore_mc_input_focus()` uses `MouseFocusReason` which may route focus to child widgets.
+    - **Issue 3 (Severity: LOW-MODERATE)**: `CursorHaloWidget` is a separate top-level `Qt.Tool` window that may interfere with focus ownership.
+    - Other issues (focus policy toggling, coordinator stale state, Raw Input per-window registration, `perform_activation_refresh()` lack of focus restore) ruled out or low severity.
+  - **Synthesized root-cause model** (speculative): Manual click triggers Qt focus routing to a child widget (overlay/GL compositor). Child widget doesn't handle keys → keys "eaten". Programmatic `SetForegroundWindow` sets focus on top-level DisplayWidget, bypassing child routing. `Qt.Tool` / `WS_EX_TOOLWINDOW` exposes this edge case; normal `Qt.SplashScreen` builds don't.
+  - **Testable hypotheses documented** (7 hypotheses in `Docs/MEDIAKEYDEBUG.md` Section 7.4). Strongest test: set `NoFocus` on all child widgets (H1) or GL compositor alone (H2).
+- **2026-04-25 H1 Test — FAILED and REVERTED**:
+  - H1 (recursive `setFocusPolicy(Qt.NoFocus)` on all child widgets) did **NOT** fix media keys. Bug persists after manual click.
+  - H1 introduced **frequent shadow corruption** on `MediaWidget` and `RedditWidget` (doubled drop shadows). Was occasional before H1.
+  - **Shadow corruption mechanism**: H1 destabilized Qt's focus tree (~30+ widgets got NoFocus simultaneously). Each click caused Qt focus routing to bounce between widgets trying to find one that accepts focus. Each focus transition fired `focusInEvent`/`focusOutEvent`, which called `invalidate_overlay_effects("focus_in")`. Rapid `eff.setEnabled(False); eff.setEnabled(True)` cycles on `QGraphicsDropShadowEffect` corrupted Qt's internal `QPixmapCache`. Context menu clear-cache restored correct shadows.
+  - **Prevention rule**: Never manipulate focus policies on large widget trees during runtime. Focus policy changes trigger `styleChange`/`updateGeometry` cascades that stress the shadow pixmap cache.
+- **2026-04-25 Critical Discovery — `_restore_mc_input_focus` is DEAD CODE**:
+  - Grepped entire codebase (excluding docs/tests): `_restore_mc_input_focus()` in `rendering/display_input.py` is **defined but NEVER CALLED**.
+  - The function was added as part of a previous "final fix" commit but was never wired into `handle_mousePressEvent`.
+  - **This is the root cause**: After ANY widget click in MC mode, focus is never restored to `DisplayWidget`. Media keys are delivered to the child widget that received the click, which does not handle them. `SetForegroundWindow` bypasses this by resetting top-level window focus.
+  - Revised model: Not "child widget focus theft" (H1 was wrong), but "no focus restoration after click". The child widget legitimately receives focus on click; the bug is that `handle_mousePressEvent` never calls `_restore_mc_input_focus()` to return focus to `DisplayWidget`.
+  - **Next step**: Wire `_restore_mc_input_focus()` into `handle_mousePressEvent` after widget click routing (MC mode, non-exit clicks).
+- **2026-04-25 FIX APPLIED — `_restore_mc_input_focus` WIRED and HALO SIDE-EFFECT RESOLVED**:
+  - `_restore_mc_input_focus()` wired into `handle_mousePressEvent` at 3 return points within the `interaction_mode`/`ctrl_mode` branches: after context menu click, after handled widget click, after unhandled interaction click.
+  - **Result**: Media keys, hotkeys (`C`, `S`) now work after manual click into SRPSS MC on secondary display. MC bug is **resolved**.
+  - **Side effect**: `widget.raise_()` in `_restore_mc_input_focus` pushed cursor halo behind `DisplayWidget`, making it invisible. Fixed by adding `hint.raise_()` at end of `_restore_mc_input_focus` to re-raise the halo after `DisplayWidget` activation. Halo is a `Qt.Tool` + `WindowDoesNotAcceptFocus` window, so `raise_()` only affects z-order, not keyboard focus.
+  - **No taskbar/Alt-Tab behavior preserved**: `Qt.Tool` + `WS_EX_TOOLWINDOW` unchanged.
+- Winlogon asymmetry (`S` works while media keys fail) is deferred until MC is understood or the MC root cause clearly requires Winlogon comparison.
+
+## Record Provenance
+
+This standalone file preserves the complete former inline `U-05` record from `Docs/Historical_Bugs.md`. The chronology and technical claims are retained from that source; only heading normalization, standalone-link retargeting, and removal of monolith-only section dividers were applied during extraction.
