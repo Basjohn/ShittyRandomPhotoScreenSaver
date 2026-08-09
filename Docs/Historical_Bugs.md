@@ -1,430 +1,63 @@
 # Historical Bugs
 
-Last updated: 2026-08-01
+Last updated: 2026-08-09
 
 Track significant bugs with clear dates, failed attempts, and final fixes.
 This is the long-term anti-regression record for the project, not an active task list.
 
-## Quick Navigation (Numbered IDs)
-
-### Open Issues
-1. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
-2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
-
-### Active Recoveries
-1. [R-53 — 2026-08-01 — Retired Runtime Generations Survived Full Edit/Settings Recreation (Partially Resolved, Plateau Proof Pending)](#R-53)
-
-### Recent Resolutions
-1. [R-54 — 2026-08-01 — Phase 5 Bubble Cadence Gate Delayed And Flattened Visible Reactions (Resolved)](#R-54)
-2. [R-52 — 2026-07-29 — ImageWorker Retained Every Shared-Memory Frame Until Process Exit (Resolved)](#R-52)
-3. [R-51 — 2026-07-28 — Phase 3 Shared Shader Cache Gave Two Compositors One Deletion Identity (Resolved)](#R-51)
-4. [R-50 — 2026-07-28 — Count-Only Image/Texture Retention And Unbounded Prefetch Backlog (Resolved)](#R-50)
-5. [R-49 — 2026-07-28 — Settings/Edit Hide-Only Pause Retained Old GL Runtime And Shadowed Cleanup (Resolved)](#R-49)
-6. [R-48 — 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved)](#R-48)
-7. [R-47 — 2026-07-15 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push (Resolved)](#R-47)
-8. [R-46 — 2026-07-15 — Failed Blob Visualizer Retired End To End (Resolved)](#R-46)
-9. [R-45 — 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved)](#R-45)
-10. [R-44 — 2026-07-15 — Gmail CUSTOM Resize Payload Overrode Live Text Balance (Resolved)](#R-44)
-11. [R-43 — 2026-07-15 — Defaults Foundry Modal Colour Picker Destroyed Its Delegate Editor (Resolved)](#R-43)
-12. [R-42 — 2026-07-15 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path (Resolved)](#R-42)
-13. [R-41 — 2026-07-14 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership (Resolved)](#R-41)
-14. [R-40 — 2026-07-14 — Abandonment Ignored The Shared Steam Refresh Interval (Resolved In Code, Runtime Validation Pending)](#R-40)
-15. [R-39 — 2026-07-14 — Abandonment Automatic Rotation Lost Uncached Selected Artwork (Resolved In Code, Runtime Validation Pending)](#R-39)
-16. [R-38 — 2026-07-14 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts (Resolved In Code, Runtime Validation Pending)](#R-38)
-17. [R-37 — 2026-07-14 — Abandonment Rotation Expiry Was Silently Dropped And Selection Walked Archive Order (Resolved In Code, Runtime Validation Pending)](#R-37)
-18. [R-36 — 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)](#R-36)
-19. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Solved)](#R-35)
-20. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Solved)](#R-34)
-21. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
-22. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
-23. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
-24. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
-25. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
-26. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
-27. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
-28. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)](#U-07)
-29. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
-30. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
-31. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
-32. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
-33. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
-34. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
-35. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
-36. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
-37. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
-38. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
-39. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
-40. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
-41. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
-42. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
-43. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
-44. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
-45. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
-46. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
-
-### Archived Context
-1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
-2. [A-02 — 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)](#A-02)
-3. [A-03 — 2026-03-22 — Settings Dialog Flicker / Placeholder Regression (Resolved) - USER NOTE: UNRESOLVED BUT LOW PRIORITY NOW. SEE DUPLICATION OF THIS ISSUE IN THIS VERY DOCUMENT.](#A-03)
-4. [A-04 — 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Historical Partial Fixes Archived; superseded by U-05 current matrix)](#A-04)
-5. [A-05 — 2026-03-22 — Blob Ghost/Pulse Investigation (Resolved Subsystems Archived)](#A-05)
-
-### Older Resolved Archive
-1. [R-07 — 2026-03-28 — Startup Fade / Visualizer Secondary-Stage Ownership Split (Resolved)](#R-07)
-2. [R-08 — 2026-02-26 / 2026-03-05 — Pixel Shift Visualizer Bleed-Through (Resolved)](#R-08)
-3. [R-09 — 2026-03-05 — Settings Spinbox/LineEdit Fill Regression (Resolved)](#R-09)
-4. [R-10 — 2026-03-06 — Widget C++ Object Already Deleted on Provider Switch (Resolved)](#R-10)
-5. [R-11 — 2026-03-14 — Visualizer Preset Tooling Regression (Resolved)](#R-11)
-6. [R-12 — 2026-04-09 — Runtime Custom Slot Replaced While Cycling Presets (Resolved)](#R-12)
-7. [R-13 — 2026-04-13 — Visualizer Sine/Oscilloscope Lines 4-6 Settings Never Persisted (Resolved)](#R-13)
-8. [R-14 — 2026-04-17 — Blob Inward-Liquid Runtime Handoff Broke GL Overlay Push (Resolved In Code, Visual Validation Pending)](#R-14)
-9. [R-15 — 2026-04-18 — Frozen Curated Presets Silently Fell Back to Onefile Tree (Resolved)](#R-15)
-10. [R-16 — 2026-04-18 — One-Dir Runtime Misdetected As Script + Curated Slot Drift (Resolved)](#R-16)
-11. [R-17 — 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)](#R-17)
-
-## Recent Entries
-
-<a id="R-54"></a>
-### [R-54] 2026-08-01 — Phase 5 Bubble Cadence Gate Delayed And Flattened Visible Reactions (Resolved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Observed failure:** Bubble still painted around 89–93 FPS and its workers remained cheap at roughly 1–2 ms, but reactions felt late, stale, and less elastic. In the decisive 29.38-second interval, 2,566 Bubble steps were offered while only 1,723 worker tasks were submitted: 842 were cadence-token deferrals, compared with one actual worker-busy deferral and three overload coalesces. Roughly one-third of overlay publications therefore repeated unchanged Bubble arrays.
-- **Root cause:** the Phase 5 attempt imposed a second 60 Hz token clock on the visualizer tick and batched up to two authored packets while publishing only the terminal snapshot. An impulse in the older packet could be integrated and partially decay before its first visible publication. The shallow-copied settings packet also retained the live event scheduler, allowing an older batch item to consume a newer discrete edge that the terminal packet would then miss.
-- **Correction:** the artificial token budget, packet queue, coalescing, and multi-step worker batch were removed. Bubble now checks its existing single-worker/pending-result ownership lane before reading audio, advancing its authored timestamp, or exposing the event scheduler; every lane-free tick freezes one payload, runs exactly one simulation/snapshot step, and publishes it with the existing activation-token stale-result guard.
-- **Guardrail:** P5.0 task reduction remains open, but task-count success cannot override Bubble feel. Future reduction must preserve discrete input edges, loud-passage elasticity, input-to-visible attack, and one visible result for every integrated logical step. Transition-time 44–97 ms GUI/frame-delivery gaps remain separate P5.1 evidence and are not a reason to retune Bubble or reinstate batching.
-- **Validation:** the latest installed run offered and submitted 50,106 lane-free Bubble steps with a 1.000 publication ratio, no cadence deferrals, and worker execution remaining roughly 1–2 ms. Later intervals remained around 89 FPS with only isolated genuine worker-lane deferrals. The operator confirmed that immediate reaction and elasticity are restored, including the formerly stale-feeling case; Settings ingress/exit also remained functional. First-frame and mode-switch generation/activation identities stayed matched.
-- **Why automation missed it:** the original checks protected final state, ordering, task bounds, and deterministic packet outcomes, but did not measure source/discrete-edge to first visible publication under the real recurring-tick and GUI-delivery shape. A terminal-only batch could therefore pass while an impulse decayed before anyone saw it. Cadence work now requires the temporal runtime-shaped oracle and installed visual review recorded in `Docs/Guardrails.md` and `Docs/Visualizer_Change_Checklist.md`.
-
-<a id="R-53"></a>
-### [R-53] 2026-08-01 — Retired Runtime Generations Survived Full Edit/Settings Recreation (Partially Resolved, Plateau Proof Pending)
-
-- [ ] COMPLETELY FUCKED
-- [x] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
-
-- **Observed failure:** equivalent-state runtime samples climbed from about 832.5 to 911.5 to 1,000.6 to 1,146.8 MiB main RSS across repeated Edit/CUSTOM Save-and-Continue and Settings restart cycles. Dedicated VRAM climbed from about 554.8 to 600.8 to 722.9 to 806.7 MiB while tracked known bytes changed only from about 456.9 to 455.9 to 471.7 to 489.1 MB. Generation-owned unknown `ResourceManager` entries accumulated from 35 to 52 to 74.
-- **Boundary:** explicit display/GL cleanup remained authoritative and successful: tracked textures, PBOs, display pixmaps, and total tracked GL bytes reached zero during Settings teardown and driver VRAM dropped substantially. This is a session-lifetime retired-owner problem under P5.4, not a reason to weaken teardown, enlarge caches, or reopen Phase 4.
-- **Ownership lead:** retired Qt roots and generation-scoped callbacks, bound methods, timers, animations, subscriptions, queued GUI work, and passive resource registrations could outlive synchronous cleanup. `deleteLater()` alone did not prove that the old runtime graph was destroyed before its replacement was constructed.
-- **Implemented correction:** recreation now has a non-reentrant destruction barrier after generation invalidation and explicit owner-context GL cleanup. It generation-rejects queued/delayed UI work, waits for watched QObject destruction plus zero retiring-generation resources/tasks/timers/subscriptions, and only then admits replacement construction. Settings uses a second barrier for its dialog tree. Registrations and lifecycle snapshots carry generation, owner identity/class, QObject validity, bounded creation-site, and callback-retention details. Display-pixmap accounting is captured on the GUI thread and published as a detached immutable sidecar so the background usage sampler never inspects live Qt pixmaps.
-- **Settings return follow-up:** the correct destruction barrier created a deliberate interval with no top-level window after Settings closed. Qt's default last-window policy queued application quit before the dialog barrier could construct the replacement, so the logs ended cleanly with code 0 rather than returning to the application. Successful RUN startup now switches to explicit-exit lifetime ownership with `setQuitOnLastWindowClosed(False)`; startup-failure/config-only paths remain unchanged, and the dialog destruction barrier is not weakened.
-- **Latest accounting:** the 17:23–17:38 installed run completed Settings → generation 1, CUSTOM → generation 2, and Settings → generation 3 recreation, then shut down cleanly. Equivalent settled main RSS was about 900.9, 901.2, and 895.2 MiB for generations 1–3; dedicated VRAM was about 539.2, 554.9, and 540.0 MiB; ResourceManager totals/unknowns were 58/47, 58/47, and 56/45. This eliminates the former approximately 80–90 MiB main-RSS, large VRAM, and 35 → 52 → 74 ResourceManager staircase across these replacements. It does not close P5.4: equivalent private commit rose about 2,911.4 → 2,944.7 → 3,000.2 MiB, handles rose 2,130 → 2,146 → 2,189, and barriers still weak-observed two `WidgetManager` plus two `FadeCoordinator` wrappers after Settings and those plus two `CustomLayoutManager` wrappers after CUSTOM.
-- **Signal-bookkeeping lead:** `WidgetManager._on_compositor_ready()` disconnects its one-shot `image_displayed` connection after first readiness, while `cleanup()` attempts the same disconnect unconditionally. PySide emits a `RuntimeWarning` when no matching connection remains; this warning indicates redundant disconnect bookkeeping, not a proven retained signal or leak. Track explicit connection ownership and clear it after one-shot disconnect, without weakening first-frame readiness.
-- **Presentation guardrail:** the destruction barrier is separate from the existing authoritative-first-frame barrier. The replacement stays hidden until its own runtime generation, visualizer engine generation, and activation identity produce valid presentation state; `FadeCoordinator` remains the sole reveal coordinator. First-frame poison and Bubble → Spectrum → Bubble mode-switch poison protections may not be weakened.
-- **Forbidden substitutes:** no nested `processEvents()` teardown loop, periodic or production `gc.collect()`, working-set/allocator trimming, process or worker recycling, cache enlargement, warm standby, retired-tree reuse, or reduced GL teardown.
-- **Validation still required:** at least five alternating installed Edit and Settings recreation cycles with image work, Bubble/Spectrum/mode switches, transition overlap, media/artwork, and pending callbacks. Every retired generation must reach zero roots, timers, animations, subscriptions, ThreadManager work, and generation-scoped ResourceManager entries; threads/handles and equivalent-state RSS/private commit/VRAM must plateau; each replacement must emit exactly one current-generation authoritative first-frame event before coordinated reveal.
-- **Evidence:** `Docs/phase_reports/P05_CPU_TASK_REDUCTION.md`, `Current_Plan.md`, `engine/runtime_destruction.py`, and `tests/test_runtime_destruction.py`. Evidence-chest folder names are temporary comparators, not durable dependencies.
-
-<a id="R-52"></a>
-### [R-52] 2026-07-29 — ImageWorker Retained Every Shared-Memory Frame Until Process Exit (Resolved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Observed failure:** the 13m45s `phase4plus_a2f7bd89` capture exited cleanly but the sole child grew from about 92.2 MiB to 770.3 MiB while main RSS remained broadly bounded. Post-warmup child RSS commonly rose by roughly 31–32 MiB at each 40-second `3840×2158` prescale, matching one 31.611 MiB RGBA8 frame. The deterministic Phase 4 cache/display/texture/PBO harness still passed because it did not spawn the long-lived ImageWorker.
-- **Root cause:** each large worker result appended its creator `SharedMemory` mapping to a process-lifetime list and released the list only at worker exit. The parent copied the full mapping into `bytes`, closed without unlinking, then deep-copied it again into `QImage`. Timeout, late response, cancellation, buffered shutdown, and queue cleanup had no payload-specific disposal.
-- **Fix:** shared images now use one versioned per-transfer mapping. A one-byte attachment handshake preserves the required Windows handle lifetime only until the parent opens the mapping; the worker then closes immediately. The parent builds a temporary QImage directly over the mapped view, copies once into Qt-owned memory, and releases/closes/unlinks in `finally`. Supervisor tombstones and payload-aware disposal cover late/cancelled/stale/buffered/stopping paths, with exact shared-memory counters and separate ImageWorker RSS telemetry.
-- **Focused bars:** ownership regressions pass (`15 passed`), including malformed-descriptor reclamation and bounded accounting history; the real spawned-worker harness consumed 50 sequential 4K frames and reclaimed one forced shutdown transfer with zero live bytes, zero unlink failures, no captured orphan names, worker RSS 89.2–90.1 MiB, and effectively zero (-0.00009 MiB/cycle) post-warmup slope. The post-change visualizer gate verified all 66 replay goldens and passed 22 first-frame/mode-switch poison tests.
-- **Live validation:** the 52-minute `fresh_20260729_2140` run created and consumed 80 segments with zero terminal live bytes and unlink failures. ImageWorker RSS stayed within 92.1–115.7 MiB and its post-warmup slope was about +0.12 MiB/min; the former approximately 31.6 MiB/image staircase did not recur.
-- **Boundary:** this comparator kept Phase 4 open at the time. Phase 4 subsequently closed after the installed normal-run presentation/containment comparator. The later repeated Edit/Settings recreation staircase belongs to P5.4 and does not reopen R-52 or Phase 4.
-- **Guardrail:** never retain creator mappings as a worker-lifetime cache, clear response buffers without payload disposal, attach transfer lifetime to compositor teardown, recycle workers to reclaim memory, or hide unexplained total memory with a larger CPU cache, repeated GC, or memory trimming.
-- **Evidence:** `Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md`, `Docs/phase_reports/P04_RESOURCE_LIFETIME_MAP.md`, `tests/test_image_worker_shared_memory.py`, and `tools/phase4_image_worker_shm_harness.py`.
-
-<a id="R-51"></a>
-### [R-51] 2026-07-28 — Phase 3 Shared Shader Cache Gave Two Compositors One Deletion Identity (Resolved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Observed failure:** the first real dual-display CUSTOM Edit teardown at 13:44:57 and Settings teardown at 13:47:59 deleted screen 0 cleanly, then screen 1 raised `GL_INVALID_VALUE` while deleting all eleven transition programs. CUSTOM exited and Settings remained half torn down instead of opening normally.
-- **Root cause:** Phase 3 correctly made deletion strict, but compiled transition IDs remained in one process-global cache and were copied into both per-display pipelines. Qt context sharing made the IDs usable from both contexts; it did not give both compositors deletion ownership. The first owner deleted the IDs and the second attempted to delete the same numeric resources. The churn harness modeled independent owners and the original real-GL test had one compositor, so the contradictory multi-display shape escaped the Phase 3 gate.
-- **Fix:** each compositor now owns its own `GLProgramCache`, compiled IDs, and uniform locations; its `GLGeometryManager` alone owns VAO/VBO IDs and pipeline fields are non-owning draw mirrors. Stateless shader helpers alone may be reused. Global program/geometry/texture/state singleton accessors and shutdown cleanup were removed. The generic `ResourceManager` is passive GL accounting and no longer retains deletion callbacks. The temporary display-local visualizer GL overlay now retains failed handles and blocks parent/display destruction. `engine.stop(exit_app=False)` is the sole teardown authority; duplicate handler teardown calls were removed. Failure aborts Settings/Edit admission and exits nonzero while retaining failed resource ownership.
-- **Architecture:** the target remains one compositor surface per display. Phase 6 may share measured resources only through explicit leases and exactly-once deletion; Phase 8 folds display-local overlay surfaces into that display compositor, never into a process-wide owner.
-- **Bars:** focused lifecycle/resource coverage passes, including strict failed-program retention and a real two-compositor Windows Qt test that proves distinct program owners and sequential cleanup without GL errors. No global GL singleton accessor remains referenced by production or tests.
-- **Guardrail:** share-group accessibility is not ownership. Never copy a globally cached numeric GL handle into multiple local owner records. Reusing stateless shader source/helper objects does not authorize shared deletion.
-- **Evidence:** `Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md`, `Docs/Compositor_Architecture.md`, and `tests/test_gl_compositor_cleanup.py`.
-
-<a id="R-50"></a>
-### [R-50] 2026-07-28 — Count-Only Image/Texture Retention And Unbounded Prefetch Backlog (Resolved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Observed failure family:** normal image rotation retained decoded/scaled image, display pixmap, texture, and PBO representations without one complete byte-budget story. The CPU cache evicted by an RGBA approximation despite already recording exact Qt bytes; pending prefetch work was unbounded; textures were count-only; historical PBO sizes accumulated; and several transition terminal paths retained active texture pins.
-- **Root causes:** ownership stopped at object counts, prefetch concurrency was mistaken for backlog containment, GUI-affine QPixmap materialization escaped into a worker, the active display path deep-copied implicit-shared QImages and created redundant original pixmaps, identical display transforms were processed independently, and display-owned Qt backing stores were absent from passive snapshots.
-- **Fix:** exact logical bytes now drive CPU LRU eviction under clamped settings; concurrency, pending count, and future scaled bytes are independently capped; workers publish QImage only; source changes invalidate old raw/scaled callback generations; exact source/size/mode/DPR/quality transforms share immutable backing in both normal and previous-image paths without cross-DPR scaled-cache collapse; GUI-captured QPixmap sidecars deduplicate aliases and displays; each compositor has byte/count texture and idle-PBO caps; all transition completion/cancellation families release pins and obsolete state on the owner context.
-- **Bars:** the focused cache/prefetch/pipeline/texture/PBO/accounting regressions pass. `tools/phase4_resource_harness.py` runs 45 alternating-resolution transition cycles (30 virtual minutes), two-display aliasing, pressure budgets, and full-owner resets with all budget/plateau criteria true; the latest follow-up had 4 KiB repeated-resolution RSS drift and an 8 KiB final tail high-water range. Real driver VRAM is explicitly not inferred from the offscreen/fake-delete seam and remains a platform gate.
-- **Guardrail:** never treat item count or concurrency alone as memory containment, create QPixmap in workers, sample live Qt display objects off-thread, share differing transform/DPR outputs, retain terminal transition pins, or raise cache/PBO budgets to hide unexplained growth.
-- **Evidence:** `Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md`, `Docs/phase_reports/P04_RESOURCE_LIFETIME_MAP.md`, and `Docs/phase_reports/artifacts/P04/resource_plateau_report.json`.
-<a id="R-49"></a>
-### [R-49] 2026-07-28 — Settings/Edit Hide-Only Pause Retained Old GL Runtime And Shadowed Cleanup (Resolved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Observed failure family:** the Settings path claimed a full-style restart but `stop(exit_app=False)` only quiesced, cleared, and hid the old display stack. Settings was constructed while the old widgets, compositor contexts, visualizer overlays, deferred warmups, and image callbacks still existed. Cleanup happened only after the dialog closed. Context failures were routinely suppressed and handles reset, so apparent teardown could not prove resource deletion.
-- **Root causes:** the pause/reconfigure contract was hide/reuse rather than full stop; `DisplayWidget._on_destroyed` was defined twice and the later no-op replaced the real delegate; the legacy overlay helper cleared attributes on the child instead of the display; async image/startup/display-ready/deferred-warmup publications lacked one engine-runtime identity; compositor/texture cleanup treated invalid context/deletion failure as a best-effort reset.
-- **Fix:** Settings and committed CUSTOM Edit now cross `teardown_display_runtime()` before dialog/reload work. One engine generation plus exact `DisplayManager` identity rejects late publications. `DisplayManager.cleanup()` calls explicit synchronous `DisplayWidget.cleanup_runtime()`, which stops producers/visualizer overlays, then strictly deletes compositor textures/PBOs/programs/buffers with the GUI thread and owning context verified, calls `doneCurrent()`, asserts zero live compositor resources, and only then destroys surfaces/QObjects. Failed deletion retains ownership and the compositor remains `DESTROYING`.
-- **Bars:** `tools/phase3_lifecycle_harness.py` completed 50 Settings, 50 Edit, and 50 mixed cycles with active transition, Spectrum/Bubble, in-flight decode, and resolution change. All 150 stale callbacks were rejected; stopped GL bytes/resources, timers, workers, and callbacks returned to zero; teardown order stayed valid. The focused lifecycle gate passed, image pipeline/worker regressions passed, and the real Windows Qt GL cleanup test passed without skip.
-- **Guardrail:** never restore hide-only Settings pauses, post-dialog display cleanup, destroyed-signal ownership, handle-clearing on failed deletion, or generation-only callbacks that omit exact manager identity. Partial reinitialization requires a separate approved architecture proposal.
-- **Evidence:** `Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md` and `Docs/phase_reports/artifacts/P03/lifecycle_churn_report.json`.
-
-<a id="R-48"></a>
-### [R-48] 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Observed failure:** a Clock routed to all displays could no longer remain analogue on one display and digital on another. Double-click visibly toggled the selected instance, but the choice was persisted into the shared Clock setting and therefore became the baseline for every display on the next settings event/rebuild.
-- **Root cause:** R-45 correctly removed behavior authority from per-display CUSTOM geometry payloads, but the surviving double-click persistence path still wrote `display_mode` and `clock_analog_mode` into the shared widget section. Removing the stale geometry authority therefore exposed the older global-write assumption and erased a useful mixed-display runtime contract.
-- **Fix:** the Settings value remains the global baseline. Double-click now persists an explicit `display_mode_overrides` entry keyed by the existing stable screen signature, and `ClockWidgetFactory` applies that override only when creating the matching display instance. CUSTOM entries continue to contain only `font_size` and `geometry_variant`; no behavior field was restored to geometry payloads. The local mode and mode-shaped rect still update immediately, and persistence uses `emit_change=False`, so no cross-display rebuild or UI-pressure path was added.
-- **Bars:** Clock tests prove digital-to-analogue and analogue-to-digital CUSTOM transformations preserve the shared baseline while writing only the current screen override; factory coverage proves a matching signature selects the override. The focused Clock/factory/diagnostic suite passed `45/45`.
-- **Runtime validation target:** route one Clock to ALL, double-click only one display, then exercise unrelated Settings refresh, engine rebuild, and restart. Require one analogue and one digital instance, stable per-display geometry, no global mode flip, no duplicate widget creation, and no DT/paint burst.
-- **Validation:** the user validated Clock behavior in every requested scenario, including mixed analogue/digital display ownership. The live plan no longer carries a Clock runtime-validation task.
-
-<a id="R-47"></a>
-### [R-47] 2026-07-15 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push (Resolved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Observed failure:** hotswapping to Oscilloscope produced no visible mode, and starting directly in Oscilloscope left the visualizer absent. Startup eventually logged a reveal-watchdog expiry while waiting for its first valid frame.
-- **Root cause:** Blob retirement correctly deleted the Blob-only portion of the Oscilloscope diagnostic signature, but accidentally removed the entire local `sig` assignment while leaving the shared throttle and assignment references intact. With visualizer diagnostics enabled, every `SpotifyBarsGLOverlay.set_state()` call raised `NameError` after state preparation. The display push failed before startup staging could observe a valid frame; the reviewed run emitted 78 copies of the same frame-boundary exception.
-- **Fix:** restored a Blob-free Oscilloscope signature from supported mode-owned state: line speed, waveform blend, ghost-ring occupancy/delay/alpha, and transient-width mix. The existing bounded diagnostic throttle and render behavior are unchanged. No timer, repaint, retry, fallback, visual retuning, or exception suppression was added.
-- **Bars:** diagnostics-enabled coverage now executes repeated Oscilloscope calls, proves unchanged state is throttled, proves a supported-state change logs again, and would fail on the deleted assignment. The focused Clock/factory/diagnostic suite passed `45/45`; the supported visualizer lock remains required before closure.
-- **Runtime validation target:** start in Oscilloscope and hotswap into it from two supported modes under `--viz --perf`. Require first-frame reveal, continuous frame pushes, bounded `[SPOTIFY_VIS][OSC]` logs, no push traceback/watchdog expiry, and unchanged waveform/ghost/transient visuals.
-- **Validation:** the user validated both direct Oscilloscope startup and hotswap behavior. The current-good supported visualizer reactivity/smoothness lock remains the regression safeguard; no mode-specific validation task remains active.
-
-<a id="R-46"></a>
-### [R-46] 2026-07-15 — Failed Blob Visualizer Retired End To End (Resolved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Why retirement was necessary:** Blob was already classified as a failed, soon-to-be-retired mode, but its temporary dev gate left a second-class architecture spread across 115 files, thousands of source matches, 267 collected tests, typed settings, curated presets, runtime transport, renderers, shaders, diagnostics, packaging, and CLI/test escape hatches. Continuing to repair or quarantine that surface would spend shared-visualizer budget on a mode that was not intended to ship.
-- **Migration boundary:** visualizer settings schema version 3 maps a saved/imported `mode: blob` to the registry-owned supported default, strips `blob_*` and `preset_blob` leaves before model normalization, preserves sibling widget data, and never re-emits retired fields. Normal/MC canonical defaults and generated JSON/SST artifacts contain no Blob leaves. Curated tree scanning, manifests, folder/ZIP import, and release mirroring accept only registered modes while still pruning stale retired preset files from managed destinations.
-- **Removal:** deleted the gate, descriptor, defaults/model fields, Settings controls/builders/bindings, presets, CLI option, runtime state and transport, solvers, renderers, shaders, diagnostics, package-facing registrations, dedicated tests, and temporary pytest skip/escape hatch. Shared audio, activation, compositor, animation, card geometry, and the five supported modes were not redesigned or retuned.
-- **Bars:** the migration/absence suite covers plain, dotted, and persisted settings; sibling preservation; clean defaults; no re-emission; and retired preset import/pruning. The supported visualizer reactivity/runtime lock passed before removal and again after production teardown (`17 passed`); the integrated changed-file gate finished at `907 passed, 20 skipped`, and Defaults Foundry/settings/default/manifest/transfer suites remained green. A production-scope search retains only the explicit migration token; historical bug prose remains documentation, not executable ownership.
-- **Guardrail:** Blob may appear only as a migration input or historical record. Do not restore its dev gate, defaults, presets, tests, render branches, shaders, or package assets. Any future visualizer must establish its own active descriptor, settings, visual identity, supported-mode regression bars, and release intent rather than inheriting retired Blob code.
-
-<a id="R-45"></a>
-### [R-45] 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Observed failure:** Clock CUSTOM entries captured and replayed `display_mode`. This preserved the digital/analogue-shaped outer rect during restart, but it also made the saved layout a second behavior authority: changing `Use Analogue Clock` in Settings could be reverted by the older CUSTOM payload after the factory had already applied the current setting.
-- **Root cause:** an earlier hot-swap repair correctly established that digital and analogue clocks need different CUSTOM outer shapes, but represented that geometry dependency by storing the behavior setting itself. Ordinary replay then called `set_display_mode()` before applying the resize-derived font, conflating “which shape this rect was authored for” with “which mode the user currently selected.”
-- **Fix:** `clock_font` payloads now contain resize-derived `font_size` plus `geometry_variant`, an outer-shape marker that is never applied as widget behavior. Replay keeps the factory/Settings baseline authoritative. If the saved shape marker differs, the manager rebuilds a centered, clamped target-mode rect using the saved CUSTOM font scale, then persists the canonical marker. Legacy `display_mode` payload keys migrate through that one geometry comparison and are removed. The R-48 follow-up preserves double-click as an explicit screen-signature behavior override while the rebuilt CUSTOM payload still writes only `geometry_variant` and font size. No timer, retry, repaint, thread, or broad widget refresh was added.
-- **Bars:** the full CUSTOM manager suite (`94 passed`) proves direct payload application cannot change mode, legacy digital-to-analogue restart rebuilds the exact target rect with base and CUSTOM font sizes intentionally different, and canonical persistence strips the legacy key. The Clock suite (`19 passed`) preserves both double-click rect transformations and setting writes; descriptor/layout integration adds `16 passed`.
-- **Runtime validation target:** in normal and MC builds, place Clock in CUSTOM at a clearly non-default scale. Switch digital/analogue from Settings and by double-click in both directions, restart each time, and require the current setting, centered mode-appropriate rect, position, display route, and scale to survive. `--geo` must show `font_size` plus `geometry_variant`, never `display_mode`, with no repeated migration write, fallback, paint burst, or DT spike.
-- **Validation:** the user validated Clock in all requested normal/mixed-display scenarios, including the mode/geometry combinations that exercised this payload boundary. R-48's per-display override remained intact, so this entry is closed rather than retained as duplicate plan work.
-
-<a id="R-44"></a>
-### [R-44] 2026-07-15 — Gmail CUSTOM Resize Payload Overrode Live Text Balance (Resolved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Observed failure:** Gmail's Text Balance ratio worked in authored layouts but appeared inert after the card entered `Custom`, even though changing the ratio should only redistribute sender and subject space inside the existing card.
-- **Root cause:** Gmail's `gmail_font` CUSTOM size payload captured `sender_subject_ratio` alongside the resize-derived font size. Widget creation correctly read the current ratio from Settings, but saved-layout replay ran afterward and restored the older payload copy. CUSTOM had therefore become a second authority for an internal placement setting rather than owning only the outer rect and resize axis. Legacy payloads could also carry the retired `sender_column_width` value.
-- **Fix:** Gmail CUSTOM capture, scaling, and replay now own only `font_size`. Current `sender_subject_ratio` remains settings-owned and continues to drive the existing reserve-first row-budget painter inside the committed rect. Old payload copies of either ratio field are ignored; the post-payload outer-rect reassertion remains unchanged. No timer, repaint loop, geometry relaxation, migration write, or other widget behavior was added.
-- **Bars:** the Gmail payload test proves resizing changes only font size and leaves a live ratio unchanged even when an old payload contains both obsolete keys. A runtime-shaped custom-layout replay test starts from a stale 35/65 payload and current 68/32 Settings authority, then proves the exact `440 x 196` rect and resize-derived font survive while 68/32 remains active.
-- **Runtime validation target:** in a Gmail card with committed Custom geometry, move Text Balance through both extremes and return to 35/65. The internal sender/subject boundary must change while the outer rect, font scale, timestamp/envelope/menu lanes, and Custom position remain unchanged across settings close and restart.
-- **Validation:** the user confirmed the internal balance visibly responds in Custom. The 2026-07-15 `--geo` run then showed post-fix Gmail replay payloads containing only `font_size` at both `810 x 442` and `567 x 352`; each stable replay kept the same local rect through payload application, position update, and final authority. Loading an older layout slot later surfaced its stale `sender_subject_ratio=35` key in input telemetry, but replay ignored it, the existing content-height exception sanitized the persisted payload back to font-only, and the recreated card again completed with identical start/final geometry. No geometry warning, replay mismatch, fallback, or extra refresh path accompanied the change.
-
-<a id="R-43"></a>
-### [R-43] 2026-07-15 — Defaults Foundry Modal Colour Picker Destroyed Its Delegate Editor (Resolved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Observed failure:** Foundry colour cells opened the styled alpha picker, but accepting a colour left the visible value and saved canonical default unchanged. The existing direct-delegate test passed despite the complete runtime failure.
-- **Root cause:** the swatch is a transient `QStyledItemDelegate` editor. Opening the modal picker transfers focus away from that editor; the delegate's default `FocusOut` handling committed the old value and destroyed the swatch before `get_color()` returned. The returning callback could therefore neither store nor emit the selected `QColor`, and could raise `Internal C++ object (ColorSwatchButton) already deleted`. The previous test constructed the editor manually and returned a colour synchronously, bypassing the modal focus transfer and real `QTreeWidget` lifecycle.
-- **Fix:** a Foundry-local swatch marks only the interval in which its modal picker is active. The Foundry delegate suppresses its normal close-on-focus-out behavior only for that marked editor, then the existing synchronous `color_changed -> commitData -> model` path runs after acceptance. Cancel leaves the model untouched. The shared application swatch, ordinary delegates, focus routing, and save authority are unchanged; no timer, polling, repaint, persistent editor population, or UI retry was added.
-- **Bars:** `tests/test_default_settings_editor.py` now opens the actual tree editor, transfers focus through a modal dialog, proves cancellation retains the original RGBA, proves acceptance keeps the swatch alive and updates both tree/model authority, then saves and reloads a temporary canonical defaults source to prove RGBA persistence. The full Foundry suite remains green.
-- **Runtime validation target:** in Defaults Foundry, edit Abandonment Accent (including alpha), accept the picker, confirm the cell updates immediately, then Save and Regenerate and reopen the Foundry to confirm the same RGBA. An installed Normal/MC profile must remain unchanged.
-- **Validation:** the user confirmed the repaired swatch flow and successfully saved a new Abandonment accent. The authoritative source plus Normal/MC generated JSON/SST artifacts all contain the same replacement RGBA value, with no unrelated defaults drift.
-
-<a id="R-42"></a>
-### [R-42] 2026-07-15 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path (Resolved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Observed failure:** `ACHIEVEMENTS` and `LAST UNLOCK` remained absent even while both default-on shelves were enabled. Privacy-safe shelf diagnostics repeatedly reported both as requested but unavailable with `achievements:missing,last_unlock:missing`.
-- **Root cause:** Abandonment probed only existing Achievement Pulse cache paths. Achievement Pulse acquires per-app records for at most five recent games, while Abandonment deliberately selects old inactive games; selected backlog games therefore had no realistic producer for their exact achievement cache file. The renderer and evidence guards were correct, but the source contract made their success state unreachable for most selections.
-- **Fix:** cache-only ranking and weighted selection remain unchanged. After one identity is committed, Abandonment's existing startup/refresh/rotation worker may hydrate exactly that app's `GetPlayerAchievements` record only when `ACHIEVEMENTS` or `LAST UNLOCK` is enabled. It reuses Achievement Pulse's canonical cache key, the process-shared source lock, app-scoped request/backoff identity, and a 24-hour automatic freshness window. The result enriches the already-selected immutable snapshot and cannot rerank, replace, or fan out across candidates. `--noupdates` suppresses automatic hydration; explicit manual refresh retains its deliberate force behavior.
-- **Pressure/security boundary:** no timer, thread, UI retry, paint work, cache enumeration, schema request, or library-wide achievement sweep was added. The new sidecar record contains only selected app ID, cache/network outcome, source status, and loaded/missing state; it does not log titles, achievement names, counts, credentials, or raw payloads.
-- **Bars:** `tests/test_steam_abandonment_issues.py` proves default/explicit shelf demand, one provider-shaped selected-app request, exact cache persistence, count/latest-unlock enrichment, 24-hour cache reuse, stable selected identity, automatic-rotation worker wiring, and no hydration when automatic updates are disabled. Runtime validation must observe one `hydrated` record for a supported selected game, subsequent `cache_hit`, visible shelves, no same-job identity change, and no DT/repaint spike.
-- **Validation:** the 2026-07-15 run selected two different apps. Each initially reported the requested achievement shelves unavailable, performed one exact selected-app achievement cache write, then logged `outcome=hydrated status=success evidence=loaded` and rendered `playtime,achievements,last_unlock,last_played`; artwork hydration also completed and widget paint cost stayed inexpensive. The user confirmed the resulting shelf data appeared correct.
-
-<a id="R-41"></a>
-### [R-41] 2026-07-14 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership (Resolved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Observed risk:** Gmail already submitted token exchange through `ThreadManager`, but its loopback `HTTPServer.serve_forever()` ran on a raw daemon `threading.Thread`. Browser cancellation, callback timeout, settings destruction, and application shutdown therefore had split ownership over the listener, task, and port.
-- **Root cause:** the callback listener was treated as incidental HTTP plumbing rather than bounded asynchronous business work. It had no generation identity, no manager task id, and no single close-once lifecycle context shared by success and cancellation paths.
-- **Fix:** each authorization attempt now captures state, PKCE verifier, redirect URI, generation, task id, stop/finished events, and close-once socket ownership in one context. A bounded `handle_request()` loop runs on a `ThreadManager` IO worker; success submits token exchange with the captured values, while browser rejection, malformed callback, timeout, explicit cancellation, credential clearing, settings-owner destruction, and application teardown converge on the same release path. Qt completion signals remain marshalled to the UI thread, and no UI polling, repaint loop, or rescue timer was added.
-- **Bars:** `tests/test_gmail_oauth.py` uses a real helper manager and proves off-UI exchange plus success, user-cancel, timeout, settings-owner, and application-shutdown cleanup with no active task or listener left behind. `tests/unit/test_policy_compliance.py` rejects a return to raw production thread creation.
-- **Security/behavior boundary:** PKCE, callback-state validation, browser handoff, token exchange, and DPAPI credential behavior are unchanged; lifecycle ownership was repaired without widening token/log/export exposure.
-
-<a id="R-40"></a>
-### [R-40] 2026-07-14 — Abandonment Ignored The Shared Steam Refresh Interval (Resolved In Code, Runtime Validation Pending)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
-
-- **Observed failure pattern:** the active MC profile's Steam refresh interval was 5 minutes, but Abandonment armed a 15-minute timer and reported roughly 15 minutes of remaining duration. Automatic game changes therefore occurred around three times later than the setting promised.
-- **Log/settings evidence:** the reviewed MC run constructed a 900,000 ms Abandonment timer while `snapshot.widgets.steam.refresh_minutes` was `5`. A separate legacy `snapshot.widgets.abandonment_issues.rotation_interval_minutes` value was `15`; Normal likewise carried a separate 30-minute card value while its shared Steam interval was 10. Treating those card values as valid made two visible settings contracts compete.
-- **Root cause:** Abandonment introduced a private user-facing rotation setting and passed it through Settings, defaults, descriptors, the factory, cache remaining-duration math, and the widget timer independently of the family refresh interval. The generic `Refresh Window` label did not make the conflict clear, but clearer labels would not solve the underlying duplicate authority.
-- **Fix:** `widgets.steam.refresh_minutes` is now the sole automatic-change cadence. The per-card control/default/descriptor/factory argument was removed; card save drops a legacy `rotation_interval_minutes` key; installed Normal/MC profiles no longer retain it; and the cache API now receives the shared refresh interval explicitly. At closure, MC used 5 minutes and Normal used 10; the later Foundry-authoritative canonical default is 6 minutes for both profiles. Rebuild/remaining-duration math evaluates persisted `changed_at` against the current shared value, so shortening an interval rotates when due rather than honoring stale duration. Cadence diagnostics name `widgets.steam.refresh_minutes` as authority.
-- **Bars:** Settings/default tests prove no second control, emitted default, or duplicate widget cadence field exists; a conflicting legacy card value of 45 is ignored; UI save retains shared 5 and removes the legacy key; direct and descriptor-driven factories construct `_refresh_minutes` as 5; stale 15-minute state reports 60 seconds remaining after four minutes under shared 5 and advances at five; and the widget recurring timer is exactly 300,000 ms. Defaults JSON/SST artifacts were regenerated without touching unrelated installed settings.
-- **Runtime validation target:** in the next MC run, require `[STEAM][ABANDONMENT_CADENCE] shared_refresh_minutes=5 rotation_minutes=5 authority=widgets.steam.refresh_minutes`, a 300,000 ms recurring timer, and automatic non-repeating draws at that cadence except for a visible bounded parent-transition deferral. No 15/30-minute card cadence may reappear, and cadence changes must not add provider, timer, paint, or UI-thread pressure.
-
-<a id="R-39"></a>
-### [R-39] 2026-07-14 — Abandonment Automatic Rotation Lost Uncached Selected Artwork (Resolved In Code, Runtime Validation Pending)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
-
-- **Observed failure pattern:** automatic Abandonment rotation changed the game and text but twice committed no artwork; forced double-click refreshes changed games and restored artwork normally.
-- **Log/cache evidence:** interval draws committed successfully and changed selection, and backlog ranks formed a non-sequential sequence rather than a linear walk. The follow-up failure near the end of the reviewed run allowed asset network work, then logged no artwork because the selected app's requested portrait `library_600x900.jpg` returned HTTP 404 while its allowlisted wide `header.jpg` variant returned valid JPEG data. The 404 had been collapsed into generic network failure, so no valid alternate was considered.
-- **Root causes:** the original `_request_cache_only_rotation()` path prepared a newly selected game with `allow_asset_network=False`, unlike manual/provider refresh. After that boundary was corrected, selected-art hydration still requested only the configured shape and treated a definitive 404 like a transient network error. A game lacking Steam's portrait capsule could therefore render blank even though its wide artwork existed.
-- **Fix:** semantic selection still reads only owned/recent/profile/achievement cache state. When automatic updates are allowed, the same existing IO task resolves cached requested/fallback shapes first and hydrates only the selected app before atomically committing the game/title/art fade. A definitive requested-shape 404 or invalid image permits one alternate allowlisted shape; ordinary timeout/network failures do not trigger a second request. HTTP 404 is classified as `NOT_FOUND`, `--noupdates` retains strict automatic artwork-cache-only behavior, and diagnostics include requested/resolved shapes and fallback outcomes without credentials or account identity. R-42 later permits one similarly bounded selected-app achievement-evidence hydration for enabled shelves without changing this no-candidate-work rule. The redundant discarded Abandonment layout pass remains removed from paint.
-- **Bars:** `tests/test_steam_profile_assets_events.py` proves HTTP 404 classification and bounded shape order. `tests/test_steam_abandonment_issues.py` proves non-sequential draws, ordinary/`--noupdates` asset-network decisions, requested-shape hydration, 404-to-wide fallback into worker-prepared cover art, and no fallback fanout after a transient failure. The full Steam bar passes.
-- **Runtime validation target:** on the next long normal and MC runs, require `ABANDONMENT_ROTATION` ranks to remain non-sequential, ordinary misses to log `outcome=hydrated`, portrait-missing/wide-valid apps to log `outcome=fallback_hydrated:wide requested_shape=portrait resolved_shape=wide` before a complete sparse fade, `--noupdates` misses to log `cache_miss_network_disabled`, and no owned/recent/candidate provider request, duplicate selected-evidence request, UI-thread stall, paint burst, or new visualizer DT spike attributable to the low-frequency worker task.
-
-<a id="R-38"></a>
-### [R-38] 2026-07-14 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts (Resolved In Code, Runtime Validation Pending)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
-
-- **Observed failure pattern:** a second recent-play candidate had the newest achievement unlock, but the first recently-played game remained in `Most Recent` and pushed the true newest-unlock game into `PREVIOUSLY`. After the Portrait artwork addition, ordinary `Unlocked` totals also rendered as an ellipsis in Portrait and then every artwork mode.
-- **Root causes:** Achievement Pulse resolved the recent-game ordinal before reading achievement data and refreshed only that chosen app, so it had no evidence with which to compare unlock recency across candidates. The `Unlocked` metric rail also inherited the exact artwork width and used final text elision rather than locally fitting a normal/high count.
-- **Fix:** recent play now supplies only a bounded candidate set of at most five apps. Exact cached/fetched per-app achievement rows rank known positive latest unlock timestamps newest-first, with missing/zero evidence retained stably behind timestamped candidates in recent-play order; Settings labels, `Most Recent`, Recent #2-#5, and Previous share that order. Refresh uses the existing worker/cache/coalescing/backoff path and fetches schema only for the selected winner. The centered metric rail is wider than the artwork and locally fits down to an explicit floor before any exceptional elision.
-- **Bars:** `tests/test_steam_achievement_pulse.py` proves play-order/achievement-order disagreement selects the newest unlock, matching cache-only Settings labels, five-candidate request bounds, and selected-schema-only fetch. `tests/test_steam_phase4_mock_visuals.py` proves `Unlocked: 999/999` reaches the painter intact in Wide, Square, and Portrait layouts.
-- **Runtime validation target:** with real cache data whose play order and latest-unlock order disagree, require the newest unlock's game in `Most Recent`, the prior unlock game in `PREVIOUSLY`, matching Settings labels, and a complete non-elided `Unlocked` line in Portrait/Wide/Square/art-off without moving the artwork or capsule rails.
-
-<a id="R-37"></a>
-### [R-37] 2026-07-14 — Abandonment Rotation Expiry Was Silently Dropped And Selection Walked Archive Order (Resolved In Code, Runtime Validation Pending)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
-
-- **Observed failure pattern:** Abandonment Issues could remain on Archive `01` with the same game and rediscovery copy for an hour, even when its configured rotation interval had elapsed repeatedly.
-- **Log evidence:** the reviewed session was `main_mc.py` and created a 15-minute timer from the now-retired card-level value even though the shared Steam refresh interval was 5 minutes; R-40 records that separate cadence defect. Timer profiler samples showed callbacks completing in roughly `0.02 ms`, but no content transition followed. The observed 15-minute expiry was an exact multiple of the parent display's three-minute image cycle, making repeated transition collisions plausible even though 15 was not the correct configured authority.
-- **Root causes:**
-  1. `_request_cache_only_rotation()` returned immediately when parent transition work was pending/running. A recurring timer expiry was therefore discarded rather than deferred, and the next attempt could collide at the same phase indefinitely.
-  2. `_select_rotation_candidate()` always selected the first sorted candidate initially and then the next index, so Archive position exposed a predictable sequential walk instead of varied rediscovery.
-  3. A callback arriving just before the persisted interval boundary could fail the due check and wait for a complete extra interval.
-  4. Every widget/settings/display rebuild armed a complete new interval instead of the remaining persisted duration, so several otherwise normal recreations could postpone a five-minute rotation indefinitely.
-  5. Explicit widget refresh bypassed source freshness but did not force semantic rotation. Owned/recent cache writes therefore appeared in logs while the same selected game was intentionally retained.
-- **Fix:** Abandonment now reuses `defer_refresh_if_transition()` and a low-pressure one-second `ThreadManager.single_shot` retry only while a due rotation is pending. Cache state persists a profile/policy draw counter; each due interval hashes that counter into a tier-first weighted draw, then a candidate draw within the tier. Tier weights do not grow with library population, every tier remains reachable, and the current App ID is excluded when alternatives exist. A two-second due tolerance handles timer-boundary jitter. Persisted `changed_at` now arms only the remaining first interval after a rebuild or rotates immediately when overdue; the timer then returns to one ordinary recurring interval. Explicit widget refresh forces one non-repeating cache-backed draw and restarts the configured cadence after source refresh.
-- **Bars:** `tests/test_steam_abandonment_issues.py` proves preference bias plus variety, same-seed repeatability, persisted non-sequential backlog ranks, immediate-repeat exclusion, profile-shared draw-count persistence, two-second due-boundary behavior, policy invalidation, remaining-delay timer replacement after rebuild, forced manual rotation, and a simulated parent-transition collision that resumes through the shared single-shot contract. Selection adds no owned/recent/candidate-achievement request; the narrow post-selection evidence and public-art worker boundaries are recorded in R-42 and R-39.
-- **Runtime validation target:** with the shared Steam refresh interval set to 5 minutes, across settings/display rebuilds, several due intervals, and a double-click refresh, require multiple non-sequential games/ranks, no immediate repeat where alternatives exist, no cadence reset to a full interval after rebuild, one diagnostic `[STEAM][ABANDONMENT_ROTATION]` line per committed draw, and a collided expiry that logs deferral then changes through the existing sparse fade without UI-thread/DT pressure.
-
-<a id="R-36"></a>
-### [R-36] 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
-
-- **Observed failure pattern:** Mighty no longer exposed the earlier full circular core after its first repair, but maximum or near-maximum contour controls still produced mostly whole-body size changes. Wobble was barely perceptible, Stretch did not read as a growing tendril, and earlier deformations could look like rotating radial cuts. Shaped reached its authored goal and then appeared almost static apart from glow; mutation, warping, fixed-angle wobble, and lighter tendrils were not materially visible.
-- **Forensic boundary:** current logs showed healthy Blob input throughout the failure. Live bands repeatedly occupied roughly `0.5..1.5`, kicks/snares/transients fired, the active concrete shader matched source, and there was no shader fallback, shared-audio starvation, or subtype bleed. The failure was therefore kept entirely Blob-owned; shared audio and the other visualizer modes were not retuned.
-- **Mighty root causes:**
-  - scalar pulse coefficients could move the complete radius by far more pixels than the contour, making a functioning profile look like a size-only reaction
-  - the Blob-local energy compressor collapsed much of the useful `0.5..1.5` live range, while autonomous phase breathing accounted for too much of the remaining motion
-  - target rounding, slew, spring smoothing, and shader sampling formed a multi-stage attenuation stack
-  - inward and outward containment were coupled, so one protected inward valley reduced every outward tendril
-  - the solved contour was passed through nonlinear containment a second time on every frame, erasing more than half of quiet-to-hot transfer
-  - an angle-varying hard solver floor rebuilt from the living base then clipped dozens of samples, producing flat/cut shoulder junctions even though the target was already safe
-- **Shaped root causes:** the authored reaction goal saturated too early, unconditional goal-floor mixing made it nearly static during sustained audio, residual mutation authority was sub-pixel after solver smoothing, and some transient routes consumed continuous pressure rather than the actual Blob transient envelopes.
-- **Settings-authority contributors:** subtype sliders could leave a curated preset authoritative instead of switching to Custom, and the typed visualizer setter serialized dotted keys one at a time with `blob_type` late. Normalization could therefore strip the incoming subtype values before the type flip completed, making valid edits appear dead or reset.
-- **Final fixes:**
-  - both concrete Blob programs now consume one 128-sample CPU-solved profile directly; Mighty has no post-profile amplifier or circular support floor
-  - Mighty uses a wider Blob-local energy mapping, fixed/slow-sway organic tendrils that grow and relax at anchored sites, reduced scalar pulse authority, one-time target rounding, independent containment authority, faster target/spring response, no post-solver re-fit, and a global `0.84` solver safety floor instead of the angle-varying clamp
-  - Shaped uses anchored amplitude-breathing warps, stronger bounded mutation beyond the authored goal, real transient envelopes, lighter music-driven tendril tips, responsive release, and zero-shift-dominant motion rather than traveling deformation phases
-  - subtype controls switch curated authority to Custom before saving, and visualizer settings are written as one normalized section so the new `blob_type` and its owned values commit atomically
-  - subtype state, shader programs, presets, settings, and diagnostic profiles remain Blob-owned; no shared audio contract changed
-- **Measurable closure evidence:**
-  - a high-authority 128-sample Mighty stress vector retains `99.89%` of quiet-to-hot target motion through the settled runtime solver; the representative contour moves about `16.96 px RMS / 36.49 px max` on a 940 px inner card, isolated Stretch reaches about `21.77 px`, and the scalar pulse delta is about `33.99 px` rather than overwhelming contour motion by an order of magnitude
-  - Mighty attack reaches `90%` in about `0.32 s`, release returns to `10%` in about `0.42 s`, every tested temporal pair prefers circular shift `0/128`, and the idle/quiet contour remains materially non-circular
-  - representative 128-sample Shaped authored cases mutate beyond their no-motion goal by more than `0.075` profile units (at least `13.5 px` at a 180 px contour radius), move at fixed angles over time, remain bounded, and preserve their authored goal identity
-- **Regression bars:** `tests/test_blob_unshaped_geometry.py`, `tests/test_blob_shaper_plumbing.py`, `tests/test_blob_pockets.py`, `tests/test_blob_intensity_reserve.py`, `tests/test_blob_inward_liquid.py`, `tests/test_blob_type_runtime.py`, `tests/test_blob_shader_compile.py`, `tests/test_visualizer_reactivity_quality.py`, `tests/test_visualizer_overlay_kwargs.py`, `tests/test_overlay_render_dispatch.py`, `tests/test_startup_shader_warmup.py`, `tests/test_settings_manager.py -k blob`, `tests/test_widgets_tab.py -k blob`, and `tests/test_visualizer_settings_plumbing.py -k blob`.
-- **Keep-closed rule:** measure target-to-runtime transfer, fixed-angle motion, pixel-scale mutation, and circular-shift preference. Helper variance or a large static profile spread is not sufficient. Do not lock the temporary showcase presets' exact creative JSON as the behavior contract; use synthetic controls/nodes that reproduce the failure shape, while preset tests remain responsible for schema and slot integrity.
-- **Runtime validation target:** under `-devblob`, confirm Mighty visibly grows and releases rounded tendrils without a circular center or cut-like shoulders, and confirm Shaped visibly mutates around—then returns to—its authored goal. Check startup, settings round-trip, hot subtype switches, curated payloads, and Custom. A clean result must not add shared-mode reactivity drift or first-frame poison.
-
-<a id="R-35"></a>
-### [R-35] 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Solved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Observed failure pattern:** `Enable Steam Widget` could be off while a card such as Achievement Pulse still appeared. The settings shell disappeared, but card-level `enabled` remained sufficient to create the overlay.
-- **Root cause:** the top-level Steam flag was documented and implemented as UI-only. Descriptor setup and the Steam factory checked only environment/card gates, so runtime creation and fade-expected truth ignored the family flag.
-- **Fix:** Steam factory descriptors now declare a base `steam.enabled` gate. Setup applies it before expected-overlay registration or factory creation, and the factory repeats the check as a defensive direct-call boundary. The UI hides all subordinate settings and now groups card controls into Layout, Appearance, and Content buckets. Card-level choices remain persisted while the family is off.
-- **Bars:** `tests/test_steam_phase3_settings_descriptors.py` proves descriptor metadata, hidden subordinate controls, retained card payloads, no created card, no expected overlay, and direct-factory refusal while the master is disabled.
-- **Runtime validation target:** in a compiled normal run, turning the family off must remove every Steam card on all displays; reopening Steam settings should show only the master. Re-enabling must restore the previously selected card choices without a fade stall.
-- **Validation:** user-observed runtime behavior was accepted on 2026-07-12; the latest reviewed multi-display logs contained no Steam master/fade-expected regression or compositor loss.
-
-<a id="R-34"></a>
-### [R-34] 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Solved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Observed failure pattern:** with no Weather location, the card was visually squashed and offered no route to configure it. Logs showed lifecycle activation failing, setup falling back to legacy `start()`, and legacy start logging the same missing-location error.
-- **Root cause:** blank location was treated as an activation exception. The fallback then called `setText()` on the QLabel-backed overlay despite the real content living in child layouts, bypassing normal card geometry and creating two divergent lifecycle branches.
-- **Fix:** blank location is now a successful provider-inert state. It renders a minimum-height `Weather location required` / `Open Weather Settings` composition, joins the normal fade, submits no ThreadManager/provider/timer work, and routes only the action-label hit area through centralized input to Weather's `source_layout` bucket.
-- **Bars:** `tests/test_weather_widget.py` proves initialize/activate and legacy start are thread/timer inert, spacing is retained, action hit-testing emits the narrow target, and central navigation primes the Weather section/bucket.
-- **Runtime validation target:** start a compiled run with Weather enabled and location blank; the inert card should be comfortably spaced, its link should open Weather Location settings, and logs must contain neither lifecycle fallback nor missing-location fetch errors.
-- **Validation:** user-observed spacing/navigation behavior was accepted on 2026-07-12; the latest reviewed logs contained no blank-location lifecycle fallback or missing-location fetch error.
+Detailed records from **R-34 onward** now live in `Docs/Historical_Bugs/` and are indexed here instead of duplicated inline. Older records remain inline below until they are individually split. The standalone record is authoritative for any incident listed in the standalone index.
+
+## Quick Navigation
+
+### Open / Watchlist Inline Records
+
+- [U-05 — MC Keyboard Focus / Ctrl Halo Runtime Input Family](#U-05)
+- [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](#U-06)
+- [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](#U-09)
+
+### Active / Pending Standalone Records
+
+- [R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation](Historical_Bugs/R-53_Runtime_Recreation_Ownership_And_Memory.md) — mechanical recreation ownership is repaired; Phase 5 plateau/resource validation remains separate follow-up work.
+
+## Standalone Records
+
+These incident bodies have been split out of this file. Do not add a second full copy here.
+
+### 2026-08
+
+- [R-59 — Runtime Settings Request Tore Down The Emitting Qt Input Stack](Historical_Bugs/R-59_Runtime_Settings_Request_Input_Stack_Teardown.md)
+- [R-58 — Move To Custom Copied Stale Backing Values Instead Of The Curated Runtime State](Historical_Bugs/R-58_Visualizer_Move_To_Custom_Preset_Authority.md)
+- [R-57 — Scaled Prefetch Popped Selection Order Instead Of Descending Indices](Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Order.md)
+- [R-56 — Settings Close Path Retouched An Already-Deleted Dialog Wrapper](Historical_Bugs/R-56_Settings_Dialog_Deleted_Wrapper_Retouch.md)
+- [R-55 — Spectrum Paint-Local Smoothing Created A Second Cadence](Historical_Bugs/R-55_Spectrum_Presentation_Smoothing.md)
+- [R-54 — Phase 5 Bubble Cadence Gate Delayed And Flattened Visible Reactions](Historical_Bugs/R-54_Bubble_Cadence_Gate.md)
+- [R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation](Historical_Bugs/R-53_Runtime_Recreation_Ownership_And_Memory.md)
+
+### 2026-07
+
+- [R-52 — ImageWorker Retained Every Shared-Memory Frame Until Process Exit](Historical_Bugs/R-52_ImageWorker_Shared_Memory_Retention.md)
+- [R-51 — Phase 3 Shared Shader Cache Gave Two Compositors One Deletion Identity](Historical_Bugs/R-51_Shared_Shader_Cache_Deletion_Ownership.md)
+- [R-50 — Count-Only Image/Texture Retention And Unbounded Prefetch Backlog](Historical_Bugs/R-50_Count_Only_Resource_Retention.md)
+- [R-49 — Settings/Edit Hide-Only Pause Retained Old GL Runtime And Shadowed Cleanup](Historical_Bugs/R-49_Settings_Edit_Hide_Only_Runtime_Retention.md)
+- [R-48 — Clock Double-Click Replaced Per-Display Mode With Shared Setting](Historical_Bugs/R-48_Clock_Per_Display_Mode_Override.md)
+- [R-47 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push](Historical_Bugs/R-47_Oscilloscope_Diagnostic_NameError.md)
+- [R-46 — Failed Blob Visualizer Retired End To End](Historical_Bugs/R-46_Blob_Visualizer_Retirement.md)
+- [R-45 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry](Historical_Bugs/R-45_Clock_Custom_Geometry_Authority.md)
+- [R-44 — Gmail CUSTOM Resize Payload Overrode Live Text Balance](Historical_Bugs/R-44_Gmail_Custom_Text_Balance_Authority.md)
+- [R-43 — Defaults Foundry Modal Colour Picker Destroyed Its Delegate Editor](Historical_Bugs/R-43_Foundry_Modal_Colour_Editor_Lifetime.md)
+- [R-42 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path](Historical_Bugs/R-42_Abandonment_Selected_Game_Achievement_Acquisition.md)
+- [R-41 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership](Historical_Bugs/R-41_Gmail_OAuth_Callback_Thread_Ownership.md)
+- [R-40 — Abandonment Ignored The Shared Steam Refresh Interval](Historical_Bugs/R-40_Abandonment_Shared_Steam_Refresh_Authority.md)
+- [R-39 — Abandonment Automatic Rotation Lost Uncached Selected Artwork](Historical_Bugs/R-39_Abandonment_Automatic_Rotation_Artwork_Hydration.md)
+- [R-38 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts](Historical_Bugs/R-38_Achievement_Pulse_Unlock_Ranking_And_Count_Elision.md)
+- [R-37 — Abandonment Rotation Expiry Was Silently Dropped And Selection Walked Archive Order](Historical_Bugs/R-37_Abandonment_Rotation_Expiry_And_Sequential_Selection.md)
+- [R-36 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion](Historical_Bugs/R-36_Blob_Mighty_Shaped_Contour_Motion.md)
+- [R-35 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards](Historical_Bugs/R-35_Steam_Family_Master_Runtime_Gate.md)
+- [R-34 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card](Historical_Bugs/R-34_Blank_Weather_Location_Lifecycle_Fallback.md)
+
+## Legacy Inline Records
+
+The records below have not yet been split into standalone files. Keep their full incident history here until each receives an authoritative standalone destination.
 
 <a id="R-33"></a>
 ### [R-33] 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)
@@ -899,7 +532,6 @@ This is the long-term anti-regression record for the project, not an active task
   - remaining non-closure note:
     - `bubble_rotation_amount` is currently a cosmetic/false control because Bubble’s shader still reserves the uploaded rotation channel without rendering it; treat it as a future cleanup/design decision rather than an active Bubble regression
 
-
 <a id="R-24"></a>
 ### [R-24] 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)
 
@@ -1185,7 +817,7 @@ This is the long-term anti-regression record for the project, not an active task
 - **Why the final solution worked:** It addressed all three root causes:
   1. MERGE semantic inside `apply_preset_to_config`: The old `merged.update(preset_settings)` only overwrote keys present in the preset.
   2. Cross-mode pollution in saving: The old save path collected settings from ALL modes.
-  3. Call-site MERGE: Even after fix #1, the callers used `.update()` to merge the returned clean dict back into the live config, re-introducing the exact same stale-key problem at the call site.
+  3. Call-site MERGE: Even after fix #1, the callers used `.update()` to merge the returned clean dict back into the live dict, re-introducing the exact same stale-key problem at the call site.
 - **Symptoms before fix:**
   - Custom settings (shaper, others) were overriding preset application
   - User got "stuck" on shaped blob even after explicitly choosing unshaped presets
@@ -1198,6 +830,7 @@ This is the long-term anti-regression record for the project, not an active task
   2. **BUG #2 - Cross-Mode Pollution:** `save_media_settings()` collected settings from ALL modes (`collect_spectrum_mode_settings()`, `collect_bubble_mode_settings()`, etc.). Inactive modes returned fallback defaults that polluted saved presets.
   3. **BUG #3 - Call-Site MERGE:** `_on_visualizer_preset_changed` and `cycle_visualizer_preset` used `vis_config.update(applied)` to merge the clean result of `apply_preset_to_config` back into the live dict. Since `.update()` only adds/overwrites, stale mode-specific keys (like `blob_shaper_enabled: true` from Custom) survived into curated presets that never declared them.
 - **Affected modes:** ALL visualizer modes (Blob, Spectrum, Bubble, Sine Wave, Oscilloscope) were affected by the MERGE bugs. The pollution bug affected any user who saved custom presets.
+
 - **Verification:** 11 cycling tests pass (including 2 new regression tests for Bug #3), 295 broader tests pass. Manual verification confirms no cross-mode pollution.
 - **Defense in depth:** All three layers are now fixed:
   1. Loading: `apply_preset_to_config` clears mode-specific keys before applying presets
@@ -1520,7 +1153,7 @@ This is the long-term anti-regression record for the project, not an active task
   - Fixed: when force-initial-sources is enabled, last-tab restore is now skipped so the A/B toggle behavior is actually deterministic.
 - **2026-04-23 root-cause breakthrough (new):**
   - Isolated to `ui/tabs/media/preset_slider.py` inside `VisualizerPresetSlider._build_ui()`.
-  - The explicit `self._edit_btn.setVisible(True)` call (redundant, default is already visible) consistently triggered the transient `Qt691QWindowIcon` caption windows during startup construction.
+  - The explicit `self._edit_btn.setVisible(True)` call (redundant, default is already visible) consistently triggered the transient `Qt691QWindowIcon` helper HWND / foreground-steal signature in observer logs.
   - Removing that single call eliminated the startup taskbar/titlebar ghost in automated repro paths:
     - `tools/flicker_test.py v54` (plain dialog + six `VisualizerPresetSlider` instances): tiny caption windows removed.
     - `v48` (SettingsDialog visualizers-only): tiny caption windows removed.
@@ -1659,7 +1292,8 @@ This is the long-term anti-regression record for the project, not an active task
 - [x] **Target-tab-first creation (no ugly placeholders):**
   [x] **Per-tab styling/shadow application:**
   [x] **Cache heavy-but-static data with freshness checks:**
-- **Summary:** Target-tab-first hydration, per-tab styling deferral, and caching are live, but dialog construction still takes ~3 s on MC builds (see latest `screensaver.log`). The flicker persists even when only one monitor hosts SRPSS content, so raw construction speed is insufficient to mask the OS placeholder. Fade-in fallback remains unimplemented and is no longer expected to solve the problem; Approach D is marked failed pending a new direction.
+- **Summary:** Target-tab-first hydration, per-tab styling deferral, and caching are live, but dialog construction still takes ~3 s on MC builds (see latest `screensaver.log`). The flicker persists even when only one monitor hosts SRPSS content, so raw construction speed is insufficient to mask the OS placeholder.
+ Fade-in fallback remains unimplemented and is no longer expected to solve the problem; Approach D is marked failed pending a new direction.
 
 **Approach E – External research before redesign (NEW)**
 - [ ] Research and corroborate ROOT CAUSES from **≥5 recent sources** (2024+) focused on Windows multi-monitor Qt apps that mix fullscreen + desktop content. Emphasize findings about secure-desktop placeholders, HWND teardown ordering, and alternative masking primitives. Summarize pros/cons and cite each source before proposing a new architecture.
@@ -2187,6 +1821,7 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
 - Frozen-mode root resolution is now strict-canonical:
   - always resolve to `%ProgramData%\SRPSS\presets\visualizer_modes`
   - attempt bootstrap from bundled shipped tree only as a copy source
+  - never return bundled/onefile paths as active curated root
   - never return bundled/onefile paths as active curated root
 - Added regression tests to lock this behavior, including bootstrap-failure and missing-bundled scenarios.
 
