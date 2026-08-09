@@ -212,6 +212,15 @@ never registers as or replaces the
 standard screensaver, never owns or mutates the secure-desktop helper, and is
 not a performance-baseline authority.
 
+After a destruction barrier has already timed out and committed its fail-closed
+exit, the explicit diagnostic product may take an aggregate-bounded,
+identity-only direct-referrer batch for surviving plain-Python owners. The
+owner count, `gc.get_referrers()` query count, Python-side inspection, and log
+payload must all be capped; an individual CPython referrer query is diagnostic
+and not pre-emptible. Attribution may not call `gc.collect()`, retain owners
+beyond the timeout call, change completion policy, expose object
+representations/settings payloads, or run in standard/Media Center products.
+
 They must not:
 
 - repaint;

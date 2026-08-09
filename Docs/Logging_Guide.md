@@ -86,6 +86,19 @@ only the failing thread; if that final raw write crosses the active-file bound,
 the next diagnostic launch trims it before retaining the bounded backup. It
 contains no settings payloads.
 
+If the retired-runtime destruction barrier times out, the diagnostic product
+commits the normal fail-closed exit first, then adds at most eight bounded
+`[LIFECYCLE_BARRIER][PYTHON_OWNER_REFS]` records for surviving plain-Python
+owners. The aggregate batch permits at most 17 direct/dictionary-owner
+`gc.get_referrers()` queries, 8,192 inspected Python items, 200 ms of work that
+begins between queries, and 24,000 encoded characters per owner record. An
+individual CPython referrer query cannot be pre-empted; its count and all
+subsequent processing/output are bounded. Records contain identity, referrer
+type, and only positively identified object-attribute names. Arbitrary mapping
+and frame-local key names are redacted. The tracer never calls object `repr()`
+or `gc.collect()`, releases owners, extends the timeout, changes the fail-closed
+result, or runs in standard/Media Center products.
+
 The diagnostic installer is per-user, has a distinct AppId and install tree,
 does not replace/register `SRPSS.scr`, and does not alter the Media Center
 payload. It also uses direct interactive URL routing and never writes helper
@@ -99,6 +112,10 @@ receives an independent capture.
 2. If startup says a sidecar is active, go there before diving into `screensaver_verbose.log`.
 3. Use timestamps to correlate across files; all runtime logs use the same wall-clock timestamp format.
 4. Use `screensaver_verbose.log` only when the family sidecars and main log are still not enough.
+5. For a destruction timeout, correlate the ordinary timeout summary with the
+   same-timestamp `[PYTHON_OWNER_REFS]` records in
+   `screensaver_lifecycle.log`; attribute the concrete edge before changing an
+   owner cleanup method.
 
 ## Recommended Pairings
 - Edit-mode / CUSTOM / stacking bugs:

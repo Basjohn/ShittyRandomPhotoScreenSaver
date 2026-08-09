@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import gc
 from types import SimpleNamespace
 import threading
 import weakref
 import warnings
 
+import pytest
 from PySide6.QtCore import QObject, QTimer, Signal
+from shiboken6 import isValid as is_valid_qobject
 
 from core.resources import ResourceManager, ResourceType
 from core.threading.manager import ThreadManager
@@ -113,10 +116,24 @@ def test_python_cycle_blocks_replacement_until_explicitly_released(qt_app, qtbot
     qtbot.waitUntil(lambda: completed == [True], timeout=1000)
 
 
-def test_display_teardown_releases_widget_manager_and_fade_owner_before_replacement(
+@pytest.mark.parametrize("display_count", [1, 2])
+def test_retained_display_wrappers_release_plain_python_owners_without_gc(
     qt_app,
     qtbot,
+    display_count,
+    monkeypatch,
+    request,
 ):
+    gc_was_enabled = gc.isenabled()
+    gc.disable()
+    if gc_was_enabled:
+        request.addfinalizer(gc.enable)
+
+    def _unexpected_collection(*_args, **_kwargs):
+        raise AssertionError("runtime teardown must not call gc.collect()")
+
+    monkeypatch.setattr(gc, "collect", _unexpected_collection)
+
     class _Display(QObject):
         image_displayed = Signal(str)
 
@@ -127,6 +144,28 @@ def test_display_teardown_releases_widget_manager_and_fade_owner_before_replacem
             self._runtime_cleanup_complete = False
             self._widget_manager = WidgetManager(self, resource_manager=object())
             self._custom_layout_manager = CustomLayoutManager(self)
+            # Match the normal z-order path: a display-parented Qt timer owns a
+            # bound WidgetManager slot until manager cleanup retires it.
+            raise_timer = QTimer(self)
+            raise_timer.setSingleShot(True)
+            raise_timer.timeout.connect(self._widget_manager._do_deferred_raise)
+            raise_timer.start(60_000)
+            self._widget_manager._raise_timer = raise_timer
+            self.settings_manager = None
+            self._settings_listener_connected = False
+            self._screen = None
+            self._coordinator = SimpleNamespace(
+                unregister_instance=lambda *_args: None,
+                release_focus=lambda *_args: None,
+                uninstall_event_filter=lambda *_args: None,
+            )
+            self._transition_controller = None
+            self._current_transition = None
+            self._input_handler = None
+            self._image_presenter = None
+            self._transition_factory = None
+            self._ctrl_cursor_hint = None
+            self._gl_compositor = None
 
         def describe_runtime_state(self):
             return {"screen": self.screen_index}
@@ -138,11 +177,21 @@ def test_display_teardown_releases_widget_manager_and_fade_owner_before_replacem
             return None
 
         def cleanup_runtime(self, _reason):
-            self._widget_manager.cleanup()
-            self._widget_manager = None
-            self._custom_layout_manager.cleanup()
-            self._custom_layout_manager = None
-            self._runtime_cleanup_complete = True
+            from rendering.display_cleanup import cleanup_runtime
+
+            cleanup_runtime(self, reason=_reason)
+
+        def shutdown_render_pipeline(self, _reason):
+            return None
+
+        def _cleanup_widget(self, attr_name, *_args, **_kwargs):
+            setattr(self, attr_name, None)
+
+        def _cancel_transition_watchdog(self):
+            return None
+
+        def _destroy_render_surface(self):
+            return None
 
         def close(self):
             assert self._runtime_cleanup_complete
@@ -152,16 +201,25 @@ def test_display_teardown_releases_widget_manager_and_fade_owner_before_replacem
         thread_manager=None,
         runtime_generation=301,
     )
-    displays = [_Display(manager, 0), _Display(manager, 1)]
-    manager.displays = displays
-    widget_manager_refs = [weakref.ref(display._widget_manager) for display in displays]
+    # Deliberately keep every Python wrapper alive after its C++ QObject has
+    # been destroyed.  The barrier must not rely on wrapper/refcount timing to
+    # release the plain-Python managers.
+    retired_display_wrappers = [
+        _Display(manager, screen_index)
+        for screen_index in range(display_count)
+    ]
+    manager.displays = list(retired_display_wrappers)
+    widget_manager_refs = [
+        weakref.ref(display._widget_manager)
+        for display in retired_display_wrappers
+    ]
     fade_coordinator_refs = [
         weakref.ref(display._widget_manager._fade_coordinator)
-        for display in displays
+        for display in retired_display_wrappers
     ]
     custom_layout_manager_refs = [
         weakref.ref(display._custom_layout_manager)
-        for display in displays
+        for display in retired_display_wrappers
     ]
     engine = SimpleNamespace(
         display_manager=manager,
@@ -175,7 +233,6 @@ def test_display_teardown_releases_widget_manager_and_fade_owner_before_replacem
         _loading_in_progress=False,
         _runtime_generation=302,
     )
-    del displays
     del manager
 
     barrier = teardown_display_runtime(engine, reason="settings")
@@ -189,6 +246,11 @@ def test_display_teardown_releases_widget_manager_and_fade_owner_before_replacem
 
     assert barrier is not None
     qtbot.waitUntil(lambda: completed == [True], timeout=1000)
+    assert len(retired_display_wrappers) == display_count
+    assert all(
+        not is_valid_qobject(display)
+        for display in retired_display_wrappers
+    )
     assert all(owner_ref() is None for owner_ref in widget_manager_refs)
     assert all(owner_ref() is None for owner_ref in fade_coordinator_refs)
     assert all(owner_ref() is None for owner_ref in custom_layout_manager_refs)

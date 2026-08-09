@@ -199,6 +199,21 @@ last-callback correlation alone.
 
 `--archive` remains a legacy ZIP alias for frozen historical comparisons only.
 
+Frozen Settings/Edit owner-attribution focus:
+
+```powershell
+$env:QT_QPA_PLATFORM='offscreen'
+python -m pytest tests/test_ownership_trace.py tests/test_runtime_destruction.py -q
+```
+
+The retained-wrapper cases deliberately keep one and two retired display
+Python wrappers alive after C++ QObject destruction. Their former
+`WidgetManager`, `FadeCoordinator`, and `CustomLayoutManager` weakrefs must
+clear before the barrier continuation and without `gc.collect()`. A passing
+source oracle does not close a frozen-only failure; rebuild the diagnostic
+product and use its bounded `[PYTHON_OWNER_REFS]` timeout records to name the
+installed retaining edge.
+
 Phase 1 measurement benchmark:
 
 ```powershell

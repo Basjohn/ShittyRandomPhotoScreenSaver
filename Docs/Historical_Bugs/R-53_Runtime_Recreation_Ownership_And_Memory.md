@@ -2,7 +2,7 @@
 
 Date opened: 2026-08-01  
 Latest evidence: 2026-08-08  
-Status: Pointer-width admission correction implemented after failed installed validation; lifecycle and plateau proof pending
+Status: Admission fixed; frozen retired-owner regression and plateau proof pending
 
 ## Classification
 
@@ -175,6 +175,34 @@ The same run emitted one `ImagePrefetcher._pump_scaled_prefetch()` `IndexError: 
 
 `WidgetManager` now tracks explicit ownership of its one-shot `image_displayed` connection. The ownership bit is cleared before touching Qt, so first readiness and terminal cleanup cannot attempt the same disconnect twice; disposed-sender cleanup remains fail-safe. A real PySide signal regression proves exactly one disconnect, and the 17:07 installed capture contains no repeat warning. This changes signal bookkeeping only and does not weaken authoritative first-frame readiness.
 
+## 2026-08-09 Frozen Retired-Owner Evidence
+
+The first dedicated diagnostic-runtime capture reproduced two Settings
+failures after clean full teardown. All QObject roots, generation resources,
+thread work, and global subscriptions reached zero; exactly two plain-Python
+`WidgetManager` owners—one per display—survived until the eight-second
+fail-closed timeout. A committed Edit reproduction retained the same two
+`WidgetManager` owners plus two `CustomLayoutManager` owners. Settings was
+never constructed, so this is the P5.4 retired-generation ownership boundary,
+not dialog presentation.
+
+The authoritative teardown already calls `WidgetManager.cleanup()` and clears
+the display's forward `_widget_manager` attribute before QObject destruction.
+Source tests also pass while keeping one and two destroyed display wrappers
+strongly alive and disabling cyclic GC. The remaining edge is therefore
+compiled/PySide-runtime-specific or absent from the source oracle. A rebuilt
+diagnostic product now captures an aggregate-bounded direct-referrer batch only
+after fail-closed exit is committed. The result must name the concrete edge
+before any cleanup or callback-retirement change is accepted.
+
+This ownership defect remains relevant to the performance gate: a retained
+manager graph can preserve widgets, callback wrappers, timers, pixmaps, and
+allocator pressure across recreation even when tracked GL cleanup reaches
+zero. The correction must deterministically sever the proven edge and then
+pass the alternating equivalent-state RSS/private/VRAM/handle/thread plateau;
+resource trimming, forced GC, ignored owners, or a longer timeout remain
+invalid substitutes.
+
 ## Presentation Guardrail
 
 The destruction barrier is separate from the authoritative-first-frame barrier. A replacement stays hidden until its own runtime generation, visualizer engine generation, and activation identity produce valid presentation state. `FadeCoordinator` remains the sole reveal coordinator. First-frame poison and Bubble → Spectrum → Bubble protections may not be weakened.
@@ -201,6 +229,7 @@ The destruction barrier is separate from the authoritative-first-frame barrier. 
 ## Evidence
 
 - `logs/evidence_chest/08_02_3877b2c7_20_27/` — temporary installed evidence identity
+- `logs/evidence_chest/08_09_diagnostic_widgetmanager_timeout_02_38/` — frozen fail-closed owner evidence
 - `Docs/phase_reports/P05_CPU_TASK_REDUCTION.md`
 - `Current_Plan.md`
 - `engine/runtime_destruction.py`

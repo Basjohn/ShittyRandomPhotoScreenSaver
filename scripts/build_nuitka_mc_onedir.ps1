@@ -138,6 +138,7 @@ if ($Console) { $consoleArg = "--windows-console-mode=force" }
 $argsList = @(
     "-m", "nuitka",
     "--mingw64",
+    "--jobs=2",
     "--standalone",
     "--remove-output",
     "--output-dir=$BuildOutputDir",

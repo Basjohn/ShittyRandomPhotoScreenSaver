@@ -51,7 +51,11 @@ separate diagnostic product now owns frozen-crash attribution.
 - [ ] Keep Media Center to a minimal shared packaged-route smoke check with no independent capture, baseline, soak, or golden.
 - [x] Add an opt-in installable Diagnostic Runtime with a distinct entry point, artifact/installer/AppId, executable-adjacent bounded logs with per-user fallbacks, automatic all-family telemetry, faulthandler output, and Settings/native-window breadcrumbs; leave standard/MC releases diagnostics-off.
 - [x] Build/install the diagnostic product and reproduce in-runtime Settings: two captured failures reached clean runtime stop, then timed out with exactly two retired `WidgetManager` Python owners and never reached dialog construction.
-- [ ] Trace and release the compiled-only retired `WidgetManager` references without garbage collection, ignored owners, timeout changes, or weakening the destruction barrier; require both displays to release before the dialog constructor begins.
+- [x] Confirm the authoritative display teardown already calls `WidgetManager.cleanup()` and clears `DisplayWidget._widget_manager` before close/delete; do not re-add that edge as a speculative fix.
+- [x] Add a one/two-display retained-wrapper oracle: both C++ display QObjects are destroyed while their Python wrappers stay strongly referenced, and former `WidgetManager`, `FadeCoordinator`, and `CustomLayoutManager` weakrefs clear before continuation without `gc.collect()`.
+- [x] Add aggregate-bounded diagnostic-only post-timeout owner-referrer attribution after fail-closed exit is committed; it is identity-only, redacts arbitrary/frame-local keys, never calls `repr()`/`gc.collect()`, and cannot alter barrier policy or activate in standard/Media Center products.
+- [ ] Rebuild/reinstall the diagnostic product and reproduce Settings first, then committed Edit; use `[PYTHON_OWNER_REFS]` to name the concrete frozen retaining edge instead of changing `WidgetManager.cleanup()` from the survivor count alone.
+- [ ] Release the proven owner-side edge with the smallest deterministic correction; require both displays to release before the dialog constructor begins and retain the exact no-GC wrapper oracle.
 - [ ] After the evidence-led correction, require rebuilt standard and bounded shared MC route smoke to continue rendering; then mark R-59 solved.
 
 ## P5.0A Clock Calendar Follow-Up
@@ -181,6 +185,7 @@ private commit, and `623.9 MiB` dedicated VRAM.
 - Passive owner/request-age telemetry and timestamp-separated live evidence.
 - Slight desynchronisation of independent heavy multi-display background work when measured simultaneous churn exists.
 - Separate opt-in diagnostic product identity with bounded per-user logs; release builds remain diagnostics-off and performance evidence remains `main.py`-only.
+- Failure-only bounded referrer snapshots after a diagnostic destruction timeout; use them to name the owner edge before lifecycle edits.
 - Registry-owned exact media-provider identities with one background GSMTC session snapshot; unsupported provider ids remain visible and inert.
 
 ## Blacklisted
@@ -194,6 +199,7 @@ private commit, and `623.9 MiB` dedicated VRAM.
 - Retry sleeps, nested event pumping, longer teardown timeouts, ignored owners, forced GC, working-set trimming, process recycling, and fake zero accounting.
 - Raising cache/resource budgets, retaining reserve frames without byte ownership, or collapsing different DPR/transform outputs.
 - Enabling diagnostic families by default in standard/Media Center release artifacts, or treating diagnostic-build timings as production performance evidence.
+- Re-adding the already-present display-to-WidgetManager clear, changing `WidgetManager.cleanup()` blindly from survivor counts, or using a failed barrier as permission to ignore/release the survivor diagnostically.
 - Fuzzy/substring media-provider matching, coercing unknown providers to Spotify, serial nested GSMTC fallback queries, or controlling whole-browser volume as though it belonged to one tab.
 
 # Later Phases

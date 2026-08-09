@@ -2,7 +2,7 @@
 
 Date: 2026-08-08
 Last updated: 2026-08-09
-Status: Current source validated; remaining frozen-native termination awaiting diagnostic attribution
+Status: Frozen failure localized to retired Python ownership; concrete referrer attribution pending
 
 ## Classification
 
@@ -84,20 +84,58 @@ not identify whether termination occurs before admission, during teardown, or
 at native dialog presentation. It does prove that stale standard-artifact drift
 was not the complete frozen failure.
 
-The new opt-in `SRPSS_Diagnostic.exe` product now runs the ordinary runtime and
-settings profile while keeping standard/MC artifacts unchanged. It writes
-bounded rotating logs under `%LOCALAPPDATA%\SRPSS\Diagnostics\logs` and an
-eagerly flushed `diagnostic_crash.log` bracketing admission, teardown, dialog
-construction, `showEvent`, `winId()`, acrylic application, modal execution, and
-replacement. Python faulthandler output is directed to the same companion.
-The diagnostic runtime uses direct interactive URL routing and never touches
-the standard SCR helper contract. This is attribution machinery, not a fix and
-not a Media Center capture.
+The opt-in `SRPSS_Diagnostic.exe` product runs the ordinary runtime and settings
+profile while keeping standard/MC artifacts unchanged. It writes bounded
+rotating logs beside the diagnostic executable under `logs`, falling back to
+`%LOCALAPPDATA%\SRPSS\Diagnostic\logs` and then
+`%TEMP%\SRPSS\Diagnostic\logs`. Its eagerly flushed `diagnostic_crash.log`
+brackets admission, teardown, dialog construction, `showEvent`, `winId()`,
+acrylic application, modal execution, and replacement. Python faulthandler
+output is directed to the same companion. The diagnostic runtime uses direct
+interactive URL routing and never touches the standard SCR helper contract.
+This is attribution machinery, not a fix and not a Media Center capture.
+
+## 2026-08-09 Hidden Diagnostic Result
+
+The diagnostic product did write logs, but its first build selected the legacy
+per-user folder instead of the documented executable-adjacent folder. Those
+logs are now retained under:
+
+```text
+logs/evidence_chest/08_09_diagnostic_widgetmanager_timeout_02_38/
+```
+
+They materially narrow the failure. Both Settings requests were queued and
+admitted once. Full runtime stop, GL/display teardown, and all watched QObject
+destruction completed. Retiring-generation resources, thread work, and global
+subscriptions reached zero. Exactly two `WidgetManager` Python owners—one per
+display—survived for eight seconds, after which the existing barrier
+intentionally exited fail-closed. No Settings dialog constructor stage was
+entered. Acrylic, modal presentation, and R-56 are therefore downstream of the
+current failure.
+
+Committed Edit reached the same barrier and retained two `WidgetManager` plus
+two `CustomLayoutManager` owners. The common defect is retired runtime
+ownership, not Settings-specific presentation. Authoritative display teardown
+already invokes `WidgetManager.cleanup()` and clears
+`DisplayWidget._widget_manager` before close/delete, so re-adding that clear or
+blindly expanding `WidgetManager.cleanup()` would not identify the frozen-only
+retaining edge.
+
+Source regressions now deliberately retain one and two destroyed
+`DisplayWidget` Python wrappers while requiring their former
+`WidgetManager`, `FadeCoordinator`, and `CustomLayoutManager` weakrefs to clear
+without cyclic GC or `gc.collect()`. They pass, proving the intended source
+ownership order but not the compiled-only retainer. The diagnostic timeout now
+commits fail-closed exit first and then emits an aggregate-bounded,
+privacy-redacted `[PYTHON_OWNER_REFS]` direct-referrer batch. Standard and Media
+Center products neither import nor execute that tracer.
 
 ## Remaining Validation
 
-- Build/install the separate diagnostic runtime and reproduce Settings entry
-  once to identify the last completed frozen/native boundary.
+- Rebuild/install the separate diagnostic runtime and reproduce Settings entry
+  once, then committed Edit, to identify the concrete strong referrer reported
+  by `[PYTHON_OWNER_REFS]`.
 - Apply only the smallest owner-local correction proved by that boundary; do
   not remove acrylic, relax teardown, or add delays speculatively.
 - Rebuild the standard SCR from corrected current source, then rebuild/reinstall
@@ -116,7 +154,10 @@ not claim frozen-binary closure.
 
 - `logs/evidence_chest/08_08_94798add_main_settings3_custom_spectrum_23_05/`
 - `logs/evidence_chest/08_08_e6f24ca5_main_settings3_perf_23_49/`
+- `logs/evidence_chest/08_09_diagnostic_widgetmanager_timeout_02_38/`
 - `engine/engine_handlers.py`
+- `engine/runtime_destruction.py`
+- `core/logging/ownership_trace.py`
 - `ui/settings_dialog.py`
 - `tests/test_s_hotkey_workflow.py`
 - `tests/test_settings_dialog.py`

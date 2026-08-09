@@ -73,6 +73,7 @@ Do not read every document by default.
 | Runtime sequencing | `engine/screensaver_engine.py` |
 | Full runtime teardown | `engine/engine_lifecycle.py::teardown_display_runtime` |
 | Retired-generation destruction barrier | `engine/runtime_destruction.py` |
+| Diagnostic-only failed-barrier Python-owner attribution | `core/logging/ownership_trace.py` |
 | Display topology/lifecycle | `engine/display_manager.py` |
 | Fullscreen presenter | `rendering/display_widget.py` |
 | Display-local ordered teardown | `rendering/display_cleanup.py::cleanup_runtime` |

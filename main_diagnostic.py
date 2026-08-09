@@ -12,6 +12,7 @@ from core.build_profile import activate_diagnostic_build
 # Keep the locally imported crash owner visible to Nuitka's static graph even
 # though ordinary runtime setup only opens it after logging is configured.
 from core.logging import crash_capture as _crash_capture  # noqa: F401
+from core.logging import ownership_trace as _ownership_trace  # noqa: F401
 
 
 activate_diagnostic_build()

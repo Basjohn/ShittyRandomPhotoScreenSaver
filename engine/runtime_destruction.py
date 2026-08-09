@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections import Counter
 from functools import partial
 import time
-from typing import Any, Callable
+from typing import Callable
 import weakref
 
 from PySide6.QtCore import QCoreApplication, QObject, QTimer
@@ -587,9 +587,20 @@ class RuntimeDestructionBarrier:
     def _on_timeout(self) -> None:
         if self._completed:
             return
+        pending_python_owner_refs = tuple(
+            (
+                token,
+                label,
+                self._python_refs.get(token),
+            )
+            for token, label in self._python_labels.items()
+            if self._python_refs.get(token) is not None
+        )
         resources = self._remaining_generation_resources()
         thread_work = self._remaining_thread_work()
         global_subscriptions = self._remaining_global_subscriptions()
+        qobject_classes = dict(Counter(self._qobject_labels.values()))
+        python_owner_classes = dict(Counter(self._python_labels.values()))
         resource_labels = [
             {
                 "id": entry.get("resource_id"),
@@ -606,16 +617,87 @@ class RuntimeDestructionBarrier:
             "global_subscriptions=%s",
             self.reason,
             self.retiring_generation,
-            dict(Counter(self._qobject_labels.values())),
-            dict(Counter(self._python_labels.values())),
+            qobject_classes,
+            python_owner_classes,
             resource_labels,
             list(thread_work[:24]),
             list(global_subscriptions[:24]),
         )
-        # Fail closed: the old graph remains diagnosable and no replacement
-        # continuation is permitted to construct a concurrent runtime.
+        # Preserve the ordinary timeout report/exit ordering, but commit the
+        # existing fail-closed policy before any diagnostic graph query.
+        # QApplication.exit() takes effect after this callback returns;
+        # attribution cannot permit a replacement runtime or change the
+        # lifecycle decision.
         self.cancel_for_terminal_shutdown()
         QApplication.exit(1)
+        diagnostic_owner_referrers, diagnostic_trace_metadata = (
+            self._capture_diagnostic_python_owner_referrers(
+                pending_python_owner_refs
+            )
+        )
+        if diagnostic_trace_metadata:
+            logger.critical(
+                "[LIFECYCLE_BARRIER][PYTHON_OWNER_REFS_SUMMARY] "
+                "reason=%s retiring_generation=%s summary=%s",
+                self.reason,
+                self.retiring_generation,
+                diagnostic_trace_metadata,
+            )
+        for token, label, snapshot in diagnostic_owner_referrers:
+            logger.critical(
+                "[LIFECYCLE_BARRIER][PYTHON_OWNER_REFS] "
+                "reason=%s retiring_generation=%s class=%s id=%s snapshot=%s",
+                self.reason,
+                self.retiring_generation,
+                label,
+                token,
+                snapshot,
+            )
+
+    def _capture_diagnostic_python_owner_referrers(
+        self,
+        pending_owner_refs: tuple[tuple[int, str, object], ...] | None = None,
+    ) -> tuple[tuple[tuple[int, str, str], ...], dict[str, object]]:
+        """Attribute survivors only in the explicit diagnostic product.
+
+        The snapshot is taken after the barrier has already failed.  It is
+        observational only: no garbage collection, owner release, retry, or
+        continuation decision is performed here.
+        """
+
+        try:
+            from core.build_profile import is_diagnostic_build
+
+            if not is_diagnostic_build():
+                return (), {}
+            from core.logging.ownership_trace import (
+                capture_weak_owner_referrer_snapshots,
+            )
+        except Exception:
+            logger.debug(
+                "[LIFECYCLE_BARRIER] Diagnostic ownership tracer unavailable",
+                exc_info=True,
+            )
+            return (), {}
+
+        if pending_owner_refs is None:
+            pending_owner_refs = tuple(
+                (
+                    token,
+                    label,
+                    self._python_refs.get(token),
+                )
+                for token, label in self._python_labels.items()
+                if self._python_refs.get(token) is not None
+            )
+        try:
+            return capture_weak_owner_referrer_snapshots(pending_owner_refs)
+        except Exception:
+            logger.debug(
+                "[LIFECYCLE_BARRIER] Diagnostic ownership capture failed",
+                exc_info=True,
+            )
+            return (), {}
 
 
 def create_runtime_destruction_barrier(

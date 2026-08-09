@@ -711,11 +711,173 @@ class LinkLabel(tk.Label):
         self.bind("<Leave>", lambda _event: self.configure(fg=COLORS["amber"]))
 
 
+class FoundryCheckbutton(tk.Frame):
+    """Large, DPI-aware checkbox with a deterministic vector check mark.
+
+    ttk's theme indicator is intentionally not used here: under Windows DPI
+    scaling the Clam indicator bitmap can be enlarged without scaling the mark
+    cleanly, which is what produced the malformed checked glyph in Build Foundry.
+    """
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        *,
+        text: str,
+        variable: tk.BooleanVar,
+        command=None,  # noqa: ANN001
+        background: str = COLORS["panel"],
+        indicator_size: int = 24,
+        gap: int = 6,
+        font=("Segoe UI", 10, "bold"),
+    ) -> None:
+        super().__init__(
+            parent,
+            bg=background,
+            bd=0,
+            highlightthickness=0,
+            takefocus=1,
+            cursor="hand2",
+        )
+        self._variable = variable
+        self._command = command
+        self._background = background
+        self._indicator_size = max(18, int(indicator_size))
+        self._disabled = False
+        self._trace_name: str | None = None
+
+        self._indicator = tk.Canvas(
+            self,
+            width=self._indicator_size,
+            height=self._indicator_size,
+            bg=background,
+            bd=0,
+            highlightthickness=0,
+            cursor="hand2",
+        )
+        self._indicator.pack(side="left", padx=(0, max(1, int(gap))))
+        self._label = tk.Label(
+            self,
+            text=text,
+            bg=background,
+            fg=COLORS["text"],
+            font=font,
+            anchor="w",
+            padx=0,
+            pady=0,
+            cursor="hand2",
+        )
+        self._label.pack(side="left")
+
+        for widget in (self, self._indicator, self._label):
+            widget.bind("<Button-1>", self._on_click)
+        self.bind("<space>", self._on_keyboard_toggle)
+        self.bind("<Return>", self._on_keyboard_toggle)
+        self.bind("<Destroy>", self._on_destroy, add="+")
+
+        self._trace_name = self._variable.trace_add("write", self._on_variable_changed)
+        self._render()
+
+    def _on_click(self, _event: tk.Event) -> str:
+        if self._disabled:
+            return "break"
+        self.focus_set()
+        self._toggle()
+        return "break"
+
+    def _on_keyboard_toggle(self, _event: tk.Event) -> str:
+        if not self._disabled:
+            self._toggle()
+        return "break"
+
+    def _toggle(self) -> None:
+        self._variable.set(not bool(self._variable.get()))
+        if self._command is not None:
+            self._command()
+
+    def _on_variable_changed(self, *_args) -> None:  # noqa: ANN002
+        self._render()
+
+    def _on_destroy(self, event: tk.Event) -> None:
+        if event.widget is not self or self._trace_name is None:
+            return
+        try:
+            self._variable.trace_remove("write", self._trace_name)
+        except tk.TclError:
+            pass
+        self._trace_name = None
+
+    def _render(self) -> None:
+        size = self._indicator_size
+        selected = bool(self._variable.get())
+        disabled = self._disabled
+        outline = COLORS["faint"] if disabled else COLORS["amber"]
+        fill = COLORS["panel_alt"] if disabled and selected else (
+            COLORS["amber_dark"] if selected else self._background
+        )
+        check_color = COLORS["muted"] if disabled else COLORS["text"]
+
+        self._indicator.delete("all")
+        border_width = max(2, int(round(size * 0.085)))
+        inset = max(1, border_width // 2)
+        self._indicator.create_rectangle(
+            inset,
+            inset,
+            size - inset - 1,
+            size - inset - 1,
+            fill=fill,
+            outline=outline,
+            width=border_width,
+        )
+        if selected:
+            self._indicator.create_line(
+                round(size * 0.22),
+                round(size * 0.52),
+                round(size * 0.42),
+                round(size * 0.72),
+                round(size * 0.79),
+                round(size * 0.29),
+                fill=check_color,
+                width=max(2, int(round(size * 0.11))),
+                capstyle=tk.ROUND,
+                joinstyle=tk.ROUND,
+            )
+
+        text_color = COLORS["faint"] if disabled else COLORS["text"]
+        cursor = "arrow" if disabled else "hand2"
+        self.configure(cursor=cursor)
+        self._indicator.configure(cursor=cursor)
+        self._label.configure(fg=text_color, cursor=cursor)
+
+    def state(self, statespec: Sequence[str] | str | None = None) -> tuple[str, ...]:
+        """Small ttk-compatible state surface used by BuildRunnerApp."""
+        if statespec is None:
+            states: list[str] = []
+            if self._disabled:
+                states.append("disabled")
+            if bool(self._variable.get()):
+                states.append("selected")
+            return tuple(states)
+
+        tokens = (statespec,) if isinstance(statespec, str) else tuple(statespec)
+        for token in tokens:
+            if token == "disabled":
+                self._disabled = True
+            elif token == "!disabled":
+                self._disabled = False
+            elif token == "selected":
+                self._variable.set(True)
+            elif token == "!selected":
+                self._variable.set(False)
+        self._render()
+        return self.state()
+
+
 @dataclass
 class JobWidgets:
     frame: tk.Frame
     variable: tk.BooleanVar
-    checkbox: ttk.Checkbutton
+    checkbox: FoundryCheckbutton
     status: tk.Label
     log_link: LinkLabel
     output_link: LinkLabel
@@ -723,7 +885,6 @@ class JobWidgets:
 
 class BuildRunnerApp:
     AUTO_CLOSE_MS = 3000
-    CHECKBOX_INDICATOR_DIP = 26
 
     def __init__(self, root: tk.Tk, *, initial_mode: ModeName | None = None) -> None:
         self._root = root
@@ -739,7 +900,6 @@ class BuildRunnerApp:
         self._preferences = load_preferences()
         self._dpi_scale = self._initial_dpi_scale()
         self._shell: tk.Frame | None = None
-        self._checkbox_indicator_images: tuple[tk.PhotoImage, ...] = ()
         self._initial_show_complete = False
         selected_mode = initial_mode or self._preferences.mode
         self._mode_var = tk.StringVar(value=selected_mode)
@@ -899,84 +1059,6 @@ class BuildRunnerApp:
             style.theme_use("clam")
         except tk.TclError:
             pass
-        indicator_size = self._dip(self.CHECKBOX_INDICATOR_DIP)
-
-        def _checkbox_image(*, checked: bool, disabled: bool) -> tk.PhotoImage:
-            image = tk.PhotoImage(width=indicator_size, height=indicator_size)
-            border = COLORS["faint"] if disabled else COLORS["amber"]
-            fill = COLORS["panel_alt"] if not checked else (
-                COLORS["border"] if disabled else COLORS["amber_dark"]
-            )
-            image.put(border, to=(0, 0, indicator_size, indicator_size))
-            inset = max(2, self._dip(2))
-            image.put(fill, to=(inset, inset, indicator_size - inset, indicator_size - inset))
-            if checked:
-                mark = COLORS["faint"] if disabled else COLORS["text"]
-                thickness = max(2, self._dip(2))
-                for offset in range(thickness):
-                    for x in range(indicator_size // 4, indicator_size // 2):
-                        y = indicator_size // 2 + (x - indicator_size // 4) // 2
-                        image.put(mark, (x, min(indicator_size - 2, y + offset)))
-                    for x in range(indicator_size // 2, (indicator_size * 4) // 5):
-                        y = (indicator_size * 3) // 4 - (x - indicator_size // 2)
-                        image.put(mark, (x, max(1, y + offset)))
-            return image
-
-        unchecked = _checkbox_image(checked=False, disabled=False)
-        checked = _checkbox_image(checked=True, disabled=False)
-        unchecked_disabled = _checkbox_image(checked=False, disabled=True)
-        checked_disabled = _checkbox_image(checked=True, disabled=True)
-        self._checkbox_indicator_images = (
-            unchecked,
-            checked,
-            unchecked_disabled,
-            checked_disabled,
-        )
-        style.element_create(
-            "Foundry.Checkbox.indicator",
-            "image",
-            unchecked,
-            ("disabled", "selected", checked_disabled),
-            ("disabled", unchecked_disabled),
-            ("selected", checked),
-            sticky="",
-        )
-        style.layout(
-            "Foundry.TCheckbutton",
-            [
-                (
-                    "Checkbutton.padding",
-                    {
-                        "sticky": "nswe",
-                        "children": [
-                            ("Foundry.Checkbox.indicator", {"side": "left", "sticky": ""}),
-                            (
-                                "Checkbutton.focus",
-                                {
-                                    "side": "left",
-                                    "sticky": "w",
-                                    "children": [
-                                        ("Checkbutton.label", {"sticky": "nswe"}),
-                                    ],
-                                },
-                            ),
-                        ],
-                    },
-                )
-            ],
-        )
-        style.configure(
-            "Foundry.TCheckbutton",
-            background=COLORS["panel"],
-            foreground=COLORS["text"],
-            font=("Segoe UI", 10, "bold"),
-            padding=(6, 4),
-        )
-        style.map(
-            "Foundry.TCheckbutton",
-            background=[("active", COLORS["panel"])],
-            foreground=[("disabled", COLORS["faint"]), ("active", COLORS["amber"])],
-        )
         style.configure(
             "Foundry.TButton",
             background=COLORS["panel_alt"],
@@ -1179,12 +1261,14 @@ class BuildRunnerApp:
         )
         self._footer_status.pack(side="left", fill="x", expand=True)
 
-        self._auto_close_checkbox = ttk.Checkbutton(
+        self._auto_close_checkbox = FoundryCheckbutton(
             footer,
             text="Auto-close after full success",
             variable=self._auto_close_var,
             command=self._persist_preferences,
-            style="Foundry.TCheckbutton",
+            background=COLORS["root"],
+            indicator_size=self._dip(24),
+            gap=self._dip(6),
         )
         self._auto_close_checkbox.pack(side="right", padx=(10, 0))
         self._start_button = ttk.Button(
@@ -1285,6 +1369,7 @@ class BuildRunnerApp:
             ttk.Scale,
             ttk.Scrollbar,
             ttk.Progressbar,
+            FoundryCheckbutton,
         )
         if isinstance(widget, interactive):
             return False
@@ -1474,11 +1559,13 @@ class BuildRunnerApp:
             job.key != "reddit_helper" or helper_status.needs_rebuild
         )
         variable = tk.BooleanVar(value=selected)
-        checkbox = ttk.Checkbutton(
+        checkbox = FoundryCheckbutton(
             frame,
             text=f"{index}.  {job.name}",
             variable=variable,
-            style="Foundry.TCheckbutton",
+            background=COLORS["panel"],
+            indicator_size=self._dip(24),
+            gap=self._dip(6),
         )
         checkbox.pack(side="left")
         status = tk.Label(
