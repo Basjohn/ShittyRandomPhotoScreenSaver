@@ -1,6 +1,6 @@
 # Documentation Maintenance
 
-Last updated: 2026-07-23
+Last updated: 2026-08-09
 
 Rules for keeping SRPSS documentation accurate, navigable, and cheap for Codex to read.
 
@@ -22,7 +22,8 @@ Rules for keeping SRPSS documentation accurate, navigable, and cheap for Codex t
 | `Spec.md` | stable architecture and behaviour |
 | `Current_Plan.md` | active unfinished work |
 | focused docs | subsystem-specific contracts |
-| `Docs/Historical_Bugs.md` | dated regression narratives |
+| `Docs/Historical_Bugs/` | full standalone significant-regression narratives |
+| `Docs/Historical_Bugs.md` | compact historical status/navigation map |
 | `Docs/Regression_Notes.md` | small resolved notes |
 | `Docs/TestSuite.md` | validation levels and gates |
 | `Docs/Harness_Index.md` | recurring commands |
