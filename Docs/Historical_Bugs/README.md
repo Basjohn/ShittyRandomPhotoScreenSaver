@@ -18,7 +18,7 @@ For migrated active records, the standalone file is the current evidence record;
 
 ## Active / Pending Records
 
-- [R-59 — Runtime Settings Request Tore Down The Emitting Qt Input Stack](R-59_Runtime_Settings_Request_Input_Stack_Teardown.md) — source runtime passes three cycles; standard and Media Center packaged validation remains pending.
+- [R-59 — Runtime Settings Request Tore Down The Emitting Qt Input Stack](R-59_Runtime_Settings_Request_Input_Stack_Teardown.md) — source sequencing passes; a fresh frozen MC still terminates and the separate diagnostic runtime must localize the remaining native boundary.
 - [R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation](R-53_Runtime_Recreation_Ownership_And_Memory.md) — mechanical Settings/CUSTOM ownership is repaired; the alternating normal/Media Center plateau matrix remains open.
 
 ## Standalone Records

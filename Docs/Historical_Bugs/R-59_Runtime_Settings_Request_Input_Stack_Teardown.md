@@ -2,7 +2,7 @@
 
 Date: 2026-08-08
 Last updated: 2026-08-09
-Status: Current source validated; installed standard artifact proven stale and awaiting rebuild validation
+Status: Current source validated; remaining frozen-native termination awaiting diagnostic attribution
 
 ## Classification
 
@@ -74,10 +74,34 @@ failure of the current source path. The installed binary still owns the exact
 synchronous teardown shape this record prohibits. It must be rebuilt from
 current source before another source change is considered.
 
+## Fresh Frozen Result And Diagnostic Boundary
+
+A newly compiled Media Center runtime was subsequently reported to terminate
+on in-runtime Settings entry as well. Media Center delegates to the same queued
+engine admission and has no independent Settings implementation. Because
+release artifacts intentionally emit no default diagnostics, this report does
+not identify whether termination occurs before admission, during teardown, or
+at native dialog presentation. It does prove that stale standard-artifact drift
+was not the complete frozen failure.
+
+The new opt-in `SRPSS_Diagnostic.exe` product now runs the ordinary runtime and
+settings profile while keeping standard/MC artifacts unchanged. It writes
+bounded rotating logs under `%LOCALAPPDATA%\SRPSS\Diagnostics\logs` and an
+eagerly flushed `diagnostic_crash.log` bracketing admission, teardown, dialog
+construction, `showEvent`, `winId()`, acrylic application, modal execution, and
+replacement. Python faulthandler output is directed to the same companion.
+The diagnostic runtime uses direct interactive URL routing and never touches
+the standard SCR helper contract. This is attribution machinery, not a fix and
+not a Media Center capture.
+
 ## Remaining Validation
 
-- Rebuild the standard SCR from current source, then rebuild/reinstall its
-  installer and open/close Settings while the runtime is active.
+- Build/install the separate diagnostic runtime and reproduce Settings entry
+  once to identify the last completed frozen/native boundary.
+- Apply only the smallest owner-local correction proved by that boundary; do
+  not remove acrylic, relax teardown, or add delays speculatively.
+- Rebuild the standard SCR from corrected current source, then rebuild/reinstall
+  its installer and open/close Settings while the runtime is active.
 - Keep Media Center to a minimal shared packaged-route parity smoke check. It
   never receives an independent capture, baseline, golden, matrix, or soak.
 - Require one queued/admitted request, clean runtime and dialog barriers, one

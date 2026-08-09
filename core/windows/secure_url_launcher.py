@@ -11,6 +11,7 @@ import webbrowser
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
 
+from core.build_profile import is_diagnostic_build
 from core.logging.logger import get_logger
 from core.windows import reddit_helper_bridge
 from core.windows import reddit_helper_runtime
@@ -40,7 +41,8 @@ def open_url(
     if not url:
         return False
 
-    direct_requested = bool(prefer_direct or is_mc_build())
+    diagnostic_build = is_diagnostic_build()
+    direct_requested = bool(prefer_direct or is_mc_build() or diagnostic_build)
     if direct_requested:
         try:
             if QDesktopServices.openUrl(QUrl(url)):
@@ -50,9 +52,14 @@ def open_url(
         except Exception as exc:
             logger.warning("[URL-LAUNCH] Native direct URL launch failed source=%s error=%s", source, exc)
 
-    # MC is always interactive: a failed direct route must not enqueue work for
-    # the SCR helper, which intentionally does not run in MC sessions.
-    if not is_mc_build() and reddit_helper_bridge.is_bridge_available():
+    # MC and the separate diagnostic product are always interactive: a failed
+    # direct route must not enqueue work for the SCR helper, which neither
+    # product owns or provisions.
+    if (
+        not is_mc_build()
+        and not diagnostic_build
+        and reddit_helper_bridge.is_bridge_available()
+    ):
         ok = reddit_helper_bridge.enqueue_url(url, source=source)
         if ok:
             try:

@@ -154,6 +154,7 @@ class Job:
     script: Path
     output_dir: Path
     expected_artifact: Path
+    default_selected: bool = True
 
 
 @dataclass
@@ -225,6 +226,15 @@ def jobs_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> tuple[Job, ...
             release_dir / "media_center" / "SRPSS_Media_Center.exe",
         ),
         Job(
+            "diagnostic",
+            "Diagnostic Runtime",
+            "powershell",
+            scripts_dir / "venv" / "build_nuitka_diagnostic.ps1",
+            release_dir / "diagnostic",
+            release_dir / "diagnostic" / "SRPSS_Diagnostic.exe",
+            default_selected=False,
+        ),
+        Job(
             "reddit_helper",
             "Reddit Helper",
             "powershell",
@@ -247,6 +257,15 @@ def jobs_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> tuple[Job, ...
             scripts_dir / "SRPSS_MediaCenter_Installer.iss",
             installers_dir,
             installers_dir / "Setup_SRPSS_Media_Center.exe",
+        ),
+        Job(
+            "diagnostic_installer",
+            "Diagnostic Installer",
+            "inno",
+            scripts_dir / "SRPSS_Diagnostic_Installer.iss",
+            installers_dir,
+            installers_dir / "Setup_SRPSS_Diagnostic.exe",
+            default_selected=False,
         ),
     )
 
@@ -271,8 +290,9 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
 
     for job in jobs:
         if not job.script.is_file():
-            result.errors.append(f"{job.name}: missing {job.script}")
             result.unavailable_jobs.add(job.key)
+            if job.default_selected:
+                result.errors.append(f"{job.name}: missing {job.script}")
 
     if result.pwsh is None:
         result.errors.append("PowerShell 7 (pwsh.exe) is not available on PATH")
@@ -283,10 +303,15 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
         result.errors.append("Inno Setup 6 console compiler (ISCC.exe) was not found")
         result.unavailable_jobs.update(job.key for job in jobs if job.kind == "inno")
 
-    if mode == "venv" and not (repo_root / ".venv").is_dir():
-        result.warnings.append(
-            "Repo-root .venv is absent; the venv workers will create it on first build"
-        )
+    if not (repo_root / ".venv").is_dir():
+        if mode == "venv":
+            result.warnings.append(
+                "Repo-root .venv is absent; the venv workers will create it on first build"
+            )
+        else:
+            result.warnings.append(
+                "Diagnostic Runtime uses the repo-root venv worker and will create .venv if selected"
+            )
 
     required_assets = (
         repo_root / "SRPSS.ico",
@@ -298,7 +323,7 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
             result.errors.append(f"Required build asset is missing: {asset}")
 
     for job in jobs:
-        if not job.expected_artifact.exists():
+        if job.default_selected and not job.expected_artifact.exists():
             result.warnings.append(f"{job.name}: output does not exist yet")
 
     return result
@@ -1377,7 +1402,9 @@ class BuildRunnerApp:
             highlightthickness=0 if index == 1 else 1,
         )
         frame.pack(fill="x")
-        selected = job.key != "reddit_helper" or helper_status.needs_rebuild
+        selected = bool(job.default_selected) and (
+            job.key != "reddit_helper" or helper_status.needs_rebuild
+        )
         variable = tk.BooleanVar(value=selected)
         checkbox = ttk.Checkbutton(
             frame,
@@ -1637,8 +1664,12 @@ class BuildRunnerApp:
 def smoke_payload(mode: ModeName) -> dict:
     status = helper_build_status(mode)
     preflight = run_preflight(mode)
+    jobs = jobs_for_mode(mode)
     return {
-        "success": not any(not job.script.is_file() for job in jobs_for_mode(mode)),
+        "success": not any(
+            job.default_selected and not job.script.is_file()
+            for job in jobs
+        ),
         "mode": mode,
         "jobs": [
             {
@@ -1646,8 +1677,9 @@ def smoke_payload(mode: ModeName) -> dict:
                 "kind": job.kind,
                 "script": str(job.script),
                 "output_dir": str(job.output_dir),
+                "default_selected": bool(job.default_selected),
             }
-            for job in jobs_for_mode(mode)
+            for job in jobs
         ],
         "helper": {
             "needs_rebuild": status.needs_rebuild,

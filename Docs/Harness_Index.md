@@ -393,9 +393,11 @@ python tools/build_runner.py --mode normal
 python tools/build_runner.py --mode venv
 ```
 
-The selected environment changes only the PowerShell workers. Normal mode uses
-`scripts/*.ps1`; repo-venv mode uses `scripts/venv/*.ps1`. Both modes compile
-the canonical installer definitions in `scripts/`. The runner reports Reddit
+The selected environment changes the standard, Media Center, and helper
+PowerShell workers. Normal mode uses `scripts/*.ps1`; repo-venv mode uses
+`scripts/venv/*.ps1`. The opt-in Diagnostic Runtime always uses its dedicated
+repo-venv worker for reproducibility. All modes compile the canonical installer
+definitions in `scripts/`. The runner reports Reddit
 helper input drift inline, persists the auto-close preference under local app
 data, exposes per-job log/output links, and shows stage progress while each
 long-running compiler owns the pipeline.
@@ -412,9 +414,19 @@ Successful products publish into one release tree:
 release/
   screensaver/
   media_center/
+  diagnostic/
   reddit_helper/
   installers/
 ```
+
+`Diagnostic Runtime` and `Diagnostic Installer` are deliberately unselected by
+default. Together they publish/install `SRPSS_Diagnostic.exe` without changing
+the standard screensaver registration or Media Center installation. Runtime
+logs live under `%LOCALAPPDATA%\SRPSS\Diagnostics\logs`; use the diagnostic
+product for frozen-crash attribution, never as a performance baseline or as a
+Media Center capture substitute. The diagnostic product is interactive and
+does not provision, queue to, start, or keep alive the standard SCR Reddit
+helper.
 
 Shader validation derives its expected files from the current
 `widgets/spotify_visualizer/shaders/*.frag` sources. Onefile builds validate the

@@ -63,6 +63,7 @@ Do not read every document by default.
 |---|---|
 | `main.py` | Normal screensaver runtime and Windows invocation modes |
 | `main_mc.py` | Media Center runtime |
+| `main_diagnostic.py` | Opt-in installable diagnostic runtime; ordinary runtime with bounded per-user logging and fatal crash breadcrumbs |
 | `tools/build_runner.py` | Build Foundry GUI/CLI owner for normal and repo-root-venv release pipelines |
 
 ## Runtime Ownership Map

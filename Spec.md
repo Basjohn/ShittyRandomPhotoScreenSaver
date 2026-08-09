@@ -202,6 +202,13 @@ Diagnostics are:
 - passive;
 - privacy-safe.
 
+Ordinary standard and Media Center packaged launches remain diagnostics-off.
+An installable diagnostic product may activate existing diagnostic families
+only through its explicit compiled entry-point identity. It uses a separate
+per-user bounded rotating-log directory, never registers as or replaces the
+standard screensaver, never owns or mutates the secure-desktop helper, and is
+not a performance-baseline authority.
+
 They must not:
 
 - repaint;

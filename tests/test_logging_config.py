@@ -1,4 +1,6 @@
 import logging
+from logging.handlers import RotatingFileHandler
+
 from core.logging import logger as logger_mod
 
 
@@ -183,3 +185,47 @@ def test_old_logging_env_toggles_no_longer_enable_families(tmp_path, monkeypatch
     assert logger_mod.is_settings_logging_enabled() is False
     assert logger_mod.is_cache_logging_enabled() is False
     assert logger_mod.is_steam_logging_enabled() is False
+
+
+def test_diagnostic_build_forces_bounded_localappdata_logging(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setattr(logger_mod, "_FORCED_LOG_DIR", None)
+    monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
+    monkeypatch.setattr(logger_mod, "_LOGGING_DISABLED", True)
+    monkeypatch.setattr(logger_mod, "_PERF_METRICS_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_USAGE_LOGGING_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_VIZ_LOGGING_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_VIZ_DIAGNOSTICS_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_GEOMETRY_LOGGING_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_SETTINGS_LOGGING_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_LIFECYCLE_LOGGING_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_CACHE_LOGGING_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_STEAM_LOGGING_ENABLED", False)
+
+    logger_mod.setup_logging(
+        debug=True,
+        settings_trace=True,
+        lifecycle=True,
+        diagnostic_build=True,
+    )
+    logging.getLogger("SettingsManager").info("[SETTINGS] diagnostic settings")
+    logging.getLogger("engine.engine_lifecycle").info("[LIFECYCLE] diagnostic lifecycle")
+
+    expected = tmp_path / "SRPSS" / "Diagnostics" / "logs"
+    assert logger_mod.get_log_dir() == expected
+    rotating = [
+        handler
+        for handler in logging.getLogger().handlers
+        if isinstance(handler, RotatingFileHandler)
+    ]
+    assert rotating
+    assert all(handler.maxBytes == 1 * 1024 * 1024 for handler in rotating)
+    assert all(1 <= handler.backupCount <= 5 for handler in rotating)
+
+    logging.shutdown()
+    assert "diagnostic settings" in (expected / "screensaver_settings.log").read_text(
+        encoding="utf-8"
+    )
+    assert "diagnostic lifecycle" in (expected / "screensaver_lifecycle.log").read_text(
+        encoding="utf-8"
+    )

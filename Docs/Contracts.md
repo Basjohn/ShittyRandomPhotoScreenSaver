@@ -29,7 +29,7 @@ This is not a second `Spec.md`. Find the owner here, then read only the owning c
 | Image shared-memory transport | `core/process/shared_memory_transport.py` plus `core/process/workers/image_worker.py` | `Docs/phase_reports/P04_RESOURCE_LIFETIME_MAP.md` | One bounded attachment handoff; parent consumes/unlinks; exact live-byte accounting |
 | Shared animation timeline | `core/animation/animator.py` | — | Shared animations only; not visualizer simulation |
 | Secure-desktop URL/helper handoff | installer task/ACL contract, `core/windows/reddit_helper_bridge.py`, `core/windows/reddit_helper_runtime.py`, and `helpers/reddit_helper_worker.py` | `Docs/Historical_Bugs.md` R-02 | Atomic bounded spool; interactive-only ephemeral helper; saver teardown never waits |
-| Build/release orchestration | `tools/build_runner.py`, `tools/build_layout.ps1`, and mode-specific workers under `scripts/` | `Docs/Harness_Index.md` Build Foundry section | One runner; sequential workers; scratch output outside the canonical four-folder release tree |
+| Build/release orchestration | `tools/build_runner.py`, `tools/build_layout.ps1`, and mode-specific workers under `scripts/` | `Docs/Harness_Index.md` Build Foundry section | One runner; sequential workers; isolated release products; diagnostic runtime is opt-in and never alters standard/MC artifacts |
 
 ## Rendering and Performance Contracts
 

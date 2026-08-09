@@ -29,6 +29,26 @@ def test_open_url_prefers_native_direct_launch_for_settings(mock_open, mock_brid
 
 @patch("core.windows.secure_url_launcher.reddit_helper_runtime.ensure_helper_runtime")
 @patch("core.windows.secure_url_launcher.reddit_helper_bridge")
+@patch("core.windows.secure_url_launcher.QDesktopServices.openUrl", return_value=True)
+def test_diagnostic_build_uses_direct_route_without_shared_helper(
+    mock_open,
+    mock_bridge,
+    mock_ensure_helper,
+    monkeypatch,
+) -> None:
+    from core.windows import secure_url_launcher
+
+    monkeypatch.setattr(secure_url_launcher, "is_diagnostic_build", lambda: True)
+
+    assert secure_url_launcher.open_url("https://example.com", source="diagnostic") is True
+    mock_open.assert_called_once()
+    mock_bridge.is_bridge_available.assert_not_called()
+    mock_bridge.enqueue_url.assert_not_called()
+    mock_ensure_helper.assert_not_called()
+
+
+@patch("core.windows.secure_url_launcher.reddit_helper_runtime.ensure_helper_runtime")
+@patch("core.windows.secure_url_launcher.reddit_helper_bridge")
 @patch("core.windows.secure_url_launcher.QDesktopServices.openUrl", return_value=False)
 def test_open_url_uses_and_wakes_secure_handoff_after_direct_failure(
     mock_open,

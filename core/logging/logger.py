@@ -757,10 +757,14 @@ def get_log_dir() -> Path:
     return _BASE_DIR / "logs"
 
 
-def _resolve_runtime_log_dir() -> Path:
+def _resolve_runtime_log_dir(*, diagnostic_build: bool = False) -> Path:
     """Resolve the log directory using the same rules as setup_logging()."""
     base_dir = _BASE_DIR
-    forced_dir = _FORCED_LOG_DIR
+    forced_dir = (
+        _candidate_localappdata_diagnostic_dir()
+        if diagnostic_build
+        else _FORCED_LOG_DIR
+    )
 
     try:
         import builtins as _builtins
@@ -792,13 +796,13 @@ def _resolve_runtime_log_dir() -> Path:
     return _select_log_dir(forced_dir, base_dir)
 
 
-def clear_logs_for_fresh_start() -> tuple[Path, int]:
+def clear_logs_for_fresh_start(*, diagnostic_build: bool = False) -> tuple[Path, int]:
     """Delete all log files in the resolved runtime log directory before startup.
 
     Returns:
         tuple[path, deleted_count]: resolved log dir and number of deleted files
     """
-    log_dir = _resolve_runtime_log_dir()
+    log_dir = _resolve_runtime_log_dir(diagnostic_build=diagnostic_build)
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -823,6 +827,15 @@ def _candidate_programdata_dir() -> Path | None:
     if not program_data:
         return None
     return Path(program_data) / "SRPSS" / "logs"
+
+
+def _candidate_localappdata_diagnostic_dir() -> Path:
+    """Return the dedicated readable per-user diagnostic log location."""
+
+    local_app_data = os.getenv("LOCALAPPDATA")
+    if local_app_data:
+        return Path(local_app_data) / "SRPSS" / "Diagnostics" / "logs"
+    return Path(tempfile.gettempdir()) / "SRPSS" / "Diagnostics" / "logs"
 
 
 def _select_log_dir(
@@ -878,6 +891,7 @@ def setup_logging(
     lifecycle: bool = False,
     cache_trace: bool = False,
     steam_trace: bool = False,
+    diagnostic_build: bool = False,
 ) -> None:
     """
     Configure application logging with file rotation.
@@ -897,6 +911,9 @@ def setup_logging(
         lifecycle: Enables widget/worker/engine lifecycle sidecar diagnostics.
         cache_trace: Enables image-cache/prefetch/cache-authority sidecar diagnostics.
         steam_trace: Enables Steam widget family sidecar diagnostics.
+        diagnostic_build: Forces bounded logging into the dedicated per-user
+            diagnostic directory. Ordinary and Media Center release entry
+            points never set this flag.
     """
     global _VERBOSE, _PERF_METRICS_ENABLED, _USAGE_LOGGING_ENABLED
     global _VIZ_LOGGING_ENABLED, _VIZ_DIAGNOSTICS_ENABLED
@@ -909,7 +926,11 @@ def setup_logging(
     # a logs/ directory next to the executable so users can easily find it.
 
     base_dir = _BASE_DIR
-    forced_dir = _FORCED_LOG_DIR
+    forced_dir = (
+        _candidate_localappdata_diagnostic_dir()
+        if diagnostic_build
+        else _FORCED_LOG_DIR
+    )
     _ACTIVE_LOG_DIR = None
     try:
         import sys as _sys
@@ -965,6 +986,8 @@ def setup_logging(
         _STEAM_LOGGING_ENABLED = True
 
     logging_disabled = _determine_logging_disabled(exe_path_valid)
+    if diagnostic_build:
+        logging_disabled = False
     global _LOGGING_DISABLED
     _LOGGING_DISABLED = logging_disabled
 

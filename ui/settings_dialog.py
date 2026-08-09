@@ -20,6 +20,7 @@ from PySide6.QtCore import Qt, QPoint, QRect, QRectF, Signal, QUrl, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QGuiApplication, QPainterPath, QDesktopServices
 
 from core.logging.logger import get_log_dir, get_logger, is_perf_metrics_enabled
+from core.build_profile import is_diagnostic_build
 from core.mc import is_mc_build
 from core.settings.settings_manager import SettingsManager
 from core.threading.manager import ThreadManager
@@ -37,6 +38,16 @@ from ui.widgets.control_shadow import apply_shadows_to_inputs
 from ui.settings_dialog_cache import get_settings_dialog_cache
 
 logger = get_logger(__name__)
+
+
+def _record_diagnostic_stage(stage: str, **fields: object) -> None:
+    """Record native Settings presentation boundaries only for diagnostics."""
+
+    if not is_diagnostic_build():
+        return
+    from core.logging.crash_capture import record_diagnostic_stage
+
+    record_diagnostic_stage(stage, **fields)
 
 SETTINGS_OUTER_CORNER_RADIUS = 6.5
 SETTINGS_OUTER_BORDER_WIDTH = 4.0
@@ -1744,10 +1755,13 @@ class SettingsDialog(QDialog):
     
     def showEvent(self, event):
         show_start = time.perf_counter()
+        _record_diagnostic_stage("settings_show_event_begin")
         super().showEvent(event)
+        _record_diagnostic_stage("settings_show_event_after_super")
         # Clear the construction-time activation guard so the window can
         # receive focus normally now that it has visible content.
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
+        _record_diagnostic_stage("settings_show_event_activation_enabled")
         self._start_background_tab_hydration()
         # Enable Windows acrylic blur-behind on first show
         if not self._acrylic_applied:
@@ -1755,9 +1769,20 @@ class SettingsDialog(QDialog):
             blur_start = time.perf_counter()
             try:
                 from core.windows.dwm_blur import enable_acrylic_blur
-                enable_acrylic_blur(int(self.winId()))
+                _record_diagnostic_stage("settings_show_event_before_winid")
+                hwnd = int(self.winId())
+                _record_diagnostic_stage(
+                    "settings_show_event_before_acrylic",
+                    hwnd=hwnd,
+                )
+                acrylic_enabled = enable_acrylic_blur(hwnd)
+                _record_diagnostic_stage(
+                    "settings_show_event_after_acrylic",
+                    enabled=acrylic_enabled,
+                )
             except Exception:
                 logger.debug("Acrylic blur not available", exc_info=True)
+                _record_diagnostic_stage("settings_show_event_acrylic_exception")
             self._log_perf_event("SettingsDialog.showEvent.blur", blur_start)
         # Reset cached width so images rescale on every show
         try:
@@ -1773,6 +1798,7 @@ class SettingsDialog(QDialog):
         except Exception as e:
             logger.debug("[SETTINGS] Exception suppressed: %s", e)
         self._log_perf_event("SettingsDialog.showEvent.total", show_start)
+        _record_diagnostic_stage("settings_show_event_complete")
     
     def moveEvent(self, event):
         """Handle move event to save geometry."""

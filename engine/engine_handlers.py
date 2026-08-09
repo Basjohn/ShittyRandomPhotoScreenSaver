@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid as _is_valid_qobject
 
 from core.logging.logger import get_logger
+from core.build_profile import is_diagnostic_build
 from core.animation import AnimationManager
 from core.performance.resource_metrics import log_lifecycle_resource_snapshot
 from core.settings import SettingsManager
@@ -29,6 +30,16 @@ if TYPE_CHECKING:
     from engine.screensaver_engine import ScreensaverEngine
 
 logger = get_logger(__name__)
+
+
+def _record_diagnostic_stage(stage: str, **fields: object) -> None:
+    """Write a frozen-crash breadcrumb only in the dedicated diagnostic build."""
+
+    if not is_diagnostic_build():
+        return
+    from core.logging.crash_capture import record_diagnostic_stage
+
+    record_diagnostic_stage(stage, **fields)
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,6 +189,11 @@ def request_settings_requested(engine: ScreensaverEngine) -> None:
         return
 
     engine._pending_settings_request_intent = intent
+    _record_diagnostic_stage(
+        "settings_request_queued",
+        generation=intent.runtime_generation,
+        manager=intent.display_manager_identity,
+    )
     logger.info(
         "Settings request queued generation=%s manager=%s",
         intent.runtime_generation,
@@ -222,6 +238,11 @@ def _admit_settings_requested(
         "Settings request admitted generation=%s manager=%s",
         intent.runtime_generation,
         intent.display_manager_identity,
+    )
+    _record_diagnostic_stage(
+        "settings_request_admitted",
+        generation=intent.runtime_generation,
+        manager=intent.display_manager_identity,
     )
     on_settings_requested(engine)
 
@@ -284,6 +305,10 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
                 logger.debug("[ENGINE] Exception suppressed: %s", _e)
 
     # Stop the engine but DON'T exit the app
+    _record_diagnostic_stage(
+        "settings_before_runtime_stop",
+        generation=getattr(engine, "_runtime_generation", "unknown"),
+    )
     log_lifecycle_resource_snapshot(
         engine,
         event="settings",
@@ -317,6 +342,10 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
         event="settings",
         stage="after_display_cleanup",
     )
+    _record_diagnostic_stage(
+        "settings_after_runtime_stop",
+        generation=getattr(engine, "_runtime_generation", "unknown"),
+    )
     stop_ms = (time.perf_counter() - stop_start) * 1000
     overall_ms = (time.perf_counter() - request_start) * 1000
     logger.info("Settings stop() completed in %.1f ms (%.1f ms since request)", stop_ms, overall_ms)
@@ -342,6 +371,11 @@ def _open_settings_after_runtime_destroyed(
         engine._settings_dialog_active = False
         return
 
+    _record_diagnostic_stage(
+        "settings_retired_runtime_destroyed",
+        generation=getattr(engine, "_runtime_generation", "unknown"),
+    )
+
     dialog_barrier = None
     try:
         dialog_generation = (
@@ -364,12 +398,20 @@ def _open_settings_after_runtime_destroyed(
             )
 
         dialog_init_start = time.perf_counter()
+        _record_diagnostic_stage(
+            "settings_dialog_constructor_begin",
+            generation=dialog_generation,
+        )
         dialog = SettingsDialog(
             engine.settings_manager,
             animations,
             runtime_generation=dialog_generation,
         )
         engine._active_settings_dialog = dialog
+        _record_diagnostic_stage(
+            "settings_dialog_constructor_complete",
+            generation=dialog_generation,
+        )
         try:
             dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         except Exception:
@@ -419,7 +461,15 @@ def _open_settings_after_runtime_destroyed(
             "Entering settings dialog exec (%.1f ms since request)",
             (exec_start - request_start) * 1000,
         )
+        _record_diagnostic_stage(
+            "settings_dialog_exec_begin",
+            generation=dialog_generation,
+        )
         _ = dialog.exec()
+        _record_diagnostic_stage(
+            "settings_dialog_exec_returned",
+            generation=dialog_generation,
+        )
         exec_duration = (time.perf_counter() - exec_start) * 1000
         sources_changed = bool(
             getattr(engine, "_sources_changed_during_settings", False)
@@ -502,6 +552,10 @@ def _open_settings_after_runtime_destroyed(
             continuation()
         else:
             engine._pending_runtime_destruction_barrier = dialog_barrier
+            _record_diagnostic_stage(
+                "settings_dialog_barrier_seal",
+                generation=dialog_generation,
+            )
             dialog_barrier.seal()
             dialog_barrier.then(continuation)
     except Exception as e:
@@ -530,6 +584,10 @@ def _restart_after_settings_dialog_destroyed(
     logger.info(
         "Settings dialog destroyed, performing full-style restart of screensaver"
     )
+    _record_diagnostic_stage(
+        "settings_replacement_begin",
+        generation=getattr(engine, "_runtime_generation", "unknown"),
+    )
     engine._settings_dialog_active = False
     try:
         from rendering.multi_monitor_coordinator import get_coordinator
@@ -554,6 +612,10 @@ def _restart_after_settings_dialog_destroyed(
         total_duration,
         exec_duration,
         sources_changed_during_settings,
+    )
+    _record_diagnostic_stage(
+        "settings_replacement_complete",
+        generation=getattr(engine, "_runtime_generation", "unknown"),
     )
 
 

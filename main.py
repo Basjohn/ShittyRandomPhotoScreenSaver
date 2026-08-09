@@ -26,6 +26,11 @@ from core.logging.logger import (
     get_log_dir,
     is_perf_metrics_enabled,
 )
+from core.build_profile import (
+    activate_diagnostic_build,
+    get_build_flavour,
+    is_diagnostic_build,
+)
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
 from engine.screensaver_engine import ScreensaverEngine
@@ -255,6 +260,11 @@ def _schedule_runtime_reddit_helper_session(engine) -> bool:
     benign ProgramData ticket and asks Windows Task Scheduler to start the
     already-registered interactive helper task when needed.
     """
+    if is_diagnostic_build():
+        logger.info(
+            "[REDDIT-HELPER] Session helper skipped for isolated diagnostic runtime"
+        )
+        return False
     try:
         from core.mc import is_mc_build
         from core.windows.reddit_helper_installer import _log_helper_event
@@ -571,20 +581,31 @@ def run_config(app: QApplication) -> int:
 
 def main(*, entrypoint: str = "main"):
     """Main entry point for the screensaver application."""
+    entrypoint_token = str(entrypoint).strip().lower()
+    if entrypoint_token == "main_diagnostic":
+        activate_diagnostic_build()
+    diagnostic_build = is_diagnostic_build()
+
     fresh_mode = '--fresh' in sys.argv
     fresh_result: tuple[Path, int] | None = None
     if fresh_mode:
-        fresh_result = clear_logs_for_fresh_start()
+        fresh_result = clear_logs_for_fresh_start(
+            diagnostic_build=diagnostic_build,
+        )
 
     # Setup logging first
-    debug_mode = '--debug' in sys.argv or '-d' in sys.argv
+    # The dedicated diagnostic product always captures broad Python plus
+    # lifecycle/settings detail. Heavy perf/usage/visualizer families remain
+    # explicit existing CLI choices so diagnostic runs can still distinguish
+    # crash attribution from measurement overhead.
+    debug_mode = diagnostic_build or '--debug' in sys.argv or '-d' in sys.argv
     verbose_mode = '--verbose' in sys.argv or '-v' in sys.argv
     perf_mode = '--perf' in sys.argv
     usage_mode = '--usage' in sys.argv
     viz_mode = '--viz' in sys.argv
     geo_mode = '--geo' in sys.argv
-    settings_trace_mode = '--set' in sys.argv
-    lifecycle_mode = '--life' in sys.argv
+    settings_trace_mode = diagnostic_build or '--set' in sys.argv
+    lifecycle_mode = diagnostic_build or '--life' in sys.argv
     cache_trace_mode = '--cache' in sys.argv
     steam_trace_mode = '--steam' in sys.argv
     viz_diag_mode = viz_mode or '--viz-diagnostics' in sys.argv or '--viz-diag' in sys.argv
@@ -600,7 +621,26 @@ def main(*, entrypoint: str = "main"):
         lifecycle=lifecycle_mode,
         cache_trace=cache_trace_mode,
         steam_trace=steam_trace_mode,
+        diagnostic_build=diagnostic_build,
     )
+    diagnostic_record = None
+    diagnostic_close = None
+    if diagnostic_build:
+        from core.logging.crash_capture import (
+            close_diagnostic_crash_capture,
+            enable_diagnostic_crash_capture,
+            record_diagnostic_stage,
+        )
+
+        diagnostic_record = record_diagnostic_stage
+        diagnostic_close = close_diagnostic_crash_capture
+        crash_path = enable_diagnostic_crash_capture(get_log_dir())
+        logger.info(
+            "[DIAGNOSTIC] Bounded logs active at %s crash_capture=%s",
+            get_log_dir(),
+            crash_path or "unavailable",
+        )
+        diagnostic_record("main_logging_ready")
     if fresh_result is not None:
         fresh_log_dir, fresh_deleted = fresh_result
         logger.info(
@@ -632,14 +672,26 @@ def main(*, entrypoint: str = "main"):
     
     # Parse command-line arguments
     mode, preview_hwnd = parse_screensaver_args()
-    entrypoint_name = "main_mc" if str(entrypoint).strip().lower() == "main_mc" else "main"
+    if entrypoint_token == "main_mc":
+        entrypoint_name = "main_mc"
+    elif entrypoint_token == "main_diagnostic":
+        entrypoint_name = "main_diagnostic"
+    else:
+        entrypoint_name = "main"
     logger.info(
-        "[STARTUP] entrypoint=%s mode=%s frozen=%s executable=%s",
+        "[STARTUP] entrypoint=%s mode=%s frozen=%s executable=%s build_flavour=%s",
         entrypoint_name,
         mode.value,
         _is_frozen_build(),
         Path(getattr(sys, "executable", "") or "").name or "<unknown>",
+        get_build_flavour(),
     )
+    if diagnostic_record is not None:
+        diagnostic_record(
+            "main_mode_parsed",
+            entrypoint=entrypoint_name,
+            mode=mode.value,
+        )
     
     # Enable High DPI scaling BEFORE creating QApplication
     QApplication.setHighDpiScaleFactorRoundingPolicy(
@@ -689,6 +741,8 @@ def main(*, entrypoint: str = "main"):
     logger.info("Qt image allocation limit: 1GB (supports 8K+ images, per-image on-demand)")
     
     logger.info("Qt Application created: %s", app.applicationName())
+    if diagnostic_record is not None:
+        diagnostic_record("qapplication_created")
     logger.debug("High DPI scaling enabled")
 
     # Register bundled custom fonts before any widgets are created
@@ -774,6 +828,8 @@ def main(*, entrypoint: str = "main"):
     logger.info("=" * 60)
     logger.info(f"ShittyRandomPhotoScreenSaver Exiting (code={exit_code})")
     logger.info("=" * 60)
+    if diagnostic_record is not None:
+        diagnostic_record("main_return", exit_code=exit_code)
 
     # When PERF metrics are enabled for this run, automatically invoke the
     # PERF helper to summarise recent Spotify visualiser and Slide metrics
@@ -795,6 +851,8 @@ def main(*, entrypoint: str = "main"):
             exc_info=True,
         )
     
+    if diagnostic_close is not None:
+        diagnostic_close()
     return exit_code
 
 

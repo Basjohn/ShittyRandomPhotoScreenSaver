@@ -253,6 +253,18 @@ class TestRedditHelperRuntime:
 
         assert runtime.ensure_helper_runtime(source="mc") is False
 
+    def test_ensure_helper_runtime_skips_in_diagnostic_build(self, monkeypatch):
+        from core.windows import reddit_helper_runtime as runtime
+
+        monkeypatch.setattr(runtime, "is_diagnostic_build", lambda: True)
+        monkeypatch.setattr(
+            runtime.reddit_helper_bridge,
+            "is_bridge_available",
+            lambda: (_ for _ in ()).throw(AssertionError("bridge must remain untouched")),
+        )
+
+        assert runtime.ensure_helper_runtime(source="diagnostic") is False
+
     def test_ensure_helper_runtime_reaps_stale_helper_and_relaunches(self, tmp_path, monkeypatch):
         from core.windows import reddit_helper_runtime as runtime
 

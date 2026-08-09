@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QTimer, Qt, QPoint
 from PySide6.QtGui import QGuiApplication, QMouseEvent
 
+from core.build_profile import is_diagnostic_build
 from core.logging.logger import get_logger
 from core.threading.manager import ThreadManager
 from rendering.custom_layout_manager import CustomLayoutManager
@@ -416,6 +417,13 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                     # Fallback: assume primary is NOT covered (MC mode behavior)
                     # This is safer than assuming exit - user can always press Esc
                     primary_is_covered = False
+
+                # The separately installed diagnostic runtime is an ordinary
+                # interactive desktop process and deliberately owns no secure-
+                # desktop helper. Route clicks directly just like MC without
+                # changing standard SCR behavior.
+                if is_diagnostic_build():
+                    primary_is_covered = False
                 
                 logger.info("[REDDIT] Exit check: this_is_primary=%s primary_is_covered=%s exiting=%s screen=%s",
                             this_is_primary, primary_is_covered, widget._exiting, widget.screen_index)
@@ -458,10 +466,11 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                                 logger.warning("[REDDIT] Failed to queue URL to bridge", exc_info=True)
                         widget.exit_requested.emit()
                 else:
-                    # Case C: MC mode - primary not covered, stay open
+                    # Case C: interactive MC/diagnostic mode - primary not
+                    # covered, stay open.
                     # Delay browser foreground to give browser time to open the URL
                     # and create a window with "reddit" in the title
-                    logger.info("[REDDIT] MC mode (primary not covered); staying open, will bring browser to foreground after delay")
+                    logger.info("[REDDIT] Interactive direct mode; staying open and bringing browser forward after delay")
                     url_to_open = reddit_url
                     if url_to_open:
                         try:

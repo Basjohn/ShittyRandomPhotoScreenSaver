@@ -35,14 +35,20 @@ def test_job_modes_share_canonical_installers_but_select_distinct_workers(tmp_pa
 
     assert normal[0].script == tmp_path / "scripts" / "build_nuitka.ps1"
     assert venv[0].script == tmp_path / "scripts" / "venv" / "build_nuitka.ps1"
-    assert normal[2].script == tmp_path / "scripts" / "build_reddit_helper.ps1"
-    assert venv[2].script == tmp_path / "scripts" / "venv" / "build_reddit_helper.ps1"
-    assert normal[3].script == venv[3].script == tmp_path / "scripts" / "SRPSS_Installer.iss"
-    assert normal[4].script == venv[4].script == tmp_path / "scripts" / "SRPSS_MediaCenter_Installer.iss"
+    assert normal[2].script == venv[2].script == tmp_path / "scripts" / "venv" / "build_nuitka_diagnostic.ps1"
+    assert normal[2].default_selected is False
+    assert normal[3].script == tmp_path / "scripts" / "build_reddit_helper.ps1"
+    assert venv[3].script == tmp_path / "scripts" / "venv" / "build_reddit_helper.ps1"
+    assert normal[4].script == venv[4].script == tmp_path / "scripts" / "SRPSS_Installer.iss"
+    assert normal[5].script == venv[5].script == tmp_path / "scripts" / "SRPSS_MediaCenter_Installer.iss"
+    assert normal[6].script == venv[6].script == tmp_path / "scripts" / "SRPSS_Diagnostic_Installer.iss"
+    assert normal[6].default_selected is False
     assert [job.output_dir for job in normal] == [
         tmp_path / "release" / "screensaver",
         tmp_path / "release" / "media_center",
+        tmp_path / "release" / "diagnostic",
         tmp_path / "release" / "reddit_helper",
+        tmp_path / "release" / "installers",
         tmp_path / "release" / "installers",
         tmp_path / "release" / "installers",
     ]
@@ -176,10 +182,39 @@ def test_smoke_payload_uses_only_tools_runner_owner():
     payload = build_runner.smoke_payload("venv")
 
     assert payload["mode"] == "venv"
-    assert len(payload["jobs"]) == 5
-    assert Path(payload["jobs"][3]["script"]) == build_runner.REPO_ROOT / "scripts" / "SRPSS_Installer.iss"
+    assert len(payload["jobs"]) == 7
+    assert Path(payload["jobs"][2]["script"]) == build_runner.REPO_ROOT / "scripts" / "venv" / "build_nuitka_diagnostic.ps1"
+    assert payload["jobs"][2]["default_selected"] is False
+    assert Path(payload["jobs"][4]["script"]) == build_runner.REPO_ROOT / "scripts" / "SRPSS_Installer.iss"
     assert not (build_runner.REPO_ROOT / "scripts" / "build_runner.py").exists()
     assert not (build_runner.REPO_ROOT / "scripts" / "venv" / "build_runner_venv.py").exists()
+
+
+def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missing(
+    tmp_path,
+    monkeypatch,
+):
+    jobs = build_runner.jobs_for_mode("normal", tmp_path)
+    for job in jobs:
+        if not job.default_selected:
+            continue
+        job.script.parent.mkdir(parents=True, exist_ok=True)
+        job.script.write_text("fixture", encoding="utf-8")
+    for asset in (
+        tmp_path / "SRPSS.ico",
+        tmp_path / "images" / "LogoBMP.bmp",
+        tmp_path / "resources" / "tutuogg.ogg",
+    ):
+        asset.parent.mkdir(parents=True, exist_ok=True)
+        asset.write_bytes(b"fixture")
+    monkeypatch.setattr(build_runner, "_find_pwsh", lambda: Path("pwsh.exe"))
+    monkeypatch.setattr(build_runner, "_find_iscc", lambda: Path("ISCC.exe"))
+
+    result = build_runner.run_preflight("normal", tmp_path)
+
+    assert result.errors == []
+    assert {"diagnostic", "diagnostic_installer"} <= result.unavailable_jobs
+    assert any("Diagnostic Runtime" in warning for warning in result.warnings)
 
 
 def test_workers_and_installers_share_the_canonical_output_layout():
@@ -190,9 +225,19 @@ def test_workers_and_installers_share_the_canonical_output_layout():
     media_installer = (scripts / "SRPSS_MediaCenter_Installer.iss").read_text(
         encoding="utf-8"
     )
+    diagnostic_worker = (scripts / "venv" / "build_nuitka_diagnostic.ps1").read_text(
+        encoding="utf-8"
+    )
+    diagnostic_entrypoint = (build_runner.REPO_ROOT / "main_diagnostic.py").read_text(
+        encoding="utf-8"
+    )
+    diagnostic_installer = (scripts / "SRPSS_Diagnostic_Installer.iss").read_text(
+        encoding="utf-8"
+    )
 
     assert "'normal\\screensaver'" in normal_standard
-    assert "'venv\\screensaver'" in venv_standard
+    assert '[string]$BuildTarget = "screensaver"' in venv_standard
+    assert '("venv\\{0}" -f $BuildTarget)' in venv_standard
     assert "--output-dir=$BuildOutputDir" in normal_standard
     assert "--output-dir=$BuildOutputDir" in venv_standard
     assert r"OutputDir=..\release\installers" in standard_installer
@@ -200,9 +245,27 @@ def test_workers_and_installers_share_the_canonical_output_layout():
     assert r"release\reddit_helper\*" in standard_installer
     assert r"OutputDir=..\release\installers" in media_installer
     assert r"release\media_center\*" in media_installer
+    assert "main_diagnostic.py" in diagnostic_worker
+    assert "SRPSS_Diagnostic" in diagnostic_worker
+    assert "-DistributionName 'diagnostic'" in diagnostic_worker
+    assert "from core.build_profile import activate_diagnostic_build" in diagnostic_entrypoint
+    assert "from core.logging import crash_capture" in diagnostic_entrypoint
+    assert r"release\diagnostic\SRPSS_Diagnostic.exe" in diagnostic_installer
+    assert "Setup_SRPSS_Diagnostic" in diagnostic_installer
+    assert "AppId={{9E730AA6-0FF0-4EF5-AE55-7D88956F32DE}" in diagnostic_installer
+    assert "SCRNSAVE.EXE" not in diagnostic_installer
+    assert r"{sys}\SRPSS.scr" not in diagnostic_installer
+    assert r"{localappdata}\SRPSS Diagnostic" in diagnostic_installer
+    assert "commonappdata" not in diagnostic_installer.lower()
+    assert "reddit_helper" not in diagnostic_installer.lower()
 
     for mode in ("normal", "venv"):
-        for job in build_runner.jobs_for_mode(mode)[:3]:
+        jobs = {
+            job.key: job
+            for job in build_runner.jobs_for_mode(mode)
+        }
+        for key in ("standard", "media_center", "reddit_helper"):
+            job = jobs[key]
             worker = job.script.read_text(encoding="utf-8")
             assert "$BuildExit = $LASTEXITCODE" in worker
             assert "if ($BuildExit -ne 0)" in worker

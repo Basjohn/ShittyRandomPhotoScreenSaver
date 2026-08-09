@@ -256,6 +256,39 @@ def test_runtime_settings_request_is_deferred_and_coalesced(monkeypatch, qt_app)
     assert engine._pending_settings_request_intent is None
 
 
+def test_runtime_settings_request_is_admitted_on_a_real_later_qt_turn(
+    monkeypatch,
+    qt_app,
+    qtbot,
+):
+    """The production zero-delay timer must leave the emitting Qt frame first."""
+    from engine import engine_handlers
+
+    manager = SimpleNamespace(_runtime_generation=8)
+    engine = SimpleNamespace(
+        display_manager=manager,
+        _runtime_generation=8,
+        _display_initialized=True,
+        _settings_dialog_active=False,
+        _pending_runtime_destruction_barrier=None,
+        _pending_settings_request_intent=None,
+        _terminal_shutdown_requested=False,
+    )
+    admitted: list[object] = []
+    monkeypatch.setattr(
+        engine_handlers,
+        "on_settings_requested",
+        lambda admitted_engine: admitted.append(admitted_engine),
+    )
+
+    engine_handlers.request_settings_requested(engine)
+
+    assert admitted == []
+    assert engine._pending_settings_request_intent is not None
+    qtbot.waitUntil(lambda: admitted == [engine], timeout=2000)
+    assert engine._pending_settings_request_intent is None
+
+
 def test_runtime_settings_admission_rejects_replaced_display_owner(
     monkeypatch,
     qt_app,

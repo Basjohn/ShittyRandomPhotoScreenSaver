@@ -24,6 +24,7 @@ import ctypes
 from pathlib import Path
 from typing import Optional
 
+from core.build_profile import is_diagnostic_build
 from core.mc import is_mc_build
 from core.logging.logger import get_logger
 from core.windows import reddit_helper_bridge
@@ -629,6 +630,12 @@ def ensure_helper_runtime(
     desktop instead of as a saver-owned child process. Direct process launch is
     retained only for non-SYSTEM/dev contexts.
     """
+    if is_diagnostic_build():
+        logger.debug(
+            "[REDDIT-HELPER] Skipping helper bootstrap in diagnostic build (%s)",
+            source,
+        )
+        return False
     if os.name != "nt":
         _log_helper_event(f"bootstrap skipped non-windows source={source}")
         return False

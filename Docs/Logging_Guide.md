@@ -62,6 +62,33 @@ Legacy compatibility:
   source preset index/name, and destination Custom index. It deliberately does
   not serialize the complete settings payload.
 
+## Installable Diagnostic Runtime
+
+Normal standard and Media Center packaged launches remain logging-off. The
+separate `SRPSS_Diagnostic.exe` product activates only broad debug plus
+Settings/lifecycle families by default and writes to:
+
+```text
+%LOCALAPPDATA%\SRPSS\Diagnostics\logs
+```
+
+The main and sidecar handlers rotate at 1 MiB with at most five backups per
+file; the verbose stream retains three backups. `diagnostic_crash.log` rotates
+live breadcrumbs/Python tracebacks at the same bound and records eagerly
+flushed Settings/native-window stages. A terminal faulthandler write captures
+only the failing thread; if that final raw write crosses the active-file bound,
+the next diagnostic launch trims it before retaining the bounded backup. It
+contains no settings payloads.
+
+The diagnostic installer is per-user, has a distinct AppId and install tree,
+does not replace/register `SRPSS.scr`, and does not alter the Media Center
+payload. It also uses direct interactive URL routing and never writes helper
+tickets/queue entries or starts the shared secure-desktop helper. Its Full
+Telemetry shortcut composes the existing `--perf --usage
+--viz --geo --cache` families; those runs are attribution sessions, not
+performance baselines. `main.py` remains the sole performance/evidence-capture
+authority and Media Center never receives an independent capture.
+
 ## Correlation Workflow
 1. Start with `screensaver.log` for the high-level sequence and all warnings/errors.
 2. If startup says a sidecar is active, go there before diving into `screensaver_verbose.log`.
@@ -104,6 +131,8 @@ Legacy compatibility:
 ## Guardrails
 - Do not reintroduce environment-variable activation for diagnostic families.
 - Do not let sidecar filters hide warnings/errors from the general logs.
+- Do not activate the diagnostic build profile from the standard or Media
+  Center entry points, installers, or workers.
 - If a new high-volume family is added, give it:
   - one explicit CLI flag,
   - one dedicated log file,

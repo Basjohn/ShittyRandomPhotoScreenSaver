@@ -21,7 +21,17 @@ param(
     [switch]$Console,
     [switch]$KeepExe,
     [switch]$SkipScrRename,
-    [switch]$ReinstallVenvDeps
+    [switch]$ReinstallVenvDeps,
+    [ValidatePattern('^[a-z0-9_-]+$')]
+    [string]$BuildTarget = "screensaver",
+    [ValidatePattern('^[a-z0-9_-]+$')]
+    [string]$DistributionName = "screensaver",
+    [ValidatePattern('^[a-z0-9_-]+$')]
+    [string]$LogStem = "build_nuitka",
+    [ValidatePattern('^[a-z0-9_-]+$')]
+    [string]$OnefileCacheName = "onefile",
+    [string]$ProductNameOverride = "",
+    [string]$DescriptionOverride = ""
 )
 
 
@@ -203,15 +213,15 @@ $VenvDir = Join-Path $Root '.venv'
 $VenvPython = Ensure-ProjectVenv -RepoRoot $Root -ForceReinstallDeps:$ReinstallVenvDeps
 
 $BuildRoot = Join-Path $Root 'build'
-$BuildDir = Join-Path $BuildRoot 'venv\screensaver'
+$BuildDir = Join-Path $BuildRoot ("venv\{0}" -f $BuildTarget)
 $BuildOutputDir = Join-Path $BuildDir 'output'
 $PackageDir = Join-Path $BuildDir 'package'
 $ReleaseRoot = Join-Path $Root 'release'
-$DistributionDir = Join-Path $ReleaseRoot 'screensaver'
+$DistributionDir = Join-Path $ReleaseRoot $DistributionName
 $LogDir = Join-Path $Root 'logs'
 $BuildLayoutScript = Join-Path $Root 'tools\build_layout.ps1'
 $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$LogFile = Join-Path $LogDir ("build_nuitka_{0}.log" -f $Timestamp)
+$LogFile = Join-Path $LogDir ("{0}_{1}.log" -f $LogStem, $Timestamp)
 
 if (-not (Test-Path -LiteralPath $BuildLayoutScript -PathType Leaf)) {
     throw "Shared build layout helper not found: $BuildLayoutScript"
@@ -232,7 +242,7 @@ Reset-SRPSSBuildDirectory -Path $BuildDir -BuildRoot $BuildRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $BuildOutputDir | Out-Null
 New-Item -ItemType Directory -Force -Path $ReleaseRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
-Rotate-Logs -LogDir $LogDir -Filter "build_nuitka_*.log"
+Rotate-Logs -LogDir $LogDir -Filter ("{0}_*.log" -f $LogStem)
 
 $Icon = $null
 $PreferredIcon = Join-Path $Root 'SRPSS.ico'
@@ -271,6 +281,8 @@ try {
 
 if (-not $ProductName) { $ProductName = "ShittyRandomPhotoScreenSaver" }
 if (-not $Description) { $Description = "ShittyRandomPhotoScreenSaver" }
+if ($ProductNameOverride) { $ProductName = $ProductNameOverride }
+if ($DescriptionOverride) { $Description = $DescriptionOverride }
 
 $EntryPath = Join-Path $Root $EntryPoint
 if (-not (Test-Path $EntryPath)) { throw "Entry point not found: $EntryPath" }
@@ -311,7 +323,7 @@ $argsList = @(
     "--include-module=winrt.windows.foundation",
     "--include-module=winrt.windows.foundation.collections",
     "--noinclude-default-mode=error",
-    "--onefile-tempdir-spec={CACHE_DIR}/SRPSS/onefile"
+    "--onefile-tempdir-spec={CACHE_DIR}/SRPSS/$OnefileCacheName"
 )
 
 if ($Icon) { $argsList += @("--windows-icon-from-ico=$($Icon.FullName)") }
