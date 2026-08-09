@@ -1,9 +1,11 @@
 """CUSTOM widget layout edit-mode session manager."""
 from __future__ import annotations
 
+from functools import partial
 import math
 from dataclasses import dataclass
 from typing import Any, Optional
+import weakref
 
 from PySide6.QtCore import QPoint, QRect, QSize, QObject, QEvent, Qt
 from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QPixmap, QKeyEvent
@@ -65,6 +67,21 @@ _CLOCK_GEOMETRY_VARIANT_KEY = "geometry_variant"
 
 def _normalize_clock_geometry_variant(value: Any) -> str:
     return "analog" if str(value or "").strip().lower() in {"analog", "analogue"} else "digital"
+
+
+def _dispatch_shell_signal(
+    manager_ref: "weakref.ReferenceType[CustomLayoutManager]",
+    handler_name: str,
+    *args: Any,
+) -> None:
+    """Deliver one edit-shell signal without giving Qt a strong manager owner."""
+
+    manager = manager_ref()
+    if manager is None:
+        return
+    handler = getattr(manager, handler_name, None)
+    if callable(handler):
+        handler(*args)
 
 
 class _CustomLayoutSessionKeyFilter(QObject):
@@ -1055,6 +1072,7 @@ class CustomLayoutManager:
         discard_deferred_image: bool = False,
     ) -> None:
         for state in list(self._shell_states.values()):
+            self._disconnect_shell_signals(state.shell)
             try:
                 state.shell.retire_session()
                 state.shell.hide()
@@ -1368,21 +1386,57 @@ class CustomLayoutManager:
         return state
 
     def _connect_shell_signals(self, shell: EditShellWidget) -> None:
-        shell.geometry_live_changed.connect(self._on_shell_geometry_live_changed)
-        shell.drag_finished.connect(self._on_shell_drag_finished)
-        shell.resize_wheel_requested.connect(self._on_shell_resize_wheel_requested)
-        shell.resize_drag_started.connect(self._on_shell_resize_drag_started)
-        shell.resize_drag_live_changed.connect(self._on_shell_resize_drag_live_changed)
-        shell.resize_drag_finished.connect(self._on_shell_resize_drag_finished)
-        shell.reset_size_requested.connect(self._on_shell_reset_size_requested)
-        shell.reset_position_requested.connect(self._on_shell_reset_position_requested)
-        shell.reset_visualizer_requested.connect(self._on_shell_reset_visualizer_requested)
-        shell.remove_requested.connect(self._on_shell_remove_requested)
-        shell.context_menu_requested.connect(self._on_shell_context_menu_requested)
+        manager_ref = weakref.ref(self)
+        callbacks = (
+            ("geometry_live_changed", partial(_dispatch_shell_signal, manager_ref, "_on_shell_geometry_live_changed")),
+            ("drag_finished", partial(_dispatch_shell_signal, manager_ref, "_on_shell_drag_finished")),
+            ("resize_wheel_requested", partial(_dispatch_shell_signal, manager_ref, "_on_shell_resize_wheel_requested")),
+            ("resize_drag_started", partial(_dispatch_shell_signal, manager_ref, "_on_shell_resize_drag_started")),
+            ("resize_drag_live_changed", partial(_dispatch_shell_signal, manager_ref, "_on_shell_resize_drag_live_changed")),
+            ("resize_drag_finished", partial(_dispatch_shell_signal, manager_ref, "_on_shell_resize_drag_finished")),
+            ("reset_size_requested", partial(_dispatch_shell_signal, manager_ref, "_on_shell_reset_size_requested")),
+            ("reset_position_requested", partial(_dispatch_shell_signal, manager_ref, "_on_shell_reset_position_requested")),
+            ("reset_visualizer_requested", partial(_dispatch_shell_signal, manager_ref, "_on_shell_reset_visualizer_requested")),
+            ("remove_requested", partial(_dispatch_shell_signal, manager_ref, "_on_shell_remove_requested")),
+            ("context_menu_requested", partial(_dispatch_shell_signal, manager_ref, "_on_shell_context_menu_requested")),
+        )
+        shell._custom_layout_signal_callbacks = callbacks
+        for signal_name, callback in callbacks:
+            signal = getattr(shell, signal_name, None)
+            connector = getattr(signal, "connect", None)
+            if callable(connector):
+                connector(callback)
         shell.set_reset_size_enabled(False)
         shell.set_reset_position_enabled(False)
         shell.set_reset_visualizer_enabled(False)
         shell.set_remove_enabled(False)
+
+    @staticmethod
+    def _disconnect_shell_signals(shell: EditShellWidget) -> None:
+        callbacks = getattr(shell, "_custom_layout_signal_callbacks", ())
+        try:
+            shell._custom_layout_signal_callbacks = ()
+        except Exception:
+            pass
+        for signal_name, callback in callbacks:
+            signal = getattr(shell, signal_name, None)
+            disconnect = getattr(signal, "disconnect", None)
+            if not callable(disconnect):
+                continue
+            try:
+                disconnect(callback)
+            except (RuntimeError, TypeError):
+                logger.debug(
+                    "[CUSTOM_LAYOUT] Edit-shell signal unavailable during disconnect signal=%s",
+                    signal_name,
+                    exc_info=True,
+                )
+            except Exception:
+                logger.debug(
+                    "[CUSTOM_LAYOUT] Failed to disconnect edit-shell signal=%s",
+                    signal_name,
+                    exc_info=True,
+                )
 
     def _capture_visualizer_shell_snapshot(
         self,

@@ -15,6 +15,7 @@ This file is the live checklist. Completed analysis and measurements belong in
 - [x] Preserve `94798add` as the queued Settings-admission and shared preset-authority checkpoint.
 - [x] Preserve `1621e564` as the bound-callback ownership and five-mode CUSTOM regression checkpoint.
 - [x] Preserve `e6f24ca5` as the passive image-delivery attribution, startup identity, and bounded action-telemetry checkpoint.
+- [x] Preserve the 2026-08-09 diagnostic-runtime ownership correction as the frozen Settings/Edit checkpoint: retained Qt wrappers no longer keep retired `WidgetManager` or `CustomLayoutManager` owners alive through Nuitka/PySide compiled bound methods.
 - [x] Preserve pressure-to-modest live evidence at `logs/evidence_chest/08_08_30fff2c8_mainpy_pressure_to_modest_22_07/`.
 - [x] Preserve three clean source Settings cycles at `logs/evidence_chest/08_08_94798add_main_settings3_custom_spectrum_23_05/`.
 - [x] Preserve the strongest combined main-runtime checkpoint at `logs/evidence_chest/08_08_e6f24ca5_main_settings3_perf_23_49/` with parser 1.7 output and manifest.
@@ -37,11 +38,12 @@ This file is the live checklist. Completed analysis and measurements belong in
 
 ## P5.0 Immediate Runtime And Package Validation
 
-Current source still passes repeated Settings recreation, but a freshly built
-Media Center runtime was reported to terminate on in-runtime Settings entry.
-That proves stale standard-artifact drift was not the complete frozen failure.
-Release products intentionally have no default diagnostic evidence; the new
-separate diagnostic product now owns frozen-crash attribution.
+The separate diagnostic product has now closed the frozen-only ownership failure:
+Settings and committed CUSTOM/Edit both pass in the compiled runtime after replacing
+lifetime-critical Qt signal connections with stable weak forwarding callbacks. The
+failure was not Qt destruction itself: retired plain-Python managers were being kept
+alive by Nuitka/PySide compiled bound-method callback wrappers. Standard/MC packaged
+validation is still required before the historical incident is closed for release.
 
 - [x] Three consecutive live runtime Settings opens/closes queue and admit once, complete both barriers, rebuild once, reveal a fresh frame, continue rendering, and exit cleanly.
 - [x] Fix the nonfatal bound-method `_srpss_timer_owner` diagnostic and cover owner/generation propagation.
@@ -54,9 +56,9 @@ separate diagnostic product now owns frozen-crash attribution.
 - [x] Confirm the authoritative display teardown already calls `WidgetManager.cleanup()` and clears `DisplayWidget._widget_manager` before close/delete; do not re-add that edge as a speculative fix.
 - [x] Add a one/two-display retained-wrapper oracle: both C++ display QObjects are destroyed while their Python wrappers stay strongly referenced, and former `WidgetManager`, `FadeCoordinator`, and `CustomLayoutManager` weakrefs clear before continuation without `gc.collect()`.
 - [x] Add aggregate-bounded diagnostic-only post-timeout owner-referrer attribution after fail-closed exit is committed; it is identity-only, redacts arbitrary/frame-local keys, never calls `repr()`/`gc.collect()`, and cannot alter barrier policy or activate in standard/Media Center products.
-- [ ] Rebuild/reinstall the diagnostic product and reproduce Settings first, then committed Edit; use `[PYTHON_OWNER_REFS]` to name the concrete frozen retaining edge instead of changing `WidgetManager.cleanup()` from the survivor count alone.
-- [ ] Release the proven owner-side edge with the smallest deterministic correction; require both displays to release before the dialog constructor begins and retain the exact no-GC wrapper oracle.
-- [ ] After the evidence-led correction, require rebuilt standard and bounded shared MC route smoke to continue rendering; then mark R-59 solved.
+- [x] Rebuild/reinstall the diagnostic product and reproduce Settings first, then committed Edit; `[PYTHON_OWNER_REFS]` named the concrete frozen retainers as compiled bound-method callbacks rather than a failed `DisplayWidget._widget_manager` clear.
+- [x] Release the proven owner-side edges with the smallest deterministic correction: `WidgetManager` settings/compositor callbacks and `CustomLayoutManager` shell callbacks now use stable weak forwarding ownership, exact callback objects for disconnect, and no `gc.collect()`/timeout/ignored-owner escape. Compiled diagnostic Settings and committed Edit both clear the destruction barrier and continue rendering.
+- [ ] Rebuild the standard runtime from the corrected source and require in-runtime Settings plus committed Edit to continue rendering; keep Media Center to the bounded shared route smoke. Mark R-59 solved only after those packaged checks pass.
 
 ## P5.0A Clock Calendar Follow-Up
 
@@ -66,8 +68,15 @@ separate diagnostic product now owns frozen-crash attribution.
 
 ## P5.0B Media Provider Runtime Validation
 
-- [ ] In ordinary `main.py`, validate Spotify Browser against at least Edge or Chrome and record the actual GSMTC source id; confirm the UI description remains honest when the active browser media is not Spotify.
+Fresh compiled diagnostic evidence proves provider selection/failover plumbing is being exercised: explicit `spotify_browser` starts a `WindowsGlobalMediaController` for that provider, desktop Spotify failover includes Browser, and Browser failover includes desktop Spotify/MusicBee. However every captured GSMTC `get_sessions()` enumeration was empty while Firefox had Spotify Web open/playing, so the failure is below settings/failover policy and may be either Windows/Firefox session exposure or a controller-selection defect.
+
+- [x] Confirm explicit Browser selection and automatic provider failover reach the shared GSMTC controller with the expected provider order; do not rework settings persistence or failover orchestration without new evidence.
+- [ ] Correct `WindowsGlobalMediaController._select_media_session_for_providers()` so a matching `get_current_session()` can win even when `get_sessions()` returns an empty/nonmatching list. The current ordering checks `matching_sessions` first and can discard a valid current browser session.
+- [ ] Extend bounded GSMTC diagnostics to record the current-session source id separately from the enumerated session ids. Keep provider matching exact/registry-owned; do not infer `spotify.com` from a browser session.
+- [ ] Add a focused regression for `get_sessions()==[]` plus `get_current_session()==firefox(.exe)` and equivalent exact browser ids; require Browser to select the current session without serial nested GSMTC queries.
+- [ ] In ordinary `main.py`, validate Spotify Browser against Firefox first and at least one Chromium browser (Edge or Chrome), recording the actual GSMTC source ids exposed by Windows. If both current and enumerated sessions are empty, classify the host/browser media-control exposure separately from SRPSS selection logic.
 - [ ] Exercise desktop Spotify absent → browser present, browser absent → desktop/MusicBee present, pause, close, and Settings recreation; require one refresh in flight per widget, correct persisted provider, live controls, and no stale-provider callback.
+- [ ] Repair the production `MediaWidget` missing-session hide contract: `widgets.media.display_update` calls `_complete_hide_sequence()`, but the real widget does not currently implement it while the test stub does. Add production-shaped coverage so test doubles cannot invent lifecycle methods absent from the runtime object.
 - [ ] Confirm the browser provider never shows or invokes application-volume control and that switching back to a desktop provider restores the preserved volume preference.
 
 ## P5.1 Visualizer Fidelity And Stronger Goldens
@@ -146,6 +155,7 @@ private commit, and `623.9 MiB` dedicated VRAM.
 - [x] Keep release artifacts diagnostics-off while providing a separate installable diagnostic runtime with bounded executable-adjacent rotation, per-user fallbacks, automatic all-family sidecars, and fatal/native-boundary breadcrumbs.
 - [ ] Keep all warnings/errors visible in `screensaver.log`; lifecycle timeout is always a failed run.
 - [ ] Keep high-volume lifecycle/performance diagnostics passive and bounded.
+- [ ] Repair `rendering.display_overlays.debug_window_state()` enum conversion so `Qt.WindowState` is logged via its value/string contract instead of `int(widget.windowState())`; this is nonfatal today but creates repeated diagnostic noise exactly where frozen-runtime evidence must stay clean.
 
 ## P5.6 Verification
 
@@ -187,6 +197,7 @@ private commit, and `623.9 MiB` dedicated VRAM.
 - Separate opt-in diagnostic product identity with bounded per-user logs; release builds remain diagnostics-off and performance evidence remains `main.py`-only.
 - Failure-only bounded referrer snapshots after a diagnostic destruction timeout; use them to name the owner edge before lifecycle edits.
 - Registry-owned exact media-provider identities with one background GSMTC session snapshot; unsupported provider ids remain visible and inert.
+- Stable weak forwarding callbacks at Qt→plain-Python lifetime seams when the Qt signal owner may outlive or be destroyed independently of the Python owner; disconnect using the exact stored callable and keep fail-closed destruction bars authoritative.
 
 ## Blacklisted
 
@@ -201,6 +212,7 @@ private commit, and `623.9 MiB` dedicated VRAM.
 - Enabling diagnostic families by default in standard/Media Center release artifacts, or treating diagnostic-build timings as production performance evidence.
 - Re-adding the already-present display-to-WidgetManager clear, changing `WidgetManager.cleanup()` blindly from survivor counts, or using a failed barrier as permission to ignore/release the survivor diagnostically.
 - Fuzzy/substring media-provider matching, coercing unknown providers to Spotify, serial nested GSMTC fallback queries, or controlling whole-browser volume as though it belonged to one tab.
+- Treating Qt signal `disconnect()` or QObject destruction as proof that Nuitka/PySide compiled bound-method wrappers cannot retain a plain-Python owner; lifetime-critical callbacks must have an explicit ownership contract.
 
 # Later Phases
 
