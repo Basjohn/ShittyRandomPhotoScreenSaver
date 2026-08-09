@@ -723,6 +723,7 @@ class JobWidgets:
 
 class BuildRunnerApp:
     AUTO_CLOSE_MS = 3000
+    CHECKBOX_INDICATOR_DIP = 26
 
     def __init__(self, root: tk.Tk, *, initial_mode: ModeName | None = None) -> None:
         self._root = root
@@ -738,6 +739,7 @@ class BuildRunnerApp:
         self._preferences = load_preferences()
         self._dpi_scale = self._initial_dpi_scale()
         self._shell: tk.Frame | None = None
+        self._checkbox_indicator_images: tuple[tk.PhotoImage, ...] = ()
         self._initial_show_complete = False
         selected_mode = initial_mode or self._preferences.mode
         self._mode_var = tk.StringVar(value=selected_mode)
@@ -897,12 +899,78 @@ class BuildRunnerApp:
             style.theme_use("clam")
         except tk.TclError:
             pass
+        indicator_size = self._dip(self.CHECKBOX_INDICATOR_DIP)
+
+        def _checkbox_image(*, checked: bool, disabled: bool) -> tk.PhotoImage:
+            image = tk.PhotoImage(width=indicator_size, height=indicator_size)
+            border = COLORS["faint"] if disabled else COLORS["amber"]
+            fill = COLORS["panel_alt"] if not checked else (
+                COLORS["border"] if disabled else COLORS["amber_dark"]
+            )
+            image.put(border, to=(0, 0, indicator_size, indicator_size))
+            inset = max(2, self._dip(2))
+            image.put(fill, to=(inset, inset, indicator_size - inset, indicator_size - inset))
+            if checked:
+                mark = COLORS["faint"] if disabled else COLORS["text"]
+                thickness = max(2, self._dip(2))
+                for offset in range(thickness):
+                    for x in range(indicator_size // 4, indicator_size // 2):
+                        y = indicator_size // 2 + (x - indicator_size // 4) // 2
+                        image.put(mark, (x, min(indicator_size - 2, y + offset)))
+                    for x in range(indicator_size // 2, (indicator_size * 4) // 5):
+                        y = (indicator_size * 3) // 4 - (x - indicator_size // 2)
+                        image.put(mark, (x, max(1, y + offset)))
+            return image
+
+        unchecked = _checkbox_image(checked=False, disabled=False)
+        checked = _checkbox_image(checked=True, disabled=False)
+        unchecked_disabled = _checkbox_image(checked=False, disabled=True)
+        checked_disabled = _checkbox_image(checked=True, disabled=True)
+        self._checkbox_indicator_images = (
+            unchecked,
+            checked,
+            unchecked_disabled,
+            checked_disabled,
+        )
+        style.element_create(
+            "Foundry.Checkbox.indicator",
+            "image",
+            unchecked,
+            ("disabled", "selected", checked_disabled),
+            ("disabled", unchecked_disabled),
+            ("selected", checked),
+            sticky="",
+        )
+        style.layout(
+            "Foundry.TCheckbutton",
+            [
+                (
+                    "Checkbutton.padding",
+                    {
+                        "sticky": "nswe",
+                        "children": [
+                            ("Foundry.Checkbox.indicator", {"side": "left", "sticky": ""}),
+                            (
+                                "Checkbutton.focus",
+                                {
+                                    "side": "left",
+                                    "sticky": "w",
+                                    "children": [
+                                        ("Checkbutton.label", {"sticky": "nswe"}),
+                                    ],
+                                },
+                            ),
+                        ],
+                    },
+                )
+            ],
+        )
         style.configure(
             "Foundry.TCheckbutton",
             background=COLORS["panel"],
             foreground=COLORS["text"],
             font=("Segoe UI", 10, "bold"),
-            padding=(4, 3),
+            padding=(6, 4),
         )
         style.map(
             "Foundry.TCheckbutton",

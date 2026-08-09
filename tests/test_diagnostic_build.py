@@ -1,9 +1,28 @@
 from __future__ import annotations
 
 import sys
+from types import SimpleNamespace
 
 from core import build_profile
 from core.logging import crash_capture
+
+
+def test_compiled_runtime_detection_is_authoritative_and_product_neutral(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(build_profile.sys, "frozen", False, raising=False)
+    monkeypatch.delattr(build_profile, "__compiled__", raising=False)
+    monkeypatch.delattr("builtins.__compiled__", raising=False)
+    monkeypatch.setitem(build_profile.sys.modules, "__main__", SimpleNamespace())
+
+    assert build_profile.is_compiled_runtime() is False
+
+    monkeypatch.setattr(build_profile, "__compiled__", object(), raising=False)
+    assert build_profile.is_compiled_runtime() is True
+
+    monkeypatch.delattr(build_profile, "__compiled__", raising=False)
+    monkeypatch.setattr(build_profile.sys, "frozen", True, raising=False)
+    assert build_profile.is_compiled_runtime() is True
 
 
 def test_diagnostic_build_profile_is_explicit_and_idempotent(monkeypatch) -> None:
@@ -17,6 +36,17 @@ def test_diagnostic_build_profile_is_explicit_and_idempotent(monkeypatch) -> Non
 
     assert build_profile.is_diagnostic_build() is True
     assert build_profile.get_build_flavour() == "diagnostic"
+
+
+def test_diagnostic_identity_is_not_inferred_from_executable_name(monkeypatch) -> None:
+    monkeypatch.setattr(build_profile, "_DIAGNOSTIC_BUILD", False)
+    monkeypatch.setattr(
+        build_profile.sys,
+        "executable",
+        r"C:\Program Files\SRPSS Diagnostic\SRPSS_Diagnostic.exe",
+    )
+
+    assert build_profile.is_diagnostic_build() is False
 
 
 def test_diagnostic_crash_capture_is_inert_for_release(tmp_path, monkeypatch) -> None:

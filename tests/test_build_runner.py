@@ -65,6 +65,17 @@ def test_preferences_round_trip_and_corrupt_fallback(tmp_path):
     assert build_runner.load_preferences(target) == build_runner.Preferences()
 
 
+def test_foundry_uses_large_image_backed_checkbox_indicators():
+    source = (build_runner.REPO_ROOT / "tools" / "build_runner.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert build_runner.BuildRunnerApp.CHECKBOX_INDICATOR_DIP >= 26
+    assert '"Foundry.Checkbox.indicator"' in source
+    assert "style.element_create(" in source
+    assert "self._checkbox_indicator_images" in source
+
+
 def test_helper_fingerprint_dechecks_only_after_matching_successful_build(tmp_path):
     _make_helper_inputs(tmp_path, "venv")
     artifact = (
@@ -256,6 +267,8 @@ def test_workers_and_installers_share_the_canonical_output_layout():
     assert "SCRNSAVE.EXE" not in diagnostic_installer
     assert r"{sys}\SRPSS.scr" not in diagnostic_installer
     assert r"{localappdata}\SRPSS Diagnostic" in diagnostic_installer
+    assert r'Parameters: """{app}\logs"""' in diagnostic_installer
+    assert "Full Telemetry" not in diagnostic_installer
     assert "commonappdata" not in diagnostic_installer.lower()
     assert "reddit_helper" not in diagnostic_installer.lower()
 

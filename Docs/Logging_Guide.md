@@ -65,12 +65,18 @@ Legacy compatibility:
 ## Installable Diagnostic Runtime
 
 Normal standard and Media Center packaged launches remain logging-off. The
-separate `SRPSS_Diagnostic.exe` product activates only broad debug plus
-Settings/lifecycle families by default and writes to:
+separate `SRPSS_Diagnostic.exe` product automatically activates every
+registered logging family and writes by default to:
 
 ```text
-%LOCALAPPDATA%\SRPSS\Diagnostics\logs
+<directory containing SRPSS_Diagnostic.exe>\logs
 ```
+
+If that directory is not writable, every runtime log, sidecar, crash trace,
+fresh-log operation, and profiling artefact uses
+`%LOCALAPPDATA%\SRPSS\Diagnostic\logs`, then
+`%TEMP%\SRPSS\Diagnostic\logs`. Build logs remain in the Foundry build-log
+directory and never mix with runtime evidence.
 
 The main and sidecar handlers rotate at 1 MiB with at most five backups per
 file; the verbose stream retains three backups. `diagnostic_crash.log` rotates
@@ -83,11 +89,10 @@ contains no settings payloads.
 The diagnostic installer is per-user, has a distinct AppId and install tree,
 does not replace/register `SRPSS.scr`, and does not alter the Media Center
 payload. It also uses direct interactive URL routing and never writes helper
-tickets/queue entries or starts the shared secure-desktop helper. Its Full
-Telemetry shortcut composes the existing `--perf --usage
---viz --geo --cache` families; those runs are attribution sessions, not
-performance baselines. `main.py` remains the sole performance/evidence-capture
-authority and Media Center never receives an independent capture.
+tickets/queue entries or starts the shared secure-desktop helper. Diagnostic
+runs are attribution sessions, not performance baselines. `main.py` remains
+the sole performance/evidence-capture authority and Media Center never
+receives an independent capture.
 
 ## Correlation Workflow
 1. Start with `screensaver.log` for the high-level sequence and all warnings/errors.

@@ -49,9 +49,9 @@ separate diagnostic product now owns frozen-crash attribution.
 - [ ] Rebuild the standard SCR from current source before rebuilding its installer; the installed and release SCR artifacts both predate the relevant fixes.
 - [ ] Validate Settings-from-runtime in the rebuilt standard executable; `--s` alone is not sufficient.
 - [ ] Keep Media Center to a minimal shared packaged-route smoke check with no independent capture, baseline, soak, or golden.
-- [x] Add an opt-in installable Diagnostic Runtime with a distinct entry point, artifact/installer/AppId, per-user Local AppData logs, bounded rotation, faulthandler output, and Settings/native-window breadcrumbs; leave standard/MC releases diagnostics-off.
-- [ ] Build/install the diagnostic product, reproduce in-runtime Settings once, and identify the last completed boundary among request admission, runtime destruction, dialog construction, `showEvent`, native `winId`, acrylic, modal entry, and restart.
-- [ ] Make no release UI/lifecycle change until that evidence proves an owner; if the native acrylic boundary is implicated, validate the smallest effect-local correction without weakening the authored Settings shell.
+- [x] Add an opt-in installable Diagnostic Runtime with a distinct entry point, artifact/installer/AppId, executable-adjacent bounded logs with per-user fallbacks, automatic all-family telemetry, faulthandler output, and Settings/native-window breadcrumbs; leave standard/MC releases diagnostics-off.
+- [x] Build/install the diagnostic product and reproduce in-runtime Settings: two captured failures reached clean runtime stop, then timed out with exactly two retired `WidgetManager` Python owners and never reached dialog construction.
+- [ ] Trace and release the compiled-only retired `WidgetManager` references without garbage collection, ignored owners, timeout changes, or weakening the destruction barrier; require both displays to release before the dialog constructor begins.
 - [ ] After the evidence-led correction, require rebuilt standard and bounded shared MC route smoke to continue rendering; then mark R-59 solved.
 
 ## P5.0A Clock Calendar Follow-Up
@@ -139,7 +139,7 @@ private commit, and `623.9 MiB` dedicated VRAM.
 - [x] Add bounded Move To Custom action telemetry: mode, source preset index/name, and Custom index without logging the full settings payload.
 - [x] Document parser 1.7 rotation/time-range semantics so appended multi-session folders cannot make whole-folder medians look session-specific; a native filter remains optional tooling work.
 - [x] Parser 1.8 extends passive image-install output with per-stage duration, cold-compositor identity, exact texture-key reuse, and upload/allocation deltas.
-- [x] Keep release artifacts diagnostics-off while providing a separate installable diagnostic runtime with bounded `%LOCALAPPDATA%` rotation and fatal/native-boundary breadcrumbs.
+- [x] Keep release artifacts diagnostics-off while providing a separate installable diagnostic runtime with bounded executable-adjacent rotation, per-user fallbacks, automatic all-family sidecars, and fatal/native-boundary breadcrumbs.
 - [ ] Keep all warnings/errors visible in `screensaver.log`; lifecycle timeout is always a failed run.
 - [ ] Keep high-volume lifecycle/performance diagnostics passive and bounded.
 

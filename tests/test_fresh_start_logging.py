@@ -67,12 +67,8 @@ def test_parse_screensaver_args_ignores_steam_dev_and_trace_flags(monkeypatch) -
     assert preview_hwnd is None
 
 
-def test_is_frozen_build_detects_srpss_executable_without_sys_frozen(monkeypatch) -> None:
-    monkeypatch.setattr(main.sys, "frozen", False, raising=False)
-    monkeypatch.setattr(main.sys, "executable", r"C:\Windows\System32\SRPSS.scr")
-    monkeypatch.setattr(main.sys, "argv", [r"C:\Windows\System32\SRPSS.scr", "/s"])
-    if main._builtins is not None:
-        monkeypatch.setattr(main._builtins, "__compiled__", False, raising=False)
+def test_main_uses_authoritative_compiled_runtime_detection(monkeypatch) -> None:
+    monkeypatch.setattr(main, "is_compiled_runtime", lambda: True)
 
     assert main._is_frozen_build() is True
     assert main.is_script_mode() is False

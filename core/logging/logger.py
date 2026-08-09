@@ -9,43 +9,14 @@ import os
 import sys
 import tempfile
 import threading
+from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
+from core.build_profile import is_compiled_runtime, is_diagnostic_build
 
-# Detect frozen/Nuitka builds up-front so we can default to silent logging
-# unless explicitly re-enabled.
-try:
-    import builtins as _builtins  # type: ignore
-except Exception:  # pragma: no cover - fallback during exotic import failures
-    _builtins = None
-
-
-def _detect_frozen_environment() -> bool:
-    """Best-effort detection of compiled/frozen runtime."""
-    if bool(getattr(sys, "frozen", False)):
-        return True
-
-    if globals().get("__compiled__", False):
-        return True
-
-    if _builtins is not None and bool(getattr(_builtins, "__compiled__", False)):
-        return True
-
-    main_mod = sys.modules.get("__main__")
-    if main_mod is not None and bool(getattr(main_mod, "__compiled__", False)):
-        return True
-
-    exe_path = Path(getattr(sys, "executable", "") or "")
-    exe_name = exe_path.name.lower()
-    if exe_name and exe_name not in ("python.exe", "pythonw.exe"):
-        if exe_name.startswith("srpss"):
-            return True
-    return False
-
-
-_IS_FROZEN: bool = _detect_frozen_environment()
+_IS_FROZEN: bool = is_compiled_runtime()
 
 _VERBOSE: bool = False
 # PERF metrics default to False for production builds. Script mode and frozen
@@ -73,6 +44,61 @@ _LOGGING_DISABLED: bool = _IS_FROZEN
 _BASE_DIR: Path = Path(__file__).parent.parent.parent
 _FORCED_LOG_DIR: Path | None = None
 _ACTIVE_LOG_DIR: Path | None = None
+
+
+@dataclass(frozen=True)
+class LoggingBootstrapProfile:
+    """One startup decision for handlers and diagnostic runtime collectors."""
+
+    debug: bool = False
+    verbose: bool = False
+    perf: bool = False
+    usage: bool = False
+    viz: bool = False
+    viz_diag: bool = False
+    geo: bool = False
+    settings_trace: bool = False
+    lifecycle: bool = False
+    cache_trace: bool = False
+    steam_trace: bool = False
+
+
+def resolve_logging_bootstrap_profile(
+    argv: Iterable[str],
+    *,
+    diagnostic_build: bool = False,
+) -> LoggingBootstrapProfile:
+    """Resolve CLI logging switches or the dedicated diagnostic-all policy."""
+
+    args = {str(arg).strip().lower() for arg in argv}
+    if diagnostic_build:
+        return LoggingBootstrapProfile(
+            debug=True,
+            verbose=True,
+            perf=True,
+            usage=True,
+            viz=True,
+            viz_diag=True,
+            geo=True,
+            settings_trace=True,
+            lifecycle=True,
+            cache_trace=True,
+            steam_trace=True,
+        )
+    viz = "--viz" in args
+    return LoggingBootstrapProfile(
+        debug="--debug" in args or "-d" in args,
+        verbose="--verbose" in args or "-v" in args,
+        perf="--perf" in args,
+        usage="--usage" in args,
+        viz=viz,
+        viz_diag=viz or "--viz-diagnostics" in args or "--viz-diag" in args,
+        geo="--geo" in args,
+        settings_trace="--set" in args,
+        lifecycle="--life" in args,
+        cache_trace="--cache" in args,
+        steam_trace="--steam" in args,
+    )
 
 def _parse_bool_token(value: Optional[str]) -> Optional[bool]:
     """Parse a string token into a boolean or None if indeterminate."""
@@ -752,6 +778,8 @@ def get_log_dir() -> Path:
     """
     if _ACTIVE_LOG_DIR is not None:
         return _ACTIVE_LOG_DIR
+    if is_diagnostic_build():
+        return _resolve_runtime_log_dir(diagnostic_build=True)
     if _FORCED_LOG_DIR is not None:
         return _FORCED_LOG_DIR
     return _BASE_DIR / "logs"
@@ -760,38 +788,27 @@ def get_log_dir() -> Path:
 def _resolve_runtime_log_dir(*, diagnostic_build: bool = False) -> Path:
     """Resolve the log directory using the same rules as setup_logging()."""
     base_dir = _BASE_DIR
-    forced_dir = (
-        _candidate_localappdata_diagnostic_dir()
-        if diagnostic_build
-        else _FORCED_LOG_DIR
-    )
-
-    try:
-        import builtins as _builtins
-
-        frozen = bool(getattr(sys, "frozen", False))  # type: ignore[attr-defined]
-        nuitka_compiled = bool(getattr(_builtins, "__compiled__", False))
-
+    exe_path_valid: Path | None = None
+    if is_compiled_runtime():
         exe_path = Path(getattr(sys, "executable", "") or "")
-        exe_path_valid: Path | None = exe_path if exe_path.exists() else None
+        if exe_path.exists():
+            exe_path_valid = exe_path
+            base_dir = exe_path.parent
 
-        if (frozen or nuitka_compiled) and exe_path_valid is not None:
-            base_dir = exe_path_valid.parent
-            if forced_dir is None:
-                try:
-                    log_cfg_name = exe_path_valid.stem + ".logdir.cfg"
-                    log_cfg_path = exe_path_valid.parent / log_cfg_name
-                    if log_cfg_path.exists():
-                        raw_dir = log_cfg_path.read_text(encoding="utf-8").strip()
-                        if raw_dir:
-                            candidate = Path(raw_dir).expanduser()
-                            if not candidate.is_absolute():
-                                candidate = candidate.resolve()
-                            forced_dir = candidate
-                except Exception:
-                    forced_dir = forced_dir
-    except Exception:
-        pass
+    if diagnostic_build:
+        return _select_diagnostic_log_dir(exe_path_valid)
+
+    forced_dir = _FORCED_LOG_DIR
+    if exe_path_valid is not None and forced_dir is None:
+        try:
+            log_cfg_path = exe_path_valid.parent / f"{exe_path_valid.stem}.logdir.cfg"
+            if log_cfg_path.exists():
+                raw_dir = log_cfg_path.read_text(encoding="utf-8").strip()
+                if raw_dir:
+                    candidate = Path(raw_dir).expanduser()
+                    forced_dir = candidate if candidate.is_absolute() else candidate.resolve()
+        except Exception:
+            pass
 
     return _select_log_dir(forced_dir, base_dir)
 
@@ -829,13 +846,51 @@ def _candidate_programdata_dir() -> Path | None:
     return Path(program_data) / "SRPSS" / "logs"
 
 
-def _candidate_localappdata_diagnostic_dir() -> Path:
+def _candidate_localappdata_diagnostic_dir() -> Path | None:
     """Return the dedicated readable per-user diagnostic log location."""
 
     local_app_data = os.getenv("LOCALAPPDATA")
     if local_app_data:
-        return Path(local_app_data) / "SRPSS" / "Diagnostics" / "logs"
-    return Path(tempfile.gettempdir()) / "SRPSS" / "Diagnostics" / "logs"
+        return Path(local_app_data) / "SRPSS" / "Diagnostic" / "logs"
+    return None
+
+
+def _candidate_temp_diagnostic_dir() -> Path:
+    return Path(tempfile.gettempdir()) / "SRPSS" / "Diagnostic" / "logs"
+
+
+def _try_writable_log_dir(path: Path | None) -> Path | None:
+    if path is None:
+        return None
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".srpss_log_probe"
+        with probe.open("w", encoding="utf-8") as handle:
+            handle.write("ok")
+        probe.unlink(missing_ok=True)
+        return path
+    except Exception:
+        return None
+
+
+def _select_diagnostic_log_dir(exe_path: Path | None) -> Path:
+    """Select the diagnostic-only readable log directory in contract order."""
+
+    global _ACTIVE_LOG_DIR
+    candidates = (
+        exe_path.parent / "logs" if exe_path is not None else None,
+        _candidate_localappdata_diagnostic_dir(),
+        _candidate_temp_diagnostic_dir(),
+    )
+    for candidate in candidates:
+        chosen = _try_writable_log_dir(candidate)
+        if chosen is not None:
+            _ACTIVE_LOG_DIR = chosen
+            return chosen
+    fallback = _candidate_temp_diagnostic_dir()
+    fallback.mkdir(parents=True, exist_ok=True)
+    _ACTIVE_LOG_DIR = fallback
+    return fallback
 
 
 def _select_log_dir(
@@ -847,19 +902,6 @@ def _select_log_dir(
     """
     global _ACTIVE_LOG_DIR
 
-    def _try_path(path: Path | None) -> Path | None:
-        if path is None:
-            return None
-        try:
-            path.mkdir(parents=True, exist_ok=True)
-            probe = path / ".srpss_log_probe"
-            with probe.open("w", encoding="utf-8") as handle:
-                handle.write("ok")
-            probe.unlink(missing_ok=True)
-            return path
-        except Exception:
-            return None
-
     candidates: list[Path | None] = []
     candidates.append(forced_dir)
     candidates.append(base_dir / "logs")
@@ -867,7 +909,7 @@ def _select_log_dir(
     candidates.append(Path(tempfile.gettempdir()) / "SRPSS" / "logs")
 
     for candidate in candidates:
-        chosen = _try_path(candidate)
+        chosen = _try_writable_log_dir(candidate)
         if chosen is not None:
             _ACTIVE_LOG_DIR = chosen
             return chosen
@@ -918,51 +960,34 @@ def setup_logging(
     global _VERBOSE, _PERF_METRICS_ENABLED, _USAGE_LOGGING_ENABLED
     global _VIZ_LOGGING_ENABLED, _VIZ_DIAGNOSTICS_ENABLED
     global _GEOMETRY_LOGGING_ENABLED, _SETTINGS_LOGGING_ENABLED, _LIFECYCLE_LOGGING_ENABLED
-    global _CACHE_LOGGING_ENABLED, _STEAM_LOGGING_ENABLED
+    global _CACHE_LOGGING_ENABLED, _STEAM_LOGGING_ENABLED, _WIDGET_PERF_VERBOSE
     global _BASE_DIR, _FORCED_LOG_DIR, _ACTIVE_LOG_DIR
 
+    if diagnostic_build:
+        diagnostic_profile = resolve_logging_bootstrap_profile((), diagnostic_build=True)
+        debug = diagnostic_profile.debug
+        verbose = diagnostic_profile.verbose
+        perf = diagnostic_profile.perf
+        usage = diagnostic_profile.usage
+        viz = diagnostic_profile.viz
+        viz_diag = diagnostic_profile.viz_diag
+        geo = diagnostic_profile.geo
+        settings_trace = diagnostic_profile.settings_trace
+        lifecycle = diagnostic_profile.lifecycle
+        cache_trace = diagnostic_profile.cache_trace
+        steam_trace = diagnostic_profile.steam_trace
+        _WIDGET_PERF_VERBOSE = True
+
     debug_enabled = debug or verbose
-    # Create logs directory. In frozen builds (Nuitka/PyInstaller) we prefer
-    # a logs/ directory next to the executable so users can easily find it.
-
     base_dir = _BASE_DIR
-    forced_dir = (
-        _candidate_localappdata_diagnostic_dir()
-        if diagnostic_build
-        else _FORCED_LOG_DIR
-    )
+    forced_dir = _FORCED_LOG_DIR
     _ACTIVE_LOG_DIR = None
-    try:
-        import sys as _sys
-        import builtins as _builtins
-
-        frozen = bool(getattr(_sys, "frozen", False))  # type: ignore[attr-defined]
-        # Nuitka sets a module-level __compiled__ flag rather than sys.frozen.
-        nuitka_compiled = bool(getattr(_builtins, "__compiled__", False))
-
-        exe_path = Path(getattr(_sys, "executable", "") or "")
-        exe_path_valid: Path | None = exe_path if exe_path.exists() else None
-
-        if frozen or nuitka_compiled:
-            if exe_path_valid is not None:
-                base_dir = exe_path_valid.parent
-                try:
-                    if forced_dir is None:
-                        log_cfg_name = exe_path_valid.stem + ".logdir.cfg"
-                        log_cfg_path = exe_path_valid.parent / log_cfg_name
-                        if log_cfg_path.exists():
-                            raw_dir = log_cfg_path.read_text(encoding="utf-8").strip()
-                            if raw_dir:
-                                candidate = Path(raw_dir).expanduser()
-                                if not candidate.is_absolute():
-                                    candidate = candidate.resolve()
-                                forced_dir = candidate
-                except Exception:
-                    forced_dir = forced_dir
-        else:
-            exe_path_valid = None
-    except Exception:
-        exe_path_valid = None
+    exe_path_valid: Path | None = None
+    if is_compiled_runtime():
+        exe_path = Path(getattr(sys, "executable", "") or "")
+        if exe_path.exists():
+            exe_path_valid = exe_path
+            base_dir = exe_path.parent
 
     # Command-line flag overrides config file / environment fallback.
     if perf:
@@ -1025,7 +1050,7 @@ def setup_logging(
         root.setLevel(logging.CRITICAL + 10)
         return
 
-    log_dir = _select_log_dir(forced_dir, base_dir)
+    log_dir = _resolve_runtime_log_dir(diagnostic_build=diagnostic_build)
     
     # Reset root handlers on re-entry so repeated setup calls do not duplicate output.
     root_logger = logging.getLogger()

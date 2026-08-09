@@ -422,7 +422,8 @@ release/
 `Diagnostic Runtime` and `Diagnostic Installer` are deliberately unselected by
 default. Together they publish/install `SRPSS_Diagnostic.exe` without changing
 the standard screensaver registration or Media Center installation. Runtime
-logs live under `%LOCALAPPDATA%\SRPSS\Diagnostics\logs`; use the diagnostic
+logs live beside the executable under `logs`, falling back to
+`%LOCALAPPDATA%\SRPSS\Diagnostic\logs` and then `%TEMP%`; use the diagnostic
 product for frozen-crash attribution, never as a performance baseline or as a
 Media Center capture substitute. The diagnostic product is interactive and
 does not provision, queue to, start, or keep alive the standard SCR Reddit

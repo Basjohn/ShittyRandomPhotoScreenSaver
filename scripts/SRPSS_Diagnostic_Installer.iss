@@ -36,9 +36,8 @@ Source: "..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Run SRPSS Diagnostic"; Filename: "{app}\SRPSS_Diagnostic.exe"; Parameters: "/s"; IconFilename: "{app}\SRPSS.ico"
-Name: "{group}\Run SRPSS Diagnostic - Full Telemetry"; Filename: "{app}\SRPSS_Diagnostic.exe"; Parameters: "/s --perf --usage --viz --geo --cache"; IconFilename: "{app}\SRPSS.ico"
 Name: "{group}\Open SRPSS Diagnostic Settings"; Filename: "{app}\SRPSS_Diagnostic.exe"; Parameters: "/c"; IconFilename: "{app}\SRPSS.ico"
-Name: "{group}\Open Diagnostic Logs"; Filename: "{sys}\explorer.exe"; Parameters: """{localappdata}\SRPSS\Diagnostics\logs"""; IconFilename: "{app}\SRPSS.ico"
+Name: "{group}\Open Diagnostic Logs"; Filename: "{sys}\explorer.exe"; Parameters: """{app}\logs"""; IconFilename: "{app}\SRPSS.ico"
 Name: "{userdesktop}\SRPSS Diagnostic"; Filename: "{app}\SRPSS_Diagnostic.exe"; Parameters: "/s"; IconFilename: "{app}\SRPSS.ico"; Tasks: desktop
 
 [Run]

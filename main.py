@@ -4,11 +4,6 @@ ShittyRandomPhotoScreenSaver - Main Entry Point
 Windows screensaver application that displays photos with transitions.
 """
 import sys
-
-try:
-    import builtins as _builtins  # type: ignore[attr-defined]
-except Exception:  # pragma: no cover - very early in startup
-    _builtins = None
 import os
 import gc
 import shutil
@@ -25,10 +20,12 @@ from core.logging.logger import (
     get_logger,
     get_log_dir,
     is_perf_metrics_enabled,
+    resolve_logging_bootstrap_profile,
 )
 from core.build_profile import (
     activate_diagnostic_build,
     get_build_flavour,
+    is_compiled_runtime,
     is_diagnostic_build,
 )
 from core.settings.settings_manager import SettingsManager
@@ -91,22 +88,8 @@ class ScreensaverMode(Enum):
 
 
 def _is_frozen_build() -> bool:
-    """Return True when running from a compiled/frozen executable."""
-    if bool(getattr(sys, "frozen", False)):
-        return True
-    if globals().get("__compiled__", False):
-        return True
-    if _builtins is not None and bool(getattr(_builtins, "__compiled__", False)):
-        return True
-    main_mod = sys.modules.get("__main__")
-    if main_mod is not None and bool(getattr(main_mod, "__compiled__", False)):
-        return True
-    exe_path = Path(getattr(sys, "executable", "") or "")
-    exe_name = exe_path.name.lower()
-    if exe_name and exe_name not in ("python.exe", "pythonw.exe"):
-        if exe_name.startswith("srpss") or exe_name.endswith(".scr"):
-            return True
-    return False
+    """Compatibility wrapper around the authoritative runtime check."""
+    return is_compiled_runtime()
 
 
 def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
@@ -593,34 +576,26 @@ def main(*, entrypoint: str = "main"):
             diagnostic_build=diagnostic_build,
         )
 
-    # Setup logging first
-    # The dedicated diagnostic product always captures broad Python plus
-    # lifecycle/settings detail. Heavy perf/usage/visualizer families remain
-    # explicit existing CLI choices so diagnostic runs can still distinguish
-    # crash attribution from measurement overhead.
-    debug_mode = diagnostic_build or '--debug' in sys.argv or '-d' in sys.argv
-    verbose_mode = '--verbose' in sys.argv or '-v' in sys.argv
-    perf_mode = '--perf' in sys.argv
-    usage_mode = '--usage' in sys.argv
-    viz_mode = '--viz' in sys.argv
-    geo_mode = '--geo' in sys.argv
-    settings_trace_mode = diagnostic_build or '--set' in sys.argv
-    lifecycle_mode = diagnostic_build or '--life' in sys.argv
-    cache_trace_mode = '--cache' in sys.argv
-    steam_trace_mode = '--steam' in sys.argv
-    viz_diag_mode = viz_mode or '--viz-diagnostics' in sys.argv or '--viz-diag' in sys.argv
+    logging_profile = resolve_logging_bootstrap_profile(
+        sys.argv[1:],
+        diagnostic_build=diagnostic_build,
+    )
+    debug_mode = logging_profile.debug
+    verbose_mode = logging_profile.verbose
+    perf_mode = logging_profile.perf
+    usage_mode = logging_profile.usage
     setup_logging(
         debug=debug_mode,
         verbose=verbose_mode,
         perf=perf_mode,
         usage=usage_mode,
-        viz=viz_mode,
-        viz_diag=viz_diag_mode,
-        geo=geo_mode,
-        settings_trace=settings_trace_mode,
-        lifecycle=lifecycle_mode,
-        cache_trace=cache_trace_mode,
-        steam_trace=steam_trace_mode,
+        viz=logging_profile.viz,
+        viz_diag=logging_profile.viz_diag,
+        geo=logging_profile.geo,
+        settings_trace=logging_profile.settings_trace,
+        lifecycle=logging_profile.lifecycle,
+        cache_trace=logging_profile.cache_trace,
+        steam_trace=logging_profile.steam_trace,
         diagnostic_build=diagnostic_build,
     )
     diagnostic_record = None

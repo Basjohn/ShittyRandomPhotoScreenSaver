@@ -1,5 +1,6 @@
 import logging
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from core.logging import logger as logger_mod
 
@@ -187,8 +188,15 @@ def test_old_logging_env_toggles_no_longer_enable_families(tmp_path, monkeypatch
     assert logger_mod.is_steam_logging_enabled() is False
 
 
-def test_diagnostic_build_forces_bounded_localappdata_logging(tmp_path, monkeypatch):
-    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+def test_diagnostic_build_enables_every_family_beside_frozen_executable(
+    tmp_path,
+    monkeypatch,
+):
+    executable = tmp_path / "installed" / "SRPSS_Diagnostic.exe"
+    executable.parent.mkdir()
+    executable.write_bytes(b"fixture")
+    monkeypatch.setattr(logger_mod, "is_compiled_runtime", lambda: True)
+    monkeypatch.setattr(logger_mod.sys, "executable", str(executable))
     monkeypatch.setattr(logger_mod, "_FORCED_LOG_DIR", None)
     monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
     monkeypatch.setattr(logger_mod, "_LOGGING_DISABLED", True)
@@ -201,17 +209,13 @@ def test_diagnostic_build_forces_bounded_localappdata_logging(tmp_path, monkeypa
     monkeypatch.setattr(logger_mod, "_LIFECYCLE_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_CACHE_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_STEAM_LOGGING_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_WIDGET_PERF_VERBOSE", False)
 
-    logger_mod.setup_logging(
-        debug=True,
-        settings_trace=True,
-        lifecycle=True,
-        diagnostic_build=True,
-    )
+    logger_mod.setup_logging(diagnostic_build=True)
     logging.getLogger("SettingsManager").info("[SETTINGS] diagnostic settings")
     logging.getLogger("engine.engine_lifecycle").info("[LIFECYCLE] diagnostic lifecycle")
 
-    expected = tmp_path / "SRPSS" / "Diagnostics" / "logs"
+    expected = executable.parent / "logs"
     assert logger_mod.get_log_dir() == expected
     rotating = [
         handler
@@ -221,6 +225,31 @@ def test_diagnostic_build_forces_bounded_localappdata_logging(tmp_path, monkeypa
     assert rotating
     assert all(handler.maxBytes == 1 * 1024 * 1024 for handler in rotating)
     assert all(1 <= handler.backupCount <= 5 for handler in rotating)
+    assert logger_mod.is_verbose_logging() is True
+    assert logger_mod.is_perf_metrics_enabled() is True
+    assert logger_mod.is_usage_logging_enabled() is True
+    assert logger_mod.is_widget_perf_verbose() is True
+    assert logger_mod.is_viz_logging_enabled() is True
+    assert logger_mod.is_viz_diagnostics_enabled() is True
+    assert logger_mod.is_geometry_logging_enabled() is True
+    assert logger_mod.is_settings_logging_enabled() is True
+    assert logger_mod.is_lifecycle_logging_enabled() is True
+    assert logger_mod.is_cache_logging_enabled() is True
+    assert logger_mod.is_steam_logging_enabled() is True
+    assert {
+        "screensaver.log",
+        "screensaver_verbose.log",
+        "screensaver_perf.log",
+        "perf_widgets.log",
+        "screensaver_usage.log",
+        "screensaver_spotify_vis.log",
+        "screensaver_spotify_vol.log",
+        "screensaver_geometry.log",
+        "screensaver_settings.log",
+        "screensaver_lifecycle.log",
+        "screensaver_cache.log",
+        "screensaver_steam.log",
+    } <= {Path(handler.baseFilename).name for handler in rotating}
 
     logging.shutdown()
     assert "diagnostic settings" in (expected / "screensaver_settings.log").read_text(
@@ -229,3 +258,135 @@ def test_diagnostic_build_forces_bounded_localappdata_logging(tmp_path, monkeypa
     assert "diagnostic lifecycle" in (expected / "screensaver_lifecycle.log").read_text(
         encoding="utf-8"
     )
+
+
+def test_diagnostic_log_dir_falls_back_localappdata_then_temp(tmp_path, monkeypatch):
+    executable = tmp_path / "install" / "SRPSS_Diagnostic.exe"
+    executable.parent.mkdir()
+    executable.write_bytes(b"fixture")
+    local_root = tmp_path / "local"
+    temp_root = tmp_path / "temp"
+    monkeypatch.setenv("LOCALAPPDATA", str(local_root))
+    monkeypatch.setattr(logger_mod.tempfile, "gettempdir", lambda: str(temp_root))
+    monkeypatch.setattr(logger_mod, "is_compiled_runtime", lambda: True)
+    monkeypatch.setattr(logger_mod.sys, "executable", str(executable))
+    monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
+
+    real_try = logger_mod._try_writable_log_dir
+    monkeypatch.setattr(
+        logger_mod,
+        "_try_writable_log_dir",
+        lambda path: None if path == executable.parent / "logs" else real_try(path),
+    )
+    expected_local = local_root / "SRPSS" / "Diagnostic" / "logs"
+    assert logger_mod._resolve_runtime_log_dir(diagnostic_build=True) == expected_local
+
+    monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
+    monkeypatch.setattr(
+        logger_mod,
+        "_try_writable_log_dir",
+        lambda path: (
+            None
+            if path in (executable.parent / "logs", expected_local)
+            else real_try(path)
+        ),
+    )
+    assert logger_mod._resolve_runtime_log_dir(diagnostic_build=True) == (
+        temp_root / "SRPSS" / "Diagnostic" / "logs"
+    )
+
+
+def test_diagnostic_fresh_clear_and_get_use_exact_same_resolved_dir(
+    tmp_path,
+    monkeypatch,
+):
+    executable = tmp_path / "installed" / "SRPSS_Diagnostic.exe"
+    executable.parent.mkdir()
+    executable.write_bytes(b"fixture")
+    log_dir = executable.parent / "logs"
+    log_dir.mkdir()
+    (log_dir / "stale.log").write_text("old", encoding="utf-8")
+    monkeypatch.setattr(logger_mod, "is_compiled_runtime", lambda: True)
+    monkeypatch.setattr(logger_mod.sys, "executable", str(executable))
+    monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
+
+    resolved, deleted = logger_mod.clear_logs_for_fresh_start(diagnostic_build=True)
+
+    assert resolved == log_dir
+    assert deleted == 1
+    assert logger_mod.get_log_dir() == log_dir
+
+
+def test_logging_bootstrap_profile_keeps_normal_collectors_off_without_flags():
+    normal = logger_mod.resolve_logging_bootstrap_profile((), diagnostic_build=False)
+    diagnostic = logger_mod.resolve_logging_bootstrap_profile((), diagnostic_build=True)
+
+    assert not any(vars(normal).values())
+    assert all(vars(diagnostic).values())
+
+
+def test_normal_frozen_build_remains_logging_disabled(tmp_path, monkeypatch):
+    executable = tmp_path / "SRPSS.scr"
+    executable.write_bytes(b"fixture")
+    monkeypatch.setattr(logger_mod, "is_compiled_runtime", lambda: True)
+    monkeypatch.setattr(logger_mod.sys, "executable", str(executable))
+    monkeypatch.setattr(logger_mod, "_LOGGING_DISABLED", True)
+    monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
+    for name in (
+        "_PERF_METRICS_ENABLED",
+        "_USAGE_LOGGING_ENABLED",
+        "_VIZ_LOGGING_ENABLED",
+        "_VIZ_DIAGNOSTICS_ENABLED",
+        "_GEOMETRY_LOGGING_ENABLED",
+        "_SETTINGS_LOGGING_ENABLED",
+        "_LIFECYCLE_LOGGING_ENABLED",
+        "_CACHE_LOGGING_ENABLED",
+        "_STEAM_LOGGING_ENABLED",
+    ):
+        monkeypatch.setattr(logger_mod, name, False)
+
+    logger_mod.setup_logging()
+
+    assert all(
+        isinstance(handler, logging.NullHandler)
+        for handler in logging.getLogger().handlers
+    )
+    assert not (tmp_path / "logs").exists()
+    assert logger_mod.is_perf_metrics_enabled() is False
+    assert logger_mod.is_usage_logging_enabled() is False
+
+
+def test_script_mode_retains_main_log_only_without_diagnostic_flags(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(logger_mod, "is_compiled_runtime", lambda: False)
+    monkeypatch.setattr(logger_mod, "_BASE_DIR", tmp_path)
+    monkeypatch.setattr(logger_mod, "_FORCED_LOG_DIR", None)
+    monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
+    monkeypatch.setattr(logger_mod, "_LOGGING_DISABLED", False)
+    for name in (
+        "_PERF_METRICS_ENABLED",
+        "_USAGE_LOGGING_ENABLED",
+        "_VIZ_LOGGING_ENABLED",
+        "_VIZ_DIAGNOSTICS_ENABLED",
+        "_GEOMETRY_LOGGING_ENABLED",
+        "_SETTINGS_LOGGING_ENABLED",
+        "_LIFECYCLE_LOGGING_ENABLED",
+        "_CACHE_LOGGING_ENABLED",
+        "_STEAM_LOGGING_ENABLED",
+    ):
+        monkeypatch.setattr(logger_mod, name, False)
+
+    logger_mod.setup_logging()
+    handlers = [
+        handler
+        for handler in logging.getLogger().handlers
+        if isinstance(handler, RotatingFileHandler)
+    ]
+
+    assert {Path(handler.baseFilename).name for handler in handlers} == {
+        "screensaver.log"
+    }
+    assert logger_mod.is_perf_metrics_enabled() is False
+    assert logger_mod.is_usage_logging_enabled() is False
