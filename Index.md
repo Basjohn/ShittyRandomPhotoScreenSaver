@@ -36,8 +36,8 @@ Do not read every document by default.
 | `Docs/Compositor_Architecture.md` | Compositor recovery target and validation |
 | `Docs/TestSuite.md` | Test levels and release gates |
 | `Docs/Harness_Index.md` | Recurring commands/probes |
-| `Docs/Historical_Bugs/README.md` | Standalone current/pending bug records and migration index |
-| `Docs/Historical_Bugs.md` | Canonical fallback for records not yet migrated |
+| `Docs/Historical_Bugs/README.md` | Historical incident index and standalone detailed records |
+| `Docs/Historical_Bugs.md` | Compact historical status/navigation map |
 | `Docs/Regression_Notes.md` | Small resolved regression notes |
 | `Docs/Documentation_Maintenance.md` | Drift and document-size control |
 | `Future_Cleanup.md` | Deferred low-priority cleanup |
