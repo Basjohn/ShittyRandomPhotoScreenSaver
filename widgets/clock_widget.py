@@ -22,7 +22,7 @@ from PySide6.QtCore import QRectF
 from shiboken6 import Shiboken
 
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
-from widgets.shadow_utils import ShadowFadeProfile
+from widgets.shadow_utils import PaintedShadowLabel, ShadowFadeProfile
 from widgets.clock_ticker import GlobalClockTicker, get_global_clock_ticker
 from core.settings.shadow_tuning import CARD_SHADOW_TUNING as PAINTED_FRAME_SHADOW_TUNING
 from core.logging.logger import get_logger
@@ -273,12 +273,13 @@ class ClockWidget(BaseOverlayWidget):
         """Create the timezone label."""
         if self._tz_label is not None:
             return
-        self._tz_label = QLabel(self)
+        self._tz_label = PaintedShadowLabel(self)
         self._tz_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._tz_label.setTextFormat(Qt.TextFormat.PlainText)
         tz_font_size = max(int(self._font_size / 4), 8)
         tz_font = QFont(self._font_family, tz_font_size, QFont.Weight.Bold)
         self._tz_label.setFont(tz_font)
+        self._tz_label.set_shadow_config(self._shadow_config)
         self._tz_label.setStyleSheet(self._secondary_label_stylesheet())
         self._tz_label.hide()
 
@@ -286,12 +287,13 @@ class ClockWidget(BaseOverlayWidget):
         """Create the digital weekday/date label."""
         if self._calendar_label is not None:
             return
-        self._calendar_label = QLabel(self)
+        self._calendar_label = PaintedShadowLabel(self)
         self._calendar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._calendar_label.setTextFormat(Qt.TextFormat.PlainText)
         self._calendar_label.setFont(
             QFont(self._font_family, self._calendar_font_size, QFont.Weight.Bold)
         )
+        self._calendar_label.set_shadow_config(self._shadow_config)
         self._calendar_label.setStyleSheet(self._secondary_label_stylesheet())
         self._calendar_label.hide()
 
@@ -1323,6 +1325,17 @@ class ClockWidget(BaseOverlayWidget):
         if self._display_mode == "analog":
             self._invalidate_clock_face_cache()
             self.update()
+
+    def set_shadow_config(self, config) -> None:
+        """Apply shared text-shadow authority to time and digital footers."""
+
+        super().set_shadow_config(config)
+        for label in (
+            getattr(self, "_calendar_label", None),
+            getattr(self, "_tz_label", None),
+        ):
+            if isinstance(label, PaintedShadowLabel):
+                label.set_shadow_config(config)
 
     def set_font_family(self, family: str) -> None:
         """Set font family for the clock and its secondary text."""

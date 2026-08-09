@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QWidget
 from rendering.custom_layout_contract import get_screen_signature
 import widgets.clock_widget as clock_mod
 from widgets.clock_widget import ClockWidget, analog_hand_angles
+from widgets.shadow_utils import PaintedShadowLabel
 
 
 def test_analog_hand_angles_use_exact_one_second_steps_without_callback_jitter() -> None:
@@ -76,6 +77,27 @@ def test_digital_clock_calendar_rows_are_centered_and_preserve_custom_rect(qtbot
 
     assert clock.geometry() == custom_rect
     assert " - " in clock._calendar_label.text()
+
+
+def test_digital_clock_secondary_rows_share_painted_text_shadow_authority(qtbot) -> None:
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+    clock = ClockWidget(
+        parent=parent,
+        show_timezone=True,
+        show_day_of_week=True,
+        show_date=True,
+    )
+    qtbot.addWidget(clock)
+    shadow_config = {"text_enabled": False}
+
+    clock.set_shadow_config(shadow_config)
+
+    assert isinstance(clock._calendar_label, PaintedShadowLabel)
+    assert isinstance(clock._tz_label, PaintedShadowLabel)
+    assert clock._calendar_label._shadow_config is shadow_config
+    assert clock._tz_label._shadow_config is shadow_config
 
 
 def test_analog_clock_calendar_reserves_footer_space(qtbot) -> None:

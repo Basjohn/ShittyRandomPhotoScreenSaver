@@ -75,6 +75,33 @@ def test_spotify_volume_provider_switch_requests_volume_sync(qt_app, monkeypatch
         widget.deleteLater()
 
 
+def test_spotify_browser_provider_hides_tab_unsafe_app_volume(qt_app, monkeypatch):
+    widget = SpotifyVolumeWidget()
+    calls = []
+    try:
+        widget._enabled = True  # type: ignore[attr-defined]
+        widget.show()
+        monkeypatch.setattr(
+            widget._controller,
+            "set_process_filter",
+            lambda provider: calls.append(provider),
+        )
+        monkeypatch.setattr(
+            widget,
+            "_request_volume_sync",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        changed = widget.set_provider_runtime("spotify_browser")
+
+        assert changed is True
+        assert widget._provider_volume_supported is False  # type: ignore[attr-defined]
+        assert widget.isVisible() is False
+        assert calls == []
+    finally:
+        widget.deleteLater()
+
+
 def test_spotify_volume_sync_visibility_requests_volume_sync_when_becoming_visible(qt_app, monkeypatch):
     widget = SpotifyVolumeWidget()
     anchor = QWidget()

@@ -18,6 +18,12 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.media.provider_registry import (
+    iter_media_providers,
+    normalize_provider_id,
+    preserve_provider_setting,
+    provider_supports_app_volume,
+)
 from core.settings.visualizer_presets import (
     apply_preset_to_config,
     resolve_preset_index_from_mapping,
@@ -26,6 +32,7 @@ from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
+    INFO_LABEL_STYLE,
     STATUS_LABEL_STYLE,
     add_section_label,
     add_swatch_label,
@@ -193,12 +200,54 @@ def _update_sine_multi_line_visibility(tab) -> None:
             w.setVisible(bool(show_l3))
 
 
-def _update_musicbee_plugin_visibility(tab) -> None:
-    """Show/hide the MusicBee plugin button based on the selected provider."""
+def _update_media_provider_controls(tab) -> None:
+    """Apply provider-owned conditional controls without changing preferences."""
+
     btn = getattr(tab, '_musicbee_plugin_btn', None)
     combo = getattr(tab, 'media_provider_combo', None)
-    if btn is not None and combo is not None:
-        btn.setVisible(combo.currentData() == "musicbee")
+    if combo is None:
+        return
+    raw_provider = combo.currentData()
+    provider = normalize_provider_id(raw_provider)
+    if btn is not None:
+        btn.setVisible(provider == "musicbee")
+
+    browser_note = getattr(tab, '_spotify_browser_provider_note', None)
+    if browser_note is not None:
+        browser_note.setVisible(provider == "spotify_browser")
+
+    unsupported_note = getattr(tab, '_unsupported_media_provider_note', None)
+    if unsupported_note is not None:
+        unsupported = provider is None and bool(str(raw_provider or '').strip())
+        unsupported_note.setVisible(unsupported)
+        if unsupported:
+            unsupported_note.setText(
+                f"Unsupported saved media provider: {raw_provider}. "
+                "Media monitoring stays disabled until a supported provider is selected."
+            )
+
+    volume = getattr(tab, 'media_spotify_volume_enabled', None)
+    if volume is not None:
+        supported = provider_supports_app_volume(provider)
+        volume.setEnabled(supported)
+        if supported:
+            volume.setToolTip(
+                "Show a slim vertical volume slider next to the media card when "
+                "Core Audio/pycaw is available. It affects only the selected "
+                "desktop application's audio session."
+            )
+        else:
+            volume.setToolTip(
+                "This provider has no safe application-volume contract. Browser "
+                "GSMTC exposes the whole browser process, not a Spotify tab. Your "
+                "saved preference is preserved when you choose a desktop provider."
+            )
+
+
+def _update_musicbee_plugin_visibility(tab) -> None:
+    """Compatibility wrapper for the consolidated provider conditional owner."""
+
+    _update_media_provider_controls(tab)
 
 
 def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
@@ -289,16 +338,17 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Provider toggle row
     provider_row = _aligned_row(provider_layout, "Provider:")
     tab.media_provider_combo = StyledComboBox()
-    tab.media_provider_combo.addItem("Spotify", "spotify")
-    tab.media_provider_combo.addItem("MusicBee", "musicbee")
+    for provider in iter_media_providers():
+        tab.media_provider_combo.addItem(provider.display_name, provider.provider_id)
     tab.media_provider_combo.setMinimumWidth(150)
     tab.media_provider_combo.setToolTip(
         "Select which media player to monitor via Windows GSMTC.\n"
-        "Change takes effect on next screensaver launch."
+        "Spotify Browser uses the active session exposed by a supported browser; "
+        "Windows does not reveal the website or tab origin."
     )
     tab.media_provider_combo.currentIndexChanged.connect(tab._save_settings)
     tab.media_provider_combo.currentIndexChanged.connect(
-        lambda: _update_musicbee_plugin_visibility(tab)
+        lambda: _update_media_provider_controls(tab)
     )
     provider_row.addWidget(tab.media_provider_combo)
 
@@ -320,6 +370,21 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab._musicbee_plugin_btn.setVisible(False)
     provider_row.addWidget(tab._musicbee_plugin_btn)
     provider_row.addStretch()
+
+    tab._spotify_browser_provider_note = QLabel(
+        "Browser GSMTC identifies Chrome, Edge, Firefox, Brave, Opera, or "
+        "Vivaldi—not a specific website. The browser's active media session is used."
+    )
+    tab._spotify_browser_provider_note.setWordWrap(True)
+    tab._spotify_browser_provider_note.setStyleSheet(INFO_LABEL_STYLE)
+    tab._spotify_browser_provider_note.setVisible(False)
+    provider_layout.addWidget(tab._spotify_browser_provider_note)
+
+    tab._unsupported_media_provider_note = QLabel("")
+    tab._unsupported_media_provider_note.setWordWrap(True)
+    tab._unsupported_media_provider_note.setStyleSheet(INFO_LABEL_STYLE)
+    tab._unsupported_media_provider_note.setVisible(False)
+    provider_layout.addWidget(tab._unsupported_media_provider_note)
 
     media_pos_row = _aligned_row(provider_layout, "Position:")
     tab.media_position = StyledComboBox()
@@ -503,11 +568,11 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_show_controls.stateChanged.connect(tab._save_settings)
     controls_layout.addWidget(tab.media_show_controls)
 
-    tab.media_spotify_volume_enabled = QCheckBox("Enable Spotify Volume Slider")
+    tab.media_spotify_volume_enabled = QCheckBox("Enable App Volume Slider")
     tab.media_spotify_volume_enabled.setProperty("circleIndicator", True)
     tab.media_spotify_volume_enabled.setToolTip(
-        "Show a slim vertical volume slider next to the Spotify card when Core Audio/pycaw is available. "
-        "The slider only affects the Spotify session volume and is gated by Interaction Mode / Ctrl-held interaction modes."
+        "Show a slim vertical volume slider next to the media card when Core Audio/pycaw is available. "
+        "It affects only the selected desktop application's audio session and is gated by Interaction Mode / Ctrl-held interaction modes."
     )
     tab.media_spotify_volume_enabled.setChecked(
         tab._default_bool('media', 'spotify_volume_enabled', True)
@@ -744,14 +809,20 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     media_config = widgets.get('media', {}) if isinstance(widgets, dict) else {}
     tab.media_enabled.setChecked(tab._config_bool('media', media_config, 'enabled', True))
 
-    # Provider (spotify / musicbee)
-    provider = tab._config_str('media', media_config, 'provider', 'spotify').lower()
+    # Registered GSMTC provider.
+    provider = preserve_provider_setting(
+        tab._config_str('media', media_config, 'provider', 'spotify')
+    )
     combo = getattr(tab, 'media_provider_combo', None)
     if combo is not None:
+        for item_index in range(combo.count() - 1, -1, -1):
+            if normalize_provider_id(combo.itemData(item_index)) is None:
+                combo.removeItem(item_index)
         idx = combo.findData(provider)
-        if idx >= 0:
-            combo.setCurrentIndex(idx)
-    _update_musicbee_plugin_visibility(tab)
+        if idx < 0:
+            combo.addItem(f"Unsupported ({provider})", provider)
+            idx = combo.findData(provider)
+        combo.setCurrentIndex(idx)
 
     media_pos = tab._config_str('media', media_config, 'position', 'Bottom Left')
     index = tab.media_position.findText(media_pos)
@@ -774,6 +845,7 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     tab.media_spotify_volume_enabled.setChecked(
         tab._config_bool('media', media_config, 'spotify_volume_enabled', True)
     )
+    _update_media_provider_controls(tab)
     tab.media_mute_button_enabled.setChecked(
         tab._config_bool('media', media_config, 'mute_button_enabled', True)
     )

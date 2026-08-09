@@ -29,6 +29,7 @@ from rendering.widget_descriptors import (
     get_layout_edit_runtime_descriptors,
     is_custom_position_selected_for_widget,
 )
+from core.media.provider_registry import normalize_provider_id, preserve_provider_setting
 from rendering.multi_monitor_coordinator import get_coordinator
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
 from rendering.fade_coordinator import FadeCoordinator
@@ -1224,7 +1225,7 @@ class WidgetManager:
     def _sync_media_provider_runtime(self, provider: object) -> None:
         """Rebind live media dependents to the active provider setting/runtime choice."""
 
-        normalized = str(provider or "spotify").strip().lower() or "spotify"
+        normalized = preserve_provider_setting(provider)
 
         media_widget = self._widgets.get('media_widget') or self._widgets.get('media')
         if media_widget is not None and hasattr(media_widget, 'set_provider_runtime'):
@@ -1243,11 +1244,16 @@ class WidgetManager:
     def handle_media_provider_failover(self, provider: object, *, source: str = "runtime") -> None:
         """Persist a runtime media-provider auto-fallback through the shared settings path."""
 
-        normalized = str(provider or "spotify").strip().lower() or "spotify"
-        self._sync_media_provider_runtime(normalized)
-
+        normalized = normalize_provider_id(provider)
+        if normalized is None:
+            logger.warning(
+                "[WIDGET_MANAGER] Ignoring invalid media-provider failover target: %r",
+                provider,
+            )
+            return
         settings = self._settings_manager
         if settings is None:
+            self._sync_media_provider_runtime(normalized)
             return
 
         widgets_cfg = settings.get('widgets', {}) or {}
@@ -1257,7 +1263,14 @@ class WidgetManager:
         if not isinstance(media_cfg, Mapping):
             media_cfg = {}
 
-        current = str(media_cfg.get('provider', 'spotify') or 'spotify').strip().lower() or 'spotify'
+        current = preserve_provider_setting(media_cfg.get('provider', 'spotify'))
+        if normalize_provider_id(current) is None:
+            logger.warning(
+                "[WIDGET_MANAGER] Preserving unsupported configured media provider: %r",
+                current,
+            )
+            return
+        self._sync_media_provider_runtime(normalized)
         if current == normalized:
             return
 

@@ -145,6 +145,7 @@ def test_widget_settings_section_descriptors_capture_loader_routing():
     assert media.loader_module == "ui.tabs.widgets_tab_media"
     assert media.loader_name == "load_media_settings"
     assert media.loader_guard_attrs == ("media_enabled",)
+    assert "media_provider_combo" in media.signal_block_attrs
     assert gmail.loader_module == "ui.tabs.widgets_tab_gmail"
     assert gmail.loader_name == "load_gmail_settings"
     assert defaults.loader_module == "ui.tabs.widgets_tab_defaults"
@@ -207,6 +208,9 @@ def test_widget_custom_resize_lock_descriptors_follow_section_contract():
     assert "clock" in section_ids
     assert "media" in section_ids
     assert "gmail" in section_ids
+
+    clock = next(item for item in descriptors if item.section_id == "clock")
+    assert clock.control_attrs == ("clock_font_size", "clock_calendar_font_size")
 
     media = next(item for item in descriptors if item.section_id == "media")
     assert media.widget_ids == ("media",)

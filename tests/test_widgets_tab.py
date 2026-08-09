@@ -131,6 +131,72 @@ class TestWidgetsTab:
         finally:
             tab.deleteLater()
 
+    def test_media_spotify_browser_choice_conditions_tab_unsafe_volume(
+        self,
+        qt_app,
+        settings_manager,
+    ):
+        settings_manager.set("widgets", {
+            "media": {
+                "enabled": True,
+                "provider": "spotify_browser",
+                "position": "Bottom Left",
+                "monitor": "ALL",
+                "spotify_volume_enabled": True,
+            },
+            "shadows": {"enabled": True, "text_enabled": True, "header_enabled": True},
+            "global": {"card_border_width_px": 3},
+        })
+
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab_id": "media"},
+        )
+        try:
+            assert tab.media_provider_combo.currentData() == "spotify_browser"
+            assert tab.media_spotify_volume_enabled.isChecked() is True
+            assert tab.media_spotify_volume_enabled.isEnabled() is False
+            assert tab._spotify_browser_provider_note.isHidden() is False
+
+            tab.media_provider_combo.setCurrentIndex(
+                tab.media_provider_combo.findData("spotify")
+            )
+            assert tab.media_spotify_volume_enabled.isEnabled() is True
+            assert tab._spotify_browser_provider_note.isHidden() is True
+        finally:
+            tab.deleteLater()
+
+    def test_invalid_media_provider_is_visible_and_not_coerced_to_spotify(
+        self,
+        qt_app,
+        settings_manager,
+    ):
+        settings_manager.set("widgets", {
+            "media": {
+                "enabled": True,
+                "provider": "retired_alias",
+                "position": "Bottom Left",
+                "monitor": "ALL",
+                "spotify_volume_enabled": True,
+            },
+            "shadows": {"enabled": True, "text_enabled": True, "header_enabled": True},
+            "global": {"card_border_width_px": 3},
+        })
+
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab_id": "media"},
+        )
+        try:
+            assert tab.media_provider_combo.currentData() == "retired_alias"
+            assert tab._unsupported_media_provider_note.isHidden() is False
+            assert tab.media_spotify_volume_enabled.isEnabled() is False
+            assert settings_manager.get("widgets")["media"]["provider"] == "retired_alias"
+        finally:
+            tab.deleteLater()
+
     def test_lazy_widgets_tab_visualizers_restore_hydrates_visualizers_only(self, qt_app, settings_manager):
         settings_manager.set("widgets", {
             "media": {"enabled": True, "position": "Bottom Right", "monitor": "ALL"},
@@ -492,6 +558,42 @@ class TestWidgetsTab:
             assert notice.isHidden() is False
             assert "Disable Custom Mode" in notice.text()
             assert tab.media_font_combo.isEnabled() is True
+        finally:
+            tab.deleteLater()
+
+    def test_widgets_tab_locks_both_clock_font_sizes_when_custom_is_active(
+        self,
+        qt_app,
+        settings_manager,
+    ):
+        settings_manager.set("widgets", {
+            "clock": {
+                "enabled": True,
+                "position": "Custom",
+                "show_day_of_week": True,
+                "show_date": True,
+                "calendar_font_size": 28,
+            },
+            "custom_layout": {
+                "version": 1,
+                "displays": {
+                    "screen:test": {
+                        "clock": {
+                            "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
+                            "size_payload": {"font_size": 64},
+                            "resize_mode": "clock_font",
+                        }
+                    }
+                },
+            },
+        })
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            assert tab.clock_font_size.isEnabled() is False
+            assert tab.clock_calendar_font_size.isEnabled() is False
+            assert tab.clock_font_combo.isEnabled() is True
+            assert tab._custom_resize_lock_notice_labels["clock"].isHidden() is False
         finally:
             tab.deleteLater()
 

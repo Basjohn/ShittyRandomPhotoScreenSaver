@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-08-01
+Last updated: 2026-08-09
 
 Canonical stable architecture and product behaviour contracts for SRPSS.
 
@@ -156,6 +156,8 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 - On startup, the media card owns reveal order: prepared artwork remains hidden until the coordinated card fade completes, then fades in once when all displays are transition-idle.
 - Track title/artist changes publish painter-owned metadata immediately, but fixed-height/card-margin Qt setters run only when the actual structural footprint changes.
 - External media-key routes converge through one process-wide 200 ms ingress claim before widget lookup, feedback, or refresh. The accepted route still preserves OS pass-through and wakes the visualizer; immediate duplicate routes do no widget work.
+- Media providers are registered stable ids with exact GSMTC source identities. Unknown non-empty ids remain visible and inert; they never silently select or persist another provider.
+- Browser GSMTC identifies the browser host rather than a website/tab. Browser-provider failover uses one background manager/session enumeration, and application-volume control remains unavailable because Windows exposes only whole-browser audio ownership.
 - Media transport feedback remains immediate. While any display has transition work pending it is one static acknowledgement cleared by one managed, token-checked callback, not a frame-by-frame media-card repaint animation; normal idle presentation retains the authored fade.
 - Visible paint does not decode, convert, or hash whole image buffers.
 - Stable source and transform metadata provide normal identity.

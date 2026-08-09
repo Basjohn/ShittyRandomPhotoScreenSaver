@@ -37,14 +37,34 @@ This file is the live checklist. Completed analysis and measurements belong in
 
 ## P5.0 Immediate Runtime And Package Validation
 
+Current source still passes repeated Settings recreation, but a freshly built
+Media Center runtime was reported to terminate on in-runtime Settings entry.
+That proves stale standard-artifact drift was not the complete frozen failure.
+Release products intentionally have no default diagnostic evidence; the new
+separate diagnostic product now owns frozen-crash attribution.
+
 - [x] Three consecutive live runtime Settings opens/closes queue and admit once, complete both barriers, rebuild once, reveal a fresh frame, continue rendering, and exit cleanly.
 - [x] Fix the nonfatal bound-method `_srpss_timer_owner` diagnostic and cover owner/generation propagation.
 - [x] Confirm the next live run contains no bound-method ownership exception.
 - [ ] Rebuild the standard SCR from current source before rebuilding its installer; the installed and release SCR artifacts both predate the relevant fixes.
 - [ ] Validate Settings-from-runtime in the rebuilt standard executable; `--s` alone is not sufficient.
 - [ ] Keep Media Center to a minimal shared packaged-route smoke check with no independent capture, baseline, soak, or golden.
-- [ ] Preserve the standard package log only if its current rebuilt route crashes, rejects admission, duplicates reconstruction, or fails to continue rendering.
-- [ ] If the rebuilt standard route passes and shared packaged-route smoke remains clean, mark R-59 solved and remove this package blocker.
+- [x] Add an opt-in installable Diagnostic Runtime with a distinct entry point, artifact/installer/AppId, per-user Local AppData logs, bounded rotation, faulthandler output, and Settings/native-window breadcrumbs; leave standard/MC releases diagnostics-off.
+- [ ] Build/install the diagnostic product, reproduce in-runtime Settings once, and identify the last completed boundary among request admission, runtime destruction, dialog construction, `showEvent`, native `winId`, acrylic, modal entry, and restart.
+- [ ] Make no release UI/lifecycle change until that evidence proves an owner; if the native acrylic boundary is implicated, validate the smallest effect-local correction without weakening the authored Settings shell.
+- [ ] After the evidence-led correction, require rebuilt standard and bounded shared MC route smoke to continue rendering; then mark R-59 solved.
+
+## P5.0A Clock Calendar Follow-Up
+
+- [x] Put digital weekday/date and timezone rows on the shared painter-owned text-shadow path; analogue footer rows retain their existing matching painted shadow.
+- [x] Include calendar font size in the descriptor-owned CUSTOM resize/font relativity lock.
+- [ ] Visually confirm digital/analogue shared/two-line rows with text shadows enabled/disabled and confirm both font controls lock/unlock with CUSTOM mode.
+
+## P5.0B Media Provider Runtime Validation
+
+- [ ] In ordinary `main.py`, validate Spotify Browser against at least Edge or Chrome and record the actual GSMTC source id; confirm the UI description remains honest when the active browser media is not Spotify.
+- [ ] Exercise desktop Spotify absent → browser present, browser absent → desktop/MusicBee present, pause, close, and Settings recreation; require one refresh in flight per widget, correct persisted provider, live controls, and no stale-provider callback.
+- [ ] Confirm the browser provider never shows or invokes application-volume control and that switching back to a desktop provider restores the preserved volume preference.
 
 ## P5.1 Visualizer Fidelity And Stronger Goldens
 
@@ -119,6 +139,7 @@ private commit, and `623.9 MiB` dedicated VRAM.
 - [x] Add bounded Move To Custom action telemetry: mode, source preset index/name, and Custom index without logging the full settings payload.
 - [x] Document parser 1.7 rotation/time-range semantics so appended multi-session folders cannot make whole-folder medians look session-specific; a native filter remains optional tooling work.
 - [x] Parser 1.8 extends passive image-install output with per-stage duration, cold-compositor identity, exact texture-key reuse, and upload/allocation deltas.
+- [x] Keep release artifacts diagnostics-off while providing a separate installable diagnostic runtime with bounded `%LOCALAPPDATA%` rotation and fatal/native-boundary breadcrumbs.
 - [ ] Keep all warnings/errors visible in `screensaver.log`; lifecycle timeout is always a failed run.
 - [ ] Keep high-volume lifecycle/performance diagnostics passive and bounded.
 
@@ -140,7 +161,7 @@ private commit, and `623.9 MiB` dedicated VRAM.
 ## Phase 5 Exit Gate
 
 - [ ] Bubble and Spectrum are separately approved equal or better than `ff934616`; other supported modes are current-good.
-- [ ] Rebuilt standard runtime Settings route passes; shared Media Center packaging parity remains a no-capture smoke check only.
+- [ ] Diagnostic attribution identifies and closes the frozen Settings failure; rebuilt standard runtime passes and shared Media Center packaging parity remains a no-capture smoke check only.
 - [ ] Five-cycle canonical main recreation matrix passes ownership and plateau checks.
 - [ ] Host-pressure delivery tails are attributed and acceptable without cadence hacks.
 - [ ] Absolute RAM/private-commit/VRAM excess is either reduced to target or fully attributed in a decision record.
@@ -159,6 +180,8 @@ private commit, and `623.9 MiB` dedicated VRAM.
 - Worker prescale before parent raw decode and raw-prefetch suppression when no scaled consumer needs it.
 - Passive owner/request-age telemetry and timestamp-separated live evidence.
 - Slight desynchronisation of independent heavy multi-display background work when measured simultaneous churn exists.
+- Separate opt-in diagnostic product identity with bounded per-user logs; release builds remain diagnostics-off and performance evidence remains `main.py`-only.
+- Registry-owned exact media-provider identities with one background GSMTC session snapshot; unsupported provider ids remain visible and inert.
 
 ## Blacklisted
 
@@ -170,6 +193,8 @@ private commit, and `623.9 MiB` dedicated VRAM.
 - Cross-context shared GL stores before Phase 6 ownership design.
 - Retry sleeps, nested event pumping, longer teardown timeouts, ignored owners, forced GC, working-set trimming, process recycling, and fake zero accounting.
 - Raising cache/resource budgets, retaining reserve frames without byte ownership, or collapsing different DPR/transform outputs.
+- Enabling diagnostic families by default in standard/Media Center release artifacts, or treating diagnostic-build timings as production performance evidence.
+- Fuzzy/substring media-provider matching, coercing unknown providers to Spotify, serial nested GSMTC fallback queries, or controlling whole-browser volume as though it belonged to one tab.
 
 # Later Phases
 

@@ -114,10 +114,3 @@ def mark_provider_probe_attempt(
     """Record the time of the latest alternate-provider probe attempt."""
 
     runtime_state.provider_probe_ts = time.monotonic() if now is None else float(now)
-
-
-def get_alternate_provider(provider: str) -> str:
-    """Return the canonical alternate media provider."""
-
-    current = str(provider or "").strip().lower()
-    return "musicbee" if current == "spotify" else "spotify"

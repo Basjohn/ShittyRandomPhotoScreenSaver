@@ -184,13 +184,16 @@ def _header_layout(widget: "MediaWidget") -> dict[str, object]:
     }
 
 
+_SPOTIFY_BRAND_LOGO_CANDIDATES = [
+    "Spotify_Primary_Logo_RGB_Black.png",
+    "spotify_logo.png",
+    "SpotifyLogo.png",
+    "spotify.png",
+]
+
 _BRAND_LOGO_CANDIDATES: dict[str, list[str]] = {
-    "spotify": [
-        "Spotify_Primary_Logo_RGB_Black.png",
-        "spotify_logo.png",
-        "SpotifyLogo.png",
-        "spotify.png",
-    ],
+    "spotify": _SPOTIFY_BRAND_LOGO_CANDIDATES,
+    "spotify_browser": _SPOTIFY_BRAND_LOGO_CANDIDATES,
     "musicbee": [
         "icons8-musicbee-96.png",
         "MusicBee_Logo.png",
@@ -211,7 +214,10 @@ def load_brand_pixmap(provider: str = "spotify") -> Optional[QPixmap]:
     """
     try:
         images_dir = Path(__file__).resolve().parent.parent.parent / "images"
-        candidates = _BRAND_LOGO_CANDIDATES.get(provider.lower(), _BRAND_LOGO_CANDIDATES["spotify"])
+        candidates = _BRAND_LOGO_CANDIDATES.get(provider.lower())
+        if candidates is None:
+            logger.warning("[MEDIA] No registered logo policy for provider=%s", provider)
+            return None
         for name in candidates:
             candidate = images_dir / name
             if candidate.exists() and candidate.is_file():

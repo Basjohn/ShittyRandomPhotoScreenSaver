@@ -36,6 +36,12 @@ from core.media.media_controller import (
     MediaTrackInfo,
     create_media_controller,
 )
+from core.media.provider_registry import (
+    get_media_provider_header_name,
+    get_provider_failover_candidates,
+    normalize_provider_id,
+    preserve_provider_setting,
+)
 from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.media.runtime_state import (
@@ -43,7 +49,6 @@ from widgets.media.runtime_state import (
     build_retained_display_info,
     cache_retained_display_info,
     clear_missing_session,
-    get_alternate_provider,
     mark_provider_probe_attempt,
     note_missing_session,
     should_probe_provider_failover,
@@ -128,8 +133,9 @@ class MediaWidget(BaseOverlayWidget):
 
         self._media_position = position  # Keep original enum for compatibility
         
-        # Media provider: "spotify" or "musicbee" — drives GSMTC session filter + branding
+        # Registered provider id drives GSMTC session ownership and branding.
         self._provider: str = self._validate_provider(provider)
+        self._provider_generation: int = 0
         self._perf_media_emit_count: int = 0
         self._perf_media_emit_total: int = 0
         self._perf_media_update_request_total: int = 0
@@ -313,20 +319,26 @@ class MediaWidget(BaseOverlayWidget):
     # ------------------------------------------------------------------
     @staticmethod
     def _validate_provider(raw: object) -> str:
-        """Validate and normalize a provider value to 'spotify' or 'musicbee'."""
-        if isinstance(raw, str) and raw.strip().lower() in ("spotify", "musicbee"):
-            return raw.strip().lower()
-        return "spotify"
+        """Normalize registered ids while leaving unknown settings inert."""
+
+        provider = preserve_provider_setting(raw)
+        if normalize_provider_id(provider) is None:
+            logger.warning(
+                "[MEDIA_WIDGET] Unsupported provider %r; media integration is inert",
+                provider,
+            )
+        return provider
 
     @property
     def provider(self) -> str:
-        """Current media provider name ('spotify' or 'musicbee')."""
+        """Current registered media-provider id."""
         return self._provider
 
     @property
     def provider_display_name(self) -> str:
         """Human-readable provider name for the header text."""
-        return "MUSICBEE" if self._provider == "musicbee" else "SPOTIFY"
+
+        return get_media_provider_header_name(self._provider) or "MEDIA"
 
     def cache_retained_display_info(self, info: MediaTrackInfo) -> None:
         """Remember the latest valid metadata/artwork snapshot for retained display."""
@@ -374,8 +386,24 @@ class MediaWidget(BaseOverlayWidget):
                 logger.debug("[MEDIA_WIDGET] Exception suppressing controller TM injection: %s", exc)
 
         old_provider = self._provider
+        self._provider_generation += 1
         self._provider = normalized
         self._controller = controller
+        self._runtime_state = MediaWidgetRuntimeState()
+        self._last_info = None
+        self._last_track_identity = None
+        self._last_metadata_identity = None
+        self._gsmtc_cached_result = None
+        self._gsmtc_cached_prepared_artwork = None
+        self._gsmtc_cache_ts = 0.0
+        self._artwork_pixmap = None
+        self._scaled_artwork_cache = None
+        self._scaled_artwork_cache_key = None
+        self._applied_artwork_key = None
+        self._pending_artwork = None
+        self._pending_artwork_deferred = False
+        type(self)._shared_last_valid_info = None
+        type(self)._shared_last_valid_info_ts = 0.0
         self._brand_pixmap = self._load_brand_pixmap()
         self._header_logo_scaled_cache = None
         self._header_logo_scaled_cache_key = None
@@ -383,43 +411,22 @@ class MediaWidget(BaseOverlayWidget):
         logger.info("[MEDIA_WIDGET] Runtime provider switch: %s -> %s", old_provider, normalized)
         return True
 
-    def _probe_provider_snapshot(self, provider: str) -> Optional[MediaTrackInfo]:
-        """Best-effort probe for an alternate provider using the shared controller contract."""
+    def _apply_provider_failover(self, provider: str) -> None:
+        """UI-side provider switch and canonical settings persistence."""
 
-        normalized = self._validate_provider(provider)
-        controller_tm = self._thread_manager or self._pending_controller_tm
-        try:
-            controller = create_media_controller(thread_manager=controller_tm, app_filter=normalized)
-            if controller_tm is not None:
-                try:
-                    controller.set_thread_manager(controller_tm)
-                except Exception as exc:
-                    logger.debug("[MEDIA_WIDGET] Exception suppressing probe controller TM injection: %s", exc)
-            return controller.get_current_track()
-        except Exception:
-            logger.debug("[MEDIA_WIDGET] Alternate provider probe failed for %s", normalized, exc_info=True)
-            return None
-
-    def try_provider_failover(self) -> Optional[MediaTrackInfo]:
-        """Probe the alternate provider and switch runtime/settings if it is the live source."""
-
-        if not self.should_probe_provider_failover():
-            return None
-
-        alternate = get_alternate_provider(self._provider)
-        self.mark_provider_probe_attempt()
-        alt_info = self._probe_provider_snapshot(alternate)
-        if alt_info is None:
-            return None
-
-        self.set_provider_runtime(alternate)
+        self.set_provider_runtime(provider)
         manager = self._widget_manager
         if manager is not None and hasattr(manager, "handle_media_provider_failover"):
             try:
-                manager.handle_media_provider_failover(alternate, source="media_runtime_autofallback")
+                manager.handle_media_provider_failover(
+                    provider,
+                    source="media_runtime_autofallback",
+                )
             except Exception:
-                logger.debug("[MEDIA_WIDGET] Failed to persist provider failover", exc_info=True)
-        return alt_info
+                logger.debug(
+                    "[MEDIA_WIDGET] Failed to persist provider failover",
+                    exc_info=True,
+                )
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -1307,18 +1314,47 @@ class MediaWidget(BaseOverlayWidget):
         self._refresh_in_flight_generation = artwork_generation
         artwork_owner_id = f"{id(self):x}"
         artwork_provider = self._provider
+        provider_generation = self._provider_generation
+        query_controller = self._controller
         if is_verbose_logging():
             logger.debug("[MEDIA_WIDGET] Async refresh started")
 
         def _do_query():
             worker_started_monotonic = time.monotonic()
+            failover_candidates = get_provider_failover_candidates(artwork_provider)
+            allow_failover = bool(failover_candidates) and (
+                self.should_probe_provider_failover()
+                and not type(self)._has_fresh_shared_info_cache()
+            )
+            selected_provider = None
             try:
-                info = self._controller.get_current_track()
+                worker_query = getattr(
+                    query_controller,
+                    "get_current_track_from_io_worker",
+                    None,
+                )
+                if callable(worker_query):
+                    selected_provider, info = worker_query(
+                        failover_candidates if allow_failover else (),
+                    )
+                else:
+                    info = query_controller.get_current_track()
+                    if info is not None:
+                        selected_provider = artwork_provider
             except Exception:
                 logger.debug("[MEDIA] get_current_track failed", exc_info=True)
                 if is_verbose_logging():
                     logger.debug("[MEDIA] get_current_track failed", exc_info=True)
                 info = None
+
+            selected_provider = normalize_provider_id(selected_provider)
+            if allow_failover and selected_provider != artwork_provider:
+                self.mark_provider_probe_attempt()
+            failover_provider = (
+                selected_provider
+                if selected_provider is not None and selected_provider != artwork_provider
+                else None
+            )
 
             artwork_payload = (
                 getattr(info, "artwork", None)
@@ -1329,7 +1365,11 @@ class MediaWidget(BaseOverlayWidget):
             prepared = type(self)._prepare_artwork_payload(
                 artwork_payload,
                 artwork_key,
-                known_artwork_keys=known_artwork_keys,
+                known_artwork_keys=(
+                    frozenset()
+                    if failover_provider is not None
+                    else known_artwork_keys
+                ),
             )
             if (
                 is_perf_metrics_enabled()
@@ -1354,6 +1394,8 @@ class MediaWidget(BaseOverlayWidget):
                 artwork_generation,
                 worker_started_monotonic,
                 time.monotonic(),
+                failover_provider,
+                provider_generation,
             )
 
         def _handle_result(task_result):
@@ -1364,13 +1406,15 @@ class MediaWidget(BaseOverlayWidget):
                     if not Shiboken.isValid(self):
                         return
                     result_payload = task_result.result if getattr(task_result, "success", False) else None
-                    if isinstance(result_payload, tuple) and len(result_payload) == 5:
+                    if isinstance(result_payload, tuple) and len(result_payload) == 7:
                         (
                             info,
                             prepared_artwork,
                             result_generation,
                             worker_started,
                             worker_finished,
+                            failover_provider,
+                            result_provider_generation,
                         ) = result_payload
                     else:
                         info = result_payload
@@ -1378,8 +1422,14 @@ class MediaWidget(BaseOverlayWidget):
                         result_generation = artwork_generation
                         worker_started = refresh_started_monotonic
                         worker_finished = callback_received_monotonic
+                        failover_provider = None
+                        result_provider_generation = self._provider_generation
                     if int(result_generation) != self._artwork_update_generation:
                         return
+                    if int(result_provider_generation) != self._provider_generation:
+                        return
+                    if failover_provider is not None:
+                        self._apply_provider_failover(failover_provider)
                     # Desync: Cache the result for 500ms
                     self._gsmtc_cached_result = info
                     self._gsmtc_cached_prepared_artwork = prepared_artwork
@@ -2135,6 +2185,15 @@ class MediaWidget(BaseOverlayWidget):
                 continue
         
         return None
+
+    @classmethod
+    def _has_fresh_shared_info_cache(cls) -> bool:
+        """Worker-safe check that avoids a redundant cross-provider probe."""
+
+        info = cls._shared_last_valid_info
+        if info is None:
+            return False
+        return (time.monotonic() - cls._shared_last_valid_info_ts) < cls._shared_info_max_age_sec
     
     # ------------------------------------------------------------------
     # Shared Feedback System — delegates to widgets.media.feedback

@@ -480,7 +480,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         saver_guard_attrs=("media_enabled",),
         persisted_widget_keys=("media",),
         signal_block_attrs=(
-            "media_enabled", "media_position", "media_monitor_combo",
+            "media_enabled", "media_provider_combo", "media_position", "media_monitor_combo",
             "media_font_combo", "media_font_size", "media_margin",
             "media_show_background", "media_bg_opacity", "media_border_opacity",
             "media_artwork_size", "media_rounded_artwork",
@@ -728,7 +728,7 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
         section_id="clock",
         widget_ids=("clock", "clock2", "clock3"),
         position_combo_attrs=("clock_position", "clock2_position", "clock3_position"),
-        control_attrs=("clock_font_size",),
+        control_attrs=("clock_font_size", "clock_calendar_font_size"),
         anchor_attr="clock_font_size",
     ),
     WidgetCustomResizeLockDescriptor(

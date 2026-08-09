@@ -73,9 +73,6 @@ class _StubMediaWidget:
     def get_retained_display_info(self):
         return self._retained_info
 
-    def try_provider_failover(self):
-        return None
-
     def _ensure_timer(self, *, force=False):
         self._ensure_timer_force_calls.append(bool(force))
 
@@ -191,33 +188,18 @@ def test_handle_no_media_keeps_retained_snapshot_visible():
     assert widget._emitted and widget._emitted[-1].state == MediaPlaybackState.PAUSED
 
 
-def test_update_display_uses_provider_failover_snapshot(monkeypatch):
+def test_update_display_never_runs_provider_probe_on_ui(monkeypatch):
     widget = _StubMediaWidget()
-    failover_info = MediaTrackInfo(
-        title="Other Provider Track",
-        artist="Fallback Artist",
-        album="Fallback Album",
-        state=MediaPlaybackState.PLAYING,
-    )
-
-    captured = {}
 
     monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
-    monkeypatch.setattr(
-        display_update,
-        "_build_and_apply_metadata",
-        lambda _widget, info, prev_info, *, metadata_changed: captured.update(
-            {"info": info, "prev": prev_info, "metadata_changed": metadata_changed}
-        ),
+    widget.try_provider_failover = lambda: (_ for _ in ()).throw(
+        AssertionError("provider probe reached UI display path")
     )
-    widget.try_provider_failover = lambda: failover_info
 
     display_update.update_display(widget, None)
 
-    assert captured["info"] is failover_info
-    assert captured["metadata_changed"] is True
-    assert widget._last_info is failover_info
-    assert widget._retained_info is failover_info
+    assert widget._missing_session_noted is True
+    assert widget._last_info is None
 
 
 def test_update_display_refades_widget_when_metadata_returns(monkeypatch):

@@ -16,10 +16,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Iterable, Optional
 import threading
 
 from core.logging.logger import get_logger, is_verbose_logging
+from core.media.provider_registry import (
+    get_provider_process_exe_names,
+    normalize_provider_id,
+    provider_matches_source_app_user_model_id,
+)
 
 logger = get_logger(__name__)
 
@@ -126,7 +131,10 @@ class WindowsGlobalMediaController(BaseMediaController):
 
     def __init__(self, thread_manager=None, app_filter: str = "spotify") -> None:
         super().__init__(thread_manager)
-        self._app_filter: str = app_filter.lower()
+        self._provider_id: Optional[str] = normalize_provider_id(app_filter)
+        # Retain this attribute for diagnostic compatibility.  It is no longer
+        # used as a substring filter.
+        self._app_filter: str = self._provider_id or str(app_filter or "").strip().lower()
         self._available: bool = False
         self._MediaManager = None
         self._PlaybackStatus = None
@@ -165,7 +173,7 @@ class WindowsGlobalMediaController(BaseMediaController):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-    def _run_coroutine(self, coro_factory):
+    def _run_coroutine(self, coro_factory, *, already_on_io_worker: bool = False):
         """Run an async coroutine in an isolated event loop.
 
         Args:
@@ -175,10 +183,10 @@ class WindowsGlobalMediaController(BaseMediaController):
         This avoids interfering with any existing asyncio usage.
         Failures are logged and result in None.
 
-        IMPORTANT: This function must never block the UI thread on a
-        potentially-stuck WinRT await. We therefore run the loop on the
-        ThreadManager IO pool and enforce a hard timeout. Inflight check
-        prevents query pileup.
+        IMPORTANT: UI callers are isolated on the ThreadManager IO pool.
+        An owner that is already executing on that pool may opt into the
+        direct bounded path, avoiding a nested submission/wait cycle.
+        Inflight checking prevents query pileup in either path.
         """
 
         import asyncio
@@ -224,6 +232,15 @@ class WindowsGlobalMediaController(BaseMediaController):
                 logger.debug("[MEDIA] GSMTC loop runner failed", exc_info=True)
                 return None
 
+        if already_on_io_worker:
+            if self._gsmc_inflight:
+                return None
+            self._gsmc_inflight = True
+            try:
+                return _run_in_loop()
+            finally:
+                self._gsmc_inflight = False
+
         def _on_done(task_result) -> None:
             try:
                 holder["result"] = getattr(task_result, "result", None)
@@ -259,63 +276,111 @@ class WindowsGlobalMediaController(BaseMediaController):
         finally:
             self._gsmc_inflight = False
 
-    def _select_media_session(self, mgr):
-        """Select a media session from a GSMTC manager by app filter.
+    @staticmethod
+    def _session_source_id(session) -> str:
+        try:
+            app_id = getattr(session, "source_app_user_model_id", None)
+            return app_id if isinstance(app_id, str) else ""
+        except Exception:
+            return ""
 
-        Prefers sessions whose ``source_app_user_model_id`` contains
-        ``self._app_filter`` (case-insensitive). If no matching session
-        is found, returns ``None`` so the widget treats the situation as
-        "no media" rather than showing an unrelated player.
+    def _select_media_session_for_providers(
+        self,
+        mgr,
+        provider_ids: Iterable[str],
+    ) -> tuple[Optional[str], object | None]:
+        """Select one provider/session from a single GSMTC enumeration.
+
+        Provider order is authoritative. Within a provider, the current
+        matching session wins, then a playing match, then stable source-id
+        ordering. This permits failover without one GSMTC query per provider.
         """
 
-        sessions = []
+        providers: list[str] = []
+        for value in provider_ids:
+            normalized = normalize_provider_id(value)
+            if normalized is not None and normalized not in providers:
+                providers.append(normalized)
+        if not providers:
+            logger.debug("[MEDIA] No registered provider supplied for GSMTC selection")
+            return None, None
+
         try:
             get_sessions = getattr(mgr, "get_sessions", None)
-            if callable(get_sessions):
-                maybe_sessions = get_sessions()
-                if maybe_sessions is not None:
-                    sessions = list(maybe_sessions)
+            maybe_sessions = get_sessions() if callable(get_sessions) else None
+            sessions = list(maybe_sessions) if maybe_sessions is not None else []
         except Exception:
             logger.debug("[MEDIA] Failed to enumerate media sessions", exc_info=True)
             sessions = []
 
-        if not sessions:
-            if is_verbose_logging():
-                logger.debug("[MEDIA] No GSMTC sessions available")
-        else:
-            if is_verbose_logging():
-                try:
-                    logger.debug("[MEDIA] GSMTC sessions: %s", [
-                        getattr(s, "source_app_user_model_id", None) for s in sessions
-                    ])
-                except Exception:
-                    logger.debug("[MEDIA] Failed to describe GSMTC sessions", exc_info=True)
-
-        for session in sessions:
+        if is_verbose_logging():
             try:
-                app_id = getattr(session, "source_app_user_model_id", None)
-            except Exception as _:
-                app_id = None
-            if isinstance(app_id, str) and self._app_filter in app_id.lower():
-                if is_verbose_logging():
-                    logger.debug("[MEDIA] Selected %s session: %r", self._app_filter, app_id)
-                return session
-
-        # No matching session; treat as "no media".
-        # Log at info level when sessions exist but none match — helps debug
-        # MusicBee GSMTC registration when paused/stopped.
-        if sessions:
-            try:
-                all_ids = [getattr(s, "source_app_user_model_id", "?") for s in sessions]
+                logger.debug(
+                    "[MEDIA] GSMTC sessions: %s",
+                    [self._session_source_id(session) for session in sessions],
+                )
             except Exception:
-                all_ids = ["<error>"]
+                logger.debug("[MEDIA] Failed to describe GSMTC sessions", exc_info=True)
+
+        try:
+            get_current_session = getattr(mgr, "get_current_session", None)
+            current_session = get_current_session() if callable(get_current_session) else None
+        except Exception:
+            logger.debug("[MEDIA] Failed to read current media session", exc_info=True)
+            current_session = None
+
+        def _is_playing(session) -> bool:
+            try:
+                playback_info = session.get_playback_info()
+                return self._map_status(playback_info.playback_status) == MediaPlaybackState.PLAYING
+            except Exception:
+                return False
+
+        for provider_id in providers:
+            matching_sessions = [
+                session
+                for session in sessions
+                if provider_matches_source_app_user_model_id(
+                    provider_id,
+                    self._session_source_id(session),
+                )
+            ]
+            if not matching_sessions:
+                continue
+            if (
+                current_session is not None
+                and provider_matches_source_app_user_model_id(
+                    provider_id,
+                    self._session_source_id(current_session),
+                )
+            ):
+                return provider_id, current_session
+            playing_sessions = [session for session in matching_sessions if _is_playing(session)]
+            candidates = playing_sessions or matching_sessions
+            return provider_id, min(
+                candidates,
+                key=lambda session: self._session_source_id(session).casefold(),
+            )
+
+        if sessions:
             logger.debug(
                 "[MEDIA] No %s session among %d GSMTC sessions: %s",
-                self._app_filter, len(sessions), all_ids,
+                "/".join(providers),
+                len(sessions),
+                [self._session_source_id(session) for session in sessions],
             )
         else:
-            logger.debug("[MEDIA] No %s GSMTC session found (0 sessions)", self._app_filter)
-        return None
+            logger.debug("[MEDIA] No %s GSMTC session found (0 sessions)", "/".join(providers))
+        return None, None
+
+    def _select_media_session(self, mgr):
+        """Compatibility owner for controls and single-provider callers."""
+
+        _provider, session = self._select_media_session_for_providers(
+            mgr,
+            (self._provider_id,) if self._provider_id is not None else (),
+        )
+        return session
 
     def _map_status(self, status) -> MediaPlaybackState:
         try:
@@ -358,9 +423,24 @@ class WindowsGlobalMediaController(BaseMediaController):
     # ------------------------------------------------------------------
     # BaseMediaController API
     # ------------------------------------------------------------------
-    def get_current_track(self) -> Optional[MediaTrackInfo]:  # pragma: no cover - requires winrt
+    def _get_current_track_for_providers(
+        self,
+        provider_ids: Iterable[str],
+        *,
+        already_on_io_worker: bool,
+    ) -> tuple[Optional[str], Optional[MediaTrackInfo]]:  # pragma: no cover - requires winrt
         if not self._available or self._MediaManager is None:
-            return None
+            return None, None
+
+        providers = tuple(
+            provider_id
+            for provider_id in (
+                normalize_provider_id(value) for value in provider_ids
+            )
+            if provider_id is not None
+        )
+        if not providers:
+            return None, None
 
         async def _query():
             mgr = await self._MediaManager.request_async()
@@ -368,9 +448,17 @@ class WindowsGlobalMediaController(BaseMediaController):
                 return None
 
             try:
-                session = self._select_media_session(mgr)
+                selected_provider, session = self._select_media_session_for_providers(
+                    mgr,
+                    providers,
+                )
             except Exception:
-                logger.debug("[MEDIA] Failed to select %s session", self._app_filter, exc_info=True)
+                logger.debug(
+                    "[MEDIA] Failed to select %s session",
+                    "/".join(providers),
+                    exc_info=True,
+                )
+                selected_provider = None
                 session = None
 
             if session is None:
@@ -483,16 +571,26 @@ class WindowsGlobalMediaController(BaseMediaController):
                 except Exception:
                     logger.debug("[MEDIA] Failed to log track snapshot", exc_info=True)
 
-            return info
+            return selected_provider, info
 
         import time
-        result = self._run_coroutine(lambda: _query())
+        result = self._run_coroutine(
+            lambda: _query(),
+            already_on_io_worker=already_on_io_worker,
+        )
         
-        if isinstance(result, MediaTrackInfo):
-            # Valid result - cache it for timeout resilience
-            self._last_valid_info = result
-            self._last_valid_info_ts = time.monotonic()
-            return result
+        if (
+            isinstance(result, tuple)
+            and len(result) == 2
+            and isinstance(result[1], MediaTrackInfo)
+        ):
+            selected_provider, info = result
+            # Cache only the controller's own provider. A fallback snapshot is
+            # handed to the replacement controller after the UI-side switch.
+            if selected_provider == self._provider_id:
+                self._last_valid_info = info
+                self._last_valid_info_ts = time.monotonic()
+            return selected_provider, info
         
         # Result is None (timeout or no session)
         # Check if we have cached info within TTL - return it instead of None
@@ -500,13 +598,44 @@ class WindowsGlobalMediaController(BaseMediaController):
             age = time.monotonic() - self._last_valid_info_ts
             if age < self._timeout_cache_ttl:
                 logger.debug("[MEDIA] Using cached info (age=%.1fs) after timeout/None", age)
-                return self._last_valid_info
+                return self._provider_id, self._last_valid_info
             else:
                 # Cache expired - clear it
                 logger.debug("[MEDIA] Cached info expired (age=%.1fs > %.1fs TTL)", age, self._timeout_cache_ttl)
                 self._last_valid_info = None
         
-        return None
+        return None, None
+
+    def get_current_track(self) -> Optional[MediaTrackInfo]:  # pragma: no cover - requires winrt
+        """Return this controller's provider snapshot from any caller thread."""
+
+        _provider, info = self._get_current_track_for_providers(
+            (self._provider_id,) if self._provider_id is not None else (),
+            already_on_io_worker=False,
+        )
+        return info
+
+    def get_current_track_from_io_worker(
+        self,
+        fallback_providers: Iterable[str] = (),
+    ) -> tuple[Optional[str], Optional[MediaTrackInfo]]:
+        """Query primary and fallback providers once from an owned IO worker.
+
+        This path performs one bounded WinRT request/session enumeration and
+        never submits another task to the same executor.
+        """
+
+        provider_ids: list[str] = []
+        if self._provider_id is not None:
+            provider_ids.append(self._provider_id)
+        for value in fallback_providers:
+            normalized = normalize_provider_id(value)
+            if normalized is not None and normalized not in provider_ids:
+                provider_ids.append(normalized)
+        return self._get_current_track_for_providers(
+            provider_ids,
+            already_on_io_worker=True,
+        )
 
     def _invoke_simple_action(self, action_name: str, coro_factory) -> None:
         if not self._available or self._MediaManager is None:
@@ -548,23 +677,17 @@ class WindowsGlobalMediaController(BaseMediaController):
     # ------------------------------------------------------------------
     # Process detection (lightweight, no GSMTC overhead)
     # ------------------------------------------------------------------
-    # Map app_filter → exe names for process enumeration
-    _PROCESS_NAME_MAP = {
-        "spotify": "spotify.exe",
-        "musicbee": "musicbee.exe",
-    }
-
     def is_app_process_running(self) -> bool:
         """Check if the target media app is running via Windows process snapshot.
 
         Uses CreateToolhelp32Snapshot (ctypes) — fast, zero-dependency,
         does not touch GSMTC. Safe to call from IO thread.
         """
-        target_exe = self._PROCESS_NAME_MAP.get(self._app_filter)
-        if target_exe is None:
+        process_names = get_provider_process_exe_names(self._provider_id)
+        if not process_names:
             return False
         try:
-            return _win_process_exists(target_exe)
+            return _win_any_process_exists(process_names)
         except Exception:
             logger.debug("[MEDIA] Process detection failed", exc_info=True)
             return False
@@ -572,6 +695,15 @@ class WindowsGlobalMediaController(BaseMediaController):
 
 def _win_process_exists(exe_name: str) -> bool:
     """Return True if a process matching *exe_name* (case-insensitive) exists.
+
+    Compatibility wrapper over the one-snapshot multi-name owner.
+    """
+
+    return _win_any_process_exists((exe_name,))
+
+
+def _win_any_process_exists(exe_names: Iterable[str]) -> bool:
+    """Return True if any exact process name exists using one Toolhelp snapshot.
 
     Uses the Windows Toolhelp32 API via ctypes — no external dependencies.
     """
@@ -602,13 +734,20 @@ def _win_process_exists(exe_name: str) -> bool:
 
     pe = PROCESSENTRY32W()
     pe.dwSize = ctypes.sizeof(PROCESSENTRY32W)
-    target = exe_name.lower()
+    targets = {
+        str(exe_name).strip().casefold()
+        for exe_name in exe_names
+        if str(exe_name).strip()
+    }
+    if not targets:
+        kernel32.CloseHandle(snapshot)
+        return False
 
     try:
         if not kernel32.Process32FirstW(snapshot, ctypes.byref(pe)):
             return False
         while True:
-            if pe.szExeFile.lower() == target:
+            if pe.szExeFile.casefold() in targets:
                 return True
             if not kernel32.Process32NextW(snapshot, ctypes.byref(pe)):
                 return False
@@ -625,7 +764,7 @@ def create_media_controller(thread_manager=None, app_filter: str = "spotify") ->
 
     Args:
         thread_manager: Engine-owned ThreadManager for async IO.
-        app_filter: GSMTC session filter string (e.g. "spotify", "musicbee").
+        app_filter: Registered media-provider id.
     """
 
     try:

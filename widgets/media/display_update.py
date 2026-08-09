@@ -536,24 +536,6 @@ def update_display(
         # else: No shared info - proceed with normal None handling
 
     if info is None:
-        try:
-            failover_info = widget.try_provider_failover()
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            failover_info = None
-        if failover_info is not None:
-            logger.info("[MEDIA_WIDGET] Alternate provider located; continuing with runtime failover snapshot")
-            info = failover_info
-            widget._last_info = info
-            cls = type(widget)
-            cls._shared_last_valid_info = info
-            cls._shared_last_valid_info_ts = time.monotonic()
-            try:
-                widget.cache_retained_display_info(info)
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-
-    if info is None:
         retained_info = _handle_no_media(widget)
         if retained_info is None:
             return

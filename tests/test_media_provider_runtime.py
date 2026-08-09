@@ -66,7 +66,7 @@ def test_refresh_media_config_syncs_provider_runtime():
     assert volume_widget.providers == ["musicbee"]
 
 
-def test_handle_media_provider_failover_persists_settings():
+def test_handle_spotify_browser_provider_failover_persists_settings():
     manager = WidgetManager(MagicMock())
     media_widget = _ProviderAwareWidget()
     volume_widget = _ProviderAwareWidget()
@@ -81,9 +81,28 @@ def test_handle_media_provider_failover_persists_settings():
         }
     )
 
-    manager.handle_media_provider_failover("musicbee", source="test")
+    manager.handle_media_provider_failover("spotify_browser", source="test")
 
-    assert media_widget.providers == ["musicbee"]
-    assert volume_widget.providers == ["musicbee"]
-    assert manager._settings_manager.get("widgets")["media"]["provider"] == "musicbee"
+    assert media_widget.providers == ["spotify_browser"]
+    assert volume_widget.providers == ["spotify_browser"]
+    assert manager._settings_manager.get("widgets")["media"]["provider"] == "spotify_browser"
     assert manager._settings_manager.saved is True
+
+
+def test_invalid_provider_stays_inert_and_is_not_overwritten_by_failover():
+    manager = WidgetManager(MagicMock())
+    media_widget = _ProviderAwareWidget()
+    volume_widget = _ProviderAwareWidget()
+    manager.register_widget("media", media_widget)
+    manager.register_widget("spotify_volume", volume_widget)
+    manager._settings_manager = _StubSettingsManager(
+        {"media": {"enabled": True, "provider": "retired_alias"}}
+    )
+
+    manager._sync_media_provider_runtime("retired_alias")
+    manager.handle_media_provider_failover("spotify_browser", source="stale_callback")
+
+    assert media_widget.providers == ["retired_alias"]
+    assert volume_widget.providers == ["retired_alias"]
+    assert manager._settings_manager.get("widgets")["media"]["provider"] == "retired_alias"
+    assert manager._settings_manager.saved is False

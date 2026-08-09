@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, TYPE_CHECKING
 
+from core.media.provider_registry import preserve_provider_setting
 from core.settings.models._enums import WidgetPosition, coerce_widget_position
 from core.settings.widget_capacity_policy import clamp_list_capacity
 
@@ -270,7 +271,9 @@ class MediaWidgetSettings:
             color=settings.get("widgets.media.color", [255, 255, 255, 230]),
             bg_color=settings.get("widgets.media.bg_color", [64, 64, 64, 255]),
             rounded_artwork_border=settings.get("widgets.media.rounded_artwork_border", True),
-            provider=settings.get("widgets.media.provider", "spotify"),
+            provider=preserve_provider_setting(
+                settings.get("widgets.media.provider", "spotify")
+            ),
             spotify_volume_enabled=settings.get("widgets.media.spotify_volume_enabled", True),
             spotify_volume_fill_color=settings.get("widgets.media.spotify_volume_fill_color", [66, 66, 66, 255]),
         )
@@ -305,7 +308,7 @@ class MediaWidgetSettings:
             color=_get("color", [255, 255, 255, 230]),
             bg_color=_get("bg_color", [64, 64, 64, 255]),
             rounded_artwork_border=_get("rounded_artwork_border", True),
-            provider=_get("provider", "spotify"),
+            provider=preserve_provider_setting(_get("provider", "spotify")),
             spotify_volume_enabled=_get("spotify_volume_enabled", True),
             spotify_volume_fill_color=_get("spotify_volume_fill_color", [66, 66, 66, 255]),
         )

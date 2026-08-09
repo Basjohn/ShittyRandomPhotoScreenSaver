@@ -98,6 +98,78 @@ def test_media_widget_header_metrics_exist_before_first_metadata_update(qt_app) 
         widget.deleteLater()
 
 
+def test_media_provider_failover_probe_runs_in_refresh_worker_before_ui_apply(
+    qt_app,
+    monkeypatch,
+) -> None:
+    class _Controller:
+        def get_current_track_from_io_worker(self, fallback_providers):
+            assert phase["value"] == "worker"
+            calls.append(("query", tuple(fallback_providers)))
+            return "spotify_browser", track
+
+        def get_current_track(self):
+            raise AssertionError("refresh worker must not enter the nested controller path")
+
+    class _TaskManager:
+        def submit_io_task(self, func, callback=None, **_kwargs):
+            phase["value"] = "worker"
+            result = func()
+            phase["value"] = "callback"
+            if callback is not None:
+                callback(SimpleNamespace(success=True, result=result))
+
+    phase = {"value": "idle"}
+    track = MediaTrackInfo(
+        title="Browser Track",
+        artist="Artist",
+        state=MediaPlaybackState.PLAYING,
+    )
+    widget = MediaWidget(controller=_Controller(), provider="spotify")
+    try:
+        widget._thread_manager = _TaskManager()
+        widget._pending_controller_tm = widget._thread_manager
+        type(widget)._shared_last_valid_info = None
+        type(widget)._shared_last_valid_info_ts = 0.0
+        monkeypatch.setattr(
+            type(widget),
+            "_get_shared_valid_info",
+            classmethod(lambda cls: None),
+        )
+        monkeypatch.setattr(
+            type(widget),
+            "_has_fresh_shared_info_cache",
+            classmethod(lambda cls: False),
+        )
+        calls: list[tuple[str, object]] = []
+
+        def _apply(provider):
+            assert phase["value"] == "callback"
+            calls.append(("apply", provider))
+
+        monkeypatch.setattr(widget, "_apply_provider_failover", _apply)
+        monkeypatch.setattr(
+            widget,
+            "_update_display",
+            lambda info, *_args, **_kwargs: calls.append(("display", info)),
+        )
+        monkeypatch.setattr(
+            "widgets.media_widget.ThreadManager.run_on_ui_thread",
+            staticmethod(lambda func, *args, **kwargs: func(*args, **kwargs)),
+        )
+
+        widget._refresh_async()
+
+        assert calls == [
+            ("query", ("spotify_browser", "musicbee")),
+            ("apply", "spotify_browser"),
+            ("display", track),
+        ]
+        assert widget._refresh_in_flight is False
+    finally:
+        widget.deleteLater()
+
+
 def test_media_display_update_does_not_restore_live_widget_during_custom_edit_mode(qt_app) -> None:
     from widgets.media.display_update import _ensure_widget_visible_for_active_metadata
 

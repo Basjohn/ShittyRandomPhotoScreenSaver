@@ -23,6 +23,7 @@ from PySide6.QtWidgets import QWidget
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging
+from core.media.provider_registry import preserve_provider_setting, provider_supports_app_volume
 from core.media.spotify_volume import SpotifyVolumeController
 from core.settings.shadow_tuning import VOLUME_SLIDER_SHADOW_TUNING
 from core.threading.manager import ThreadManager
@@ -48,8 +49,9 @@ class SpotifyVolumeWidget(QWidget):
     def __init__(self, parent: Optional[QWidget] = None, provider: str = "spotify") -> None:
         super().__init__(parent)
 
-        self._provider = str(provider or "spotify").strip().lower() or "spotify"
-        self._controller = SpotifyVolumeController(provider=provider)
+        self._provider = preserve_provider_setting(provider)
+        self._provider_volume_supported = provider_supports_app_volume(self._provider)
+        self._controller = SpotifyVolumeController(provider=self._provider)
         self._thread_manager: Optional[ThreadManager] = None
         self._shadow_config = None
         self._enabled: bool = False
@@ -90,16 +92,29 @@ class SpotifyVolumeWidget(QWidget):
     def set_provider_runtime(self, provider: object) -> bool:
         """Retarget the underlying Core Audio session filter without recreating the widget."""
 
-        normalized = str(provider or "spotify").strip().lower() or "spotify"
-        if normalized == self._provider:
+        normalized = preserve_provider_setting(provider)
+        supported = provider_supports_app_volume(normalized)
+        if normalized == self._provider and supported == self._provider_volume_supported:
             return False
         self._provider = normalized
+        self._provider_volume_supported = supported
+        if not supported:
+            self._reset_flush_state(delete_timer=False)
+            self.hide()
+            logger.info(
+                "[SPOTIFY_VOL] App-volume control unavailable for provider=%s; widget hidden",
+                normalized,
+            )
+            return True
         try:
             self._controller.set_process_filter(normalized)
         except Exception:
             logger.debug("[SPOTIFY_VOL] Failed to retarget provider runtime", exc_info=True)
             return False
         logger.info("[SPOTIFY_VOL] Runtime provider switch applied: %s", normalized)
+        if self._enabled:
+            self._ensure_flush_timer()
+            self.sync_visibility_with_anchor()
         self._request_volume_sync(force=True)
         return True
 
@@ -239,6 +254,7 @@ class SpotifyVolumeWidget(QWidget):
         ):
             if (
                 self._enabled
+                and self._provider_volume_supported
                 and self._is_anchor_visible()
                 and self._is_parent_secondary_stage_ready()
             ):
@@ -255,7 +271,7 @@ class SpotifyVolumeWidget(QWidget):
             visible = sync_anchor_dependent_visibility(
                 self,
                 anchor=self._anchor_media,
-                enabled=self._enabled,
+                enabled=self._enabled and self._provider_volume_supported,
                 has_faded_in=self._has_faded_in,
                 start_fade_in=self._start_widget_fade_in,
                 missing_anchor_visible=None,
@@ -302,7 +318,7 @@ class SpotifyVolumeWidget(QWidget):
 
     def begin_spotify_secondary_stage(self) -> None:
         """Join the shared Spotify secondary reveal stage explicitly."""
-        if not self._enabled:
+        if not self._enabled or not self._provider_volume_supported:
             return
         parent = self.parent()
         if parent is not None:
@@ -356,7 +372,7 @@ class SpotifyVolumeWidget(QWidget):
     
     def _activate_impl(self) -> None:
         """Activate volume widget (lifecycle hook)."""
-        if not self._controller.is_available():
+        if not self._provider_volume_supported or not self._controller.is_available():
             logger.debug("[LIFECYCLE] SpotifyVolumeWidget controller unavailable")
             return
         
@@ -392,7 +408,7 @@ class SpotifyVolumeWidget(QWidget):
         except Exception as e:
             logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
 
-        if not self._controller.is_available():
+        if not self._provider_volume_supported or not self._controller.is_available():
             if is_verbose_logging():
                 logger.info("[SPOTIFY_VOL] Controller unavailable; widget will remain hidden")
             return
@@ -423,7 +439,7 @@ class SpotifyVolumeWidget(QWidget):
 
         # Participate in coordinated overlay fade sync like other widgets
         def _starter() -> None:
-            if not self._enabled:
+            if not self._enabled or not self._provider_volume_supported:
                 return
             self._start_widget_fade_in()
 
@@ -789,7 +805,7 @@ class SpotifyVolumeWidget(QWidget):
             pass
 
     def _request_volume_sync(self, *, force: bool = False) -> None:
-        if not self._controller.is_available():
+        if not self._provider_volume_supported or not self._controller.is_available():
             return
         now = time.monotonic()
         if not force and (now - self._last_volume_sync_request_ts) < 1.25:
@@ -910,6 +926,8 @@ class SpotifyVolumeWidget(QWidget):
         self._schedule_set_volume(ratio)
 
     def _schedule_set_volume(self, level: float) -> None:
+        if not self._provider_volume_supported:
+            return
         self._pending_volume = float(max(0.0, min(1.0, level)))
         self._ensure_flush_timer()
         if self._flush_timer is not None:
@@ -919,7 +937,7 @@ class SpotifyVolumeWidget(QWidget):
                 logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
 
     def _submit_volume_set(self, level: float) -> None:
-        if not self._controller.is_available():
+        if not self._provider_volume_supported or not self._controller.is_available():
             logger.debug("[SPOTIFY_VOL] Controller not available, cannot set volume")
             return
 
