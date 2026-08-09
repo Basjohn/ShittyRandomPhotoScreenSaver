@@ -103,6 +103,23 @@ def _dispatch_spotify_secondary_attempt(
     )
 
 
+def _dispatch_widget_manager_callback(
+    manager_ref: "weakref.ReferenceType[WidgetManager]",
+    method_name: str,
+    *args,
+    **kwargs,
+):
+    """Invoke a WidgetManager signal callback without a strong manager edge."""
+
+    manager = manager_ref()
+    if manager is None:
+        return None
+    callback = getattr(manager, method_name, None)
+    if not callable(callback):
+        return None
+    return callback(*args, **kwargs)
+
+
 class WidgetManager:
     """
     Manages overlay widgets for a DisplayWidget.
@@ -167,6 +184,23 @@ class WidgetManager:
 
         # Wait for compositor first frame before starting widget fades
         self._compositor_ready: bool = False
+
+        # PySide signal connections must not own Nuitka ``compiled_method``
+        # wrappers for this plain-Python manager. Keep stable partial objects
+        # whose only manager edge is weak; the same object is reused for
+        # connect/disconnect, and a stale Qt connection cannot retain ``self``.
+        manager_ref = weakref.ref(self)
+        self._compositor_ready_callback: Optional[Callable] = partial(
+            _dispatch_widget_manager_callback,
+            manager_ref,
+            "_on_compositor_ready",
+        )
+        self._settings_changed_callback: Optional[Callable] = partial(
+            _dispatch_widget_manager_callback,
+            manager_ref,
+            "_handle_settings_changed",
+        )
+
         # ``image_displayed`` is a one-shot connection owned by this manager.
         # Keep explicit ownership rather than attempting a best-effort
         # disconnect during terminal cleanup: PySide warns when there is no
@@ -342,8 +376,9 @@ class WidgetManager:
             # optional warmup permanently blocked.
             signal = getattr(self._parent, "image_displayed", None)
             connector = getattr(signal, "connect", None)
-            if callable(connector):
-                connector(self._on_compositor_ready)
+            callback = self._compositor_ready_callback
+            if callable(connector) and callback is not None:
+                connector(callback)
                 self._compositor_ready_signal_connected = True
                 return
 
@@ -372,10 +407,11 @@ class WidgetManager:
         parent = self._parent
         signal = getattr(parent, "image_displayed", None) if parent is not None else None
         disconnect = getattr(signal, "disconnect", None)
-        if not callable(disconnect):
+        callback = self._compositor_ready_callback
+        if not callable(disconnect) or callback is None:
             return
         try:
-            disconnect(self._on_compositor_ready)
+            disconnect(callback)
         except (RuntimeError, TypeError):
             # Sender disposal can race terminal cleanup.  The ownership bit is
             # already clear, which is the important lifetime boundary here.
@@ -860,7 +896,7 @@ class WidgetManager:
         Raise a specific widget.
         
         Args:
-            name: Name of the widget to raise
+            name: Name of widget
             
         Returns:
             True if widget was raised
@@ -873,7 +909,6 @@ class WidgetManager:
             except Exception as e:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         return False
-
     # =========================================================================
     # Settings integration
     # =========================================================================
@@ -886,8 +921,16 @@ class WidgetManager:
             return
         self._detach_settings_manager()
         self._settings_manager = settings_manager
+        callback = self._settings_changed_callback
+        if callback is None:
+            callback = partial(
+                _dispatch_widget_manager_callback,
+                weakref.ref(self),
+                "_handle_settings_changed",
+            )
+            self._settings_changed_callback = callback
         try:
-            settings_manager.settings_changed.connect(self._handle_settings_changed)
+            settings_manager.settings_changed.connect(callback)
         except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to connect settings_changed signal", exc_info=True)
 
@@ -895,8 +938,10 @@ class WidgetManager:
         """Disconnect previously attached settings manager, if any."""
         if self._settings_manager is None:
             return
+        callback = self._settings_changed_callback
         try:
-            self._settings_manager.settings_changed.disconnect(self._handle_settings_changed)
+            if callback is not None:
+                self._settings_manager.settings_changed.disconnect(callback)
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         finally:
@@ -2088,6 +2133,8 @@ class WidgetManager:
         # coordinator's bound completion callback can retain the same graph.
         # Runtime teardown is terminal for this manager, so release the owner
         # edge explicitly rather than relying on cyclic GC.
+        self._compositor_ready_callback = None
+        self._settings_changed_callback = None
         self._resource_manager = None
         self._parent = None
         logger.debug("[WIDGET_MANAGER] Cleanup complete")
