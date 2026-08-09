@@ -1,0 +1,105 @@
+# U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)
+
+## Classification
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
+- **Final resolved state:** Bubble no longer sits under the same unresolved loud-path/oracle-drift family. The stronger newer Bubble runtime path became the authoritative path, the old proxy/current-feel bars that disagreed with the healthier runtime were retired as blockers, and the remaining follow-up issues split cleanly into separate seams such as grouped-drift feel or ordinary authored tuning rather than the old "soft better than loud because the whole Bubble contract is lying" family.
+- **2026-07-14 regression-bar reconciliation:** the complete supported visualizer file ran in eight bounded shards and passed `186` tests with `21` explicit skips. Historical parity against `9d4925e` and `510520e` showed the current Deep Sea runtime materially stronger in loud hero and small-lane response with no clamp dependence. Disproved proxy/current-feel signatures remain named, skipped retirement evidence rather than release blockers; active visible-lane, authored-motion, first-frame, and performance guards remain green. Bubble runtime and curated presets were not changed during this reconciliation.
+- **2026-07-14 cadence follow-up:** after adding the paused-source cadence bars, the complete file passed `188` tests with the same `21` explicit skips. The active Bubble worker oracle still enforces wall-time average, simulation components, active-field/collision density, and sustained authored-profile cost; its former individual p95/max wall-clock assertions were replaced by the worst complete replay-profile average after they failed only in the full Qt process while isolated repeats and runtime Bubble summaries remained healthy. This removes Windows scheduler preemption from the deterministic worker contract without changing Bubble runtime or weakening sustained-cost detection.
+- **2026-07-15 Drift evidence pass:** the newest logs do not support reopening or retuning Bubble drift. The current paused run (`04:04:28 .. 04:06:49`, 22 diagnostics, overlay `playing=False`) held `overall=0.015`, `drive=0.000`, phase/amplitude gains at exactly `1.000`, and movement energy at `0.004 .. 0.008`. The newest usable playing sample after the last `bubble_simulation.py` runtime change was isolated before its image transition began (`2026-07-01 11:17:18 .. 11:17:38`; transition starts at `11:17:39`): soft samples (`n=5`, mean overall `0.362`) averaged drive/phase/amplitude/speed `0.009 / 1.004 / 1.011 / 0.317`; medium samples (`n=15`, mean overall `0.555`) averaged `0.097 / 1.046 / 1.116 / 0.404`; loud samples (`n=5`, mean overall `0.722`) averaged `0.309 / 1.146 / 1.370 / 0.523`. This is monotonic source-energy response with a material loud lift, not transition or paint-cadence motion. The current run lacks fresh playing soft/loud material, so it cannot replace that older same-runtime-path sample, but it independently confirms the idle floor remains minimal.
+- **Observed failure pattern:**
+  - live runtime repeatedly showed soft passages looking more expressive than louder passages
+  - small bubbles often died in loud passages while big bubbles pulsed late, flickered, or plateaued at the wrong visible size
+  - some automated bars stayed green even when runtime still looked awful
+  - later passes made the bar easier to satisfy while live behavior stayed wrong or got worse
+- **Latest evidence that tightened the diagnosis (2026-06-12 late run):**
+  - a newer loud window near `22:30:11 .. 22:30:56` reproduced the same weak-Bubble shape even though the run was no longer leaning on dynamic-floor support
+  - representative points from that window:
+    - `22:30:11`: `raw_bass=1.894` while visible bars stayed modest instead of opening up loudly
+    - `22:30:21`: `raw_bass=1.183` while the lane still hovered around small values
+    - `22:30:51`: `raw_bass=1.005` and `22:30:56`: `raw_bass=1.063`, still with weak visible response
+  - accompanying floor logs in that same window stayed at `mode=manual gate=0.200 manual=0.200 support=0.000`
+  - this matters because it weakens the theory that the remaining loud-path failure is only a shared dynamic-floor / support-pressure problem; Bubble-owned feed/compression/simulation seams remain first suspects
+- **What went wrong in the investigation:**
+  - too many loud-path adjustments were stacked at once across `bubble_simulation.py`, `tick_pipeline.py`, and the widget-path oracle
+  - the loud oracle was repeatedly tuned to current code instead of staying anchored to the user-visible rule that louder music must not look less active than softer music
+  - helper/proxy-style checks and permissive thresholds were allowed to coexist with an unresolved runtime complaint
+  - sim-only or feed-only conclusions were trusted too early without matching the exact live failure shape
+- **Latest reopened lesson from the 2026-06-18 pass:**
+  - a newer visual-only hero smoothing pass improved soft-passage flicker but still did not materially solve the same loud-passage collapse
+  - the user asked for the Bubble runtime changes to be reverted back to the checked-in baseline while explicitly keeping the stronger Bubble oracles/tests
+  - this exposed one important truth cleanly: the "current feel" lock needed re-baselining, but the louder failure bars stayed valid and should not be discarded
+  - because hardcoded hero-smoothing retunes were becoming another iteration loop, the display-only hero settling seam was extracted into a user/preset-facing control (`bubble_big_visual_smoothing`) so future soft-passage preference changes do not require more Bubble runtime rewrites
+  - the Deep Sea authored preset itself is now a first-class suspect: runtime code changed repeatedly while the preset combination remained mostly stable, so a dedicated preset/runtime audit was created before more Bubble code retuning
+- **Latest evidence from the 2026-06-19 long run with user-tuned `Preset 9 (Deep Sea Hero Lift)`:**
+  - Bubble no longer matched the old fully-dead loud shape once the authored controls moved away from the original Deep Sea balance.
+  - The log stayed on manual-floor truth the whole run (`gate=0.100 manual=0.100 support=0.000`), which further weakens the theory that shared dynamic-floor behavior is the main remaining owner of the problem.
+  - The user-driven authored changes that coincided with the healthier run were concentrated in AGC / input / transient balance rather than another floor rewrite, and that combination helped somewhat even though it did not fully close the loud-path complaint:
+    - `bubble_input_gain=0.70`
+    - `bubble_agc_strength=0.20`
+    - `bubble_transient_pulse_gain=0.40`
+    - `bubble_transient_mix_bass=0.15`
+    - `bubble_transient_mix_vocal=0.40`
+    - `bubble_transient_clamp=1.50`
+    - `bubble_sensitivity=0.60`
+  - A coarse bar/log bucket check from that run showed the visible bar envelope now scales upward with hotter raw-bass windows instead of staying trapped near the soft-path range:
+    - soft (`raw_bass < 0.8`): average peak `0.088`
+    - mid (`0.8 .. 1.5`): average peak `0.192`
+    - hot (`1.5 .. 2.2`): average peak `0.250`
+    - very hot (`>= 2.2`): average peak `0.300`
+  - That does **not** close U-07, because the user still reports loud sections as only "better, not exceptional", especially for broad small-lane life. It does, however, move the next correct direction away from shared-floor churn and toward authored Bubble control balance plus stricter runtime-shaped bars around that authored truth.
+- **Latest correction from the 2026-06-19 stricter-oracle pass:**
+  - one of the newer Bubble loud-path bars had quietly drifted into a bad unit comparison by requiring hero render radius to scale against raw `speed_energy` with an impossible coefficient
+  - this created another version of the older "bar tightening without runtime truth" trap: the bar could stay red for reasons that were not the user-visible failure seam
+  - the corrected direction keeps the louder-vs-softer body contract, but maps speed-vs-body checks back onto realistic body-scale expectations and keeps clamp-faked single-shape holds guarded separately
+- **Closure update from the 2026-06-20 grouped-drift/settings pass:**
+  - the current healthier Bubble path is now the owner of the live contract; older proxy-heavy tests and old "current feel lock" signatures that still expected the pre-reset failure shape were retired as blockers instead of being allowed to contradict better runtime
+  - specifically retired blocker families included:
+    - the soft-to-loud fixture proxy that required internal Bubble feed amplification rather than user-visible loud-vs-soft truth
+    - the clean-vocals size-lift proxy that overfit a tiny hero-size ratio instead of the runtime body contract
+    - the older log-signature/current-feel locks that were tied to a previous recovery baseline instead of the now-healthier active runtime path
+  - grouped drift is no longer part of U-07. Its remaining turn/cadence feel is a motion-seam issue, not a loud-path oracle-drift issue.
+- **Concrete failed methods worth preserving:**
+  - weakening the replay oracle from a stronger "loud must beat soft" expectation into "materially alive" ratios such as `hot_small >= soft_small * 0.80` and `hot_big >= soft_big * 0.88`
+  - repeatedly adding new sustained-loud support floors/holds/mixes on top of one another before proving the oracle matched runtime
+  - treating a green synthetic or widget-path bar as sufficient even after live logs still showed loud sections plateauing around modest visible output while raw/transient loudness was much higher
+  - trying to fix several of these at once: signal source choice, small-lane support, big-lane hold, render sizing, and oracle expectations
+  - hardcoding extra loud-path Bubble body through more support-style branches while leaving the tiny-small render seam capped at a flat `0.5x` pulse multiplier; this let bars read "alive enough" while the actual tiny-small field still looked dead in loud/tail windows
+  - hero-only visual smoothing rewrites that improved soft flicker but left the same loud collapse shape intact; soft-passage settling and loud-path body authority need to stay separate seams
+- **Key lessons / guardrails from this failure family:**
+  - when runtime says soft looks better than loud, the loud oracle must fail in that same shape before more code tuning continues
+  - do one aspect change at a time once the oracle is suspect; otherwise good fixes can be buried under later overfit changes
+  - do not relax Bubble loud-path assertions to fit current code; strengthen them against live logs instead
+  - historical-good commits such as `61ad4ba` are recovery baselines for the runtime seam only, not a reason to restore older weak tests wholesale
+- **Next correct direction:**
+  - if Bubble regresses again, start from the newer runtime-shaped bars that model visible hero contraction, louder-vs-softer authority, grouped-drift cadence, and drift-lift rather than reviving the retired proxy/current-feel locks
+  - treat authored preset tuning and grouped-drift feel as separate seams from the old loud-path oracle-drift family
+- **Resolved contract state after the 2026-06-20 closure pass:**
+  - Bubble size authority is now cleaner and narrower:
+    - hero/big visible size breathing stays owned by the Bubble runtime plus a display-only hero smoothing seam
+    - transient-heavy churn no longer gets to reopen the old "soft looks better than loud" failure by default
+  - hero chatter closure:
+    - `bubble_big_visual_smoothing` remains the user/preset-facing display-only control for hero settling
+    - high authored smoothing now truly suppresses hero chatter instead of being silently nulled out in runtime
+  - grouped drift closure:
+    - grouped swish cadence and turn shape are now motion-owned rather than another Bubble loud-path support seam
+    - low authored drift-frequency values are remapped to genuinely calmer effective motion instead of acting deceptively busy
+    - drift diagnostics now log authored vs effective Bubble drift controls so runtime logs tell the truth about slider behavior
+  - specular closure:
+    - Bubble specular size no longer double-counts render growth
+    - largest big bubbles now earn a slightly stronger highlight before the cap, while `bubble_big_specular_max_size` remains a hard ceiling rather than a gain control
+  - preset closure:
+    - `Preset 1 (Deep Sea)` is now the practical authored baseline for the healthier Bubble path
+    - the remaining shipped Bubble presets were normalized around that runtime/technical baseline while preserving their own directions, palette, size/count, and bounce identity
+  - startup/runtime support work that accompanied closure:
+    - stronger bars now cover low-end drift remap truth, grouped-drift cadence, hot/soft hero chatter, and Bubble specular proportionality so these seams can fail in automation before runtime is requested again
+  - remaining non-closure note:
+    - `bubble_rotation_amount` is currently a cosmetic/false control because Bubble’s shader still reserves the uploaded rotation channel without rendering it; treat it as a future cleanup/design decision rather than an active Bubble regression
+
+## Record Provenance
+
+This standalone file preserves the complete former inline `U-07` record from `Docs/Historical_Bugs.md`. The chronology and technical claims are retained from that source; only heading normalization, standalone-link retargeting, and removal of monolith-only section dividers were applied during extraction.
