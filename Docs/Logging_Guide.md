@@ -1,162 +1,113 @@
 # Logging Guide
 
-Last updated: 2026-08-08
-
-Operator-facing logging guide for SRPSS.
+Last updated: 2026-08-10
 
 ## Purpose
-- Keep runtime diagnostics CLI-first.
-- Keep noisy families in dedicated sidecar logs instead of flooding the main log.
-- Make it obvious where to look first during regressions without needing repo history.
 
-## Main Logs
+Keep logs readable, attributable and cheap enough that diagnostics do not become the
+workload they are measuring.
 
-| File | Purpose |
-|---|---|
-| `logs/screensaver.log` | General runtime log. Keeps `WARNING`/`ERROR`/`CRITICAL` from every family. |
-| `logs/screensaver_verbose.log` | Full DEBUG/INFO stream for broad debugging when `--debug` or `--verbose` is active. |
+## Main Contract
 
-Notes:
-- Dedicated sidecar families suppress their routine INFO/DEBUG from the general logs only when that sidecar is active.
-- Dedicated sidecars never suppress `WARNING`/`ERROR`/`CRITICAL` from the general logs.
-- Fallbacks should stay loud at `WARNING` or higher and, when possible, carry the owning family tag too:
-  - `"[CACHE] [FALLBACK] ..."`
-  - `"[LIFECYCLE][FALLBACK] ..."`
-  - `"[REFRESH_DIAG][FALLBACK] ..."`
-  - `"[CUSTOM_LAYOUT][FALLBACK] ..."`
-  - `"[SPOTIFY_VIS][FALLBACK] ..."`
-- Cache worker/compute fallback paths are diagnostic events, not routine cache hits; keep them `WARNING` plus `[FALLBACK]` while leaving normal cache hit/miss telemetry at INFO in `--cache`.
+`screensaver.log` contains:
 
-## Specific Sidecar Logs
+- high-level runtime narrative useful to an operator;
+- **every WARNING, ERROR and CRITICAL from every family**;
+- only routine INFO that genuinely belongs in the general sequence.
 
-| CLI flag | File(s) | Purpose |
-|---|---|---|
-| `--perf` | `screensaver_perf.log`, `perf_widgets.log` | Performance telemetry, GC/perf probes, widget timing summaries. |
-| `--usage` | `screensaver_usage.log` | Low-cadence whole-application CPU, main/child/total RSS, private commit, handles/threads, driver GPU/VRAM, shared-memory, task, and aggregate owner bytes. |
-| `--viz` | `screensaver_spotify_vis.log`, `screensaver_spotify_vol.log` | Visualizer and volume diagnostics. `--viz` also enables visualizer diagnostics. |
-| `--geo` | `screensaver_geometry.log` | Geometry, z-order, CUSTOM layout, and display-stack diagnostics. |
-| `--set` | `screensaver_settings.log` | Settings mutations, imports, schema normalization, and settings-binding traces. |
-| `--life` | `screensaver_lifecycle.log` | Widget, worker, and engine lifecycle/setup/teardown diagnostics. |
-| `--cache` | `screensaver_cache.log` | Image-cache authority, prefetch targeting, scaled warmup, and worker-fallback classification traces. |
-| `--steam` | `screensaver_steam.log` | Steam provider/cache/widget diagnostics for public Achievement Pulse and the unfinished card prototypes. |
+When a dedicated family sidecar is enabled, routine family INFO/DEBUG belongs in that
+sidecar and should not duplicate into main. `screensaver_verbose.log` remains the broad
+debug fallback, not the place agents should read first when a dedicated sidecar exists.
 
-Legacy compatibility:
-- `--viz-diagnostics` and `--viz-diag` remain accepted aliases for extra visualizer diagnostics, but `--viz` is the preferred operator flag.
+## Dedicated Families
 
-## CLI Rules
-- Use CLI flags, not environment variables, to activate diagnostic families.
-- Diagnostic family flags are intentionally composable. Example:
-  - `python main.py --debug --geo --life`
-  - `python main.py --perf --viz`
-  - `python main.py --perf --cache`
-  - `python main.py --steam --cache`
-- `--fresh` means a genuinely clean slate for the resolved runtime log directory:
-  all existing log files there are deleted before the new launch starts logging.
-- Startup logs should advertise both:
-  - the available specific logs
-  - the specific logs active for the current run
-- Each launch emits one bounded `[STARTUP]` identity record with
-  `entrypoint=main|main_mc`, parsed mode, frozen/script state, and executable
-  basename. Use it instead of inferring Media Center from later window flags.
-- Move To Custom emits one bounded `[VIS_PRESETS]` INFO record with mode,
-  source preset index/name, and destination Custom index. It deliberately does
-  not serialize the complete settings payload.
+Existing sidecars remain the first destinations for their domains:
 
-## Installable Diagnostic Runtime
+- `--perf` → `screensaver_perf.log`, `perf_widgets.log`
+- `--usage` → `screensaver_usage.log`
+- `--viz` → `screensaver_spotify_vis.log`, `screensaver_spotify_vol.log`
+- `--geo` → `screensaver_geometry.log`
+- `--set` → `screensaver_settings.log`
+- `--life` → `screensaver_lifecycle.log`
+- `--cache` → `screensaver_cache.log`
+- `--steam` → `screensaver_steam.log`
 
-Normal standard and Media Center packaged launches remain logging-off. The
-separate `SRPSS_Diagnostic.exe` product automatically activates every
-registered logging family and writes by default to:
+Do not create a new sidecar merely because one logger is noisy. Add a family only when a
+distinct high-volume domain has a coherent correlation workflow.
+
+## Known Routing Defect
+
+Current cache routing relies partly on message text and expects `[CACHE]`. The current
+mixed-load evidence contains **132 `[GL CACHE]` INFO records in `screensaver.log` and
+zero in `screensaver_cache.log`**. `[GL CACHE]` therefore bypasses the intended cache
+sidecar suppression.
+
+This should be fixed while the logging architecture is queued. Do not solve it by
+lowering those records to DEBUG or deleting useful cache evidence.
+
+## Phase 5 Execution Architecture
+
+Normal logging should use one bounded process-owned queue/writer:
 
 ```text
-<directory containing SRPSS_Diagnostic.exe>\logs
+caller thread
+   -> cheap structured LogRecord enqueue
+   -> process-owned writer
+      -> family routing
+      -> formatting/deduplication
+      -> rotation/file writes
 ```
 
-If that directory is not writable, every runtime log, sidecar, crash trace,
-fresh-log operation, and profiling artefact uses
-`%LOCALAPPDATA%\SRPSS\Diagnostic\logs`, then
-`%TEMP%\SRPSS\Diagnostic\logs`. Build logs remain in the Foundry build-log
-directory and never mix with runtime evidence.
+Requirements:
 
-The main and sidecar handlers rotate at 1 MiB with at most five backups per
-file; the verbose stream retains three backups. `diagnostic_crash.log` rotates
-live breadcrumbs/Python tracebacks at the same bound and records eagerly
-flushed Settings/native-window stages. A terminal faulthandler write captures
-only the failing thread; if that final raw write crosses the active-file bound,
-the next diagnostic launch trims it before retaining the bounded backup. It
-contains no settings payloads.
+- caller path is small and normally non-blocking;
+- bounded queue with high-water/drop telemetry and explicit overload policy;
+- original timestamp plus monotonic/correlation ordering metadata survives;
+- one writer owns normal file rotation/writes;
+- shutdown exposes a bounded flush/close contract;
+- fatal/native crash breadcrumbs and faulthandler output remain direct and independent of the queue.
 
-If the retired-runtime destruction barrier times out, the diagnostic product
-commits the normal fail-closed exit first, then adds at most eight bounded
-`[LIFECYCLE_BARRIER][PYTHON_OWNER_REFS]` records for surviving plain-Python
-owners. The aggregate batch permits at most 17 direct/dictionary-owner
-`gc.get_referrers()` queries, 8,192 inspected Python items, 200 ms of work that
-begins between queries, and 24,000 encoded characters per owner record. An
-individual CPython referrer query cannot be pre-empted; its count and all
-subsequent processing/output are bounded. Records contain identity, referrer
-type, and only positively identified object-attribute names. Arbitrary mapping
-and frame-local key names are redacted. The tracer never calls object `repr()`
-or `gc.collect()`, releases owners, extends the timeout, changes the fail-closed
-result, or runs in standard/Media Center products.
+## Structured Family Metadata
 
-The diagnostic installer is per-user, has a distinct AppId and install tree,
-does not replace/register `SRPSS.scr`, and does not alter the Media Center
-payload. It also uses direct interactive URL routing and never writes helper
-tickets/queue entries or starts the shared secure-desktop helper. Diagnostic
-runs are attribution sessions, not performance baselines. `main.py` remains
-the sole performance/evidence-capture authority and Media Center never
-receives an independent capture.
+Human-readable tags such as `[PERF]`, `[CACHE]` and `[GL CACHE]` are useful for people
+but are a fragile routing API. Prefer an explicit record family/category attribute,
+e.g. `cache`, `lifecycle`, `geometry`, `visualizer`, `usage`, `perf`, while retaining the
+visible tag where useful.
+
+Late Phase 7 should migrate high-volume families systematically and simplify filters so
+routing no longer depends on token quirks.
+
+## Late Phase 7 Taxonomy Refinement
+
+Before Phase 8 compositor work:
+
+1. inventory routine INFO/DEBUG volume by family/logger;
+2. ensure existing sidecar families receive their own routine records;
+3. keep every WARNING+ visible in main regardless of sidecar;
+4. add sidecars only for genuinely distinct domains;
+5. remove redundant main/verbose duplication where a family sidecar is active;
+6. preserve correlation identifiers/timestamps across files;
+7. update parser rules/tests together with routing.
+
+## Diagnostic Runtime
+
+Diagnostic remains an opt-in frozen-runtime attribution product. It may enable all
+families automatically and retain bounded crash/owner breadcrumbs. It is not a
+performance baseline, and ordinary work must not trigger a Diagnostic rebuild unless a
+specific frozen-only failure requires it.
 
 ## Correlation Workflow
-1. Start with `screensaver.log` for the high-level sequence and all warnings/errors.
-2. If startup says a sidecar is active, go there before diving into `screensaver_verbose.log`.
-3. Use timestamps to correlate across files; all runtime logs use the same wall-clock timestamp format.
-4. Use `screensaver_verbose.log` only when the family sidecars and main log are still not enough.
-5. For a destruction timeout, correlate the ordinary timeout summary with the
-   same-timestamp `[PYTHON_OWNER_REFS]` records in
-   `screensaver_lifecycle.log`; attribute the concrete edge before changing an
-   owner cleanup method.
 
-## Recommended Pairings
-- Edit-mode / CUSTOM / stacking bugs:
-  - `--geo --life`
-- Settings drift, restore, import, or schema issues:
-  - `--set --life`
-- Visualizer mode/preset/runtime issues:
-  - `--viz --perf`
-- Startup/teardown/recreation regressions:
-  - `--life --geo`
-- Cache/prefetch/prescale investigations:
-  - `--perf --cache`
-- Settings/Edit memory/VRAM recreation investigations:
-  - `--usage --life --perf --cache`
-- Steam widget family investigations:
-  - `--steam --cache --set`
-  - Add `--devsteam` only when investigating Steam Journey, Friend Pulse, or Abandonment Issues prototypes.
-
-## Perf Semantics
-- Transition-scoped perf warnings should describe active-cadence problems, not intentional idle time.
-- Recurring-timer `Large gap` warnings are meant for unexpected steady-runtime cadence loss; if a widget intentionally hands cadence to a different owner during transitions, the resumed dedicated timer should not be treated as a catastrophic gap by itself.
-- Compositor `Paint gap` warnings are transition-paint diagnostics. Once a transition has completed and the compositor is intentionally idle/paused, later base-frame paints should not inherit the old transition label.
-- Per-entry image-cache hit/miss/put/remove/eviction records belong to `screensaver_cache.log` when `--cache` is active. `screensaver_perf.log` retains only bounded `[PERF] [CACHE]` summaries needed for lifecycle correlation.
-- Bounded ResourceManager generation/owner/creation-site records belong to `screensaver_lifecycle.log` as `[LIFECYCLE] [RESOURCE_DETAIL]`. The ordinary `[PERF] [RESOURCE]` record contains aggregate counts/bytes only and does not duplicate the resource list.
-- Lifecycle snapshots reuse the latest background `--usage` totals for whole-app RSS/private commit/VRAM and state their sample age. They do not run a new driver query or inspect live Qt pixmaps, QObjects, or Qt-wrapper validity from the usage worker.
-- `[SPOTIFY_VIS][BUBBLE_CADENCE]` distinguishes lane-free submissions from `worker_busy_deferrals` and `result_waiting_deferrals`. It is passive accounting, not a task-rate controller; a low publish ratio must be explained by an existing owner, never an artificial cadence token.
-- `[PERF] [IMAGE_UI_DELAY]` identifies delayed image-pipeline UI work by reason,
-  display, nested callable, scheduled delay, due lateness, runtime-identity
-  guard duration, actual callback duration, monotonic start/end bounds, total
-  age, generation, and outcome. Stale callbacks report zero callback cost.
-  `[PERF] [IMAGE_UI_SEGMENT]` separately times GUI `QImage→QPixmap` conversion
-  and display image application. These records are attribution only; they do
-  not alter the existing display stagger.
+1. Read `screensaver.log` for sequence and all warnings/errors.
+2. Follow the owning sidecar for routine family detail.
+3. Use shared timestamps/correlation ids to cross-reference perf/usage/lifecycle/cache/viz.
+4. Use verbose only when the general + family sidecars are insufficient.
 
 ## Guardrails
-- Do not reintroduce environment-variable activation for diagnostic families.
-- Do not let sidecar filters hide warnings/errors from the general logs.
-- Do not activate the diagnostic build profile from the standard or Media
-  Center entry points, installers, or workers.
-- If a new high-volume family is added, give it:
-  - one explicit CLI flag,
-  - one dedicated log file,
-  - one documented correlation rule,
-  - and one suppression path from general INFO/DEBUG only when active.
+
+- no per-frame routine INFO stream;
+- no logging-driven repaint/cadence/control flow;
+- no UI-thread file/rotation work once queued architecture lands;
+- no hiding WARNING+ from main;
+- no “performance improvement” achieved by deleting evidence instead of moving/routing it cheaply;
+- no unbounded logging queue.

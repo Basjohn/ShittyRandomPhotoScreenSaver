@@ -2,9 +2,11 @@
 
 Last reconciled: 2026-08-10
 
+Current `main` is the implementation authority. Historical commits are used only as negative controls or forensic references; this plan contains no historical-candidate extraction seam.
+
 ## Current evidence and correction
 
-Historical baseline/donor runs could consume roughly one logical core and submit around 90–100 compute jobs per second.
+Historical comparison runs could consume roughly one logical core and submit around 90–100 compute jobs per second.
 
 A later attempt to solve this through persistent shared-analysis and Bubble lanes changed temporal behaviour and was rejected. Production Bubble therefore remains on the approved ordinary general COMPUTE executor model: one lane-free authored step is submitted through the bounded executor, with the existing source/event/dt/publication semantics preserved.
 
@@ -238,6 +240,8 @@ Keep fatal/native crash breadcrumbs separate: faulthandler/emergency crash recor
 must not depend on a healthy logging queue or writer thread. Preserve enough ordering
 metadata that cross-sidecar diagnostic correlation remains trustworthy.
 
+Route normal records by explicit structured family/category metadata where practical rather than permanently parsing display text. The current `[GL CACHE]` versus `[CACHE]` mismatch proves that human-readable message tokens are not a reliable routing contract. Main log keeps all WARNING+ and only high-level routine narrative; enabled-family INFO/DEBUG belongs in its sidecar.
+
 ### General COMPUTE workers
 
 Use existing bounded executors for finite thread-safe work such as:
@@ -281,7 +285,7 @@ created. Extra pure-Python worker threads can add context switching/GIL contenti
 may make latency worse. Therefore "put it on a third thread" is not an architectural
 goal; owner separation and measured native/GIL behaviour are required.
 
-Free-threaded CPython is outside this recovery plan. It would change extension/native
+Free-threaded CPython is outside this roadmap. It would change extension/native
 compatibility assumptions across PySide/Nuitka and is not a shortcut for current UI
 ownership problems.
 
@@ -539,6 +543,18 @@ duration alone; queueing, callback delivery and retained outputs may dominate.
 For each threading extraction, record the **work removed from GUI**, not merely the new
 worker duration. A change that moves 5 ms to a worker but adds 8 ms of serialization,
 queueing and commit cost is not a win.
+
+## Compatibility and fallback simplification
+
+The threading architecture should also delete temporary alternate authorities that no longer preserve a real contract. `widgets/spotify_visualizer/bubble_compute_lane.py` explicitly describes itself as a temporary compatibility façade over the ordinary general COMPUTE executor. Remove it only as an exact-semantics direct-path refactor: preserve authored cadence, one-in-flight behavior, dt, live snapshots, task category, callback/publication ordering and generation identity.
+
+After that removal, audit `core/threading/compute_lanes.py` and ThreadManager lane APIs. Current runtime telemetry repeatedly reports zero registered lanes/worker threads. Remove the persistent-lane subsystem only after production, dynamic-import, test and frozen-build proof. This is simplification, not an invitation to alter Bubble timing.
+
+Apply the same proof rule to other documented dead compatibility surfaces (`rendering/render_strategy.py`, `widgets/dimming_overlay.py`, `sources/rss_source.py`, and `transitions/overlay_manager.py::_raise_halo_topmost`). Preserve genuine persisted-data/external migration compatibility. One concern per reversible checkpoint.
+
+## GPU/presentation relationship
+
+Active-display GPU busy in `08_09_ca830d7_14_59` measured median `10.8%`, p95 `27.8%`, max `32.9%`. Screen 1 is 60 Hz while visualizer overlay windows can approach ~100 state/update/paint operations per second. Phase 5 measures/attributes this without touching logical cadence. Phase 7 may later decouple physical presentation through latest immutable render state after logical integration.
 
 ## Acceptance gates
 

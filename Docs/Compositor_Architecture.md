@@ -1,443 +1,100 @@
 # Compositor Architecture
 
-Last updated: 2026-07-29
+Last updated: 2026-08-10
 
-Target architecture and recovery contract for fullscreen presentation.
+Current target architecture for fullscreen presentation. `main` is the implementation
+authority; historical candidates exist only as negative controls/reference.
 
-This document replaces the failed donor implementation as architectural authority. It does not describe `7376bb9` as the desired system.
-
-## 1. Evidence and Git Boundary
-
-Behavioural/lifecycle base:
-
-```text
-main (based on baseline)
-00edb57a3076b845cb8ee4b6cb7f36ea83411f0c
-```
-
-Donor/reference:
-
-```text
-donor-7376bb9
-7376bb9bb380253f3bd14079e65d7bdbca062fad
-```
-
-Evidence:
-
-```text
-logs/evidence_chest/logs00edb57.zip
-logs/evidence_chest/logs7376bb9.zip
-```
-
-The donor branch remains intact, reference-only/read-only, and is never merged wholesale. Phase 1 measurement evidence is archived in `Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md`.
-
-## 2. Runtime Conclusions
-
-### Baseline strengths
-
-- better perceived visualizer smoothness;
-- better Spectrum/Bubble feel;
-- safer Settings/Edit lifecycle in supplied evidence;
-- simpler presentation topology.
-
-### Baseline failures
-
-- high CPU and task rate;
-- excessive RAM/private commit;
-- severe VRAM growth;
-- degraded smoothness under heavy background load;
-- weak resource-lifetime accounting.
-
-### Donor strengths
-
-- more explicit resource accounting;
-- more bounded VRAM behaviour;
-- useful GL ownership tests and diagnostics;
-- proof that single-surface composition is possible.
-
-### Donor failures
-
-- visualizer flattening and loss of elasticity;
-- microgaps and burst delivery;
-- cursor/UI choppiness;
-- producer dependence on compositor paint acknowledgement;
-- distributed transition/lifecycle state;
-- partial reconstruction and GL affinity crash;
-- high CPU with low GPU use;
-- implementation complexity that prevents reliable diagnosis.
-
-## 3. Target Ownership
+## 1. Ownership
 
 ### Runtime coordinator
-
-Owns complete start/stop/recreate order.
-
-Does not own simulation or GL details.
+Owns full start/stop/recreate sequencing and generation admission. Does not own visualizer simulation or GL internals.
 
 ### Image pipeline
+Owns source selection, decode/transform, bounded CPU cache and worker-safe upload-ready data. Does not own textures/QPixmap/compositor state.
 
-Owns source selection, decode, transform, bounded CPU cache, and immutable upload-ready data.
-
-Does not own textures, compositor state, or QWidget mutation.
-
-### GPU resource store
-
-Owns texture/FBO/PBO metadata, exact bytes, context/share generation, leases, and deletion scheduling.
-
-Does not own image sequence, transition, visualizer, or application lifecycle.
-
-### Visualizer controller/model
-
-Owns audio integration, mode simulation, logical cadence, and latest immutable render state.
-
-Does not own compositor timing or GL lifecycle.
-
-### Transition controller
-
-Owns source, destination, start, duration, easing, and local completion.
-
-Does not own worker threads or image decode.
+### Visualizer model/controller
+Owns audio/event integration, mode logical state and authoritative source/state cadence. Publishes current immutable render state.
 
 ### Display compositor
+Owns one display's presentation surface/context, GL draw order, local transition animation and presentation requests. Does **not** own visualizer simulation/cadence, workers, image selection or lifecycle admission.
 
-Owns one display surface, GL draw order, latest scene snapshot, and local animation repaint requests.
+### GL resource owners
+Own exact handles/bytes/context generation/deletion. One numeric handle has one deletion owner.
 
-Does not own simulation, worker scheduling, Settings/Edit lifecycle, or image selection.
+## 2. Current Phase 5 Reality
 
-## 4. Data Flow
+Do not start a surface merge yet. Current evidence shows:
+
+- GUI request age dominates paint duration;
+- `set_processed_image()`/`generic_pair_warm` are large GUI/context transactions;
+- retained current texture fails next-old identity reuse, causing paired warm/upload work;
+- active-display GPU busy is material but not yet separated by owner;
+- screen 1 is 60 Hz while visualizer overlay state/update/paint windows can approach ~100 Hz.
+
+Fix/attribute those owners first.
+
+## 3. Data Flow
 
 ```text
-audio/input
-    -> visualizer model
-    -> immutable latest VisualizerState
-                                  \
-image source -> decode/transform -> UploadDescriptor
-                                  -> GPU resource store -> TextureLease
-                                                        \
-transition state ----------------------------------------> SceneSnapshot
-visualizer state ----------------------------------------> SceneSnapshot
-overlay state -------------------------------------------> SceneSnapshot
-                                                         |
-                                                         v
-                                                display compositor
-                                                         |
-                                                         v
-                                                       paint
+audio/events -> visualizer logical owner -> immutable current RenderState ------image source -> decode/transform -> GUI upload/texture owner -> base/transition --+-> display compositor -> paint
+widgets/overlays -> prepared current UI state ----------------------------------/
 ```
 
 There is no ordinary return arrow from paint to a producer.
 
-## 5. Scene Snapshot
+## 4. Logical Cadence vs Presentation
 
-A scene snapshot contains explicit immutable references:
+Logical visualizer state evolves at its approved authored/source boundaries.
+Presentation is a consumer opportunity.
 
-```text
-SceneSnapshot
-- runtime/context generation
-- display geometry and DPR
-- base texture lease
-- optional transition snapshot
-- optional visualizer state
-- overlay state
-- scene generation
-```
+A late/missed paint may skip intermediate immutable render snapshots after logical
+integration. It may not drop events, change dt, slow source sampling, trigger catch-up
+simulation or acknowledge the producer.
 
-Scene generation identifies replacement of the latest scene. It is not a paint acknowledgement.
+Phase 7 will formalize this boundary. Phase 8 may then remove a separate visualizer GL
+surface/context if GPU/context evidence justifies it.
 
-## 6. Presentation Model
+## 5. Texture Identity
 
-When producer state changes:
+Current texture retention must use a stable identity that survives terminal handoff into
+the next old-image lookup under unchanged source/transform/size/context generation.
+Steady transition target: old cache hit + new upload only.
 
-1. update immutable logical/render state;
-2. replace latest scene;
-3. coalesce one GUI `update()` request;
-4. return immediately.
+Do not solve identity failure through larger caches or retaining historical image sets.
 
-At paint:
+## 6. Transition Model
 
-1. clear GUI-local pending-update state;
-2. read latest scene;
-3. draw;
-4. request another GUI-local frame only if compositor-local animation remains active;
-5. if state changed during paint, coalesce one additional update.
+Transition owner keeps source/destination, monotonic start/duration/easing and required
+temporary resources. Completion is local/exactly-once: destination becomes base; source
+and temp transition ownership releases; no worker/image-pipeline terminal acknowledgement.
 
-No worker waits.
+## 7. GPU Timing
 
-No catch-up burst is emitted.
+All transition families need shared-seam paint timing and non-blocking GL timer queries
+with delayed result collection. `glFinish()` is prohibited in ordinary profiling.
+Correlate timer samples with process GPU busy, texture uploads and event-loop/request age.
 
-## 7. Clock Separation
+## 8. GL Ownership
 
-Separate clocks:
+All GL mutation/deletion on the owner GUI/context thread. No worker QPixmap/GL. No GL
+under registry locks. Context generation is part of identity. Failed deletion retains
+ownership and fails closed.
 
-- visualizer simulation;
-- transition monotonic elapsed time;
-- Qt presentation.
+## 9. Lifecycle
 
-A late paint draws current state.
+Settings/Edit full stop–destroy–recreate is solved architecture and remains mandatory:
+stop/reject producers, delete GL under owner context, prove zero retired ownership,
+construct replacement, reveal only fresh current-generation authoritative state.
 
-A late paint does not:
+## 10. Future One-Surface Design
 
-- pause visualizer simulation;
-- alter attack/decay;
-- create repeated fixed-step catch-up visible states;
-- authorize a queue of repaint retries;
-- require a producer acknowledgement.
+One compositor surface **per display** is an optional Phase 8 target only after:
 
-## 8. Transition Model
+- Phase 5 GUI starvation and texture reuse work;
+- truthful GPU owner attribution;
+- stronger visualizer temporal/paint-receipt goldens;
+- Phase 7 proof that missed paints do not change logical state.
 
-```text
-TransitionSnapshot
-- source lease
-- destination lease
-- start monotonic timestamp
-- duration
-- easing
-```
-
-At completed paint:
-
-- destination becomes base;
-- source transition lease releases;
-- temporary transition resources release;
-- transition becomes inactive.
-
-This state is local to the compositor/transition owner.
-
-Remove:
-
-- terminal transaction queue;
-- post-paint completion acknowledgement;
-- wrapper/compositor busy-state handshake;
-- image-pipeline terminal commit handshake;
-- generation-per-frame terminal machinery.
-
-## 9. Visualizer Integration
-
-Use a narrow renderer boundary:
-
-```text
-VisualizerModel/Controller
-    -> immutable VisualizerState
-
-VisualizerRenderer
-    -> draw(state, viewport, resources)
-```
-
-Do not preserve a widget-shaped compositor layer.
-
-Remove:
-
-- dynamic attribute forwarding;
-- compatibility local-attribute registries;
-- duplicated old/new renderer state;
-- compositor-owned visualizer timers;
-- retry paths that silently switch surface architecture.
-
-The visualizer state must preserve baseline feel through deterministic replay and manual review.
-
-## 10. GL Ownership
-
-All GL work occurs on the owner GUI/context thread.
-
-Every native resource records:
-
-- type/id;
-- owner;
-- byte size;
-- context/share group;
-- runtime/context generation;
-- lease/reference count;
-- creation and deletion reason.
-
-Deletion is explicit and exactly once.
-
-No GL call occurs under a resource-registry lock.
-
-No numeric handle is trusted across context recreation.
-
-## 11. Settings/Edit Lifecycle
-
-Default lifecycle:
-
-1. close admission;
-2. stop producer publication;
-3. stop GUI timers;
-4. disconnect callbacks;
-5. cancel/drain worker work;
-6. reject late old-generation results;
-7. make valid contexts current;
-8. destroy visualizer/transition/resource-store GL objects;
-9. destroy compositor surface last;
-10. assert no old-generation resource;
-11. create new runtime/context generation;
-12. reconnect and restart.
-
-Phase 3 implementation boundary (2026-07-28):
-
-- `engine.engine_lifecycle.teardown_display_runtime()` is the coordinator-owned full-stop seam;
-- `DisplayManager.cleanup()` retains any display whose explicit cleanup fails;
-- `DisplayWidget.cleanup_runtime()` stops child producers and visualizer overlays before compositor deletion;
-- `GLCompositorWidget.cleanup()` verifies GUI thread/current context and reports `DESTROYED` only after strict texture/PBO/program/buffer deletion;
-- every compositor owns its compiled transition-program IDs and uniform cache; module-level helpers may be reused only as stateless shader definitions;
-- the application `ResourceManager` observes GL handles and bytes passively; only the context-bound compositor/overlay manager can delete them;
-- `engine.stop(exit_app=False)` is the single full-teardown authority for Settings/Edit handlers;
-- deferred GL warmups are compositor-lifecycle-generation guarded;
-- display-local startup fades are held until the first frame and critical active GL work are terminal, and coordinator completion reflects the real overlay animations rather than starter dispatch;
-- noncritical transition program/resource warmup processes one item per managed callback and pauses while any coordinated startup fade or live display transition is active;
-- engine delayed/image callbacks require runtime generation plus exact display-manager identity;
-- the real Qt gate creates two live compositors and destroys them in sequence, protecting the shared-context/multi-display ownership shape missed at the original Phase 3 checkpoint.
-
-Partial reinitialization is deferred until a separately approved design proves it safe and worthwhile.
-
-## 12. Image and Upload Path
-
-Target one owned upload-ready representation.
-
-Avoid:
-
-- worker `QPixmap`;
-- visible-paint conversion;
-- repeated full-buffer copies;
-- whole-buffer SHA-256 in normal path;
-- UI waits on upload/fence completion.
-
-Normal identity uses:
-
-- canonical source id;
-- source version/mtime/size;
-- transform/crop;
-- target dimensions;
-- format;
-- pipeline version.
-
-## 13. Resource Budgets
-
-All CPU and GPU caches are byte-bounded.
-
-Phase 4 implementation boundary (2026-07-28):
-
-- the baseline CPU cache retains at most 16 entries by default and 256 MiB, with legacy settings clamped to 2–32 entries / 64–256 MiB;
-- prefetch admits at most four concurrent requests and independently bounds pending count and future scaled RGBA8 bytes;
-- exact-transform displays may share immutable QImage/QPixmap backing, while size/mode/DPR differences remain independent;
-- large ImageWorker RGBA handoffs retain only one in-flight producer mapping until parent attachment, then copy once into Qt-owned `QImage`; timeout/cancel/stale/buffer/shutdown paths are payload-disposed with exact live-byte accounting;
-- each compositor owns a 128 MiB / 12-entry texture LRU and one idle PBO under 64 MiB;
-- active transition texture pairs are pinned only through terminal presentation/cancellation;
-- display QPixmap metadata is captured on the GUI thread and globally deduplicated by backing identity in passive snapshots;
-- Phase 6 still owns any cross-context/shared GPU resource store and lease design.
-
-The deterministic cache/display/texture/PBO gate and focused 50×4K worker-transfer gate pass. Phase 4 remains open until the full platform comparator confirms ImageWorker and total RSS/private-commit plateau alongside tracked GL bytes, driver VRAM, and unchanged presentation.
-
-For the current dual-1440p environment:
-
-- investigate application-owned GL allocations above roughly 500 MiB;
-- investigate RSS above roughly 900 MiB;
-- reject monotonic image-cycle or lifecycle-cycle growth.
-
-Tracked resources must explain the expected working set.
-
-## 14. CPU and Task Model
-
-Do not submit a general task per display frame.
-
-Reduce:
-
-- tiny recurring jobs;
-- callback cascades;
-- duplicate per-display simulation;
-- state copying;
-- logging allocations;
-- work while hidden/static.
-
-Use measured vectorized/native GIL-releasing work for real numeric hotspots.
-
-Thread count is not a success metric.
-
-## 15. Donor Extraction
-
-### Reconstruct selectively
-
-- resource byte accounting;
-- explicit leases;
-- share-group verification;
-- immutable worker/render boundaries;
-- GL affinity assertions;
-- stale-generation rejection;
-- passive performance metrics.
-
-### Discard
-
-- adaptive timer;
-- paint acknowledgement;
-- compositor-cadence starvation state;
-- terminal transactions;
-- partial Settings/Edit reinit;
-- compatibility mega-layer;
-- broad forwarding;
-- hot-path full-buffer hashing;
-- scattered retry/fallback state.
-
-## 16. Required Gates
-
-### Visualizer
-
-- deterministic replay;
-- Spectrum shape/reactivity;
-- Bubble elasticity;
-- irregular-presentation equivalence;
-- manual review.
-
-### Lifecycle
-
-- repeated Settings;
-- repeated Edit;
-- mixed cycles;
-- active transition/visualizer cycles;
-- zero GL affinity errors;
-- zero old-generation resources.
-
-### Frame pacing
-
-- p50/p90/p95/p99/max;
-- no average-only acceptance;
-- cursor/overlay smoothness;
-- no repeated idle 100+ ms gaps.
-
-### CPU/task
-
-- materially below both evidence versions;
-- task categories measured;
-- no one-core saturation in ordinary use;
-- no task per paint.
-
-### RAM/VRAM
-
-- stable plateau;
-- exact tracked bytes;
-- no image-cycle staircase;
-- no lifecycle-cycle accumulation.
-
-## 17. Prohibited Until Recovery Completion
-
-- partial GL recreation;
-- speculative warmup architecture;
-- silent legacy renderer;
-- second visualizer surface as automatic fallback;
-- producer-to-paint handshake;
-- new presentation service with paint acknowledgements;
-- another terminal transaction;
-- new quality reduction;
-- donor wholesale cherry-pick/merge.
-
-## 18. Work Order
-
-Follow `Current_Plan.md`.
-
-Do not begin single-surface reconstruction before:
-
-- measurement;
-- visualizer fidelity lock;
-- lifecycle safety;
-- baseline memory containment;
-- CPU/task reduction.
-
-The architecture is accepted only when runtime evidence is better than both supplied versions.
+The compositor may absorb presentation surfaces/draw order, never simulation/cadence,
+worker scheduling, settings lifecycle or source selection.

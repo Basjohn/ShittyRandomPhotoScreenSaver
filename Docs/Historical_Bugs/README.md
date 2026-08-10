@@ -1,8 +1,10 @@
 # Historical Bug Records
 
-Last updated: 2026-08-09
+Last updated: 2026-08-10
 
-Authoritative standalone incident records for significant SRPSS regressions. `Docs/Historical_Bugs.md` is the compact status/navigation index; the files in this directory own the full narratives.
+Authoritative standalone incident records for significant SRPSS regressions.
+`Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory
+own the full narratives.
 
 ## Current Open / Watchlist
 
@@ -12,11 +14,13 @@ Authoritative standalone incident records for significant SRPSS regressions. `Do
 
 ## Active / Pending
 
-- [R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation](R-53_Runtime_Recreation_Ownership_And_Memory.md) — mechanical recreation ownership is repaired; Phase 5 plateau/resource validation remains separate follow-up work.
+No R-series lifecycle/recreation incident is currently active. R-53, R-56, R-57 and
+R-59 are solved incident records. Ongoing Phase 5 memory/GPU/plateau and workload work is
+architecture/performance work and does **not** keep those historical bugs open.
 
 ## R Records
 
-- [R-59 — Runtime Settings Request Tore Down The Emitting Qt Input Stack](R-59_Runtime_Settings_Request_Input_Stack_Teardown.md)
+- [R-59 — Frozen Settings/Edit Recreation Retained Compiled Bound Methods](R-59_Runtime_Settings_Request_Input_Stack_Teardown.md)
 - [R-58 — Move To Custom Copied Stale Backing Values Instead Of The Curated Runtime State](R-58_Visualizer_Move_To_Custom_Preset_Authority.md)
 - [R-57 — Scaled Prefetch Popped Selection Order Instead Of Descending Indices](R-57_Image_Prefetch_Selected_Index_Order.md)
 - [R-56 — Settings Close Path Retouched An Already-Deleted Dialog Wrapper](R-56_Settings_Dialog_Deleted_Wrapper_Retouch.md)
@@ -76,7 +80,9 @@ Authoritative standalone incident records for significant SRPSS regressions. `Do
 
 ### Historical numbering note
 
-`R-19` and `R-20` were historical navigation aliases for `U-02` and `U-03`. The monolithic source never contained independent `R-19` or `R-20` anchored incident bodies, so creating duplicate files would manufacture a second authority rather than preserve history.
+`R-19` and `R-20` were historical navigation aliases for the incidents now canonically
+recorded as `U-02` and `U-03`. The monolithic source never contained independent anchored
+R-19/R-20 incident bodies, so duplicate standalone records are intentionally absent.
 
 ## U Records
 
@@ -101,12 +107,13 @@ Authoritative standalone incident records for significant SRPSS regressions. `Do
 
 ## Record Rules
 
-- One incident has one authoritative standalone file.
-- Preserve the incident's dates, status, evidence, failed approaches, correction, validation state, and guardrails; do not rewrite history to match later understanding.
-- Cross-link superseding or sibling records instead of duplicating their bodies.
-- Keep active/open status summaries in this README and `Docs/Historical_Bugs.md`; detailed chronology stays in the incident file.
-- New substantial incidents belong here. Small resolved regressions may stay in `Docs/Regression_Notes.md`.
+- one incident has one authoritative standalone file;
+- preserve dates, evidence, failed approaches, correction and guardrails;
+- cross-link sibling/superseding records instead of duplicating bodies;
+- open/watch status lives here and in `Docs/Historical_Bugs.md`;
+- small resolved notes may remain in `Docs/Regression_Notes.md`.
 
 ## Migration Status
 
-The legacy monolithic incident bodies have been fully split. R-01 through R-59 where independent source bodies existed, U-02 through U-10, and A-01 through A-06 now have standalone destinations. `Docs/Historical_Bugs.md` no longer serves as a fallback store for unsplit records.
+The standalone split is complete. `Docs/Historical_Bugs.md` is navigation/status only,
+not a fallback store for unsplit incident bodies.

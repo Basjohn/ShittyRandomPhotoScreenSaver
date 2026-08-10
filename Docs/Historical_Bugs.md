@@ -1,10 +1,12 @@
 # Historical Bugs
 
-Last updated: 2026-08-09
+Last updated: 2026-08-10
 
-Compact status and navigation index for significant SRPSS regressions. Full incident narratives, evidence, failed approaches, fixes, validation, and guardrails live in `Docs/Historical_Bugs/` and are authoritative.
+Compact status/navigation index for significant SRPSS regressions. Full incident
+narratives are authoritative under `Docs/Historical_Bugs/`.
 
-Use [`Docs/Historical_Bugs/README.md`](Historical_Bugs/README.md) when browsing the complete standalone record set.
+Use [`Docs/Historical_Bugs/README.md`](Historical_Bugs/README.md) for the complete record
+set.
 
 ## Open / Watchlist Records
 
@@ -14,11 +16,13 @@ Use [`Docs/Historical_Bugs/README.md`](Historical_Bugs/README.md) when browsing 
 
 ## Active / Pending Records
 
-- [R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation](Historical_Bugs/R-53_Runtime_Recreation_Ownership_And_Memory.md) — mechanical recreation ownership is repaired; Phase 5 plateau/resource validation remains separate follow-up work.
+No R-series recreation/lifecycle incident is active. R-53/R-56/R-57/R-59 are solved;
+current Phase 5 performance/resource work is tracked by `Current_Plan.md` rather than by
+keeping those incidents artificially open.
 
 ## Standalone R Records
 
-- [R-59 — Runtime Settings Request Tore Down The Emitting Qt Input Stack](Historical_Bugs/R-59_Runtime_Settings_Request_Input_Stack_Teardown.md)
+- [R-59 — Frozen Settings/Edit Recreation Retained Compiled Bound Methods](Historical_Bugs/R-59_Runtime_Settings_Request_Input_Stack_Teardown.md)
 - [R-58 — Move To Custom Copied Stale Backing Values Instead Of The Curated Runtime State](Historical_Bugs/R-58_Visualizer_Move_To_Custom_Preset_Authority.md)
 - [R-57 — Scaled Prefetch Popped Selection Order Instead Of Descending Indices](Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Order.md)
 - [R-56 — Settings Close Path Retouched An Already-Deleted Dialog Wrapper](Historical_Bugs/R-56_Settings_Dialog_Deleted_Wrapper_Retouch.md)
@@ -78,7 +82,8 @@ Use [`Docs/Historical_Bugs/README.md`](Historical_Bugs/README.md) when browsing 
 
 ### Historical numbering note
 
-`R-19` and `R-20` were historical navigation aliases for the incidents now canonically recorded as `U-02` and `U-03`; neither ID had its own independent anchored incident body. No duplicate standalone record is created for those alias numbers.
+`R-19` and `R-20` were aliases for `U-02` and `U-03`; no independent source bodies
+existed, so no duplicate records are manufactured.
 
 ## U Records
 
@@ -103,4 +108,5 @@ Use [`Docs/Historical_Bugs/README.md`](Historical_Bugs/README.md) when browsing 
 
 ## Maintenance Rule
 
-Do not add full incident bodies back to this file. New substantial regressions should receive one standalone record under `Docs/Historical_Bugs/`, then be linked here and in the folder README. Small resolved notes still belong in `Docs/Regression_Notes.md`.
+Do not add full incident bodies here. New substantial incidents receive one standalone
+record, then links here and in the folder README.

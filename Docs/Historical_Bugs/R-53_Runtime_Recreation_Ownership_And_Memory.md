@@ -1,243 +1,157 @@
 # R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation
 
 Date opened: 2026-08-01  
-Latest evidence: 2026-08-08  
-Status: Admission fixed; frozen retired-owner regression and plateau proof pending
+Last updated: 2026-08-10  
+Status: **SOLVED — recreation ownership/admission and frozen retired-owner retention closed; remaining absolute resource work is separate Phase 5 architecture work**
 
 ## Classification
 
 - [ ] COMPLETELY FUCKED
-- [x] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 ## Original Failure
 
-Equivalent-state runtime samples climbed from about 832.5 to 911.5 to 1,000.6 to 1,146.8 MiB main RSS across repeated Edit/CUSTOM Save-and-Continue and Settings restart cycles. Dedicated VRAM climbed from about 554.8 to 600.8 to 722.9 to 806.7 MiB while tracked known bytes changed only from about 456.9 to 455.9 to 471.7 to 489.1 MB. Generation-owned unknown `ResourceManager` entries accumulated from 35 to 52 to 74.
+Repeated Settings and committed CUSTOM/Edit recreation originally produced an
+approximately linear equivalent-state memory/resource staircase. Later evidence showed
+that the broad symptom contained several distinct ownership failures rather than one
+mysterious allocator problem:
 
-Explicit display/GL cleanup remained authoritative and successful: tracked textures, PBOs, display pixmaps, and total tracked GL bytes reached zero during Settings teardown and driver VRAM dropped substantially. This is a session-lifetime retired-owner problem under P5.4, not a reason to weaken teardown, enlarge caches, or reopen Phase 4.
+1. full teardown could be admitted from inside the retiring Edit manager/action frame;
+2. Settings could retouch a `WA_DeleteOnClose` dialog wrapper after the C++ object was already gone (split to R-56);
+3. a 64-bit exact manager identity was temporarily carried through a Qt signed-32-bit `int` signal and therefore rejected after truncation;
+4. frozen Nuitka/PySide signal callback wrappers could retain plain-Python `WidgetManager` and `CustomLayoutManager` owners after QObject teardown (root-caused and closed under R-59).
 
-## Implemented Barrier Correction
+Tracked GL deletion itself could reach zero during the old failures. The incident was
+therefore about **retired runtime ownership/admission**, not permission to weaken GL
+teardown, enlarge caches, force GC or recycle the process.
 
-Recreation now has a non-reentrant destruction barrier after generation invalidation and explicit owner-context GL cleanup. It generation-rejects queued/delayed UI work, waits for watched QObject destruction plus zero retiring-generation resources/tasks/timers/subscriptions, and only then admits replacement construction. Settings uses a second barrier for its dialog tree. Registrations and lifecycle snapshots carry generation, owner identity/class, QObject validity, bounded creation-site, and callback-retention details. Display-pixmap accounting is captured on the GUI thread and published as a detached immutable sidecar so the background usage sampler never inspects live Qt pixmaps.
+## Runtime Destruction Barrier
 
-The correct destruction barrier also created a deliberate interval with no top-level window after Settings closed. Qt's default last-window policy could queue application quit before the dialog barrier constructed the replacement. Successful RUN startup therefore uses explicit-exit lifetime ownership with `setQuitOnLastWindowClosed(False)`; startup-failure/config-only paths remain unchanged.
+The correction established a non-reentrant fail-closed destruction barrier after
+runtime generation invalidation and explicit owner-context GL cleanup. It observes:
 
-## Earlier Follow-Up Evidence
+- retiring QObjects and weak-observed Python roots;
+- generation resources;
+- tasks/timers/animations/subscriptions/callbacks;
+- visualizer/display owners;
+- first-frame/reveal as a separate post-construction authority.
 
-The 2026-08-01 installed run completed Settings → generation 1, CUSTOM → generation 2, and Settings → generation 3 recreation. Equivalent settled main RSS was about 900.9, 901.2, and 895.2 MiB; dedicated VRAM about 539.2, 554.9, and 540.0 MiB; and ResourceManager totals/unknowns 58/47, 58/47, and 56/45. That eliminated the former approximately 80–90 MiB main-RSS, large VRAM, and 35 → 52 → 74 ResourceManager staircase across those replacements.
+The barrier proves release; it never forces release with `gc.collect()`, event pumping,
+timeout extension or ignored owners.
 
-It did not close P5.4: equivalent private commit rose about 2,911.4 → 2,944.7 → 3,000.2 MiB, handles rose 2,130 → 2,146 → 2,189, and barriers still weak-observed manager wrappers after recreation.
+## Settings Path
 
-## 2026-08-02 Evidence
+Settings recreation moved to process/runtime-owned admission and retained full
+stop–destroy–recreate. R-56 separately corrected the modal deleted-wrapper lifetime
+mistake by observing the dialog graph while valid and checking Shiboken validity after
+`exec()` returns.
 
-Temporary evidence identity:
+## CUSTOM/Edit Admission Root Cause
 
-```text
-logs/evidence_chest/08_02_3877b2c7_20_27/
-```
-
-The supplied archive was `logseditfailure.zip` and corresponds to `main` at `3877b2c7` plus the documentation-only migration commits made afterward.
-
-### Settings recreation now passes the known ownership barrier
-
-Two consecutive Settings cycles completed full runtime teardown, dialog teardown, replacement construction, authoritative first frame, and coordinated reveal.
-
-First Settings cycle:
-
-```text
-retiring generation: 0
-barrier armed:       176 QObjects, 2 PixelShiftManager owners
-barrier complete:    219 ms
-settings dialog:     constructed only after completion
-dialog barrier:      2 QObjects, 0 Python owners, complete in 16 ms
-replacement:         generation 1 revealed from its own authoritative frame
-```
-
-Second Settings cycle:
-
-```text
-retiring generation: 1
-barrier armed:       166 QObjects, 2 PixelShiftManager owners
-barrier complete:    203 ms
-settings dialog:     constructed only after completion
-dialog barrier:      2 QObjects, 0 Python owners, complete immediately
-replacement:         generation 2 revealed from its own authoritative frame
-```
-
-No persistent visualizer compute lane was registered. Bubble diagnostics reported `lane_registrations=0` and a `1.000` offered/submitted/published ratio through the tested interval.
-
-### The old linear Settings memory staircase did not reproduce
-
-Lifecycle `replacement_settled` snapshots were:
-
-```text
-state                    main RSS   main private   handles   threads   tracked known   RM total/unknown
-cold generation 0         848.4       2093.2        1790       61        424.7 MiB         61 / 50
-Settings generation 1     949.5       2188.4        1838       67        424.6 MiB         56 / 45
-Settings generation 2     946.6       2179.1        1823       62        413.4 MiB         54 / 43
-```
-
-The first post-Settings runtime sat about 101.1 MiB higher in main RSS and 95.2 MiB higher in main private bytes than the early cold-settled snapshot. The second Settings cycle did not add another step: main RSS fell 2.9 MiB, main private fell 9.3 MiB, handles fell 15, threads fell 5, tracked known bytes fell 11.2 MiB, and ResourceManager total/unknown counts both fell.
-
-The cold snapshot was earlier in runtime warm-up and used Spectrum, while both post-Settings snapshots used Bubble. The one-time uplift therefore does not yet have a cause above 90% confidence and is not proof of a retained generation. The former approximately linear per-cycle Settings accumulation is not present in this batch.
-
-Dedicated-VRAM fields in lifecycle snapshots inherit the latest asynchronous usage sample and were sometimes 13–14 seconds old during dialog gaps. They are valid for broad teardown/recovery shape, not exact same-instant comparison. Tracked GL bytes nevertheless reached zero during each teardown, and usage telemetry observed driver dedicated VRAM near 8 MiB while no display runtime existed.
-
-### CUSTOM/Edit remains fail-closed and now proves the re-entrant cause
-
-The user entered a dual-display CUSTOM session, resized widgets, and selected Save-and-Continue. All eleven edited scene entries were written before teardown began.
-
-The current synchronous path then performed full runtime teardown from inside `CustomLayoutManager.commit_session_without_reload()`:
+The decisive failing path was:
 
 ```text
 Edit action
-→ CustomLayoutManager.save_session()
-→ persist scene and finish shells
-→ synchronous custom_layout_reload_requested relay
-→ engine.stop(reason=custom_edit)
-→ display/GL teardown and manager cleanup
-→ return into the still-running CustomLayoutManager save/finally frame
+-> CustomLayoutManager save/commit
+-> persist scene + retire shells
+-> synchronous custom_layout_reload_requested relay
+-> engine.stop(reason=custom_edit)
+-> display/GL teardown + manager cleanup
+-> return into still-running retiring manager frame
 ```
 
-The barrier armed with:
+That violates ownership regardless of how quickly Qt objects delete. The correct shape
+is:
 
-```text
-224 QObjects
-2 CustomLayoutManager owners
-2 PixelShiftManager owners
-0 thread-work blockers after producer stop
-```
+1. persist the complete graph;
+2. explicitly retire temporary shell/session ownership;
+3. return from manager/action/key-filter frames;
+4. queue one primitive/immutable engine-owned reload intent on a later GUI turn;
+5. revalidate runtime generation and exact manager identity;
+6. run the unchanged full stop → barrier → reconstruction → graph replay → fresh-frame reveal.
 
-Every watched QObject, tracked resource, thread task, and global subscription reached zero. Both PixelShift owners released. Exactly two `CustomLayoutManager` Python owners—one per display—remained for the entire eight-second timeout. The application then exited deliberately with code 1; this was the fail-closed lifecycle policy, not an unhandled process crash.
+No manager, display, shell, widget, pixmap, bound retiring method or shell state crosses
+the later-turn handoff.
 
-The log contains direct re-entrancy proof. Display cleanup called `CustomLayoutManager.cleanup()`, which cleared `manager._display`. Control then returned to the original save function's `finally` block, which tried to clear `_custom_layout_runtime_reload_pending` through those already-cleaned managers and produced two suppressed:
+## Shell Retirement
 
-```text
-AttributeError: 'NoneType' object has no attribute '_custom_layout_runtime_reload_pending'
-```
+Committed Edit retirement became explicit and idempotent: pointer grabs, manager-bound
+signals, resolver/applier closures, temporary filters, snapshots/guides, transfer state,
+grid overlays, class-level active-manager/key-filter/restack state and deferred old
+runtime image state are retired before full reconstruction can begin.
 
-Confidence that full recreation is admitted from inside the retiring Edit graph: **greater than 99%**.
+## Pointer-Width Identity Correction
 
-Confidence in the exact final eight-second strong-reference edge: **below 90%**. Shell resolver/applier closures, manager-bound signal callback records, the action/key-filter dispatch frame, or a combination may retain the manager wrappers after the immediate save frame unwinds. A live `gc.get_referrers` capture is still absent. The exact edge does not change the required architecture: explicit shell callback retirement and later engine-owned reload admission are both required.
+The first installed version of the later-turn admission carried Python object identity
+through Qt `int`; a 64-bit identity overflowed/truncated and the exact-identity guard
+correctly rejected it as stale. Production signals and tests were changed to carry the
+pointer-width identity without truncation. The local/widget-only fallback was removed:
+a committed Save/Reset that cannot request mandatory full recreation fails loudly rather
+than silently substituting partial rebuild.
 
-## Required Correction
+## Frozen Retired-Owner Follow-Up
 
-1. Persist the complete CUSTOM scene without weakening graph-based placement authority.
-2. Explicitly retire shell callbacks, signal connections, pointer grabs, snapshots, grid overlays, class-level active-manager/key-filter/restack state, and manager-owned temporary data.
-3. Return from every manager/action/key-filter save frame.
-4. Queue one engine-owned immutable reload intent on a later GUI turn.
-5. Validate runtime generation and exact DisplayManager identity, coalesce duplicates, then run the same full runtime stop, destruction barrier, reconstruction, graph replay, and authoritative-first-frame reveal.
-6. Never capture a manager, display, shell, edited widget, pixmap, bound manager method, or shell state in the queued continuation.
-7. Keep `CustomLayoutManager` observed by the destruction barrier; do not hide it from accounting.
+A dedicated Diagnostic Runtime later reproduced frozen-only failures even after the
+admission sequence was correct. The destruction barrier reached zero QObject/resource/
+thread/subscription ownership but retained exactly two `WidgetManager` owners for
+Settings; after that was fixed, committed Edit retained exactly two
+`CustomLayoutManager` owners.
 
-The full runtime reinitialization and graph-based placement/replay systems remain mandatory. This correction changes only the admission boundary.
+Failure-only direct-referrer diagnostics identified `builtins.compiled_method` wrappers
+for lifetime-critical Qt signal callbacks. The fix, detailed under R-59, replaced those
+strong bound-method edges with stable forwarding callables holding weak manager
+references and used the exact stored callable for disconnect.
 
-## 2026-08-08 Mechanical Repair
+This closed the last frozen retired-owner manifestation without weakening the barrier.
 
-The production path now persists the same complete scene graph, explicitly retires each temporary Edit shell, and returns through the manager-owned save/reset/slot frame before teardown is eligible to begin. Shell retirement is idempotent and releases pointer grabs, manager-bound signals, resolver/applier closures, temporary event filters, snapshots, guides, and transfer state. Save/reset/slot replacement paths discard deferred image payloads owned by the retiring runtime; cancel still restores the deferred image into the unchanged runtime.
+## Final Validation And Closure
 
-`custom_layout_reload_requested` now carries request kind, runtime generation, and exact `DisplayManager` identity. The engine converts that data into a frozen primitive-only intent, coalesces duplicates, and admits it through a zero-delay `ThreadManager` GUI callback. The admission callback revalidates generation, exact manager identity, Settings/barrier ownership, terminal state, and current runtime availability before invoking the unchanged full stop → destruction barrier → reconstruction path. The callback captures the process-lifetime engine and immutable intent only; it does not capture a manager, display, shell, widget, pixmap, shell state, or bound manager method.
+The 2026-08-09 compiled Diagnostic Runtime completed both runtime Settings and committed
+CUSTOM/Edit Save & Continue after the stable weak-callback corrections. The subsequent
+`logs/evidence_chest/08_09_ca830d7_14_59/` mixed-load/current-main evidence completed
+four Settings retirements and one committed Edit retirement with destruction barriers
+clearing normally and no retired `WidgetManager`/`CustomLayoutManager` timeout.
 
-Focused production-shaped regressions prove:
+The user has now declared the Settings/Edit/Diagnostic build issue fully solved. The
+remaining Phase 5 questions—absolute RSS/private commit/VRAM, GPU busy, cache efficiency,
+UI-thread starvation and longer soak/plateau quality—are **not validation debt for
+R-53**. They are general architecture/performance work and must not keep this incident in
+Active/Pending status.
 
-- complete two-display positions, sizes, routes, and graph replay;
-- both temporary shells die without `gc.collect()` after committed retirement;
-- both barrier-observed `CustomLayoutManager` owners die without `gc.collect()` before replacement continuation;
-- stale generation and manager identity are rejected;
-- duplicate requests produce one queued admission and exactly one replacement;
-- committed reload discards deferred image state while cancel restores it;
-- `CustomLayoutManager` remains part of runtime-root observation.
+## What R-53 Does Not Authorize
 
-The focused CUSTOM/lifecycle set passed 161 tests, and the adjacent display/widget lifecycle set passed 104 tests with four environment skips. This is mechanical evidence only. No installed dual-display Save-and-Continue or memory-plateau evidence has yet been collected for this repair.
-
-## 2026-08-08 Installed Admission Failure And Correction
-
-The first installed dual-display Save-and-Continue attempt persisted all eleven graph entries and retired the Edit session, but emitted no `CUSTOM layout reload queued` event and began no runtime teardown. The next teardown in the run was an unrelated Settings action fourteen seconds later.
-
-The exact defect was signal width. Both `DisplayWidget.custom_layout_reload_requested` and `DisplayManager.custom_layout_reload_requested` declared the exact manager identity as Qt `int`. On 64-bit Python the observed object identities are pointer-width values (for example, approximately `1.866e12` in this run), while Qt's registered `int` is signed 32-bit. A project-venv reproduction produced Shiboken's overflow warning and delivered a truncated negative identity. The engine's exact-identity guard then correctly rejected the request as stale.
-
-The test double had used identity `0`, so the production-shaped relay tests did not exercise the platform boundary. Both production signals and the real-signal test double now carry the identity as a Python object, and regressions require an identity above `2**32` to arrive unchanged at both signal layers.
-
-The manager's old exception-only fallback to `_reload_widgets_across_instances()` was also removed. A committed Save/Reset that cannot request mandatory full recreation now logs the failure and exits with code 1. A widget-only teardown/setup is not a valid substitute for engine-owned full reconstruction.
-
-Mechanical validation proves pointer-width identity survives the relay and a request failure performs no local widget rebuild. The later 17:07 installed capture completed one dual-display CUSTOM Save-and-Continue, admitted exactly one full replacement, crossed the retired-runtime barrier, and revealed only after the replacement generation's authoritative first frame. This closes the admission defect, not the five-cycle memory/resource gate.
-
-## Settings Dialog Sibling Defect
-
-Both successful Settings cycles emitted three caught `RuntimeError` traces after `dialog.exec()` returned because the close path touched a `SettingsDialog` wrapper whose C++ object had already been deleted by `WA_DeleteOnClose`. This is tracked separately as R-56. It did not block Settings recreation, but it is not acceptable lifecycle bookkeeping.
-
-## Image Prefetch Sibling Defect
-
-The same run emitted one `ImagePrefetcher._pump_scaled_prefetch()` `IndexError: pop index out of range`. This is independent of recreation ownership and is tracked separately as R-57.
-
-## Signal-Bookkeeping Resolution
-
-`WidgetManager` now tracks explicit ownership of its one-shot `image_displayed` connection. The ownership bit is cleared before touching Qt, so first readiness and terminal cleanup cannot attempt the same disconnect twice; disposed-sender cleanup remains fail-safe. A real PySide signal regression proves exactly one disconnect, and the 17:07 installed capture contains no repeat warning. This changes signal bookkeeping only and does not weaken authoritative first-frame readiness.
-
-## 2026-08-09 Frozen Retired-Owner Evidence
-
-The first dedicated diagnostic-runtime capture reproduced two Settings
-failures after clean full teardown. All QObject roots, generation resources,
-thread work, and global subscriptions reached zero; exactly two plain-Python
-`WidgetManager` owners—one per display—survived until the eight-second
-fail-closed timeout. A committed Edit reproduction retained the same two
-`WidgetManager` owners plus two `CustomLayoutManager` owners. Settings was
-never constructed, so this is the P5.4 retired-generation ownership boundary,
-not dialog presentation.
-
-The authoritative teardown already calls `WidgetManager.cleanup()` and clears
-the display's forward `_widget_manager` attribute before QObject destruction.
-Source tests also pass while keeping one and two destroyed display wrappers
-strongly alive and disabling cyclic GC. The remaining edge is therefore
-compiled/PySide-runtime-specific or absent from the source oracle. A rebuilt
-diagnostic product now captures an aggregate-bounded direct-referrer batch only
-after fail-closed exit is committed. The result must name the concrete edge
-before any cleanup or callback-retirement change is accepted.
-
-This ownership defect remains relevant to the performance gate: a retained
-manager graph can preserve widgets, callback wrappers, timers, pixmaps, and
-allocator pressure across recreation even when tracked GL cleanup reaches
-zero. The correction must deterministically sever the proven edge and then
-pass the alternating equivalent-state RSS/private/VRAM/handle/thread plateau;
-resource trimming, forced GC, ignored owners, or a longer timeout remain
-invalid substitutes.
-
-## Presentation Guardrail
-
-The destruction barrier is separate from the authoritative-first-frame barrier. A replacement stays hidden until its own runtime generation, visualizer engine generation, and activation identity produce valid presentation state. `FadeCoordinator` remains the sole reveal coordinator. First-frame poison and Bubble → Spectrum → Bubble protections may not be weakened.
-
-## Forbidden Substitutes
-
+- no partial Settings/Edit reinitialization;
 - no nested `processEvents()` teardown loop;
-- no periodic or production `gc.collect()`;
-- no working-set/allocator trimming;
-- no process or worker recycling to conceal ownership;
-- no cache enlargement;
-- no warm standby or retired-tree reuse;
-- no reduced GL teardown;
-- no ignored manager owner or longer timeout.
+- no production/periodic `gc.collect()`;
+- no working-set/allocator trimming or process recycling;
+- no ignored manager owner or longer destruction timeout;
+- no widget-only fallback for committed Edit;
+- no reveal before current-generation authoritative state.
 
-## Validation Still Required
+## Related Records
 
-- Completed once: installed dual-display Save-and-Continue produced exactly one replacement runtime with no manager-owner timeout. Repeat it inside the mandatory alternating-cycle matrix below.
-- Run at least five alternating installed Edit and Settings cycles with image work, Bubble/Spectrum/mode switches, transition overlap, media/artwork, and pending callbacks.
-- Require every retired generation to reach zero roots, timers, animations, subscriptions, ThreadManager work, and generation-scoped ResourceManager entries.
-- Require equivalent-state RSS, private commit, VRAM, handles, and threads to plateau.
-- Require exactly one current-generation authoritative first-frame event before coordinated reveal.
+- R-56 — Settings deleted-wrapper retouch, solved.
+- R-59 — frozen Settings/Edit compiled bound-method owner retention, solved.
+- R-57 — independent scaled-prefetch positional-removal defect, solved.
 
 ## Evidence
 
-- `logs/evidence_chest/08_02_3877b2c7_20_27/` — temporary installed evidence identity
-- `logs/evidence_chest/08_09_diagnostic_widgetmanager_timeout_02_38/` — frozen fail-closed owner evidence
-- `Docs/phase_reports/P05_CPU_TASK_REDUCTION.md`
-- `Current_Plan.md`
+- `logs/evidence_chest/08_02_3877b2c7_20_27/`
+- `logs/evidence_chest/08_09_diagnostic_widgetmanager_timeout_02_38/`
+- compiled Diagnostic Settings/Edit success on 2026-08-09
+- `logs/evidence_chest/08_09_ca830d7_14_59/`
 - `engine/runtime_destruction.py`
-- `rendering/custom_layout_manager.py`
 - `engine/engine_handlers.py`
-- `tests/test_runtime_destruction.py`
-- `tests/test_custom_layout_manager.py`
+- `rendering/custom_layout_manager.py`
+- `rendering/widget_manager.py`
+- `widgets/edit_shell_widget.py`
+- focused runtime-destruction/custom-layout/Settings tests
 
-## Migration Record
+## Guardrail
 
-This is the current standalone detailed record. The older embedded R-53 entry in `Docs/Historical_Bugs.md` remains untouched during the copy-first historical-document migration and should be treated as an earlier evidence snapshot until the final index cutover.
+Never enter full teardown synchronously from a frame owned by the graph being retired.
+Return to a process-lifetime GUI turn with primitive identity, reject stale/duplicate
+intent, keep destruction fail-closed, and construct/reveal only after the retired graph
+is truly gone and fresh authoritative state exists.
