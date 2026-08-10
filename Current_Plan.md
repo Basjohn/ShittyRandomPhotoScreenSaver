@@ -1,12 +1,13 @@
 # Current Plan
 
-Last updated: 2026-08-09
+Last updated: 2026-08-10
 Branch: `main`
 Active phase: Phase 5 — delivery, visualizer fidelity, recreation, and resource efficiency
 
-This file is the live checklist. Completed analysis and measurements belong in
-`Docs/phase_reports/P05_CPU_TASK_REDUCTION.md`; durable failure lessons belong in
-`Docs/Historical_Bugs/`.
+This file is the live checklist. Detailed threading/workload architecture belongs in
+`Docs/audits/SRPSS_Architecture_Recovery_Roadmap/08_CPU_THREADING_AND_WORKLOAD_PLAN.md`;
+completed performance measurements belong in `Docs/phase_reports/P05_CPU_TASK_REDUCTION.md`;
+durable failure lessons belong in `Docs/Historical_Bugs/`.
 
 ## Checkpoints And Evidence
 
@@ -18,19 +19,22 @@ This file is the live checklist. Completed analysis and measurements belong in
 - [x] Preserve the 2026-08-09 diagnostic-runtime ownership correction as the frozen Settings/Edit checkpoint: retained Qt wrappers no longer keep retired `WidgetManager` or `CustomLayoutManager` owners alive through Nuitka/PySide compiled bound methods.
 - [x] Preserve pressure-to-modest live evidence at `logs/evidence_chest/08_08_30fff2c8_mainpy_pressure_to_modest_22_07/`.
 - [x] Preserve three clean source Settings cycles at `logs/evidence_chest/08_08_94798add_main_settings3_custom_spectrum_23_05/`.
-- [x] Preserve the strongest combined main-runtime checkpoint at `logs/evidence_chest/08_08_e6f24ca5_main_settings3_perf_23_49/` with parser 1.7 output and manifest.
+- [x] Preserve the combined main-runtime checkpoint at `logs/evidence_chest/08_08_e6f24ca5_main_settings3_perf_23_49/` with parser 1.7 output and manifest.
+- [x] Preserve the 2026-08-09 mixed-load/root-cause evidence at `logs/evidence_chest/08_09_ca830d7_14_59/`: four Settings retirements plus one CUSTOM/Edit retirement cleared their runtime barriers, the image-install substage probe isolated `generic_pair_warm` as the dominant steady setter stage, and exact texture-key telemetry proved the retained terminal texture is not cache-hitting the next old image.
 - [ ] Promote a later checkpoint over `ff934616` only after separate Bubble and Spectrum visual approval plus the stronger temporal package.
 
 ## Non-Negotiable Guardrails
 
 - Keep `versioning.py` user-owned unless a version change is explicitly requested.
-- Preserve Bubble's approved authored response, ordinary COMPUTE executor path, and source cadence.
+- Preserve Bubble's approved authored response, ordinary COMPUTE executor path, one-lane-free-authored-step semantics, and source cadence.
 - Spectrum smoothing stays optional, Spectrum-only, and on the existing authoritative UI visualizer tick. No timer, second cadence, paint mutation, self-requested repaint, source decimation, or shared-analysis change.
+- Phase 5 UI-thread extraction must attack work that starves the existing visualizer clock before changing visualizer timing. Bubble and Spectrum are protected from scheduler/tick-rate experiments during this pass.
+- Do not create one catch-all "third thread" for miscellaneous work. Separate blocking I/O, ordered persistence, logging, finite compute, and GUI/context-affine commits by ownership and contention class.
 - Runtime Settings/Edit reconstruction remains full, fail-closed, generation-checked, and gated by destruction plus authoritative-first-frame reveal.
 - Never tear down a Qt owner graph from one of its own input/signal/paint/timer/callback frames. Queue primitive intent to a process-owned later GUI turn.
 - Strict GL teardown must reach zero textures, PBOs, tracked GL resources, and known GL bytes. Do not weaken accounting to make a gate pass.
 - Keep the production CPU-cache cap at 256 MiB until measured hit/fallback evidence justifies a deliberate change.
-- UI-thread pressure is the primary performance hazard. Heavy background work for multiple displays must be slightly desynchronised where evidence shows simultaneous churn, without changing visual cadence or correctness.
+- UI-thread pressure is the primary performance hazard. Heavy independent work for multiple displays may be slightly desynchronised where evidence shows simultaneous churn, without changing visual cadence or correctness.
 - `main.py` is the sole performance, soak, golden, and evidence-capture authority. Media Center never gets a parallel capture; it receives only bounded shared build/route smoke coverage when packaging parity is relevant.
 - Do not add sleeps, nested event pumping, forced garbage collection, working-set trimming, process recycling, timeout extensions, ignored owners, or hidden fallback paths.
 
@@ -38,12 +42,12 @@ This file is the live checklist. Completed analysis and measurements belong in
 
 ## P5.0 Immediate Runtime And Package Validation
 
-The separate diagnostic product has now closed the frozen-only ownership failure:
-Settings and committed CUSTOM/Edit both pass in the compiled runtime after replacing
-lifetime-critical Qt signal connections with stable weak forwarding callbacks. The
-failure was not Qt destruction itself: retired plain-Python managers were being kept
-alive by Nuitka/PySide compiled bound-method callback wrappers. Standard/MC packaged
-validation is still required before the historical incident is closed for release.
+The frozen-only Settings/Edit ownership failure is solved at root cause. Compiled
+Diagnostic Settings and committed CUSTOM/Edit both pass after replacing lifetime-critical
+Qt-to-plain-Python bound-method signal edges with stable weak forwarding callbacks.
+Retired `WidgetManager`/`CustomLayoutManager` ownership no longer survives through
+Nuitka/PySide compiled callback wrappers. Standard and Media Center package checks
+remain delivery/parity gates rather than an unresolved R-59 causal investigation.
 
 - [x] Three consecutive live runtime Settings opens/closes queue and admit once, complete both barriers, rebuild once, reveal a fresh frame, continue rendering, and exit cleanly.
 - [x] Fix the nonfatal bound-method `_srpss_timer_owner` diagnostic and cover owner/generation propagation.
@@ -58,7 +62,8 @@ validation is still required before the historical incident is closed for releas
 - [x] Add aggregate-bounded diagnostic-only post-timeout owner-referrer attribution after fail-closed exit is committed; it is identity-only, redacts arbitrary/frame-local keys, never calls `repr()`/`gc.collect()`, and cannot alter barrier policy or activate in standard/Media Center products.
 - [x] Rebuild/reinstall the diagnostic product and reproduce Settings first, then committed Edit; `[PYTHON_OWNER_REFS]` named the concrete frozen retainers as compiled bound-method callbacks rather than a failed `DisplayWidget._widget_manager` clear.
 - [x] Release the proven owner-side edges with the smallest deterministic correction: `WidgetManager` settings/compositor callbacks and `CustomLayoutManager` shell callbacks now use stable weak forwarding ownership, exact callback objects for disconnect, and no `gc.collect()`/timeout/ignored-owner escape. Compiled diagnostic Settings and committed Edit both clear the destruction barrier and continue rendering.
-- [ ] Rebuild the standard runtime from the corrected source and require in-runtime Settings plus committed Edit to continue rendering; keep Media Center to the bounded shared route smoke. Mark R-59 solved only after those packaged checks pass.
+- [x] Preserve R-59 as solved in `Docs/Historical_Bugs/`; do not reopen it merely because standard/MC delivery validation remains.
+- [ ] Rebuild the standard runtime from the corrected source and require in-runtime Settings plus committed Edit to continue rendering; keep Media Center to the bounded shared route smoke.
 
 ## P5.0A Clock Calendar Follow-Up
 
@@ -95,33 +100,89 @@ Fresh compiled diagnostic evidence proves provider selection/failover plumbing i
 
 ## P5.2 UI Delivery And Host-Pressure Robustness
 
-Current modest-load evidence is positive but not closure: completed transition
-windows on the 165 Hz display delivered `110.5–148.7 FPS` and the 60 Hz display
-`52.4–59.2 FPS`; Spectrum/Bubble commonly settled around `88–99 FPS`.
-Under heavier host pressure, paint fell to `23 FPS`, dtmax reached `232 ms`,
-request age `145 ms`, and event-loop lateness `3.07 s`. Paint work was usually
-small relative to request age.
+The 2026-08-09 `ca830d7` mixed-load run strengthens the existing diagnosis rather
+than pointing at paint or Bubble simulation. Across 238 owner-labelled >33/>50 ms
+gaps, gap median/max was `44.75/139.54 ms`, matching request-age median/max was
+`35.29/138.83 ms`, while paint median/max was only `0.79/8.92 ms`. During the
+heaviest late interval machine CPU reached roughly `21–25%`, app CPU roughly
+`98–109%`, and Bubble continued to report approximately `1–2 ms` worker samples.
+The active problem remains GUI availability/delivery under mixed ownership.
+
+The new image setter probe now closes two formerly-open attribution questions.
+`set_processed_image` measured median/p95/max `35.84/117.43/128.42 ms`;
+`qimage_to_qpixmap` only `4.95/9.49/11.67 ms`. `generic_pair_warm` dominates
+steady setter work at median/p95/max `26.62/64.45/80.41 ms`; transition construction
+is about `5.33 ms`, controller start about `1.29 ms`, overlay/accounting sub-stages
+are sub-millisecond, and transition-specific warm is effectively zero. Exact key
+telemetry also proves the retained terminal key does **not** equal/cache-hit the next
+old-image key in repeated steady transitions; those misses allocate/upload both old
+and new textures instead of only the new texture.
 
 - [x] Use ordinary `main.py` as the sole performance/evidence authority; never request or retain a separate Media Center capture.
-- [ ] Mark load-change timestamps and assess hostile-pressure and modest-pressure intervals separately.
-- [ ] Attribute transition gaps to request age, event-loop lateness, callback/queue wait, source age, and paint cost before changing rendering or visualizer code.
-- [ ] Identify the UI-thread work responsible for the remaining request-age/max tails; last-callback labels alone are correlation.
+- [x] Preserve the `08_09_ca830d7_14_59` mixed-load interval as the current source-level starvation checkpoint; do not ask later agents to rediscover its basic owner conclusions from raw logs unless a new hypothesis needs them.
+- [ ] Mark deliberate host-load change timestamps in future captures so hostile-pressure and modest-pressure intervals can be compared without inference from system CPU alone.
+- [x] Attribute the current transition gaps to request age versus paint/callback/queue/source state before changing rendering or visualizer code; request age overwhelmingly dominates paint in this run.
+- [ ] Continue identifying the GUI-owned work responsible for request-age/max tails; last-callback labels remain correlation only.
 - [x] Add perf-gated delayed-image UI records with reason, display, nested callable, due lateness, runtime-guard cost, actual payload cost, monotonic interval bounds, total age, and stale/error outcome; separately time `QImage→QPixmap` and display setter/transition-start segments.
-- [x] Correlate the newest image UI segments with 25/33/50 ms frame gaps: delivery/request age dominates paint, and synchronous `set_processed_image` is the largest measured GUI-owner segment, especially after recreation.
+- [x] Correlate image UI segments with frame gaps: synchronous `set_processed_image` is the largest measured GUI-owner transaction, especially after recreation.
 - [x] Add perf-only `set_processed_image` substage timings plus exact retained/old/new texture cache keys and upload/allocation deltas; parser output groups the new records by stage.
-- [ ] Use the next main run to distinguish compositor setup, generic pair warm, transition construction/specific warm, controller start, overlay raises, and accounting before changing behaviour.
-- [ ] Prove whether the terminally retained texture key equals and cache-hits the next transition's old-image key; the newest run's repeated two steady uploads per display is suspicious but not yet causal proof.
-- [ ] Audit simultaneous per-display image decode/prefetch, transition preparation, widget hydration, and diagnostics; desynchronise only independently safe heavy work.
+- [x] Use the next main run to distinguish compositor setup, generic pair warm, transition construction/specific warm, controller start, overlay raises, and accounting. `generic_pair_warm` is the dominant steady stage; compositor setup is mostly cheap but has cold/recreation outliers.
+- [x] Prove whether the retained texture key cache-hits the next transition's old-image key. It currently does not: repeated steady transitions show retained-key/old-key mismatch, `old_cached_before=false`, and two allocations/uploads.
+- [ ] Repair the exact current-image texture identity/reuse contract so a terminally retained current texture is found as the next old image. Require steady transitions to reuse old and upload only new unless an explicit invalidation/size/context boundary requires otherwise.
+- [ ] Re-run identical transition sequences after the identity repair and prove lower `generic_pair_warm`, setter, request-age and visualizer tick tails without increasing retained texture count or weakening strict teardown.
+- [ ] Audit simultaneous per-display transition commits after identity reuse is fixed. If large prepared commits still collide, use a bounded one-display-at-a-time GUI commit turn rather than delaying source, visualizer, transition completion, or first-frame authority.
 - [ ] Preserve transition names and one terminal GL metric bracket per real transition.
 - [ ] Reject repaint retries, transition-derived visualizer clocks, scheduler cadence gates, and speculative shader/visualizer tuning.
 - [ ] Re-run the same live transition sequence on a lower-spec machine or constrained host before declaring the high-end-machine result sufficient.
+
+## P5.2A UI-Thread Workload Extraction
+
+This is the implementation track opened by the 2026-08-10 source audit. It is not
+a second architecture programme: `08_CPU_THREADING_AND_WORKLOAD_PLAN.md` owns the
+threading model and this checklist owns execution order. The target is a small GUI
+commit surface fed by prepared immutable state, not indiscriminate thread creation.
+
+### Priority 0 — broad architectural removals
+
+- [ ] Move ordinary logging formatting/rotation/file writes behind one bounded process-owned logging queue/writer. Preserve direct crash/faulthandler/emergency breadcrumbs independently so fatal diagnostics do not depend on the queue.
+- [ ] Replace synchronous critical-settings JSON serialization/temp-write/replace on GUI call paths with one ordered persistence lane. In-memory settings remain immediately authoritative; writes are revision-ordered/coalesced only where safe; shutdown/save boundaries have an explicit flush contract.
+- [ ] Fix current-image GL texture identity/reuse before attempting more invasive compositor threading. The current two-upload steady path is a proven avoidable context-bound cost.
+
+### Priority 1 — service/widget prepare → commit → persist
+
+- [ ] Reddit: move raw-row normalization/filtering/sorting/deduplication, sparse-cache merge, JSON cache read/write/touch work off the GUI callback. Publish one prepared result; GUI only commits visible state/layout/update.
+- [ ] Weather: move startup persisted/provider cache reads and post-fetch JSON persistence to IO ownership. Keep QLabel/layout/font metrics/QPixmap commits on GUI.
+- [ ] Gmail: move startup cache read/deserialization off GUI and move stable content-cache regeneration out of `paintEvent()`. First make cold rendering an explicit invalidation-time preparation step; consider worker-safe `QImage` preparation only if needed and parity-tested.
+- [ ] Reddit: move cold static content-cache regeneration out of the critical `paintEvent()` path. Current startup/recreation paint samples still show tens-of-milliseconds cold paints while cached paints are normally about 1–3 ms.
+- [ ] Audit other widgets for disk/network/JSON/large pure-data preparation inside GUI callbacks or paint; add work only when a concrete owner is found.
+
+### Priority 1 — cadence-neutral visualizer reductions only
+
+- [ ] Freeze Bubble authored-step admission, ordinary general-COMPUTE execution, event consumption, dt/source timestamps and publication semantics. No persistent lane, batching, process worker, tick change, or latest-only simulation policy.
+- [ ] Cache Bubble configuration/state that is immutable between settings changes so the existing authored dispatch does not rebuild/copy the same large settings payload every tick. Energy/transient/event sampling and submission timing must remain byte/ordering-equivalent at the authored boundary.
+- [ ] Keep Spectrum on the existing authoritative UI visualizer tick. Only remove provably repeated immutable allocation/lookup work; no cadence, smoothing authority, source integration or presentation-clock change in Phase 5.
+- [ ] Measure existing tick-phase `devcurve_dispatch_ms` under representative load. DevCurve may move only if the measured UI cost is material and a temporal/replay gate proves identical state evolution; pure-Python threading is not assumed to provide parallel speedup under the normal GIL.
+- [ ] First evaluate visualizer improvement after the external GUI-starvation work above. A transition-start visualizer stall is not evidence for moving Bubble/Spectrum if the GUI thread is simply unavailable to accept presentation.
+
+### Priority 2 — worker topology after owner extraction
+
+- [ ] Move long-lived presentation/adaptive-timer waiting loops out of generic finite COMPUTE capacity only after measuring pool occupancy and preserving existing presentation deadlines. Prefer a dedicated presentation timing service, not a visualizer scheduler.
+- [ ] Re-evaluate COMPUTE width only after workload classes are separated. `cpu_count - 1` is not automatically optimal when finite native-heavy jobs, pure-Python work, and long-lived timing owners share one executor.
+- [ ] Do not use more Python threads as a GIL workaround. Additional threads are justified for blocking I/O, native work known to release the GIL, strict serialization/ordering, or ownership isolation with measured benefit.
+
+### Acceptance rule
+
+- [ ] Every extraction names the removed GUI work and measures before/after GUI callback or request-age cost.
+- [ ] No new unbounded queue, timer authority, hidden retry, stale-generation publication, shutdown race, or durability loss.
+- [ ] Bubble/Spectrum source-to-first-visible, authored event integration, temporal negative controls, and user visual approval remain unchanged or improve solely through reduced starvation.
 
 ## P5.3 Recreation Ownership And Plateau
 
 - [x] Settings uses primitive generation/manager identity, later-turn admission, duplicate coalescing, and stale-owner rejection.
 - [x] CUSTOM/Edit persists and retires its edit session before later-turn full runtime admission; no widget-only fallback is permitted.
 - [x] Real destruction tests release display, manager, shell, widget, timer, animation, resource, task, and subscription owners without `gc.collect()`.
-- [ ] Run at least five alternating Settings/Edit cycles in normal runtime.
+- [x] `08_09_ca830d7_14_59` adds four successful Settings runtime retirements (`172/187/172/187 ms`) plus one committed CUSTOM/Edit retirement (`265 ms`) with only the expected two `PixelShiftManager` Python owners at arm time; all completed without timeout. Settings-dialog barrier `elapsed_ms` values include dialog dwell and are not destruction-latency measurements.
+- [ ] Run at least five **alternating Settings/Edit** cycles in normal runtime; the latest run is useful but is four Settings plus one Edit, not the required alternating matrix.
 - [ ] Include dual display, one selected display, active transition, pending image work, pending ordinary executor work, playing/paused media, and mode switches.
 - [ ] Require exactly one continuation per generation and zero retiring QObjects, Python owners, resources, timers, animations, subscriptions, callbacks, tasks, registrations, pixmaps, textures, PBOs, and tracked GL bytes.
 - [ ] Require equivalent settled RSS, private commit, USS, dedicated/shared VRAM, handles, threads, CPU, and GPU to stop rising approximately linearly per cycle.
@@ -129,9 +190,10 @@ small relative to request age.
 
 ## P5.4 Absolute Memory, VRAM, And Cache Efficiency
 
-The current code is a real improvement over the failed resource candidate, but
-the newest main run still reached `1070.1 MiB` whole-app RSS, `3123.3 MiB`
-private commit, and `623.9 MiB` dedicated VRAM.
+Absolute usage remains open. The 2026-08-09 mixed-load run reached approximately
+`1046.6 MiB` whole-app RSS, `3179.9 MiB` private commit, and `623.6 MiB` dedicated
+VRAM; this is not a settled-equivalent plateau result because runtime-active, dialog,
+recreation and external-load intervals are mixed.
 
 - [ ] Capture cold, warm, active-transition, steady-image, Settings-gap, post-Settings, and full-teardown snapshots in one live scenario.
 - [ ] Reconcile whole/main/child RSS, private commit, USS, worker mappings, thread stacks, Qt/native heaps, driver mappings, and tracked application bytes.
@@ -139,7 +201,7 @@ private commit, and `623.9 MiB` dedicated VRAM.
 - [ ] Audit exact-transform per-display image duplication without collapsing different DPR or transform outputs.
 - [ ] Audit raw/scaled/display co-retention, unused prefetch results, future-byte pressure, and eviction churn using cache hits and actual `worker_fallbacks`.
 - [ ] Right-size work only from measured hit/fallback cost; do not raise budgets or create decode storms to lower resident bytes.
-- [ ] Audit process-lifetime queues, futures, callback/metric history, logs, handles, and dead Python/Qt graphs.
+- [ ] Audit process-lifetime queues, futures, callback/metric history, logs, handles, threads and dead Python/Qt graphs. The new async logging/persistence owners must themselves be bounded and visible here.
 - [ ] If ownership reaches zero but process memory still rises, open a new evidence-led retention incident before changing cache or teardown policy.
 
 ## P5.5 Logging And Evidence Quality
@@ -153,9 +215,10 @@ private commit, and `623.9 MiB` dedicated VRAM.
 - [x] Document parser 1.7 rotation/time-range semantics so appended multi-session folders cannot make whole-folder medians look session-specific; a native filter remains optional tooling work.
 - [x] Parser 1.8 extends passive image-install output with per-stage duration, cold-compositor identity, exact texture-key reuse, and upload/allocation deltas.
 - [x] Keep release artifacts diagnostics-off while providing a separate installable diagnostic runtime with bounded executable-adjacent rotation, per-user fallbacks, automatic all-family sidecars, and fatal/native-boundary breadcrumbs.
+- [x] `08_09_ca830d7_14_59` contains no ERROR/CRITICAL records and no instances of the earlier `_complete_hide_sequence` or `Qt.WindowState` diagnostic noise in the supplied sidecars. Treat absence as run evidence only, not closure for a route that was not explicitly exercised; do not infer browser-GSMTC correctness from this capture.
 - [ ] Keep all warnings/errors visible in `screensaver.log`; lifecycle timeout is always a failed run.
 - [ ] Keep high-volume lifecycle/performance diagnostics passive and bounded.
-- [ ] Repair `rendering.display_overlays.debug_window_state()` enum conversion so `Qt.WindowState` is logged via its value/string contract instead of `int(widget.windowState())`; this is nonfatal today but creates repeated diagnostic noise exactly where frozen-runtime evidence must stay clean.
+- [ ] When ordinary logging becomes queued, preserve total ordering metadata sufficiently for cross-sidecar causal analysis and provide a synchronous emergency/fatal path.
 
 ## P5.6 Verification
 
@@ -175,9 +238,9 @@ private commit, and `623.9 MiB` dedicated VRAM.
 ## Phase 5 Exit Gate
 
 - [ ] Bubble and Spectrum are separately approved equal or better than `ff934616`; other supported modes are current-good.
-- [ ] Diagnostic attribution identifies and closes the frozen Settings failure; rebuilt standard runtime passes and shared Media Center packaging parity remains a no-capture smoke check only.
-- [ ] Five-cycle canonical main recreation matrix passes ownership and plateau checks.
-- [ ] Host-pressure delivery tails are attributed and acceptable without cadence hacks.
+- [ ] Rebuilt standard runtime passes the solved Settings/Edit ownership path and shared Media Center packaging parity remains a no-capture smoke check only.
+- [ ] Five-cycle canonical main alternating recreation matrix passes ownership and plateau checks.
+- [ ] Host-pressure delivery tails are reduced/attributed without cadence hacks, including the proven image texture-identity reuse defect and the P5.2A GUI-work extraction list.
 - [ ] Absolute RAM/private-commit/VRAM excess is either reduced to target or fully attributed in a decision record.
 - [ ] Cache work has no fallback/decode storm and GL/cache ownership remains bounded.
 - [ ] Stronger golden, negative-control, lifecycle, performance, and evidence packages are complete.
@@ -190,20 +253,23 @@ private commit, and `623.9 MiB` dedicated VRAM.
 - One authoritative visualizer tick; optional mode-local presentation filtering inside that tick.
 - Runtime-authoritative curated-preset resolution before editor hydration or Custom fork.
 - Primitive-only later-turn lifecycle admission with exact pointer-width identity.
-- Exact current-texture retention plus at most one size/budget-bounded idle PBO per compositor.
+- Exact current-texture retention plus at most one size/budget-bounded idle PBO per compositor; repair identity so retained current texture is actually reusable as the next old texture.
 - Worker prescale before parent raw decode and raw-prefetch suppression when no scaled consumer needs it.
 - Passive owner/request-age telemetry and timestamp-separated live evidence.
-- Slight desynchronisation of independent heavy multi-display background work when measured simultaneous churn exists.
+- Slight desynchronisation of independent heavy multi-display work when measured simultaneous churn exists, without altering source/presentation cadence or first-frame authority.
 - Separate opt-in diagnostic product identity with bounded per-user logs; release builds remain diagnostics-off and performance evidence remains `main.py`-only.
 - Failure-only bounded referrer snapshots after a diagnostic destruction timeout; use them to name the owner edge before lifecycle edits.
 - Registry-owned exact media-provider identities with one background GSMTC session snapshot; unsupported provider ids remain visible and inert.
-- Stable weak forwarding callbacks at Qt→plain-Python lifetime seams when the Qt signal owner may outlive or be destroyed independently of the Python owner; disconnect using the exact stored callable and keep fail-closed destruction bars authoritative.
+- Stable weak forwarding callbacks at Qt→plain-Python lifetime seams when the Qt signal owner may outlive or be destroyed independently of the Python owner; disconnect using the exact stored callable and keep fail-closed destruction barriers authoritative.
+- Prepare → Commit → Persist ownership: thread-safe I/O/parse/CPU preparation off GUI, minimal Qt/GL commit on GUI, and ordered durable persistence off GUI with explicit flush boundaries.
 
 ## Blacklisted
 
 - Persistent shared-analysis or Bubble lanes and the `666624d` ownership model.
 - Bubble maximum-two/terminal batching or any source/publication decimation.
 - Paint-local Spectrum smoothing, `paintGL()` state mutation, self-requested repaint loops, or a second visualizer clock.
+- Moving Bubble/Spectrum to a new thread merely because transition-start UI starvation exists; reduce the work monopolising GUI ownership first.
+- One miscellaneous background thread or unbounded queue that serializes unrelated logging, persistence, service I/O, image work and visualizer work into a new choke point.
 - Retiring every idle texture/PBO and forcing avoidable transition reallocation; retaining historical image sets is also rejected.
 - Scheduler/cadence changes used to hide UI-thread pressure.
 - Cross-context shared GL stores before Phase 6 ownership design.
@@ -217,7 +283,7 @@ private commit, and `623.9 MiB` dedicated VRAM.
 # Later Phases
 
 - Phase 6: explicit GPU resource store with context/share-group ownership and budgeted eviction.
-- Phase 7: immutable latest visualizer render state with generation/activation rejection, only after Phase 5 goldens and lifecycle/resource gates.
+- Phase 7: immutable visualizer state/presentation boundary only after Phase 5 goldens and starvation reduction. Preserve Bubble/Spectrum authoritative clocks and event integration; decoupling is not permission to invent a new cadence.
 - Phase 8: one compositor surface per display (not one global surface), only after Phase 7 proves missed paints never alter logical state and measured A/B evidence justifies the merge.
 - Phase 9: local transition completion and deterministic temporary-resource release.
 - Phase 10: remove temporary and dead compatibility scaffolding.
