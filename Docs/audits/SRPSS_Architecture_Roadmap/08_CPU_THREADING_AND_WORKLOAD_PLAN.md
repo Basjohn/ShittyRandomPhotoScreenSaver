@@ -360,12 +360,19 @@ starvation without altering Bubble/Spectrum time semantics.
 
 ### Priority 1 — service/widget prepare/commit/persist
 
-**Reddit**
+**Reddit fetch-result preparation — complete**
 
-Move raw result conversion, filtering, numeric parsing, dedupe/sort, sparse fallback
-merge, cache load and cache save/touch work off the GUI result callback. Return one
-prepared immutable result. GUI owns only visible model assignment, Qt metrics/layout,
-fade/visibility and update.
+Normal fetches now capture detached inputs and use the shared IO task for provider work,
+raw result conversion, filtering, numeric parsing, dedupe/sort, sparse fallback merge
+and post-cache JSON persistence. The worker publishes one frozen
+`PreparedRedditFeed`; transition deferral retains that object and the GUI commit owns
+only visible model assignment, Qt metrics/layout, fade/visibility and update. Same-path
+cache transactions are process-serialized and replace the JSON file atomically. The
+former missing-worker synchronous network fallback is removed.
+
+Remaining Reddit work is narrower and stays active in `Current_Plan.md`: startup
+post-cache load/deserialization and cache/gate/attempt timestamp/touch/create I/O still
+run on the GUI thread. Cold static paint-cache generation is the separate contract below.
 
 **Weather**
 

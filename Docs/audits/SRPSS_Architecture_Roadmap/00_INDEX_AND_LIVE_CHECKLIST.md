@@ -69,6 +69,7 @@ from `main`.
 - [x] Move ordinary logging filtering/formatting/deduplication/rotation/file I/O behind one bounded process-owned writer.
 - [x] Establish authoritative immutable multi-family LogRecord routing metadata and migrate the real GL program-cache producer; retain name/tag fallback for unmigrated and third-party records.
 - [x] Move settings serialization/temp-write/fsync/atomic replace behind one ordered process-owned writer with revision and explicit durability boundaries.
+- [x] Move Reddit normal fetch-result preparation, sparse-cache merge and post-cache persistence behind the shared IO worker and publish one immutable GUI commit.
 - [ ] Remove proven GUI-thread service/cache preparation.
 - [ ] Attribute GPU busy across upload/transition/visualizer/presentation owners.
 - [ ] Remove proven temporary compatibility/fallback debris without changing behaviour.

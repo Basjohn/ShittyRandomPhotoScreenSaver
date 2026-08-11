@@ -10,14 +10,12 @@ or keyboard input directly.
 """
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import math
 import threading
 import time
 import random
-import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QUrl
@@ -39,8 +37,14 @@ from core.performance import widget_paint_sample
 from core.reddit_post_provider import (
     RedditFetchRequest,
     RedditPostProvider,
-    RedditProviderResult,
     build_default_reddit_post_provider,
+)
+from core.reddit_preparation import (
+    PreparedRedditFeed,
+    prepare_reddit_feed,
+    read_reddit_post_cache,
+    sort_reddit_candidates,
+    write_reddit_post_cache,
 )
 from core.settings.widget_capacity_policy import (
     LIST_WIDGET_MAX_CAPACITY,
@@ -62,7 +66,6 @@ from widgets.overlay_timers import OverlayTimerHandle
 from widgets.reddit_components import (  # noqa: F401 (re-exports for tests/external)
     RedditPosition,
     RedditPost,
-    TITLE_FILTER_RE as _TITLE_FILTER_RE,
     TITLE_CASE_SMALL_WORDS as _TITLE_CASE_SMALL_WORDS,
     smart_title_case as _smart_title_case,
     try_bring_reddit_window_to_front as _try_bring_reddit_window_to_front,
@@ -180,9 +183,7 @@ class RedditWidget(BaseOverlayWidget):
         self._fetch_in_progress: bool = False
         self._deferred_refresh_timer: Optional[QTimer] = None
         self._pending_refresh_after_transition: bool = False
-        self._deferred_posts_data: Optional[List[Dict[str, Any]]] = None
-        self._deferred_posts_source_id: Optional[str] = None
-        self._deferred_posts_attempted_sources: tuple[str, ...] = ()
+        self._deferred_prepared_feed: Optional[PreparedRedditFeed] = None
         self._deferred_fetch_error: Optional[str] = None
 
         # Hover state and tooltip management
@@ -403,9 +404,7 @@ class RedditWidget(BaseOverlayWidget):
             timer_attrs=("_deferred_refresh_timer",),
             state_attrs=(
                 ("_pending_refresh_after_transition", False),
-                ("_deferred_posts_data", None),
-                ("_deferred_posts_source_id", None),
-                ("_deferred_posts_attempted_sources", ()),
+                ("_deferred_prepared_feed", None),
                 ("_deferred_fetch_error", None),
                 ("_fetch_in_progress", False),
             ),
@@ -539,59 +538,6 @@ class RedditWidget(BaseOverlayWidget):
             self._configured_capacity,
             fade,
         )
-
-    def _prepare_posts_for_display(self, posts: List[RedditPost]) -> None:
-        """Prepare posts data without showing widget (for startup with cached data)."""
-        if not posts:
-            return
-        
-        # Sort posts
-        try:
-            def _sort_key(p: RedditPost) -> tuple[int, float]:
-                ts = float(getattr(p, "created_utc", 0.0) or 0.0)
-                if ts <= 0.0:
-                    return (1, 0.0)
-                return (0, -ts)
-            posts = sorted(posts, key=_sort_key)
-        except Exception as e:
-            logger.debug("[REDDIT] Exception suppressed: %s", e)
-        
-        self._effective_visible_capacity = max(
-            LIST_WIDGET_MIN_CAPACITY,
-            min(self._configured_capacity, LIST_WIDGET_MAX_CAPACITY),
-        )
-        self._posts = posts[: self._effective_visible_capacity]
-        self._row_hit_rects.clear()
-        self._invalidate_paint_cache()
-        
-        # Update typography
-        self._sync_header_metrics()
-        
-        # Size the card
-        self._update_card_height_from_content(len(self._posts))
-        
-        if self.parent():
-            self._update_position()
-        
-        # Register for fade sync (widget stays hidden until sync triggers)
-        self._has_seen_first_sample = True
-        self._has_displayed_valid_data = True
-        parent = self.parent()
-        
-        def _starter() -> None:
-            if not shiboken_isValid(self):
-                return
-            self._start_widget_fade_in()
-        
-        if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
-            try:
-                overlay_name = getattr(self, '_overlay_name', None) or "reddit"
-                parent.request_overlay_fade_sync(overlay_name, _starter)
-            except Exception as e:
-                logger.debug("[REDDIT] Exception suppressed: %s", e)
-                _starter()
-        else:
-            _starter()
 
     # ------------------------------------------------------------------
     # Networking
@@ -764,7 +710,7 @@ class RedditWidget(BaseOverlayWidget):
             self._schedule_timer()
 
     def _fetch_feed(self, *, defer_for_transition: bool = True, mark_manual_attempt: bool = False) -> bool:
-        """Request subreddit listing via ThreadManager or synchronously.
+        """Request and prepare a subreddit listing on the shared I/O pool.
 
         Failures are silent from the user's perspective: the widget
         simply remains hidden until at least one successful fetch has
@@ -830,33 +776,50 @@ class RedditWidget(BaseOverlayWidget):
 
         tm = self._thread_manager
         fetch_limit = LIST_WIDGET_MAX_CAPACITY
+        provider = self._post_provider
+        cache_key = str(self._cache_key)
+        shutdown_event = self._shutdown_event
+        current_candidates = tuple(self._all_fetched_posts)
+        cache_path = self._get_cache_file_path()
 
-        def _do_fetch(subreddit: str, sort: str, limit: int) -> RedditProviderResult:
+        def _do_fetch(subreddit: str, sort: str, limit: int) -> PreparedRedditFeed:
             request = RedditFetchRequest(
                 subreddit=subreddit,
                 sort=sort,
                 limit=limit,
-                cache_key=self._cache_key,
-                shutdown_event=self._shutdown_event,
+                cache_key=cache_key,
+                shutdown_event=shutdown_event,
                 bypass_blocked_cooldown=bypass_blocked_cooldown,
             )
-            return self._post_provider.fetch_posts(request)
+            result = provider.fetch_posts(request)
+            if result.skip_reason:
+                return PreparedRedditFeed(
+                    candidates=(),
+                    source_id=result.source_id,
+                    attempted_sources=tuple(result.attempted_sources),
+                    raw_count=0,
+                    skip_reason=str(result.skip_reason),
+                )
+            rows = result.posts if isinstance(result.posts, list) else []
+            return prepare_reddit_feed(
+                rows,
+                source_id=result.source_id,
+                attempted_sources=result.attempted_sources,
+                current_candidates=current_candidates,
+                cache_path=cache_path,
+                cache_key=cache_key,
+                candidate_limit=fetch_limit,
+            )
 
         def _on_result(result) -> None:
             try:
                 if getattr(result, "success", False):
                     payload = getattr(result, "result", None)
-                    if isinstance(payload, RedditProviderResult) and payload.skip_reason:
+                    if isinstance(payload, PreparedRedditFeed) and payload.skip_reason:
                         ThreadManager.run_on_ui_thread(self._on_fetch_skipped, payload.skip_reason)
                         return
-                    if isinstance(payload, RedditProviderResult) and isinstance(payload.posts, list):
-                        posts_data = payload.posts
-                        ThreadManager.run_on_ui_thread(
-                            self._on_feed_fetched,
-                            posts_data,
-                            source_id=payload.source_id,
-                            attempted_sources=payload.attempted_sources,
-                        )
+                    if isinstance(payload, PreparedRedditFeed):
+                        ThreadManager.run_on_ui_thread(self._commit_prepared_feed, payload)
                         return
                 else:
                     err = getattr(result, "error", None) or "No Reddit data returned"
@@ -869,38 +832,26 @@ class RedditWidget(BaseOverlayWidget):
                     f"Reddit fetch failed: {exc}",
                 )
 
-        if tm is not None:
-            try:
-                tm.submit_io_task(
-                    _do_fetch,
-                    self._subreddit,
-                    self._sort,
-                    fetch_limit,
-                    callback=_on_result,
-                )
-                return True
-            except Exception as exc:
-                logger.exception("[REDDIT] ThreadManager submission failed, falling back to sync fetch: %s", exc)
+        if tm is None:
+            end_fetch_guard(self)
+            self._stop_refresh_spinner()
+            logger.error("[REDDIT] Background fetch unavailable: ThreadManager is not configured")
+            return False
 
-        # Fallback: synchronous fetch on UI thread (rare, but bounded by timeout)
         try:
-            payload = _do_fetch(self._subreddit, self._sort, fetch_limit)
-            if isinstance(payload, RedditProviderResult) and payload.skip_reason:
-                self._on_fetch_skipped(payload.skip_reason)
-                return True
-            posts_data = payload.posts if isinstance(payload, RedditProviderResult) else None
-            if isinstance(posts_data, list):
-                self._on_feed_fetched(
-                    posts_data,
-                    source_id=payload.source_id if isinstance(payload, RedditProviderResult) else None,
-                    attempted_sources=payload.attempted_sources if isinstance(payload, RedditProviderResult) else (),
-                )
-                return True
-            self._on_fetch_error("No Reddit data returned")
+            tm.submit_io_task(
+                _do_fetch,
+                self._subreddit,
+                self._sort,
+                fetch_limit,
+                callback=_on_result,
+            )
             return True
         except Exception as exc:
-            self._on_fetch_error(str(exc))
-            return True
+            end_fetch_guard(self)
+            self._stop_refresh_spinner()
+            logger.exception("[REDDIT] ThreadManager submission failed: %s", exc)
+            return False
 
     def _on_fetch_skipped(self, reason: str) -> None:
         if not shiboken_isValid(self):
@@ -1047,25 +998,14 @@ class RedditWidget(BaseOverlayWidget):
         if self._parent_transition_running():
             self._schedule_deferred_refresh()
             return
-        if self._deferred_posts_data is not None:
-            posts_data = self._deferred_posts_data
-            source_id = self._deferred_posts_source_id
-            attempted_sources = self._deferred_posts_attempted_sources
-            self._deferred_posts_data = None
-            self._deferred_posts_source_id = None
-            self._deferred_posts_attempted_sources = ()
-            self._on_feed_fetched(
-                posts_data,
-                defer_for_transition=False,
-                source_id=source_id,
-                attempted_sources=attempted_sources,
-            )
+        if self._deferred_prepared_feed is not None:
+            prepared = self._deferred_prepared_feed
+            self._deferred_prepared_feed = None
+            self._commit_prepared_feed(prepared, defer_for_transition=False)
             return
         if self._deferred_fetch_error is not None:
             error = self._deferred_fetch_error
             self._deferred_fetch_error = None
-            self._deferred_posts_source_id = None
-            self._deferred_posts_attempted_sources = ()
             self._on_fetch_error(error, defer_for_transition=False)
             return
         if self._pending_refresh_after_transition:
@@ -1074,33 +1014,24 @@ class RedditWidget(BaseOverlayWidget):
 
     def _defer_feed_apply_if_transition(
         self,
-        posts_data: List[Dict[str, Any]],
-        *,
-        source_id: str | None,
-        attempted_sources: tuple[str, ...],
+        prepared: PreparedRedditFeed,
     ) -> bool:
-        deferred = defer_value_if_transition(
+        return defer_value_if_transition(
             self,
-            attr_name="_deferred_posts_data",
-            value=list(posts_data),
+            attr_name="_deferred_prepared_feed",
+            value=prepared,
             clear_attrs=("_deferred_fetch_error",),
             schedule_callback=self._schedule_deferred_refresh,
             logger=logger,
-            log_message="[REDDIT] Deferred fetched posts apply until active transition finishes",
+            log_message="[REDDIT] Deferred prepared feed commit until active transition finishes",
         )
-        if deferred:
-            self._deferred_posts_source_id = source_id
-            self._deferred_posts_attempted_sources = tuple(attempted_sources)
-        return deferred
 
     def _defer_fetch_error_if_transition(self, error: str) -> bool:
-        self._deferred_posts_source_id = None
-        self._deferred_posts_attempted_sources = ()
         return defer_value_if_transition(
             self,
             attr_name="_deferred_fetch_error",
             value=str(error),
-            clear_attrs=("_deferred_posts_data",),
+            clear_attrs=("_deferred_prepared_feed",),
             schedule_callback=self._schedule_deferred_refresh,
             logger=logger,
             log_message="[REDDIT] Deferred fetch error apply until active transition finishes",
@@ -1148,116 +1079,66 @@ class RedditWidget(BaseOverlayWidget):
         else:
             self.update()
 
-    def _on_feed_fetched(
+    def _commit_prepared_feed(
         self,
-        posts_data: List[Dict[str, Any]],
+        prepared: PreparedRedditFeed,
         *,
         defer_for_transition: bool = True,
-        source_id: str | None = None,
-        attempted_sources: tuple[str, ...] = (),
     ) -> None:
-        # Guard against callback arriving after widget destruction
+        """Commit one detached worker result using GUI-owned state only."""
+
         if not shiboken_isValid(self):
             return
         end_fetch_guard(self)
         self._stop_refresh_spinner()
-        if defer_for_transition and self._defer_feed_apply_if_transition(
-            posts_data,
-            source_id=source_id,
-            attempted_sources=attempted_sources,
-        ):
+        if defer_for_transition and self._defer_feed_apply_if_transition(prepared):
             return
-        
-        if not posts_data:
-            logger.warning(
-                "[CACHE][REDDIT] Empty listing for subreddit %s cache_key=%s source=%s attempted=%s; cache timestamp unchanged",
-                self._subreddit,
-                self._cache_key,
-                source_id or "<unknown>",
-                ",".join(attempted_sources) or "<unknown>",
-            )
-            if preserve_visible_fallback(
-                self,
-                content_attr="_posts",
-                logger=logger,
-                log_message="[REDDIT] Empty listing received; keeping cached/displayed content visible",
-            ):
-                self._mark_periodic_terminal_now(reason="all_sources_failed")
-                return
-            if not self._has_displayed_valid_data:
-                try:
-                    self.hide()
-                except Exception as e:
-                    logger.debug("[REDDIT] Exception suppressed: %s", e)
-            self._mark_periodic_terminal_now(reason="all_sources_failed")
-            return
-
-        posts: List[RedditPost] = []
-        for raw in posts_data:
-            title = str(raw.get("title") or "").strip()
-            url = str(raw.get("url") or "").strip()
-            if not title or not url:
-                continue
-            if _TITLE_FILTER_RE.search(title):
-                continue
-
-            try:
-                score = int(raw.get("score") or 0)
-            except Exception as e:
-                logger.debug("[REDDIT] Exception suppressed: %s", e)
-                score = 0
-
-            try:
-                created_utc = float(raw.get("created_utc") or 0.0)
-            except Exception as e:
-                logger.debug("[REDDIT] Exception suppressed: %s", e)
-                created_utc = 0.0
-
-            posts.append(
-                RedditPost(
-                    title=title,
-                    url=url,
-                    score=score,
-                    created_utc=created_utc,
-                )
-            )
-        
+        posts = list(prepared.candidates)
         if not posts:
-            logger.warning(
-                "[CACHE][REDDIT] Provider rows produced no authoritative posts after filtering "
-                "cache_key=%s source=%s attempted=%s; cache timestamp unchanged",
-                self._cache_key,
-                source_id or "<unknown>",
-                ",".join(attempted_sources) or "<unknown>",
-            )
+            if prepared.filtered_empty:
+                logger.warning(
+                    "[CACHE][REDDIT] Provider rows produced no authoritative posts after filtering "
+                    "cache_key=%s source=%s attempted=%s; cache timestamp unchanged",
+                    self._cache_key,
+                    prepared.source_id or "<unknown>",
+                    ",".join(prepared.attempted_sources) or "<unknown>",
+                )
+                fallback_message = (
+                    "[REDDIT] No authoritative posts remained after filtering; "
+                    "keeping cached/displayed content visible"
+                )
+            else:
+                logger.warning(
+                    "[CACHE][REDDIT] Empty listing for subreddit %s cache_key=%s source=%s "
+                    "attempted=%s; cache timestamp unchanged",
+                    self._subreddit,
+                    self._cache_key,
+                    prepared.source_id or "<unknown>",
+                    ",".join(prepared.attempted_sources) or "<unknown>",
+                )
+                fallback_message = "[REDDIT] Empty listing received; keeping cached/displayed content visible"
             if preserve_visible_fallback(
                 self,
                 content_attr="_posts",
                 logger=logger,
-                log_message="[REDDIT] No authoritative posts remained after filtering; keeping cached/displayed content visible",
+                log_message=fallback_message,
             ):
                 self._mark_periodic_terminal_now(reason="all_sources_failed")
                 return
             if not self._has_displayed_valid_data:
-                logger.info("[REDDIT] No posts fetched (likely rate limited), hiding until next attempt")
+                if prepared.filtered_empty:
+                    logger.info("[REDDIT] No posts fetched (likely rate limited), hiding until next attempt")
                 try:
                     self.hide()
                 except Exception as e:
                     logger.debug("[REDDIT] Exception suppressed: %s", e)
-            else:
-                logger.debug("[REDDIT] No new posts fetched, keeping existing display")
             self._mark_periodic_terminal_now(reason="all_sources_failed")
             return
-
-        posts = self._merge_sparse_fallback_posts(posts, source_id=source_id, attempted_sources=attempted_sources)
 
         # Store the full fetched candidate window while rendering only the
         # configured visible count.
         self._all_fetched_posts = posts
 
-        # Save only authoritative non-empty windows. Empty/error/fallback
-        # display states must never freshen the content-cache timestamp.
-        self._save_cached_posts(posts)
         self._mark_periodic_terminal_now(reason="success")
 
         self._display_configured_posts(fade=False)
@@ -1265,94 +1146,11 @@ class RedditWidget(BaseOverlayWidget):
         logger.info(
             "[CACHE][REDDIT] Cache refreshed cache_key=%s source=%s attempted=%s candidates=%d visible_limit=%d",
             self._cache_key,
-            source_id or "<unknown>",
-            ",".join(attempted_sources) or "<unknown>",
+            prepared.source_id or "<unknown>",
+            ",".join(prepared.attempted_sources) or "<unknown>",
             len(posts),
             self._configured_capacity,
         )
-
-    def _merge_sparse_fallback_posts(
-        self,
-        posts: List[RedditPost],
-        *,
-        source_id: str | None,
-        attempted_sources: tuple[str, ...],
-    ) -> List[RedditPost]:
-        """Merge partial HTML fallback listings into the existing candidate window.
-
-        A sparse HTML scrape can be useful when RSS is blocked, but it is not
-        authoritative enough to replace a healthy cache outright. Newer dated
-        posts are allowed to enter at the top while older cached posts keep the
-        widget populated up to the normal 25-post candidate limit.
-        """
-
-        source = str(source_id or "")
-        attempts = {str(item) for item in attempted_sources}
-        html_source = source in {"html_old", "html_www"} or bool(
-            attempts.intersection({"html_old", "html_www"})
-        )
-        if not html_source or len(posts) >= LIST_WIDGET_MAX_CAPACITY:
-            return self._sort_candidate_posts(posts)[:LIST_WIDGET_MAX_CAPACITY]
-
-        current_posts = list(self._all_fetched_posts)
-        persisted_posts = self._load_cached_posts()
-        cached_posts = self._dedupe_candidate_posts([*current_posts, *persisted_posts])
-        if len(cached_posts) <= len(posts):
-            return self._sort_candidate_posts(posts)[:LIST_WIDGET_MAX_CAPACITY]
-
-        merged = self._dedupe_candidate_posts([*posts, *cached_posts])
-        merged = self._sort_candidate_posts(merged)[:LIST_WIDGET_MAX_CAPACITY]
-        logger.info(
-            "[CACHE][REDDIT] Sparse fallback merged cache_key=%s source=%s attempted=%s incoming=%d existing=%d merged=%d",
-            self._cache_key,
-            source_id or "<unknown>",
-            ",".join(attempted_sources) or "<unknown>",
-            len(posts),
-            len(cached_posts),
-            len(merged),
-        )
-        return merged
-
-    @staticmethod
-    def _candidate_identity(post: RedditPost) -> str:
-        url = str(getattr(post, "url", "") or "").strip().lower()
-        if url:
-            url = url.split("#", 1)[0].split("?", 1)[0].rstrip("/")
-            if url:
-                return f"url:{url}"
-        title = str(getattr(post, "title", "") or "").strip().casefold()
-        return f"title:{title}"
-
-    @classmethod
-    def _dedupe_candidate_posts(cls, posts: List[RedditPost]) -> List[RedditPost]:
-        deduped: Dict[str, RedditPost] = {}
-        for post in posts:
-            key = cls._candidate_identity(post)
-            if not key or key == "title:":
-                continue
-            existing = deduped.get(key)
-            if existing is None:
-                deduped[key] = post
-                continue
-            incoming_ts = float(getattr(post, "created_utc", 0.0) or 0.0)
-            existing_ts = float(getattr(existing, "created_utc", 0.0) or 0.0)
-            if incoming_ts >= existing_ts:
-                deduped[key] = post
-        return list(deduped.values())
-
-    @staticmethod
-    def _sort_candidate_posts(posts: List[RedditPost]) -> List[RedditPost]:
-        try:
-            return sorted(
-                posts,
-                key=lambda post: (
-                    1 if float(getattr(post, "created_utc", 0.0) or 0.0) <= 0.0 else 0,
-                    -float(getattr(post, "created_utc", 0.0) or 0.0),
-                ),
-            )
-        except Exception as e:
-            logger.debug("[REDDIT] Exception suppressed: %s", e)
-            return list(posts)
 
     def _update_posts_internal(self, posts: List[RedditPost], fade: bool = False) -> None:
         """Internal method to update displayed posts from the visible slice.
@@ -1366,22 +1164,9 @@ class RedditWidget(BaseOverlayWidget):
         
         first_sample = not self._has_seen_first_sample
 
-        # Order posts so that the newest entries appear at the top of the
-        # list, while still using Reddit's hot/top/etc. listing as the
-        # source. Posts with invalid timestamps fall back to their original
-        # order and sink to the bottom.
-        try:
-            def _sort_key(p: RedditPost) -> tuple[int, float]:
-                ts = float(getattr(p, "created_utc", 0.0) or 0.0)
-                if ts <= 0.0:
-                    return (1, 0.0)
-                return (0, -ts)
-
-            posts = sorted(posts, key=_sort_key)
-        except Exception as e:
-            logger.debug("[REDDIT] Exception suppressed: %s", e)
-
-        self._posts = posts
+        # Provider results and startup cache snapshots arrive pre-sorted; this
+        # GUI method owns only visible state and Qt layout/paint invalidation.
+        self._posts = list(posts)
         self._row_hit_rects.clear()
         
         # Invalidate paint cache since data changed
@@ -2331,7 +2116,6 @@ class RedditWidget(BaseOverlayWidget):
     def _get_cache_file_path(self) -> Path:
         """Get cache file path for this widget's posts."""
         cache_dir = Path(__file__).resolve().parent.parent / "cache" / "reddit"
-        cache_dir.mkdir(parents=True, exist_ok=True)
         return cache_dir / f"{self._cache_key}_posts.json"
 
     def _get_service_gate_file_path(self) -> Path:
@@ -2483,32 +2267,13 @@ class RedditWidget(BaseOverlayWidget):
         self._schedule_timer()
 
     def _save_cached_posts(self, posts: List[RedditPost]) -> None:
-        """Save posts to cache for next startup."""
-        try:
-            cache_path = self._get_cache_file_path()
-            data = [asdict(post) for post in posts]
-            with open(cache_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
-            logger.debug("[REDDIT] Saved %d posts to cache: %s", len(posts), cache_path)
-        except Exception as e:
-            logger.debug("[REDDIT] Failed to save post cache: %s", e)
+        """Compatibility wrapper for explicit cache maintenance callers."""
+        write_reddit_post_cache(self._get_cache_file_path(), posts)
     
     def _load_cached_posts(self) -> List[RedditPost]:
         """Load cached posts from previous session."""
-        try:
-            cache_path = self._get_cache_file_path()
-            if not cache_path.exists():
-                return []
-            
-            with open(cache_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
-            posts = [RedditPost(**item) for item in data]
-            logger.debug("[REDDIT] Loaded %d posts from cache: %s", len(posts), cache_path)
-            return posts
-        except Exception as e:
-            logger.debug("[REDDIT] Failed to load post cache: %s", e)
-            return []
+        posts = read_reddit_post_cache(self._get_cache_file_path())
+        return list(sort_reddit_candidates(posts))
 
     @staticmethod
     def _normalise_subreddit(name: str) -> str:

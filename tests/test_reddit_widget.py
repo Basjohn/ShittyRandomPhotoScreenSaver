@@ -5,18 +5,89 @@ click handling for posts and the header.
 """
 
 import logging
+import threading
 import time
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QPoint, QRect
 
 from core.reddit_post_provider import RedditProviderResult
+from core.reddit_preparation import (
+    PreparedRedditFeed,
+    RedditPost,
+    prepare_reddit_feed,
+    write_reddit_post_cache,
+)
 from core.settings.widget_capacity_policy import LIST_WIDGET_MAX_CAPACITY
+from core.threading.manager import ThreadManager
 from widgets import reddit_widget as reddit_module
 from widgets.reddit_widget import RedditWidget
+
+
+def _post_row(post: RedditPost) -> dict[str, object]:
+    return {
+        "title": post.title,
+        "url": post.url,
+        "score": post.score,
+        "created_utc": post.created_utc,
+    }
+
+
+def _prepare_feed(
+    widget: RedditWidget,
+    rows: list[dict[str, object]],
+    *,
+    source_id: str | None = None,
+    attempted_sources: tuple[str, ...] = (),
+    cache_path: Path | None = None,
+) -> PreparedRedditFeed:
+    return prepare_reddit_feed(
+        rows,
+        source_id=source_id,
+        attempted_sources=attempted_sources,
+        current_candidates=tuple(widget._all_fetched_posts),  # type: ignore[attr-defined]
+        cache_path=cache_path,
+        cache_key=str(widget._cache_key),  # type: ignore[attr-defined]
+        candidate_limit=LIST_WIDGET_MAX_CAPACITY,
+    )
+
+
+def _commit_rows(
+    widget: RedditWidget,
+    rows: list[dict[str, object]],
+    *,
+    source_id: str | None = None,
+    attempted_sources: tuple[str, ...] = (),
+    defer_for_transition: bool = True,
+) -> PreparedRedditFeed:
+    prepared = _prepare_feed(
+        widget,
+        rows,
+        source_id=source_id,
+        attempted_sources=attempted_sources,
+    )
+    widget._commit_prepared_feed(  # type: ignore[attr-defined]
+        prepared,
+        defer_for_transition=defer_for_transition,
+    )
+    return prepared
+
+
+class _ImmediateIoThreadManager:
+    """ThreadManager-shaped test seam which completes the submitted task inline."""
+
+    def submit_io_task(self, func, *args, callback=None, **kwargs):
+        try:
+            result = SimpleNamespace(success=True, result=func(*args, **kwargs), error=None)
+        except Exception as exc:  # pragma: no cover - exercised by failure tests
+            result = SimpleNamespace(success=False, result=None, error=exc)
+        if callback is not None:
+            callback(result)
+        return "reddit-test-task"
 
 
 def _clear_reddit_due_state() -> None:
@@ -88,7 +159,7 @@ def test_reddit_filters_daily_weekly_question_threads(qt_app, qtbot):  # noqa: A
     ]
 
     # Call the internal handler directly with synthetic data.
-    widget._on_feed_fetched(posts_data)  # type: ignore[attr-defined]
+    _commit_rows(widget, posts_data)
 
     # Only the non-thread post should survive.
     assert len(widget._posts) == 1  # type: ignore[attr-defined]
@@ -107,7 +178,8 @@ def test_reddit_successful_refresh_logs_no_warning(qt_app, qtbot, caplog):  # no
     try:
         caplog.clear()
         with caplog.at_level(logging.INFO, logger=reddit_module.__name__):
-            widget._on_feed_fetched(  # type: ignore[attr-defined]
+            _commit_rows(
+                widget,
                 [{
                     "title": "Normal post",
                     "url": "https://example.com/post",
@@ -367,7 +439,7 @@ def test_reddit_fetch_error_keeps_displayed_cache_visible(qt_app, qtbot):  # noq
 
 
 @pytest.mark.qt
-def test_reddit_sparse_html_fallback_merges_into_existing_candidate_cache(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+def test_reddit_sparse_html_fallback_merges_into_existing_candidate_cache(qt_app, qtbot):  # noqa: ARG001
     from core.reddit_post_provider import RedditHtmlProvider
     from widgets.reddit_components import RedditPost
 
@@ -397,14 +469,16 @@ def test_reddit_sparse_html_fallback_merges_into_existing_candidate_cache(qt_app
                 created_utc=1_700_000_400.0,
             ),
         ]
-        widget._all_fetched_posts = existing  # type: ignore[attr-defined]
-        monkeypatch.setattr(widget, "_load_cached_posts", lambda: [])
-
-        merged = widget._merge_sparse_fallback_posts(  # type: ignore[attr-defined]
-            incoming,
+        prepared = prepare_reddit_feed(
+            [_post_row(post) for post in incoming],
             source_id=RedditHtmlProvider.SOURCE_OLD,
             attempted_sources=("rss", RedditHtmlProvider.SOURCE_OLD),
+            current_candidates=existing,
+            cache_path=None,
+            cache_key="reddit",
+            candidate_limit=LIST_WIDGET_MAX_CAPACITY,
         )
+        merged = list(prepared.candidates)
 
         assert len(merged) == LIST_WIDGET_MAX_CAPACITY
         assert [post.title for post in merged[:2]] == [
@@ -417,7 +491,11 @@ def test_reddit_sparse_html_fallback_merges_into_existing_candidate_cache(qt_app
 
 
 @pytest.mark.qt
-def test_reddit_sparse_html_fallback_uses_persisted_cache_when_runtime_cache_is_empty(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+def test_reddit_sparse_html_fallback_uses_persisted_cache_when_runtime_cache_is_empty(
+    qt_app,
+    qtbot,
+    tmp_path,
+):  # noqa: ARG001
     from core.reddit_post_provider import RedditHtmlProvider
     from widgets.reddit_components import RedditPost
 
@@ -441,14 +519,18 @@ def test_reddit_sparse_html_fallback_uses_persisted_cache_when_runtime_cache_is_
                 created_utc=1_700_000_500.0,
             )
         ]
-        widget._all_fetched_posts = []  # type: ignore[attr-defined]
-        monkeypatch.setattr(widget, "_load_cached_posts", lambda: list(persisted))
-
-        merged = widget._merge_sparse_fallback_posts(  # type: ignore[attr-defined]
-            incoming,
+        cache_path = tmp_path / "reddit_posts.json"
+        assert write_reddit_post_cache(cache_path, persisted)
+        prepared = prepare_reddit_feed(
+            [_post_row(post) for post in incoming],
             source_id=RedditHtmlProvider.SOURCE_OLD,
             attempted_sources=("rss", RedditHtmlProvider.SOURCE_OLD),
+            current_candidates=(),
+            cache_path=cache_path,
+            cache_key="reddit",
+            candidate_limit=LIST_WIDGET_MAX_CAPACITY,
         )
+        merged = list(prepared.candidates)
 
         assert len(merged) == LIST_WIDGET_MAX_CAPACITY
         assert merged[0].title == "Fresh sparse fallback"
@@ -458,7 +540,12 @@ def test_reddit_sparse_html_fallback_uses_persisted_cache_when_runtime_cache_is_
 
 
 @pytest.mark.qt
-def test_reddit_deferred_sparse_html_preserves_source_metadata_for_cache_merge(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+def test_reddit_deferred_prepared_feed_preserves_sparse_merge_metadata(
+    qt_app,
+    qtbot,
+    monkeypatch,
+    tmp_path,
+):  # noqa: ARG001
     import widgets.service_widget_runtime as service_runtime
     from core.reddit_post_provider import RedditHtmlProvider
     from widgets.reddit_components import RedditPost
@@ -483,8 +570,18 @@ def test_reddit_deferred_sparse_html_preserves_source_metadata_for_cache_merge(q
                 "created_utc": 1_700_000_500.0,
             }
         ]
-        saved: list[list[RedditPost]] = []
         transition_busy = {"value": True}
+        cache_path = tmp_path / "reddit_posts.json"
+        assert write_reddit_post_cache(cache_path, persisted)
+        prepared = prepare_reddit_feed(
+            incoming,
+            source_id=RedditHtmlProvider.SOURCE_OLD,
+            attempted_sources=("rss", RedditHtmlProvider.SOURCE_OLD),
+            current_candidates=(),
+            cache_path=cache_path,
+            cache_key="reddit",
+            candidate_limit=LIST_WIDGET_MAX_CAPACITY,
+        )
 
         monkeypatch.setattr(
             service_runtime,
@@ -496,31 +593,24 @@ def test_reddit_deferred_sparse_html_preserves_source_metadata_for_cache_merge(q
             "parent_transition_running",
             lambda _widget: transition_busy["value"],
         )
-        monkeypatch.setattr(widget, "_load_cached_posts", lambda: list(persisted))
-        monkeypatch.setattr(widget, "_save_cached_posts", lambda posts: saved.append(list(posts)))
         monkeypatch.setattr(widget, "_display_configured_posts", lambda *args, **kwargs: None)
         monkeypatch.setattr(widget, "_mark_periodic_terminal_now", lambda *args, **kwargs: None)
         monkeypatch.setattr(widget, "_schedule_deferred_refresh", lambda: None)
 
-        widget._on_feed_fetched(  # type: ignore[attr-defined]
-            incoming,
-            source_id=RedditHtmlProvider.SOURCE_OLD,
-            attempted_sources=("rss", RedditHtmlProvider.SOURCE_OLD),
-        )
+        widget._commit_prepared_feed(prepared)  # type: ignore[attr-defined]
 
-        assert widget._deferred_posts_data == incoming  # type: ignore[attr-defined]
-        assert widget._deferred_posts_source_id == RedditHtmlProvider.SOURCE_OLD  # type: ignore[attr-defined]
-        assert widget._deferred_posts_attempted_sources == ("rss", RedditHtmlProvider.SOURCE_OLD)  # type: ignore[attr-defined]
-        assert saved == []
+        assert widget._deferred_prepared_feed is prepared  # type: ignore[attr-defined]
+        assert prepared.source_id == RedditHtmlProvider.SOURCE_OLD
+        assert prepared.attempted_sources == ("rss", RedditHtmlProvider.SOURCE_OLD)
+        assert len(json.loads(cache_path.read_text(encoding="utf-8"))) == LIST_WIDGET_MAX_CAPACITY
+        assert widget._all_fetched_posts == []  # type: ignore[attr-defined]
 
         transition_busy["value"] = False
         widget._flush_deferred_refresh()  # type: ignore[attr-defined]
 
-        assert len(saved) == 1
-        assert len(saved[0]) == LIST_WIDGET_MAX_CAPACITY
-        assert saved[0][0].title == "Fresh sparse fallback"
-        assert widget._deferred_posts_source_id is None  # type: ignore[attr-defined]
-        assert widget._deferred_posts_attempted_sources == ()  # type: ignore[attr-defined]
+        assert len(widget._all_fetched_posts) == LIST_WIDGET_MAX_CAPACITY  # type: ignore[attr-defined]
+        assert widget._all_fetched_posts[0].title == "Fresh sparse fallback"  # type: ignore[attr-defined]
+        assert widget._deferred_prepared_feed is None  # type: ignore[attr-defined]
     finally:
         widget.cleanup()
 
@@ -532,7 +622,7 @@ def test_reddit_sparse_primary_result_stays_authoritative(qt_app, qtbot):  # noq
     widget = RedditWidget()
     qtbot.addWidget(widget)
     try:
-        widget._all_fetched_posts = [  # type: ignore[attr-defined]
+        existing = [
             RedditPost(
                 title=f"Cached post {idx}",
                 url=f"https://example.com/cached{idx}",
@@ -550,13 +640,17 @@ def test_reddit_sparse_primary_result_stays_authoritative(qt_app, qtbot):  # noq
             )
         ]
 
-        merged = widget._merge_sparse_fallback_posts(  # type: ignore[attr-defined]
-            incoming,
+        prepared = prepare_reddit_feed(
+            [_post_row(post) for post in incoming],
             source_id="rss",
             attempted_sources=("rss",),
+            current_candidates=existing,
+            cache_path=None,
+            cache_key="reddit",
+            candidate_limit=LIST_WIDGET_MAX_CAPACITY,
         )
 
-        assert merged == incoming
+        assert list(prepared.candidates) == incoming
     finally:
         widget.cleanup()
 
@@ -659,7 +753,7 @@ def test_reddit_manual_fetch_bypasses_automatic_blocked_cooldown_after_manual_wi
             staticmethod(lambda: 20 * 60.0),
         )
         widget.set_post_provider(StubProvider())
-        widget._thread_manager = None  # type: ignore[attr-defined]
+        widget._thread_manager = _ImmediateIoThreadManager()  # type: ignore[attr-defined]
         widget._subreddit = "wallpapers"  # type: ignore[attr-defined]
         widget._fetch_in_progress = False  # type: ignore[attr-defined]
         widget._get_service_gate_timestamp = lambda: datetime.now() - timedelta(minutes=8)  # type: ignore[method-assign]
@@ -1045,7 +1139,7 @@ def test_reddit_empty_fetch_keeps_displayed_cache_visible(qt_app, qtbot):  # noq
         widget._has_displayed_valid_data = True  # type: ignore[attr-defined]
         widget.hide = lambda *args, **kwargs: hide_calls.append("hide")  # type: ignore[method-assign]
 
-        widget._on_feed_fetched([])  # type: ignore[attr-defined]
+        _commit_rows(widget, [])
 
         assert len(widget._posts) == 1  # type: ignore[attr-defined]
         assert hide_calls == []
@@ -1393,7 +1487,6 @@ def test_reddit_fetch_result_defers_apply_during_parent_transition(qt_app, qtbot
     qtbot.addWidget(parent)
     qtbot.addWidget(widget)
     try:
-        monkeypatch.setattr(widget, "_save_cached_posts", lambda posts: None)
         widget._fetch_in_progress = True  # type: ignore[attr-defined]
         posts_data = [
             {
@@ -1404,17 +1497,17 @@ def test_reddit_fetch_result_defers_apply_during_parent_transition(qt_app, qtbot
             }
         ]
 
-        widget._on_feed_fetched(posts_data)  # type: ignore[attr-defined]
+        prepared = _commit_rows(widget, posts_data)
 
         assert widget._fetch_in_progress is False  # type: ignore[attr-defined]
         assert widget._posts == []  # type: ignore[attr-defined]
-        assert widget._deferred_posts_data == posts_data  # type: ignore[attr-defined]
+        assert widget._deferred_prepared_feed is prepared  # type: ignore[attr-defined]
 
         parent.running = False
         widget._flush_deferred_refresh()  # type: ignore[attr-defined]
 
         assert len(widget._posts) == 1  # type: ignore[attr-defined]
-        assert widget._deferred_posts_data is None  # type: ignore[attr-defined]
+        assert widget._deferred_prepared_feed is None  # type: ignore[attr-defined]
     finally:
         widget.cleanup()
         parent.deleteLater()
@@ -1446,8 +1539,9 @@ def test_reddit_fetch_uses_injected_post_provider(qt_app, qtbot):  # noqa: ARG00
         widget._fetch_in_progress = False  # type: ignore[attr-defined]
         widget._subreddit = "wallpapers"  # type: ignore[attr-defined]
 
-        # Drive the sync path so the provider contract is exercised directly.
-        widget._thread_manager = None  # type: ignore[attr-defined]
+        # Drive the ThreadManager contract inline without permitting a GUI
+        # network fallback in production.
+        widget._thread_manager = _ImmediateIoThreadManager()  # type: ignore[attr-defined]
         assert widget._fetch_feed(defer_for_transition=False) is True  # type: ignore[attr-defined]
 
         assert len(calls) == 1
@@ -1455,6 +1549,103 @@ def test_reddit_fetch_uses_injected_post_provider(qt_app, qtbot):  # noqa: ARG00
         assert calls[0].limit == LIST_WIDGET_MAX_CAPACITY
         assert len(widget._posts) == 1  # type: ignore[attr-defined]
         assert widget._posts[0].title == "Injected post"  # type: ignore[attr-defined]
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_fetch_prepares_and_persists_before_ui_dispatch(qt_app, qtbot, monkeypatch, tmp_path):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    cache_path = tmp_path / "reddit_posts.json"
+    ui_thread = threading.current_thread()
+    worker_threads: list[threading.Thread] = []
+    dispatches: list[tuple[object, tuple[object, ...], dict[str, object], bool, threading.Thread]] = []
+
+    class StubProvider:
+        def fetch_posts(self, request):  # noqa: ANN001
+            worker_threads.append(threading.current_thread())
+            return RedditProviderResult(
+                posts=[{
+                    "title": "Prepared off UI",
+                    "url": "https://example.com/prepared",
+                    "score": 7,
+                    "created_utc": 1_710_001_111.0,
+                }],
+                source_id="rss",
+                attempted_sources=("rss",),
+            )
+
+    class WorkerThreadManager:
+        def submit_io_task(self, func, *args, callback=None, **kwargs):
+            def _run() -> None:
+                try:
+                    result = SimpleNamespace(success=True, result=func(*args, **kwargs), error=None)
+                except Exception as exc:  # pragma: no cover - defensive
+                    result = SimpleNamespace(success=False, result=None, error=exc)
+                assert callback is not None
+                callback(result)
+
+            thread = threading.Thread(target=_run, name="reddit-preparation-test")
+            thread.start()
+            thread.join(timeout=5.0)
+            assert not thread.is_alive()
+            return "reddit-worker-task"
+
+    def _capture_ui_dispatch(func, *args, **kwargs):
+        dispatches.append((func, args, kwargs, cache_path.exists(), threading.current_thread()))
+
+    try:
+        monkeypatch.setattr(ThreadManager, "run_on_ui_thread", staticmethod(_capture_ui_dispatch))
+        widget.set_post_provider(StubProvider())
+        widget._thread_manager = WorkerThreadManager()  # type: ignore[attr-defined]
+        widget._get_cache_file_path = lambda: cache_path  # type: ignore[method-assign]
+
+        assert widget._fetch_feed(defer_for_transition=False) is True  # type: ignore[attr-defined]
+
+        assert worker_threads and worker_threads[0] is not ui_thread
+        assert len(dispatches) == 1
+        callback, args, kwargs, cache_existed_at_dispatch, dispatch_thread = dispatches[0]
+        assert dispatch_thread is worker_threads[0]
+        assert cache_existed_at_dispatch is True
+        assert isinstance(args[0], PreparedRedditFeed)
+        assert args[0].candidates[0].title == "Prepared off UI"
+
+        monkeypatch.setattr(
+            widget,
+            "_load_cached_posts",
+            lambda: pytest.fail("GUI commit must not read the Reddit cache"),
+        )
+        monkeypatch.setattr(
+            widget,
+            "_save_cached_posts",
+            lambda posts: pytest.fail("GUI commit must not write the Reddit cache"),
+        )
+        callback(*args, **kwargs)
+        assert widget._posts[0].title == "Prepared off UI"  # type: ignore[attr-defined]
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_fetch_without_thread_manager_never_falls_back_to_gui_network(qt_app, qtbot):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    provider_calls: list[object] = []
+
+    class ExplodingProvider:
+        def fetch_posts(self, request):  # noqa: ANN001
+            provider_calls.append(request)
+            raise AssertionError("provider must not run without the shared I/O pool")
+
+    try:
+        widget.set_post_provider(ExplodingProvider())
+        widget._thread_manager = None  # type: ignore[attr-defined]
+        widget._fetch_in_progress = False  # type: ignore[attr-defined]
+
+        assert widget._fetch_feed(defer_for_transition=False) is False  # type: ignore[attr-defined]
+        assert provider_calls == []
+        assert widget._fetch_in_progress is False  # type: ignore[attr-defined]
     finally:
         widget.cleanup()
 
@@ -1485,7 +1676,7 @@ def test_reddit_fetch_writes_cache_file_from_provider_result(qt_app, qtbot, tmp_
         widget.set_post_provider(StubProvider())
         widget._fetch_in_progress = False  # type: ignore[attr-defined]
         widget._subreddit = "wallpapers"  # type: ignore[attr-defined]
-        widget._thread_manager = None  # type: ignore[attr-defined]
+        widget._thread_manager = _ImmediateIoThreadManager()  # type: ignore[attr-defined]
         widget._get_cache_file_path = lambda: Path(cache_path)  # type: ignore[method-assign]
 
         assert widget._fetch_feed(defer_for_transition=False) is True  # type: ignore[attr-defined]
@@ -1511,7 +1702,6 @@ def test_reddit_fetch_caches_candidate_window_but_displays_configured_count(qt_a
     qtbot.addWidget(widget)
     try:
         widget._configured_capacity = 5  # type: ignore[attr-defined]
-        monkeypatch.setattr(widget, "_save_cached_posts", lambda posts: None)
         posts_data = [
             {
                 "title": f"Candidate {i:02d}",
@@ -1522,7 +1712,7 @@ def test_reddit_fetch_caches_candidate_window_but_displays_configured_count(qt_a
             for i in range(LIST_WIDGET_MAX_CAPACITY)
         ]
 
-        widget._on_feed_fetched(posts_data)  # type: ignore[attr-defined]
+        _commit_rows(widget, posts_data)
 
         assert len(widget._all_fetched_posts) == LIST_WIDGET_MAX_CAPACITY  # type: ignore[attr-defined]
         assert len(widget._posts) == 5  # type: ignore[attr-defined]
@@ -1552,7 +1742,7 @@ def test_reddit_provider_error_keeps_displayed_cache_visible(qt_app, qtbot):  # 
             )
         ]
         widget._has_displayed_valid_data = True  # type: ignore[attr-defined]
-        widget._thread_manager = None  # type: ignore[attr-defined]
+        widget._thread_manager = _ImmediateIoThreadManager()  # type: ignore[attr-defined]
         widget.set_post_provider(FailingProvider())
 
         assert widget._fetch_feed(defer_for_transition=False) is True  # type: ignore[attr-defined]
@@ -1584,7 +1774,7 @@ def test_reddit_empty_provider_result_keeps_displayed_cache_visible(qt_app, qtbo
             )
         ]
         widget._has_displayed_valid_data = True  # type: ignore[attr-defined]
-        widget._thread_manager = None  # type: ignore[attr-defined]
+        widget._thread_manager = _ImmediateIoThreadManager()  # type: ignore[attr-defined]
         widget.set_post_provider(EmptyProvider())
 
         assert widget._fetch_feed(defer_for_transition=False) is True  # type: ignore[attr-defined]
@@ -1633,7 +1823,7 @@ def test_reddit_empty_provider_result_does_not_freshen_cache_timestamp(qt_app, q
             )
         ]
         widget._has_displayed_valid_data = True  # type: ignore[attr-defined]
-        widget._thread_manager = None  # type: ignore[attr-defined]
+        widget._thread_manager = _ImmediateIoThreadManager()  # type: ignore[attr-defined]
         widget._cache_key = "reddit"  # type: ignore[attr-defined]
         widget._get_cache_file_path = lambda: Path(cache_path)  # type: ignore[method-assign]
         widget.set_post_provider(EmptyProvider())
@@ -1668,7 +1858,6 @@ def test_reddit_fetch_result_defers_apply_during_parent_transition_pending(qt_ap
     qtbot.addWidget(parent)
     qtbot.addWidget(widget)
     try:
-        monkeypatch.setattr(widget, "_save_cached_posts", lambda posts: None)
         posts_data = [
             {
                 "title": "A pending post",
@@ -1678,10 +1867,10 @@ def test_reddit_fetch_result_defers_apply_during_parent_transition_pending(qt_ap
             }
         ]
 
-        widget._on_feed_fetched(posts_data)  # type: ignore[attr-defined]
+        prepared = _commit_rows(widget, posts_data)
 
         assert widget._posts == []  # type: ignore[attr-defined]
-        assert widget._deferred_posts_data == posts_data  # type: ignore[attr-defined]
+        assert widget._deferred_prepared_feed is prepared  # type: ignore[attr-defined]
 
         parent.pending = False
         widget._flush_deferred_refresh()  # type: ignore[attr-defined]

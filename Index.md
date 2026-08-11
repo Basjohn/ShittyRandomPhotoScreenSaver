@@ -59,6 +59,7 @@ Do not read every document by default.
 | Image pipeline | `engine/image_pipeline.py` and image/prefetch helpers |
 | Compositor/GL programs | `rendering/gl_compositor.py`, `rendering/gl_compositor_pkg/`, `rendering/gl_programs/` |
 | Media provider/GSMTC | `core/media/provider_registry.py`, `core/media/media_controller.py`, `widgets/media_widget.py` |
+| Reddit provider/preparation/Qt commit | `core/reddit_post_provider.py`, `core/reddit_preparation.py`, `widgets/reddit_widget.py` |
 | Visualizer model/runtime | `widgets/spotify_visualizer/` and `widgets/spotify_visualizer_widget.py` |
 | Visualizer presentation | `widgets/spotify_bars_gl_overlay.py` plus display-local Qt/GL ownership |
 | CUSTOM layout | custom-layout manager/contract modules |

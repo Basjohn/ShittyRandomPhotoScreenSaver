@@ -9,11 +9,11 @@ monolith threshold. Contains:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 from enum import Enum
 import re
 
 from core.logging.logger import get_logger
+from core.reddit_preparation import RedditPost, TITLE_FILTER_RE
 from core.windows.browser_window_routing import try_bring_browser_window_to_front_by_keywords
 
 logger = get_logger(__name__)
@@ -32,18 +32,6 @@ class RedditPosition(Enum):
     BOTTOM_CENTER = "bottom_center"
     BOTTOM_RIGHT = "bottom_right"
 
-
-@dataclass
-class RedditPost:
-    """Lightweight representation of a Reddit post for display."""
-
-    title: str
-    url: str
-    score: int
-    created_utc: float
-
-
-TITLE_FILTER_RE = re.compile(r"\b(daily|weekly|question thread)\b", re.IGNORECASE)
 
 # Words to keep lowercase in title case (unless first word)
 TITLE_CASE_SMALL_WORDS = frozenset()

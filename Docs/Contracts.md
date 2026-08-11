@@ -68,6 +68,7 @@ This is not a second `Spec.md`. Find the owner here, then read only the owning c
 | Widget positioning | existing position/stacking owners | `Docs/10_WIDGET_GUIDELINES.md` | One authored positioning path |
 | CUSTOM layout storage and apply | existing CUSTOM layout contract/manager | `Docs/10_WIDGET_GUIDELINES.md` | Display-bounded, descriptor-capability-driven |
 | Service-widget shared lifecycle | existing service runtime helper | `Docs/10_WIDGET_GUIDELINES.md` | Shared mechanics only; provider behaviour local |
+| Reddit fetch/preparation/commit | `core/reddit_post_provider.py`, `core/reddit_preparation.py`, `widgets/reddit_widget.py` | `Docs/audits/SRPSS_Architecture_Roadmap/08_CPU_THREADING_AND_WORKLOAD_PLAN.md` | Provider/network and detached cache preparation on shared IO; Qt-visible commit on GUI |
 | Media artwork preparation and presentation | `widgets/media_widget.py`, `widgets/media/display_update.py`, `rendering/display_widget.py` | `Docs/10_WIDGET_GUIDELINES.md` | Worker QImage decode; GUI QPixmap handoff; all-display transition deferral |
 | Media provider identity and GSMTC selection | `core/media/provider_registry.py`, `core/media/media_controller.py`, `widgets/media_widget.py` | `Spec.md` | Exact source ids; one background session snapshot; unsupported ids inert; browser volume unavailable |
 | Steam family | modules under `core/steam/` and Steam widgets | existing Steam focused docs | Core docs route; domain docs own detailed behaviour |
