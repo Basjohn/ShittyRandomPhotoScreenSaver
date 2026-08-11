@@ -89,6 +89,13 @@ def compute_controls_layout(widget):
         logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
         header_font_pt = widget._font_size
 
+    progress_enabled = bool(getattr(widget, "_playback_progress_enabled", False))
+    protected_metadata_bottom = (
+        max(0, int(getattr(widget, "_metadata_paint_bottom", 0) or 0))
+        if progress_enabled
+        else 0
+    )
+
     cache_key = (
         width,
         height,
@@ -99,6 +106,9 @@ def compute_controls_layout(widget):
         controls_font_pt,
         header_font_pt,
         round(compact_scale, 3),
+        progress_enabled,
+        int(getattr(widget, "_playback_progress_height", 0) or 0),
+        protected_metadata_bottom,
     )
     cached = widget._controls_layout_cache
     if cached is not None and cached.get("_cache_key") == cache_key:
@@ -122,6 +132,28 @@ def compute_controls_layout(widget):
         int(row_height),
     )
 
+    progress_rect = QRect()
+    if progress_enabled:
+        progress_height = max(
+            3,
+            min(18, int(getattr(widget, "_playback_progress_height", 6) or 6)),
+        )
+        progress_gap = max(8, progress_height // 2 + 4)
+        progress_top = row_rect.top() - progress_gap - progress_height
+        minimum_top = max(
+            margins.top() + header_height + 6,
+            protected_metadata_bottom + 7,
+        )
+        horizontal_inset = max(14, int(content_width * 0.08))
+        progress_width = content_width - horizontal_inset * 2
+        if progress_top >= minimum_top and progress_width >= 40:
+            progress_rect = QRect(
+                int(content_left + horizontal_inset),
+                int(progress_top),
+                int(progress_width),
+                int(progress_height),
+            )
+
     slot_width = content_width / 3.0
     inner_pad_x = max(4.0, slot_width * (0.06 if compact_scale < 0.9 else 0.07))
     inner_pad_y = max(2.0, row_height * (0.14 if compact_scale < 0.9 else 0.16))
@@ -143,6 +175,7 @@ def compute_controls_layout(widget):
     layout = {
         "font": font,
         "row_rect": row_rect,
+        "progress_rect": progress_rect,
         "button_rects": button_rects,
         "hit_rects": hit_rects,
     }

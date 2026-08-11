@@ -168,6 +168,56 @@ class TestWidgetsTab:
         finally:
             tab.deleteLater()
 
+    def test_media_progress_settings_roundtrip_and_transport_gate(
+        self,
+        qt_app,
+        settings_manager,
+    ):
+        from ui.tabs.widgets_tab_media import save_media_settings
+
+        settings_manager.set("widgets", {
+            "media": {
+                "enabled": True,
+                "show_controls": True,
+                "playback_progress_enabled": True,
+                "playback_progress_height": 11,
+                "playback_progress_fill_color": [15, 125, 235, 210],
+                "playback_progress_shadow_enabled": True,
+                "playback_progress_glow_enabled": True,
+                "playback_progress_glow_color": [45, 180, 255, 160],
+            },
+            "shadows": {"enabled": True},
+            "global": {"card_border_width_px": 3},
+        })
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab_id": "media"},
+        )
+        try:
+            assert tab.media_playback_progress_enabled.isChecked() is True
+            assert tab.media_playback_progress_height.value() == 11
+            assert tab._media_progress_fill_color.getRgb() == (15, 125, 235, 210)
+            assert tab.media_playback_progress_shadow_enabled.isChecked() is True
+            assert tab.media_playback_progress_glow_enabled.isChecked() is True
+            assert tab._media_progress_glow_color.getRgb() == (45, 180, 255, 160)
+            assert tab._media_progress_options_container.isEnabled() is True
+            assert tab.media_playback_progress_glow_color_btn.isEnabled() is True
+
+            saved = save_media_settings(tab)
+            assert saved["playback_progress_enabled"] is True
+            assert saved["playback_progress_height"] == 11
+            assert saved["playback_progress_fill_color"] == [15, 125, 235, 210]
+            assert saved["playback_progress_shadow_enabled"] is True
+            assert saved["playback_progress_glow_enabled"] is True
+            assert saved["playback_progress_glow_color"] == [45, 180, 255, 160]
+
+            tab.media_show_controls.setChecked(False)
+            assert tab.media_playback_progress_enabled.isEnabled() is False
+            assert tab._media_progress_options_container.isEnabled() is False
+        finally:
+            tab.deleteLater()
+
     def test_invalid_media_provider_is_visible_and_not_coerced_to_spotify(
         self,
         qt_app,

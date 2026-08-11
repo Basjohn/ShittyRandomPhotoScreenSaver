@@ -69,9 +69,7 @@ extraction without waiting for a new prompt.
 
 ### Media playback progress
 
-- [ ] Add an optional adjustable pill-style playback progress bar positioned just above the media controls, with configurable fill colour, optional shadow, optional glow and configurable glow colour.
-- [ ] Consume the existing media snapshot/update cadence only: no new GUI timer, polling loop, recurring task or paint-time preparation; keep invalidation and repaint bounds narrow.
-- [ ] Add settings/default/preset compatibility, paused/playing/unknown-duration, seek/progress update and visual-layout coverage.
+- [ ] Validate the optional progress pill in installed Normal and MC builds with playing, paused, seek and unknown-duration sessions; check compact and authored CUSTOM cards, fill/shadow/glow styling, and confirm paint/update counts remain bounded by accepted GSMTC snapshots with no independent cadence.
 
 ## P5.1 Visualizer Fidelity And Stronger Goldens
 

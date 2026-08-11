@@ -688,3 +688,226 @@ def test_media_set_artwork_size_respects_active_custom_rect(qt_app) -> None:
         assert reapply_calls == ["reapply"]
     finally:
         widget.deleteLater()
+
+
+def test_media_progress_layout_is_bounded_above_transport_controls(qt_app) -> None:
+    widget = MediaWidget()
+    try:
+        widget.resize(600, 320)
+        widget._playback_progress_enabled = True
+        widget._playback_progress_height = 8
+        widget._refresh_metadata_paint_boundary()
+        widget._invalidate_controls_layout()
+
+        layout = widget._compute_controls_layout()
+        progress_rect = layout["progress_rect"]
+        row_rect = layout["row_rect"]
+
+        assert progress_rect.isEmpty() is False
+        assert progress_rect.height() == 8
+        assert progress_rect.left() >= widget.contentsMargins().left()
+        assert progress_rect.right() < widget.width() - widget.contentsMargins().right()
+        assert progress_rect.bottom() < row_rect.top()
+    finally:
+        widget.deleteLater()
+
+
+def test_media_progress_metadata_boundary_is_cached_and_inert_when_disabled(
+    qt_app,
+    monkeypatch,
+) -> None:
+    from widgets.media import painting
+
+    widget = MediaWidget()
+    calls: list[bool] = []
+    original = painting.metadata_paint_bottom
+    monkeypatch.setattr(
+        painting,
+        "metadata_paint_bottom",
+        lambda owner: (calls.append(True), original(owner))[1],
+    )
+    try:
+        widget.resize(600, 320)
+        widget._playback_progress_enabled = False
+        widget._invalidate_controls_layout()
+        widget._compute_controls_layout()
+        assert calls == []
+
+        widget._playback_progress_enabled = True
+        widget._refresh_metadata_paint_boundary()
+        widget._compute_controls_layout()
+        widget._compute_controls_layout()
+        assert calls == [True]
+    finally:
+        widget.deleteLater()
+
+
+def test_small_custom_media_card_hides_progress_lane_before_metadata_overlap(qt_app) -> None:
+    widget = MediaWidget()
+    try:
+        custom_rect = QRect(20, 30, 420, 240)
+        widget._custom_layout_local_rect = custom_rect
+        widget.setMinimumSize(1, 1)
+        widget.setMaximumSize(10_000, 10_000)
+        widget.resize(custom_rect.size())
+        widget._playback_progress_enabled = True
+        widget._playback_progress_height = 8
+        widget._artwork_size = 160
+        artwork = QPixmap(160, 160)
+        artwork.fill(QColor(30, 90, 160))
+        widget._artwork_pixmap = artwork
+        widget.setContentsMargins(29, 12, 200, 12)
+        widget._metadata_paint = {
+            "provider": "SPOTIFY",
+            "title": (
+                "A deliberately long authored title that wraps through several lines "
+                "inside a compact custom media card"
+            ),
+            "artist": "A deliberately long artist identity",
+            "header_font": 24,
+            "title_font": 23,
+            "artist_font": 18,
+            "header_weight": 750,
+            "title_weight": 700,
+            "artist_weight": 600,
+            "line_spacing": 3,
+            "body_top_gap": 6,
+        }
+        widget._refresh_metadata_paint_boundary()
+
+        layout = widget._compute_controls_layout()
+
+        assert layout["progress_rect"].isEmpty() is True
+        assert widget.geometry().size() == custom_rect.size()
+    finally:
+        widget.deleteLater()
+
+
+def test_media_progress_config_preserves_committed_custom_geometry(qt_app) -> None:
+    widget = MediaWidget()
+    try:
+        custom_rect = QRect(20, 30, 640, 410)
+        widget._custom_layout_local_rect = custom_rect
+        widget._fixed_card_height = custom_rect.height()
+
+        widget.set_playback_progress_config(
+            enabled=True,
+            height=10,
+            fill_color=QColor(20, 180, 240, 230),
+            shadow_enabled=True,
+            glow_enabled=True,
+            glow_color=QColor(20, 180, 240, 180),
+        )
+
+        assert widget._fixed_card_height == custom_rect.height()
+        assert widget._playback_progress_enabled is True
+        assert widget._playback_progress_height == 10
+    finally:
+        widget.deleteLater()
+
+
+def test_media_progress_config_refreshes_scalar_paint_state_without_display_pipeline(qt_app) -> None:
+    widget = MediaWidget()
+    try:
+        widget.resize(600, 320)
+        widget._last_info = MediaTrackInfo(
+            title="Track",
+            artist="Artist",
+            state=MediaPlaybackState.PLAYING,
+            position_ms=30_000,
+            duration_ms=120_000,
+        )
+        widget._update_display = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("progress styling must not enter the media publication pipeline")
+        )
+        updates: list[bool] = []
+        widget._safe_update = lambda: updates.append(True)
+
+        widget.set_playback_progress_config(
+            enabled=True,
+            height=8,
+            fill_color=QColor(20, 180, 240, 230),
+            shadow_enabled=False,
+            glow_enabled=False,
+            glow_color=QColor(20, 180, 240, 180),
+        )
+
+        assert updates == [True]
+        assert widget._playback_progress_visible is True
+        assert widget._playback_progress_fill_width > 0
+    finally:
+        widget.deleteLater()
+
+
+def test_media_progress_resize_requantizes_existing_snapshot_immediately(qt_app) -> None:
+    widget = MediaWidget()
+    try:
+        widget.setMinimumSize(1, 1)
+        widget.setMaximumSize(10_000, 10_000)
+        widget.resize(600, 320)
+        widget.show()
+        qt_app.processEvents()
+        widget._last_info = MediaTrackInfo(
+            title="Track",
+            artist="Artist",
+            state=MediaPlaybackState.PLAYING,
+            position_ms=60_000,
+            duration_ms=120_000,
+        )
+        widget.set_playback_progress_config(
+            enabled=True,
+            height=8,
+            fill_color=QColor(20, 180, 240, 230),
+            shadow_enabled=False,
+            glow_enabled=False,
+            glow_color=QColor(20, 180, 240, 180),
+        )
+        old_fill_width = widget._playback_progress_fill_width
+        updates: list[bool] = []
+        widget._safe_update = lambda: updates.append(True)
+
+        widget.resize(480, 320)
+        qt_app.processEvents()
+        layout = widget._compute_controls_layout()
+
+        assert widget._playback_progress_fill_width == round(
+            layout["progress_rect"].width() * 0.5
+        )
+        assert widget._playback_progress_fill_width < old_fill_width
+        assert updates == [True]
+    finally:
+        widget.deleteLater()
+
+
+def test_first_media_snapshot_requantizes_progress_after_card_geometry_commit(qt_app) -> None:
+    from widgets.media.display_update import update_display
+
+    widget = MediaWidget()
+    try:
+        widget.set_playback_progress_config(
+            enabled=True,
+            height=8,
+            fill_color=QColor(20, 180, 240, 230),
+            shadow_enabled=False,
+            glow_enabled=False,
+            glow_color=QColor(20, 180, 240, 180),
+        )
+
+        update_display(
+            widget,
+            MediaTrackInfo(
+                title="Track",
+                artist="Artist",
+                state=MediaPlaybackState.PLAYING,
+                position_ms=30_000,
+                duration_ms=120_000,
+            ),
+        )
+        layout = widget._compute_controls_layout()
+
+        assert widget._playback_progress_visible is True
+        assert widget._playback_progress_fill_width == round(
+            layout["progress_rect"].width() * 0.25
+        )
+    finally:
+        widget.deleteLater()

@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 from types import SimpleNamespace
 
-from PySide6.QtGui import QImage
+from PySide6.QtCore import QRect
+from PySide6.QtGui import QColor, QImage
 
 import widgets.media.display_update as display_update
 from core.media.media_controller import MediaPlaybackState, MediaTrackInfo
@@ -908,3 +909,117 @@ def test_null_prepared_artwork_clears_existing_artwork_once(
     finally:
         widget.cleanup()
         widget.close()
+
+
+def _progress_ready_stub(
+    position_ms: int = 20_000,
+    *,
+    state: MediaPlaybackState = MediaPlaybackState.PLAYING,
+) -> tuple[_StubMediaWidget, MediaTrackInfo]:
+    widget = _StubMediaWidget()
+    widget._playback_progress_enabled = True
+    widget._playback_progress_fill_color = QColor(255, 255, 255, 230)
+    widget._playback_progress_shadow_enabled = False
+    widget._playback_progress_glow_enabled = False
+    widget._playback_progress_glow_color = QColor(255, 255, 255, 180)
+    widget._playback_progress_paint_key = None
+    widget._compute_controls_layout = lambda: {
+        "progress_rect": QRect(50, 190, 500, 6),
+    }
+    info = MediaTrackInfo(
+        title="Stable Track",
+        artist="Stable Artist",
+        album="Stable Album",
+        state=state,
+        position_ms=position_ms,
+        duration_ms=100_000,
+    )
+    widget._last_info = info
+    widget._last_track_identity = widget._compute_track_identity(info)
+    widget._last_metadata_identity = widget._compute_metadata_identity(info)
+    widget._has_seen_first_track = True
+    widget._fixed_card_height = 260
+    widget._metadata_paint = {"title": info.title}
+    widget._fade_in_completed = True
+    display_update._update_progress_paint_state(widget, info)
+    return widget, info
+
+
+def test_same_track_progress_pixel_change_requests_one_repaint_without_publish(
+    monkeypatch,
+) -> None:
+    widget, _previous = _progress_ready_stub()
+    updates: list[bool] = []
+    widget._safe_update = lambda: updates.append(True)
+    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
+
+    display_update.update_display(
+        widget,
+        MediaTrackInfo(
+            title="Stable Track",
+            artist="Stable Artist",
+            album="Stable Album",
+            state=MediaPlaybackState.PLAYING,
+            position_ms=25_000,
+            duration_ms=100_000,
+        ),
+    )
+
+    assert updates == [True]
+    assert widget._emitted == []
+    assert widget._playback_progress_fill_width == 125
+
+
+def test_same_track_subpixel_progress_change_requests_no_repaint(monkeypatch) -> None:
+    widget, _previous = _progress_ready_stub()
+    updates: list[bool] = []
+    widget._safe_update = lambda: updates.append(True)
+    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
+
+    display_update.update_display(
+        widget,
+        MediaTrackInfo(
+            title="Stable Track",
+            artist="Stable Artist",
+            album="Stable Album",
+            state=MediaPlaybackState.PLAYING,
+            position_ms=20_050,
+            duration_ms=100_000,
+        ),
+    )
+
+    assert updates == []
+    assert widget._emitted == []
+    assert widget._playback_progress_fill_width == 100
+
+
+def test_unknown_duration_clears_progress_once(monkeypatch) -> None:
+    widget, _previous = _progress_ready_stub()
+    updates: list[bool] = []
+    widget._safe_update = lambda: updates.append(True)
+    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
+    unknown = MediaTrackInfo(
+        title="Stable Track",
+        artist="Stable Artist",
+        album="Stable Album",
+        state=MediaPlaybackState.PLAYING,
+    )
+
+    display_update.update_display(widget, unknown)
+    display_update.update_display(widget, unknown)
+
+    assert updates == [True]
+    assert widget._playback_progress_visible is False
+    assert widget._playback_progress_fill_width == 0
+
+
+def test_paused_unchanged_progress_snapshot_is_static(monkeypatch) -> None:
+    widget, paused = _progress_ready_stub(state=MediaPlaybackState.PAUSED)
+    updates: list[bool] = []
+    widget._safe_update = lambda: updates.append(True)
+    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
+
+    display_update.update_display(widget, paused)
+
+    assert updates == []
+    assert widget._emitted == []

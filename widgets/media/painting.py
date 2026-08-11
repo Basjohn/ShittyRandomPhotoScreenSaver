@@ -450,6 +450,62 @@ def paint_metadata_text(widget: "MediaWidget", painter: QPainter) -> None:
         painter.restore()
 
 
+def metadata_paint_bottom(widget: "MediaWidget") -> int:
+    """Return the inclusive bottom edge of the current painted metadata."""
+
+    metadata = getattr(widget, "_metadata_paint", None)
+    if not isinstance(metadata, dict):
+        return 0
+    title = str(metadata.get("title") or "")
+    artist = str(metadata.get("artist") or "")
+    header_rect = _header_layout(widget)["rect"]
+    margins = widget.contentsMargins()
+    shrink_r, _ = widget.painted_frame_shadow_card_shrink()
+    left = int(margins.left())
+    right = int(widget.width() - margins.right() - shrink_r - 8)
+    max_width = max(40, right - left)
+    title_font_pt = int(metadata.get("title_font") or max(6, widget._font_size + 3))
+    artist_font_pt = int(metadata.get("artist_font") or max(6, widget._font_size - 2))
+    title_weight = int(metadata.get("title_weight") or 700)
+    artist_weight = int(metadata.get("artist_weight") or 600)
+    line_spacing = int(metadata.get("line_spacing") or 4)
+    body_top_gap = int(metadata.get("body_top_gap") or 8)
+    y = int(header_rect.bottom() + 1 + body_top_gap)
+    bottom = int(header_rect.bottom())
+    body_flags = (
+        Qt.AlignmentFlag.AlignLeft
+        | Qt.AlignmentFlag.AlignTop
+        | Qt.TextFlag.TextWordWrap
+    )
+
+    if title:
+        title_font = QFont(
+            widget._font_family,
+            title_font_pt,
+            _qt_font_weight(title_weight, QFont.Weight.Bold),
+        )
+        title_fm = QFontMetrics(title_font)
+        title_bounds = title_fm.boundingRect(
+            QRect(left, y, max_width, 1000),
+            int(body_flags),
+            title,
+        )
+        title_height = max(title_fm.height(), title_bounds.height())
+        bottom = y + title_height - 1
+        y = bottom + 1 + line_spacing
+
+    if artist:
+        artist_font = QFont(
+            widget._font_family,
+            artist_font_pt,
+            _qt_font_weight(artist_weight, QFont.Weight.DemiBold),
+        )
+        artist_height = QFontMetrics(artist_font).height() + 2
+        bottom = y + artist_height - 1
+
+    return int(bottom)
+
+
 def draw_control_icon(
     widget: "MediaWidget", painter: QPainter, rect: QRect, key: str
 ) -> None:
@@ -716,6 +772,71 @@ def paint_artwork(widget: "MediaWidget", painter: QPainter) -> None:
         painter.restore()
 
 
+def paint_playback_progress(widget: "MediaWidget", painter: QPainter) -> None:
+    """Paint the optional scalar-only playback progress pill."""
+
+    if not bool(getattr(widget, "_playback_progress_visible", False)):
+        return
+    layout = widget._compute_controls_layout()
+    if not layout:
+        return
+    rect = layout.get("progress_rect")
+    if not isinstance(rect, QRect) or rect.isEmpty():
+        return
+
+    fill_width = max(
+        0,
+        min(rect.width(), int(getattr(widget, "_playback_progress_fill_width", 0) or 0)),
+    )
+    track_rect = QRectF(rect)
+    track_radius = max(1.5, track_rect.height() * 0.5)
+    fill_color = QColor(
+        getattr(widget, "_playback_progress_fill_color", QColor(255, 255, 255, 230))
+    )
+
+    painter.save()
+    try:
+        painter.setPen(Qt.PenStyle.NoPen)
+
+        if bool(getattr(widget, "_playback_progress_shadow_enabled", False)):
+            shadow_rect = track_rect.translated(0.0, 2.0)
+            painter.setBrush(QColor(0, 0, 0, 90))
+            painter.drawRoundedRect(shadow_rect, track_radius, track_radius)
+
+        track_color = QColor(fill_color)
+        track_color.setAlpha(max(32, min(90, int(fill_color.alpha() * 0.28))))
+        painter.setBrush(track_color)
+        painter.drawRoundedRect(track_rect, track_radius, track_radius)
+
+        if fill_width <= 0:
+            return
+
+        fill_rect = QRectF(
+            track_rect.left(),
+            track_rect.top(),
+            float(fill_width),
+            track_rect.height(),
+        )
+        fill_radius = max(0.5, min(fill_rect.width(), fill_rect.height()) * 0.5)
+
+        if bool(getattr(widget, "_playback_progress_glow_enabled", False)):
+            glow_base = QColor(
+                getattr(widget, "_playback_progress_glow_color", QColor(255, 255, 255, 180))
+            )
+            for expansion, alpha_scale in ((4.0, 0.18), (2.5, 0.28), (1.25, 0.42)):
+                glow_color = QColor(glow_base)
+                glow_color.setAlpha(max(1, int(glow_base.alpha() * alpha_scale)))
+                glow_rect = fill_rect.adjusted(-expansion, -expansion, expansion, expansion)
+                glow_radius = fill_radius + expansion
+                painter.setBrush(glow_color)
+                painter.drawRoundedRect(glow_rect, glow_radius, glow_radius)
+
+        painter.setBrush(fill_color)
+        painter.drawRoundedRect(fill_rect, fill_radius, fill_radius)
+    finally:
+        painter.restore()
+
+
 def paint_contents(widget: "MediaWidget", event) -> None:
     """Internal paint implementation — dispatches to sub-painters."""
     # Call base class paintEvent for background frame
@@ -741,6 +862,10 @@ def paint_contents(widget: "MediaWidget", event) -> None:
 
         # Spotify logo
         paint_header_logo(widget, painter)
+
+        # Optional playback position. This is driven only by accepted GSMTC
+        # snapshots and never owns a timer or animation.
+        paint_playback_progress(widget, painter)
 
         # Transport controls row
         paint_controls_row(widget, painter)

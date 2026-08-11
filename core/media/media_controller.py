@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import math
 from typing import Iterable, Optional
 import threading
 
@@ -58,6 +59,10 @@ class MediaTrackInfo:
     artwork: Optional[bytes] = None
     # Runtime-only identity of the selected GSMTC host. Never persisted.
     source_app_user_model_id: str = ""
+    # Runtime-only timeline snapshot captured by the existing GSMTC query.
+    # These fields never introduce their own timer or polling cadence.
+    position_ms: Optional[int] = None
+    duration_ms: Optional[int] = None
 
 
 class BaseMediaController:
@@ -451,6 +456,38 @@ class WindowsGlobalMediaController(BaseMediaController):
         except Exception as _:
             return MediaPlaybackState.UNKNOWN
 
+    @staticmethod
+    def _timespan_to_milliseconds(value) -> Optional[int]:
+        """Convert a WinRT TimeSpan/timedelta-like value to milliseconds."""
+
+        total_seconds = getattr(value, "total_seconds", None)
+        if not callable(total_seconds):
+            return None
+        try:
+            seconds = float(total_seconds())
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if not math.isfinite(seconds):
+            return None
+        return int(round(seconds * 1000.0))
+
+    @classmethod
+    def _normalize_timeline(cls, timeline) -> tuple[Optional[int], Optional[int]]:
+        """Return a bounded relative position/duration pair from GSMTC."""
+
+        if timeline is None:
+            return None, None
+        start_ms = cls._timespan_to_milliseconds(getattr(timeline, "start_time", None))
+        end_ms = cls._timespan_to_milliseconds(getattr(timeline, "end_time", None))
+        position_ms = cls._timespan_to_milliseconds(getattr(timeline, "position", None))
+        if start_ms is None or end_ms is None or position_ms is None:
+            return None, None
+        duration_ms = end_ms - start_ms
+        if duration_ms <= 0:
+            return None, None
+        relative_position_ms = max(0, min(duration_ms, position_ms - start_ms))
+        return relative_position_ms, duration_ms
+
     # ------------------------------------------------------------------
     # BaseMediaController API
     # ------------------------------------------------------------------
@@ -523,6 +560,11 @@ class WindowsGlobalMediaController(BaseMediaController):
 
             info = MediaTrackInfo()
             info.source_app_user_model_id = self._session_source_id(session)
+            try:
+                timeline = session.get_timeline_properties()
+                info.position_ms, info.duration_ms = self._normalize_timeline(timeline)
+            except Exception:
+                logger.debug("[MEDIA] Failed to read timeline properties", exc_info=True)
             if props is not None:
                 try:
                     info.title = (props.title or "").strip()[:256]

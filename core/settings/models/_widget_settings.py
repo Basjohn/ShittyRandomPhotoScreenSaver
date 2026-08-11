@@ -243,6 +243,12 @@ class MediaWidgetSettings:
     provider: str = "spotify"
     spotify_volume_enabled: bool = True
     spotify_volume_fill_color: list[int] = field(default_factory=lambda: [66, 66, 66, 255])
+    playback_progress_enabled: bool = False
+    playback_progress_height: int = 6
+    playback_progress_fill_color: list[int] = field(default_factory=lambda: [255, 255, 255, 230])
+    playback_progress_shadow_enabled: bool = False
+    playback_progress_glow_enabled: bool = False
+    playback_progress_glow_color: list[int] = field(default_factory=lambda: [255, 255, 255, 180])
     
     @classmethod
     def from_settings(cls, settings: "SettingsManager") -> "MediaWidgetSettings":
@@ -276,6 +282,12 @@ class MediaWidgetSettings:
             ),
             spotify_volume_enabled=settings.get("widgets.media.spotify_volume_enabled", True),
             spotify_volume_fill_color=settings.get("widgets.media.spotify_volume_fill_color", [66, 66, 66, 255]),
+            playback_progress_enabled=settings.get("widgets.media.playback_progress_enabled", False),
+            playback_progress_height=settings.get("widgets.media.playback_progress_height", 6),
+            playback_progress_fill_color=settings.get("widgets.media.playback_progress_fill_color", [255, 255, 255, 230]),
+            playback_progress_shadow_enabled=settings.get("widgets.media.playback_progress_shadow_enabled", False),
+            playback_progress_glow_enabled=settings.get("widgets.media.playback_progress_glow_enabled", False),
+            playback_progress_glow_color=settings.get("widgets.media.playback_progress_glow_color", [255, 255, 255, 180]),
         )
 
     @classmethod
@@ -311,6 +323,12 @@ class MediaWidgetSettings:
             provider=preserve_provider_setting(_get("provider", "spotify")),
             spotify_volume_enabled=_get("spotify_volume_enabled", True),
             spotify_volume_fill_color=_get("spotify_volume_fill_color", [66, 66, 66, 255]),
+            playback_progress_enabled=_get("playback_progress_enabled", False),
+            playback_progress_height=int(_get("playback_progress_height", 6)),
+            playback_progress_fill_color=_get("playback_progress_fill_color", [255, 255, 255, 230]),
+            playback_progress_shadow_enabled=_get("playback_progress_shadow_enabled", False),
+            playback_progress_glow_enabled=_get("playback_progress_glow_enabled", False),
+            playback_progress_glow_color=_get("playback_progress_glow_color", [255, 255, 255, 180]),
         )
 
     def to_dict(self, prefix: str = "widgets.media") -> Dict[str, Any]:
@@ -337,6 +355,12 @@ class MediaWidgetSettings:
             f"{prefix}.provider": self.provider,
             f"{prefix}.spotify_volume_enabled": self.spotify_volume_enabled,
             f"{prefix}.spotify_volume_fill_color": self.spotify_volume_fill_color,
+            f"{prefix}.playback_progress_enabled": self.playback_progress_enabled,
+            f"{prefix}.playback_progress_height": int(self.playback_progress_height),
+            f"{prefix}.playback_progress_fill_color": self.playback_progress_fill_color,
+            f"{prefix}.playback_progress_shadow_enabled": self.playback_progress_shadow_enabled,
+            f"{prefix}.playback_progress_glow_enabled": self.playback_progress_glow_enabled,
+            f"{prefix}.playback_progress_glow_color": self.playback_progress_glow_color,
         }
 
 

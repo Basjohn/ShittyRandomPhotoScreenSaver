@@ -172,6 +172,34 @@ def _update_media_bg_visibility(tab) -> None:
         container.setVisible(bool(show))
 
 
+def _update_media_progress_controls(tab) -> None:
+    """Gate progress styling behind both transport and progress toggles."""
+
+    transport_enabled = bool(
+        getattr(tab, "media_show_controls", None)
+        and tab.media_show_controls.isChecked()
+    )
+    progress_toggle = getattr(tab, "media_playback_progress_enabled", None)
+    if progress_toggle is not None:
+        progress_toggle.setEnabled(transport_enabled)
+    options = getattr(tab, "_media_progress_options_container", None)
+    if options is not None:
+        options.setEnabled(
+            transport_enabled
+            and progress_toggle is not None
+            and progress_toggle.isChecked()
+        )
+    glow_color = getattr(tab, "media_playback_progress_glow_color_btn", None)
+    glow_toggle = getattr(tab, "media_playback_progress_glow_enabled", None)
+    if glow_color is not None:
+        glow_color.setEnabled(
+            options is not None
+            and options.isEnabled()
+            and glow_toggle is not None
+            and glow_toggle.isChecked()
+        )
+
+
 def _update_osc_multi_line_visibility(tab) -> None:
     """Show/hide multi-line sub-controls based on checkbox and line count."""
     enabled = getattr(tab, 'osc_multi_line', None) and tab.osc_multi_line.isChecked()
@@ -575,7 +603,88 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         tab._default_bool('media', 'show_controls', True)
     )
     tab.media_show_controls.stateChanged.connect(tab._save_settings)
+    tab.media_show_controls.stateChanged.connect(lambda: _update_media_progress_controls(tab))
     controls_layout.addWidget(tab.media_show_controls)
+
+    tab.media_playback_progress_enabled = QCheckBox("Show Playback Progress Bar")
+    tab.media_playback_progress_enabled.setProperty("circleIndicator", True)
+    tab.media_playback_progress_enabled.setChecked(
+        tab._default_bool('media', 'playback_progress_enabled', False)
+    )
+    tab.media_playback_progress_enabled.setToolTip(
+        "Draws a pill progress bar above the transport keys using the existing GSMTC poll. "
+        "It adds no timer, animation, or independent media request."
+    )
+    tab.media_playback_progress_enabled.stateChanged.connect(tab._save_settings)
+    tab.media_playback_progress_enabled.stateChanged.connect(
+        lambda: _update_media_progress_controls(tab)
+    )
+    controls_layout.addWidget(tab.media_playback_progress_enabled)
+
+    tab._media_progress_options_container = QWidget()
+    progress_options_layout = QVBoxLayout(tab._media_progress_options_container)
+    progress_options_layout.setContentsMargins(18, 0, 0, 4)
+    progress_options_layout.setSpacing(6)
+
+    progress_height_row = _aligned_row(progress_options_layout, "Bar Height:")
+    tab.media_playback_progress_height = QSpinBox()
+    tab.media_playback_progress_height.setRange(3, 18)
+    tab.media_playback_progress_height.setValue(
+        tab._default_int('media', 'playback_progress_height', 6)
+    )
+    tab.media_playback_progress_height.valueChanged.connect(tab._save_settings)
+    progress_height_row.addWidget(tab.media_playback_progress_height)
+    progress_height_row.addWidget(_inline_label("px"))
+    progress_height_row.addStretch()
+
+    progress_fill_row = _swatch_row(progress_options_layout, "Fill Color:")
+    tab.media_playback_progress_fill_color_btn = ColorSwatchButton(
+        title="Choose Media Playback Progress Fill Color"
+    )
+    tab.media_playback_progress_fill_color_btn.set_color(tab._media_progress_fill_color)
+    tab.media_playback_progress_fill_color_btn.color_changed.connect(
+        lambda color: (
+            setattr(tab, '_media_progress_fill_color', color),
+            tab._save_settings(),
+        )
+    )
+    progress_fill_row.addWidget(tab.media_playback_progress_fill_color_btn)
+    progress_fill_row.addStretch()
+
+    tab.media_playback_progress_shadow_enabled = QCheckBox("Progress Bar Shadow")
+    tab.media_playback_progress_shadow_enabled.setProperty("circleIndicator", True)
+    tab.media_playback_progress_shadow_enabled.setChecked(
+        tab._default_bool('media', 'playback_progress_shadow_enabled', False)
+    )
+    tab.media_playback_progress_shadow_enabled.stateChanged.connect(tab._save_settings)
+    progress_options_layout.addWidget(tab.media_playback_progress_shadow_enabled)
+
+    tab.media_playback_progress_glow_enabled = QCheckBox("Progress Bar Glow")
+    tab.media_playback_progress_glow_enabled.setProperty("circleIndicator", True)
+    tab.media_playback_progress_glow_enabled.setChecked(
+        tab._default_bool('media', 'playback_progress_glow_enabled', False)
+    )
+    tab.media_playback_progress_glow_enabled.stateChanged.connect(tab._save_settings)
+    tab.media_playback_progress_glow_enabled.stateChanged.connect(
+        lambda: _update_media_progress_controls(tab)
+    )
+    progress_options_layout.addWidget(tab.media_playback_progress_glow_enabled)
+
+    progress_glow_row = _swatch_row(progress_options_layout, "Glow Color:")
+    tab.media_playback_progress_glow_color_btn = ColorSwatchButton(
+        title="Choose Media Playback Progress Glow Color"
+    )
+    tab.media_playback_progress_glow_color_btn.set_color(tab._media_progress_glow_color)
+    tab.media_playback_progress_glow_color_btn.color_changed.connect(
+        lambda color: (
+            setattr(tab, '_media_progress_glow_color', color),
+            tab._save_settings(),
+        )
+    )
+    progress_glow_row.addWidget(tab.media_playback_progress_glow_color_btn)
+    progress_glow_row.addStretch()
+    controls_layout.addWidget(tab._media_progress_options_container)
+    _update_media_progress_controls(tab)
 
     tab.media_spotify_volume_enabled = QCheckBox("Enable App Volume Slider")
     tab.media_spotify_volume_enabled.setProperty("circleIndicator", True)
@@ -851,6 +960,18 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     tab.media_rounded_artwork.setChecked(tab._config_bool('media', media_config, 'rounded_artwork_border', True))
     tab.media_show_header_frame.setChecked(tab._config_bool('media', media_config, 'show_header_frame', True))
     tab.media_show_controls.setChecked(tab._config_bool('media', media_config, 'show_controls', True))
+    tab.media_playback_progress_enabled.setChecked(
+        tab._config_bool('media', media_config, 'playback_progress_enabled', False)
+    )
+    tab.media_playback_progress_height.setValue(
+        tab._config_int('media', media_config, 'playback_progress_height', 6)
+    )
+    tab.media_playback_progress_shadow_enabled.setChecked(
+        tab._config_bool('media', media_config, 'playback_progress_shadow_enabled', False)
+    )
+    tab.media_playback_progress_glow_enabled.setChecked(
+        tab._config_bool('media', media_config, 'playback_progress_glow_enabled', False)
+    )
     tab.media_spotify_volume_enabled.setChecked(
         tab._config_bool('media', media_config, 'spotify_volume_enabled', True)
     )
@@ -884,10 +1005,30 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set volume_fill_color=%s", volume_fill_data, exc_info=True)
         tab._media_volume_fill_color = QColor(66, 66, 66, 255)
+    progress_fill_data = media_config.get(
+        'playback_progress_fill_color',
+        tab._widget_default('media', 'playback_progress_fill_color', [255, 255, 255, 230]),
+    )
+    try:
+        tab._media_progress_fill_color = QColor(*progress_fill_data)
+    except Exception:
+        logger.debug("[MEDIA_TAB] Failed to set progress fill color=%s", progress_fill_data, exc_info=True)
+        tab._media_progress_fill_color = QColor(255, 255, 255, 230)
+    progress_glow_data = media_config.get(
+        'playback_progress_glow_color',
+        tab._widget_default('media', 'playback_progress_glow_color', [255, 255, 255, 180]),
+    )
+    try:
+        tab._media_progress_glow_color = QColor(*progress_glow_data)
+    except Exception:
+        logger.debug("[MEDIA_TAB] Failed to set progress glow color=%s", progress_glow_data, exc_info=True)
+        tab._media_progress_glow_color = QColor(255, 255, 255, 180)
     _apply_color_to_button('media_color_btn', '_media_color')
     _apply_color_to_button('media_bg_color_btn', '_media_bg_color')
     _apply_color_to_button('media_border_color_btn', '_media_border_color')
     _apply_color_to_button('media_volume_fill_color_btn', '_media_volume_fill_color')
+    _apply_color_to_button('media_playback_progress_fill_color_btn', '_media_progress_fill_color')
+    _apply_color_to_button('media_playback_progress_glow_color_btn', '_media_progress_glow_color')
 
     m_monitor_sel = media_config.get('monitor', tab._widget_default('media', 'monitor', 'ALL'))
     m_mon_text = str(m_monitor_sel) if isinstance(m_monitor_sel, (int, str)) else 'ALL'
@@ -896,6 +1037,7 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.media_monitor_combo.setCurrentIndex(midx)
 
     _update_media_bg_visibility(tab)
+    _update_media_progress_controls(tab)
     _update_media_enabled_visibility(tab)
 
 
@@ -1075,6 +1217,12 @@ def save_media_settings(tab: WidgetsTab) -> dict:
         'rounded_artwork_border': tab.media_rounded_artwork.isChecked(),
         'show_header_frame': tab.media_show_header_frame.isChecked(),
         'show_controls': tab.media_show_controls.isChecked(),
+        'playback_progress_enabled': tab.media_playback_progress_enabled.isChecked(),
+        'playback_progress_height': tab.media_playback_progress_height.value(),
+        'playback_progress_fill_color': _qcolor_to_list(tab._media_progress_fill_color),
+        'playback_progress_shadow_enabled': tab.media_playback_progress_shadow_enabled.isChecked(),
+        'playback_progress_glow_enabled': tab.media_playback_progress_glow_enabled.isChecked(),
+        'playback_progress_glow_color': _qcolor_to_list(tab._media_progress_glow_color),
         'spotify_volume_enabled': tab.media_spotify_volume_enabled.isChecked(),
         'mute_button_enabled': tab.media_mute_button_enabled.isChecked(),
     }

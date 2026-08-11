@@ -254,6 +254,36 @@ class TestMediaWidgetFactory:
         
         assert widget is None
 
+    def test_create_applies_timer_free_playback_progress_style(
+        self,
+        mock_settings,
+        parent_widget,
+    ):
+        factory = MediaWidgetFactory(mock_settings)
+
+        widget = factory.create(
+            parent_widget,
+            {
+                "enabled": True,
+                "playback_progress_enabled": True,
+                "playback_progress_height": 9,
+                "playback_progress_fill_color": [12, 130, 240, 220],
+                "playback_progress_shadow_enabled": True,
+                "playback_progress_glow_enabled": True,
+                "playback_progress_glow_color": [40, 180, 255, 170],
+            },
+        )
+
+        assert widget is not None
+        assert widget._playback_progress_enabled is True
+        assert widget._playback_progress_height == 9
+        assert widget._playback_progress_fill_color.getRgb() == (12, 130, 240, 220)
+        assert widget._playback_progress_shadow_enabled is True
+        assert widget._playback_progress_glow_enabled is True
+        assert widget._playback_progress_glow_color.getRgb() == (40, 180, 255, 170)
+        assert not hasattr(widget, "_playback_progress_timer")
+        widget.deleteLater()
+
 
 # ---------------------------------------------------------------------------
 # Reddit Widget Factory Tests

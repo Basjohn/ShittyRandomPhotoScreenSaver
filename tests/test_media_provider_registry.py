@@ -1,6 +1,7 @@
 """Focused contracts for registered GSMTC media-provider identities."""
 from __future__ import annotations
 
+from datetime import timedelta
 from types import SimpleNamespace
 
 from core.media.media_controller import MediaPlaybackState, WindowsGlobalMediaController
@@ -59,6 +60,28 @@ def test_registry_has_stable_process_and_failover_identities() -> None:
     assert preserve_provider_setting("retired_alias") == "retired_alias"
     assert MediaWidgetSettings.from_mapping({"provider": "spotify_browser"}).provider == "spotify_browser"
     assert MediaWidgetSettings.from_mapping({"provider": "retired_alias"}).provider == "retired_alias"
+
+
+def test_media_progress_typed_settings_roundtrip() -> None:
+    model = MediaWidgetSettings.from_mapping(
+        {
+            "playback_progress_enabled": True,
+            "playback_progress_height": 10,
+            "playback_progress_fill_color": [12, 130, 240, 220],
+            "playback_progress_shadow_enabled": True,
+            "playback_progress_glow_enabled": True,
+            "playback_progress_glow_color": [40, 180, 255, 170],
+        }
+    )
+
+    saved = model.to_dict()
+
+    assert saved["widgets.media.playback_progress_enabled"] is True
+    assert saved["widgets.media.playback_progress_height"] == 10
+    assert saved["widgets.media.playback_progress_fill_color"] == [12, 130, 240, 220]
+    assert saved["widgets.media.playback_progress_shadow_enabled"] is True
+    assert saved["widgets.media.playback_progress_glow_enabled"] is True
+    assert saved["widgets.media.playback_progress_glow_color"] == [40, 180, 255, 170]
 
 
 class _PlaybackStatus:
@@ -159,6 +182,8 @@ def test_io_worker_failover_runs_one_inline_gsmtc_query_without_nested_submit() 
         thumbnail = None
 
     class _BrowserSession(_Session):
+        timeline_reads = 0
+
         async def try_get_media_properties_async(self):
             return _Properties()
 
@@ -169,6 +194,14 @@ def test_io_worker_failover_runs_one_inline_gsmtc_query_without_nested_submit() 
                 is_previous_enabled=True,
             )
             return SimpleNamespace(playback_status=self._status, controls=controls)
+
+        def get_timeline_properties(self):
+            self.timeline_reads += 1
+            return SimpleNamespace(
+                start_time=timedelta(seconds=5),
+                end_time=timedelta(seconds=245),
+                position=timedelta(seconds=65),
+            )
 
     browser = _BrowserSession("msedge.exe", _PlaybackStatus.PLAYING)
     manager = _Manager([browser], browser)
@@ -201,7 +234,30 @@ def test_io_worker_failover_runs_one_inline_gsmtc_query_without_nested_submit() 
     assert provider == "spotify_browser"
     assert info is not None and info.title == "Browser Track"
     assert info.source_app_user_model_id == "msedge.exe"
+    assert info.position_ms == 60_000
+    assert info.duration_ms == 240_000
+    assert browser.timeline_reads == 1
     assert _MediaManager.requests == 1
+
+
+def test_gsmtc_timeline_normalization_rejects_invalid_duration_and_clamps_position() -> None:
+    normalize = WindowsGlobalMediaController._normalize_timeline
+
+    assert normalize(
+        SimpleNamespace(
+            start_time=timedelta(seconds=10),
+            end_time=timedelta(seconds=10),
+            position=timedelta(seconds=10),
+        )
+    ) == (None, None)
+    assert normalize(
+        SimpleNamespace(
+            start_time=timedelta(seconds=10),
+            end_time=timedelta(seconds=40),
+            position=timedelta(seconds=99),
+        )
+    ) == (30_000, 30_000)
+    assert normalize(SimpleNamespace()) == (None, None)
 
 
 def test_session_selection_rejects_unrelated_and_false_positive_sources() -> None:

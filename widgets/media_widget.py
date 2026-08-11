@@ -20,6 +20,7 @@ from typing import Optional, TYPE_CHECKING, ClassVar, Any
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import QBuffer, QByteArray, QTimer, Qt, Signal, QPoint
 from PySide6.QtGui import (
+    QColor,
     QFont,
     QFontMetrics,
     QImage,
@@ -200,6 +201,16 @@ class MediaWidget(BaseOverlayWidget):
 
         # Layout/controls behaviour
         self._show_controls: bool = True
+        self._playback_progress_enabled: bool = False
+        self._playback_progress_height: int = 6
+        self._playback_progress_fill_color = QColor(255, 255, 255, 230)
+        self._playback_progress_shadow_enabled: bool = False
+        self._playback_progress_glow_enabled: bool = False
+        self._playback_progress_glow_color = QColor(255, 255, 255, 180)
+        self._playback_progress_visible: bool = False
+        self._playback_progress_fill_width: int = 0
+        self._playback_progress_paint_key: Optional[tuple] = None
+        self._metadata_paint_bottom: int = 0
 
         # Optional Spotify-style brand logo used when album artwork is absent.
         self._brand_pixmap: Optional[QPixmap] = self._load_brand_pixmap()
@@ -766,7 +777,41 @@ class MediaWidget(BaseOverlayWidget):
         """Force the next media display refresh to rebuild painter-owned text layout."""
 
         self._metadata_paint = {}
+        self._metadata_paint_bottom = 0
         self._last_metadata_identity = None
+
+    def _refresh_metadata_paint_boundary(self) -> None:
+        """Prepare the scalar text boundary outside paint-time layout lookup."""
+
+        if not bool(getattr(self, "_playback_progress_enabled", False)):
+            self._metadata_paint_bottom = 0
+            return
+        try:
+            from widgets.media.painting import metadata_paint_bottom
+
+            self._metadata_paint_bottom = max(0, int(metadata_paint_bottom(self)))
+        except Exception as exc:
+            logger.debug("[MEDIA_WIDGET] Failed to prepare metadata paint boundary: %s", exc)
+            self._metadata_paint_bottom = 0
+        self._invalidate_controls_layout()
+
+    def _refresh_playback_progress_snapshot(self) -> bool:
+        """Re-quantize progress from the accepted snapshot without publication work."""
+
+        info = self._last_info
+        if info is None:
+            try:
+                info = self.get_retained_display_info()
+            except Exception as exc:
+                logger.debug("[MEDIA_WIDGET] Failed to read retained progress snapshot: %s", exc)
+                info = None
+        try:
+            from widgets.media.display_update import _update_progress_paint_state
+
+            return bool(_update_progress_paint_state(self, info))
+        except Exception as exc:
+            logger.debug("[MEDIA_WIDGET] Failed to refresh progress paint state: %s", exc)
+            return True
 
     def _refresh_current_display_layout(self) -> None:
         """Rebuild the live or retained media card layout after geometry-affecting setting changes."""
@@ -834,16 +879,79 @@ class MediaWidget(BaseOverlayWidget):
     def set_show_controls(self, show: bool) -> None:
         """Show or hide the transport controls row."""
 
-        self._show_controls = bool(show)
+        show = bool(show)
+        if show == self._show_controls:
+            return
+        old_reserved = self._controls_reserved_height()
+        self._show_controls = show
+        self._apply_controls_reserved_height_delta(
+            old_reserved,
+            self._controls_reserved_height(),
+        )
+        self._refresh_metadata_paint_boundary()
         invalidate = getattr(self, "_invalidate_controls_layout", None)
         if callable(invalidate):
             invalidate()
-        if self._last_info is not None:
-            try:
-                self._update_display(self._last_info)
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                self._safe_update()
+        self._refresh_current_display_layout()
+
+    def set_playback_progress_config(
+        self,
+        *,
+        enabled: bool,
+        height: int,
+        fill_color: QColor,
+        shadow_enabled: bool,
+        glow_enabled: bool,
+        glow_color: QColor,
+    ) -> None:
+        """Apply the paint-only playback progress presentation settings."""
+
+        normalized_height = max(3, min(18, int(height)))
+        try:
+            normalized_fill = QColor(fill_color)
+        except (TypeError, ValueError):
+            normalized_fill = QColor()
+        if not normalized_fill.isValid():
+            normalized_fill = QColor(255, 255, 255, 230)
+        try:
+            normalized_glow = QColor(glow_color)
+        except (TypeError, ValueError):
+            normalized_glow = QColor()
+        if not normalized_glow.isValid():
+            normalized_glow = QColor(255, 255, 255, 180)
+        normalized = (
+            bool(enabled),
+            normalized_height,
+            normalized_fill.rgba(),
+            bool(shadow_enabled),
+            bool(glow_enabled),
+            normalized_glow.rgba(),
+        )
+        current = (
+            self._playback_progress_enabled,
+            self._playback_progress_height,
+            self._playback_progress_fill_color.rgba(),
+            self._playback_progress_shadow_enabled,
+            self._playback_progress_glow_enabled,
+            self._playback_progress_glow_color.rgba(),
+        )
+        if normalized == current:
+            return
+
+        old_reserved = self._controls_reserved_height()
+        self._playback_progress_enabled = normalized[0]
+        self._playback_progress_height = normalized[1]
+        self._playback_progress_fill_color = normalized_fill
+        self._playback_progress_shadow_enabled = normalized[3]
+        self._playback_progress_glow_enabled = normalized[4]
+        self._playback_progress_glow_color = normalized_glow
+        new_reserved = self._controls_reserved_height()
+        self._apply_controls_reserved_height_delta(old_reserved, new_reserved)
+        self._refresh_metadata_paint_boundary()
+        self._invalidate_controls_layout()
+        progress_changed = self._refresh_playback_progress_snapshot()
+        if progress_changed or old_reserved != new_reserved:
+            self._safe_update()
 
 
     def _invalidate_controls_layout(self) -> None:
@@ -912,6 +1020,8 @@ class MediaWidget(BaseOverlayWidget):
                             can_previous=info.can_previous,
                             artwork=info.artwork,
                             source_app_user_model_id=info.source_app_user_model_id,
+                            position_ms=info.position_ms,
+                            duration_ms=info.duration_ms,
                         )
                     except Exception as e:
                         logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
@@ -2030,6 +2140,36 @@ class MediaWidget(BaseOverlayWidget):
     def _controls_row_margin(self) -> int:
         """Bottom margin that keeps controls breathing room above the card edge."""
         return max(10, int(self._controls_row_min_height() * 0.35))
+
+    def _playback_progress_lane_height(self) -> int:
+        """Return the reserved lane above controls for the optional pill bar."""
+
+        if not (self._show_controls and self._playback_progress_enabled):
+            return 0
+        return self._playback_progress_height + max(10, self._playback_progress_height // 2 + 6)
+
+    def _controls_reserved_height(self) -> int:
+        """Return the full fixed-card footprint owned by transport presentation."""
+
+        if not self._show_controls:
+            return 0
+        return self._controls_row_min_height() + self._playback_progress_lane_height()
+
+    def _apply_controls_reserved_height_delta(self, old_height: int, new_height: int) -> None:
+        """Resize an established anchored card without mutating CUSTOM geometry."""
+
+        delta = int(new_height) - int(old_height)
+        if delta == 0 or self._fixed_card_height is None:
+            return
+        if self._active_custom_layout_rect() is not None:
+            return
+        self._fixed_card_height = max(220, int(self._fixed_card_height) + delta)
+        try:
+            self.setMinimumHeight(int(self._fixed_card_height))
+            self.setMaximumHeight(int(self._fixed_card_height))
+            self.updateGeometry()
+        except Exception as exc:
+            logger.debug("[MEDIA_WIDGET] Failed to apply controls height delta: %s", exc)
     
     def _compute_controls_layout(self):
         """Delegates to widgets.media_layout."""
@@ -2260,6 +2400,17 @@ class MediaWidget(BaseOverlayWidget):
     # ------------------------------------------------------------------
     # Painting
     # ------------------------------------------------------------------
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        try:
+            width_changed = event.oldSize().width() != event.size().width()
+        except Exception:
+            width_changed = True
+        if width_changed and bool(getattr(self, "_playback_progress_enabled", False)):
+            self._refresh_metadata_paint_boundary()
+            if self._refresh_playback_progress_snapshot():
+                self._safe_update()
+
     def paintEvent(self, event):  # type: ignore[override]
         """Paint the media card through the painter-owned runtime path.
 

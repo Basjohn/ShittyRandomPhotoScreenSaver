@@ -499,6 +499,18 @@ class MediaWidgetFactory(WidgetFactory):
             show_controls = SettingsManager.to_bool(model.show_controls, True)
             if hasattr(widget, 'set_show_controls'):
                 widget.set_show_controls(show_controls)
+
+            if hasattr(widget, 'set_playback_progress_config'):
+                progress_fill = parse_color_to_qcolor(model.playback_progress_fill_color)
+                progress_glow = parse_color_to_qcolor(model.playback_progress_glow_color)
+                widget.set_playback_progress_config(
+                    enabled=SettingsManager.to_bool(model.playback_progress_enabled, False),
+                    height=int(model.playback_progress_height),
+                    fill_color=progress_fill or parse_color_to_qcolor([255, 255, 255, 230]),
+                    shadow_enabled=SettingsManager.to_bool(model.playback_progress_shadow_enabled, False),
+                    glow_enabled=SettingsManager.to_bool(model.playback_progress_glow_enabled, False),
+                    glow_color=progress_glow or parse_color_to_qcolor([255, 255, 255, 180]),
+                )
             
             show_header = SettingsManager.to_bool(model.show_header_frame, True)
             if hasattr(widget, 'set_show_header_frame'):

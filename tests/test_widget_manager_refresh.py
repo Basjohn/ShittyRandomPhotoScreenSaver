@@ -80,6 +80,7 @@ class _StubMediaWidget(_BaseStubWidget):
         self.rounded_artwork = None
         self.show_controls = None
         self.show_header_frame = None
+        self.playback_progress = None
         self.text_color = None
         self.show_background = None
         self.background_color = None
@@ -113,6 +114,9 @@ class _StubMediaWidget(_BaseStubWidget):
 
     def set_show_header_frame(self, value):
         self.show_header_frame = value
+
+    def set_playback_progress_config(self, **kwargs):
+        self.playback_progress = kwargs
 
     def set_text_color(self, value):
         self.text_color = value
@@ -367,6 +371,12 @@ def test_media_widget_creation_handles_prefixed_positions():
             "rounded_artwork_border": False,
             "show_controls": False,
             "show_header_frame": False,
+            "playback_progress_enabled": True,
+            "playback_progress_height": 9,
+            "playback_progress_fill_color": [12, 130, 240, 220],
+            "playback_progress_shadow_enabled": True,
+            "playback_progress_glow_enabled": True,
+            "playback_progress_glow_color": [40, 180, 255, 170],
             "color": [10, 20, 30, 255],
             "bg_color": [1, 2, 3, 4],
             "bg_opacity": 0.8,
@@ -391,6 +401,14 @@ def test_media_widget_creation_handles_prefixed_positions():
     assert widget.position == MediaPosition.TOP_CENTER
     assert widget.margin == 15
     assert widget.show_controls is False
+    assert widget.playback_progress == {
+        "enabled": True,
+        "height": 9,
+        "fill_color": ((12, 130, 240, 220), None),
+        "shadow_enabled": True,
+        "glow_enabled": True,
+        "glow_color": ((40, 180, 255, 170), None),
+    }
     assert widget.background_border[0] >= 1
     assert widget.background_border[1] == (tuple([5, 6, 7, 128]), 0.5)
     assert widget.shadow_config == widgets_config["shadows"]

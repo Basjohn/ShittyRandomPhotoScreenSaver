@@ -760,6 +760,22 @@
         "margin": 30,
         "monitor": 1,
         "mute_button_enabled": false,
+        "playback_progress_enabled": false,
+        "playback_progress_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "playback_progress_glow_color": [
+          255,
+          255,
+          255,
+          180
+        ],
+        "playback_progress_glow_enabled": false,
+        "playback_progress_height": 6,
+        "playback_progress_shadow_enabled": false,
         "position": "Top Left",
         "provider": "spotify",
         "rounded_artwork_border": true,

@@ -1894,6 +1894,7 @@ class TestSettingsRouting:
                 self.text_color = None
                 self.show_controls = None
                 self.show_header_frame = None
+                self.playback_progress = None
 
             def set_font_family(self, value):
                 self.font_family = value
@@ -1916,6 +1917,9 @@ class TestSettingsRouting:
             def set_show_header_frame(self, value):
                 self.show_header_frame = value
 
+            def set_playback_progress_config(self, **kwargs):
+                self.playback_progress = kwargs
+
         parent = MagicMock()
         manager = WidgetManager(parent)
         fake_media = _FakeMediaWidget()
@@ -1930,6 +1934,12 @@ class TestSettingsRouting:
                 "rounded_artwork_border": False,
                 "show_controls": False,
                 "show_header_frame": False,
+                "playback_progress_enabled": True,
+                "playback_progress_height": 10,
+                "playback_progress_fill_color": [12, 130, 240, 220],
+                "playback_progress_shadow_enabled": True,
+                "playback_progress_glow_enabled": True,
+                "playback_progress_glow_color": [40, 180, 255, 170],
                 "color": [1, 2, 3, 255],
             }
         }
@@ -1942,6 +1952,12 @@ class TestSettingsRouting:
         assert fake_media.rounded_artwork is False
         assert fake_media.show_controls is False
         assert fake_media.show_header_frame is False
+        assert fake_media.playback_progress["enabled"] is True
+        assert fake_media.playback_progress["height"] == 10
+        assert fake_media.playback_progress["fill_color"].getRgb() == (12, 130, 240, 220)
+        assert fake_media.playback_progress["shadow_enabled"] is True
+        assert fake_media.playback_progress["glow_enabled"] is True
+        assert fake_media.playback_progress["glow_color"].getRgb() == (40, 180, 255, 170)
 
     def test_refresh_spotify_visualizer_config_repositions_using_live_growth_contract(self):
         from PySide6.QtCore import QRect

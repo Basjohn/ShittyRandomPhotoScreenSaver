@@ -206,6 +206,58 @@ def _has_fixed_metadata_presentation(widget: "MediaWidget") -> bool:
     )
 
 
+def _update_progress_paint_state(
+    widget: "MediaWidget",
+    info: Optional[MediaTrackInfo],
+) -> bool:
+    """Commit a pixel-quantized progress snapshot and report visual change."""
+
+    visible = False
+    fill_width = 0
+    paint_key: tuple = (False,)
+    if bool(getattr(widget, "_playback_progress_enabled", False)) and info is not None:
+        try:
+            duration_ms = int(info.duration_ms) if info.duration_ms is not None else 0
+            position_ms = int(info.position_ms) if info.position_ms is not None else 0
+        except (TypeError, ValueError, OverflowError):
+            duration_ms = 0
+            position_ms = 0
+        if duration_ms > 0:
+            layout_getter = getattr(widget, "_compute_controls_layout", None)
+            layout = layout_getter() if callable(layout_getter) else None
+            progress_rect = layout.get("progress_rect") if isinstance(layout, dict) else None
+            if progress_rect is not None and not progress_rect.isEmpty():
+                position_ms = max(0, min(duration_ms, position_ms))
+                fill_width = int(round(progress_rect.width() * position_ms / duration_ms))
+                fill_width = max(0, min(progress_rect.width(), fill_width))
+                visible = True
+                paint_key = (
+                    True,
+                    progress_rect.x(),
+                    progress_rect.y(),
+                    progress_rect.width(),
+                    progress_rect.height(),
+                    fill_width,
+                    getattr(widget, "_playback_progress_fill_color", None).rgba()
+                    if getattr(widget, "_playback_progress_fill_color", None) is not None
+                    else 0,
+                    bool(getattr(widget, "_playback_progress_shadow_enabled", False)),
+                    bool(getattr(widget, "_playback_progress_glow_enabled", False)),
+                    getattr(widget, "_playback_progress_glow_color", None).rgba()
+                    if getattr(widget, "_playback_progress_glow_color", None) is not None
+                    else 0,
+                )
+
+    old_key = getattr(widget, "_playback_progress_paint_key", None)
+    changed = paint_key != old_key
+    if old_key is None and paint_key == (False,):
+        changed = False
+    widget._playback_progress_visible = visible
+    widget._playback_progress_fill_width = fill_width
+    widget._playback_progress_paint_key = paint_key
+    return changed
+
+
 def _compute_metadata_layout_budget(widget: "MediaWidget", *, has_artwork: bool = False) -> dict[str, int]:
     width = max(1, int(getattr(widget, "width", lambda: 0)() or 0))
     height = max(1, int(getattr(widget, "height", lambda: 0)() or 0))
@@ -424,8 +476,10 @@ def update_display(
     metadata_changed = False
     artwork_changed = False
     artwork_snapshot_processed = False
+    progress_changed = False
 
     if info is not None:
+        progress_changed = _update_progress_paint_state(widget, info)
         current_identity = widget._compute_track_identity(info)
         current_metadata_identity = widget._compute_metadata_identity(info)
         metadata_changed = current_metadata_identity != widget._last_metadata_identity
@@ -508,6 +562,10 @@ def update_display(
                 widget,
                 budget_exhausted=budget_exhausted,
             )
+            if progress_changed:
+                safe_update = getattr(widget, "_safe_update", None)
+                if callable(safe_update):
+                    safe_update()
             return
 
         # Track changed - update identity and proceed
@@ -538,9 +596,13 @@ def update_display(
     if info is None:
         retained_info = _handle_no_media(widget)
         if retained_info is None:
+            _update_progress_paint_state(widget, None)
             return
         info = retained_info
         widget._last_info = info
+
+    # Shared/retained fallback may replace the original empty snapshot.
+    _update_progress_paint_state(widget, info)
 
     # Apply only the worker-prepared artwork that belongs to the final snapshot.
     # A raw ``None`` result may have been replaced by retained/shared metadata,
@@ -919,7 +981,12 @@ def _build_and_apply_metadata(
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             hint_h = 0
         base_min = widget.minimumHeight()
-        control_padding = widget._controls_row_min_height()
+        reserved_height = getattr(widget, "_controls_reserved_height", None)
+        control_padding = (
+            reserved_height()
+            if callable(reserved_height)
+            else widget._controls_row_min_height()
+        )
         widget._fixed_card_height = max(220, base_min, hint_h + control_padding)
 
     # Artwork and its reserved lane become visible atomically. Deferred
@@ -935,6 +1002,12 @@ def _build_and_apply_metadata(
         right_margin=right_margin,
         bottom_margin=widget._controls_row_margin() + shrink_b,
     )
+    refresh_metadata_boundary = getattr(widget, "_refresh_metadata_paint_boundary", None)
+    if callable(refresh_metadata_boundary):
+        refresh_metadata_boundary()
+    refresh_progress_snapshot = getattr(widget, "_refresh_playback_progress_snapshot", None)
+    if callable(refresh_progress_snapshot):
+        refresh_progress_snapshot()
     layout_ms = max(0.0, (time.monotonic() - update_started) * 1000.0)
 
     if layout_only:
