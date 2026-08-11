@@ -52,7 +52,7 @@ A release candidate fails when a critical gate fails even if one average metric 
 
 - [ ] Main log is readable high-level narrative plus every WARNING/ERROR/CRITICAL.
 - [ ] Routine enabled-family INFO/DEBUG is routed to sidecar without systematic duplication.
-- [ ] Structured family routing prevents token accidents like `[GL CACHE]` versus `[CACHE]`.
+- [x] Structured family routing prevents token accidents like `[GL CACHE]` versus `[CACHE]`.
 - [ ] Logging queue depth/writer lag/drop/flush telemetry is bounded and visible.
 - [ ] Raw logs/failed runs/manifests/parser commands are preserved.
 

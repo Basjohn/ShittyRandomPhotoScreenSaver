@@ -12,13 +12,34 @@ import pytest
 import logging
 from core.logging.logger import (
     CacheLogFilter,
+    GeometryLogFilter,
+    LifecycleLogFilter,
+    LogFamilyAdapter,
     NonPerfFilter,
     NonSpotifyFilter,
     PerfLogFilter,
+    SettingsLogFilter,
     SpacedLogFormatter,
     SpotifyVisLogFilter,
     SpotifyVolLogFilter,
+    SteamLogFilter,
+    UsageLogFilter,
     VerboseLogFilter,
+    WidgetPerfLogFilter,
+    get_logger,
+)
+from core.logging.tags import (
+    LOG_FAMILY_CACHE,
+    LOG_FAMILY_FIELD,
+    LOG_FAMILY_GEOMETRY,
+    LOG_FAMILY_LIFECYCLE,
+    LOG_FAMILY_PERF,
+    LOG_FAMILY_SETTINGS,
+    LOG_FAMILY_STEAM,
+    LOG_FAMILY_USAGE,
+    LOG_FAMILY_VISUALIZER,
+    LOG_FAMILY_VISUALIZER_VOLUME,
+    LOG_FAMILY_WIDGET_PERF,
 )
 
 
@@ -86,6 +107,107 @@ def test_cache_filter_accepts_gl_cache_family():
     )
 
     assert filter_obj.filter(record) is True
+
+
+@pytest.mark.parametrize(
+    ("filter_type", "family"),
+    (
+        (PerfLogFilter, LOG_FAMILY_PERF),
+        (UsageLogFilter, LOG_FAMILY_USAGE),
+        (WidgetPerfLogFilter, LOG_FAMILY_WIDGET_PERF),
+        (SpotifyVisLogFilter, LOG_FAMILY_VISUALIZER),
+        (SpotifyVolLogFilter, LOG_FAMILY_VISUALIZER_VOLUME),
+        (GeometryLogFilter, LOG_FAMILY_GEOMETRY),
+        (SettingsLogFilter, LOG_FAMILY_SETTINGS),
+        (LifecycleLogFilter, LOG_FAMILY_LIFECYCLE),
+        (CacheLogFilter, LOG_FAMILY_CACHE),
+        (SteamLogFilter, LOG_FAMILY_STEAM),
+    ),
+)
+def test_family_filters_accept_untagged_structured_metadata(filter_type, family):
+    record = logging.LogRecord(
+        name="unrelated.external.name",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="untagged structured record",
+        args=(),
+        exc_info=None,
+    )
+    setattr(record, LOG_FAMILY_FIELD, (family,))
+
+    assert filter_type().filter(record) is True
+
+
+def test_explicit_multi_family_metadata_is_authoritative_over_visible_tags():
+    record = logging.LogRecord(
+        name="unrelated.external.name",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="[USAGE] visible legacy token conflicts with explicit families",
+        args=(),
+        exc_info=None,
+    )
+    setattr(
+        record,
+        LOG_FAMILY_FIELD,
+        (LOG_FAMILY_PERF, LOG_FAMILY_CACHE),
+    )
+
+    assert PerfLogFilter().filter(record) is True
+    assert CacheLogFilter().filter(record) is True
+    assert UsageLogFilter().filter(record) is False
+    assert NonPerfFilter().filter(record) is False
+
+
+def test_unknown_family_metadata_falls_back_to_legacy_routing():
+    record = logging.LogRecord(
+        name="unrelated.external.name",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="[PERF] third-party legacy metric",
+        args=(),
+        exc_info=None,
+    )
+    setattr(record, LOG_FAMILY_FIELD, ("future_external_family",))
+
+    assert PerfLogFilter().filter(record) is True
+    assert NonPerfFilter().filter(record) is False
+
+
+def test_family_logger_adapter_preserves_other_extra_and_owns_family_field():
+    adapter = get_logger("test.structured.adapter", families=(LOG_FAMILY_CACHE,))
+    assert isinstance(adapter, LogFamilyAdapter)
+
+    message, kwargs = adapter.process(
+        "adapter record",
+        {
+            "extra": {
+                "correlation_id": "abc",
+                LOG_FAMILY_FIELD: (LOG_FAMILY_PERF,),
+            },
+            "stacklevel": 2,
+        },
+    )
+
+    assert message == "adapter record"
+    assert kwargs["extra"]["correlation_id"] == "abc"
+    assert kwargs["extra"][LOG_FAMILY_FIELD] == (LOG_FAMILY_CACHE,)
+    assert kwargs["stacklevel"] == 2
+
+
+def test_family_logger_rejects_unknown_declared_family():
+    with pytest.raises(ValueError, match="unknown SRPSS log families"):
+        get_logger("test.structured.invalid", families=("typo_family",))
+
+
+def test_gl_program_cache_declares_structured_cache_ownership():
+    from rendering.gl_programs import program_cache
+
+    assert isinstance(program_cache.logger, LogFamilyAdapter)
+    assert program_cache.logger._families == (LOG_FAMILY_CACHE,)
 
 
 def test_non_spotify_filter_blocks_spotify_records():

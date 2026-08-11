@@ -5,6 +5,11 @@ from pathlib import Path
 import pytest
 
 from core.logging import logger as logger_mod
+from core.logging.tags import (
+    LOG_FAMILY_CACHE,
+    LOG_FAMILY_FIELD,
+    LOG_FAMILY_PERF,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -65,6 +70,27 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
         "[CACHE] [FALLBACK] Cache entry recovery failed"
     )
     logging.getLogger("core.steam.backend").info("[STEAM] provider trace")
+    logging.getLogger("unrelated.structured.cache").info(
+        "structured cache info",
+        extra={LOG_FAMILY_FIELD: (LOG_FAMILY_CACHE,)},
+    )
+    logging.getLogger("unrelated.structured.cache").warning(
+        "structured cache warning",
+        extra={LOG_FAMILY_FIELD: (LOG_FAMILY_CACHE,)},
+    )
+    logging.getLogger("unrelated.structured.multi").info(
+        "structured perf cache info",
+        extra={
+            LOG_FAMILY_FIELD: (
+                LOG_FAMILY_PERF,
+                LOG_FAMILY_CACHE,
+            )
+        },
+    )
+    logging.getLogger("third.party.unknown").info(
+        "unknown structured family remains general",
+        extra={LOG_FAMILY_FIELD: ("future_external_family",)},
+    )
 
     metrics = logger_mod.flush_and_close_logging()
     assert metrics["flush_timed_out"] is False
@@ -94,6 +120,10 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     assert "[PERF] [CACHE] ImageCacheFlow: raw_hits=1 raw_misses=0" not in main_log
     assert "[CACHE] [FALLBACK] Cache entry recovery failed" in main_log
     assert "[STEAM] provider trace" not in main_log
+    assert "structured cache info" not in main_log
+    assert "structured cache warning" in main_log
+    assert "structured perf cache info" not in main_log
+    assert "unknown structured family remains general" in main_log
     assert "Specific logs available:" in main_log
     assert "Specific logs active:" in main_log
     assert "[LOG_QUEUE] final" in main_log
@@ -114,7 +144,13 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     assert "[CACHE] Cache hit: image-a.jpg" in cache_log
     assert "[PERF] [CACHE] ImageCacheFlow: raw_hits=1 raw_misses=0" in cache_log
     assert "[CACHE] [FALLBACK] Cache entry recovery failed" in cache_log
+    assert "structured cache info" in cache_log
+    assert "structured cache warning" in cache_log
+    assert "structured perf cache info" in cache_log
     assert "[PERF] [CACHE] ImageCacheFlow: raw_hits=1 raw_misses=0" in (
+        tmp_path / "screensaver_perf.log"
+    ).read_text(encoding="utf-8")
+    assert "structured perf cache info" in (
         tmp_path / "screensaver_perf.log"
     ).read_text(encoding="utf-8")
     assert "[STEAM] provider trace" in (tmp_path / "screensaver_steam.log").read_text(encoding="utf-8")

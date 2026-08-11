@@ -8,6 +8,60 @@ Usage:
     logger.info(f"{TAG_PERF} Operation took {elapsed:.2f}ms")
 """
 
+from __future__ import annotations
+
+from typing import Iterable
+
+
+# Reserved structured LogRecord metadata.  A tuple is required because one
+# record may intentionally belong to more than one sidecar family (for
+# example, a PERF cache summary belongs to both ``perf`` and ``cache``).
+LOG_FAMILY_FIELD = "srpss_log_families"
+
+LOG_FAMILY_PERF = "perf"
+LOG_FAMILY_WIDGET_PERF = "widget_perf"
+LOG_FAMILY_USAGE = "usage"
+LOG_FAMILY_VISUALIZER = "visualizer"
+LOG_FAMILY_VISUALIZER_VOLUME = "visualizer_volume"
+LOG_FAMILY_GEOMETRY = "geometry"
+LOG_FAMILY_SETTINGS = "settings"
+LOG_FAMILY_LIFECYCLE = "lifecycle"
+LOG_FAMILY_CACHE = "cache"
+LOG_FAMILY_STEAM = "steam"
+
+KNOWN_LOG_FAMILIES = frozenset(
+    {
+        LOG_FAMILY_PERF,
+        LOG_FAMILY_WIDGET_PERF,
+        LOG_FAMILY_USAGE,
+        LOG_FAMILY_VISUALIZER,
+        LOG_FAMILY_VISUALIZER_VOLUME,
+        LOG_FAMILY_GEOMETRY,
+        LOG_FAMILY_SETTINGS,
+        LOG_FAMILY_LIFECYCLE,
+        LOG_FAMILY_CACHE,
+        LOG_FAMILY_STEAM,
+    }
+)
+
+
+def normalize_log_families(value: object) -> tuple[str, ...]:
+    """Return known, lower-case family ids in stable de-duplicated order."""
+
+    if isinstance(value, str):
+        values: Iterable[object] = (value,)
+    elif isinstance(value, (tuple, list, set, frozenset)):
+        values = value
+    else:
+        return ()
+
+    normalized: list[str] = []
+    for item in values:
+        family = str(item or "").strip().lower()
+        if family in KNOWN_LOG_FAMILIES and family not in normalized:
+            normalized.append(family)
+    return tuple(normalized)
+
 # =============================================================================
 # Performance and Metrics
 # =============================================================================
@@ -111,6 +165,20 @@ TAG_GL_PBO = "[GL PBO]"
 # =============================================================================
 
 __all__ = [
+    # Structured record family metadata
+    "LOG_FAMILY_FIELD",
+    "LOG_FAMILY_PERF",
+    "LOG_FAMILY_WIDGET_PERF",
+    "LOG_FAMILY_USAGE",
+    "LOG_FAMILY_VISUALIZER",
+    "LOG_FAMILY_VISUALIZER_VOLUME",
+    "LOG_FAMILY_GEOMETRY",
+    "LOG_FAMILY_SETTINGS",
+    "LOG_FAMILY_LIFECYCLE",
+    "LOG_FAMILY_CACHE",
+    "LOG_FAMILY_STEAM",
+    "KNOWN_LOG_FAMILIES",
+    "normalize_log_families",
     # Performance
     "TAG_PERF",
     "TAG_TIMING",

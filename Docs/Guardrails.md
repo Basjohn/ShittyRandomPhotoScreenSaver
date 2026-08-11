@@ -309,6 +309,11 @@ Measure GUI timer lateness, callback duration, paint duration, scene age, signal
 
 Diagnostics are CLI-gated, sampled, fixed-memory, aggregated, non-overlapping, and lazily formatted.
 
+Valid explicit `srpss_log_families` metadata is the routing authority and may contain
+multiple families. Visible tags remain human/parser text; name/tag heuristics are a
+compatibility fallback for unmigrated and third-party records. Every WARNING+ remains
+main-visible regardless of family sidecars.
+
 No per-frame INFO logs or per-frame state dumps.
 
 Diagnostic evidence exists to make later optimization accurate. Do not delete or

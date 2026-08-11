@@ -120,10 +120,6 @@ GUI-availability problem remains active and is not a texture-identity problem.
 
 Target contract: **Prepare → Commit → Persist**.
 
-### Priority 0 — broad architectural removal
-
-- [ ] **Structured logging family metadata:** the queued record should carry a family/category field so routing is not permanently dependent on human message tokens such as `[CACHE]` versus `[GL CACHE]`.
-
 ### Priority 1 — service/widget preparation
 
 - [ ] Reddit: move normalization/filter/sort/dedupe, sparse-cache merge and JSON cache I/O out of the GUI result callback. Publish one prepared immutable result; GUI commits only visible state/layout/update.

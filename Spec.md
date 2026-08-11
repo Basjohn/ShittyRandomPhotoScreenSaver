@@ -208,6 +208,11 @@ Diagnostics are:
 - passive;
 - privacy-safe.
 
+Ordinary records may declare immutable multi-family routing metadata. Valid explicit
+metadata is authoritative, supports delivery to more than one existing family sidecar,
+and does not replace visible human/parser tags. Unclassified and third-party records
+retain compatible name/tag fallback, and every WARNING+ remains main-visible.
+
 Ordinary standard and Media Center packaged launches remain diagnostics-off.
 An installable diagnostic product activates all existing diagnostic families
 only through its explicit compiled entry-point identity. It uses one separate

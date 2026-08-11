@@ -271,7 +271,14 @@ Keep fatal/native crash breadcrumbs separate: faulthandler/emergency crash recor
 must not depend on a healthy logging queue or writer thread. Preserve enough ordering
 metadata that cross-sidecar diagnostic correlation remains trustworthy.
 
-Route normal records by explicit structured family/category metadata where practical rather than permanently parsing display text. The current `[GL CACHE]` versus `[CACHE]` mismatch proves that human-readable message tokens are not a reliable routing contract. Main log keeps all WARNING+ and only high-level routine narrative; enabled-family INFO/DEBUG belongs in its sidecar.
+Records may now declare the immutable `srpss_log_families` tuple. Valid explicit
+metadata is authoritative, supports intentional multi-family delivery such as
+`perf + cache`, and survives queued detachment. Unclassified or unknown third-party
+records retain the established name/tag fallback. The real GL program-cache producer
+is explicitly `cache`-owned, closing the `[GL CACHE]` versus `[CACHE]` token accident
+without changing its human-readable text. Main log keeps all WARNING+ and only
+high-level routine narrative; enabled-family INFO/DEBUG belongs in its sidecar.
+Migrate other high-volume families systematically during the late taxonomy pass.
 
 ### General COMPUTE workers
 
@@ -327,6 +334,7 @@ ownership problems.
 1. **Async ordinary logging**
    - implemented with a bounded process-owned writer and producer-facing ingress;
    - normal filtering/formatting/deduplication/rotation/file writes are writer-owned;
+   - immutable multi-family metadata is authoritative when declared, while legacy and third-party records retain compatible name/tag fallback;
    - direct fatal capture remains independent and saturated WARNING+ remains main-visible;
    - focused gates cover bounded close, shutdown handoff, reentry, drops/lag/high-water/flush telemetry and sidecar routing;
    - repeat the same typical scenario and compare UI/request-age tails with PERF/VIZ diagnostics enabled.

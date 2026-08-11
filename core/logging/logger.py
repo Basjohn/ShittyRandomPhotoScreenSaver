@@ -19,6 +19,21 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from core.build_profile import is_compiled_runtime, is_diagnostic_build
+from core.logging.tags import (
+    KNOWN_LOG_FAMILIES,
+    LOG_FAMILY_CACHE,
+    LOG_FAMILY_FIELD,
+    LOG_FAMILY_GEOMETRY,
+    LOG_FAMILY_LIFECYCLE,
+    LOG_FAMILY_PERF,
+    LOG_FAMILY_SETTINGS,
+    LOG_FAMILY_STEAM,
+    LOG_FAMILY_USAGE,
+    LOG_FAMILY_VISUALIZER,
+    LOG_FAMILY_VISUALIZER_VOLUME,
+    LOG_FAMILY_WIDGET_PERF,
+    normalize_log_families,
+)
 
 _IS_FROZEN: bool = is_compiled_runtime()
 
@@ -1068,6 +1083,18 @@ class SuppressingStreamHandler(logging.StreamHandler):
             super().close()
 
 
+def _explicit_log_family_match(
+    record: logging.LogRecord,
+    *expected: str,
+) -> bool | None:
+    """Return a metadata match, or ``None`` for legacy/unclassified records."""
+
+    families = normalize_log_families(getattr(record, LOG_FAMILY_FIELD, None))
+    if not families:
+        return None
+    return any(family in expected for family in families)
+
+
 class NonPerfFilter(logging.Filter):
     """Filter that drops dedicated PERF/USAGE records from the main log file.
 
@@ -1080,6 +1107,13 @@ class NonPerfFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
         if record.levelno >= logging.WARNING:
             return True
+        explicit = _explicit_log_family_match(
+            record,
+            LOG_FAMILY_PERF,
+            LOG_FAMILY_USAGE,
+        )
+        if explicit is not None:
+            return not explicit
         try:
             msg = record.getMessage()
         except Exception:
@@ -1089,6 +1123,13 @@ class NonPerfFilter(logging.Filter):
 
 class NonSpotifyFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        explicit = _explicit_log_family_match(
+            record,
+            LOG_FAMILY_VISUALIZER,
+            LOG_FAMILY_VISUALIZER_VOLUME,
+        )
+        if explicit is not None:
+            return not explicit
         try:
             msg = record.getMessage()
         except Exception:
@@ -1120,6 +1161,9 @@ class GeometryLogFilter(logging.Filter):
     )
 
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        explicit = _explicit_log_family_match(record, LOG_FAMILY_GEOMETRY)
+        if explicit is not None:
+            return explicit
         name = str(getattr(record, "name", "") or "")
         if name in self._NAME_EXACT or any(name.startswith(prefix) for prefix in self._NAME_PREFIXES):
             return True
@@ -1147,6 +1191,9 @@ class SettingsLogFilter(logging.Filter):
     )
 
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        explicit = _explicit_log_family_match(record, LOG_FAMILY_SETTINGS)
+        if explicit is not None:
+            return explicit
         name = str(getattr(record, "name", "") or "")
         if name in self._NAME_EXACT or any(name.startswith(prefix) for prefix in self._NAME_PREFIXES):
             return True
@@ -1174,6 +1221,9 @@ class LifecycleLogFilter(logging.Filter):
     )
 
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        explicit = _explicit_log_family_match(record, LOG_FAMILY_LIFECYCLE)
+        if explicit is not None:
+            return explicit
         name = str(getattr(record, "name", "") or "")
         if any(name.startswith(prefix) for prefix in self._NAME_PREFIXES):
             return True
@@ -1197,6 +1247,9 @@ class CacheLogFilter(logging.Filter):
     )
 
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        explicit = _explicit_log_family_match(record, LOG_FAMILY_CACHE)
+        if explicit is not None:
+            return explicit
         name = str(getattr(record, "name", "") or "")
         if any(name.startswith(prefix) for prefix in self._NAME_PREFIXES):
             try:
@@ -1225,6 +1278,9 @@ class SteamLogFilter(logging.Filter):
     )
 
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        explicit = _explicit_log_family_match(record, LOG_FAMILY_STEAM)
+        if explicit is not None:
+            return explicit
         name = str(getattr(record, "name", "") or "")
         if any(name.startswith(prefix) for prefix in self._NAME_PREFIXES):
             return True
@@ -1267,6 +1323,9 @@ class VerboseLogFilter(logging.Filter):
         # Only DEBUG and INFO levels (not WARNING+)
         if record.levelno > logging.INFO:
             return False
+        explicit = _explicit_log_family_match(record, LOG_FAMILY_PERF)
+        if explicit is not None:
+            return not explicit
         try:
             msg = record.getMessage()
         except Exception:
@@ -1278,11 +1337,14 @@ class VerboseLogFilter(logging.Filter):
 class PerfLogFilter(logging.Filter):
     """Filter that accepts only PERF metric records.
 
-    Records are matched purely on the presence of "[PERF]" in the formatted
-    message so existing call sites do not need to change.
+    Structured metadata is authoritative when declared. Legacy call sites
+    retain the visible ``[PERF]`` compatibility fallback.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        explicit = _explicit_log_family_match(record, LOG_FAMILY_PERF)
+        if explicit is not None:
+            return explicit
         try:
             msg = record.getMessage()
         except Exception:
@@ -1294,6 +1356,9 @@ class UsageLogFilter(logging.Filter):
     """Filter that accepts only whole-process usage telemetry records."""
 
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        explicit = _explicit_log_family_match(record, LOG_FAMILY_USAGE)
+        if explicit is not None:
+            return explicit
         try:
             msg = record.getMessage()
         except Exception:
@@ -1305,6 +1370,9 @@ class WidgetPerfLogFilter(logging.Filter):
     """Filter that accepts only widget PERF instrumentation records."""
 
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        explicit = _explicit_log_family_match(record, LOG_FAMILY_WIDGET_PERF)
+        if explicit is not None:
+            return explicit
         try:
             msg = record.getMessage()
         except Exception:
@@ -1318,6 +1386,11 @@ class WidgetPerfVisibilityFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
         if record.levelno >= logging.WARNING:
             return True
+        explicit = _explicit_log_family_match(record, LOG_FAMILY_WIDGET_PERF)
+        if explicit is not None:
+            if not explicit:
+                return True
+            return is_widget_perf_verbose()
         try:
             msg = record.getMessage()
         except Exception:
@@ -1329,6 +1402,9 @@ class WidgetPerfVisibilityFilter(logging.Filter):
 
 class SpotifyVisLogFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        explicit = _explicit_log_family_match(record, LOG_FAMILY_VISUALIZER)
+        if explicit is not None:
+            return explicit
         try:
             msg = record.getMessage()
         except Exception:
@@ -1346,6 +1422,12 @@ class SpotifyVisLogFilter(logging.Filter):
 
 class SpotifyVolLogFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        explicit = _explicit_log_family_match(
+            record,
+            LOG_FAMILY_VISUALIZER_VOLUME,
+        )
+        if explicit is not None:
+            return explicit
         try:
             msg = record.getMessage()
         except Exception:
@@ -2173,10 +2255,44 @@ _SHORT_NAME_OVERRIDES = {
 }
 
 
-def get_logger(name: str) -> logging.Logger:
-    """Get a logger instance with optional short-name overrides for noisy modules."""
+class LogFamilyAdapter(logging.LoggerAdapter):
+    """Attach immutable SRPSS family metadata without rewriting log text."""
+
+    def __init__(self, logger: logging.Logger, families: tuple[str, ...]) -> None:
+        super().__init__(logger, {LOG_FAMILY_FIELD: families})
+        self._families = families
+
+    def process(self, msg: object, kwargs: dict[str, Any]):
+        supplied = kwargs.get("extra")
+        extra = dict(supplied) if supplied is not None else {}
+        # The adapter's declared ownership is authoritative. Callers needing a
+        # multi-family record bind every family on the adapter itself.
+        extra[LOG_FAMILY_FIELD] = self._families
+        kwargs["extra"] = extra
+        return msg, kwargs
+
+
+def get_logger(
+    name: str,
+    *,
+    families: Iterable[str] | str = (),
+) -> logging.Logger | LogFamilyAdapter:
+    """Get a logger, optionally binding explicit structured family metadata."""
+
     actual = _SHORT_NAME_OVERRIDES.get(name, name)
-    return logging.getLogger(actual)
+    logger = logging.getLogger(actual)
+    requested = (families,) if isinstance(families, str) else tuple(families)
+    unknown = tuple(
+        str(family)
+        for family in requested
+        if str(family or "").strip().lower() not in KNOWN_LOG_FAMILIES
+    )
+    if unknown:
+        raise ValueError(f"unknown SRPSS log families: {unknown!r}")
+    normalized = normalize_log_families(requested)
+    if not normalized:
+        return logger
+    return LogFamilyAdapter(logger, normalized)
 
 
 class ThrottledLogger:

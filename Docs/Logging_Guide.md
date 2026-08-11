@@ -37,13 +37,12 @@ distinct high-volume domain has a coherent correlation workflow.
 
 ## Current Cache Routing
 
-Cache routing still relies partly on message text. It now recognizes both `[CACHE]`
-and `[GL CACHE]`; focused routing automation requires routine `[GL CACHE]` INFO in
-`screensaver_cache.log` and absent from main when the sidecar is active, while a
-`[GL CACHE]` WARNING remains in both.
-
-Structured family metadata remains the later replacement for token-based routing. Do
-not regress this repair by lowering records to DEBUG or deleting useful cache evidence.
+The real GL program-cache producer declares structured `cache` ownership. Its visible
+`[GL CACHE]` text remains for people and parsers, but no longer controls routing.
+Focused automation requires routine `[GL CACHE]` INFO in `screensaver_cache.log` and
+absent from main when the sidecar is active, while a `[GL CACHE]` WARNING remains in
+both. Unmigrated cache producers still retain compatible `[CACHE]`/`[GL CACHE]`
+fallback; do not regress them by lowering records to DEBUG or deleting useful evidence.
 
 ## Phase 5 Execution Architecture
 
@@ -81,10 +80,18 @@ Current implementation details:
 
 ## Structured Family Metadata
 
-Human-readable tags such as `[PERF]`, `[CACHE]` and `[GL CACHE]` are useful for people
-but are a fragile routing API. Prefer an explicit record family/category attribute,
-e.g. `cache`, `lifecycle`, `geometry`, `visualizer`, `usage`, `perf`, while retaining the
-visible tag where useful.
+SRPSS records may carry `srpss_log_families`, an immutable tuple because one record can
+intentionally belong to multiple destinations such as `("perf", "cache")`. Canonical
+families live in `core/logging/tags.py`. Bind them with
+`get_logger(name, families=(...))`; the adapter preserves ordinary logging kwargs and
+other `extra` fields while owning this reserved field.
+
+Valid explicit metadata is authoritative over logger-name and visible-token heuristics.
+Absent or wholly unknown metadata falls back to existing name/tag routing so third-party
+and unmigrated records remain compatible. The tuple survives queued record detachment;
+filters and formatting still execute on `SRPSSLogWriter`. Human-readable tags such as
+`[PERF]`, `[CACHE]` and `[GL CACHE]` remain useful for people and existing parsers, but
+newly migrated producers must not depend on them for delivery.
 
 Late Phase 7 should migrate high-volume families systematically and simplify filters so
 routing no longer depends on token quirks.

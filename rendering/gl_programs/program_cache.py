@@ -17,13 +17,15 @@ Phase 1 of GLCompositor refactor - see audits/REFACTOR_GL_COMPOSITOR.md
 
 from __future__ import annotations
 
-import logging
 from typing import Dict, Optional, Set, TYPE_CHECKING
+
+from core.logging.logger import get_logger
+from core.logging.tags import LOG_FAMILY_CACHE
 
 if TYPE_CHECKING:
     from rendering.gl_programs.base_program import BaseGLProgram
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, families=(LOG_FAMILY_CACHE,))
 
 
 class GLProgramCache:

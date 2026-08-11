@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from core.logging import logger as logger_mod
+from core.logging.tags import LOG_FAMILY_CACHE, LOG_FAMILY_FIELD, LOG_FAMILY_PERF
 
 
 def _record(level: int, message: str, *args: object) -> logging.LogRecord:
@@ -116,6 +117,22 @@ def test_exception_snapshot_detaches_traceback_before_queueing() -> None:
 
     assert "ValueError: snapshot failure fixture" in snapshot.exc_text
     assert not hasattr(snapshot, "_srpss_traceback")
+
+
+def test_queue_snapshot_preserves_immutable_multi_family_metadata() -> None:
+    source = _record(logging.INFO, "structured family record")
+    setattr(
+        source,
+        LOG_FAMILY_FIELD,
+        (LOG_FAMILY_PERF, LOG_FAMILY_CACHE),
+    )
+
+    snapshot = logger_mod._snapshot_log_record(source)
+
+    assert getattr(snapshot, LOG_FAMILY_FIELD) == (
+        LOG_FAMILY_PERF,
+        LOG_FAMILY_CACHE,
+    )
 
 
 def test_full_queue_drops_low_severity_but_preserves_warning() -> None:
