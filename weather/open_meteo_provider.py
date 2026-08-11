@@ -6,16 +6,22 @@ Free weather API with no API key required.
 - Weather: Current weather data
 """
 from typing import Optional, Dict, Any, Tuple
+from datetime import datetime
 import time
-import json
 import requests
 from core.logging.logger import get_logger
-from core.settings.storage_paths import get_weather_cache_file
+from core.weather_preparation import (
+    prepare_weather_sample,
+    read_weather_provider_cache,
+    resolve_weather_provider_cache_path,
+    write_weather_provider_cache,
+)
 
 logger = get_logger(__name__)
 
-# Weather cache file location
-_WEATHER_CACHE_FILE = get_weather_cache_file()
+# Optional test/profile override.  The canonical path is resolved lazily by a
+# provider instance so module import never performs filesystem work.
+_WEATHER_CACHE_FILE = None
 _WEATHER_CACHE_TTL_SECONDS = 1800  # 30 minutes
 
 
@@ -67,14 +73,20 @@ class OpenMeteoProvider:
         99: "Thunderstorm with heavy hail"
     }
     
-    def __init__(self, timeout: int = 10):
+    def __init__(self, timeout: int = 10, *, persist_results: bool = True):
         """
         Initialize Open-Meteo provider.
         
         Args:
             timeout: Request timeout in seconds
+            persist_results: Persist successful network samples immediately.
+                WeatherWidget disables this and persists only after its GUI
+                request/location token accepts the result.
         """
         self._timeout = timeout
+        self._persist_results = bool(persist_results)
+        self._last_result_was_network = False
+        self._cache_file = resolve_weather_provider_cache_path(_WEATHER_CACHE_FILE)
         self._cached_coords: Dict[str, Tuple[float, float]] = {}  # City → (lat, lon)
         self._weather_cache: Dict[str, Dict[str, Any]] = {}  # City → weather data with timestamp
         
@@ -86,22 +98,18 @@ class OpenMeteoProvider:
     def _load_weather_cache(self) -> None:
         """Load weather cache from disk for offline resilience."""
         try:
-            if _WEATHER_CACHE_FILE.exists():
-                with open(_WEATHER_CACHE_FILE, 'r', encoding='utf-8') as f:
-                    self._weather_cache = json.load(f)
+            self._weather_cache = read_weather_provider_cache(self._cache_file)
+            if self._weather_cache:
                 logger.debug(f"Loaded weather cache with {len(self._weather_cache)} entries")
         except Exception as e:
             logger.debug(f"Failed to load weather cache: {e}")
             self._weather_cache = {}
-    
-    def _save_weather_cache(self) -> None:
-        """Save weather cache to disk for offline resilience."""
-        try:
-            with open(_WEATHER_CACHE_FILE, 'w', encoding='utf-8') as f:
-                json.dump(self._weather_cache, f, indent=2)
-            logger.debug(f"Saved weather cache with {len(self._weather_cache)} entries")
-        except Exception as e:
-            logger.debug(f"Failed to save weather cache: {e}")
+
+    @property
+    def last_result_was_network(self) -> bool:
+        """Whether the last current-weather result came from a fresh response."""
+
+        return self._last_result_was_network
     
     def _get_cached_weather(self, city: str) -> Optional[Dict[str, Any]]:
         """Get cached weather data if still valid.
@@ -135,9 +143,16 @@ class OpenMeteoProvider:
             weather_data: Weather data to cache
         """
         cached = weather_data.copy()
-        cached['_cached_at'] = time.time()
+        observed_at = time.time()
+        cached['_cached_at'] = observed_at
         self._weather_cache[city] = cached
-        self._save_weather_cache()
+        if self._persist_results:
+            sample = prepare_weather_sample(
+                weather_data,
+                fallback_location=city,
+                observed_at=datetime.fromtimestamp(observed_at),
+            )
+            write_weather_provider_cache(sample, cache_path_override=self._cache_file)
     
     def _get_stale_cache(self, city: str) -> Optional[Dict[str, Any]]:
         """Get stale cached weather data as fallback when network fails.
@@ -267,6 +282,8 @@ class OpenMeteoProvider:
             }
             or None if request fails and no cache available
         """
+        self._last_result_was_network = False
+
         # Check cache first
         cached = self._get_cached_weather(city)
         if cached:
@@ -370,6 +387,7 @@ class OpenMeteoProvider:
             }
             
             # Cache successful result
+            self._last_result_was_network = True
             self._cache_weather(city, weather_data)
             
             logger.info(f"Weather fetched for {city}: {temperature}°C, {condition}")

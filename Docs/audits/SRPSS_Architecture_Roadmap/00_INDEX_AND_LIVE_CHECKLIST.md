@@ -71,6 +71,7 @@ from `main`.
 - [x] Move settings serialization/temp-write/fsync/atomic replace behind one ordered process-owned writer with revision and explicit durability boundaries.
 - [x] Move Reddit normal fetch-result preparation, sparse-cache merge and post-cache persistence behind the shared IO worker and publish one immutable GUI commit.
 - [x] Move Reddit startup post-cache/gate loading and blocked-gate persistence off GUI; use worker-refreshed process metadata for runtime cadence checks.
+- [x] Move Weather startup cache selection and accepted-result persistence to shared IO; publish immutable, generation/location-gated GUI commits with newest-wins atomic durability.
 - [ ] Remove proven GUI-thread service/cache preparation.
 - [ ] Attribute GPU busy across upload/transition/visualizer/presentation owners.
 - [ ] Remove proven temporary compatibility/fallback debris without changing behaviour.

@@ -1,6 +1,8 @@
 """Tests for weather widget."""
 from datetime import datetime, timedelta
 import json
+from types import SimpleNamespace
+import threading
 import pytest
 from unittest.mock import Mock, patch
 from PySide6.QtWidgets import QWidget, QApplication
@@ -8,6 +10,33 @@ from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QColor
 from widgets.weather_widget import WeatherWidget, WeatherPosition, WeatherFetcher
 from widgets.weather_components import WeatherConditionIcon
+
+
+class _QueuedIoManager:
+    def __init__(self) -> None:
+        self.tasks = []
+
+    def submit_io_task(self, func, *args, callback=None, category="uncategorized", **kwargs):
+        self.tasks.append(
+            SimpleNamespace(
+                func=func,
+                args=args,
+                kwargs=kwargs,
+                callback=callback,
+                category=category,
+            )
+        )
+        return f"task-{len(self.tasks)}"
+
+
+def _run_queued_io_task(task) -> None:
+    try:
+        value = task.func(*task.args, **task.kwargs)
+        result = SimpleNamespace(success=True, result=value, error=None)
+    except Exception as exc:  # pragma: no cover - exercised through assertions
+        result = SimpleNamespace(success=False, result=None, error=exc)
+    if task.callback is not None:
+        task.callback(result)
 
 
 @pytest.fixture(autouse=True)
@@ -254,8 +283,32 @@ def test_weather_cache(qapp, parent_widget, mock_weather_data):
     assert weather._cached_data == mock_weather_data
 
 
-def test_weather_loads_persisted_cache_for_same_location(qapp, parent_widget, tmp_path, monkeypatch, caplog):
-    caplog.set_level("INFO")
+def test_weather_constructor_and_initialize_are_filesystem_inert(qapp, parent_widget, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "widgets.weather_widget.load_weather_startup_snapshot",
+        lambda *args, **kwargs: calls.append("cache") or (_ for _ in ()).throw(AssertionError("cache read")),
+    )
+    monkeypatch.setattr(
+        "widgets.weather_widget.OpenMeteoProvider",
+        lambda *args, **kwargs: calls.append("provider") or (_ for _ in ()).throw(AssertionError("provider")),
+    )
+
+    weather = WeatherWidget(parent=parent_widget, location="London")
+    weather._initialize_impl()
+
+    assert calls == []
+    assert weather._cached_data is None
+
+
+def test_weather_startup_cache_load_runs_on_io_then_commits_on_gui(
+    qapp,
+    parent_widget,
+    tmp_path,
+    monkeypatch,
+):
+    from core.weather_preparation import load_weather_startup_snapshot as real_loader
+
     widget_cache = tmp_path / "weather_widget_cache.json"
     payload = {
         "location": "London",
@@ -269,19 +322,98 @@ def test_weather_loads_persisted_cache_for_same_location(qapp, parent_widget, tm
     }
     widget_cache.write_text(json.dumps(payload), encoding="utf-8")
     monkeypatch.setattr("widgets.weather_widget._CACHE_FILE", widget_cache, raising=False)
-
+    manager = _QueuedIoManager()
     weather = WeatherWidget(parent=parent_widget, location="  london  ")
+    weather.set_thread_manager(manager)
+    main_thread_id = threading.get_ident()
+    loader_threads = []
+    ui_threads = []
+    queued_ui = []
+    schedule_calls = []
+    fade_calls = []
 
+    def _load(*args, **kwargs):
+        loader_threads.append(threading.get_ident())
+        return real_loader(*args, **kwargs)
+
+    monkeypatch.setattr("widgets.weather_widget.load_weather_startup_snapshot", _load)
+    monkeypatch.setattr(
+        "widgets.weather_widget.ThreadManager.run_on_ui_thread",
+        lambda callback, *args, **kwargs: queued_ui.append((callback, args, kwargs)),
+    )
+    monkeypatch.setattr(weather, "_schedule_refresh_cycle", lambda: schedule_calls.append(threading.get_ident()))
+    monkeypatch.setattr(weather, "_request_fade_in", lambda: fade_calls.append(threading.get_ident()))
+    original_update = weather._update_display
+    monkeypatch.setattr(
+        weather,
+        "_update_display",
+        lambda data: (ui_threads.append(threading.get_ident()), original_update(data))[1],
+    )
+
+    weather.start()
+
+    assert weather._cached_data is None
+    assert schedule_calls == []
+    assert [task.category for task in manager.tasks] == ["weather_startup_cache"]
+
+    worker = threading.Thread(target=_run_queued_io_task, args=(manager.tasks.pop(0),))
+    worker.start()
+    worker.join()
+
+    assert loader_threads and loader_threads[0] != main_thread_id
+    assert weather._cached_data is None
+    assert len(queued_ui) == 1
+    callback, args, kwargs = queued_ui.pop(0)
+    callback(*args, **kwargs)
+
+    assert ui_threads == [main_thread_id]
+    assert schedule_calls == [main_thread_id]
+    assert fade_calls == [main_thread_id]
     assert weather._cached_data is not None
     assert weather._cached_data["location"] == "London"
     assert weather._cached_data["temperature"] == 18.5
+    assert weather._cached_data["weather_code"] == 0
+    assert weather._cached_data["is_day"] == 1
     assert weather._cache_time is not None
-    assert "Loaded persisted widget cache for location=London" in caplog.text
 
 
-def test_weather_ignores_persisted_cache_for_different_location(qapp, parent_widget, tmp_path, monkeypatch, caplog):
+def test_weather_legacy_start_preserves_immediate_refresh_after_cache_miss(
+    qapp,
+    parent_widget,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "widgets.weather_widget._LEGACY_CACHE_FILE",
+        tmp_path / "missing_legacy.json",
+        raising=False,
+    )
+    manager = _QueuedIoManager()
+    weather = WeatherWidget(parent=parent_widget, location="London")
+    weather.set_thread_manager(manager)
+    calls = []
+    monkeypatch.setattr(
+        "widgets.weather_widget.ThreadManager.run_on_ui_thread",
+        lambda callback, *args, **kwargs: callback(*args, **kwargs),
+    )
+    monkeypatch.setattr(weather, "_fetch_weather", lambda: calls.append("fetch"))
+    monkeypatch.setattr(weather, "_schedule_refresh_cycle", lambda: calls.append("schedule"))
+
+    weather.start()
+    _run_queued_io_task(manager.tasks.pop(0))
+
+    assert calls == ["fetch", "schedule"]
+
+
+def test_weather_startup_snapshot_uses_provider_when_widget_location_mismatches(
+    tmp_path,
+    caplog,
+):
+    from core.weather_preparation import load_weather_startup_snapshot
+
     caplog.set_level("INFO")
     widget_cache = tmp_path / "weather_widget_cache.json"
+    provider_cache = tmp_path / "open_meteo_cache.json"
     payload = {
         "location": "Paris",
         "temperature": 18.5,
@@ -289,118 +421,351 @@ def test_weather_ignores_persisted_cache_for_different_location(qapp, parent_wid
         "timestamp": datetime.now().isoformat(),
     }
     widget_cache.write_text(json.dumps(payload), encoding="utf-8")
-    monkeypatch.setattr("widgets.weather_widget._CACHE_FILE", widget_cache, raising=False)
+    provider_cache.write_text(
+        json.dumps(
+            {
+                "London": {
+                    "location": "London",
+                    "temperature": 9.0,
+                    "condition": "Overcast",
+                    "humidity": 55.0,
+                    "_cached_at": datetime.now().timestamp() - 3600,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    snapshot = load_weather_startup_snapshot(
+        "London",
+        widget_cache_path_override=widget_cache,
+        provider_cache_path_override=provider_cache,
+    )
 
+    assert snapshot.source == "provider"
+    assert snapshot.stale is True
+    assert snapshot.sample is not None
+    assert snapshot.sample.location == "London"
+    assert snapshot.sample.temperature == 9.0
+    assert "Ignoring persisted widget cache for location=Paris while active_location=London" in caplog.text
+    assert "Loaded provider stale startup cache for location=London" in caplog.text
+
+
+def test_weather_location_change_rejects_late_startup_snapshot(
+    qapp,
+    parent_widget,
+    tmp_path,
+    monkeypatch,
+):
+    widget_cache = tmp_path / "weather_widget_cache.json"
+    widget_cache.write_text(
+        json.dumps(
+            {
+                "location": "London",
+                "temperature": 18.5,
+                "condition": "Clear sky",
+                "timestamp": datetime.now().isoformat(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("widgets.weather_widget._CACHE_FILE", widget_cache, raising=False)
+    manager = _QueuedIoManager()
     weather = WeatherWidget(parent=parent_widget, location="London")
+    weather.set_thread_manager(manager)
+    queued_ui = []
+    scheduled = []
+    monkeypatch.setattr(
+        "widgets.weather_widget.ThreadManager.run_on_ui_thread",
+        lambda callback, *args, **kwargs: queued_ui.append((callback, args, kwargs)),
+    )
+    monkeypatch.setattr(weather, "_schedule_refresh_cycle", lambda: scheduled.append(True))
+
+    weather.start()
+    task = manager.tasks.pop(0)
+    _run_queued_io_task(task)
+    weather.set_location("Paris")
+    callback, args, kwargs = queued_ui.pop(0)
+    callback(*args, **kwargs)
 
     assert weather._cached_data is None
-    assert "Ignoring persisted widget cache for location=Paris while active_location=London" in caplog.text
+    assert scheduled == []
 
 
-def test_weather_uses_provider_cache_when_widget_cache_location_mismatches(
+def test_weather_fetch_accepts_only_latest_request_and_persists_off_gui(
     qapp,
     parent_widget,
     tmp_path,
     monkeypatch,
-    caplog,
 ):
-    caplog.set_level("INFO")
-    widget_cache = tmp_path / "weather_widget_cache.json"
-    provider_cache = tmp_path / "open_meteo_cache.json"
-    widget_cache.write_text(
-        json.dumps(
-            {
-                "location": "Paris",
-                "temperature": 18.5,
-                "condition": "Clear sky",
-                "timestamp": datetime.now().isoformat(),
-            }
-        ),
-        encoding="utf-8",
-    )
-    provider_cache.write_text(
-        json.dumps(
-            {
-                "London": {
-                    "location": "London",
-                    "temperature": 9.0,
-                    "condition": "Overcast",
-                    "humidity": 55.0,
-                    "_cached_at": datetime.now().timestamp() - 3600,
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr("widgets.weather_widget._CACHE_FILE", widget_cache, raising=False)
-    monkeypatch.setattr(
-        "weather.open_meteo_provider._WEATHER_CACHE_FILE",
-        provider_cache,
-        raising=False,
-    )
+    from core.weather_preparation import PreparedWeatherFetch, prepare_weather_sample
+    from widgets.weather_widget import _normalize_weather_location_key
 
+    cache_path = tmp_path / "weather_widget_cache.json"
+    monkeypatch.setattr("widgets.weather_widget._CACHE_FILE", cache_path, raising=False)
+    manager = _QueuedIoManager()
     weather = WeatherWidget(parent=parent_widget, location="London")
+    weather.set_thread_manager(manager)
+    weather._enabled = True
+    emitted = []
+    weather.weather_updated.connect(emitted.append)
+    monkeypatch.setattr(weather, "_update_display", lambda data: None)
 
-    assert weather._cached_data is not None
-    assert weather._cached_data["location"] == "London"
-    assert weather._cached_data["temperature"] == 9.0
-    assert "Ignoring persisted widget cache for location=Paris while active_location=London" in caplog.text
-    assert "Loaded provider stale startup cache for location=London" in caplog.text
+    weather._fetch_weather()
+    weather._fetch_weather()
+    assert [task.category for task in manager.tasks] == ["weather_fetch", "weather_fetch"]
+
+    location_key = _normalize_weather_location_key("London")
+    older = prepare_weather_sample(
+        {"location": "London", "temperature": 10, "condition": "Rain"},
+        fallback_location="London",
+        observed_at=datetime.now() - timedelta(seconds=5),
+    )
+    newer = prepare_weather_sample(
+        {"location": "London", "temperature": 20, "condition": "Clear"},
+        fallback_location="London",
+        observed_at=datetime.now(),
+    )
+
+    weather._commit_weather_fetch(
+        1,
+        location_key,
+        PreparedWeatherFetch(older, persist_provider=True),
+    )
+    assert weather._cached_data is None
+    assert cache_path.exists() is False
+
+    weather._commit_weather_fetch(
+        2,
+        location_key,
+        PreparedWeatherFetch(newer, persist_provider=True),
+    )
+    assert weather._cached_data["temperature"] == 20.0
+    assert emitted[-1]["condition"] == "Clear"
+    assert cache_path.exists() is False
+
+    persist_tasks = [task for task in manager.tasks if task.category == "weather_cache_persist"]
+    assert len(persist_tasks) == 1
+    worker = threading.Thread(target=_run_queued_io_task, args=(persist_tasks[0],))
+    worker.start()
+    worker.join()
+
+    payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert payload["location"] == "London"
+    assert payload["temperature"] == 20.0
+    assert payload["condition"] == "Clear"
+    provider_payload = json.loads(
+        (tmp_path / "open_meteo_cache.json").read_text(encoding="utf-8")
+    )
+    assert provider_payload["London"]["temperature"] == 20.0
 
 
-def test_weather_lifecycle_initialize_uses_provider_startup_cache_when_widget_cache_mismatches(
+def test_weather_fetch_defers_provider_cache_until_gui_accepts_request(
     qapp,
     parent_widget,
     tmp_path,
     monkeypatch,
-    caplog,
 ):
-    """Lifecycle initialize must not regress to widget-cache-only startup truth."""
-    caplog.set_level("INFO")
-    widget_cache = tmp_path / "weather_widget_cache.json"
-    provider_cache = tmp_path / "open_meteo_cache.json"
-    widget_cache.write_text(
-        json.dumps(
-            {
-                "location": "Paris",
-                "temperature": 18.5,
-                "condition": "Clear sky",
-                "timestamp": datetime.now().isoformat(),
-            }
-        ),
-        encoding="utf-8",
-    )
-    provider_cache.write_text(
-        json.dumps(
-            {
-                "London": {
-                    "location": "London",
-                    "temperature": 9.0,
-                    "condition": "Overcast",
-                    "humidity": 55.0,
-                    "_cached_at": datetime.now().timestamp() - 3600,
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr("widgets.weather_widget._CACHE_FILE", widget_cache, raising=False)
+    provider_path = tmp_path / "open_meteo_cache.json"
+    widget_path = tmp_path / "weather_widget_cache.json"
+    manager = _QueuedIoManager()
+    weather = WeatherWidget(parent=parent_widget, location="London")
+    weather.set_thread_manager(manager)
+    weather._enabled = True
+    queued_ui = []
+    constructor_flags = []
+
+    class _Provider:
+        def __init__(self, timeout=10, *, persist_results=True):
+            constructor_flags.append(persist_results)
+            self.last_result_was_network = True
+
+        def get_current_weather(self, location):
+            return {"location": location, "temperature": 21, "condition": "Clear"}
+
+    monkeypatch.setattr("widgets.weather_widget.OpenMeteoProvider", _Provider)
+    monkeypatch.setattr(weather, "_update_display", lambda data: None)
     monkeypatch.setattr(
-        "weather.open_meteo_provider._WEATHER_CACHE_FILE",
-        provider_cache,
-        raising=False,
+        "widgets.weather_widget.ThreadManager.run_on_ui_thread",
+        lambda callback, *args, **kwargs: queued_ui.append((callback, args, kwargs)),
     )
+
+    weather._fetch_weather()
+    fetch_task = manager.tasks.pop(0)
+    _run_queued_io_task(fetch_task)
+
+    assert constructor_flags == [False]
+    assert provider_path.exists() is False
+    assert widget_path.exists() is False
+
+    callback, args, kwargs = queued_ui.pop(0)
+    callback(*args, **kwargs)
+    assert provider_path.exists() is False
+    assert widget_path.exists() is False
+    persist_task = manager.tasks.pop(0)
+    assert persist_task.category == "weather_cache_persist"
+    _run_queued_io_task(persist_task)
+
+    provider_payload = json.loads(provider_path.read_text(encoding="utf-8"))
+    assert provider_payload["London"]["temperature"] == 21.0
+
+
+def test_weather_cache_persistence_is_atomic_and_newest_wins(tmp_path):
+    from core.weather_preparation import prepare_weather_sample, write_weather_widget_cache
+
+    cache_path = tmp_path / "weather_widget_cache.json"
+    newer = prepare_weather_sample(
+        {"location": "Paris", "temperature": 24, "condition": "Clear"},
+        fallback_location="Paris",
+        observed_at=datetime.now(),
+    )
+    older = prepare_weather_sample(
+        {"location": "London", "temperature": 8, "condition": "Rain"},
+        fallback_location="London",
+        observed_at=newer.observed_at - timedelta(minutes=1),
+    )
+
+    assert write_weather_widget_cache(newer, cache_path_override=cache_path) is True
+    assert write_weather_widget_cache(older, cache_path_override=cache_path) is False
+
+    payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert payload["location"] == "Paris"
+    assert payload["temperature"] == 24.0
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_weather_provider_cache_merge_preserves_cities_and_rejects_older_sample(tmp_path):
+    from core.weather_preparation import prepare_weather_sample, write_weather_provider_cache
+
+    provider_path = tmp_path / "weather.json"
+    now = datetime.now()
+    london = prepare_weather_sample(
+        {"location": "London", "temperature": 18, "condition": "Rain"},
+        fallback_location="London",
+        observed_at=now,
+    )
+    paris = prepare_weather_sample(
+        {"location": "Paris", "temperature": 24, "condition": "Clear"},
+        fallback_location="Paris",
+        observed_at=now + timedelta(seconds=1),
+    )
+    older_london = prepare_weather_sample(
+        {"location": "London", "temperature": 5, "condition": "Snow"},
+        fallback_location="London",
+        observed_at=now - timedelta(minutes=1),
+    )
+
+    assert write_weather_provider_cache(london, cache_path_override=provider_path) is True
+    assert write_weather_provider_cache(paris, cache_path_override=provider_path) is True
+    assert write_weather_provider_cache(older_london, cache_path_override=provider_path) is False
+
+    payload = json.loads(provider_path.read_text(encoding="utf-8"))
+    assert set(payload) == {"London", "Paris"}
+    assert payload["London"]["temperature"] == 18.0
+    assert payload["Paris"]["temperature"] == 24.0
+
+
+def test_weather_legacy_migration_is_serialized_with_current_persistence(tmp_path):
+    from core.weather_preparation import (
+        load_weather_startup_snapshot,
+        prepare_weather_sample,
+        write_weather_widget_cache,
+    )
+
+    legacy_path = tmp_path / "legacy.json"
+    widget_path = tmp_path / "weather_widget.json"
+    provider_path = tmp_path / "provider.json"
+    legacy_path.write_text(
+        json.dumps(
+            {
+                "location": "London",
+                "temperature": 8,
+                "condition": "Old",
+                "timestamp": (datetime.now() - timedelta(days=1)).isoformat(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    current = prepare_weather_sample(
+        {"location": "London", "temperature": 20, "condition": "Current"},
+        fallback_location="London",
+        observed_at=datetime.now(),
+    )
+    barrier = threading.Barrier(2)
+    failures = []
+
+    def _load() -> None:
+        try:
+            barrier.wait()
+            load_weather_startup_snapshot(
+                "London",
+                widget_cache_path_override=widget_path,
+                provider_cache_path_override=provider_path,
+                legacy_widget_cache_path=legacy_path,
+            )
+        except Exception as exc:
+            failures.append(exc)
+
+    def _persist() -> None:
+        try:
+            barrier.wait()
+            write_weather_widget_cache(current, cache_path_override=widget_path)
+        except Exception as exc:
+            failures.append(exc)
+
+    threads = [threading.Thread(target=_load), threading.Thread(target=_persist)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert failures == []
+    payload = json.loads(widget_path.read_text(encoding="utf-8"))
+    assert payload["temperature"] == 20.0
+    assert payload["condition"] == "Current"
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_weather_deactivation_rejects_late_fetch_commit(qapp, parent_widget, monkeypatch):
+    from core.weather_preparation import PreparedWeatherFetch, prepare_weather_sample
+    from widgets.weather_widget import _normalize_weather_location_key
 
     weather = WeatherWidget(parent=parent_widget, location="London")
-    weather._cached_data = None
-    weather._cache_time = None
+    manager = _QueuedIoManager()
+    weather.set_thread_manager(manager)
+    weather._fetch_request_id = 3
+    weather._enabled = True
+    monkeypatch.setattr(weather, "_update_display", lambda data: None)
+    sample = prepare_weather_sample(
+        {"location": "London", "temperature": 18, "condition": "Cloudy"},
+        fallback_location="London",
+    )
 
-    weather._initialize_impl()
+    weather._deactivate_impl()
+    weather._commit_weather_fetch(
+        3,
+        _normalize_weather_location_key("London"),
+        PreparedWeatherFetch(sample, persist_provider=True),
+    )
 
-    assert weather._cached_data is not None
-    assert weather._cached_data["location"] == "London"
-    assert weather._cached_data["temperature"] == 9.0
-    assert "Loaded provider stale startup cache for location=London" in caplog.text
+    assert weather._cached_data is None
+    assert [task.category for task in manager.tasks] == []
+
+
+def test_weather_fetch_without_thread_manager_never_constructs_provider(
+    qapp,
+    parent_widget,
+    monkeypatch,
+):
+    weather = WeatherWidget(parent=parent_widget, location="London")
+    calls = []
+    monkeypatch.setattr(
+        "widgets.weather_widget.OpenMeteoProvider",
+        lambda *args, **kwargs: calls.append(True),
+    )
+
+    weather._fetch_weather()
+
+    assert calls == []
 
 
 def test_weather_all_positions(qapp, parent_widget):

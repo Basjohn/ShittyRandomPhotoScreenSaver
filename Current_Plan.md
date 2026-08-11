@@ -59,7 +59,30 @@ a matching current session when `get_sessions()` is empty/nonmatching.
 - [ ] Add regressions for `get_sessions()==[]` with matching current Firefox/Chromium source ids.
 - [ ] Validate Spotify Browser in ordinary `main.py` against Firefox first and at least one Chromium browser. If both current and enumerated sessions are absent, classify Windows/browser exposure separately from SRPSS selection.
 - [ ] Repair the real `MediaWidget` missing-session hide contract: production currently lacks `_complete_hide_sequence()` while the test double supplies it. Make the test shape match production rather than allowing a fake to invent lifecycle API.
-- [ ] Confirm browser providers expose no application-volume control and desktop providers restore the preserved volume preference.
+- [ ] Preserve desktop Spotify direct-volume preference; when Browser GSMTC cannot adjust Spotify directly, route volume to the exact matching browser audio session, with diagnostics and no unrelated-session fallback.
+
+## P5.0A Immediate User-Requested Runtime Slices
+
+Complete these bounded slices after the Weather IO checkpoint, then resume P5.2A workload
+extraction without waiting for a new prompt.
+
+### Clock presentation and mode stability
+
+- [ ] Add an optional Digital separator line and optional secondary/day text beneath it; preserve existing saved/default behaviour when the options are disabled.
+- [ ] Remove the unusually large Digital day-text gap and keep Digital authored scale/geometry stable across repeated Digital → Analogue → Digital mode switches; preserve the already-correct Analogue result.
+- [ ] Add settings round-trip, repeated mode-switch, layout/geometry and installed visual checks for the affected clock paths.
+
+### Media playback progress
+
+- [ ] Add an optional adjustable pill-style playback progress bar positioned just above the media controls, with configurable fill colour, optional shadow, optional glow and configurable glow colour.
+- [ ] Consume the existing media snapshot/update cadence only: no new GUI timer, polling loop, recurring task or paint-time preparation; keep invalidation and repaint bounds narrow.
+- [ ] Add settings/default/preset compatibility, paused/playing/unknown-duration, seek/progress update and visual-layout coverage.
+
+### Small visual/runtime corrections
+
+- [ ] Swap the complete authored identities of Bubble presets 1 and 9 without changing Bubble simulation cadence or algorithm semantics; update exact preset/runtime regression fixtures.
+- [ ] Make Browser GSMTC detect Spotify through matching current-session identity before enumerated-session availability, then validate the exact browser-volume fallback above.
+- [ ] Make `Esc` exit the application while Interaction Mode is active, preserving normal interaction-mode click/key routing and explicit terminal cleanup ownership.
 
 ## P5.1 Visualizer Fidelity And Stronger Goldens
 
@@ -122,7 +145,6 @@ Target contract: **Prepare → Commit → Persist**.
 
 ### Priority 1 — service/widget preparation
 
-- [ ] Weather: move startup cache reads and post-fetch persistence to IO ownership; keep Qt text/layout/QPixmap commits on GUI.
 - [ ] Gmail: move startup cache read/deserialization off GUI and move stable content-cache regeneration out of `paintEvent()`; paint consumes prepared/cache state.
 - [ ] Reddit/Gmail: cold static rendering must not be discovered inside `paintEvent()`. Prefer invalidation-time preparation before worker-rendered text unless measurement justifies the extra complexity.
 - [ ] Audit other widget/provider callbacks for JSON/filesystem/filter/sort work and apply the same owner rule only where source inspection proves it.

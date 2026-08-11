@@ -4,7 +4,15 @@ from weather.open_meteo_provider import OpenMeteoProvider
 
 
 @patch("weather.open_meteo_provider.requests.get")
-def test_get_current_weather_uses_documented_current_block(mock_get) -> None:
+def test_get_current_weather_uses_documented_current_block(
+    mock_get,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "weather.open_meteo_provider._WEATHER_CACHE_FILE",
+        tmp_path / "weather.json",
+    )
     geocode_response = Mock()
     geocode_response.raise_for_status = Mock()
     geocode_response.json.return_value = {

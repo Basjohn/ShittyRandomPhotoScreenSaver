@@ -381,11 +381,27 @@ legacy startup-attempt marker had no production caller and was removed rather th
 promoted into a persistence contract. Remaining Reddit work is the cold static
 paint-cache contract below.
 
-**Weather**
+**Weather prepare/commit/persist — complete**
 
-Move startup persisted/provider cache reads and post-fetch JSON persistence to IO.
-Worker preparation may normalize ordinary Python values and icon identity; QLabel,
-QFontMetrics, QPixmap and layout mutation remain GUI-owned.
+Weather construction and lifecycle initialization are now filesystem-inert. Activation
+submits one shared-IO startup task which performs legacy migration, widget-cache JSON
+read/validation and provider-cache fallback selection, then publishes one frozen
+`PreparedWeatherStartup`. The GUI accepts it only for the current request, lifecycle
+generation and normalized location before assigning visible state, measuring text,
+loading QPixmaps, updating layout and joining the coordinated fade.
+
+Provider/network work remains on shared IO and now returns a frozen
+`PreparedWeatherSample`. Worker callbacks retain only a weak widget reference; current
+request/location tokens reject out-of-order results after a newer request, location
+change, deactivation or cleanup. An accepted GUI commit queues detached JSON
+persistence back to shared IO. Only an accepted fresh network sample is merged into
+the shared provider fallback, so a rejected/out-of-order fetch cannot become durable;
+the locked atomic merge preserves other cached cities. Widget-cache persistence uses
+the same atomic/newest-wins rule, and legacy migration participates in that path lock
+rather than racing a current write.
+Neither startup nor ordinary refresh has a synchronous network/filesystem fallback,
+and the exported legacy fetch helper now defers provider construction/cache loading to
+its worker-owned `fetch()` call.
 
 **Gmail**
 

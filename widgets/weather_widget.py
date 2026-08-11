@@ -6,8 +6,8 @@ Displays current weather information using Open-Meteo API (no API key needed).
 from typing import Optional, Dict, Any, Tuple, List
 from datetime import datetime, timedelta
 from pathlib import Path
-import json
 import random
+import weakref
 from PySide6.QtWidgets import QWidget, QSizePolicy, QHBoxLayout, QVBoxLayout, QLabel
 from PySide6.QtCore import QPoint, QRect, Qt, Signal, QSize, QTimer
 from PySide6.QtGui import QFont, QPainter, QPen, QColor, QFontMetrics, QPixmap
@@ -16,6 +16,17 @@ from shiboken6 import Shiboken
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.threading.manager import ThreadManager
 from core.performance import widget_paint_sample
+from core.weather_preparation import (
+    PreparedWeatherFetch,
+    PreparedWeatherSample,
+    PreparedWeatherStartup,
+    load_weather_startup_snapshot,
+    normalize_weather_location_key as _normalize_weather_location_key,
+    prepare_weather_sample,
+    write_weather_provider_cache,
+    write_weather_widget_cache,
+)
+import weather.open_meteo_provider as open_meteo_provider_module
 from weather.open_meteo_provider import OpenMeteoProvider
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import PaintedShadowLabel, ShadowFadeProfile
@@ -27,7 +38,6 @@ from widgets.service_widget_runtime import (
     stop_qtimer_attr,
 )
 from core.runtime_flags import automatic_service_updates_enabled
-from core.settings.storage_paths import get_weather_widget_cache_file, migrate_file
 from widgets.weather_components import (  # noqa: F401 (re-exports for tests/external)
     WeatherConditionIcon,
     WeatherDetailRow,
@@ -36,9 +46,10 @@ from widgets.weather_components import (  # noqa: F401 (re-exports for tests/ext
 )
 
 logger = get_logger(__name__)
-_CACHE_FILE = get_weather_widget_cache_file()
+# Optional test/profile override.  The canonical path is resolved by an I/O
+# task so importing or constructing the widget never touches the filesystem.
+_CACHE_FILE: Optional[Path] = None
 _LEGACY_CACHE_FILE = Path.home() / ".srpss_last_weather.json"
-migrate_file(_LEGACY_CACHE_FILE, _CACHE_FILE)
 
 # Weather icon directory (PNG files)
 _WEATHER_ICON_DIR = Path(__file__).resolve().parents[1] / "images" / "weather"
@@ -86,11 +97,6 @@ _DEFAULT_ICON_ALIGNMENT = "RIGHT"
 _DEFAULT_ICON_SIZE = 120
 _DEFAULT_DETAIL_ICON_SIZE = 16
 WEATHER_SETTINGS_TARGET = "weather_location"
-
-
-def _normalize_weather_location_key(value: Any) -> str:
-    """Normalize location strings for persisted-cache identity checks."""
-    return " ".join(str(value or "").split()).casefold()
 
 
 class WeatherWidget(BaseOverlayWidget):
@@ -149,7 +155,8 @@ class WeatherWidget(BaseOverlayWidget):
         self._cache_duration = timedelta(minutes=30)
         self._has_displayed_valid_data = False
         self._pending_first_show = False
-        self._load_startup_cache()
+        self._startup_cache_request_id = 0
+        self._fetch_request_id = 0
         
         # Background thread
         # Override base class font size default
@@ -649,7 +656,6 @@ class WeatherWidget(BaseOverlayWidget):
     
     def _initialize_impl(self) -> None:
         """Initialize weather resources (lifecycle hook)."""
-        self._load_startup_cache()
         if not self._location.strip():
             self._show_missing_location_state()
         logger.debug("[LIFECYCLE] WeatherWidget initialized")
@@ -663,22 +669,25 @@ class WeatherWidget(BaseOverlayWidget):
             return
         if not self._ensure_thread_manager("WeatherWidget._activate_impl"):
             raise RuntimeError("ThreadManager not available")
-        
-        # Display cached data if available
+
         if self._is_cache_valid():
             self._update_display(self._cached_data)
             self._has_displayed_valid_data = True
-        self._schedule_refresh_cycle()
-        
-        # Fade in
-        self._request_fade_in()
-        
+            self._schedule_refresh_cycle()
+            self._request_fade_in()
+        else:
+            self.hide()
+            self._pending_first_show = True
+            self._begin_startup_cache_load()
+
         logger.debug("[LIFECYCLE] WeatherWidget activated")
     
     def _deactivate_impl(self) -> None:
         """Deactivate weather widget - stop updates (lifecycle hook)."""
+        self._invalidate_async_results()
         self._stop_runtime_timers(delete_qtimers=True)
-        
+        self._pending_first_show = False
+
         logger.debug("[LIFECYCLE] WeatherWidget deactivated")
     
     def _cleanup_impl(self) -> None:
@@ -706,54 +715,18 @@ class WeatherWidget(BaseOverlayWidget):
         if not self._ensure_thread_manager("WeatherWidget.start"):
             return
 
+        self._enabled = True
         if self._is_cache_valid():
             self._update_display(self._cached_data)
             self._has_displayed_valid_data = True
-            self._enabled = True
-
-            def _starter() -> None:
-                # Guard against widget being deleted before deferred callback runs
-                if not Shiboken.isValid(self):
-                    return
-                self._fade_in()
-
-            parent = self.parent()
-            if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
-                try:
-                    parent.request_overlay_fade_sync("weather", _starter)
-                except Exception as e:
-                    logger.debug("[WEATHER] Exception suppressed: %s", e)
-                    _starter()
-            else:
-                _starter()
+            self._request_fade_in()
             self._schedule_refresh_cycle()
-
             logger.info("Weather widget started (using cached data)")
             return
 
         self.hide()
         self._pending_first_show = True
-
-        if automatic_service_updates_enabled():
-            decision = get_automatic_startup_refresh_decision(cache_timestamp=self._cache_time)
-            if decision.run:
-                logger.info(
-                    "[CACHE][WEATHER] Startup refresh allowed (%s%s)",
-                    decision.reason,
-                    f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
-                )
-                self._fetch_weather()
-            else:
-                logger.info(
-                    "[CACHE][WEATHER] Startup refresh skipped (%s%s)",
-                    decision.reason,
-                    f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
-                )
-        else:
-            logger.info("[WEATHER] Automatic updates disabled via --noupdates; manual refresh only")
-        self._schedule_refresh_cycle()
-
-        self._enabled = True
+        self._begin_startup_cache_load(immediate_refresh_on_miss=True)
 
         logger.info("Weather widget started")
     
@@ -762,13 +735,146 @@ class WeatherWidget(BaseOverlayWidget):
         if not self._enabled:
             return
 
+        self._invalidate_async_results()
         self._stop_runtime_timers(delete_qtimers=True)
-        
+
         self._enabled = False
         self._pending_first_show = False
         self.hide()
         
         logger.debug("Weather widget stopped")
+
+    def _invalidate_async_results(self) -> None:
+        """Close admission for startup and provider results already in flight."""
+
+        self._startup_cache_request_id += 1
+        self._fetch_request_id += 1
+
+    def _begin_startup_cache_load(self, *, immediate_refresh_on_miss: bool = False) -> None:
+        """Load widget/provider startup state once on the shared I/O pool."""
+
+        tm = self._thread_manager
+        if tm is None:
+            logger.error("[WEATHER] Startup cache load unavailable: ThreadManager is not configured")
+            return
+
+        self._startup_cache_request_id += 1
+        request_id = self._startup_cache_request_id
+        location = self._location
+        location_key = _normalize_weather_location_key(location)
+        widget_cache_override = _CACHE_FILE
+        provider_cache_override = open_meteo_provider_module._WEATHER_CACHE_FILE
+        legacy_cache_path = _LEGACY_CACHE_FILE
+        runtime_generation = getattr(self, "_runtime_generation", None)
+        owner_ref = weakref.ref(self)
+
+        def _load_snapshot() -> PreparedWeatherStartup:
+            return load_weather_startup_snapshot(
+                location,
+                widget_cache_path_override=widget_cache_override,
+                provider_cache_path_override=provider_cache_override,
+                legacy_widget_cache_path=legacy_cache_path,
+            )
+
+        _load_snapshot._srpss_runtime_generation = runtime_generation
+
+        def _on_result(result) -> None:
+            snapshot = None
+            error = None
+            if getattr(result, "success", False):
+                candidate = getattr(result, "result", None)
+                if isinstance(candidate, PreparedWeatherStartup):
+                    snapshot = candidate
+                else:
+                    error = "No Weather startup snapshot returned"
+            else:
+                error = str(getattr(result, "error", None) or "Weather startup cache load failed")
+
+            def _deliver() -> None:
+                owner = owner_ref()
+                if owner is None or not Shiboken.isValid(owner):
+                    return
+                if snapshot is not None:
+                    owner._commit_startup_cache(
+                        request_id,
+                        location_key,
+                        snapshot,
+                        immediate_refresh_on_miss=immediate_refresh_on_miss,
+                    )
+                else:
+                    owner._on_startup_cache_error(
+                        request_id,
+                        location_key,
+                        str(error),
+                        immediate_refresh_on_miss=immediate_refresh_on_miss,
+                    )
+
+            _deliver._srpss_runtime_generation = runtime_generation
+            ThreadManager.run_on_ui_thread(_deliver)
+
+        _on_result._srpss_runtime_generation = runtime_generation
+
+        try:
+            tm.submit_io_task(
+                _load_snapshot,
+                callback=_on_result,
+                category="weather_startup_cache",
+            )
+        except Exception as exc:
+            self._on_startup_cache_error(
+                request_id,
+                location_key,
+                str(exc),
+                immediate_refresh_on_miss=immediate_refresh_on_miss,
+            )
+
+    def _commit_startup_cache(
+        self,
+        request_id: int,
+        location_key: str,
+        snapshot: PreparedWeatherStartup,
+        *,
+        immediate_refresh_on_miss: bool = False,
+    ) -> None:
+        """Commit the current detached startup snapshot, then schedule refresh."""
+
+        if (
+            not Shiboken.isValid(self)
+            or request_id != self._startup_cache_request_id
+            or location_key != _normalize_weather_location_key(self._location)
+        ):
+            return
+
+        if snapshot.sample is not None:
+            data = snapshot.sample.to_display_dict()
+            self._cached_data = data
+            self._cache_time = snapshot.cache_time
+            self._update_display(data)
+            self._has_displayed_valid_data = True
+            self._pending_first_show = False
+            self._request_fade_in()
+        elif immediate_refresh_on_miss and automatic_service_updates_enabled():
+            self._fetch_weather()
+        self._schedule_refresh_cycle()
+
+    def _on_startup_cache_error(
+        self,
+        request_id: int,
+        location_key: str,
+        error: str,
+        *,
+        immediate_refresh_on_miss: bool = False,
+    ) -> None:
+        if (
+            not Shiboken.isValid(self)
+            or request_id != self._startup_cache_request_id
+            or location_key != _normalize_weather_location_key(self._location)
+        ):
+            return
+        logger.warning("[CACHE][WEATHER] Startup cache snapshot failed: %s", error)
+        if immediate_refresh_on_miss and automatic_service_updates_enabled():
+            self._fetch_weather()
+        self._schedule_refresh_cycle()
 
     def _stop_runtime_timers(self, *, delete_qtimers: bool) -> None:
         stop_overlay_timer_pair(
@@ -863,87 +969,194 @@ class WeatherWidget(BaseOverlayWidget):
         else:
             logger.debug("Fetching fresh weather data")
 
-        if self._thread_manager is not None:
-            self._fetch_via_thread_manager()
-        else:
+        if self._thread_manager is None:
             logger.error("[THREAD_MANAGER] Weather fetch aborted: no ThreadManager available")
+            return
 
-    def _fetch_via_thread_manager(self) -> None:
+        self._fetch_request_id += 1
+        request_id = self._fetch_request_id
+        location = self._location
+        self._fetch_via_thread_manager(request_id, location)
+
+    def _fetch_via_thread_manager(self, request_id: int, location: str) -> None:
         tm = self._thread_manager
-        def _do_fetch(location: str) -> Dict[str, Any]:
+        if tm is None:
+            return
+        location_key = _normalize_weather_location_key(location)
+        runtime_generation = getattr(self, "_runtime_generation", None)
+        owner_ref = weakref.ref(self)
+
+        def _do_fetch() -> PreparedWeatherFetch:
             import time
+
             start_time = time.perf_counter()
             if is_perf_metrics_enabled():
                 logger.debug("[PERF] Weather API call starting for %s", location)
             else:
                 logger.debug("[ThreadManager] Fetching weather for %s", location)
-            provider = OpenMeteoProvider(timeout=10)
+            provider = OpenMeteoProvider(timeout=10, persist_results=False)
             result = provider.get_current_weather(location)
             if is_perf_metrics_enabled():
                 elapsed_ms = (time.perf_counter() - start_time) * 1000
                 logger.debug("[PERF] Weather API call completed in %.2fms for %s", elapsed_ms, location)
-            return result
+            if not isinstance(result, dict):
+                raise RuntimeError("No weather data returned")
+            return PreparedWeatherFetch(
+                sample=prepare_weather_sample(
+                    result,
+                    fallback_location=location,
+                    observed_at=datetime.now(),
+                ),
+                persist_provider=provider.last_result_was_network,
+            )
+
+        _do_fetch._srpss_runtime_generation = runtime_generation
 
         def _on_result(result) -> None:
-            try:
-                if getattr(result, "success", False) and isinstance(getattr(result, "result", None), dict):
-                    data = result.result
-                    ThreadManager.run_on_ui_thread(self._on_weather_fetched, data)
+            sample = None
+            error = None
+            if getattr(result, "success", False):
+                candidate = getattr(result, "result", None)
+                if isinstance(candidate, PreparedWeatherFetch):
+                    sample = candidate
                 else:
-                    err = getattr(result, "error", None)
-                    if err is None:
-                        err = "No weather data returned"
-                    ThreadManager.run_on_ui_thread(self._on_fetch_error, str(err))
-            except Exception as e:
-                ThreadManager.run_on_ui_thread(self._on_fetch_error, f"Weather fetch failed: {e}")
+                    error = "No weather data returned"
+            else:
+                error = str(getattr(result, "error", None) or "No weather data returned")
+
+            def _deliver() -> None:
+                owner = owner_ref()
+                if owner is None or not Shiboken.isValid(owner):
+                    return
+                if sample is not None:
+                    owner._commit_weather_fetch(request_id, location_key, sample)
+                else:
+                    owner._commit_weather_fetch_error(request_id, location_key, str(error))
+
+            _deliver._srpss_runtime_generation = runtime_generation
+            ThreadManager.run_on_ui_thread(_deliver)
+
+        _on_result._srpss_runtime_generation = runtime_generation
 
         try:
-            tm.submit_io_task(_do_fetch, self._location, callback=_on_result)
+            tm.submit_io_task(
+                _do_fetch,
+                callback=_on_result,
+                category="weather_fetch",
+            )
         except Exception as e:
             logger.exception("ThreadManager IO task submission failed for weather fetch: %s", e)
-    
+            self._commit_weather_fetch_error(request_id, location_key, str(e))
+
+    def _commit_weather_fetch(
+        self,
+        request_id: int,
+        location_key: str,
+        prepared: PreparedWeatherFetch,
+    ) -> None:
+        """Accept only the newest current-location provider result on the GUI."""
+
+        if (
+            not Shiboken.isValid(self)
+            or request_id != self._fetch_request_id
+            or location_key != _normalize_weather_location_key(self._location)
+        ):
+            return
+        # A live provider sample is authoritative over a still-pending startup
+        # snapshot, but failed/deferred work must not discard that fallback.
+        self._startup_cache_request_id += 1
+        needs_refresh_cycle = self._pending_first_show and self._update_timer_handle is None
+        self._install_weather_data(
+            prepared.sample.to_display_dict(),
+            prepared.sample,
+            persist_provider=prepared.persist_provider,
+        )
+        if needs_refresh_cycle:
+            self._schedule_refresh_cycle()
+
+    def _commit_weather_fetch_error(
+        self,
+        request_id: int,
+        location_key: str,
+        error: str,
+    ) -> None:
+        if (
+            not Shiboken.isValid(self)
+            or request_id != self._fetch_request_id
+            or location_key != _normalize_weather_location_key(self._location)
+        ):
+            return
+        self._on_fetch_error(error)
+
     def _on_weather_fetched(self, data: Dict[str, Any]) -> None:
-        """
-        Handle fetched weather data.
-        
-        Args:
-            data: Weather data from API
-        """
+        """Compatibility GUI seam for an already-fetched Weather dictionary."""
+
         if not Shiboken.isValid(self):
             return
-        # Cache data
+        sample = prepare_weather_sample(
+            data,
+            fallback_location=self._location,
+            observed_at=datetime.now(),
+        )
+        self._startup_cache_request_id += 1
+        self._install_weather_data(dict(data), sample)
+
+    def _install_weather_data(
+        self,
+        data: Dict[str, Any],
+        sample: PreparedWeatherSample,
+        *,
+        persist_provider: bool = False,
+    ) -> None:
+        """Install visible state on GUI, then enqueue detached persistence."""
+
         self._cached_data = data
-        self._cache_time = datetime.now()
-        
-        # Update display
+        self._cache_time = sample.observed_at
         self._update_display(data)
-        self._persist_cache(data)
-        
+        self._queue_weather_cache_persistence(
+            sample,
+            persist_provider=persist_provider,
+        )
+
         if self._pending_first_show and not self._has_displayed_valid_data:
             self._pending_first_show = False
-            self._has_displayed_valid_data = True
+            self._request_fade_in()
 
-            def _starter() -> None:
-                # Guard against widget being deleted before deferred callback runs
-                if not Shiboken.isValid(self):
-                    return
-                self._fade_in()
-
-            parent = self.parent()
-            if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
-                try:
-                    parent.request_overlay_fade_sync("weather", _starter)
-                except Exception as e:
-                    logger.debug("[WEATHER] Exception suppressed: %s", e)
-                    _starter()
-            else:
-                _starter()
-        else:
-            # For subsequent updates, keep using the current visibility state;
-            # the initial fade-in (if any) owns showing the widget.
-            pass
-
+        self._has_displayed_valid_data = True
         self.weather_updated.emit(data)
+
+    def _queue_weather_cache_persistence(
+        self,
+        sample: PreparedWeatherSample,
+        *,
+        persist_provider: bool,
+    ) -> None:
+        tm = self._thread_manager
+        if tm is None:
+            logger.debug("[CACHE][WEATHER] Persistence skipped: ThreadManager is not configured")
+            return
+        cache_override = _CACHE_FILE
+        provider_cache_override = open_meteo_provider_module._WEATHER_CACHE_FILE
+        runtime_generation = getattr(self, "_runtime_generation", None)
+
+        def _persist() -> bool:
+            widget_written = write_weather_widget_cache(
+                sample,
+                cache_path_override=cache_override,
+            )
+            provider_written = True
+            if persist_provider:
+                provider_written = write_weather_provider_cache(
+                    sample,
+                    cache_path_override=provider_cache_override,
+                )
+            return widget_written and provider_written
+
+        _persist._srpss_runtime_generation = runtime_generation
+        try:
+            tm.submit_io_task(_persist, category="weather_cache_persist")
+        except Exception:
+            logger.warning("[CACHE][WEATHER] Failed to submit widget-cache persistence", exc_info=True)
     
     def _on_fetch_error(self, error: str) -> None:
         """
@@ -977,106 +1190,6 @@ class WeatherWidget(BaseOverlayWidget):
 
         return bool(self._cached_data)
 
-    def _load_startup_cache(self) -> None:
-        """Load the best available startup cache without letting Weather start blank."""
-        self._load_persisted_cache()
-        self._load_provider_startup_cache()
-
-    def _load_persisted_cache(self) -> None:
-        if self._cached_data and self._cache_time is not None:
-            return
-        try:
-            if not _CACHE_FILE.exists():
-                return
-            raw = _CACHE_FILE.read_text(encoding="utf-8")
-            payload = json.loads(raw)
-        except Exception:
-            logger.warning("[CACHE][WEATHER] Failed to load persisted widget cache", exc_info=True)
-            return
-
-        loc = payload.get("location")
-        ts = payload.get("timestamp")
-        if not loc or not ts:
-            logger.warning("[CACHE][WEATHER] Ignoring persisted widget cache with missing location/timestamp")
-            return
-        try:
-            dt = datetime.fromisoformat(ts)
-        except Exception as e:
-            logger.warning("[CACHE][WEATHER] Ignoring persisted widget cache with invalid timestamp: %s", e)
-            return
-        if _normalize_weather_location_key(loc) != _normalize_weather_location_key(self._location):
-            logger.info(
-                "[CACHE][WEATHER] Ignoring persisted widget cache for location=%s while active_location=%s",
-                loc,
-                self._location,
-            )
-            return
-
-        temp = payload.get("temperature")
-        condition = payload.get("condition")
-        if temp is None or condition is None:
-            logger.warning("[CACHE][WEATHER] Ignoring persisted widget cache with missing temperature/condition")
-            return
-
-        # Load ALL fields from cache, not just temperature/condition/location
-        self._cached_data = {
-            "temperature": temp,
-            "condition": condition,
-            "location": loc,
-            "humidity": payload.get("humidity"),
-            "precipitation_probability": payload.get("precipitation_probability"),
-            "windspeed": payload.get("windspeed"),
-            "forecast": payload.get("forecast"),
-            "is_day": payload.get("is_day", 1),  # Default to day if not present
-            "weather_code": payload.get("weather_code"),
-        }
-        self._cache_time = dt
-        try:
-            age_s = max(0.0, (datetime.now() - dt).total_seconds())
-        except Exception:
-            age_s = -1.0
-        logger.info(
-            "[CACHE][WEATHER] Loaded persisted widget cache for location=%s age_s=%.1f",
-            loc,
-            age_s,
-        )
-
-    def _load_provider_startup_cache(self) -> None:
-        """Use provider-backed persisted weather when widget-local cache is missing."""
-        if self._cached_data and self._cache_time is not None:
-            return
-        if not self._location:
-            return
-        try:
-            provider = OpenMeteoProvider(timeout=10)
-            payload = provider.get_persisted_weather(self._location, allow_stale=True)
-        except Exception:
-            logger.warning("[CACHE][WEATHER] Failed to load provider startup cache", exc_info=True)
-            return
-        if not isinstance(payload, dict):
-            return
-
-        cached_at = payload.pop("_cached_at", None)
-        is_stale = bool(payload.pop("_stale", False))
-        try:
-            if cached_at:
-                self._cache_time = datetime.fromtimestamp(float(cached_at))
-            else:
-                self._cache_time = datetime.now()
-        except Exception:
-            self._cache_time = datetime.now()
-        self._cached_data = payload
-        try:
-            age_s = max(0.0, (datetime.now() - self._cache_time).total_seconds())
-        except Exception:
-            age_s = -1.0
-        logger.info(
-            "[CACHE][WEATHER] Loaded provider %sstartup cache for location=%s age_s=%.1f",
-            "stale " if is_stale else "",
-            self._location,
-            age_s,
-        )
-
     def _schedule_retry(self, delay_ms: int = 5 * 60 * 1000) -> None:
         ensure_single_shot_timer(
             self,
@@ -1091,66 +1204,6 @@ class WeatherWidget(BaseOverlayWidget):
         if self._enabled:
             self._fetch_weather()
     
-    def _persist_cache(self, data: Dict[str, Any]) -> None:
-        try:
-            temp = data.get("temperature")
-            condition = data.get("condition")
-            location = data.get("location") or self._location
-
-            if temp is None:
-                main = data.get("main")
-                if isinstance(main, dict):
-                    temp = main.get("temp")
-            if condition is None:
-                weather_list = data.get("weather")
-                if isinstance(weather_list, list) and weather_list:
-                    entry = weather_list[0]
-                    condition = entry.get("main") or entry.get("description")
-
-            if temp is None or condition is None:
-                return
-
-            # Extract detail metrics for persistence
-            precipitation, humidity, windspeed = self._extract_detail_values(data)
-
-            payload = {
-                "location": location,
-                "temperature": float(temp),
-                "condition": str(condition),
-                "timestamp": datetime.now().isoformat(),
-            }
-
-            # Include detail metrics if available
-            if humidity is not None:
-                payload["humidity"] = float(humidity)
-            if precipitation is not None:
-                payload["precipitation_probability"] = float(precipitation)
-            if windspeed is not None:
-                payload["windspeed"] = float(windspeed)
-            
-            # Include forecast if available
-            forecast = data.get("forecast")
-            if forecast:
-                payload["forecast"] = str(forecast)
-            
-            # Include is_day and weather_code for icon selection
-            is_day = data.get("is_day")
-            if is_day is not None:
-                payload["is_day"] = int(is_day)
-            
-            weather_code = data.get("weather_code")
-            if weather_code is not None:
-                payload["weather_code"] = int(weather_code)
-
-            _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            _CACHE_FILE.write_text(json.dumps(payload), encoding="utf-8")
-            logger.info(
-                "[CACHE][WEATHER] Persisted widget cache for location=%s",
-                location,
-            )
-        except Exception:
-            logger.warning("[CACHE][WEATHER] Failed to persist widget cache", exc_info=True)
-
     def _available_primary_text_width(self) -> int:
         """Return a safe text-column width that stays inside the weather card."""
         visible_width = max(self.width() if self.width() > 0 else 0, self._min_content_width)
@@ -1413,7 +1466,10 @@ class WeatherWidget(BaseOverlayWidget):
         Args:
             location: City name or coordinates
         """
-        self._location = str(location or "").strip()
+        next_location = str(location or "").strip()
+        if _normalize_weather_location_key(next_location) != _normalize_weather_location_key(self._location):
+            self._invalidate_async_results()
+        self._location = next_location
         
         # Clear cache
         self._cached_data = None

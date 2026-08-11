@@ -513,12 +513,17 @@ class WeatherFetcher(QObject):
         """
         super().__init__()
         self._location = location
-        self._provider = OpenMeteoProvider(timeout=10)
+        # Provider construction loads its persisted cache, so defer it to the
+        # worker-owned fetch call instead of doing filesystem work here.
+        self._provider: Optional[OpenMeteoProvider] = None
     
     def fetch(self) -> None:
         """Fetch weather data from Open-Meteo API."""
         try:
             logger.debug(f"Fetching weather for {self._location}")
+
+            if self._provider is None:
+                self._provider = OpenMeteoProvider(timeout=10)
             
             # Fetch weather using Open-Meteo (no API key needed!)
             data = self._provider.get_current_weather(self._location)
