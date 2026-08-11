@@ -359,7 +359,9 @@ Background samplers read detached GUI-captured image metadata. They never inspec
 ## 10. Settings, Widgets, and Layout
 
 - Defaults and normalization remain single-source.
-- Mutation APIs preserve cache invalidation, persistence, and notification semantics.
+- Settings mutation is synchronously authoritative in memory and preserves cross-manager cache invalidation and notification semantics.
+- One process-scoped ordered settings writer owns routine serialization/temp-write/fsync/atomic replacement across profiles; do not create per-manager, per-dialog, or runtime-generation writers.
+- Routine save/sync requests persistence. Only an explicit bounded flush acknowledges durability; failed writes remain dirty/retryable, and Settings completion, reload, and process shutdown preserve their flush boundaries.
 - Widget metadata remains descriptor-owned.
 - Transition identity remains registry-owned.
 - Visualizer identity/settings remain registry/model-owned.

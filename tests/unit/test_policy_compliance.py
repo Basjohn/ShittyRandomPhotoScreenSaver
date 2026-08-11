@@ -19,14 +19,19 @@ class TestThreadingPolicyCompliance:
     Policy: All background task execution must use ThreadManager.
     Raw threading.Thread/ThreadPoolExecutor should only be used in:
     1. ThreadManager implementation itself
-    2. External library wrappers where ThreadManager cannot be injected
-    3. Test files simulating external library behavior
+    2. Explicit process-lifetime infrastructure whose ordering/lifetime cannot
+       be represented by runtime-generation ThreadManager tasks
+    3. External library wrappers where ThreadManager cannot be injected
+    4. Test files simulating external library behavior
     """
 
     EXCLUDED_PATHS = [
         # ThreadManager implementation itself
         "core/threading/manager.py",
         "core/threading/",
+        # Process-scoped ordered writers intentionally outlive runtime generations
+        "core/logging/logger.py",
+        "core/settings/persistence.py",
         # External library wrappers and pre-policy implementations
         "core/process/supervisor.py",
         "rendering/adaptive_timer.py",

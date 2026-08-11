@@ -31,6 +31,7 @@ from core.build_profile import (
     is_diagnostic_build,
 )
 from core.settings.settings_manager import SettingsManager
+from core.settings.persistence import flush_and_close_settings_persistence
 from core.animation import AnimationManager
 from engine.screensaver_engine import ScreensaverEngine
 from ui.settings_dialog import SettingsDialog
@@ -794,6 +795,40 @@ def main(*, entrypoint: str = "main"):
             _restore_windows_timer_resolution(1)
             logger.debug("Windows timer resolution restored to default")
     
+    settings_persistence = flush_and_close_settings_persistence(timeout=5.0)
+    logger.info(
+        "[SETTINGS_PERSIST] enqueued=%d coalesced=%d writes=%d failed=%d "
+        "high_water=%d lag_avg_ms=%.3f lag_max_ms=%.3f write_avg_ms=%.3f "
+        "write_max_ms=%.3f flush_max_ms=%.3f close_ms=%.3f timed_out=%s",
+        int(settings_persistence.get("enqueued", 0)),
+        int(settings_persistence.get("coalesced", 0)),
+        int(settings_persistence.get("writes_completed", 0)),
+        int(settings_persistence.get("writes_failed", 0)),
+        int(settings_persistence.get("queue_high_water", 0)),
+        float(settings_persistence.get("writer_lag_avg_ms", 0.0)),
+        float(settings_persistence.get("writer_lag_max_ms", 0.0)),
+        float(settings_persistence.get("write_avg_ms", 0.0)),
+        float(settings_persistence.get("write_max_ms", 0.0)),
+        float(settings_persistence.get("flush_max_ms", 0.0)),
+        float(settings_persistence.get("close_duration_ms", 0.0)),
+        bool(settings_persistence.get("close_timed_out", False)),
+    )
+    if (
+        settings_persistence.get("close_timed_out")
+        or int(settings_persistence.get("writes_failed", 0)) > 0
+    ):
+        logger.warning(
+            "[SETTINGS_PERSIST] Terminal durability boundary was not clean: %r",
+            settings_persistence,
+        )
+        if diagnostic_record is not None:
+            diagnostic_record(
+                "settings_persistence_close_failure",
+                queue_depth=settings_persistence.get("queue_depth", 0),
+                writes_failed=settings_persistence.get("writes_failed", 0),
+                close_timed_out=settings_persistence.get("close_timed_out", False),
+            )
+
     # Cleanup pycache on exit (script mode only)
     if is_script_mode():
         logger.info("Cleaning pycache on exit")

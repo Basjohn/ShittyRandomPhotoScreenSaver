@@ -112,7 +112,7 @@ one idle PBO. Steady `generic_pair_warm` fell from the historical reference medi
 GUI-availability problem remains active and is not a texture-identity problem.
 
 - [x] Validate retained-current → next-old reuse in a live repeated-transition run without increasing terminal texture/PBO ownership.
-- [ ] Re-run the same typical scenario after queued logging and require lower request-age/visualizer-tick tails while preserving the closed texture/resource bars.
+- [ ] Re-run the same typical scenario after queued logging and ordered settings persistence. Require lower request-age/visualizer-tick tails, clean bounded logging/settings-writer terminal metrics, and preservation of the closed texture/resource bars.
 - [ ] Change multi-display commit scheduling only if post-extraction steady evidence shows back-to-back prepared commits are a remaining owner. The current run's three large stagger delays occurred only during cold runtime starts and do not justify a scheduling change.
 - [ ] Keep transition names and one terminal GL metric bracket per real transition; no repaint retry or scheduler/cadence compensation.
 
@@ -122,8 +122,6 @@ Target contract: **Prepare → Commit → Persist**.
 
 ### Priority 0 — broad architectural removal
 
-- [x] **Queued ordinary logging:** caller threads enqueue bounded snapshots; one process-owned writer performs normal filtering/formatting/deduplication/rotation/file writes. Queue saturation/drop/caller-cost/writer-lag/high-water/flush metrics, serialized WARNING+ emergency visibility, bounded reconfiguration/shutdown, and independent crash/faulthandler ownership are covered by focused automation. The same typical-load runtime comparison remains the next evidence gate.
-- [ ] **Ordered settings persistence:** in-memory settings become authoritative synchronously; JSON serialization/temp-write/atomic replace move to one ordered persistence owner. Coalesce only superseded pending revisions where semantics allow and expose explicit durability flush points.
 - [ ] **Structured logging family metadata:** the queued record should carry a family/category field so routing is not permanently dependent on human message tokens such as `[CACHE]` versus `[GL CACHE]`.
 
 ### Priority 1 — service/widget preparation

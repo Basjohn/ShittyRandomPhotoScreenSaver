@@ -4,11 +4,16 @@ from copy import deepcopy
 import math
 import threading
 import json
+import weakref
 from datetime import datetime
 from pathlib import Path
 from PySide6.QtCore import QSettings, QObject, Signal
 from core.logging.logger import get_logger, is_verbose_logging
-from core.settings.json_store import JsonSettingsStore, determine_storage_path
+from core.settings.json_store import (
+    SettingsDurabilityError,
+    determine_storage_path,
+    get_json_settings_store,
+)
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
@@ -27,6 +32,10 @@ _WIDGET_DEFAULT_MERGE_SKIP_KEYS: dict[str, frozenset[str]] = {
 }
 
 logger = get_logger('SettingsManager')
+_MANAGER_REGISTRY_LOCK = threading.RLock()
+_MANAGERS_BY_STORE: "weakref.WeakKeyDictionary[object, weakref.WeakSet[SettingsManager]]" = (
+    weakref.WeakKeyDictionary()
+)
 
 
 class SettingsManager(QObject):
@@ -86,17 +95,30 @@ class SettingsManager(QObject):
             logger.debug("[SETTINGS] Exception suppressed: %s", exc, exc_info=True)
 
         storage_path = determine_storage_path(app_name, base_dir=storage_base_dir)
-        self._settings = JsonSettingsStore(storage_path=storage_path, profile=app_name)
+        self._settings = get_json_settings_store(
+            storage_path=storage_path,
+            profile=app_name,
+        )
         self._organization = organization
         self._application = app_name
         self._storage_path = storage_path
         self._storage_base_dir = storage_base_dir
-        self._lock = threading.RLock()
+        # Managers sharing one profile path also share the store operation
+        # lock.  A cache miss therefore cannot read an old store value and
+        # repopulate the shared cache after a peer mutation invalidates it.
+        self._lock = self._settings.manager_operation_lock()
         self._change_handlers: Dict[str, List[Callable]] = {}
         
         # In-memory cache for frequently accessed settings (P2 optimization)
-        self._cache: Dict[str, Any] = {}
+        self._cache = self._settings.manager_cache()
+        self._cache_lock = self._settings.manager_cache_lock()
         self._cache_enabled = True
+        with _MANAGER_REGISTRY_LOCK:
+            managers = _MANAGERS_BY_STORE.get(self._settings)
+            if managers is None:
+                managers = weakref.WeakSet()
+                _MANAGERS_BY_STORE[self._settings] = managers
+            managers.add(self)
 
         if not self._settings.exists():
             self._run_initial_migration(organization, app_name, storage_path)
@@ -137,6 +159,16 @@ class SettingsManager(QObject):
             self.cleanup_legacy_global_preset_state()
         except Exception:
             logger.debug("Legacy global preset cleanup failed", exc_info=True)
+
+        # Startup is the first explicit durability boundary.  Runtime changes
+        # are admitted to the ordered writer without holding the GUI thread;
+        # construction finishes only after migrations/default repair are on
+        # disk so a second manager for the same profile cannot start stale.
+        if not self._settings.flush(timeout=5.0):
+            logger.warning(
+                "[SETTINGS_PERSIST] Startup durability flush failed for %s",
+                storage_path,
+            )
 
         # Diagnostic snapshot so widget enable/monitor issues can be traced
         # without guessing what QSettings returned on this machine. The
@@ -273,7 +305,7 @@ class SettingsManager(QObject):
 
             if migrated:
                 self._settings.sync()
-                self._cache.clear()
+                self._clear_cache_locked()
 
         if migrated:
             logger.info("Migrated legacy setting aliases: %s", migrated)
@@ -495,19 +527,6 @@ class SettingsManager(QObject):
         Returns:
             Setting value or default
         """
-        key = self._canonicalize_key(key)
-        with self._lock:
-            # Check cache first (P2 optimization)
-            cache_key = f"{key}:{id(default)}"
-            if self._cache_enabled and cache_key in self._cache:
-                return self._cache[cache_key]
-
-            structured_value = self._get_structured_value_locked(key)
-            if structured_value is not self._MISSING:
-                value = structured_value
-            else:
-                value = self._settings.value(key, default)
-
         def to_plain(obj: Any) -> Any:
             if isinstance(obj, Mapping):
                 return {k: to_plain(v) for k, v in obj.items()}
@@ -515,31 +534,53 @@ class SettingsManager(QObject):
                 return [to_plain(v) for v in obj]
             return obj
 
-        if isinstance(value, Mapping):
-            return to_plain(value)
-
-        # Some QSettings backends (notably on Windows) round-trip QVariantList
-        # items as strings. Normalize critical list-valued settings.
-        dotted = str(key) if key is not None else ""
-        if dotted == "display.show_on_monitors" and isinstance(value, list):
-            coerced: list[Any] = []
-            for item in value:
-                try:
-                    coerced.append(int(item))
-                except Exception as exc:
-                    logger.debug("[SETTINGS] Exception suppressed: %s", exc, exc_info=True)
-                    coerced.append(item)
-            # Cache the coerced value
+        key = self._canonicalize_key(key)
+        with self._lock:
+            # Check cache first (P2 optimization)
+            cache_key = f"{key}:{id(default)}"
             if self._cache_enabled:
-                with self._lock:
-                    self._cache[cache_key] = coerced
-            return coerced
+                with self._cache_lock:
+                    cached = self._cache.get(cache_key, self._MISSING)
+                if cached is not self._MISSING:
+                    return cached
 
-        # Cache the result for future lookups
-        if self._cache_enabled:
-            with self._lock:
-                self._cache[cache_key] = value
-        return value
+            structured_value = self._get_structured_value_locked(key)
+            if structured_value is not self._MISSING:
+                value = structured_value
+            else:
+                value = self._settings.value(key, default)
+
+            if isinstance(value, Mapping):
+                return to_plain(value)
+
+            # Some QSettings backends (notably on Windows) round-trip
+            # QVariantList items as strings. Normalize critical list-valued
+            # settings before publishing them to the shared cache.
+            dotted = str(key) if key is not None else ""
+            if dotted == "display.show_on_monitors" and isinstance(value, list):
+                coerced: list[Any] = []
+                for item in value:
+                    try:
+                        coerced.append(int(item))
+                    except Exception as exc:
+                        logger.debug(
+                            "[SETTINGS] Exception suppressed: %s",
+                            exc,
+                            exc_info=True,
+                        )
+                        coerced.append(item)
+                if self._cache_enabled:
+                    with self._cache_lock:
+                        self._cache[cache_key] = coerced
+                return coerced
+
+            # Cache the result before releasing the shared store operation
+            # lock so a peer mutation cannot invalidate and then be followed
+            # by this older read repopulating the cache.
+            if self._cache_enabled:
+                with self._cache_lock:
+                    self._cache[cache_key] = value
+            return value
     
     @staticmethod
     def to_bool(value: Any, default: bool = False) -> bool:
@@ -696,15 +737,6 @@ class SettingsManager(QObject):
                 logger.info("Cleaned up %d obsolete settings: %s", len(removed), removed)
         return removed
 
-    # Keys that require immediate sync to prevent data loss on crash/exit
-    _CRITICAL_KEYS = frozenset({
-        'transitions',
-        'widgets',
-        'sources.folders',
-        'sources.rss_feeds',
-        'display',
-    })
-
     def set(self, key: str, value: Any) -> None:
         """
         Set a setting value.
@@ -730,21 +762,12 @@ class SettingsManager(QObject):
             # Invalidate cache entries for this key/root (P2 optimization)
             self._invalidate_cache_for_key_locked(key)
 
-            # Immediate sync for critical settings to prevent data loss
-            root_key = key.split('.')[0] if '.' in key else key
-            if root_key in self._CRITICAL_KEYS or key in self._CRITICAL_KEYS:
-                self._settings.sync()
+            # Every semantic mutation enters the process-owned ordered writer.
+            # Complete pending snapshots from this same store may coalesce;
+            # in-memory visibility, cache invalidation, and notification do not.
+            self._settings.sync()
 
-            # Emit change signal
-            self.settings_changed.emit(key, value)
-
-            # Call registered handlers
-            if key in self._change_handlers:
-                for handler in self._change_handlers[key]:
-                    try:
-                        handler(value, old_value)
-                    except Exception:
-                        logger.error("Error in change handler for %s", key, exc_info=True)
+        self._publish_store_change(key, value, old_value)
 
         # Compact logging by default so large nested maps (e.g. 'widgets')
         # do not flood the log. When verbose logging is enabled we still
@@ -759,31 +782,58 @@ class SettingsManager(QObject):
         if not self._cache_enabled:
             return
         key_text = str(key or "")
-        if not key_text:
-            self._cache.clear()
-            return
-        key_root = key_text.split(".", 1)[0]
-        keys_to_remove: list[str] = []
-        for cache_key in list(self._cache.keys()):
-            cache_name = cache_key.split(":", 1)[0]
-            if not cache_name:
-                keys_to_remove.append(cache_key)
-                continue
-            if (
-                cache_name == key_text
-                or cache_name.startswith(f"{key_text}.")
-                or cache_name == key_root
-                or cache_name.startswith(f"{key_root}.")
-            ):
-                keys_to_remove.append(cache_key)
-        for cache_key in keys_to_remove:
-            self._cache.pop(cache_key, None)
+        with self._cache_lock:
+            if not key_text or key_text == "*":
+                self._cache.clear()
+                return
+            key_root = key_text.split(".", 1)[0]
+            keys_to_remove: list[str] = []
+            for cache_key in list(self._cache.keys()):
+                cache_name = cache_key.split(":", 1)[0]
+                if not cache_name:
+                    keys_to_remove.append(cache_key)
+                    continue
+                if (
+                    cache_name == key_text
+                    or cache_name.startswith(f"{key_text}.")
+                    or cache_name == key_root
+                    or cache_name.startswith(f"{key_root}.")
+                ):
+                    keys_to_remove.append(cache_key)
+            for cache_key in keys_to_remove:
+                self._cache.pop(cache_key, None)
 
     def _clear_cache_locked(self) -> None:
         """Clear the in-memory settings cache after bulk store mutations."""
         if not self._cache_enabled:
             return
-        self._cache.clear()
+        with self._cache_lock:
+            self._cache.clear()
+
+    def _publish_store_change(self, key: str, value: Any, old_value: Any) -> None:
+        """Synchronously notify every live manager sharing this store."""
+
+        with _MANAGER_REGISTRY_LOCK:
+            registered = list(_MANAGERS_BY_STORE.get(self._settings, ()))
+        managers = [self, *(manager for manager in registered if manager is not self)]
+        for manager in managers:
+            try:
+                with manager._lock:
+                    manager._invalidate_cache_for_key_locked(key)
+                    handlers = list(manager._change_handlers.get(key, ()))
+                manager.settings_changed.emit(key, value)
+                for handler in handlers:
+                    try:
+                        handler(value, old_value)
+                    except Exception:
+                        logger.error(
+                            "Error in change handler for %s",
+                            key,
+                            exc_info=True,
+                        )
+            except RuntimeError:
+                # A weakly-held QObject wrapper may be in final destruction.
+                continue
 
     def set_many(self, values: Mapping[str, Any]) -> None:
         """Set multiple settings in one call."""
@@ -816,7 +866,7 @@ class SettingsManager(QObject):
             self._invalidate_cache_for_key_locked("widgets")
             self._settings.sync()
 
-        self.settings_changed.emit("widgets", widgets)
+        self._publish_store_change("widgets", widgets, stored_widgets)
         logger.debug("Spotify visualizer settings persisted as one normalized widgets root")
 
     def reset_visualizers_to_defaults(self) -> None:
@@ -843,21 +893,57 @@ class SettingsManager(QObject):
         self.set('widgets', widgets_dict)
 
     def save(self) -> None:
-        """Force save settings to persistent storage."""
+        """Request ordered persistence of the current in-memory revision."""
         with self._lock:
             self._settings.sync()
-        logger.debug("Settings saved")
+        logger.debug("Settings persistence requested")
+
+    def flush(self, timeout: float = 5.0) -> bool:
+        """Wait for the current revision to reach durable storage."""
+
+        # JsonSettingsStore releases its operation lock before waiting for the
+        # writer acknowledgement.  Do not hold the same shared lock here: the
+        # writer callback needs it to publish the durable revision.
+        success = self._settings.flush(timeout=timeout)
+        if success:
+            logger.debug("Settings persistence flush complete")
+        else:
+            logger.warning("[SETTINGS_PERSIST] Settings flush failed or timed out")
+        return success
+
+    def persistence_snapshot(self) -> Dict[str, Any]:
+        """Return passive ordered-persistence state for diagnostics/tests."""
+
+        return self._settings.persistence_snapshot()
 
     def load(self) -> None:
         """Load settings from persistent storage."""
-        with self._lock:
+        try:
+            if not self._settings.flush(timeout=5.0):
+                logger.error(
+                    "[SETTINGS_PERSIST] Refusing reload after durability flush failure"
+                )
+                return
+            # JsonSettingsStore owns the cross-manager revision barrier.  Do
+            # not hold this manager's lock while it waits, or a peer mutation's
+            # synchronous signal fanout could deadlock on this manager.
+            self._settings.load()
+            with self._lock:
+                self._clear_cache_locked()
+        except SettingsDurabilityError as exc:
+            logger.error(
+                "[SETTINGS_PERSIST] Refusing reload across failed boundary: %s",
+                exc,
+            )
+            return
+        except Exception as exc:
+            logger.error("Failed to load settings: %s", exc, exc_info=True)
+            # Non-durability load failures retain the historical repair path.
             try:
-                self._settings.load()
-                self._cache.clear()
-            except Exception as exc:
-                logger.error("Failed to load settings: %s", exc, exc_info=True)
-                # Reset to defaults if loading fails
                 self.reset_to_defaults()
+            except Exception:
+                logger.exception("Failed to reset settings after load failure")
+            return
         logger.debug("Settings loaded")
 
     def validate_and_repair(self) -> Dict[str, str]:
@@ -1191,10 +1277,10 @@ class SettingsManager(QObject):
                     self._store_widgets_root_locked(widgets_dict)
             
             self._settings.sync()
-            self._cache.clear()
+            self._clear_cache_locked()
 
         logger.info("Settings reset to defaults (preserved: %s)", list(preserved.keys()))
-        self.settings_changed.emit('*', None)  # Signal that all changed
+        self._publish_store_change('*', None, self._MISSING)
     
     def get_all_keys(self) -> List[str]:
         """Get all setting keys."""
@@ -1228,11 +1314,9 @@ class SettingsManager(QObject):
             if not removed:
                 self._settings.remove(key)
             self._invalidate_cache_for_key_locked(str(key))
-            root_key = key.split('.')[0] if '.' in key else key
-            if root_key in self._CRITICAL_KEYS or key in self._CRITICAL_KEYS:
-                self._settings.sync()
+            self._settings.sync()
 
-        self.settings_changed.emit(key, None)
+        self._publish_store_change(key, None, self._MISSING)
 
         logger.debug(f"Removed setting: {key}")
     
@@ -1242,7 +1326,7 @@ class SettingsManager(QObject):
             self._settings.clear()
             self._clear_cache_locked()
             self._settings.sync()
-        self.settings_changed.emit('*', None)
+        self._publish_store_change('*', None, self._MISSING)
         logger.warning("All settings cleared")
 
     # ------------------------------------------------------------------
@@ -1410,12 +1494,10 @@ class SettingsManager(QObject):
                 self._settings.setValue(section, mapping)
             self._invalidate_cache_for_key_locked(section)
 
-            root_key = section.split('.')[0] if '.' in section else section
-            if root_key in self._CRITICAL_KEYS or section in self._CRITICAL_KEYS:
-                self._settings.sync()
+            self._settings.sync()
 
         if emit_change:
-            self.settings_changed.emit(section, mapping)
+            self._publish_store_change(section, mapping, old_value)
         if is_verbose_logging():
             logger.debug("Section changed%s: %s: %r -> %r", "" if emit_change else " (silent)", section, old_value, mapping)
         else:

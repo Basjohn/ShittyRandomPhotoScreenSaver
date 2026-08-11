@@ -1198,6 +1198,19 @@ class SettingsDialog(QDialog):
             self._save_geometry()
         except Exception:
             logger.debug("Failed to save dialog geometry on close", exc_info=True)
+
+        # Settings completion is an explicit durability boundary.  Routine
+        # control changes only enqueue persistence; one bounded close flush
+        # prevents the standalone config process or a runtime rebuild from
+        # observing an acknowledged Settings session that never reached disk.
+        try:
+            flush = getattr(self._settings, "flush", None)
+            if callable(flush) and not flush(timeout=2.0):
+                logger.warning(
+                    "[SETTINGS_PERSIST] Settings close durability flush timed out"
+                )
+        except Exception:
+            logger.exception("[SETTINGS_PERSIST] Settings close flush failed")
         
         # Disable acrylic blur
         try:

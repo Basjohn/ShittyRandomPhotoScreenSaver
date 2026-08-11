@@ -181,7 +181,7 @@ class TestDisplayTab:
         assert mode == 'fill'
         
         interval = fresh_settings.get('timing.interval', 5)
-        assert interval == 140
+        assert interval == 40
 
         tab.deleteLater()
 

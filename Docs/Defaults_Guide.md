@@ -1,6 +1,6 @@
 # Defaults Guide
 
-Last updated: 2026-07-14
+Last updated: 2026-08-11
 
 Canonical guidance for defaults, reset behavior, snapshots, and import safety.
 
@@ -25,6 +25,14 @@ The current MC differential changes only `display.show_on_monitors`, `input.inte
 - Structured roots include `widgets`, `transitions`, and `ui`; older flat/dotted keys remain accepted through `SettingsManager` APIs where needed.
 
 Use public `SettingsManager` accessors for active settings paths. Do not reach into the backing store from UI code.
+
+### Persistence And Durability
+
+- A public mutation becomes authoritative in memory immediately, invalidates every live same-profile manager cache, and publishes notifications synchronously.
+- Routine mutation and `SettingsManager.save()` request persistence; they do not claim that disk durability has completed. `SettingsManager.flush(timeout=...)` is the explicit durability acknowledgement.
+- One process-scoped ordered writer owns JSON serialization, temp-file write/fsync, and durable atomic replacement for all profiles. One shared `JsonSettingsStore` owns each normalized profile path, and only complete same-store snapshots still pending may coalesce.
+- Startup migration/repair completion, Settings-dialog completion, reload, and process shutdown are bounded explicit flush boundaries. A failed write remains dirty and retryable, and reload refuses to replace newer memory when durability cannot be established.
+- SST export remains synchronous explicit user transport. SST import mutates the canonical store and then follows its ordered persistence path; neither creates a competing routine writer.
 
 ## 3. Reset And Import Preservation
 - Preserve-on-reset keys live in `core/settings/defaults.py`.

@@ -67,7 +67,8 @@ from `main`.
 - [-] Active. `Current_Plan.md` owns exact order.
 - [x] Repair retained-current → next-old texture identity reuse.
 - [x] Move ordinary logging filtering/formatting/deduplication/rotation/file I/O behind one bounded process-owned writer.
-- [ ] Remove avoidable GUI-thread persistence/service/cache preparation.
+- [x] Move settings serialization/temp-write/fsync/atomic replace behind one ordered process-owned writer with revision and explicit durability boundaries.
+- [ ] Remove proven GUI-thread service/cache preparation.
 - [ ] Attribute GPU busy across upload/transition/visualizer/presentation owners.
 - [ ] Remove proven temporary compatibility/fallback debris without changing behaviour.
 - [ ] Complete stronger visualizer temporal/paint-receipt protection.

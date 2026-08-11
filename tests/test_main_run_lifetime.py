@@ -25,6 +25,28 @@ def test_run_session_disables_last_window_auto_quit_only_after_startup_gate():
     assert fallback < lifetime_policy < event_loop
 
 
+def test_terminal_settings_durability_precedes_logging_shutdown():
+    source = (Path(__file__).parents[1] / "main.py").read_text(encoding="utf-8")
+
+    settings_close = source.index(
+        "settings_persistence = flush_and_close_settings_persistence(timeout=5.0)"
+    )
+    parser_flush = source.index(
+        "logging_flushed_for_parser = flush_logging()",
+        settings_close,
+    )
+    logging_close = source.index(
+        "logging_metrics = flush_and_close_logging()",
+        parser_flush,
+    )
+    diagnostic_close = source.index(
+        "diagnostic_close()",
+        logging_close,
+    )
+
+    assert settings_close < parser_flush < logging_close < diagnostic_close
+
+
 @pytest.mark.qt
 def test_run_lifetime_survives_zero_window_dialog_destruction_barrier(qt_app, qtbot):
     class _Engine:

@@ -4,8 +4,9 @@ import json
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication, QWidget
 from PySide6.QtCore import QTimer, Qt
+from PySide6.QtGui import QCloseEvent
+from PySide6.QtWidgets import QApplication, QWidget
 from shiboken6 import Shiboken
 import ui.settings_dialog as settings_dialog_module
 from ui.settings_dialog import SettingsDialog, CustomTitleBar, TabButton, ResetDefaultsDialog
@@ -397,6 +398,32 @@ def test_settings_dialog_close_cancels_background_hydration_work():
     assert "self._background_tab_queue.clear()" in close_source
     assert "if self._closing" in start_source
     assert "if self._closing" in schedule_source
+
+
+def test_settings_dialog_close_flushes_after_geometry_save(
+    qapp,
+    settings_manager,
+    animation_manager,
+    monkeypatch,
+):
+    """A completed Settings session acknowledges geometry before durability."""
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    order = []
+
+    monkeypatch.setattr(dialog, "_has_image_sources", lambda: True)
+    monkeypatch.setattr(dialog, "_save_geometry", lambda: order.append("geometry"))
+
+    def _flush(*, timeout):
+        order.append(("flush", timeout))
+        return True
+
+    monkeypatch.setattr(settings_manager, "flush", _flush)
+
+    event = QCloseEvent()
+    dialog.closeEvent(event)
+
+    assert event.isAccepted() is True
+    assert order == ["geometry", ("flush", 2.0)]
 
 
 def test_settings_dialog_restores_persisted_top_level_tab(qapp, settings_manager, animation_manager):

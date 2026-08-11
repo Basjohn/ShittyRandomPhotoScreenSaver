@@ -171,6 +171,10 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 ## 9. Settings and Persistence Contract
 
 - `SettingsManager` owns settings read/write/migration.
+- Public mutation becomes authoritative in memory immediately and synchronously invalidates/notifies every live manager for the same profile path.
+- One process-scoped ordered persistence writer, outside runtime generations, owns routine JSON serialization, temp-file fsync and durable atomic replacement for all profiles; one shared store authority exists per normalized path.
+- Store revisions are monotonic. Only complete superseded snapshots still pending for the same store may coalesce; an older or failed write cannot be acknowledged over newer in-memory state.
+- Routine save/sync requests persistence. Explicit bounded flushes acknowledge durability at startup repair/migration completion, Settings completion, reload and process shutdown; failed writes remain dirty and retryable.
 - Canonical defaults and profile differences remain single-source.
 - Root/section writes invalidate dependent caches.
 - All widgets-map/import mutation routes use one normalization contract.

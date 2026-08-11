@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 Navigation and ownership map for SRPSS. This file is not a specification.
 
@@ -53,6 +53,7 @@ Do not read every document by default.
 | Widget lifecycle | `rendering/widget_manager.py` |
 | Thread/task ownership | `core/threading/manager.py` |
 | Settings in-memory authority | `core/settings/settings_manager.py` |
+| Settings ordered durability | `core/settings/persistence.py`, `core/settings/json_store.py` |
 | Resource accounting | `core/resources/manager.py`, `core/performance/resource_metrics.py` |
 | Whole-process usage | `core/performance/usage_sampler.py` |
 | Image pipeline | `engine/image_pipeline.py` and image/prefetch helpers |

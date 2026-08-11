@@ -227,7 +227,7 @@ def import_from_sst(mgr: "SettingsManager", path: str, merge: bool = True) -> bo
             mgr._settings.sync()
             mgr._clear_cache_locked()
 
-        mgr.settings_changed.emit('*', None)
+        mgr._publish_store_change('*', None, mgr._MISSING)
         logger.info("Imported settings snapshot from %s", path)
         return True
     except Exception:

@@ -1,6 +1,6 @@
 # 15 — Completion and Release Gates
 
-Last reconciled: 2026-08-10
+Last reconciled: 2026-08-11
 
 A release candidate fails when a critical gate fails even if one average metric improves.
 
@@ -26,7 +26,7 @@ A release candidate fails when a critical gate fails even if one average metric 
 
 - [ ] Retained-current texture becomes next-old cache hit; steady transition uploads only new.
 - [ ] Routine logging file/rotation work is off caller/UI threads with bounded queue/writer ownership.
-- [ ] Settings persistence is ordered/background with explicit flush semantics and no stale write winning.
+- [x] Settings persistence is ordered/background with explicit flush semantics and no stale write winning.
 - [ ] Proven Reddit/Weather/Gmail cache/data preparation is outside GUI/paint hot paths.
 - [ ] p95/p99/max request-age/tick tails improve or remaining owners are named.
 - [ ] No catch-all background thread or new unbounded queue.

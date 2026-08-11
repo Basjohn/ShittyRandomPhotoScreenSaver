@@ -235,19 +235,27 @@ would simply create a new choke point.
 
 ### Ordered persistence lane
 
-Settings durability is a distinct workload because **order matters**. Critical
-settings should become immediately authoritative in memory and be submitted to one
-process-owned ordered persistence writer/lane that:
+Settings durability is a distinct workload because **order matters**. It is now owned
+by one lazy process-scoped `SRPSSSettingsWriter`, deliberately outside runtime
+`ThreadManager` generations. `SettingsManager` mutation is immediately authoritative
+in memory and submits a complete revisioned snapshot to that writer. The contract is:
 
-- snapshots a monotonically ordered revision;
-- coalesces superseded pending revisions only where semantics allow;
-- performs JSON serialization/temp-write/atomic replace away from GUI;
-- exposes explicit flush/close boundaries for Settings completion, shutdown and any
-  operation that requires durable acknowledgement;
-- remains visible in lifecycle/resource diagnostics.
+- one live `JsonSettingsStore` authority per normalized profile path;
+- monotonic store revisions admitted under the store lock so an older snapshot cannot
+  be submitted after a newer one;
+- coalescing only for superseded, complete, same-owner pending snapshots; an in-flight
+  snapshot is never replaced;
+- JSON serialization, temp write, file flush/fsync and durable atomic replacement on
+  the writer thread;
+- explicit bounded durability acknowledgement at startup repair/migration completion,
+  Settings close, reload boundaries and process shutdown;
+- failed writes remain dirty and retryable rather than being reported as durable;
+- queue depth/high-water, revision, coalescing, writer lag/write/flush/close duration,
+  failure and timeout state in passive diagnostics and terminal logging.
 
 Do not fire independent settings writes into a multi-worker pool where revision N+1
-can reach disk before revision N.
+can reach disk before revision N. SST import/export remains explicit user transport;
+it is not a competing routine settings writer.
 
 ### Logging writer
 
@@ -323,11 +331,14 @@ ownership problems.
    - focused gates cover bounded close, shutdown handoff, reentry, drops/lag/high-water/flush telemetry and sidecar routing;
    - repeat the same typical scenario and compare UI/request-age tails with PERF/VIZ diagnostics enabled.
 
-2. **Ordered async settings persistence**
-   - keep in-memory setting mutation synchronous/authoritative;
-   - move serialization/temp-write/replace to ordered writer;
-   - add revision, flush and shutdown tests;
-   - prove no stale write can win.
+2. **Ordered async settings persistence — complete**
+   - in-memory mutation, peer-manager cache invalidation and notifications are synchronous;
+   - one process writer owns serialization/temp-write/fsync/durable replace for every profile;
+   - one shared store authority per path plus lock-ordered revisions prevents stale-write wins;
+   - explicit startup, Settings-close, reload and process-close durability boundaries are bounded and observable;
+   - focused tests cover asynchronous caller return, coalescing, failure/retry, flush timeout,
+     two-thread revision races, same-path peer managers/cache invalidation, reload races,
+     multi-profile ordering, shutdown rejection and writer-thread ownership.
 
 3. **Image/transition texture identity repair — complete**
    - the stale presenter/display DPR split and exact `+2` cache-key divergence are removed;
