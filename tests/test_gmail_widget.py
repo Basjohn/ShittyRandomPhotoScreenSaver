@@ -1,6 +1,10 @@
 """Tests for Gmail widget with Qt app (requires QCoreApplication)."""
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+from types import SimpleNamespace
+import threading
+
 from PySide6.QtCore import QRect
 from PySide6.QtWidgets import QApplication, QWidget
 import pytest
@@ -14,6 +18,42 @@ def qt_app():
         app = QApplication([])
     yield app
     # Don't delete the app - other tests might need it
+
+
+class _QueuedIoManager:
+    def __init__(self) -> None:
+        self.tasks = []
+
+    def submit_io_task(self, func, *args, callback=None, category="uncategorized", **kwargs):
+        self.tasks.append(
+            SimpleNamespace(
+                func=func,
+                args=args,
+                kwargs=kwargs,
+                callback=callback,
+                category=category,
+            )
+        )
+        return f"task-{len(self.tasks)}"
+
+
+def _run_queued_io_task(task) -> None:
+    try:
+        value = task.func(*task.args, **task.kwargs)
+        result = SimpleNamespace(success=True, result=value, error=None)
+    except Exception as exc:  # pragma: no cover - surfaced through callback assertions
+        result = SimpleNamespace(success=False, result=None, error=exc)
+    if task.callback is not None:
+        task.callback(result)
+
+
+@pytest.fixture(autouse=True)
+def isolated_gmail_cache(tmp_path, monkeypatch):
+    cache_dir = tmp_path / "cache"
+    cache_path = cache_dir / "gmail_cache.json"
+    monkeypatch.setattr("widgets.gmail_widget.CACHE_DIR", cache_dir)
+    monkeypatch.setattr("widgets.gmail_widget.CACHE_PATH", cache_path)
+    yield cache_path
 
 
 def test_gmail_widget_instantiation_mock_settings(qt_app):
@@ -183,17 +223,28 @@ def test_gmail_deferred_timers_are_cleared_on_cleanup(qt_app):
 
 def test_gmail_no_auth_and_no_cache_does_not_request_fade(qt_app, monkeypatch):
     """Gmail should stay hidden when there is no account information and no cache."""
+    from core.gmail.gmail_preparation import PreparedGmailStartup
     from widgets.gmail_widget import GmailWidget
 
     widget = GmailWidget()
+    manager = _QueuedIoManager()
+    widget.set_thread_manager(manager)
     fade_requests = []
     try:
-        monkeypatch.setattr(widget, "_load_email_cache", lambda: None)
+        monkeypatch.setattr(
+            "widgets.gmail_widget.load_gmail_startup_snapshot",
+            lambda *args, **kwargs: PreparedGmailStartup((), None, "missing"),
+        )
+        monkeypatch.setattr(
+            "widgets.gmail_widget.ThreadManager.run_on_ui_thread",
+            lambda callback, *args, **kwargs: callback(*args, **kwargs),
+        )
         monkeypatch.setattr(widget, "_schedule_timer", lambda: None)
         monkeypatch.setattr(widget, "_fetch_emails", lambda: False)
         monkeypatch.setattr(widget, "_request_fade_in", lambda: fade_requests.append("fade"))
 
         widget._activate_impl()
+        _run_queued_io_task(manager.tasks.pop(0))
 
         assert fade_requests == []
         assert widget._has_displayed_valid_data is False
@@ -203,9 +254,8 @@ def test_gmail_no_auth_and_no_cache_does_not_request_fade(qt_app, monkeypatch):
 
 def test_gmail_cached_startup_stays_hidden_until_fade_starter_runs(qt_app, monkeypatch):
     """Cached Gmail content may mark itself ready, but must not become visible early."""
-    from datetime import datetime
-
     from core.gmail.gmail_client import EmailMetadata
+    from core.gmail.gmail_preparation import PreparedGmailStartup
     from widgets.gmail_widget import GmailWidget
 
     class _FadeParent(QWidget):
@@ -218,6 +268,8 @@ def test_gmail_cached_startup_stays_hidden_until_fade_starter_runs(qt_app, monke
 
     parent = _FadeParent()
     widget = GmailWidget(parent=parent)
+    manager = _QueuedIoManager()
+    widget.set_thread_manager(manager)
     show_calls = []
     try:
         cached = EmailMetadata(
@@ -229,7 +281,14 @@ def test_gmail_cached_startup_stays_hidden_until_fade_starter_runs(qt_app, monke
             labels=("INBOX",),
             is_unread=True,
         )
-        monkeypatch.setattr(widget, "_load_email_cache", lambda: [cached])
+        monkeypatch.setattr(
+            "widgets.gmail_widget.load_gmail_startup_snapshot",
+            lambda *args, **kwargs: PreparedGmailStartup((cached,), datetime.now(), "fresh"),
+        )
+        monkeypatch.setattr(
+            "widgets.gmail_widget.ThreadManager.run_on_ui_thread",
+            lambda callback, *args, **kwargs: callback(*args, **kwargs),
+        )
         monkeypatch.setattr(widget, "_schedule_timer", lambda: None)
         monkeypatch.setattr(widget, "_fetch_emails", lambda: False)
         monkeypatch.setattr(widget, "show", lambda: show_calls.append("show"))
@@ -237,6 +296,7 @@ def test_gmail_cached_startup_stays_hidden_until_fade_starter_runs(qt_app, monke
         assert widget.isVisible() is False
 
         widget._activate_impl()
+        _run_queued_io_task(manager.tasks.pop(0))
 
         assert widget._has_displayed_valid_data is True
         assert [name for name, _ in parent.starters] == ["gmail"]
@@ -252,12 +312,13 @@ def test_gmail_cached_startup_stays_hidden_until_fade_starter_runs(qt_app, monke
 
 def test_gmail_activate_skips_startup_fetch_when_cache_is_fresh(qt_app, monkeypatch):
     """Fresh cache should still allow timer setup while skipping startup retrieval."""
-    from datetime import datetime
-
     from core.gmail.gmail_client import EmailMetadata
+    from core.gmail.gmail_preparation import PreparedGmailStartup
     from widgets.gmail_widget import GmailWidget
 
     widget = GmailWidget()
+    manager = _QueuedIoManager()
+    widget.set_thread_manager(manager)
     calls = []
     try:
         cached = EmailMetadata(
@@ -269,12 +330,19 @@ def test_gmail_activate_skips_startup_fetch_when_cache_is_fresh(qt_app, monkeypa
             labels=("INBOX",),
             is_unread=True,
         )
-        monkeypatch.setattr(widget, "_load_email_cache", lambda: [cached])
-        monkeypatch.setattr(widget, "_get_email_cache_timestamp", lambda: datetime.now())
+        monkeypatch.setattr(
+            "widgets.gmail_widget.load_gmail_startup_snapshot",
+            lambda *args, **kwargs: PreparedGmailStartup((cached,), datetime.now(), "fresh"),
+        )
+        monkeypatch.setattr(
+            "widgets.gmail_widget.ThreadManager.run_on_ui_thread",
+            lambda callback, *args, **kwargs: callback(*args, **kwargs),
+        )
         monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
         monkeypatch.setattr(widget, "_fetch_emails", lambda: calls.append("fetch") or False)
 
         widget._activate_impl()
+        _run_queued_io_task(manager.tasks.pop(0))
 
         assert calls == ["timer"]
     finally:
@@ -283,17 +351,28 @@ def test_gmail_activate_skips_startup_fetch_when_cache_is_fresh(qt_app, monkeypa
 
 def test_gmail_activate_disables_automatic_updates_under_noupdates(qt_app, monkeypatch):
     """Automatic Gmail retrieval should fully stop under --noupdates."""
+    from core.gmail.gmail_preparation import PreparedGmailStartup
     from widgets.gmail_widget import GmailWidget
 
     widget = GmailWidget()
+    manager = _QueuedIoManager()
+    widget.set_thread_manager(manager)
     calls = []
     try:
         monkeypatch.setattr("widgets.gmail_widget.automatic_service_updates_enabled", lambda: False)
-        monkeypatch.setattr(widget, "_load_email_cache", lambda: None)
+        monkeypatch.setattr(
+            "widgets.gmail_widget.load_gmail_startup_snapshot",
+            lambda *args, **kwargs: PreparedGmailStartup((), None, "missing"),
+        )
+        monkeypatch.setattr(
+            "widgets.gmail_widget.ThreadManager.run_on_ui_thread",
+            lambda callback, *args, **kwargs: callback(*args, **kwargs),
+        )
         monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
         monkeypatch.setattr(widget, "_fetch_emails", lambda: calls.append("fetch") or False)
 
         widget._activate_impl()
+        _run_queued_io_task(manager.tasks.pop(0))
 
         assert calls == []
     finally:
@@ -393,6 +472,385 @@ def test_gmail_cache_max_age_is_two_weeks():
     assert CACHE_MAX_AGE_HOURS == 24 * 14
 
 
+def test_gmail_startup_cache_load_runs_on_io_then_commits_on_gui(
+    qt_app,
+    isolated_gmail_cache,
+    monkeypatch,
+):
+    from core.gmail.gmail_client import EmailMetadata
+    from core.gmail.gmail_preparation import (
+        load_gmail_startup_snapshot as real_loader,
+        serialize_email_cache,
+    )
+    from widgets.gmail_widget import GmailWidget
+
+    cached = EmailMetadata(
+        id="cached",
+        thread_id="thread",
+        sender="Sender",
+        subject="Prepared",
+        date=datetime.now(),
+        labels=("INBOX", "UNREAD"),
+        is_unread=True,
+    )
+    isolated_gmail_cache.parent.mkdir(parents=True)
+    isolated_gmail_cache.write_text(serialize_email_cache([cached]), encoding="utf-8")
+    manager = _QueuedIoManager()
+    widget = GmailWidget()
+    widget.set_thread_manager(manager)
+    main_thread_id = threading.get_ident()
+    loader_threads = []
+    commit_threads = []
+    queued_ui = []
+
+    def _load(*args, **kwargs):
+        loader_threads.append(threading.get_ident())
+        return real_loader(*args, **kwargs)
+
+    monkeypatch.setattr("widgets.gmail_widget.load_gmail_startup_snapshot", _load)
+    monkeypatch.setattr(
+        "widgets.gmail_widget.ThreadManager.run_on_ui_thread",
+        lambda callback, *args, **kwargs: queued_ui.append((callback, args, kwargs)),
+    )
+    monkeypatch.setattr(widget, "_schedule_timer", lambda: None)
+    monkeypatch.setattr(widget, "_fetch_emails", lambda: False)
+    original_rebuild = widget._rebuild_display_rows
+    monkeypatch.setattr(
+        widget,
+        "_rebuild_display_rows",
+        lambda: (commit_threads.append(threading.get_ident()), original_rebuild())[1],
+    )
+
+    try:
+        widget._activate_impl()
+
+        assert widget._emails == []
+        assert [task.category for task in manager.tasks] == ["gmail_startup_cache"]
+
+        worker = threading.Thread(target=_run_queued_io_task, args=(manager.tasks.pop(0),))
+        worker.start()
+        worker.join()
+
+        assert loader_threads and loader_threads[0] != main_thread_id
+        assert widget._emails == []
+        assert len(queued_ui) == 1
+
+        callback, args, kwargs = queued_ui.pop(0)
+        callback(*args, **kwargs)
+
+        assert commit_threads == [main_thread_id]
+        assert [email.id for email in widget._emails] == ["cached"]
+        assert widget._unread_count == 1
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_late_startup_cache_result_is_rejected_after_deactivation(
+    qt_app,
+    monkeypatch,
+):
+    from core.gmail.gmail_client import EmailMetadata
+    from core.gmail.gmail_preparation import PreparedGmailStartup
+    from widgets.gmail_widget import GmailWidget
+
+    cached = EmailMetadata(
+        id="late",
+        thread_id="thread",
+        sender="Sender",
+        subject="Late",
+        date=datetime.now(),
+        labels=("INBOX",),
+        is_unread=False,
+    )
+    manager = _QueuedIoManager()
+    widget = GmailWidget()
+    widget.set_thread_manager(manager)
+    queued_ui = []
+    fades = []
+    fetches = []
+    monkeypatch.setattr(
+        "widgets.gmail_widget.load_gmail_startup_snapshot",
+        lambda *args, **kwargs: PreparedGmailStartup((cached,), datetime.now(), "fresh"),
+    )
+    monkeypatch.setattr(
+        "widgets.gmail_widget.ThreadManager.run_on_ui_thread",
+        lambda callback, *args, **kwargs: queued_ui.append((callback, args, kwargs)),
+    )
+    monkeypatch.setattr(widget, "_schedule_timer", lambda: None)
+    monkeypatch.setattr(widget, "_request_fade_in", lambda: fades.append(True))
+    monkeypatch.setattr(widget, "_fetch_emails", lambda: fetches.append(True) or False)
+
+    try:
+        widget._activate_impl()
+        _run_queued_io_task(manager.tasks.pop(0))
+        widget._deactivate_impl()
+        callback, args, kwargs = queued_ui.pop(0)
+        callback(*args, **kwargs)
+
+        assert widget._emails == []
+        assert fades == []
+        assert fetches == []
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_live_fetch_wins_over_older_startup_snapshot(qt_app, monkeypatch):
+    from core.gmail.gmail_client import EmailMetadata
+    from core.gmail.gmail_preparation import PreparedGmailStartup
+    from widgets.gmail_widget import GmailWidget
+
+    cached = EmailMetadata(
+        id="cached",
+        thread_id="cached-thread",
+        sender="Cache",
+        subject="Cached",
+        date=datetime.now() - timedelta(minutes=1),
+        labels=("INBOX",),
+        is_unread=False,
+    )
+    live = EmailMetadata(
+        id="live",
+        thread_id="live-thread",
+        sender="Network",
+        subject="Live",
+        date=datetime.now(),
+        labels=("INBOX", "UNREAD"),
+        is_unread=True,
+    )
+    manager = _QueuedIoManager()
+    widget = GmailWidget()
+    widget.set_thread_manager(manager)
+    queued_ui = []
+    fetches = []
+    monkeypatch.setattr(
+        "widgets.gmail_widget.load_gmail_startup_snapshot",
+        lambda *args, **kwargs: PreparedGmailStartup((cached,), datetime.now(), "fresh"),
+    )
+    monkeypatch.setattr(
+        "widgets.gmail_widget.ThreadManager.run_on_ui_thread",
+        lambda callback, *args, **kwargs: queued_ui.append((callback, args, kwargs)),
+    )
+    monkeypatch.setattr(widget, "_schedule_timer", lambda: None)
+    monkeypatch.setattr(widget, "_fetch_emails", lambda: fetches.append(True) or False)
+    monkeypatch.setattr(widget, "_write_email_cache_deferred", lambda emails: None)
+    monkeypatch.setattr(widget, "_request_fade_in", lambda: None)
+
+    try:
+        widget._activate_impl()
+        _run_queued_io_task(manager.tasks.pop(0))
+        widget._on_emails_fetched([live], 1)
+        callback, args, kwargs = queued_ui.pop(0)
+        callback(*args, **kwargs)
+
+        assert [email.id for email in widget._emails] == ["live"]
+        assert widget._unread_count == 1
+        assert fetches == []
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_startup_cache_remains_fallback_after_early_fetch_error(qt_app, monkeypatch):
+    from core.gmail.gmail_client import EmailMetadata
+    from core.gmail.gmail_preparation import PreparedGmailStartup
+    from widgets.gmail_widget import GmailWidget
+
+    cached = EmailMetadata(
+        id="cached-fallback",
+        thread_id="cached-thread",
+        sender="Cache",
+        subject="Fallback",
+        date=datetime.now(),
+        labels=("INBOX",),
+        is_unread=False,
+    )
+    manager = _QueuedIoManager()
+    widget = GmailWidget()
+    widget.set_thread_manager(manager)
+    queued_ui = []
+    fades = []
+    monkeypatch.setattr(
+        "widgets.gmail_widget.load_gmail_startup_snapshot",
+        lambda *args, **kwargs: PreparedGmailStartup((cached,), datetime.now(), "fresh"),
+    )
+    monkeypatch.setattr(
+        "widgets.gmail_widget.ThreadManager.run_on_ui_thread",
+        lambda callback, *args, **kwargs: queued_ui.append((callback, args, kwargs)),
+    )
+    monkeypatch.setattr(widget, "_schedule_timer", lambda: None)
+    monkeypatch.setattr(widget, "_request_fade_in", lambda: fades.append(True))
+
+    try:
+        widget._activate_impl()
+        _run_queued_io_task(manager.tasks.pop(0))
+        widget._on_fetch_error("network failed")
+        assert widget._last_error == "network failed"
+
+        callback, args, kwargs = queued_ui.pop(0)
+        callback(*args, **kwargs)
+
+        assert [email.id for email in widget._emails] == ["cached-fallback"]
+        assert widget._last_error is None
+        assert widget._has_displayed_valid_data is True
+        assert fades == [True]
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_invalid_startup_cache_runs_normal_background_refresh(
+    qt_app,
+    isolated_gmail_cache,
+    monkeypatch,
+):
+    from widgets.gmail_widget import GmailWidget
+
+    isolated_gmail_cache.parent.mkdir(parents=True)
+    isolated_gmail_cache.write_text("{not-json", encoding="utf-8")
+    manager = _QueuedIoManager()
+    widget = GmailWidget()
+    widget.set_thread_manager(manager)
+    calls = []
+    monkeypatch.setattr(
+        "widgets.gmail_widget.ThreadManager.run_on_ui_thread",
+        lambda callback, *args, **kwargs: callback(*args, **kwargs),
+    )
+    monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
+    monkeypatch.setattr(widget, "_fetch_emails", lambda: calls.append("fetch") or False)
+
+    try:
+        widget._activate_impl()
+        _run_queued_io_task(manager.tasks.pop(0))
+
+        assert calls == ["timer", "fetch"]
+        assert widget._emails == []
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_missing_thread_manager_never_reads_cache_or_fetches(qt_app, monkeypatch):
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    calls = []
+    monkeypatch.setattr(
+        "widgets.gmail_widget.load_gmail_startup_snapshot",
+        lambda *args, **kwargs: calls.append("cache") or None,
+    )
+    monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
+    monkeypatch.setattr(widget, "_fetch_emails", lambda: calls.append("fetch") or False)
+
+    try:
+        widget._thread_manager = None
+        widget._activate_impl()
+
+        assert calls == []
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_cache_persistence_is_dispatched_to_shared_io(
+    qt_app,
+    isolated_gmail_cache,
+):
+    from core.gmail.gmail_client import EmailMetadata
+    from core.gmail.gmail_preparation import deserialize_email_cache
+    from widgets.gmail_widget import GmailWidget
+
+    email = EmailMetadata(
+        id="persisted",
+        thread_id="thread",
+        sender="Sender",
+        subject="Persisted",
+        date=datetime.now(),
+        labels=("INBOX",),
+        is_unread=False,
+    )
+    manager = _QueuedIoManager()
+    widget = GmailWidget()
+    widget.set_thread_manager(manager)
+
+    try:
+        widget._write_email_cache_deferred([email])
+
+        assert isolated_gmail_cache.exists() is False
+        assert [task.category for task in manager.tasks] == ["gmail_cache_persist"]
+
+        worker = threading.Thread(target=_run_queued_io_task, args=(manager.tasks.pop(0),))
+        worker.start()
+        worker.join()
+
+        persisted = deserialize_email_cache(isolated_gmail_cache.read_text(encoding="utf-8"))
+        assert [item.id for item in persisted] == ["persisted"]
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_cache_persist_task_is_detached_from_widget_lifecycle(
+    qt_app,
+    isolated_gmail_cache,
+):
+    from core.gmail.gmail_client import EmailMetadata
+    from core.gmail.gmail_preparation import deserialize_email_cache
+    from widgets.gmail_widget import GmailWidget
+
+    email = EmailMetadata(
+        id="detached",
+        thread_id="thread",
+        sender="Sender",
+        subject="Detached",
+        date=datetime.now(),
+        labels=("INBOX",),
+        is_unread=False,
+    )
+    manager = _QueuedIoManager()
+    widget = GmailWidget()
+    widget.set_thread_manager(manager)
+
+    widget._write_email_cache_deferred([email])
+    task = manager.tasks.pop(0)
+    closure_values = tuple(
+        cell.cell_contents
+        for cell in (getattr(task.func, "__closure__", None) or ())
+    )
+
+    assert getattr(task.func, "__self__", None) is None
+    assert all(value is not widget for value in closure_values)
+
+    widget.cleanup()
+    _run_queued_io_task(task)
+
+    persisted = deserialize_email_cache(isolated_gmail_cache.read_text(encoding="utf-8"))
+    assert [item.id for item in persisted] == ["detached"]
+
+
+def test_gmail_fetch_dispatch_failure_has_no_synchronous_network_fallback(
+    qt_app,
+):
+    from widgets.gmail_widget import GmailWidget
+
+    class _RejectingManager:
+        def submit_io_task(self, *args, **kwargs):
+            raise RuntimeError("rejected")
+
+    calls = []
+
+    class _Client:
+        def list_messages(self, **kwargs):
+            calls.append(kwargs)
+            return []
+
+    widget = GmailWidget()
+    widget.set_thread_manager(_RejectingManager())
+    widget._backend = SimpleNamespace(is_authenticated=True, client=_Client())
+
+    try:
+        assert widget._fetch_emails() is False
+        assert calls == []
+        assert widget._fetch_in_progress is False
+        assert widget._refreshing is False
+    finally:
+        widget.cleanup()
+
+
 def test_gmail_limit_clamps_to_shared_capacity_policy(qt_app):
     from widgets.gmail_widget import GmailWidget
 
@@ -407,7 +865,7 @@ def test_gmail_limit_clamps_to_shared_capacity_policy(qt_app):
         widget.cleanup()
 
 
-def test_gmail_fetch_uses_fixed_window_capacity(qt_app):
+def test_gmail_worker_fetch_uses_fixed_window_capacity(qt_app, monkeypatch):
     from widgets.gmail_widget import GmailWidget
 
     widget = GmailWidget()
@@ -421,7 +879,11 @@ def test_gmail_fetch_uses_fixed_window_capacity(qt_app):
     try:
         widget._gmail_client = FakeClient()
         widget.set_limit(7)
-        widget._fetch_emails_sync()
+        monkeypatch.setattr(
+            "widgets.gmail_widget.ThreadManager.run_on_ui_thread",
+            lambda callback, *args, **kwargs: None,
+        )
+        widget._fetch_emails_async(widget._fetch_generation)
 
         assert calls == [(25, ("INBOX",))]
     finally:
@@ -1401,7 +1863,7 @@ def test_gmail_widget_cache_uses_display_order(qt_app):
             labels=("INBOX",),
             is_unread=False,
         )
-        widget._write_email_cache = lambda emails: written_ids.extend(e.id for e in emails)  # type: ignore[method-assign]
+        widget._write_email_cache_deferred = lambda emails: written_ids.extend(e.id for e in emails)  # type: ignore[method-assign]
 
         backend_order = [read_newer, unread_older, older_read]
         widget._on_emails_fetched(backend_order, 1)
@@ -1477,7 +1939,7 @@ def test_gmail_fetch_result_defers_visible_apply_during_parent_transition(qt_app
             labels=("INBOX",),
             is_unread=False,
         )
-        widget._write_email_cache = lambda emails: written_ids.extend(e.id for e in emails)  # type: ignore[method-assign]
+        widget._write_email_cache_deferred = lambda emails: written_ids.extend(e.id for e in emails)  # type: ignore[method-assign]
         widget.update = lambda *args, **kwargs: update_calls.append("update")  # type: ignore[method-assign]
 
         widget._on_emails_fetched([email], 0, 0)
@@ -1626,7 +2088,7 @@ def test_gmail_widget_has_perf_instrumentation():
 
     assert 'widget_paint_sample(self, "gmail.paint")' in source
     assert 'widget_timer_sample(self, "gmail.fetch.apply")' in source
-    assert 'widget_timer_sample(self, "gmail.cache.write")' in source
+    assert '"gmail.cache.write"' in source
     assert '"gmail.refresh.dispatch"' in source
 
 

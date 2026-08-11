@@ -13,11 +13,11 @@ from datetime import datetime, timedelta
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 from enum import Enum
-import json
 import re
 import unicodedata
 from typing import Any, List, Optional
 
+from core.gmail.gmail_preparation import deserialize_email_cache, serialize_email_cache
 from core.logging.logger import get_logger
 from core.gmail.gmail_client import EmailMetadata
 
@@ -324,53 +324,6 @@ def clean_sender_name(raw: str, enabled: bool = True, max_words: int = 3) -> str
     return _append_ellipsis(candidate, shortened)
 
 
-def _email_to_cache_dict(email: EmailMetadata) -> dict[str, Any]:
-    """Serialize EmailMetadata to a JSON-safe dict (no sensitive data)."""
-    return {
-        "id": email.id,
-        "thread_id": email.thread_id,
-        "sender": email.sender,
-        "subject": email.subject,
-        "date_iso": email.date.isoformat() if email.date else None,
-        "labels": list(email.labels),
-        "is_unread": email.is_unread,
-        "provider": email.provider,
-        "account_email": email.account_email,
-        "imap_uid": email.imap_uid,
-        "rfc822_message_id": email.rfc822_message_id,
-        "gmail_thread_id": email.gmail_thread_id,
-        "gmail_message_id": email.gmail_message_id,
-        "open_url": email.open_url,
-    }
-
-
-def _email_from_cache_dict(data: dict[str, Any]) -> Optional[EmailMetadata]:
-    """Deserialize a dict back to EmailMetadata."""
-    try:
-        date_str = data.get("date_iso")
-        date = datetime.fromisoformat(date_str) if date_str else None
-        labels = tuple(data.get("labels", []))
-        return EmailMetadata(
-            id=data["id"],
-            thread_id=data["thread_id"],
-            sender=data["sender"],
-            subject=data["subject"],
-            date=date,
-            labels=labels,
-            is_unread=data["is_unread"],
-            provider=data.get("provider", "gmail_api"),
-            account_email=data.get("account_email"),
-            imap_uid=data.get("imap_uid"),
-            rfc822_message_id=data.get("rfc822_message_id"),
-            gmail_thread_id=data.get("gmail_thread_id"),
-            gmail_message_id=data.get("gmail_message_id"),
-            open_url=data.get("open_url"),
-        )
-    except (KeyError, ValueError, TypeError) as e:
-        logger.warning("[GMAIL] Failed to deserialize cached email: %s", e)
-        return None
-
-
 @dataclass(frozen=True)
 class DisplayRow:
     """A single row in the Gmail widget — either one email or a group of threads.
@@ -409,20 +362,3 @@ def group_emails(emails: List[EmailMetadata]) -> List[DisplayRow]:
         rows.append(DisplayRow(email=members[0], count=len(members)))
     rows.sort(key=lambda r: r.email.date, reverse=True)
     return rows
-
-
-def serialize_email_cache(emails: List[EmailMetadata]) -> str:
-    """Serialize a list of EmailMetadata to a JSON string."""
-    return json.dumps([_email_to_cache_dict(e) for e in emails], indent=2)
-
-
-def deserialize_email_cache(data: str) -> List[EmailMetadata]:
-    """Deserialize a JSON string back to a list of EmailMetadata."""
-    try:
-        items = json.loads(data)
-        if not isinstance(items, list):
-            return []
-        return [e for e in (_email_from_cache_dict(item) for item in items) if e is not None]
-    except json.JSONDecodeError as e:
-        logger.warning("[GMAIL] Failed to deserialize email cache: %s", e)
-        return []

@@ -403,12 +403,31 @@ Neither startup nor ordinary refresh has a synchronous network/filesystem fallba
 and the exported legacy fetch helper now defers provider construction/cache loading to
 its worker-owned `fetch()` call.
 
-**Gmail**
+**Gmail startup cache prepare/commit/persist — complete**
 
-Network fetch and deferred cache writes are already largely good. Move startup cache
-read/deserialization off GUI. Move stable content-cache regeneration out of
-`paintEvent()` first; only consider worker-rendered `QImage` content later if the
-explicit invalidation-time GUI cache build remains material and parity can be proven.
+Activation now submits one shared-IO startup task which performs the cache stat/read,
+freshness classification and metadata-only JSON reconstruction, then publishes one
+frozen `PreparedGmailStartup`. The GUI accepts it only for the current startup request
+and unchanged content revision before rebuilding rows, measuring card geometry and
+joining the coordinated fade. A newer accepted live fetch, deactivation or cleanup
+invalidates the snapshot. The startup refresh decision consumes the prepared timestamp,
+so activation no longer repeats filesystem inspection on GUI.
+
+Accepted cache writes remain ordered after GUI commit and now use a per-path reserved
+newest-wins identity plus locked unique-temp atomic replacement on shared IO. A late
+older task cannot overwrite newer accepted mail. Missing-worker or rejected-dispatch paths skip
+durability/service work instead of reading, writing or fetching synchronously on GUI.
+Malformed cache roots fail open to the ordinary background refresh path while valid
+metadata rows preserve stored order and invalid individual rows remain filtered.
+
+The remaining Gmail service startup violation is separate: widget construction eagerly
+creates `GmailBackend`, which reads backend configuration and DPAPI-backed IMAP
+credentials on GUI. Extract that ownership independently rather than folding it into
+the content-cache contract.
+
+Move stable content-cache regeneration out of `paintEvent()` next. Only consider
+worker-rendered `QImage` content later if the explicit invalidation-time GUI cache build
+remains material and parity can be proven.
 
 **Reddit/Gmail paint-cache contract**
 
