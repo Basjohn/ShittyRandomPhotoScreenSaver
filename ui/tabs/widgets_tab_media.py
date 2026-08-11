@@ -228,19 +228,26 @@ def _update_media_provider_controls(tab) -> None:
 
     volume = getattr(tab, 'media_spotify_volume_enabled', None)
     if volume is not None:
-        supported = provider_supports_app_volume(provider)
-        volume.setEnabled(supported)
-        if supported:
+        direct_app_volume = provider_supports_app_volume(provider)
+        browser_volume_fallback = provider == "spotify_browser"
+        volume.setEnabled(direct_app_volume or browser_volume_fallback)
+        if direct_app_volume:
             volume.setToolTip(
                 "Show a slim vertical volume slider next to the media card when "
                 "Core Audio/pycaw is available. It affects only the selected "
                 "desktop application's audio session."
             )
+        elif browser_volume_fallback:
+            volume.setToolTip(
+                "Show the volume slider when Browser GSMTC identifies an exact "
+                "browser host. Desktop Spotify is preferred when available; "
+                "otherwise this adjusts the selected browser's whole audio session, "
+                "not only its Spotify tab."
+            )
         else:
             volume.setToolTip(
-                "This provider has no safe application-volume contract. Browser "
-                "GSMTC exposes the whole browser process, not a Spotify tab. Your "
-                "saved preference is preserved when you choose a desktop provider."
+                "This provider has no registered application-volume contract. "
+                "Your saved preference is preserved when you choose a supported provider."
             )
 
 
@@ -373,7 +380,9 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     tab._spotify_browser_provider_note = QLabel(
         "Browser GSMTC identifies Chrome, Edge, Firefox, Brave, Opera, or "
-        "Vivaldi—not a specific website. The browser's active media session is used."
+        "Vivaldi—not a specific website. The browser's active media session is used. "
+        "Volume fallback therefore affects that browser's whole audio session, not "
+        "only its Spotify tab."
     )
     tab._spotify_browser_provider_note.setWordWrap(True)
     tab._spotify_browser_provider_note.setStyleSheet(INFO_LABEL_STYLE)

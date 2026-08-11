@@ -7,6 +7,7 @@ from core.media.media_controller import MediaPlaybackState, WindowsGlobalMediaCo
 from core.media.provider_registry import (
     get_media_provider_display_name,
     get_provider_failover_candidates,
+    get_provider_process_exe_name_for_source,
     get_provider_process_exe_names,
     normalize_provider_id,
     preserve_provider_setting,
@@ -28,6 +29,16 @@ def test_spotify_browser_provider_uses_explicit_browser_host_identities() -> Non
     assert not provider_matches_source_app_user_model_id("spotify_browser", "mychrome.exe")
     assert not provider_matches_source_app_user_model_id("spotify", "chrome.exe")
     assert provider_supports_app_volume("spotify_browser") is False
+    assert get_provider_process_exe_name_for_source("spotify_browser", "firefox") == "firefox.exe"
+    assert (
+        get_provider_process_exe_name_for_source(
+            "spotify_browser",
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        )
+        == "chrome.exe"
+    )
+    assert get_provider_process_exe_name_for_source("spotify_browser", "chromium.exe") is None
+    assert get_provider_process_exe_name_for_source("spotify_browser", "mychrome.exe") is None
 
 
 def test_registry_has_stable_process_and_failover_identities() -> None:
@@ -97,6 +108,23 @@ def test_session_selection_prefers_current_matching_session_then_playing_then_so
 
     manager = _Manager([chrome_paused, edge_playing, brave_playing], unrelated_current)
     assert controller._select_media_session(manager) is brave_playing
+
+
+def test_session_selection_accepts_matching_current_browser_when_enumeration_is_empty() -> None:
+    controller = _controller("spotify_browser")
+
+    for source_id in ("firefox.exe", "chrome.exe"):
+        current = _Session(source_id, _PlaybackStatus.PLAYING)
+        assert controller._select_media_session(_Manager([], current)) is current
+
+
+def test_session_source_diagnostics_are_bounded() -> None:
+    sessions = [_Session(f"browser-{index}.exe") for index in range(20)]
+
+    values = WindowsGlobalMediaController._session_source_ids_for_log(sessions)
+
+    assert len(values) == 17
+    assert values[-1] == "<4 more>"
 
 
 def test_provider_failover_uses_one_session_snapshot_in_registry_order() -> None:
@@ -172,6 +200,7 @@ def test_io_worker_failover_runs_one_inline_gsmtc_query_without_nested_submit() 
 
     assert provider == "spotify_browser"
     assert info is not None and info.title == "Browser Track"
+    assert info.source_app_user_model_id == "msedge.exe"
     assert _MediaManager.requests == 1
 
 

@@ -18,6 +18,7 @@ def test_retained_display_snapshot_downgrades_to_paused() -> None:
         album="Album",
         state=MediaPlaybackState.PLAYING,
         artwork=b"art",
+        source_app_user_model_id="firefox.exe",
     )
 
     cache_retained_display_info(state, live_info, now=10.0)
@@ -28,6 +29,7 @@ def test_retained_display_snapshot_downgrades_to_paused() -> None:
     assert retained.state == MediaPlaybackState.PAUSED
     assert retained.title == "Track"
     assert retained.artwork == b"art"
+    assert retained.source_app_user_model_id == "firefox.exe"
 
 
 def test_provider_probe_cooldown() -> None:

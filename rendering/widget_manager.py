@@ -1286,6 +1286,29 @@ class WidgetManager:
             except Exception:
                 logger.debug("[WIDGET_MANAGER] Failed to sync volume provider runtime", exc_info=True)
 
+    def sync_media_volume_runtime_target(
+        self,
+        provider: object,
+        source_app_user_model_id: object,
+    ) -> None:
+        """Route one accepted GSMTC source to the volume widget without persistence."""
+
+        volume_widget = self._widgets.get('spotify_volume') or self._widgets.get(
+            'spotify_volume_widget'
+        )
+        if volume_widget is None or not hasattr(volume_widget, 'set_runtime_volume_source'):
+            return
+        try:
+            volume_widget.set_runtime_volume_source(
+                provider,
+                source_app_user_model_id,
+            )
+        except Exception:
+            logger.debug(
+                "[WIDGET_MANAGER] Failed to sync media volume runtime target",
+                exc_info=True,
+            )
+
     def handle_media_provider_failover(self, provider: object, *, source: str = "runtime") -> None:
         """Persist a runtime media-provider auto-fallback through the shared settings path."""
 

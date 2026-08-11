@@ -23,7 +23,11 @@ from PySide6.QtWidgets import QWidget
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging
-from core.media.provider_registry import preserve_provider_setting, provider_supports_app_volume
+from core.media.provider_registry import (
+    get_provider_process_exe_name_for_source,
+    preserve_provider_setting,
+    provider_supports_app_volume,
+)
 from core.media.spotify_volume import SpotifyVolumeController
 from core.settings.shadow_tuning import VOLUME_SLIDER_SHADOW_TUNING
 from core.threading.manager import ThreadManager
@@ -52,6 +56,7 @@ class SpotifyVolumeWidget(QWidget):
         self._provider = preserve_provider_setting(provider)
         self._provider_volume_supported = provider_supports_app_volume(self._provider)
         self._controller = SpotifyVolumeController(provider=self._provider)
+        self._browser_volume_process: Optional[str] = None
         self._thread_manager: Optional[ThreadManager] = None
         self._shadow_config = None
         self._enabled: bool = False
@@ -93,29 +98,85 @@ class SpotifyVolumeWidget(QWidget):
         """Retarget the underlying Core Audio session filter without recreating the widget."""
 
         normalized = preserve_provider_setting(provider)
-        supported = provider_supports_app_volume(normalized)
-        if normalized == self._provider and supported == self._provider_volume_supported:
+        if normalized == self._provider:
             return False
         self._provider = normalized
-        self._provider_volume_supported = supported
-        if not supported:
+        self._browser_volume_process = None
+        try:
+            configured = bool(self._controller.configure_volume_target(normalized))
+        except Exception:
+            logger.debug("[SPOTIFY_VOL] Failed to retarget provider runtime", exc_info=True)
+            configured = False
+        self._provider_volume_supported = bool(
+            provider_supports_app_volume(normalized) and configured
+        )
+        if not self._provider_volume_supported:
             self._reset_flush_state(delete_timer=False)
             self.hide()
             logger.info(
-                "[SPOTIFY_VOL] App-volume control unavailable for provider=%s; widget hidden",
+                "[SPOTIFY_VOL] Volume target unavailable for provider=%s; widget hidden",
                 normalized,
             )
             return True
-        try:
-            self._controller.set_process_filter(normalized)
-        except Exception:
-            logger.debug("[SPOTIFY_VOL] Failed to retarget provider runtime", exc_info=True)
-            return False
         logger.info("[SPOTIFY_VOL] Runtime provider switch applied: %s", normalized)
         if self._enabled:
             self._ensure_flush_timer()
             self.sync_visibility_with_anchor()
         self._request_volume_sync(force=True)
+        return True
+
+    def set_runtime_volume_source(
+        self,
+        provider: object,
+        source_app_user_model_id: object,
+    ) -> bool:
+        """Apply the generation-accepted GSMTC host as a runtime-only target."""
+
+        normalized = preserve_provider_setting(provider)
+        if normalized != self._provider or normalized != "spotify_browser":
+            return False
+
+        browser_process = get_provider_process_exe_name_for_source(
+            normalized,
+            source_app_user_model_id,
+        )
+        if (
+            browser_process == self._browser_volume_process
+            and self._provider_volume_supported == (browser_process is not None)
+        ):
+            return False
+
+        # A pending drag/write belongs to the previous exact process identity.
+        # Never let it spill into a newly selected browser host.
+        self._reset_flush_state(delete_timer=False)
+        try:
+            configured = bool(
+                self._controller.configure_volume_target(
+                    normalized,
+                    source_app_user_model_id,
+                )
+            )
+        except Exception:
+            logger.debug("[SPOTIFY_VOL] Failed to configure Browser volume target", exc_info=True)
+            configured = False
+
+        self._browser_volume_process = browser_process if configured else None
+        self._provider_volume_supported = bool(browser_process is not None and configured)
+        if not self._provider_volume_supported:
+            self.hide()
+            logger.debug(
+                "[SPOTIFY_VOL] Browser volume disabled; no exact accepted GSMTC host"
+            )
+            return True
+
+        logger.info(
+            "[SPOTIFY_VOL] Browser volume target accepted: spotify.exe -> %s fallback",
+            browser_process,
+        )
+        if self._enabled:
+            self._ensure_flush_timer()
+            self._request_volume_sync(force=True)
+            self.sync_visibility_with_anchor()
         return True
 
     # ------------------------------------------------------------------

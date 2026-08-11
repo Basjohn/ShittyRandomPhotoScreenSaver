@@ -124,6 +124,7 @@ def test_media_provider_failover_probe_runs_in_refresh_worker_before_ui_apply(
         title="Browser Track",
         artist="Artist",
         state=MediaPlaybackState.PLAYING,
+        source_app_user_model_id="firefox.exe",
     )
     widget = MediaWidget(controller=_Controller(), provider="spotify")
     try:
@@ -142,6 +143,11 @@ def test_media_provider_failover_probe_runs_in_refresh_worker_before_ui_apply(
             classmethod(lambda cls: False),
         )
         calls: list[tuple[str, object]] = []
+        widget._widget_manager = SimpleNamespace(
+            sync_media_volume_runtime_target=lambda provider, source_id: calls.append(
+                ("volume_target", (provider, source_id))
+            )
+        )
 
         def _apply(provider):
             assert phase["value"] == "callback"
@@ -163,6 +169,7 @@ def test_media_provider_failover_probe_runs_in_refresh_worker_before_ui_apply(
         assert calls == [
             ("query", ("spotify_browser", "musicbee")),
             ("apply", "spotify_browser"),
+            ("volume_target", ("spotify_browser", "firefox.exe")),
             ("display", track),
         ]
         assert widget._refresh_in_flight is False

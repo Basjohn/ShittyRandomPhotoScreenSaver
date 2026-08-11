@@ -75,7 +75,7 @@ def test_spotify_volume_provider_switch_requests_volume_sync(qt_app, monkeypatch
         widget.deleteLater()
 
 
-def test_spotify_browser_provider_hides_tab_unsafe_app_volume(qt_app, monkeypatch):
+def test_spotify_browser_provider_waits_hidden_for_exact_runtime_source(qt_app, monkeypatch):
     widget = SpotifyVolumeWidget()
     calls = []
     try:
@@ -83,13 +83,11 @@ def test_spotify_browser_provider_hides_tab_unsafe_app_volume(qt_app, monkeypatc
         widget.show()
         monkeypatch.setattr(
             widget._controller,
-            "set_process_filter",
-            lambda provider: calls.append(provider),
-        )
-        monkeypatch.setattr(
-            widget,
-            "_request_volume_sync",
-            lambda **kwargs: calls.append(kwargs),
+            "configure_volume_target",
+            lambda provider, source_app_user_model_id="": calls.append(
+                (provider, source_app_user_model_id)
+            )
+            or False,
         )
 
         changed = widget.set_provider_runtime("spotify_browser")
@@ -97,7 +95,54 @@ def test_spotify_browser_provider_hides_tab_unsafe_app_volume(qt_app, monkeypatc
         assert changed is True
         assert widget._provider_volume_supported is False  # type: ignore[attr-defined]
         assert widget.isVisible() is False
-        assert calls == []
+        assert calls == [("spotify_browser", "")]
+    finally:
+        widget.deleteLater()
+
+
+def test_spotify_browser_runtime_source_enables_and_retargets_exact_host(qt_app, monkeypatch):
+    widget = SpotifyVolumeWidget(provider="spotify_browser")
+    calls = []
+    try:
+        monkeypatch.setattr(
+            widget._controller,
+            "configure_volume_target",
+            lambda provider, source_app_user_model_id="": calls.append(
+                (provider, source_app_user_model_id)
+            )
+            or True,
+        )
+
+        assert widget.set_runtime_volume_source("spotify_browser", "firefox.exe") is True
+        assert widget._provider_volume_supported is True  # type: ignore[attr-defined]
+        assert widget._browser_volume_process == "firefox.exe"  # type: ignore[attr-defined]
+        assert widget.set_runtime_volume_source("spotify_browser", "firefox") is False
+
+        assert widget.set_runtime_volume_source("spotify_browser", "chrome") is True
+        assert widget._browser_volume_process == "chrome.exe"  # type: ignore[attr-defined]
+        assert calls == [
+            ("spotify_browser", "firefox.exe"),
+            ("spotify_browser", "chrome"),
+        ]
+    finally:
+        widget.deleteLater()
+
+
+def test_spotify_browser_unknown_source_clears_prior_runtime_target(qt_app, monkeypatch):
+    widget = SpotifyVolumeWidget(provider="spotify_browser")
+    try:
+        monkeypatch.setattr(
+            widget._controller,
+            "configure_volume_target",
+            lambda _provider, source_app_user_model_id="": bool(source_app_user_model_id),
+        )
+        assert widget.set_runtime_volume_source("spotify_browser", "firefox.exe") is True
+
+        assert widget.set_runtime_volume_source("spotify_browser", "myfirefox.exe") is True
+
+        assert widget._provider_volume_supported is False  # type: ignore[attr-defined]
+        assert widget._browser_volume_process is None  # type: ignore[attr-defined]
+        assert widget.isVisible() is False
     finally:
         widget.deleteLater()
 

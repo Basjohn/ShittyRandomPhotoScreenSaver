@@ -131,7 +131,7 @@ class TestWidgetsTab:
         finally:
             tab.deleteLater()
 
-    def test_media_spotify_browser_choice_conditions_tab_unsafe_volume(
+    def test_media_spotify_browser_choice_enables_exact_host_volume_fallback(
         self,
         qt_app,
         settings_manager,
@@ -156,8 +156,9 @@ class TestWidgetsTab:
         try:
             assert tab.media_provider_combo.currentData() == "spotify_browser"
             assert tab.media_spotify_volume_enabled.isChecked() is True
-            assert tab.media_spotify_volume_enabled.isEnabled() is False
+            assert tab.media_spotify_volume_enabled.isEnabled() is True
             assert tab._spotify_browser_provider_note.isHidden() is False
+            assert "whole audio session" in tab.media_spotify_volume_enabled.toolTip()
 
             tab.media_provider_combo.setCurrentIndex(
                 tab.media_provider_combo.findData("spotify")

@@ -8,9 +8,13 @@ from rendering.widget_manager import WidgetManager
 class _ProviderAwareWidget:
     def __init__(self) -> None:
         self.providers = []
+        self.runtime_targets = []
 
     def set_provider_runtime(self, provider):
         self.providers.append(str(provider))
+
+    def set_runtime_volume_source(self, provider, source_app_user_model_id):
+        self.runtime_targets.append((str(provider), str(source_app_user_model_id)))
 
 
 class _StubSettingsManager:
@@ -86,7 +90,29 @@ def test_handle_spotify_browser_provider_failover_persists_settings():
     assert media_widget.providers == ["spotify_browser"]
     assert volume_widget.providers == ["spotify_browser"]
     assert manager._settings_manager.get("widgets")["media"]["provider"] == "spotify_browser"
+    assert manager._settings_manager.get("widgets")["media"] == {
+        "enabled": True,
+        "provider": "spotify_browser",
+    }
     assert manager._settings_manager.saved is True
+
+
+def test_browser_volume_runtime_target_is_not_persisted():
+    manager = WidgetManager(MagicMock())
+    volume_widget = _ProviderAwareWidget()
+    manager.register_widget("spotify_volume", volume_widget)
+    manager._settings_manager = _StubSettingsManager(
+        {"media": {"enabled": True, "provider": "spotify_browser"}}
+    )
+
+    manager.sync_media_volume_runtime_target("spotify_browser", "firefox.exe")
+
+    assert volume_widget.runtime_targets == [("spotify_browser", "firefox.exe")]
+    assert manager._settings_manager.get("widgets")["media"] == {
+        "enabled": True,
+        "provider": "spotify_browser",
+    }
+    assert manager._settings_manager.saved is False
 
 
 def test_invalid_provider_stays_inert_and_is_not_overwritten_by_failover():

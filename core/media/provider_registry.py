@@ -167,6 +167,35 @@ def get_provider_process_exe_names(provider: object) -> tuple[str, ...]:
     return tuple(sorted(descriptor.process_exe_names))
 
 
+def get_provider_process_exe_name_for_source(
+    provider: object,
+    source_app_user_model_id: object,
+) -> Optional[str]:
+    """Resolve one exact GSMTC source identity to its registered process.
+
+    This is intentionally narrower than :func:`get_provider_process_exe_names`:
+    callers must never turn an unknown Browser GSMTC identity into a scan of
+    every supported browser audio session.
+    """
+
+    if not provider_matches_source_app_user_model_id(provider, source_app_user_model_id):
+        return None
+    if not isinstance(source_app_user_model_id, str):
+        return None
+
+    source_id = source_app_user_model_id.strip().casefold()
+    basename = _source_id_basename(source_id)
+    for process_name in get_provider_process_exe_names(provider):
+        process_id = process_name.casefold()
+        process_stem = process_id.removesuffix(".exe")
+        if source_id in (process_id, process_stem) or basename in (
+            process_id,
+            process_stem,
+        ):
+            return process_name
+    return None
+
+
 def provider_supports_app_volume(provider: object) -> bool:
     """Return whether a provider has a session-specific Core Audio contract."""
 

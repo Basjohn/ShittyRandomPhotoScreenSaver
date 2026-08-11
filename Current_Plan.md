@@ -49,17 +49,14 @@ A checkpoint is a rollback anchor, **not a pause for permission**.
 
 ## P5.0 Media Provider Runtime Validation
 
-The provider/failover plumbing reaches the shared GSMTC controller. The unresolved
-Browser path is below settings/failover policy. Current controller selection can discard
-a matching current session when `get_sessions()` is empty/nonmatching.
+The provider/failover plumbing reaches the shared GSMTC controller. Browser selection now
+accepts the exact current-session identity independently of enumeration, and volume routing
+prefers desktop Spotify before the one exact selected browser host. Installed exposure and
+whole-browser volume behaviour remain to be validated.
 
 - [x] Preserve exact registry-owned provider identities and one bounded GSMTC query/failover pass.
-- [ ] Make `WindowsGlobalMediaController._select_media_session_for_providers()` test `get_current_session()` for the requested provider before requiring a match in `get_sessions()`.
-- [ ] Add bounded diagnostics for current-session source id separately from enumerated session ids.
-- [ ] Add regressions for `get_sessions()==[]` with matching current Firefox/Chromium source ids.
-- [ ] Validate Spotify Browser in ordinary `main.py` against Firefox first and at least one Chromium browser. If both current and enumerated sessions are absent, classify Windows/browser exposure separately from SRPSS selection.
+- [ ] Validate Spotify Browser in ordinary `main.py` against Firefox first and at least one Chromium browser. Confirm metadata/control selection, desktop-Spotify-first volume, exact selected-browser fallback and the documented whole-browser volume effect. If both current and enumerated sessions are absent, classify Windows/browser exposure separately from SRPSS selection.
 - [ ] Repair the real `MediaWidget` missing-session hide contract: production currently lacks `_complete_hide_sequence()` while the test double supplies it. Make the test shape match production rather than allowing a fake to invent lifecycle API.
-- [ ] Preserve desktop Spotify direct-volume preference; when Browser GSMTC cannot adjust Spotify directly, route volume to the exact matching browser audio session, with diagnostics and no unrelated-session fallback.
 
 ## P5.0A Immediate User-Requested Runtime Slices
 
@@ -75,10 +72,6 @@ extraction without waiting for a new prompt.
 - [ ] Add an optional adjustable pill-style playback progress bar positioned just above the media controls, with configurable fill colour, optional shadow, optional glow and configurable glow colour.
 - [ ] Consume the existing media snapshot/update cadence only: no new GUI timer, polling loop, recurring task or paint-time preparation; keep invalidation and repaint bounds narrow.
 - [ ] Add settings/default/preset compatibility, paused/playing/unknown-duration, seek/progress update and visual-layout coverage.
-
-### Small visual/runtime corrections
-
-- [ ] Make Browser GSMTC detect Spotify through matching current-session identity before enumerated-session availability, then validate the exact browser-volume fallback above.
 
 ## P5.1 Visualizer Fidelity And Stronger Goldens
 

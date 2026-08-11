@@ -56,6 +56,8 @@ class MediaTrackInfo:
     can_previous: bool = False
     # Optional album artwork bytes (e.g. PNG/JPEG), if available.
     artwork: Optional[bytes] = None
+    # Runtime-only identity of the selected GSMTC host. Never persisted.
+    source_app_user_model_id: str = ""
 
 
 class BaseMediaController:
@@ -284,6 +286,29 @@ class WindowsGlobalMediaController(BaseMediaController):
         except Exception:
             return ""
 
+    @classmethod
+    def _session_source_id_for_log(cls, session) -> str:
+        """Return one bounded source identity for diagnostics only."""
+
+        source_id = cls._session_source_id(session)
+        if not source_id:
+            return "<none>"
+        return source_id[:260]
+
+    @classmethod
+    def _session_source_ids_for_log(cls, sessions, *, limit: int = 16) -> list[str]:
+        """Return a bounded diagnostic snapshot of enumerated source ids."""
+
+        bounded_limit = max(1, int(limit))
+        values = [
+            cls._session_source_id_for_log(session)
+            for session in sessions[:bounded_limit]
+        ]
+        remaining = len(sessions) - len(values)
+        if remaining > 0:
+            values.append(f"<{remaining} more>")
+        return values
+
     def _select_media_session_for_providers(
         self,
         mgr,
@@ -317,7 +342,7 @@ class WindowsGlobalMediaController(BaseMediaController):
             try:
                 logger.debug(
                     "[MEDIA] GSMTC sessions: %s",
-                    [self._session_source_id(session) for session in sessions],
+                    self._session_source_ids_for_log(sessions),
                 )
             except Exception:
                 logger.debug("[MEDIA] Failed to describe GSMTC sessions", exc_info=True)
@@ -329,6 +354,12 @@ class WindowsGlobalMediaController(BaseMediaController):
             logger.debug("[MEDIA] Failed to read current media session", exc_info=True)
             current_session = None
 
+        if is_verbose_logging():
+            logger.debug(
+                "[MEDIA] GSMTC current session: %s",
+                self._session_source_id_for_log(current_session),
+            )
+
         def _is_playing(session) -> bool:
             try:
                 playback_info = session.get_playback_info()
@@ -337,6 +368,14 @@ class WindowsGlobalMediaController(BaseMediaController):
                 return False
 
         for provider_id in providers:
+            if (
+                current_session is not None
+                and provider_matches_source_app_user_model_id(
+                    provider_id,
+                    self._session_source_id(current_session),
+                )
+            ):
+                return provider_id, current_session
             matching_sessions = [
                 session
                 for session in sessions
@@ -347,14 +386,6 @@ class WindowsGlobalMediaController(BaseMediaController):
             ]
             if not matching_sessions:
                 continue
-            if (
-                current_session is not None
-                and provider_matches_source_app_user_model_id(
-                    provider_id,
-                    self._session_source_id(current_session),
-                )
-            ):
-                return provider_id, current_session
             playing_sessions = [session for session in matching_sessions if _is_playing(session)]
             candidates = playing_sessions or matching_sessions
             return provider_id, min(
@@ -367,7 +398,7 @@ class WindowsGlobalMediaController(BaseMediaController):
                 "[MEDIA] No %s session among %d GSMTC sessions: %s",
                 "/".join(providers),
                 len(sessions),
-                [self._session_source_id(session) for session in sessions],
+                self._session_source_ids_for_log(sessions),
             )
         else:
             logger.debug("[MEDIA] No %s GSMTC session found (0 sessions)", "/".join(providers))
@@ -491,6 +522,7 @@ class WindowsGlobalMediaController(BaseMediaController):
                 controls = None
 
             info = MediaTrackInfo()
+            info.source_app_user_model_id = self._session_source_id(session)
             if props is not None:
                 try:
                     info.title = (props.title or "").strip()[:256]

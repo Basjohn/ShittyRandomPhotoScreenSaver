@@ -15,6 +15,11 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from core.logging.logger import get_logger
+from core.media.provider_registry import (
+    get_provider_process_exe_name_for_source,
+    get_provider_process_exe_names,
+    normalize_provider_id,
+)
 
 logger = get_logger(__name__)
 
@@ -28,18 +33,11 @@ else:
     _PYCAW_AVAILABLE = True
 
 
-# Map media provider names to the process name substring used by Core Audio.
-_PROVIDER_PROCESS_FILTERS: dict[str, str] = {
-    "spotify": "spotify",
-    "musicbee": "musicbee",
-}
-
-
 class SpotifyVolumeController:
     """Best-effort per-session volume controller.
 
-    The controller searches Core Audio sessions for ones whose process name
-    contains a configurable filter (default ``"spotify"``) and exposes a
+    The controller searches Core Audio sessions for exact registered process
+    identities (desktop Spotify by default) and exposes a
     minimal API to read and write that session's master volume via
     ``ISimpleAudioVolume``. It deliberately does not touch the system/master
     volume.
@@ -48,9 +46,9 @@ class SpotifyVolumeController:
     def __init__(self, provider: str = "spotify") -> None:
         self._available: bool = bool(_PYCAW_AVAILABLE)
         self._last_pid: Optional[int] = None
-        self._process_filter: str = _PROVIDER_PROCESS_FILTERS.get(
-            provider.lower(), provider.lower()
-        )
+        self._provider: str = ""
+        self._process_targets: tuple[str, ...] = ()
+        self.configure_volume_target(provider)
 
         if not self._available:
             logger.info(
@@ -147,7 +145,12 @@ class SpotifyVolumeController:
         where Spotify outputs to a non-default device (headphones, DAC, etc.).
         """
 
-        if not self._available or AudioUtilities is None or ISimpleAudioVolume is None:
+        if (
+            not self._process_targets
+            or not self._available
+            or AudioUtilities is None
+            or ISimpleAudioVolume is None
+        ):
             return None, None
 
         # Search all sessions on the default device
@@ -175,11 +178,40 @@ class SpotifyVolumeController:
         
         return None, None
     
-    def set_process_filter(self, provider: str) -> None:
-        """Update the process name filter at runtime (e.g. when provider changes)."""
-        self._process_filter = _PROVIDER_PROCESS_FILTERS.get(
-            provider.lower(), provider.lower()
+    def configure_volume_target(
+        self,
+        provider: object,
+        source_app_user_model_id: object = "",
+    ) -> bool:
+        """Configure an ordered, exact Core Audio target contract.
+
+        Browser mode is inert until GSMTC supplies one registered host identity.
+        Once known, desktop Spotify remains the first target and only that exact
+        browser executable may be used as fallback.
+        """
+
+        provider_id = normalize_provider_id(provider)
+        targets: tuple[str, ...] = ()
+        if provider_id == "spotify_browser":
+            browser_process = get_provider_process_exe_name_for_source(
+                provider_id,
+                source_app_user_model_id,
+            )
+            if browser_process is not None:
+                targets = ("spotify.exe", browser_process)
+        elif provider_id is not None:
+            targets = get_provider_process_exe_names(provider_id)
+
+        self._provider = provider_id or str(provider or "").strip()
+        self._process_targets = tuple(
+            dict.fromkeys(name.strip().casefold() for name in targets if name.strip())
         )
+        return bool(self._process_targets)
+
+    def set_process_filter(self, provider: str) -> None:
+        """Compatibility wrapper for desktop-provider runtime switches."""
+
+        self.configure_volume_target(provider)
 
     def _search_sessions_for_spotify(self, sessions) -> tuple[Optional[Any], Optional[str]]:
         """Search a list of audio sessions for the configured provider.
@@ -189,41 +221,46 @@ class SpotifyVolumeController:
         if not sessions:
             return None, None
         
-        target = self._process_filter
-        for session in sessions:
-            proc = None
-            try:
-                proc = getattr(session, "Process", None)
-            except Exception as e:
-                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+        if not self._process_targets:
+            return None, None
+
+        # Target priority is authoritative: desktop Spotify first, followed by
+        # the one browser host selected by GSMTC. Session enumeration order must
+        # never choose a different browser.
+        for target in self._process_targets:
+            for session in sessions:
                 proc = None
+                try:
+                    proc = getattr(session, "Process", None)
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+                    proc = None
 
-            if proc is None:
-                continue
-
-            try:
-                name = proc.name()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-                name = None
-
-            if not isinstance(name, str):
-                continue
-
-            if target not in name.lower():
-                continue
-
-            try:
-                ctl = getattr(session, "_ctl", None)
-                if ctl is None:
+                if proc is None:
                     continue
-                volume = ctl.QueryInterface(ISimpleAudioVolume)  # type: ignore[call-arg]
-                logger.debug("[SPOTIFY_VOL] Found %s session: %s", target, name)
-                return volume, name
-            except Exception:
-                logger.debug(
-                    "[SPOTIFY_VOL] Failed to obtain ISimpleAudioVolume for %r", name, exc_info=True
-                )
-                continue
+
+                try:
+                    name = proc.name()
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+                    name = None
+
+                if not isinstance(name, str) or name.strip().casefold() != target:
+                    continue
+
+                try:
+                    ctl = getattr(session, "_ctl", None)
+                    if ctl is None:
+                        continue
+                    volume = ctl.QueryInterface(ISimpleAudioVolume)  # type: ignore[call-arg]
+                    logger.debug("[SPOTIFY_VOL] Found exact %s session: %s", target, name)
+                    return volume, name
+                except Exception:
+                    logger.debug(
+                        "[SPOTIFY_VOL] Failed to obtain ISimpleAudioVolume for %r",
+                        name,
+                        exc_info=True,
+                    )
+                    continue
         
         return None, None

@@ -911,6 +911,7 @@ class MediaWidget(BaseOverlayWidget):
                             can_next=info.can_next,
                             can_previous=info.can_previous,
                             artwork=info.artwork,
+                            source_app_user_model_id=info.source_app_user_model_id,
                         )
                     except Exception as e:
                         logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
@@ -1430,6 +1431,24 @@ class MediaWidget(BaseOverlayWidget):
                         return
                     if failover_provider is not None:
                         self._apply_provider_failover(failover_provider)
+                    runtime_provider = failover_provider or artwork_provider
+                    manager = self._widget_manager
+                    if manager is not None and hasattr(
+                        manager,
+                        "sync_media_volume_runtime_target",
+                    ):
+                        try:
+                            manager.sync_media_volume_runtime_target(
+                                runtime_provider,
+                                getattr(info, "source_app_user_model_id", "")
+                                if info is not None
+                                else "",
+                            )
+                        except Exception:
+                            logger.debug(
+                                "[MEDIA_WIDGET] Failed to sync accepted volume target",
+                                exc_info=True,
+                            )
                     # Desync: Cache the result for 500ms
                     self._gsmtc_cached_result = info
                     self._gsmtc_cached_prepared_artwork = prepared_artwork
