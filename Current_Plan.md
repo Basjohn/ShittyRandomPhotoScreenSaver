@@ -80,7 +80,6 @@ extraction without waiting for a new prompt.
 
 ### Small visual/runtime corrections
 
-- [ ] Swap the complete authored identities of Bubble presets 1 and 9 without changing Bubble simulation cadence or algorithm semantics; update exact preset/runtime regression fixtures.
 - [ ] Make Browser GSMTC detect Spotify through matching current-session identity before enumerated-session availability, then validate the exact browser-volume fallback above.
 - [ ] Make `Esc` exit the application while Interaction Mode is active, preserving normal interaction-mode click/key routing and explicit terminal cleanup ownership.
 

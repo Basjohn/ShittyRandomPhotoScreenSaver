@@ -12,7 +12,11 @@ from types import SimpleNamespace
 from utils.lockfree import TripleBuffer
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_preset_key
-from core.settings.visualizer_presets import get_custom_preset_index, get_preset_settings
+from core.settings.visualizer_presets import (
+    get_custom_preset_index,
+    get_preset_names,
+    get_preset_settings,
+)
 from widgets.spotify_visualizer import bar_computation
 from widgets.spotify_visualizer import config_applier
 from widgets.spotify_visualizer import mode_transition
@@ -2500,14 +2504,14 @@ def _apply_authored_bubble_preset(widget: SpotifyVisualizerWidget, preset_index:
 
 
 def _apply_authored_bubble_deep_sea(widget: SpotifyVisualizerWidget) -> dict[str, object]:
-    return _apply_authored_bubble_preset(widget, 0)
+    return _apply_authored_bubble_preset(widget, 8)
 
 
 def _apply_authored_bubble_debug_preset(widget: SpotifyVisualizerWidget) -> dict[str, object]:
-    settings = get_preset_settings("bubble", 8)
+    settings = get_preset_settings("bubble", 0)
     if not settings:
-        pytest.skip("authored Bubble preset 9 not available")
-    return _apply_authored_bubble_preset(widget, 8)
+        pytest.skip("authored Bubble preset 1 not available")
+    return _apply_authored_bubble_preset(widget, 0)
 
 
 def _apply_authored_bubble_deep_sea_manual_floor(
@@ -2567,10 +2571,10 @@ def _apply_bubble_deep_sea_dynamic_floor_oracle(widget: SpotifyVisualizerWidget)
 
 
 def _apply_authored_bubble_deep_sea_experimental(widget: SpotifyVisualizerWidget) -> dict[str, object]:
-    settings = get_preset_settings("bubble", 8)
+    settings = get_preset_settings("bubble", 0)
     if not settings:
-        pytest.skip("authored Bubble preset 8 not available")
-    return _apply_authored_bubble_preset(widget, 8)
+        pytest.skip("authored Bubble preset 1 not available")
+    return _apply_authored_bubble_preset(widget, 0)
 
 
 def test_authored_bubble_preset_1_vs_9_share_signal_path_but_keep_visual_identity():
@@ -2580,6 +2584,9 @@ def test_authored_bubble_preset_1_vs_9_share_signal_path_but_keep_visual_identit
         pytest.skip("authored Bubble preset 8 not available")
 
     assert preset_1 and preset_9
+    names = get_preset_names("bubble")
+    assert names[0] == "Preset 1 (Deep Sea Abyss)"
+    assert names[8] == "Preset 9 (Deep Sea)"
     signal_keys = (
         "bubble_input_gain",
         "bubble_adaptive_sensitivity",
@@ -2590,9 +2597,12 @@ def test_authored_bubble_preset_1_vs_9_share_signal_path_but_keep_visual_identit
     assert {key: preset_9.get(key) for key in signal_keys} == {
         key: preset_1.get(key) for key in signal_keys
     }
-    assert preset_9["bubble_gradient_dark"] != preset_1["bubble_gradient_dark"]
-    assert preset_9["bubble_gradient_light"] != preset_1["bubble_gradient_light"]
-    assert preset_9["bubble_pop_color"] != preset_1["bubble_pop_color"]
+    assert preset_1["bubble_gradient_dark"] == [0, 4, 11, 255]
+    assert preset_1["bubble_gradient_light"] == [43, 61, 80, 255]
+    assert preset_1["bubble_pop_color"] == [138, 146, 191, 255]
+    assert preset_9["bubble_gradient_dark"] == [0, 16, 45, 255]
+    assert preset_9["bubble_gradient_light"] == [0, 82, 175, 255]
+    assert preset_9["bubble_pop_color"] == [38, 115, 191, 255]
 
 
 def _apply_authored_spectrum_organs(widget: SpotifyVisualizerWidget) -> dict[str, object]:
@@ -5920,7 +5930,7 @@ def test_bubble_deep_sea_first_visible_frame_is_nontrivial_under_authored_phrase
     )
     qtbot.addWidget(parent)
 
-    settings = dict(get_preset_settings("bubble", 0) or {})
+    settings = dict(get_preset_settings("bubble", 8) or {})
     bar_count = int(settings.get("bubble_bar_count", 48) or 48)
 
     engine = _SpotifyBeatEngine(bar_count)
@@ -5957,7 +5967,7 @@ def test_deep_sea_bubble_feed_preserves_live_variance_under_floor_pressure(
     qtbot,
     np_module,
 ):
-    settings = dict(get_preset_settings("bubble", 0) or {})
+    settings = dict(get_preset_settings("bubble", 8) or {})
     bar_count = int(settings.get("bubble_bar_count", 48) or 48)
 
     engine = _SpotifyBeatEngine(bar_count)
@@ -6038,7 +6048,7 @@ def test_deep_sea_bubble_runtime_dispatch_preserves_visible_radius_variance(
     np_module,
 ):
     random.seed(1007)
-    settings = dict(get_preset_settings("bubble", 0) or {})
+    settings = dict(get_preset_settings("bubble", 8) or {})
     bar_count = int(settings.get("bubble_bar_count", 48) or 48)
 
     engine = _SpotifyBeatEngine(bar_count)
@@ -6111,7 +6121,7 @@ def test_deep_sea_manual_floor_runtime_dispatch_keeps_big_bubble_growth_headroom
     np_module,
 ):
     random.seed(1008)
-    settings = dict(get_preset_settings("bubble", 0) or {})
+    settings = dict(get_preset_settings("bubble", 8) or {})
     bar_count = int(settings.get("bubble_bar_count", 48) or 48)
 
     engine = _SpotifyBeatEngine(bar_count)
@@ -6166,7 +6176,7 @@ def test_deep_sea_big_bubble_lane_participates_in_soft_and_hot_phrases(
     np_module,
 ):
     random.seed(1001)
-    settings = dict(get_preset_settings("bubble", 0) or {})
+    settings = dict(get_preset_settings("bubble", 8) or {})
     bar_count = int(settings.get("bubble_bar_count", 48) or 48)
 
     engine = _SpotifyBeatEngine(bar_count)
@@ -6287,7 +6297,7 @@ def test_small_bubble_success_cannot_mask_dead_big_bubble_lane(
 
 
 @pytest.mark.qt
-def test_deep_sea_preset_1_runtime_loud_phrase_keeps_hero_lane_visible_without_preset_9_goalposts(
+def test_deep_sea_preset_9_runtime_loud_phrase_keeps_hero_lane_visible_without_preset_1_goalposts(
     qt_app,
     qtbot,
     np_module,
@@ -6324,9 +6334,9 @@ def test_deep_sea_preset_1_runtime_loud_phrase_keeps_hero_lane_visible_without_p
     top_expand = sum(m["top_big_expansion"] for m in metrics_series) / len(metrics_series)
     small_avg = sum(m["max_small_delta"] for m in metrics_series) / len(metrics_series)
 
-    assert big_max >= 0.118, "Preset 1 hero lane still never reaches a convincing loud-section size range."
-    assert top_expand >= 2.50, "Preset 1 hero-lane expansion is still too weak on the runtime loud phrase."
-    assert small_avg >= 0.020, "Preset 1 small lane still dies too hard on the runtime loud phrase."
+    assert big_max >= 0.118, "Preset 9 hero lane still never reaches a convincing loud-section size range."
+    assert top_expand >= 2.50, "Preset 9 hero-lane expansion is still too weak on the runtime loud phrase."
+    assert small_avg >= 0.020, "Preset 9 small lane still dies too hard on the runtime loud phrase."
 
 
 @pytest.mark.qt
@@ -8544,7 +8554,7 @@ def test_mode_switch_deep_sea_first_visible_frame_matches_fresh_activation_oracl
     qtbot,
     np_module,
 ):
-    settings = dict(get_preset_settings("bubble", 0) or {})
+    settings = dict(get_preset_settings("bubble", 8) or {})
     bar_count = int(settings.get("bubble_bar_count", 48) or 48)
 
     live_parent = _PrimingDisplayParent(

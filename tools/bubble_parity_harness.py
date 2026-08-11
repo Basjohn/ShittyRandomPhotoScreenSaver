@@ -182,7 +182,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Compare current Bubble against historical revisions.")
     parser.add_argument(
         "--preset",
-        default="preset_1_deep_sea.json",
+        default="preset_9_deep_sea.json",
         help="Bubble preset filename under presets/visualizer_modes/bubble/",
     )
     args = parser.parse_args()

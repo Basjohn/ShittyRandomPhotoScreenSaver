@@ -1,6 +1,6 @@
 {
   "mode": "bubble",
-  "name": "Preset 1 (Deep Sea)",
+  "name": "Preset 1 (Deep Sea Abyss)",
   "preset_index": 0,
   "visualizer_preset_override": true,
   "visualizer_preset_mode": "bubble",
@@ -30,32 +30,32 @@
         "bubble_bounce_same_only": true,
         "bubble_collision_pop_mode": "one",
         "bubble_outline_color": [
-          219,
-          239,
+          243,
+          250,
           255,
-          255
+          245
         ],
         "bubble_specular_color": [
-          219,
-          239,
           255,
-          255
+          255,
+          255,
+          235
         ],
         "bubble_gradient_light": [
-          0,
-          82,
-          175,
+          43,
+          61,
+          80,
           255
         ],
         "bubble_gradient_dark": [
           0,
-          16,
-          45,
+          4,
+          11,
           255
         ],
         "bubble_pop_color": [
-          38,
-          115,
+          138,
+          146,
           191,
           255
         ],

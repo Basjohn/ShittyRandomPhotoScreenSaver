@@ -1,6 +1,6 @@
 {
   "managed_curated_files": [
-    "bubble/preset_1_deep_sea.json",
+    "bubble/preset_1_deep_sea_abyss.json",
     "bubble/preset_2_spiral_surge.json",
     "bubble/preset_3_orange_soda.json",
     "bubble/preset_4_sideway_swish.json",
@@ -8,7 +8,7 @@
     "bubble/preset_6_lava_flow.json",
     "bubble/preset_7_tap_water.json",
     "bubble/preset_8_abyss.json",
-    "bubble/preset_9_deep_sea_abyss.json",
+    "bubble/preset_9_deep_sea.json",
     "devcurve/preset_1_deep_blue.json",
     "devcurve/preset_2_rainbow_rapids.json",
     "oscilloscope/preset_1_electric.json",
