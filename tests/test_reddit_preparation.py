@@ -12,10 +12,13 @@ import pytest
 from core.reddit_preparation import (
     RedditPost,
     dedupe_reddit_candidates,
+    get_reddit_cached_timestamp,
+    load_reddit_startup_snapshot,
     normalize_reddit_rows,
     prepare_reddit_feed,
     read_reddit_post_cache,
     sort_reddit_candidates,
+    touch_reddit_marker,
     write_reddit_post_cache,
 )
 from core.settings.widget_capacity_policy import LIST_WIDGET_MAX_CAPACITY
@@ -193,3 +196,26 @@ def test_empty_preparation_does_not_freshen_existing_cache(tmp_path) -> None:
     assert prepared.candidates == ()
     assert prepared.raw_count == 0
     assert cache_path.stat().st_mtime == pytest.approx(old_timestamp, abs=1.0)
+
+
+def test_startup_snapshot_loads_posts_and_control_timestamps_into_memory(tmp_path) -> None:
+    cache_path = tmp_path / "reddit_posts.json"
+    gate_path = tmp_path / "reddit_gate.touch"
+    older = RedditPost("Older", "https://example.com/older", 1, 10.0)
+    newer = RedditPost("Newer", "https://example.com/newer", 2, 20.0)
+    assert write_reddit_post_cache(cache_path, (older, newer))
+    old_cache_timestamp = time.time() - 3600.0
+    os.utime(cache_path, (old_cache_timestamp, old_cache_timestamp))
+    gate_timestamp = touch_reddit_marker(gate_path, "reddit_startup_gate\n")
+
+    snapshot = load_reddit_startup_snapshot(cache_path, gate_path)
+
+    assert snapshot.candidates == (newer, older)
+    assert snapshot.cache_timestamp is not None
+    assert snapshot.cache_timestamp.timestamp() == pytest.approx(old_cache_timestamp, abs=1.0)
+    assert snapshot.service_gate_timestamp == gate_timestamp
+
+    cache_path.unlink()
+    gate_path.unlink()
+    assert get_reddit_cached_timestamp(cache_path) == snapshot.cache_timestamp
+    assert get_reddit_cached_timestamp(gate_path) == snapshot.service_gate_timestamp

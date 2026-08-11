@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
+from datetime import datetime
 import json
 import os
 from pathlib import Path
 import re
 import tempfile
 import threading
+import time
 from typing import Iterable, Mapping
 
 from core.logging.logger import get_logger
@@ -27,16 +29,47 @@ TITLE_FILTER_RE = re.compile(r"\b(daily|weekly|question thread)\b", re.IGNORECAS
 _HTML_SOURCE_IDS = frozenset({"html_old", "html_www"})
 _CACHE_LOCKS_GUARD = threading.Lock()
 _CACHE_LOCKS: dict[str, threading.RLock] = {}
+_TIMESTAMP_REGISTRY_GUARD = threading.Lock()
+_TIMESTAMP_REGISTRY: dict[str, datetime | None] = {}
+
+
+def _normalized_path_key(cache_path: Path) -> str:
+    return os.path.normcase(os.path.abspath(str(cache_path)))
 
 
 def _cache_lock(cache_path: Path) -> threading.RLock:
-    key = os.path.normcase(os.path.abspath(str(cache_path)))
+    key = _normalized_path_key(cache_path)
     with _CACHE_LOCKS_GUARD:
         lock = _CACHE_LOCKS.get(key)
         if lock is None:
             lock = threading.RLock()
             _CACHE_LOCKS[key] = lock
         return lock
+
+
+def _record_cached_timestamp(cache_path: Path, timestamp: datetime | None) -> None:
+    with _TIMESTAMP_REGISTRY_GUARD:
+        _TIMESTAMP_REGISTRY[_normalized_path_key(cache_path)] = timestamp
+
+
+def get_reddit_cached_timestamp(cache_path: Path) -> datetime | None:
+    """Return process-cached file metadata without touching the filesystem."""
+
+    with _TIMESTAMP_REGISTRY_GUARD:
+        return _TIMESTAMP_REGISTRY.get(_normalized_path_key(cache_path))
+
+
+def refresh_reddit_cached_timestamp(cache_path: Path) -> datetime | None:
+    """Refresh one path timestamp from disk; callers must own an I/O thread."""
+
+    path = Path(cache_path)
+    try:
+        timestamp = datetime.fromtimestamp(path.stat().st_mtime) if path.exists() else None
+    except Exception:
+        logger.debug("[REDDIT] Failed to inspect persisted timestamp: %s", path, exc_info=True)
+        timestamp = None
+    _record_cached_timestamp(path, timestamp)
+    return timestamp
 
 
 @dataclass(frozen=True)
@@ -62,6 +95,15 @@ class PreparedRedditFeed:
     @property
     def filtered_empty(self) -> bool:
         return self.raw_count > 0 and not self.candidates
+
+
+@dataclass(frozen=True)
+class RedditStartupSnapshot:
+    """Detached startup cache and persisted gate state loaded by an I/O task."""
+
+    candidates: tuple[RedditPost, ...]
+    cache_timestamp: datetime | None
+    service_gate_timestamp: datetime | None
 
 
 def candidate_identity(post: RedditPost) -> str:
@@ -189,6 +231,7 @@ def write_reddit_post_cache(cache_path: Path, posts: Iterable[RedditPost]) -> bo
                 handle.flush()
             os.replace(temp_path, path)
             temp_path = None
+            refresh_reddit_cached_timestamp(path)
         logger.debug("[REDDIT] Saved %d posts to cache: %s", len(snapshot), path)
         return True
     except Exception:
@@ -200,6 +243,40 @@ def write_reddit_post_cache(cache_path: Path, posts: Iterable[RedditPost]) -> bo
                 temp_path.unlink(missing_ok=True)
             except Exception:
                 logger.debug("[REDDIT] Failed to remove cache temp file: %s", temp_path, exc_info=True)
+
+
+def load_reddit_startup_snapshot(
+    cache_path: Path,
+    service_gate_path: Path,
+) -> RedditStartupSnapshot:
+    """Load posts and persisted timing metadata for one startup decision."""
+
+    posts = sort_reddit_candidates(read_reddit_post_cache(cache_path))
+    return RedditStartupSnapshot(
+        candidates=posts,
+        cache_timestamp=refresh_reddit_cached_timestamp(cache_path),
+        service_gate_timestamp=refresh_reddit_cached_timestamp(service_gate_path),
+    )
+
+
+def touch_reddit_marker(marker_path: Path, marker_text: str) -> datetime | None:
+    """Create/touch one Reddit control marker on an I/O thread."""
+
+    path = Path(marker_path)
+    try:
+        with _cache_lock(path):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if not path.exists():
+                path.write_text(str(marker_text), encoding="utf-8")
+            now = time.time()
+            path.touch()
+            os.utime(path, (now, now))
+            timestamp = datetime.fromtimestamp(now)
+            _record_cached_timestamp(path, timestamp)
+            return timestamp
+    except Exception:
+        logger.debug("[REDDIT] Failed to touch persisted marker: %s", path, exc_info=True)
+        return None
 
 
 def prepare_reddit_feed(
@@ -266,12 +343,17 @@ def prepare_reddit_feed(
 __all__ = [
     "PreparedRedditFeed",
     "RedditPost",
+    "RedditStartupSnapshot",
     "TITLE_FILTER_RE",
     "candidate_identity",
     "dedupe_reddit_candidates",
+    "get_reddit_cached_timestamp",
+    "load_reddit_startup_snapshot",
     "normalize_reddit_rows",
     "prepare_reddit_feed",
     "read_reddit_post_cache",
+    "refresh_reddit_cached_timestamp",
     "sort_reddit_candidates",
+    "touch_reddit_marker",
     "write_reddit_post_cache",
 ]

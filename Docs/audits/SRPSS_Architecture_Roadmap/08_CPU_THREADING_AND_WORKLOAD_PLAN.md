@@ -370,9 +370,16 @@ only visible model assignment, Qt metrics/layout, fade/visibility and update. Sa
 cache transactions are process-serialized and replace the JSON file atomically. The
 former missing-worker synchronous network fallback is removed.
 
-Remaining Reddit work is narrower and stays active in `Current_Plan.md`: startup
-post-cache load/deserialization and cache/gate/attempt timestamp/touch/create I/O still
-run on the GUI thread. Cold static paint-cache generation is the separate contract below.
+Startup control-plane extraction is also complete. Activation loads the post cache and
+persisted blocked gate as one immutable `RedditStartupSnapshot` on shared IO, commits
+cached content first, then evaluates freshness/cooldown from that snapshot. Runtime
+cadence checks read a process-shared in-memory timestamp registry updated by worker
+cache writes and gate touches, so they do not `stat`, create or touch files on GUI.
+Late snapshots are rejected after deactivation or receipt of any newer authoritative
+live result. The unused
+legacy startup-attempt marker had no production caller and was removed rather than
+promoted into a persistence contract. Remaining Reddit work is the cold static
+paint-cache contract below.
 
 **Weather**
 

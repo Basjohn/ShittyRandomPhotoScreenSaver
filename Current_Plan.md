@@ -122,7 +122,6 @@ Target contract: **Prepare → Commit → Persist**.
 
 ### Priority 1 — service/widget preparation
 
-- [ ] Reddit filesystem control plane: move startup post-cache load/deserialization plus cache/gate/attempt timestamp and touch/create I/O off GUI ownership. Preserve cached-first reveal, freshness decisions, blocked/manual cooldown semantics and the shared `ThreadManager` boundary.
 - [ ] Weather: move startup cache reads and post-fetch persistence to IO ownership; keep Qt text/layout/QPixmap commits on GUI.
 - [ ] Gmail: move startup cache read/deserialization off GUI and move stable content-cache regeneration out of `paintEvent()`; paint consumes prepared/cache state.
 - [ ] Reddit/Gmail: cold static rendering must not be discovered inside `paintEvent()`. Prefer invalidation-time preparation before worker-rendered text unless measurement justifies the extra complexity.

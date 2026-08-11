@@ -19,7 +19,10 @@ from core.reddit_post_provider import RedditProviderResult
 from core.reddit_preparation import (
     PreparedRedditFeed,
     RedditPost,
+    RedditStartupSnapshot,
+    load_reddit_startup_snapshot,
     prepare_reddit_feed,
+    touch_reddit_marker,
     write_reddit_post_cache,
 )
 from core.settings.widget_capacity_policy import LIST_WIDGET_MAX_CAPACITY
@@ -88,6 +91,42 @@ class _ImmediateIoThreadManager:
         if callback is not None:
             callback(result)
         return "reddit-test-task"
+
+
+class _JoinedWorkerThreadManager:
+    """Run a submitted task on a real worker and join for deterministic tests."""
+
+    def __init__(self) -> None:
+        self.worker_threads: list[threading.Thread] = []
+
+    def submit_io_task(self, func, *args, callback=None, **kwargs):
+        def _run() -> None:
+            self.worker_threads.append(threading.current_thread())
+            try:
+                result = SimpleNamespace(success=True, result=func(*args, **kwargs), error=None)
+            except Exception as exc:  # pragma: no cover - defensive
+                result = SimpleNamespace(success=False, result=None, error=exc)
+            if callback is not None:
+                callback(result)
+
+        thread = threading.Thread(target=_run, name="reddit-io-test")
+        thread.start()
+        thread.join(timeout=5.0)
+        assert not thread.is_alive()
+        return "reddit-worker-task"
+
+
+def _startup_snapshot(
+    posts: tuple[RedditPost, ...] = (),
+    *,
+    cache_timestamp: datetime | None = None,
+    gate_timestamp: datetime | None = None,
+) -> RedditStartupSnapshot:
+    return RedditStartupSnapshot(
+        candidates=posts,
+        cache_timestamp=cache_timestamp,
+        service_gate_timestamp=gate_timestamp,
+    )
 
 
 def _clear_reddit_due_state() -> None:
@@ -671,6 +710,7 @@ def test_reddit_403_error_keeps_cache_timestamp_truthful_and_starts_block_cooldo
         os.utime(cache_path, (old_ts, old_ts))
         widget._get_cache_file_path = lambda: Path(cache_path)  # type: ignore[method-assign]
         widget._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
+        widget._thread_manager = _ImmediateIoThreadManager()  # type: ignore[attr-defined]
 
         widget._on_fetch_error("403 Client Error: Blocked for url: https://www.reddit.com/r/Games/hot.json?limit=25")  # type: ignore[attr-defined]
 
@@ -694,6 +734,7 @@ def test_reddit_429_error_does_not_create_false_fresh_cache_and_starts_block_coo
         RedditRateLimiter.reset()
         widget._get_cache_file_path = lambda: Path(cache_path)  # type: ignore[method-assign]
         widget._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
+        widget._thread_manager = _ImmediateIoThreadManager()  # type: ignore[attr-defined]
 
         widget._on_fetch_error("429 Client Error: Too Many Requests for url: https://www.reddit.com/r/SubredditDrama/.rss")  # type: ignore[attr-defined]
 
@@ -847,7 +888,8 @@ def test_reddit_startup_refresh_uses_shared_service_gate_before_rate_limiter(qt_
 
         old_ts = time.time() - (2 * 3600)
         os.utime(cache_path, (old_ts, old_ts))
-        widget._touch_service_gate_timestamp_now()  # type: ignore[attr-defined]
+        assert touch_reddit_marker(gate_path, "reddit_startup_gate\n") is not None
+        load_reddit_startup_snapshot(cache_path, gate_path)
 
         decision = widget._get_startup_refresh_decision()  # type: ignore[attr-defined]
 
@@ -876,7 +918,8 @@ def test_reddit_periodic_refresh_waits_for_persisted_blocked_gate(qt_app, qtbot,
         cache_path.write_text("[]", encoding="utf-8")
         old_ts = time.time() - (2 * 3600)
         os.utime(cache_path, (old_ts, old_ts))
-        widget._touch_service_gate_timestamp_now()  # type: ignore[attr-defined]
+        assert touch_reddit_marker(gate_path, "reddit_startup_gate\n") is not None
+        load_reddit_startup_snapshot(cache_path, gate_path)
 
         delay_ms, reason = widget._refresh_due_delay_ms(  # type: ignore[attr-defined]
             phase_delay_ms=0,
@@ -896,12 +939,11 @@ def test_reddit_startup_refresh_skips_when_cache_is_fresh(qt_app, qtbot, tmp_pat
     qtbot.addWidget(widget)
     cache_path = tmp_path / "reddit_cache.json"
     gate_path = tmp_path / "reddit_gate.touch"
-    attempt_path = tmp_path / "reddit_attempt.touch"
     try:
         cache_path.write_text("[]", encoding="utf-8")
         widget._get_cache_file_path = lambda: Path(cache_path)  # type: ignore[method-assign]
         widget._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
-        widget._get_startup_attempt_file_path = lambda: Path(attempt_path)  # type: ignore[method-assign]
+        load_reddit_startup_snapshot(cache_path, gate_path)
 
         decision = widget._get_startup_refresh_decision()  # type: ignore[attr-defined]
 
@@ -927,9 +969,8 @@ def test_reddit_startup_refresh_ignores_legacy_recent_attempt_for_stale_cache(qt
         os.utime(cache_path, (old_ts, old_ts))
         widget._get_cache_file_path = lambda: Path(cache_path)  # type: ignore[method-assign]
         widget._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
-        widget._get_startup_attempt_file_path = lambda: Path(attempt_path)  # type: ignore[method-assign]
-
-        widget._touch_startup_attempt_timestamp_now()  # type: ignore[attr-defined]
+        attempt_path.write_text("reddit_startup_attempt\n", encoding="utf-8")
+        load_reddit_startup_snapshot(cache_path, gate_path)
         decision = widget._get_startup_refresh_decision()  # type: ignore[attr-defined]
 
         assert decision.run is True
@@ -949,13 +990,11 @@ def test_reddit_activate_runs_startup_fetch_even_when_legacy_recent_attempt_exis
     attempt_path = tmp_path / "reddit_attempt.touch"
     try:
         calls = []
-        widget.set_thread_manager(object())
+        widget.set_thread_manager(_ImmediateIoThreadManager())
         widget._get_cache_file_path = lambda: Path(cache_path)  # type: ignore[method-assign]
         widget._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
-        widget._get_startup_attempt_file_path = lambda: Path(attempt_path)  # type: ignore[method-assign]
-        widget._touch_startup_attempt_timestamp_now()  # type: ignore[attr-defined]
+        attempt_path.write_text("reddit_startup_attempt\n", encoding="utf-8")
 
-        monkeypatch.setattr(widget, "_load_cached_posts", lambda: [])
         monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
         monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: calls.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
 
@@ -1061,7 +1100,6 @@ def test_reddit_delayed_periodic_refresh_start_is_cancelled_on_cleanup(qt_app, q
 
 @pytest.mark.qt
 def test_reddit2_startup_refresh_paces_second_stale_cache_behind_reddit1(qt_app, qtbot, monkeypatch, tmp_path):  # noqa: ARG001
-    attempt_path = tmp_path / "reddit_attempt.touch"
     gate_path = tmp_path / "reddit_gate.touch"
     cache_path_1 = tmp_path / "reddit_posts.json"
     cache_path_2 = tmp_path / "reddit2_posts.json"
@@ -1074,8 +1112,8 @@ def test_reddit2_startup_refresh_paces_second_stale_cache_behind_reddit1(qt_app,
     try:
         _clear_reddit_due_state()
         monkeypatch.setattr(reddit_module.random, "randint", lambda _low, _high: 0)
-        widget1.set_thread_manager(object())
-        widget2.set_thread_manager(object())
+        widget1.set_thread_manager(_ImmediateIoThreadManager())
+        widget2.set_thread_manager(_ImmediateIoThreadManager())
         widget1._cache_key = "reddit"  # type: ignore[attr-defined]
         widget2._cache_key = "reddit2"  # type: ignore[attr-defined]
 
@@ -1090,13 +1128,8 @@ def test_reddit2_startup_refresh_paces_second_stale_cache_behind_reddit1(qt_app,
         widget2._get_cache_file_path = lambda: Path(cache_path_2)  # type: ignore[method-assign]
         widget1._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
         widget2._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
-        widget1._get_startup_attempt_file_path = lambda: Path(attempt_path)  # type: ignore[method-assign]
-        widget2._get_startup_attempt_file_path = lambda: Path(attempt_path)  # type: ignore[method-assign]
-
         calls1 = []
         calls2 = []
-        monkeypatch.setattr(widget1, "_load_cached_posts", lambda: [])
-        monkeypatch.setattr(widget2, "_load_cached_posts", lambda: [])
         monkeypatch.setattr(widget1, "_schedule_timer", lambda: calls1.append("timer"))
         monkeypatch.setattr(widget1, "_fetch_feed", lambda **kwargs: calls1.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
         monkeypatch.setattr(widget2, "_fetch_feed", lambda **kwargs: calls2.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
@@ -1376,16 +1409,236 @@ def test_reddit_manual_refresh_uses_shorter_blocked_cooldown_than_automatic(qt_a
 
 
 @pytest.mark.qt
+def test_reddit_activation_loads_startup_snapshot_before_ui_dispatch(
+    qt_app,
+    qtbot,
+    monkeypatch,
+    tmp_path,
+):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    cache_path = tmp_path / "reddit_posts.json"
+    gate_path = tmp_path / "reddit_gate.touch"
+    cached_post = RedditPost("Cached", "https://example.com/cached", 1, 10.0)
+    assert write_reddit_post_cache(cache_path, (cached_post,))
+    manager = _JoinedWorkerThreadManager()
+    ui_thread = threading.current_thread()
+    load_threads: list[threading.Thread] = []
+    dispatches: list[tuple[object, tuple[object, ...], dict[str, object], threading.Thread]] = []
+    real_loader = reddit_module.load_reddit_startup_snapshot
+
+    def _recording_loader(cache_file, gate_file):
+        load_threads.append(threading.current_thread())
+        return real_loader(cache_file, gate_file)
+
+    def _capture_ui_dispatch(func, *args, **kwargs):
+        dispatches.append((func, args, kwargs, threading.current_thread()))
+
+    try:
+        widget.set_thread_manager(manager)
+        widget._get_cache_file_path = lambda: cache_path  # type: ignore[method-assign]
+        widget._get_service_gate_file_path = lambda: gate_path  # type: ignore[method-assign]
+        monkeypatch.setattr(reddit_module, "load_reddit_startup_snapshot", _recording_loader)
+        monkeypatch.setattr(ThreadManager, "run_on_ui_thread", staticmethod(_capture_ui_dispatch))
+        monkeypatch.setattr(reddit_module, "automatic_service_updates_enabled", lambda: False)
+
+        widget._activate_impl()
+
+        assert load_threads and load_threads[0] is not ui_thread
+        assert manager.worker_threads == load_threads
+        assert len(dispatches) == 1
+        callback, args, kwargs, dispatch_thread = dispatches[0]
+        assert dispatch_thread is load_threads[0]
+        assert isinstance(args[1], RedditStartupSnapshot)
+        assert args[1].candidates == (cached_post,)
+
+        cache_path.unlink()
+        callback(*args, **kwargs)
+        assert widget._posts == [cached_post]  # type: ignore[attr-defined]
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_blocked_gate_touch_runs_on_shared_io_worker(qt_app, qtbot, monkeypatch, tmp_path):  # noqa: ARG001
+    from core.reddit_rate_limiter import RedditRateLimiter
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    gate_path = tmp_path / "reddit_gate.touch"
+    manager = _JoinedWorkerThreadManager()
+    ui_thread = threading.current_thread()
+    touch_threads: list[threading.Thread] = []
+    real_touch = reddit_module.touch_reddit_marker
+
+    def _recording_touch(path, marker):
+        touch_threads.append(threading.current_thread())
+        return real_touch(path, marker)
+
+    try:
+        RedditRateLimiter.reset()
+        widget.set_thread_manager(manager)
+        widget._get_service_gate_file_path = lambda: gate_path  # type: ignore[method-assign]
+        monkeypatch.setattr(reddit_module, "touch_reddit_marker", _recording_touch)
+
+        widget._on_fetch_error("403 Client Error: blocked for url")  # type: ignore[attr-defined]
+
+        assert touch_threads and touch_threads[0] is not ui_thread
+        assert manager.worker_threads == touch_threads
+        assert gate_path.exists()
+    finally:
+        RedditRateLimiter.reset()
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_stale_startup_snapshot_is_rejected_after_deactivation(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    submissions: list[tuple[object, tuple[object, ...], object]] = []
+    cached_post = RedditPost("Stale", "https://example.com/stale", 1, 10.0)
+
+    class HoldingThreadManager:
+        def submit_io_task(self, func, *args, callback=None, **kwargs):
+            submissions.append((func, args, callback))
+            return "held-startup-task"
+
+    try:
+        widget.set_thread_manager(HoldingThreadManager())
+        fetch_calls: list[object] = []
+        monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: fetch_calls.append(kwargs) or True)
+
+        widget._activate_impl()
+        assert len(submissions) == 1
+        widget._deactivate_impl()
+
+        _func, _args, callback = submissions[0]
+        assert callback is not None
+        callback(
+            SimpleNamespace(
+                success=True,
+                result=_startup_snapshot((cached_post,)),
+                error=None,
+            )
+        )
+
+        assert widget._all_fetched_posts == []  # type: ignore[attr-defined]
+        assert fetch_calls == []
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_startup_snapshot_cannot_overwrite_newer_fetch(qt_app, qtbot, tmp_path):  # noqa: ARG001
+    from core.reddit_rate_limiter import RedditRateLimiter
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    startup_submissions: list[object] = []
+    cache_path = tmp_path / "reddit_posts.json"
+
+    class HoldingThreadManager:
+        def submit_io_task(self, func, *args, callback=None, **kwargs):
+            startup_submissions.append(callback)
+            return "held-startup-task"
+
+    class NewProvider:
+        def fetch_posts(self, request):  # noqa: ANN001
+            return RedditProviderResult(
+                posts=[{
+                    "title": "New live result",
+                    "url": "https://example.com/new",
+                    "score": 2,
+                    "created_utc": 20.0,
+                }],
+                source_id="rss",
+                attempted_sources=("rss",),
+            )
+
+    try:
+        RedditRateLimiter.reset()
+        widget.set_thread_manager(HoldingThreadManager())
+        widget._get_cache_file_path = lambda: cache_path  # type: ignore[method-assign]
+        widget._activate_impl()
+        assert len(startup_submissions) == 1
+
+        widget.set_thread_manager(_ImmediateIoThreadManager())
+        widget.set_post_provider(NewProvider())
+        widget._subreddit = "newsubreddit"  # type: ignore[attr-defined]
+        assert widget._fetch_feed(defer_for_transition=False) is True  # type: ignore[attr-defined]
+        assert widget._posts[0].title == "New live result"  # type: ignore[attr-defined]
+
+        startup_callback = startup_submissions[0]
+        assert startup_callback is not None
+        startup_callback(
+            SimpleNamespace(
+                success=True,
+                result=_startup_snapshot(
+                    (RedditPost("Stale cached", "https://example.com/stale", 1, 10.0),)
+                ),
+                error=None,
+            )
+        )
+
+        assert widget._posts[0].title == "New live result"  # type: ignore[attr-defined]
+        assert widget._all_fetched_posts[0].title == "New live result"  # type: ignore[attr-defined]
+    finally:
+        RedditRateLimiter.reset()
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_deferred_fetch_does_not_suppress_pending_startup_snapshot(
+    qt_app,
+    qtbot,
+    monkeypatch,
+):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    startup_submissions: list[object] = []
+    cached_post = RedditPost("Cached first", "https://example.com/cached", 1, 10.0)
+
+    class HoldingThreadManager:
+        def submit_io_task(self, func, *args, callback=None, **kwargs):
+            startup_submissions.append(callback)
+            return "held-startup-task"
+
+    try:
+        widget.set_thread_manager(HoldingThreadManager())
+        monkeypatch.setattr(reddit_module, "automatic_service_updates_enabled", lambda: False)
+        widget._activate_impl()
+        assert len(startup_submissions) == 1
+
+        monkeypatch.setattr(widget, "_defer_refresh_if_transition", lambda: True)
+        assert widget._fetch_feed(defer_for_transition=True) is True  # type: ignore[attr-defined]
+
+        startup_callback = startup_submissions[0]
+        assert startup_callback is not None
+        startup_callback(
+            SimpleNamespace(
+                success=True,
+                result=_startup_snapshot((cached_post,)),
+                error=None,
+            )
+        )
+
+        assert widget._posts == [cached_post]  # type: ignore[attr-defined]
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
 def test_reddit_activate_skips_startup_fetch_when_cache_is_fresh(qt_app, qtbot, monkeypatch):  # noqa: ARG001
     widget = RedditWidget()
     qtbot.addWidget(widget)
     try:
         calls = []
-        widget.set_thread_manager(object())
-        monkeypatch.setattr(widget, "_load_cached_posts", lambda: [])
-        monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now())
-        monkeypatch.setattr(widget, "_get_service_gate_timestamp", lambda: None)
-        monkeypatch.setattr(widget, "_get_startup_attempt_timestamp", lambda: None)
+        widget.set_thread_manager(_ImmediateIoThreadManager())
+        monkeypatch.setattr(
+            reddit_module,
+            "load_reddit_startup_snapshot",
+            lambda *_args: _startup_snapshot(cache_timestamp=datetime.now()),
+        )
         monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
         monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: calls.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
 
@@ -1402,11 +1655,12 @@ def test_reddit_activate_runs_startup_fetch_when_cache_is_old(qt_app, qtbot, mon
     qtbot.addWidget(widget)
     try:
         calls = []
-        widget.set_thread_manager(object())
-        monkeypatch.setattr(widget, "_load_cached_posts", lambda: [])
-        monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(days=3))
-        monkeypatch.setattr(widget, "_get_service_gate_timestamp", lambda: None)
-        monkeypatch.setattr(widget, "_get_startup_attempt_timestamp", lambda: None)
+        widget.set_thread_manager(_ImmediateIoThreadManager())
+        monkeypatch.setattr(
+            reddit_module,
+            "load_reddit_startup_snapshot",
+            lambda *_args: _startup_snapshot(cache_timestamp=datetime.now() - timedelta(days=3)),
+        )
         monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
         monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: calls.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
 
@@ -1424,7 +1678,7 @@ def test_reddit_activate_uses_cached_posts_before_refresh(qt_app, qtbot, monkeyp
     widget = RedditWidget()
     qtbot.addWidget(widget)
     try:
-        widget.set_thread_manager(object())
+        widget.set_thread_manager(_ImmediateIoThreadManager())
         cached_posts = [
             RedditPost(
                 title="Cached post",
@@ -1434,10 +1688,14 @@ def test_reddit_activate_uses_cached_posts_before_refresh(qt_app, qtbot, monkeyp
             )
         ]
         calls = []
-        monkeypatch.setattr(widget, "_load_cached_posts", lambda: list(cached_posts))
-        monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(days=3))
-        monkeypatch.setattr(widget, "_get_service_gate_timestamp", lambda: None)
-        monkeypatch.setattr(widget, "_get_startup_attempt_timestamp", lambda: None)
+        monkeypatch.setattr(
+            reddit_module,
+            "load_reddit_startup_snapshot",
+            lambda *_args: _startup_snapshot(
+                tuple(cached_posts),
+                cache_timestamp=datetime.now() - timedelta(days=3),
+            ),
+        )
         monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
         monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: calls.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
 
@@ -1456,9 +1714,9 @@ def test_reddit_activate_disables_automatic_updates_under_noupdates(qt_app, qtbo
     qtbot.addWidget(widget)
     try:
         calls = []
-        widget.set_thread_manager(object())
+        widget.set_thread_manager(_ImmediateIoThreadManager())
         monkeypatch.setattr("widgets.reddit_widget.automatic_service_updates_enabled", lambda: False)
-        monkeypatch.setattr(widget, "_load_cached_posts", lambda: [])
+        monkeypatch.setattr(reddit_module, "load_reddit_startup_snapshot", lambda *_args: _startup_snapshot())
         monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
         monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: calls.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
 
@@ -1611,16 +1869,6 @@ def test_reddit_fetch_prepares_and_persists_before_ui_dispatch(qt_app, qtbot, mo
         assert isinstance(args[0], PreparedRedditFeed)
         assert args[0].candidates[0].title == "Prepared off UI"
 
-        monkeypatch.setattr(
-            widget,
-            "_load_cached_posts",
-            lambda: pytest.fail("GUI commit must not read the Reddit cache"),
-        )
-        monkeypatch.setattr(
-            widget,
-            "_save_cached_posts",
-            lambda posts: pytest.fail("GUI commit must not write the Reddit cache"),
-        )
         callback(*args, **kwargs)
         assert widget._posts[0].title == "Prepared off UI"  # type: ignore[attr-defined]
     finally:

@@ -41,10 +41,11 @@ from core.reddit_post_provider import (
 )
 from core.reddit_preparation import (
     PreparedRedditFeed,
+    RedditStartupSnapshot,
+    get_reddit_cached_timestamp,
+    load_reddit_startup_snapshot,
     prepare_reddit_feed,
-    read_reddit_post_cache,
-    sort_reddit_candidates,
-    write_reddit_post_cache,
+    touch_reddit_marker,
 )
 from core.settings.widget_capacity_policy import (
     LIST_WIDGET_MAX_CAPACITY,
@@ -88,6 +89,8 @@ from widgets.service_widget_runtime import (
 from core.runtime_flags import automatic_service_updates_enabled
 
 logger = get_logger(__name__)
+_REDDIT_CACHE_DIR = Path(__file__).parent.parent / "cache" / "reddit"
+
 
 class RedditWidget(BaseOverlayWidget):
     """Reddit widget for displaying subreddit entries.
@@ -185,6 +188,7 @@ class RedditWidget(BaseOverlayWidget):
         self._pending_refresh_after_transition: bool = False
         self._deferred_prepared_feed: Optional[PreparedRedditFeed] = None
         self._deferred_fetch_error: Optional[str] = None
+        self._startup_snapshot_request_id: int = 0
 
         # Hover state and tooltip management
         self._hover_row_index: Optional[int] = None
@@ -254,24 +258,12 @@ class RedditWidget(BaseOverlayWidget):
         if not self._ensure_thread_manager("RedditWidget._activate_impl"):
             raise RuntimeError("ThreadManager not available")
         
-        cached_posts = self._load_cached_posts()
-        if cached_posts:
-            logger.info(
-                "[REDDIT] Loaded %d cached candidate posts (cache_key=%s, visible_limit=%d)",
-                len(cached_posts),
-                self._cache_key,
-                self._configured_capacity,
-            )
-            self._all_fetched_posts = cached_posts
-            self._display_configured_posts(fade=False)
-        else:
-            logger.info("[REDDIT] No cached posts found for %s (cache_key=%s)", self._subreddit, self._cache_key)
-
-        self._run_startup_refresh_flow()
+        self._begin_startup_snapshot_load()
         logger.debug("[LIFECYCLE] RedditWidget activated")
     
     def _deactivate_impl(self) -> None:
         """Deactivate reddit widget - stop fetching (lifecycle hook)."""
+        self._startup_snapshot_request_id += 1
         stop_overlay_timer_pair(
             self,
             handle_attr="_update_timer_handle",
@@ -319,7 +311,62 @@ class RedditWidget(BaseOverlayWidget):
         # CRITICAL: Hide widget immediately - it will be shown by fade sync
         self.hide()
         
-        cached_posts = self._load_cached_posts()
+        self._begin_startup_snapshot_load()
+
+    def _begin_startup_snapshot_load(self) -> None:
+        """Load startup posts and persisted gate metadata on the shared I/O pool."""
+
+        tm = self._thread_manager
+        if tm is None:
+            logger.error("[REDDIT] Startup cache load unavailable: ThreadManager is not configured")
+            return
+
+        self._startup_snapshot_request_id += 1
+        request_id = self._startup_snapshot_request_id
+        cache_path = self._get_cache_file_path()
+        service_gate_path = self._get_service_gate_file_path()
+
+        def _load_snapshot(cache_file: Path, gate_file: Path) -> RedditStartupSnapshot:
+            return load_reddit_startup_snapshot(cache_file, gate_file)
+
+        def _on_result(result) -> None:
+            if getattr(result, "success", False):
+                snapshot = getattr(result, "result", None)
+                if isinstance(snapshot, RedditStartupSnapshot):
+                    ThreadManager.run_on_ui_thread(
+                        self._commit_startup_snapshot,
+                        request_id,
+                        snapshot,
+                    )
+                    return
+            error = getattr(result, "error", None) or "No Reddit startup snapshot returned"
+            ThreadManager.run_on_ui_thread(
+                self._on_startup_snapshot_error,
+                request_id,
+                str(error),
+            )
+
+        try:
+            tm.submit_io_task(
+                _load_snapshot,
+                cache_path,
+                service_gate_path,
+                callback=_on_result,
+            )
+        except Exception as exc:
+            self._on_startup_snapshot_error(request_id, str(exc))
+
+    def _commit_startup_snapshot(
+        self,
+        request_id: int,
+        snapshot: RedditStartupSnapshot,
+    ) -> None:
+        """Install a detached startup snapshot before deciding refresh cadence."""
+
+        if not shiboken_isValid(self) or request_id != self._startup_snapshot_request_id:
+            return
+
+        cached_posts = list(snapshot.candidates)
         if cached_posts:
             logger.info(
                 "[REDDIT] Loaded %d cached candidate posts (cache_key=%s, visible_limit=%d)",
@@ -332,13 +379,27 @@ class RedditWidget(BaseOverlayWidget):
         else:
             logger.info("[REDDIT] No cached posts found for %s (cache_key=%s)", self._subreddit, self._cache_key)
 
-        self._run_startup_refresh_flow()
+        self._run_startup_refresh_flow(snapshot=snapshot)
+
+    def _on_startup_snapshot_error(self, request_id: int, error: str) -> None:
+        if not shiboken_isValid(self) or request_id != self._startup_snapshot_request_id:
+            return
+        logger.warning("[REDDIT] Startup cache snapshot failed: %s", error)
+        self._run_startup_refresh_flow(
+            snapshot=RedditStartupSnapshot(
+                candidates=(),
+                cache_timestamp=None,
+                service_gate_timestamp=None,
+            )
+        )
 
     def stop(self) -> None:
         """Stop refreshes and hide widget."""
 
         if not self._enabled:
             return
+
+        self._startup_snapshot_request_id += 1
 
         stop_overlay_timer_pair(
             self,
@@ -1089,6 +1150,12 @@ class RedditWidget(BaseOverlayWidget):
 
         if not shiboken_isValid(self):
             return
+        if prepared.candidates:
+            # An authoritative live result supersedes a still-pending
+            # cached-first snapshot even when its visible apply must defer for
+            # a transition. Empty/skipped/failed attempts do not suppress the
+            # only available cached content.
+            self._startup_snapshot_request_id += 1
         end_fetch_guard(self)
         self._stop_refresh_spinner()
         if defer_for_transition and self._defer_feed_apply_if_transition(prepared):
@@ -1236,10 +1303,10 @@ class RedditWidget(BaseOverlayWidget):
                 RedditRateLimiter.record_blocked_response(reason=error)
             except Exception:
                 logger.debug("[REDDIT] Failed to record blocked-response cooldown", exc_info=True)
-            self._touch_service_gate_timestamp_now()
+            self._queue_service_gate_touch()
             logger.warning(
                 "[CACHE][REDDIT][RATE_LIMIT] Blocked fetch left content cache timestamp unchanged; "
-                "service cooldown gate refreshed cache_key=%s",
+                "service cooldown gate persistence queued cache_key=%s",
                 self._cache_key,
             )
 
@@ -2115,53 +2182,24 @@ class RedditWidget(BaseOverlayWidget):
 
     def _get_cache_file_path(self) -> Path:
         """Get cache file path for this widget's posts."""
-        cache_dir = Path(__file__).resolve().parent.parent / "cache" / "reddit"
-        return cache_dir / f"{self._cache_key}_posts.json"
+        return _REDDIT_CACHE_DIR / f"{self._cache_key}_posts.json"
 
     def _get_service_gate_file_path(self) -> Path:
-        cache_dir = Path(__file__).resolve().parent.parent / "cache" / "reddit"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        return cache_dir / "_startup_gate.touch"
-
-    def _get_startup_attempt_file_path(self) -> Path:
-        cache_dir = Path(__file__).resolve().parent.parent / "cache" / "reddit"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        return cache_dir / "_startup_attempt.touch"
+        return _REDDIT_CACHE_DIR / "_startup_gate.touch"
 
     def _get_cache_timestamp(self):
-        """Return the cache file modification time when available."""
-        try:
-            cache_path = self._get_cache_file_path()
-            if not cache_path.exists():
-                return None
-            return datetime.fromtimestamp(cache_path.stat().st_mtime)
-        except Exception:
-            logger.debug("[REDDIT] Failed to inspect cache timestamp", exc_info=True)
-            return None
+        """Return the process-cached post timestamp without filesystem I/O."""
+        return get_reddit_cached_timestamp(self._get_cache_file_path())
 
     def _get_service_gate_timestamp(self):
-        """Return the shared Reddit startup-gate timestamp when available."""
-        try:
-            gate_path = self._get_service_gate_file_path()
-            if not gate_path.exists():
-                return None
-            return datetime.fromtimestamp(gate_path.stat().st_mtime)
-        except Exception:
-            logger.debug("[REDDIT] Failed to inspect shared startup-gate timestamp", exc_info=True)
-            return None
+        """Return the process-cached blocked-gate timestamp without filesystem I/O."""
+        return get_reddit_cached_timestamp(self._get_service_gate_file_path())
 
-    def _get_startup_attempt_timestamp(self):
-        """Return the shared Reddit startup-attempt timestamp when available."""
-        try:
-            attempt_path = self._get_startup_attempt_file_path()
-            if not attempt_path.exists():
-                return None
-            return datetime.fromtimestamp(attempt_path.stat().st_mtime)
-        except Exception:
-            logger.debug("[REDDIT] Failed to inspect shared startup-attempt timestamp", exc_info=True)
-            return None
-
-    def _get_startup_refresh_decision(self) -> StartupRefreshDecision:
+    def _get_startup_refresh_decision(
+        self,
+        *,
+        snapshot: RedditStartupSnapshot | None = None,
+    ) -> StartupRefreshDecision:
         """Return Reddit startup-refresh policy with shared blocked-gate awareness."""
 
         if not automatic_service_updates_enabled():
@@ -2169,7 +2207,11 @@ class RedditWidget(BaseOverlayWidget):
 
         cache_age = None
         try:
-            cache_timestamp = self._get_cache_timestamp()
+            cache_timestamp = (
+                snapshot.cache_timestamp
+                if snapshot is not None
+                else self._get_cache_timestamp()
+            )
             if cache_timestamp is not None:
                 cache_age = datetime.now() - cache_timestamp
                 if cache_age < self._refresh_interval:
@@ -2181,7 +2223,11 @@ class RedditWidget(BaseOverlayWidget):
         try:
             from core.reddit_rate_limiter import RedditRateLimiter
 
-            gate_timestamp = self._get_service_gate_timestamp()
+            gate_timestamp = (
+                snapshot.service_gate_timestamp
+                if snapshot is not None
+                else self._get_service_gate_timestamp()
+            )
             if gate_timestamp is not None:
                 gate_age = datetime.now() - gate_timestamp
                 blocked_window = timedelta(seconds=RedditRateLimiter.BLOCK_COOLDOWN_SECONDS)
@@ -2193,50 +2239,35 @@ class RedditWidget(BaseOverlayWidget):
         reason = "missing_cache_timestamp" if cache_age is None else "cache_stale"
         return StartupRefreshDecision(True, reason, cache_age)
 
-    def _touch_service_gate_timestamp_now(self) -> None:
-        """Refresh the shared Reddit startup gate after a blocked response."""
+    def _queue_service_gate_touch(self) -> None:
+        """Persist a blocked-response gate without filesystem work on the GUI."""
 
+        tm = self._thread_manager
+        if tm is None:
+            logger.error("[REDDIT] Cannot persist blocked gate without ThreadManager")
+            return
         gate_path = self._get_service_gate_file_path()
         try:
-            if not gate_path.exists():
-                gate_path.parent.mkdir(parents=True, exist_ok=True)
-                gate_path.write_text("reddit_startup_gate\n", encoding="utf-8")
-            now = time.time()
-            gate_path.touch()
-            try:
-                import os
-                os.utime(gate_path, (now, now))
-            except Exception:
-                logger.debug("[REDDIT] Failed to force startup-gate timestamp via utime", exc_info=True)
+            tm.submit_io_task(
+                touch_reddit_marker,
+                gate_path,
+                "reddit_startup_gate\n",
+            )
         except Exception:
-            logger.debug("[REDDIT] Failed to touch shared startup-gate timestamp", exc_info=True)
+            logger.debug("[REDDIT] Failed to submit shared startup-gate touch", exc_info=True)
 
-    def _touch_startup_attempt_timestamp_now(self) -> None:
-        """Refresh the shared Reddit startup-attempt timestamp before fetch submission."""
-
-        attempt_path = self._get_startup_attempt_file_path()
-        try:
-            if not attempt_path.exists():
-                attempt_path.parent.mkdir(parents=True, exist_ok=True)
-                attempt_path.write_text("reddit_startup_attempt\n", encoding="utf-8")
-            now = time.time()
-            attempt_path.touch()
-            try:
-                import os
-                os.utime(attempt_path, (now, now))
-            except Exception:
-                logger.debug("[REDDIT] Failed to force startup-attempt timestamp via utime", exc_info=True)
-        except Exception:
-            logger.debug("[REDDIT] Failed to touch startup-attempt timestamp", exc_info=True)
-
-    def _run_startup_refresh_flow(self) -> None:
+    def _run_startup_refresh_flow(
+        self,
+        *,
+        snapshot: RedditStartupSnapshot | None = None,
+    ) -> None:
         """Apply the shared Reddit startup refresh contract."""
 
         if not automatic_service_updates_enabled():
             logger.info("[REDDIT] Automatic updates disabled via --noupdates; manual refresh only")
             return
 
-        decision = self._get_startup_refresh_decision()
+        decision = self._get_startup_refresh_decision(snapshot=snapshot)
         if decision.run:
             startup_delay_ms = (
                 int(self.STARTUP_STALE_PACE.total_seconds() * 1000.0)
@@ -2265,15 +2296,6 @@ class RedditWidget(BaseOverlayWidget):
             f", age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
         )
         self._schedule_timer()
-
-    def _save_cached_posts(self, posts: List[RedditPost]) -> None:
-        """Compatibility wrapper for explicit cache maintenance callers."""
-        write_reddit_post_cache(self._get_cache_file_path(), posts)
-    
-    def _load_cached_posts(self) -> List[RedditPost]:
-        """Load cached posts from previous session."""
-        posts = read_reddit_post_cache(self._get_cache_file_path())
-        return list(sort_reddit_candidates(posts))
 
     @staticmethod
     def _normalise_subreddit(name: str) -> str:
