@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
+import weakref
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
+from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger
 from core.resources.manager import ResourceManager
@@ -111,8 +113,8 @@ def _swatch_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
 def _get_gmail_oauth_manager():
     """Lazy-import singleton accessor for GmailOAuthManager (avoids early import cost)."""
     try:
-        from core.gmail.gmail_oauth import GmailOAuthManager
-        return GmailOAuthManager.instance()
+        backend = _get_gmail_backend()
+        return backend.oauth_manager if backend is not None else None
     except Exception as exc:
         logger.error("[GMAIL_TAB] Failed to obtain GmailOAuthManager: %s", exc)
         return None
@@ -180,11 +182,60 @@ def _queue_gmail_auth_refresh(tab: WidgetsTab) -> None:
 
     def _run() -> None:
         tab._gmail_auth_refresh_queued = False
-        _refresh_gmail_auth_state(tab)
+        _begin_gmail_backend_bootstrap(tab)
 
     _run._srpss_timer_owner = tab
     _run._srpss_runtime_generation = getattr(tab, "_runtime_generation", None)
     ThreadManager.single_shot(250, _run)
+
+
+def _set_gmail_backend_loading(tab: WidgetsTab, loading: bool) -> None:
+    body = getattr(tab, "_gmail_backend_body", None)
+    if body is not None:
+        body.setEnabled(not loading)
+    status_label = getattr(tab, "gmail_auth_status", None)
+    if loading and status_label is not None:
+        status_label.setText("Gmail status loading...")
+
+
+def _begin_gmail_backend_bootstrap(tab: WidgetsTab) -> None:
+    """Start or join the process-wide detached Gmail bootstrap."""
+
+    backend = _get_gmail_backend()
+    if backend is None:
+        _refresh_gmail_auth_state(tab)
+        return
+    if getattr(backend, "is_initialized", True):
+        _set_gmail_backend_loading(tab, False)
+        _refresh_gmail_auth_state(tab)
+        return
+
+    _set_gmail_backend_loading(tab, True)
+    request_id = int(getattr(tab, "_gmail_backend_bootstrap_request_id", 0)) + 1
+    tab._gmail_backend_bootstrap_request_id = request_id
+    owner_ref = weakref.ref(tab)
+
+    def _ready(success: bool) -> None:
+        owner = owner_ref()
+        if owner is None or not Shiboken.isValid(owner):
+            return
+        if getattr(owner, "_gmail_backend_bootstrap_request_id", None) != request_id:
+            return
+        _set_gmail_backend_loading(owner, False)
+        if success:
+            _refresh_gmail_auth_state(owner)
+            return
+        status_label = getattr(owner, "gmail_auth_status", None)
+        if status_label is not None:
+            status_label.setText("Gmail unavailable")
+
+    try:
+        manager = _get_gmail_thread_manager(tab)
+        if not backend.ensure_initialized(manager, _ready):
+            _ready(False)
+    except Exception as exc:
+        logger.warning("[GMAIL_TAB] Failed to submit backend bootstrap: %s", exc)
+        _ready(False)
 
 
 def _finalize_bucket_body(toggle, body: QWidget) -> None:
@@ -209,18 +260,14 @@ def _refresh_gmail_auth_state(tab: WidgetsTab) -> None:
         out_btn.setEnabled(False)
         _set_visible_if_changed(out_btn, False)
         return
+    if not getattr(backend, "is_initialized", True):
+        _set_gmail_backend_loading(tab, True)
+        return
+    _set_gmail_backend_loading(tab, False)
     _sync_backend_combo_from_backend(tab, backend)
     imap_email = getattr(tab, "gmail_imap_email", None)
     if imap_email is not None and not imap_email.text() and getattr(backend, "_imap_email", None):
         imap_email.setText(backend._imap_email)
-
-    # Reload OAuth config in case client_secrets was added after start
-    mgr = _get_gmail_oauth_manager()
-    if mgr is not None:
-        try:
-            mgr._load_client_config()
-        except Exception:
-            pass
 
     # Update mode-specific panel visibility
     _update_backend_panels(tab, use_backend=True)
@@ -260,8 +307,11 @@ def _on_gmail_authorize_clicked(tab: WidgetsTab) -> None:
     if backend is None:
         StyledPopup.show_warning(tab, "Gmail", "Gmail backend unavailable.")
         return
+    if not getattr(backend, "is_initialized", True):
+        _begin_gmail_backend_bootstrap(tab)
+        return
 
-    mgr = _get_gmail_oauth_manager()
+    mgr = backend.oauth_manager
     if mgr is None:
         StyledPopup.show_warning(tab, "Gmail", "OAuth subsystem unavailable.")
         return
@@ -270,24 +320,61 @@ def _on_gmail_authorize_clicked(tab: WidgetsTab) -> None:
 
     # Wire signals once per tab instance
     if not getattr(tab, '_gmail_auth_signals_wired', False):
+        owner_ref = weakref.ref(tab)
+
+        def _refresh_owner() -> None:
+            owner = owner_ref()
+            if owner is not None and Shiboken.isValid(owner):
+                _refresh_gmail_auth_state(owner)
+
+        def _fail_owner(message: str) -> None:
+            owner = owner_ref()
+            if owner is not None and Shiboken.isValid(owner):
+                _on_gmail_auth_failed(owner, message)
+
         try:
-            backend.auth_state_changed.connect(lambda: _refresh_gmail_auth_state(tab))
-            mgr.auth_failed.connect(lambda msg: _on_gmail_auth_failed(tab, msg))
+            backend.auth_state_changed.connect(_refresh_owner)
+            mgr.auth_failed.connect(_fail_owner)
         except Exception as exc:
             logger.warning("[GMAIL_TAB] Signal wiring failed: %s", exc)
         tab._gmail_auth_signals_wired = True
 
+    auth_btn = getattr(tab, 'gmail_authorize_btn', None)
+    if auth_btn is not None:
+        auth_btn.setEnabled(False)
+    status_label = getattr(tab, 'gmail_auth_status', None)
+    if status_label is not None:
+        status_label.setText("Checking OAuth credentials...")
+    owner_ref = weakref.ref(tab)
+
+    def _after_refresh(success: bool) -> None:
+        owner = owner_ref()
+        if owner is None or not Shiboken.isValid(owner):
+            return
+        if not success:
+            if auth_btn is not None:
+                auth_btn.setEnabled(True)
+            if status_label is not None:
+                status_label.setText("OAuth credential check failed")
+            return
+        _continue_gmail_authorize(owner, backend, mgr)
+
     try:
-        mgr._load_client_config()
-    except Exception:
-        pass
+        backend.reload_oauth_client_config(
+            _get_gmail_thread_manager(tab),
+            _after_refresh,
+        )
+    except Exception as exc:
+        logger.warning("[GMAIL_TAB] Failed to refresh OAuth config: %s", exc)
+        _after_refresh(False)
 
-    if not getattr(mgr, '_client_id', None):
-        from core.settings.storage_paths import get_app_data_dir
-        import webbrowser
+
+def _continue_gmail_authorize(tab: WidgetsTab, backend, mgr) -> None:
+    if not mgr.client_id:
         import subprocess
+        import webbrowser
 
-        app_data = get_app_data_dir()
+        app_data = backend.app_data_path
         popup = StyledPopup(
             tab,
             "OAuth Credentials Required",
@@ -314,10 +401,8 @@ def _on_gmail_authorize_clicked(tab: WidgetsTab) -> None:
         elif result == "folder":
             subprocess.run(["explorer", str(app_data)], check=False)
         elif result == "retry":
-            try:
-                mgr._load_client_config()
-            except Exception:
-                pass
+            _on_gmail_authorize_clicked(tab)
+        else:
             _refresh_gmail_auth_state(tab)
         return
 
@@ -330,7 +415,7 @@ def _on_gmail_authorize_clicked(tab: WidgetsTab) -> None:
 
     success = backend.start_oauth_flow()
     if not success:
-        pass
+        _refresh_gmail_auth_state(tab)
 
 
 def _wire_gmail_auth_lifecycle(tab: WidgetsTab, manager) -> None:
@@ -398,6 +483,9 @@ def _on_gmail_sign_out_clicked(tab: WidgetsTab) -> None:
     backend = _get_gmail_backend()
     if backend is None:
         return
+    if not getattr(backend, "is_initialized", True):
+        _begin_gmail_backend_bootstrap(tab)
+        return
     if not StyledPopup.question(tab, "Sign Out of Gmail", "Remove Gmail credentials and sign out?"):
         return
     try:
@@ -413,6 +501,9 @@ def _on_gmail_backend_changed(tab: WidgetsTab, mode_text: str) -> None:
     backend = _get_gmail_backend()
     if backend is None:
         return
+    if not getattr(backend, "is_initialized", True):
+        _begin_gmail_backend_bootstrap(tab)
+        return
     backend.mode = GmailBackendMode.IMAP if mode_text == "IMAP (App Password)" else GmailBackendMode.OAUTH
     _refresh_gmail_auth_state(tab)
 
@@ -421,6 +512,9 @@ def _on_gmail_imap_save(tab: WidgetsTab) -> None:
     """Test IMAP credentials off the UI thread, then save them on success."""
     backend = _get_gmail_backend()
     if backend is None:
+        return
+    if not getattr(backend, "is_initialized", True):
+        _begin_gmail_backend_bootstrap(tab)
         return
     email_field = getattr(tab, 'gmail_imap_email', None)
     pw_field = getattr(tab, 'gmail_imap_password', None)
@@ -527,6 +621,8 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         on_toggle=lambda checked: tab.set_gmail_bucket_state("backend", checked),
         defer_initial_visibility=True,
     )
+    tab._gmail_backend_body = backend_body
+    backend_body.setEnabled(False)
 
     gmail_info = QLabel(
         "Shows recent Gmail messages. Choose a backend below to connect."

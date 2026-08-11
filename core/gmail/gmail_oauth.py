@@ -5,7 +5,6 @@ Security: PKCE, DPAPI-encrypted tokens, external client_secrets.json.
 """
 from __future__ import annotations
 
-import json
 import pickle
 import secrets
 import hashlib
@@ -24,8 +23,7 @@ from PySide6.QtCore import QObject, Signal, QCoreApplication
 from core.logging.logger import get_logger
 from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
-from core.settings.storage_paths import get_app_data_dir
-from core.windows.dpapi import save_encrypted, load_encrypted
+from core.windows.dpapi import save_encrypted
 
 logger = get_logger(__name__)
 
@@ -47,7 +45,7 @@ class GmailConfigError(Exception):
 @dataclass
 class GmailCredentials:
     access_token: str
-    refresh_token: str
+    refresh_token: Optional[str]
     token_type: str
     expires_at: datetime
     scope: str
@@ -135,62 +133,55 @@ class GmailOAuthManager(QObject):
         self._thread_manager = thread_manager
         self._owns_thread_manager = False
         self._shutdown_hook_connected = False
+        # Construction is deliberately filesystem-inert.  The GUI-owned
+        # QObject receives one detached worker snapshot through GmailBackend.
+        self._credentials_path = Path(credentials_path) if credentials_path is not None else None
+        self._token_path = Path(token_path) if token_path is not None else None
+        self._legacy_token_path: Optional[Path] = None
+        self._initialized = False
 
-        app_data = get_app_data_dir()
+    @property
+    def is_initialized(self) -> bool:
+        return self._initialized
 
-        # Resolve credentials path: bundled resource first, then app data override
-        if credentials_path is not None:
-            self._credentials_path = credentials_path
-        else:
-            bundled = Path(__file__).resolve().parents[2] / "resources" / "client_secrets.json"
-            if bundled.exists():
-                self._credentials_path = bundled
-            else:
-                self._credentials_path = app_data / "client_secrets.json"
+    @property
+    def client_id(self) -> Optional[str]:
+        return self._client_id
 
-        self._token_path = token_path or (app_data / "gmail_token.enc")
-        self._legacy_token_path = app_data / "gmail_credentials.json"
+    def install_prepared_bootstrap(self, snapshot) -> None:
+        """Commit a Qt-free bootstrap snapshot on the QObject's GUI thread."""
 
-        self._load_client_config()
-        self._load_credentials()
-        if self._credentials is None:
-            self._migrate_legacy_token()
+        from core.gmail.gmail_bootstrap import PreparedGmailBootstrap
 
-    def _load_client_config(self) -> None:
-        path = Path(self._credentials_path)
-        if not path.exists():
-            logger.error("[GMAIL_OAUTH] client_secrets.json not found at %s", path)
-            return
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if "installed" in data:
-                data = data["installed"]
-            elif "web" in data:
-                data = data["web"]
-            self._client_id = data.get("client_id")
-            self._client_secret = data.get("client_secret")
-            if not self._client_id:
-                raise GmailConfigError("client_secrets.json missing 'client_id'")
-            if not self._client_secret:
-                logger.warning("[GMAIL_OAUTH] client_secret missing from JSON")
-            logger.info("[GMAIL_OAUTH] Loaded client configuration (client_id=%s...)", self._client_id[:20] if self._client_id else "None")
-        except Exception as exc:
-            logger.error("[GMAIL_OAUTH] Failed to parse client_secrets.json: %s", exc)
-            self._client_id = None
+        if not isinstance(snapshot, PreparedGmailBootstrap):
+            raise TypeError("Expected PreparedGmailBootstrap")
+        self._credentials_path = snapshot.oauth_credentials_path
+        self._token_path = snapshot.oauth_token_path
+        self._legacy_token_path = snapshot.oauth_legacy_token_path
+        self.install_prepared_client_config(snapshot.oauth_client_config)
+        prepared = snapshot.oauth_credentials
+        self._credentials = (
+            GmailCredentials(
+                access_token=prepared.access_token,
+                refresh_token=prepared.refresh_token,
+                token_type=prepared.token_type,
+                expires_at=prepared.expires_at,
+                scope=prepared.scope,
+            )
+            if prepared is not None
+            else None
+        )
+        self._initialized = True
 
-    def _migrate_legacy_token(self) -> None:
-        if not self._legacy_token_path.exists():
-            return
-        try:
-            with open(self._legacy_token_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            creds = GmailCredentials.from_dict(data)
-            self._save_credentials(creds)
-            self._legacy_token_path.unlink()
-            logger.info("[GMAIL_OAUTH] Migrated legacy token to encrypted storage")
-        except Exception as exc:
-            logger.warning("[GMAIL_OAUTH] Legacy token migration failed: %s", exc)
+    def install_prepared_client_config(self, config) -> None:
+        """Commit worker-prepared OAuth client configuration."""
+
+        from core.gmail.gmail_bootstrap import PreparedOAuthClientConfig
+
+        if not isinstance(config, PreparedOAuthClientConfig):
+            raise TypeError("Expected PreparedOAuthClientConfig")
+        self._client_id = config.client_id
+        self._client_secret = config.client_secret
 
     def set_client_id(self, client_id: str) -> None:
         self._client_id = client_id
@@ -210,7 +201,7 @@ class GmailOAuthManager(QObject):
     def clear_local_credentials(self) -> None:
         self.cancel_auth_flow()
         try:
-            if self._token_path.exists():
+            if self._token_path is not None and self._token_path.exists():
                 self._token_path.unlink()
         except Exception as exc:
             logger.warning("[GMAIL_OAUTH] Failed to delete token file: %s", exc)
@@ -218,21 +209,9 @@ class GmailOAuthManager(QObject):
         self.auth_revoked.emit()
         logger.info("[GMAIL_OAUTH] Local credentials cleared")
 
-    def _load_credentials(self) -> None:
-        try:
-            plaintext = load_encrypted(self._token_path)
-            if plaintext is None:
-                return
-            data = pickle.loads(plaintext)
-            self._credentials = GmailCredentials.from_dict(data)
-            logger.info("[GMAIL_OAUTH] Loaded existing credentials")
-        except Exception as exc:
-            logger.warning("[GMAIL_OAUTH] Failed to load credentials: %s", exc)
-            self._credentials = None
-
     def _save_credentials(self, creds: Optional[GmailCredentials] = None) -> None:
         target = creds or self._credentials
-        if target is None:
+        if target is None or self._token_path is None:
             return
         try:
             plaintext = pickle.dumps(target.to_dict())

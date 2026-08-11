@@ -10,16 +10,25 @@ from __future__ import annotations
 import json
 import threading
 from enum import Enum
-from typing import Optional
+from pathlib import Path
+from typing import Callable, Optional
+import weakref
 
 from PySide6.QtCore import QObject, Signal
+from shiboken6 import Shiboken
 
+from core.gmail.gmail_bootstrap import (
+    PreparedGmailBootstrap,
+    PreparedOAuthClientConfig,
+    prepare_gmail_backend_bootstrap,
+    prepare_oauth_client_config,
+)
 from core.gmail.gmail_client import GmailClient
 from core.gmail.gmail_imap import GmailImapClient
 from core.gmail.gmail_oauth import GmailOAuthManager
 from core.logging.logger import get_logger
-from core.settings.storage_paths import get_app_data_dir
-from core.windows.dpapi import save_encrypted, load_encrypted
+from core.threading.manager import ThreadManager
+from core.windows.dpapi import save_encrypted
 
 logger = get_logger(__name__)
 
@@ -44,27 +53,194 @@ class GmailBackend(QObject):
                 cls._instance = cls()
             return cls._instance
 
-    def __init__(self) -> None:
+    def __init__(self, *, oauth_manager: GmailOAuthManager | None = None) -> None:
         super().__init__()
-        self._app_data = get_app_data_dir()
-        self._imap_creds_path = self._app_data / "gmail_imap_creds.enc"
-        self._config_path = self._app_data / "gmail_backend.json"
+        # The QObject facade is cheap and GUI-owned.  All cold filesystem and
+        # DPAPI work is installed later from one shared-worker snapshot.
+        self._app_data: Optional[Path] = None
+        self._imap_creds_path: Optional[Path] = None
+        self._config_path: Optional[Path] = None
 
         self._mode: GmailBackendMode = GmailBackendMode.OAUTH
         self._imap_email: Optional[str] = None
         self._imap_password: Optional[str] = None
         self._imap_client: Optional[GmailImapClient] = None
 
-        self._load_config()
-        self._load_imap_credentials()
-
-        self._oauth_manager = GmailOAuthManager.instance()
+        self._oauth_manager = oauth_manager or GmailOAuthManager.instance()
         self._oauth_client: Optional[GmailClient] = None
-        if self._oauth_manager.is_authenticated:
-            self._oauth_client = GmailClient(self._oauth_manager)
+        self._initialized = False
+        self._initializing = False
+        self._initialization_callbacks: list[Callable[[bool], None]] = []
+        self._client_config_refreshing = False
+        self._client_config_callbacks: list[Callable[[bool], None]] = []
 
         self._oauth_manager.auth_completed.connect(self._on_oauth_completed)
         self._oauth_manager.auth_revoked.connect(self._on_oauth_revoked)
+
+    @property
+    def is_initialized(self) -> bool:
+        return self._initialized
+
+    @property
+    def oauth_manager(self) -> GmailOAuthManager:
+        return self._oauth_manager
+
+    @property
+    def app_data_path(self) -> Optional[Path]:
+        return self._app_data
+
+    def ensure_initialized(
+        self,
+        thread_manager: ThreadManager | None,
+        callback: Callable[[bool], None] | None = None,
+    ) -> bool:
+        """Coalesce cold preparation and commit it back on the GUI thread."""
+
+        if self._initialized:
+            if callback is not None:
+                callback(True)
+            return True
+        if callback is not None:
+            self._initialization_callbacks.append(callback)
+        if self._initializing:
+            return True
+        if thread_manager is None:
+            self._finish_initialization(None, "ThreadManager is not configured")
+            return False
+
+        self._initializing = True
+        owner_ref = weakref.ref(self)
+
+        def _on_result(result) -> None:
+            snapshot = None
+            error = None
+            if getattr(result, "success", False):
+                candidate = getattr(result, "result", None)
+                if isinstance(candidate, PreparedGmailBootstrap):
+                    snapshot = candidate
+                else:
+                    error = "No Gmail backend bootstrap returned"
+            else:
+                error = str(getattr(result, "error", None) or "Gmail backend bootstrap failed")
+
+            def _deliver() -> None:
+                owner = owner_ref()
+                if owner is None or not Shiboken.isValid(owner):
+                    return
+                owner._finish_initialization(snapshot, error)
+
+            ThreadManager.run_on_ui_thread(_deliver)
+
+        try:
+            thread_manager.submit_io_task(
+                prepare_gmail_backend_bootstrap,
+                callback=_on_result,
+                category="gmail_backend_bootstrap",
+            )
+            return True
+        except Exception as exc:
+            self._finish_initialization(None, str(exc))
+            return False
+
+    def _finish_initialization(
+        self,
+        snapshot: PreparedGmailBootstrap | None,
+        error: str | None,
+    ) -> None:
+        callbacks = self._initialization_callbacks
+        self._initialization_callbacks = []
+        self._initializing = False
+        success = snapshot is not None
+        if snapshot is not None:
+            self._app_data = snapshot.app_data_path
+            self._config_path = snapshot.backend_config_path
+            self._imap_creds_path = snapshot.imap_credentials_path
+            self._mode = GmailBackendMode(snapshot.backend_mode)
+            self._imap_email = snapshot.imap_email
+            self._imap_password = snapshot.imap_password
+            self._imap_client = None
+            self._oauth_manager.install_prepared_bootstrap(snapshot)
+            self._oauth_client = (
+                GmailClient(self._oauth_manager)
+                if self._oauth_manager.is_authenticated
+                else None
+            )
+            self._initialized = True
+            self.auth_state_changed.emit()
+        elif error:
+            logger.error("[GMAIL_BACKEND] Bootstrap failed: %s", error)
+        for pending in callbacks:
+            try:
+                pending(success)
+            except Exception as exc:
+                logger.warning("[GMAIL_BACKEND] Bootstrap callback failed: %s", exc)
+
+    def reload_oauth_client_config(
+        self,
+        thread_manager: ThreadManager | None,
+        callback: Callable[[bool], None] | None = None,
+    ) -> bool:
+        """Refresh client_secrets.json on shared I/O, coalescing callers."""
+
+        path = self._oauth_manager._credentials_path
+        if not self._initialized or path is None or thread_manager is None:
+            if callback is not None:
+                callback(False)
+            return False
+        if callback is not None:
+            self._client_config_callbacks.append(callback)
+        if self._client_config_refreshing:
+            return True
+        self._client_config_refreshing = True
+        owner_ref = weakref.ref(self)
+        credentials_path = Path(path)
+
+        def _prepare() -> PreparedOAuthClientConfig:
+            return prepare_oauth_client_config(credentials_path)
+
+        def _on_result(result) -> None:
+            config = None
+            if getattr(result, "success", False):
+                candidate = getattr(result, "result", None)
+                if isinstance(candidate, PreparedOAuthClientConfig):
+                    config = candidate
+
+            def _deliver() -> None:
+                owner = owner_ref()
+                if owner is None or not Shiboken.isValid(owner):
+                    return
+                owner._finish_client_config_refresh(config)
+
+            ThreadManager.run_on_ui_thread(_deliver)
+
+        try:
+            thread_manager.submit_io_task(
+                _prepare,
+                callback=_on_result,
+                category="gmail_oauth_config_refresh",
+            )
+            return True
+        except Exception as exc:
+            logger.warning("[GMAIL_BACKEND] Client config refresh dispatch failed: %s", exc)
+            self._finish_client_config_refresh(None)
+            return False
+
+    def _finish_client_config_refresh(
+        self,
+        config: PreparedOAuthClientConfig | None,
+    ) -> None:
+        callbacks = self._client_config_callbacks
+        self._client_config_callbacks = []
+        self._client_config_refreshing = False
+        success = config is not None
+        if config is not None:
+            self._oauth_manager.install_prepared_client_config(config)
+            self.auth_state_changed.emit()
+        for pending in callbacks:
+            try:
+                pending(success)
+            except Exception as exc:
+                logger.warning("[GMAIL_BACKEND] Client config callback failed: %s", exc)
 
     @property
     def mode(self) -> GmailBackendMode:
@@ -79,6 +255,8 @@ class GmailBackend(QObject):
 
     @property
     def is_authenticated(self) -> bool:
+        if not self._initialized:
+            return False
         if self._mode == GmailBackendMode.OAUTH:
             return self._oauth_manager.is_authenticated
         return self._imap_email is not None and self._imap_password is not None
@@ -86,6 +264,8 @@ class GmailBackend(QObject):
     @property
     def client(self) -> Optional[GmailClient | GmailImapClient]:
         """Return the active client or None if not authenticated."""
+        if not self._initialized:
+            return None
         if self._mode == GmailBackendMode.OAUTH:
             if self._oauth_manager.is_authenticated:
                 if self._oauth_client is None:
@@ -101,6 +281,8 @@ class GmailBackend(QObject):
     @property
     def status_text(self) -> str:
         """Human-readable status for the settings UI."""
+        if not self._initialized:
+            return "Gmail status loading..."
         if self._mode == GmailBackendMode.OAUTH:
             if self._oauth_manager.is_authenticated:
                 return "Signed in (OAuth)"
@@ -117,6 +299,8 @@ class GmailBackend(QObject):
         self._imap_password = app_password
         self._imap_client = None
         try:
+            if self._imap_creds_path is None:
+                raise RuntimeError("Gmail backend is not initialized")
             data = json.dumps({"email": email_address, "app_password": app_password}).encode("utf-8")
             save_encrypted(self._imap_creds_path, data)
             logger.info("[GMAIL_BACKEND] IMAP credentials saved for %s", email_address)
@@ -130,7 +314,7 @@ class GmailBackend(QObject):
         self._imap_password = None
         self._imap_client = None
         try:
-            if self._imap_creds_path.exists():
+            if self._imap_creds_path is not None and self._imap_creds_path.exists():
                 self._imap_creds_path.unlink()
         except Exception as exc:
             logger.warning("[GMAIL_BACKEND] Failed to delete IMAP creds file: %s", exc)
@@ -174,32 +358,12 @@ class GmailBackend(QObject):
         self._oauth_client = None
         self.auth_state_changed.emit()
 
-    def _load_config(self) -> None:
-        try:
-            if self._config_path.exists():
-                data = json.loads(self._config_path.read_text(encoding="utf-8"))
-                mode_str = data.get("mode", "oauth")
-                self._mode = GmailBackendMode(mode_str)
-        except Exception as exc:
-            logger.warning("[GMAIL_BACKEND] Failed to load config: %s", exc)
-
     def _save_config(self) -> None:
         try:
+            if self._config_path is None:
+                raise RuntimeError("Gmail backend is not initialized")
             self._config_path.write_text(
                 json.dumps({"mode": self._mode.value}), encoding="utf-8"
             )
         except Exception as exc:
             logger.warning("[GMAIL_BACKEND] Failed to save config: %s", exc)
-
-    def _load_imap_credentials(self) -> None:
-        try:
-            plaintext = load_encrypted(self._imap_creds_path)
-            if plaintext is None:
-                return
-            data = json.loads(plaintext.decode("utf-8"))
-            self._imap_email = data.get("email")
-            self._imap_password = data.get("app_password")
-            if self._imap_email and self._imap_password:
-                logger.info("[GMAIL_BACKEND] Loaded IMAP credentials for %s", self._imap_email)
-        except Exception as exc:
-            logger.warning("[GMAIL_BACKEND] Failed to load IMAP creds: %s", exc)

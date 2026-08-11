@@ -86,12 +86,9 @@ def _appdata_root() -> Path:
     return (Path.home() / "AppData" / "Roaming").resolve()
 
 
-def get_app_data_dir(profile: Optional[str] = None) -> Path:
-    """Return the canonical application data directory for the given profile.
+def resolve_app_data_dir(profile: Optional[str] = None) -> Path:
+    """Resolve the canonical application data path without touching disk."""
 
-    Creates the directory if it does not exist.  Returns e.g.
-    ``%APPDATA%/SRPSS`` for the default profile.
-    """
     global _resolved_base, _resolved_profile
     profile = profile or _DEFAULT_PROFILE
     if _resolved_base is not None and _resolved_profile == profile:
@@ -100,7 +97,15 @@ def get_app_data_dir(profile: Optional[str] = None) -> Path:
     folder = _CANONICAL_FOLDERS.get(profile)
     if folder is None:
         folder = f"SRPSS_profiles/{profile}"
-    result = (_appdata_root() / folder).resolve()
+    return (_appdata_root() / folder).resolve()
+
+
+def get_app_data_dir(profile: Optional[str] = None) -> Path:
+    """Return and create the canonical application data directory."""
+
+    global _resolved_base, _resolved_profile
+    profile = profile or _DEFAULT_PROFILE
+    result = resolve_app_data_dir(profile)
     result.mkdir(parents=True, exist_ok=True)
     _resolved_base = result
     _resolved_profile = profile

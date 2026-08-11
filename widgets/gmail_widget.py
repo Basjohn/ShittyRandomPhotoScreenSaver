@@ -42,7 +42,7 @@ from core.settings.widget_capacity_policy import (
     clamp_list_capacity,
 )
 from core.audio.sound_paths import default_notification_sound_path
-from core.settings.storage_paths import get_app_data_dir
+from core.settings.storage_paths import resolve_app_data_dir
 from core.threading.manager import ThreadManager
 from core.windows.secure_url_launcher import open_url
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition, WidgetLifecycleState
@@ -85,7 +85,7 @@ logger = get_logger(__name__)
 
 
 CACHE_MAX_AGE_HOURS = 24 * 14
-CACHE_DIR = get_app_data_dir() / "cache"
+CACHE_DIR = resolve_app_data_dir() / "cache"
 CACHE_PATH = CACHE_DIR / "gmail_cache.json"
 GMAIL_IMAGE_ASSETS = (
     "images/google-gmail.png",
@@ -138,6 +138,10 @@ class GmailWidget(BaseOverlayWidget):
         self._gmail_position = position
 
         self._backend: GmailBackend = GmailBackend.instance()
+        self._backend_ready = self._backend.is_initialized
+        self._backend_initializing = False
+        self._backend_request_id = 0
+        self._pending_fetch_after_backend_ready = False
         self._gmail_client = None  # GmailClient or GmailImapClient
         self._emails: List[EmailMetadata] = []
         self._display_rows: List[DisplayRow] = []
@@ -417,7 +421,7 @@ class GmailWidget(BaseOverlayWidget):
 
     def _activate_impl(self) -> None:
         self._cancelled = False
-        if self._backend.is_authenticated:
+        if self._backend.is_initialized and self._backend.is_authenticated:
             self._gmail_client = self._backend.client
         self._update_card_height_from_content(1)
         if not self._ensure_thread_manager("GmailWidget._activate_impl"):
@@ -428,6 +432,7 @@ class GmailWidget(BaseOverlayWidget):
             self._schedule_timer()
         else:
             logger.info("[GMAIL] Automatic updates disabled via --noupdates; manual refresh only")
+        self._begin_backend_initialization()
         self._begin_startup_cache_load()
         logger.debug("[LIFECYCLE] GmailWidget activated")
 
@@ -438,6 +443,10 @@ class GmailWidget(BaseOverlayWidget):
         self._cancelled = True
         self._fetch_generation += 1
         self._startup_cache_request_id += 1
+        self._backend_request_id += 1
+        self._backend_initializing = False
+        self._backend_ready = False
+        self._pending_fetch_after_backend_ready = False
         self._emails.clear()
         self._display_rows.clear()
         self._row_hit_rects.clear()
@@ -465,6 +474,10 @@ class GmailWidget(BaseOverlayWidget):
         self._cancelled = True
         self._fetch_generation += 1
         self._startup_cache_request_id += 1
+        self._backend_request_id += 1
+        self._backend_initializing = False
+        self._backend_ready = False
+        self._pending_fetch_after_backend_ready = False
         # Explicit timer cleanup for safety (also covered by _cleanup_impl → _deactivate_impl)
         self._stop_polling_timers(delete_qtimers=True)
         self._reset_deferred_runtime_state(delete_qtimers=True)
@@ -504,6 +517,57 @@ class GmailWidget(BaseOverlayWidget):
     # Timer & Fetch
     # ------------------------------------------------------------------
 
+    def _begin_backend_initialization(self) -> None:
+        if self._cancelled or self._backend_initializing:
+            return
+        if self._backend.is_initialized:
+            self._backend_ready = True
+            self._gmail_client = (
+                self._backend.client if self._backend.is_authenticated else None
+            )
+            if self._pending_fetch_after_backend_ready:
+                self._pending_fetch_after_backend_ready = False
+                self._fetch_emails(defer_for_transition=False)
+            return
+        if not self._ensure_thread_manager("GmailWidget._begin_backend_initialization"):
+            logger.error("[GMAIL] Backend bootstrap unavailable: ThreadManager is not configured")
+            return
+
+        self._backend_initializing = True
+        self._backend_request_id += 1
+        request_id = self._backend_request_id
+        owner_ref = weakref.ref(self)
+        runtime_generation = getattr(self, "_runtime_generation", None)
+
+        def _ready(success: bool) -> None:
+            owner = owner_ref()
+            if owner is None or not Shiboken.isValid(owner):
+                return
+            owner._commit_backend_initialization(request_id, bool(success))
+
+        _ready._srpss_runtime_generation = runtime_generation
+        if not self._backend.ensure_initialized(self._thread_manager, _ready):
+            self._backend_initializing = False
+
+    def _commit_backend_initialization(self, request_id: int, success: bool) -> None:
+        if (
+            not Shiboken.isValid(self)
+            or self._cancelled
+            or request_id != self._backend_request_id
+        ):
+            return
+        self._backend_initializing = False
+        self._backend_ready = bool(success and self._backend.is_initialized)
+        if not self._backend_ready:
+            logger.warning("[GMAIL] Backend bootstrap did not complete")
+            return
+        self._gmail_client = (
+            self._backend.client if self._backend.is_authenticated else None
+        )
+        if self._pending_fetch_after_backend_ready:
+            self._pending_fetch_after_backend_ready = False
+            self._fetch_emails(defer_for_transition=False)
+
     def _schedule_timer(self) -> None:
         interval_ms = int(self._refresh_interval.total_seconds() * 1000)
         try:
@@ -528,6 +592,10 @@ class GmailWidget(BaseOverlayWidget):
             )
             return True
         try:
+            if not self._backend_ready or not self._backend.is_initialized:
+                self._pending_fetch_after_backend_ready = True
+                self._begin_backend_initialization()
+                return True
             if not begin_fetch_guard(
                 self,
                 lock_attr="_fetch_lock",
