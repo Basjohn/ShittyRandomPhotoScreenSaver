@@ -1,6 +1,6 @@
 # Project Overview
 
-Last updated: 2026-08-09
+Last updated: 2026-08-11
 
 ## What SRPSS Is
 
@@ -25,7 +25,7 @@ Do **not** read the entire documentation tree for every task.
 6. Read focused documents only for the subsystem being changed.
 7. Read `Docs/Historical_Bugs/README.md` when touching a fragile area with prior regressions.
 
-For compositor recovery work, also read:
+For compositor/architecture work, also read:
 
 - `Docs/Compositor_Architecture.md`
 - `Docs/TestSuite.md`
@@ -40,7 +40,7 @@ For compositor recovery work, also read:
 | `Docs/Contracts.md` | Fast task-to-owner routing |
 | `Spec.md` | Stable architecture and behaviour contracts |
 | `Current_Plan.md` | Unfinished active work only |
-| `Docs/Compositor_Architecture.md` | Compositor recovery and target design |
+| `Docs/Compositor_Architecture.md` | Compositor architecture and target design |
 | `Docs/TestSuite.md` | Testing levels and release bars |
 | `Docs/Harness_Index.md` | Commands for recurring investigations |
 | `Docs/Historical_Bugs/README.md` | Historical incident index and full standalone records |
@@ -60,22 +60,17 @@ When goals conflict:
 7. average FPS;
 8. code elegance.
 
-## Recovery References
+## Current Architecture Authority
 
-```text
-behavioural recovery base: recovery-00edb57
-baseline commit:           00edb57a3076b845cb8ee4b6cb7f36ea83411f0c
-donor branch:              donor-7376bb9
-donor commit:              7376bb9bb380253f3bd14079e65d7bdbca062fad
-```
+Current `main` is the implementation authority. Historical baseline/candidate branches
+and commits are forensic references or negative controls only; they are not design
+owners, merge targets, or implementation starting points.
 
 Runtime evidence belongs under:
 
 ```text
 logs/evidence_chest/
 ```
-
-The donor branch is reference material. It must not be merged wholesale into the recovery branch.
 
 ## Repository Stability Rule
 

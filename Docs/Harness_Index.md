@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-08-09
+Last updated: 2026-08-11
 
 Compact routing for recurring investigation commands.
 
@@ -129,7 +129,7 @@ overlay self-updates. The manifest under `tests/goldens/visualizer_temporal/v1/`
 hand-reviewed evidence: do not auto-regenerate it. These checks do not replace the
 installed source/paint-receipt/operator gate.
 
-## 4. Compositor Recovery
+## 4. Compositor Architecture Regression
 
 Use when touching compositor, GL lifecycle, visualizer integration, image upload, transition completion, or resource sharing.
 
@@ -139,7 +139,7 @@ Find current focused tests:
 rg -n "compositor|paintGL|gl_|texture|framebuffer|transition|display_cleanup|image_upload" tests
 ```
 
-The recovery test set must cover:
+The compositor/architecture regression set must cover:
 
 - one surface per display;
 - GUI-local update coalescing;
@@ -181,6 +181,8 @@ New captures are plain disposable subfolders. Parse the folder directly; do not 
 python tools/recovery_evidence_parser.py --source logs/evidence_chest/phase4plus_a2f7bd89 --output-dir logs/evidence_chest/derived/phase4plus_a2f7bd89
 ```
 
+The parser filename is historical and remains stable; its name does not make any historical branch or candidate an implementation authority.
+
 Parser 1.7 joins copied sidecar rotations oldest-first and then reads the active
 `.log`, so a session that crosses `screensaver_verbose.log.1` or
 `screensaver_lifecycle.log.1` remains continuous. Copy only the rotations needed
@@ -199,20 +201,19 @@ last-callback correlation alone.
 
 `--archive` remains a legacy ZIP alias for frozen historical comparisons only.
 
-Frozen Settings/Edit owner-attribution focus:
+Historical/frozen Settings/Edit owner-attribution regression:
 
 ```powershell
 $env:QT_QPA_PLATFORM='offscreen'
 python -m pytest tests/test_ownership_trace.py tests/test_runtime_destruction.py -q
 ```
 
-The retained-wrapper cases deliberately keep one and two retired display
-Python wrappers alive after C++ QObject destruction. Their former
-`WidgetManager`, `FadeCoordinator`, and `CustomLayoutManager` weakrefs must
-clear before the barrier continuation and without `gc.collect()`. A passing
-source oracle does not close a frozen-only failure; rebuild the diagnostic
-product and use its bounded `[PYTHON_OWNER_REFS]` timeout records to name the
-installed retaining edge.
+These retained-wrapper cases preserve the solved R-59 ownership oracle. Do not
+rebuild the Diagnostic product for routine work or to re-prove the solved
+Settings/Edit issue. Use the frozen Diagnostic product and its bounded
+`[PYTHON_OWNER_REFS]` attribution only if a new failure reproduces exclusively
+in a frozen build and ordinary source/runtime-shaped evidence cannot name the
+retaining edge.
 
 Phase 1 measurement benchmark:
 

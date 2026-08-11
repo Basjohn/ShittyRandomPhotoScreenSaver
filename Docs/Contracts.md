@@ -1,6 +1,6 @@
 # Contracts
 
-Last updated: 2026-07-29
+Last updated: 2026-08-11
 
 Fast routing index for SRPSS contracts.
 
@@ -18,7 +18,7 @@ This is not a second `Spec.md`. Find the owner here, then read only the owning c
 
 | Family | Canonical owner | Focused document | Contract |
 |---|---|---|---|
-| Runtime start/stop and display recreation | `ScreensaverEngine`, `DisplayManager` | `Docs/Compositor_Architecture.md` for render recovery | One ordered runtime lifecycle |
+| Runtime start/stop and display recreation | `ScreensaverEngine`, `DisplayManager` | `Docs/Compositor_Architecture.md` for compositor/runtime architecture | One ordered runtime lifecycle |
 | Fullscreen display presentation | `DisplayWidget` and display-owned compositor | `Docs/Compositor_Architecture.md` | One surface per display; no global display authority |
 | Overlay widget lifecycle | `WidgetManager` | `Docs/10_WIDGET_GUIDELINES.md` | One setup/reveal/cleanup authority |
 | Thread and task registry | `core/threading/manager.py` | `Docs/Guardrails.md` | Coarse async work; no frame-clock handshakes |

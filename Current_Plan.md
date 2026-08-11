@@ -1,8 +1,7 @@
 # Current Plan
 
-Last updated: 2026-08-10  
+Last updated: 2026-08-11  
 Branch: `main`  
-Documentation checkpoint: `5da02b050ecce84384f51431ee3b4282d6f5c5de`  
 Active phase: Phase 5 — workload, delivery, GPU attribution, and resource efficiency
 
 This file contains **unfinished active work only**. Detailed architecture belongs in

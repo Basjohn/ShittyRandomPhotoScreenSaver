@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-08-02
+Last updated: 2026-08-11
 
 Durable cross-cutting rules for SRPSS.
 
@@ -390,23 +390,21 @@ Logical goldens protect equations and state after accepted input. They do not, b
 
 Performance reports include scenario, environment, average FPS, p50/p90/p95/p99/max, gap counts, CPU, task rate, RSS/private commit, tracked GL bytes, driver VRAM, visualizer result, and lifecycle result.
 
-Recovery evidence:
+Runtime evidence:
 
 ```text
 logs/evidence_chest/<plain_run_subfolder>/
-recovery-00edb57
-donor-7376bb9
 ```
 
 Plain evidence subfolders are the current capture pattern and may be moved or deleted by the user. Legacy ZIPs remain readable historical inputs; do not create new ZIPs solely for evidence analysis.
 
-Do not merge the donor branch wholesale.
+Historical baseline/candidate branches and commits are forensic references or negative controls only. They are not implementation authority or merge targets.
 
 Every new production helper must have a production caller verified by repository search.
 
-## 12. Recovery Prohibitions
+## 12. Architecture Prohibitions
 
-Until recovery completes, do not preserve or reintroduce:
+Do not preserve or reintroduce:
 
 - adaptive timer/presentation worker;
 - worker-to-`paintGL()` acknowledgement;
@@ -426,7 +424,7 @@ Until recovery completes, do not preserve or reintroduce:
 - worker-created `QPixmap` or worker-side live Qt display inspection;
 - transition pins retained after terminal presentation.
 
-Donor ideas may be reconstructed only after isolated review and benchmark:
+Historical candidate ideas may be reconsidered only after isolated review and benchmark:
 
 - resource accounting;
 - bounded texture reuse/leases;

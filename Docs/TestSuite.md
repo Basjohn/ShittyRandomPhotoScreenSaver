@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-08-08
+Last updated: 2026-08-11
 
 Testing strategy, execution commands, and minimum quality gates.
 
@@ -127,7 +127,7 @@ python tests/run_chunked.py --chunks 4 --timeout-seconds 180 path/to/test_file.p
 | Settings/Edit GL lifecycle | repeated real lifecycle loops |
 | Performance instrumentation | parser/sampler tests + enabled/disabled overhead |
 
-## 4. Recovery Test Families
+## 4. Architecture Regression Test Families
 
 The exact test filenames may evolve; use repository search and `Docs/Harness_Index.md`.
 

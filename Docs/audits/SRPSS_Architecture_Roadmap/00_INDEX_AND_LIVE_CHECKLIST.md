@@ -1,6 +1,6 @@
 # 00 — Index and Live Checklist
 
-Last reconciled: 2026-08-10
+Last reconciled: 2026-08-11
 
 This is the compact roadmap status ledger. Detailed active tasks belong only in
 `Current_Plan.md`.
@@ -17,7 +17,6 @@ This is the compact roadmap status ledger. Detailed active tasks belong only in
 
 ```text
 working branch:                 main
-documentation checkpoint:       5da02b050ecce84384f51431ee3b4282d6f5c5de
 approved visual behaviour:      ff93461685476bd0657aa88312fc2e35e9037880
 rejected persistent lane:       666624d421b08f978c5f610571a078570150a1e7
 rejected Spectrum second clock: ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9

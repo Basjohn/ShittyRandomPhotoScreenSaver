@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-08-09
+Last updated: 2026-08-11
 
 Canonical stable architecture and product behaviour contracts for SRPSS.
 
@@ -254,23 +254,11 @@ High-risk changes require:
 
 Detailed validation lives in `Docs/TestSuite.md` and `Docs/Harness_Index.md`.
 
-## 13. Recovery Boundary
+## 13. Current Architecture Boundary
 
-Recovery work is based on:
-
-```text
-main (based on baseline)
-00edb57a3076b845cb8ee4b6cb7f36ea83411f0c
-```
-
-Donor reference:
-
-```text
-donor-7376bb9
-7376bb9bb380253f3bd14079e65d7bdbca062fad
-```
-
-The donor branch is reference-only, read-only, and not a merge target.
+Current `main` is the implementation and design authority. Historical baseline and
+candidate commits may be used as forensic references or negative controls, but they are
+not merge targets, implementation starting points, or competing architecture owners.
 
 The stable architecture excludes:
 
@@ -282,4 +270,5 @@ The stable architecture excludes:
 - compatibility mega-layers;
 - hot-path whole-buffer identity hashing.
 
-The detailed recovery design lives in `Docs/Compositor_Architecture.md`.
+The detailed current design and active architecture roadmap live in
+`Docs/Compositor_Architecture.md` and `Docs/audits/SRPSS_Architecture_Roadmap/`.
