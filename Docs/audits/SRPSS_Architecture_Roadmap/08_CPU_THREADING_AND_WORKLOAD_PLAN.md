@@ -415,8 +415,8 @@ so activation no longer repeats filesystem inspection on GUI.
 
 Accepted cache writes remain ordered after GUI commit and now use a per-path reserved
 newest-wins identity plus locked unique-temp atomic replacement on shared IO. A late
-older task cannot overwrite newer accepted mail. Missing-worker or rejected-dispatch paths skip
-durability/service work instead of reading, writing or fetching synchronously on GUI.
+older task cannot overwrite newer accepted mail. Missing-worker or rejected-dispatch
+paths skip durability/service work instead of reading, writing or fetching synchronously on GUI.
 Malformed cache roots fail open to the ordinary background refresh path while valid
 metadata rows preserve stored order and invalid individual rows remain filtered.
 
@@ -425,15 +425,31 @@ creates `GmailBackend`, which reads backend configuration and DPAPI-backed IMAP
 credentials on GUI. Extract that ownership independently rather than folding it into
 the content-cache contract.
 
-Move stable content-cache regeneration out of `paintEvent()` next. Only consider
-worker-rendered `QImage` content later if the explicit invalidation-time GUI cache build
-remains material and parity can be proven.
+**Gmail static paint-cache preparation — complete**
 
-**Reddit/Gmail paint-cache contract**
+The stable Gmail layer remains a GUI-owned `QPixmap`, but content/data commits now
+prepare it immediately before reveal and ordinary visual invalidations coalesce into one
+managed zero-delay GUI preparation. The exact cache identity is logical size, DPR and
+static revision. Resize/screen-DPR events and every cached visual input—including the
+previously missed text colour, font family, header border/corner and shadow settings—
+invalidate through that owner.
 
-Invalidation may schedule/perform content preparation, but paint should not discover
-that an expensive cold static layer must be regenerated before it can deliver the
-frame. Keep dynamic spinner/hit-state regions narrow and separate from static cache.
+`paintEvent()` no longer allocates the Gmail static pixmap or performs header/row font,
+layout, elision, shadow or hit-geometry work. It accepts only an exact-current prepared
+cache and then paints the narrow dynamic refresh spinner separately. During a queued
+invalidation window neither stale pixels nor mismatched hit targets are exposed. Worker
+rendering remains unnecessary; consider detached `QImage` preparation only if installed
+measurement proves this bounded GUI commit remains material and visual/interaction
+parity can be preserved.
+
+**Remaining static paint-cache contract**
+
+Reddit still needs the same cold-static-layer extraction. The inherited
+`BaseOverlayWidget` painted-frame shadow cache can also build lazily from `paintEvent()`;
+audit that shared path independently with cross-widget parity rather than folding it
+into Gmail's widget-owned static layer. Invalidation may schedule/perform preparation,
+but paint should not discover an expensive cold layer before delivering a frame. Keep
+dynamic spinner/hit-state regions narrow and separate from static cache.
 
 ### Priority 1 — visualizer reductions with cadence frozen
 

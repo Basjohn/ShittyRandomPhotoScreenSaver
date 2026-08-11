@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -196,7 +196,10 @@ class GmailWidget(BaseOverlayWidget):
         self._envelope_read_pixmap: Optional[QPixmap] = None
         self._action_icons: Dict[str, Optional[QPixmap]] = {}
         self._cached_content_pixmap: Optional[QPixmap] = None
+        self._cached_content_identity: Optional[Tuple[int, int, float, int]] = None
         self._cache_invalidated = True
+        self._cache_revision = 0
+        self._cache_prepare_scheduled = False
 
         self._header_hit_rect: Optional[QRect] = None
         self._refresh_hit_rect: Optional[QRect] = None
@@ -237,6 +240,7 @@ class GmailWidget(BaseOverlayWidget):
         self._load_brand_pixmap()
         self._load_envelope_pixmap()
         self._load_action_icons()
+        self._invalidate_content_cache()
 
     def _setup_ui(self) -> None:
         self._apply_base_styling()
@@ -539,7 +543,7 @@ class GmailWidget(BaseOverlayWidget):
                 self._set_refreshing(False)
                 logger.debug("[GMAIL] Not authenticated, skipping fetch")
                 self._last_error = "auth"
-                self._invalidate_content_cache_and_update()
+                self._invalidate_content_cache_and_update(prepare_now=True)
                 return False
             try:
                 if not self._ensure_thread_manager("GmailWidget._fetch_emails"):
@@ -795,12 +799,12 @@ class GmailWidget(BaseOverlayWidget):
             self._has_displayed_valid_data = True
             self._write_email_cache_deferred(display_emails)
             self._update_card_height_from_content(visible_count)
-            self._invalidate_content_cache_and_update()
+            self._invalidate_content_cache_and_update(prepare_now=True)
             if not self.isVisible():
                 self._request_fade_in()
         else:
             self._update_card_height_from_content(1)
-            self._invalidate_content_cache_and_update()
+            self._invalidate_content_cache_and_update(prepare_now=True)
             if not self.isVisible():
                 self._request_fade_in()
 
@@ -892,7 +896,7 @@ class GmailWidget(BaseOverlayWidget):
         self._last_error = error_msg
         logger.warning("[GMAIL] Displaying error state: %s", error_msg)
         self._update_card_height_from_content(1)
-        self._invalidate_content_cache_and_update()
+        self._invalidate_content_cache_and_update(prepare_now=True)
 
     # ------------------------------------------------------------------
     # Email Cache
@@ -991,7 +995,7 @@ class GmailWidget(BaseOverlayWidget):
             self._unread_count = sum(1 for email in self._emails if email.is_unread)
             self._has_displayed_valid_data = True
             self._update_card_height_from_content(len(self._display_rows))
-            self._invalidate_content_cache_and_update()
+            self._invalidate_content_cache_and_update(prepare_now=True)
             self._request_fade_in()
             logger.info("[GMAIL] Loaded %d cached emails", len(self._emails))
         else:
@@ -1190,29 +1194,13 @@ class GmailWidget(BaseOverlayWidget):
             self._paint_cached_content()
 
     def _paint_cached_content(self) -> None:
-        widget_size = self.size()
-        cache_valid = False
-        if self._cached_content_pixmap is not None and not self._cached_content_pixmap.isNull():
-            try:
-                cached_dpr = self._cached_content_pixmap.devicePixelRatio()
-                cached_w = int(self._cached_content_pixmap.width() / cached_dpr)
-                cached_h = int(self._cached_content_pixmap.height() / cached_dpr)
-                cache_valid = (
-                    abs(cached_w - widget_size.width()) <= 2
-                    and abs(cached_h - widget_size.height()) <= 2
-                )
-            except Exception:
-                cache_valid = False
-
-        if self._cache_invalidated or not cache_valid:
-            self._regenerate_content_cache(widget_size)
-
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         try:
-            if self._cached_content_pixmap is not None and not self._cached_content_pixmap.isNull():
-                painter.drawPixmap(0, 0, self._cached_content_pixmap)
+            prepared_pixmap = self._prepared_content_pixmap_for_paint()
+            if prepared_pixmap is not None:
+                painter.drawPixmap(0, 0, prepared_pixmap)
             if self._show_refresh_spiral:
                 self._paint_refresh_button(painter)
             else:
@@ -1220,16 +1208,65 @@ class GmailWidget(BaseOverlayWidget):
         finally:
             painter.end()
 
-    def _regenerate_content_cache(self, size: QSize) -> None:
-        """Regenerate stable Gmail content without touching widget effects."""
-        if size.width() <= 0 or size.height() <= 0:
-            self._clear_content_cache()
-            return
-        with widget_timer_sample(self, "gmail.cache.regen"):
+    def _prepared_content_pixmap_for_paint(self) -> Optional[QPixmap]:
+        """Return only a cache whose pixels and hit geometry match live state."""
+
+        pixmap = self._cached_content_pixmap
+        if self._cache_invalidated or pixmap is None or pixmap.isNull():
+            return None
+        if self._cached_content_identity != self._current_content_cache_identity():
+            return None
+        return pixmap
+
+    def _current_content_cache_identity(
+        self,
+        size: Optional[QSize] = None,
+        dpr: Optional[float] = None,
+    ) -> Tuple[int, int, float, int]:
+        current_size = size or self.size()
+        if dpr is None:
             try:
-                dpr = self.devicePixelRatioF()
+                dpr = float(self.devicePixelRatioF())
             except Exception:
                 dpr = 1.0
+        return (
+            int(current_size.width()),
+            int(current_size.height()),
+            float(dpr),
+            int(self._cache_revision),
+        )
+
+    def _prepare_static_content_cache(self) -> bool:
+        """Build stable Gmail content on the GUI thread before paint delivery."""
+
+        try:
+            if QThread.currentThread() != self.thread():
+                logger.error("[GMAIL] Refusing static content-cache preparation off GUI thread")
+                return False
+        except RuntimeError:
+            return False
+
+        size = self.size()
+        if size.width() <= 0 or size.height() <= 0:
+            self._cached_content_pixmap = None
+            self._cached_content_identity = None
+            self._cache_invalidated = True
+            return False
+
+        try:
+            dpr = float(self.devicePixelRatioF())
+        except Exception:
+            dpr = 1.0
+        identity = self._current_content_cache_identity(size, dpr)
+        if (
+            not self._cache_invalidated
+            and self._cached_content_identity == identity
+            and self._cached_content_pixmap is not None
+            and not self._cached_content_pixmap.isNull()
+        ):
+            return False
+
+        with widget_timer_sample(self, "gmail.cache.regen"):
             pixmap = QPixmap(max(1, int(size.width() * dpr)), max(1, int(size.height() * dpr)))
             pixmap.setDevicePixelRatio(dpr)
             pixmap.fill(Qt.GlobalColor.transparent)
@@ -1242,7 +1279,22 @@ class GmailWidget(BaseOverlayWidget):
             finally:
                 painter.end()
             self._cached_content_pixmap = pixmap
+            self._cached_content_identity = identity
             self._cache_invalidated = False
+        return True
+
+    def _schedule_content_cache_prepare(self) -> None:
+        if self._cache_prepare_scheduled:
+            return
+        self._cache_prepare_scheduled = True
+        ThreadManager.single_shot(0, self._flush_content_cache_prepare)
+
+    def _flush_content_cache_prepare(self) -> None:
+        self._cache_prepare_scheduled = False
+        if self._cancelled or not Shiboken.isValid(self):
+            return
+        if self._prepare_static_content_cache():
+            self.update()
 
     def _paint_stable_content(self, painter: QPainter) -> None:
         self._row_hit_rects.clear()
@@ -1255,20 +1307,41 @@ class GmailWidget(BaseOverlayWidget):
         else:
             self._paint_emails(painter)
 
-    def _invalidate_content_cache(self) -> None:
+    def _invalidate_content_cache(self, *, schedule_prepare: bool = True) -> None:
+        self._cache_revision += 1
         self._cache_invalidated = True
+        self._header_hit_rect = None
+        self._row_hit_rects.clear()
+        self._action_hit_rects.clear()
+        if schedule_prepare:
+            self._schedule_content_cache_prepare()
 
-    def _invalidate_content_cache_and_update(self) -> None:
-        self._invalidate_content_cache()
+    def _invalidate_content_cache_and_update(self, *, prepare_now: bool = False) -> None:
+        self._invalidate_content_cache(schedule_prepare=not prepare_now)
+        if prepare_now:
+            self._prepare_static_content_cache()
         self.update()
 
     def _clear_content_cache(self) -> None:
         self._cached_content_pixmap = None
+        self._cached_content_identity = None
+        self._cache_revision += 1
         self._cache_invalidated = True
+        self._header_hit_rect = None
+        self._row_hit_rects.clear()
+        self._action_hit_rects.clear()
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
         self._invalidate_content_cache()
+
+    def event(self, event) -> bool:  # type: ignore[override]
+        if event.type() in (
+            QEvent.Type.DevicePixelRatioChange,
+            QEvent.Type.ScreenChangeInternal,
+        ) and hasattr(self, "_cache_revision"):
+            self._invalidate_content_cache()
+        return super().event(event)
 
     def _paint_header(self, painter: QPainter) -> None:
         header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
@@ -2067,6 +2140,22 @@ class GmailWidget(BaseOverlayWidget):
         self._invalidate_content_cache_and_update()
         return True
 
+    def set_font_family(self, family: str) -> None:
+        next_family = family or self.DEFAULT_FONT_FAMILY
+        if self._font_family == next_family:
+            return
+        self._invalidate_content_cache()
+        super().set_font_family(next_family)
+        self._update_card_height_from_content(len(self._display_rows) or self._configured_capacity)
+        self.update()
+
+    def set_text_color(self, color: QColor) -> None:
+        if not isinstance(color, QColor) or self._text_color == color:
+            return
+        self._invalidate_content_cache()
+        super().set_text_color(color)
+        self.update()
+
     def set_show_background(self, show: bool) -> None:
         super().set_show_background(show)
 
@@ -2077,12 +2166,23 @@ class GmailWidget(BaseOverlayWidget):
         super().set_background_opacity(opacity)
 
     def set_background_border(self, width: int, color: QColor) -> None:
+        next_width = max(0, int(width))
+        next_color = color if isinstance(color, QColor) else self._bg_border_color
+        if int(self._bg_border_width) == next_width and self._bg_border_color == next_color:
+            return
+        self._invalidate_content_cache()
         super().set_background_border(width, color)
+        self.update()
 
     def set_background_corner_radius(self, radius: int) -> None:
+        if int(self._bg_corner_radius) == max(0, int(radius)):
+            return
+        self._invalidate_content_cache()
         super().set_background_corner_radius(radius)
+        self.update()
 
     def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:
+        self._invalidate_content_cache()
         super().set_shadow_config(config)
 
     def on_fade_complete(self) -> None:
@@ -2111,11 +2211,15 @@ class GmailWidget(BaseOverlayWidget):
         self._invalidate_content_cache_and_update()
 
     def set_font_size(self, size: int) -> None:
+        next_size = max(8, int(size))
+        if self._font_size == next_size:
+            return
+        self._invalidate_content_cache()
         super().set_font_size(size)
         self._sync_header_metrics()
         self._load_brand_pixmap()
         self._update_card_height_from_content(len(self._display_rows) or self._configured_capacity)
-        self._invalidate_content_cache_and_update()
+        self.update()
 
     def set_header_logo_px_adjust(self, value: Any) -> None:
         try:

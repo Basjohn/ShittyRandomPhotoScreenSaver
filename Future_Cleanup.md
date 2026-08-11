@@ -12,6 +12,7 @@ Last updated: 2026-08-09
 Low-priority cleanup items discovered during unrelated work. These are not active tasks unless promoted into `Current_Plan.md`.
 
 - [ ] Make `tools/perf_integration_harness.py` safe to inspect and select: `--help` currently launches an approximately 85-second GUI sequence instead of printing help. Add argparse-backed help, scenario selection, and duration controls, and guarantee process/window cleanup for every path (including help/error/interrupt). Keep the harness opt-in and do not use it as a runtime control mechanism.
+- [ ] Define a low-pressure freshness policy for Gmail's cached relative timestamps. Unchanged fetches intentionally skip stable-cache regeneration, so labels such as `Just now` can age without a visual refresh; do not add a per-minute UI timer merely to update prose.
 
 ## 2026-08-09 CUSTOM/Edit Ownership Follow-Up
 

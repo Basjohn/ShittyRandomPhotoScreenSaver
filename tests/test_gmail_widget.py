@@ -299,6 +299,9 @@ def test_gmail_cached_startup_stays_hidden_until_fade_starter_runs(qt_app, monke
         _run_queued_io_task(manager.tasks.pop(0))
 
         assert widget._has_displayed_valid_data is True
+        assert widget._cache_invalidated is False
+        assert widget._cached_content_pixmap is not None
+        assert widget._row_hit_rects
         assert [name for name, _ in parent.starters] == ["gmail"]
         assert show_calls == []
 
@@ -2092,8 +2095,8 @@ def test_gmail_widget_has_perf_instrumentation():
     assert '"gmail.refresh.dispatch"' in source
 
 
-def test_gmail_cached_paint_reuses_stable_content(qt_app):
-    """Stable Gmail content should render once until invalidated."""
+def test_gmail_paint_consumes_prepared_stable_content_without_regeneration(qt_app):
+    """Paint should only blit stable content prepared before delivery."""
     from PySide6.QtGui import QPixmap
     from widgets.gmail_widget import GmailWidget
 
@@ -2101,8 +2104,17 @@ def test_gmail_cached_paint_reuses_stable_content(qt_app):
     calls = []
     try:
         widget.resize(420, 160)
+        assert widget._cache_prepare_scheduled is True
         widget._paint_stable_content = lambda painter: calls.append("stable")  # type: ignore[method-assign]
         widget._paint_refresh_button = lambda painter: None  # type: ignore[method-assign]
+        widget._flush_content_cache_prepare()
+
+        assert calls == ["stable"]
+        assert widget._cache_invalidated is False
+
+        widget._prepare_static_content_cache = (  # type: ignore[method-assign]
+            lambda: (_ for _ in ()).throw(AssertionError("paint prepared static cache"))
+        )
 
         target = QPixmap(widget.size())
         target.fill()
@@ -2110,7 +2122,6 @@ def test_gmail_cached_paint_reuses_stable_content(qt_app):
         widget.render(target)
 
         assert calls == ["stable"]
-        assert widget._cache_invalidated is False
     finally:
         widget.cleanup()
 
@@ -2147,7 +2158,7 @@ def test_gmail_content_cache_regeneration_avoids_shadow_effect_mutation():
     import inspect
     from widgets.gmail_widget import GmailWidget
 
-    source = inspect.getsource(GmailWidget._regenerate_content_cache)
+    source = inspect.getsource(GmailWidget._prepare_static_content_cache)
 
     forbidden = (
         "setGraphicsEffect",
@@ -2159,3 +2170,212 @@ def test_gmail_content_cache_regeneration_avoids_shadow_effect_mutation():
     )
     for token in forbidden:
         assert token not in source
+
+
+def test_gmail_paint_does_not_discover_or_prepare_a_cold_static_cache(qt_app):
+    from PySide6.QtGui import QPixmap
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    calls = []
+    try:
+        widget.resize(420, 160)
+        widget._clear_content_cache()
+        widget._prepare_static_content_cache = lambda: calls.append("prepare") or True  # type: ignore[method-assign]
+        widget._paint_refresh_button = lambda painter: None  # type: ignore[method-assign]
+
+        target = QPixmap(widget.size())
+        target.fill()
+        widget.render(target)
+
+        assert calls == []
+        assert widget._cached_content_pixmap is None
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_static_cache_invalidations_coalesce_to_latest_gui_build(qt_app, monkeypatch):
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    scheduled = []
+    builds = []
+    try:
+        widget.resize(420, 160)
+        widget._flush_content_cache_prepare()
+        initial_revision = widget._cache_revision
+        monkeypatch.setattr(
+            "widgets.gmail_widget.ThreadManager.single_shot",
+            lambda delay, callback, *args, **kwargs: scheduled.append(callback),
+        )
+        widget._paint_stable_content = lambda painter: builds.append(widget._cache_revision)  # type: ignore[method-assign]
+
+        widget.set_sender_subject_ratio(widget._sender_subject_ratio + 1)
+        widget.set_max_subject_words(widget._max_subject_words + 1)
+
+        assert widget._cache_revision == initial_revision + 2
+        assert len(scheduled) == 1
+        assert builds == []
+
+        scheduled.pop(0)()
+
+        assert builds == [initial_revision + 2]
+        assert widget._cache_invalidated is False
+        assert widget._cached_content_identity[-1] == initial_revision + 2
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_preflush_invalidation_never_pairs_stale_pixels_with_cleared_hits(
+    qt_app,
+    monkeypatch,
+):
+    from PySide6.QtGui import QPixmap
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    email = EmailMetadata(
+        id="visible",
+        thread_id="thread",
+        sender="Sender",
+        subject="Visible",
+        date=datetime.now(),
+        labels=("INBOX",),
+        is_unread=False,
+    )
+    widget = GmailWidget()
+    scheduled = []
+    prepare_calls = []
+    try:
+        widget.resize(420, 160)
+        widget._flush_content_cache_prepare()
+        widget._emails = [email]
+        widget._rebuild_display_rows()
+        widget._invalidate_content_cache(schedule_prepare=False)
+        assert widget._prepare_static_content_cache() is True
+        old_pixmap = widget._cached_content_pixmap
+        assert widget._prepared_content_pixmap_for_paint() is old_pixmap
+        assert widget._row_hit_rects
+
+        monkeypatch.setattr(
+            "widgets.gmail_widget.ThreadManager.single_shot",
+            lambda delay, callback, *args, **kwargs: scheduled.append(callback),
+        )
+        original_prepare = widget._prepare_static_content_cache
+        monkeypatch.setattr(
+            widget,
+            "_prepare_static_content_cache",
+            lambda: (prepare_calls.append(True), original_prepare())[1],
+        )
+
+        widget.set_sender_subject_ratio(widget._sender_subject_ratio + 1)
+
+        assert widget._prepared_content_pixmap_for_paint() is None
+        assert widget._row_hit_rects == []
+        assert len(scheduled) == 1
+
+        target = QPixmap(widget.size())
+        target.fill()
+        widget.render(target)
+
+        assert prepare_calls == []
+        assert widget._prepared_content_pixmap_for_paint() is None
+
+        scheduled.pop(0)()
+
+        assert prepare_calls == [True]
+        assert widget._prepared_content_pixmap_for_paint() is widget._cached_content_pixmap
+        assert widget._cached_content_pixmap is not old_pixmap
+        assert widget._row_hit_rects
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_cached_visual_setters_cover_text_font_border_corner_and_shadow(qt_app):
+    from PySide6.QtGui import QColor
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        widget.resize(420, 160)
+        widget._flush_content_cache_prepare()
+        revision = widget._cache_revision
+
+        widget.set_text_color(QColor(20, 30, 40, 255))
+        widget.set_font_family("Arial")
+        widget.set_background_border(widget._bg_border_width + 1, QColor(50, 60, 70, 255))
+        widget.set_background_corner_radius(widget._bg_corner_radius + 1)
+        widget.set_shadow_config({"enabled": True, "text_enabled": False})
+
+        assert widget._cache_revision == revision + 5
+        assert widget._cache_invalidated is True
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_dpr_change_invalidates_exact_static_cache_identity(qt_app, monkeypatch):
+    from PySide6.QtCore import QEvent
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    dpr = {"value": 1.0}
+    try:
+        widget.resize(420, 160)
+        monkeypatch.setattr(widget, "devicePixelRatioF", lambda: dpr["value"])
+        widget._invalidate_content_cache(schedule_prepare=False)
+        assert widget._prepare_static_content_cache() is True
+        first_pixmap = widget._cached_content_pixmap
+        assert widget._cached_content_identity[2] == 1.0
+
+        dpr["value"] = 1.5
+        widget.event(QEvent(QEvent.Type.DevicePixelRatioChange))
+        widget._flush_content_cache_prepare()
+
+        assert widget._cached_content_identity[2] == 1.5
+        assert widget._cached_content_pixmap is not first_pixmap
+        assert widget._cached_content_pixmap.devicePixelRatio() == 1.5
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_static_cache_preparation_refuses_worker_thread(qt_app):
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    results = []
+    try:
+        widget.resize(420, 160)
+        widget._clear_content_cache()
+        worker = threading.Thread(
+            target=lambda: results.append(widget._prepare_static_content_cache())
+        )
+        worker.start()
+        worker.join()
+
+        assert results == [False]
+        assert widget._cached_content_pixmap is None
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_queued_static_cache_prepare_drops_after_cleanup(qt_app, monkeypatch):
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    scheduled = []
+    widget._flush_content_cache_prepare()
+    monkeypatch.setattr(
+        "widgets.gmail_widget.ThreadManager.single_shot",
+        lambda delay, callback, *args, **kwargs: scheduled.append(callback),
+    )
+
+    widget.set_sender_subject_ratio(widget._sender_subject_ratio + 1)
+    assert len(scheduled) == 1
+
+    widget.cleanup()
+    scheduled.pop(0)()
+
+    assert widget._cached_content_pixmap is None
+    assert widget._cache_invalidated is True
+    assert widget._cache_prepare_scheduled is False

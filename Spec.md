@@ -135,6 +135,7 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 - `ThreadManager` owns registered async tasks and workers; it is not a presentation clock.
 - GUI and GL mutation remain on the GUI/context owner.
 - Workers perform coarse I/O, decode, preparation, and measured pure computation.
+- GUI-owned stable widget `QPixmap` caches are prepared at state/invalidation commit boundaries; paint may validate exact logical-size/DPR/revision identity and blit, but does not build a cold static layer or expose hit geometry that does not match the displayed cache.
 - High-frequency tiny jobs are batched, coalesced, vectorized, or removed only when their logical inputs and visible authored behaviour remain intact. A reactive visualizer may not gain a second cadence authority or terminal-only multi-step batch that delays first-visible attack, consumes a discrete edge without publishing it, reduces loud-passage elasticity, or changes mode smoothing merely to lower task counts. Final-state/order/task-count tests do not authorize that change; runtime-shaped temporal validation and installed visual review are required.
 - More Python threads are not assumed to provide multi-core scaling.
 - Hidden/static systems stop unnecessary recurring work.

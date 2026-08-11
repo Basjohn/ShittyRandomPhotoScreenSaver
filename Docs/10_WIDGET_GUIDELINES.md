@@ -115,6 +115,7 @@ If this contract is fuzzy, code will drift fast.
 - Keep paint/layout behavior widget-owned.
 - Keep provider/network/cache policy widget-owned unless the repo already has a shared seam for that exact behavior.
 - Do not do blocking work in `paintEvent`, update paths, or constructors.
+- Prepare expensive stable paint caches at the state/invalidation owner. GUI-owned `QPixmap` work stays on GUI, but `paintEvent` validates/blits an exact-current cache rather than discovering and building a cold layer; keep dynamic regions and matching hit geometry separate.
 - When a `Custom` widget has dynamic content, make its inner layout respond to the committed size payload; a correct outer rect alone is not proof that text, columns, margins, or child geometry are correct.
 
 ### C. Use centralized managers only

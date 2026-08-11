@@ -132,9 +132,9 @@ Target contract: **Prepare → Commit → Persist**.
 
 ### Priority 1 — service/widget preparation
 
-- [ ] Gmail: move stable content-cache regeneration out of `paintEvent()`; paint consumes GUI-prepared/cache state with exact logical-size/DPR identity.
 - [ ] Gmail backend construction: move the proven eager `gmail_backend.json` and DPAPI credential reads out of GUI-side widget construction without changing backend/settings authority.
-- [ ] Reddit/Gmail: cold static rendering must not be discovered inside `paintEvent()`. Prefer invalidation-time preparation before worker-rendered text unless measurement justifies the extra complexity.
+- [ ] Reddit: cold static rendering must not be discovered inside `paintEvent()`. Prefer invalidation-time preparation before worker-rendered text unless measurement justifies the extra complexity.
+- [ ] Shared overlay frame shadow: audit the inherited `BaseOverlayWidget` lazy painted-frame `QPixmap` build still reachable from `paintEvent()` and move it only with shared-widget visual/cache parity coverage.
 - [ ] Audit other widget/provider callbacks for JSON/filesystem/filter/sort work and apply the same owner rule only where source inspection proves it.
 
 ### Priority 2 — worker topology after extraction
