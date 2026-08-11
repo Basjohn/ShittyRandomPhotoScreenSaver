@@ -483,6 +483,7 @@
         "show_background": false,
         "show_date": false,
         "show_day_of_week": false,
+        "show_digital_separator": false,
         "show_numerals": true,
         "show_seconds": true,
         "show_timezone": true,

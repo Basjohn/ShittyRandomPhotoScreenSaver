@@ -235,6 +235,7 @@ class ClockWidgetSettings:
     show_timezone: bool = False
     show_day_of_week: bool = False
     show_date: bool = False
+    show_digital_separator: bool = False
     calendar_layout: str = "shared_line"
     calendar_font_size: int = 20
     font_family: str = "Inter"
@@ -266,6 +267,10 @@ class ClockWidgetSettings:
             show_timezone=settings.get(f"{prefix}.show_timezone", False),
             show_day_of_week=settings.get(f"{prefix}.show_day_of_week", False),
             show_date=settings.get(f"{prefix}.show_date", False),
+            show_digital_separator=settings.get(
+                f"{prefix}.show_digital_separator",
+                False,
+            ),
             calendar_layout=settings.get(f"{prefix}.calendar_layout", "shared_line"),
             calendar_font_size=settings.get(f"{prefix}.calendar_font_size", 20),
             font_family=settings.get(f"{prefix}.font_family", "Inter"),

@@ -94,8 +94,13 @@ class ClockWidget(BaseOverlayWidget):
     
     # Override defaults for clock
     DEFAULT_FONT_SIZE = 48
-    DIGITAL_TZ_GAP = 20
+    DIGITAL_FOOTER_GAP = 8
     DIGITAL_FOOTER_ROW_GAP = 4
+    DIGITAL_SEPARATOR_HEIGHT = 1
+    DIGITAL_SEPARATOR_CALENDAR_GAP = 6
+    DIGITAL_SEPARATOR_WIDTH_RATIO = 0.55
+    DIGITAL_SEPARATOR_MIN_WIDTH = 48
+    DIGITAL_SEPARATOR_MAX_WIDTH = 240
     DIGITAL_MIN_SIDE_PAD = 8
     DIGITAL_MAX_SIDE_PAD = 14
     DIGITAL_MIN_TOP_PAD = 4
@@ -127,6 +132,15 @@ class ClockWidget(BaseOverlayWidget):
     class _AnalogNumeralPlacement:
         radial_offset_em: float = 0.0
         tangential_offset_em: float = 0.0
+
+    @dataclass(frozen=True)
+    class _DigitalFooterLayout:
+        main_bottom: int
+        calendar_rect: QRect
+        timezone_rect: QRect
+        separator_left: int
+        separator_right: int
+        separator_y: int | None
     
     def __init__(self, parent: Optional[QWidget] = None,
                  time_format: TimeFormat = TimeFormat.TWELVE_HOUR,
@@ -136,6 +150,7 @@ class ClockWidget(BaseOverlayWidget):
                  show_timezone: bool = False,
                  show_day_of_week: bool = False,
                  show_date: bool = False,
+                 show_digital_separator: bool = False,
                  calendar_layout: str = CALENDAR_LAYOUT_SHARED_LINE,
                  calendar_font_size: int = 20):
         """
@@ -150,6 +165,7 @@ class ClockWidget(BaseOverlayWidget):
             show_timezone: Whether to display timezone abbreviation
             show_day_of_week: Whether to display the weekday
             show_date: Whether to display the date as DD/MM/YYYY
+            show_digital_separator: Whether to draw a line above Digital day/date text
             calendar_layout: Shared line or two-line weekday/date layout
             calendar_font_size: Weekday/date font size
         """
@@ -167,6 +183,7 @@ class ClockWidget(BaseOverlayWidget):
         self._show_timezone = show_timezone
         self._show_day_of_week = bool(show_day_of_week)
         self._show_date = bool(show_date)
+        self._show_digital_separator = bool(show_digital_separator)
         self._calendar_layout = self._normalize_calendar_layout(calendar_layout)
         try:
             self._calendar_font_size = max(8, int(calendar_font_size))
@@ -229,6 +246,7 @@ class ClockWidget(BaseOverlayWidget):
         # Set label properties
         self.setObjectName("clock_main")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._update_digital_alignment()
         
         # Set font with bold weight for clock
         font = QFont(self._font_family, self._font_size, QFont.Weight.Bold)
@@ -243,6 +261,10 @@ class ClockWidget(BaseOverlayWidget):
     @property
     def _calendar_enabled(self) -> bool:
         return self._show_day_of_week or self._show_date
+
+    @property
+    def _digital_separator_enabled(self) -> bool:
+        return self._show_digital_separator and self._calendar_enabled
 
     @classmethod
     def _normalize_calendar_layout(cls, layout: str) -> str:
@@ -406,6 +428,21 @@ class ClockWidget(BaseOverlayWidget):
             return "11:59:59 PM" if self._show_seconds else "11:59 PM"
         return "23:59:59" if self._show_seconds else "23:59"
 
+    def _digital_footer_content_height(
+        self,
+        tz_label_height: int,
+        calendar_label_height: int,
+    ) -> int:
+        height = 0
+        calendar_height = max(0, int(calendar_label_height)) if self._calendar_enabled else 0
+        timezone_height = max(0, int(tz_label_height)) if self._show_timezone else 0
+        if self._digital_separator_enabled:
+            height += self.DIGITAL_SEPARATOR_HEIGHT + self.DIGITAL_SEPARATOR_CALENDAR_GAP
+        height += calendar_height + timezone_height
+        if calendar_height and timezone_height:
+            height += self.DIGITAL_FOOTER_ROW_GAP
+        return height
+
     def _compute_digital_padding(
         self,
         tz_label_height: int | None = None,
@@ -420,7 +457,7 @@ class ClockWidget(BaseOverlayWidget):
             min(self.DIGITAL_MAX_TOP_PAD, int(round(self._font_size * 0.10))),
         )
         bottom_pad = self.DIGITAL_BOTTOM_PAD
-        footer_heights: list[int] = []
+        calendar_height = 0
         if self._calendar_enabled:
             if calendar_label_height is None:
                 calendar_height = self._measure_calendar_size_for_font(
@@ -428,18 +465,20 @@ class ClockWidget(BaseOverlayWidget):
                 ).height()
             else:
                 calendar_height = calendar_label_height
-            footer_heights.append(max(0, int(calendar_height)))
+        timezone_height = 0
         if self._show_timezone:
             if tz_label_height is None:
-                label_height = self._measure_digital_timezone_height_for_font(
+                timezone_height = self._measure_digital_timezone_height_for_font(
                     self._effective_digital_font_size
                 )
             else:
-                label_height = tz_label_height
-            footer_heights.append(max(0, int(label_height)))
-        if footer_heights:
-            bottom_pad += self.DIGITAL_TZ_GAP + sum(footer_heights)
-            bottom_pad += self.DIGITAL_FOOTER_ROW_GAP * max(0, len(footer_heights) - 1)
+                timezone_height = tz_label_height
+        footer_height = self._digital_footer_content_height(
+            timezone_height,
+            calendar_height,
+        )
+        if footer_height:
+            bottom_pad += self.DIGITAL_FOOTER_GAP + footer_height
         return side_pad, top_pad, side_pad, bottom_pad
 
     def _measure_digital_timezone_height_for_font(self, point_size: int) -> int:
@@ -475,8 +514,9 @@ class ClockWidget(BaseOverlayWidget):
             self._effective_calendar_font_size
         ).height()
         sample_text = self._digital_measurement_text()
-        best_size = max(8, int(self._font_size))
-        for candidate in range(best_size, 7, -1):
+        requested_size = max(8, int(self._font_size))
+        best_size = 8
+        for candidate in range(requested_size, 7, -1):
             tz_height = self._measure_digital_timezone_height_for_font(candidate)
             left_pad, top_pad, right_pad, bottom_pad = self._compute_digital_padding(
                 tz_height,
@@ -588,38 +628,101 @@ class ClockWidget(BaseOverlayWidget):
         """Compatibility wrapper for positioning all digital footer labels."""
         self._position_secondary_labels()
 
+    def _digital_footer_layout(self) -> _DigitalFooterLayout:
+        calendar_size = QSize(0, 0)
+        if self._calendar_enabled:
+            if self._calendar_label is not None:
+                calendar_size = self._calendar_label.size()
+            if calendar_size.width() <= 0 or calendar_size.height() <= 0:
+                calendar_size = self._measure_calendar_size_for_font(
+                    self._effective_calendar_font_size
+                )
+
+        timezone_size = QSize(0, 0)
+        if self._show_timezone:
+            if self._tz_label is not None:
+                timezone_size = self._tz_label.size()
+            if timezone_size.width() <= 0 or timezone_size.height() <= 0:
+                timezone_size = QSize(
+                    0,
+                    self._measure_digital_timezone_height_for_font(
+                        self._effective_digital_font_size
+                    ),
+                )
+
+        footer_height = self._digital_footer_content_height(
+            timezone_size.height(),
+            calendar_size.height(),
+        )
+        group_top = max(0, self.height() - self.DIGITAL_BOTTOM_PAD - footer_height)
+        main_bottom = max(0, group_top - (self.DIGITAL_FOOTER_GAP if footer_height else 0))
+        y = group_top
+
+        separator_y: int | None = None
+        separator_left = 0
+        separator_right = 0
+        if self._digital_separator_enabled:
+            available_width = max(0, self.width() - (2 * self.DIGITAL_MIN_SIDE_PAD))
+            separator_width = min(
+                available_width,
+                max(
+                    self.DIGITAL_SEPARATOR_MIN_WIDTH,
+                    min(
+                        self.DIGITAL_SEPARATOR_MAX_WIDTH,
+                        int(round(available_width * self.DIGITAL_SEPARATOR_WIDTH_RATIO)),
+                    ),
+                ),
+            )
+            separator_left = max(0, int(round((self.width() - separator_width) / 2.0)))
+            separator_right = min(self.width() - 1, separator_left + separator_width)
+            separator_y = y
+            y += self.DIGITAL_SEPARATOR_HEIGHT + self.DIGITAL_SEPARATOR_CALENDAR_GAP
+
+        calendar_rect = QRect()
+        if self._calendar_enabled and calendar_size.height() > 0:
+            calendar_rect = QRect(
+                max(0, int(round((self.width() - calendar_size.width()) / 2.0))),
+                y,
+                max(0, calendar_size.width()),
+                max(0, calendar_size.height()),
+            )
+            y += calendar_size.height()
+            if timezone_size.height() > 0:
+                y += self.DIGITAL_FOOTER_ROW_GAP
+
+        timezone_rect = QRect()
+        if self._show_timezone and timezone_size.height() > 0:
+            timezone_rect = QRect(
+                max(0, int(round((self.width() - timezone_size.width()) / 2.0))),
+                y,
+                max(0, timezone_size.width()),
+                max(0, timezone_size.height()),
+            )
+
+        return self._DigitalFooterLayout(
+            main_bottom=main_bottom,
+            calendar_rect=calendar_rect,
+            timezone_rect=timezone_rect,
+            separator_left=separator_left,
+            separator_right=separator_right,
+            separator_y=separator_y,
+        )
+
+    def _update_digital_alignment(self) -> None:
+        alignment = Qt.AlignmentFlag.AlignCenter
+        if self._display_mode != "analog" and (self._calendar_enabled or self._show_timezone):
+            alignment = Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom
+        if self.alignment() != alignment:
+            self.setAlignment(alignment)
+
     def _position_secondary_labels(self) -> None:
         if self._display_mode == "analog":
             return
-
-        calendar_height = (
-            self._calendar_label.height()
-            if self._calendar_enabled and self._calendar_label is not None
-            else 0
-        )
-        tz_height = (
-            self._tz_label.height()
-            if self._show_timezone and self._tz_label is not None
-            else 0
-        )
-        _, _, _, bottom_pad = self._compute_digital_padding(tz_height, calendar_height)
-        content_height = calendar_height + tz_height
-        if calendar_height and tz_height:
-            content_height += self.DIGITAL_FOOTER_ROW_GAP
-        reserved_top = max(0, self.height() - bottom_pad)
-        available_slack = max(0, bottom_pad - content_height)
-        y = reserved_top + int(round(available_slack * self.DIGITAL_TZ_UPPER_SLACK_RATIO))
-
+        layout = self._digital_footer_layout()
         if self._calendar_enabled and self._calendar_label is not None:
-            calendar_x = max(0, int((self.width() - self._calendar_label.width()) / 2))
-            self._calendar_label.move(calendar_x, y)
-            y += calendar_height
-            if tz_height:
-                y += self.DIGITAL_FOOTER_ROW_GAP
-
+            self._calendar_label.setGeometry(layout.calendar_rect)
         if self._show_timezone and self._tz_label is not None:
-            tz_x = max(0, int((self.width() - self._tz_label.width()) / 2))
-            self._tz_label.move(tz_x, y)
+            self._tz_label.setGeometry(layout.timezone_rect)
 
     def raise_auxiliary_labels(self) -> None:
         """Keep digital footer labels above the compositor with their clock."""
@@ -1114,11 +1217,11 @@ class ClockWidget(BaseOverlayWidget):
         """
         self._time_format = time_format
         
-        # Update stylesheet to tighten padding when timezone hidden
-        self._update_stylesheet()
         if self._display_mode != "analog":
             self._apply_digital_font_fit()
             self._position_timezone_label()
+        # Commit margins only after fitting secondary text to the current bounds.
+        self._update_stylesheet()
 
         # Update display immediately if running
         if self._enabled:
@@ -1128,6 +1231,7 @@ class ClockWidget(BaseOverlayWidget):
         super().set_show_background(show)
         if self._display_mode != "analog":
             self._apply_digital_font_fit()
+            self._update_stylesheet()
             self._position_timezone_label()
 
     def set_widget_manager(self, wm) -> None:
@@ -1239,6 +1343,7 @@ class ClockWidget(BaseOverlayWidget):
         if self._display_mode == mode_l:
             return
         self._display_mode = mode_l
+        self._update_digital_alignment()
 
         self._apply_display_mode_size_constraints()
         if self._display_mode != "analog":
@@ -1256,11 +1361,31 @@ class ClockWidget(BaseOverlayWidget):
         else:
             self.update()
 
-        # Resize card and reposition after mode switch
-        try:
-            self.adjustSize()
-        except Exception as e:
-            logger.debug("[CLOCK] Exception suppressed: %s", e)
+        # Preserve committed CUSTOM geometry. For ordinary Digital mode use a
+        # stable authored target instead of QLabel.adjustSize(), whose transient
+        # post-Analogue hint can permanently collapse the fitted font.
+        custom_rect = getattr(self, "_custom_layout_local_rect", None)
+        has_custom_rect = (
+            isinstance(custom_rect, QRect)
+            and custom_rect.width() > 0
+            and custom_rect.height() > 0
+        )
+        if not has_custom_rect:
+            try:
+                if self._display_mode == "digital":
+                    self.resize(
+                        self._natural_custom_size_for_mode(
+                            "digital",
+                            font_size=self._font_size,
+                        )
+                    )
+                    self._apply_digital_font_fit()
+                    self._update_stylesheet()
+                    self._position_secondary_labels()
+                else:
+                    self.adjustSize()
+            except Exception as e:
+                logger.debug("[CLOCK] Exception suppressed: %s", e)
         if self.parent():
             try:
                 self._update_position()
@@ -1344,6 +1469,7 @@ class ClockWidget(BaseOverlayWidget):
             self._set_main_clock_font(self._font_size)
         else:
             self._apply_digital_font_fit()
+            self._update_stylesheet()
         # Invalidate analog clock face cache since numerals use this font
         self._invalidate_clock_face_cache()
         # Update timezone label font
@@ -1367,6 +1493,7 @@ class ClockWidget(BaseOverlayWidget):
             self._set_main_clock_font(self._font_size)
         else:
             self._apply_digital_font_fit()
+            self._update_stylesheet()
         # Invalidate analog clock face cache since numerals use this font size
         self._invalidate_clock_face_cache()
         # Update timezone label font
@@ -1440,16 +1567,18 @@ class ClockWidget(BaseOverlayWidget):
             return
 
         self._show_timezone = show_timezone
+        self._update_digital_alignment()
         self._apply_display_mode_size_constraints()
-        self._update_stylesheet()
-        if self._display_mode != "analog":
-            self._apply_digital_font_fit()
 
         if show_timezone and self._tz_label is None and self.parent():
             # Lazily create timezone label if needed
             self._create_tz_label()
         elif not show_timezone and self._tz_label:
             self._tz_label.hide()
+
+        if self._display_mode != "analog":
+            self._apply_digital_font_fit()
+        self._update_stylesheet()
 
         self._position_timezone_label()
 
@@ -1464,13 +1593,14 @@ class ClockWidget(BaseOverlayWidget):
             self._calendar_label.hide()
 
         self._effective_calendar_font_size = self._calendar_font_size
+        self._update_digital_alignment()
         self._apply_display_mode_size_constraints()
-        self._update_stylesheet()
         self._invalidate_clock_face_cache()
         if self._display_mode != "analog":
             self._apply_digital_font_fit()
         else:
             self._update_calendar_label_font()
+        self._update_stylesheet()
         self._update_time()
         self._position_secondary_labels()
 
@@ -1486,6 +1616,13 @@ class ClockWidget(BaseOverlayWidget):
         if self._show_date == show:
             return
         self._show_date = show
+        self._refresh_calendar_configuration()
+
+    def set_show_digital_separator(self, show: bool) -> None:
+        show = bool(show)
+        if self._show_digital_separator == show:
+            return
+        self._show_digital_separator = show
         self._refresh_calendar_configuration()
 
     def set_calendar_layout(self, layout: str) -> None:
@@ -1507,6 +1644,7 @@ class ClockWidget(BaseOverlayWidget):
     
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet based on current settings."""
+        self._update_digital_alignment()
         self._style_secondary_labels()
         if self.uses_painted_frame_shadow():
             if self._display_mode == "analog":
@@ -1601,10 +1739,31 @@ class ClockWidget(BaseOverlayWidget):
         if self._display_mode != "analog":
             with widget_paint_sample(self, "clock.paint.digital"):
                 super().paintEvent(event)
+                self._paint_digital_separator()
             return
 
         with widget_paint_sample(self, "clock.paint.analog"):
             self._paint_analog(event)
+
+    def _paint_digital_separator(self) -> None:
+        layout = self._digital_footer_layout()
+        if layout.separator_y is None or layout.separator_right <= layout.separator_left:
+            return
+        painter = QPainter(self)
+        try:
+            color = QColor(self._text_color)
+            color.setAlpha(min(color.alpha(), 170))
+            pen = QPen(color)
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            painter.drawLine(
+                layout.separator_left,
+                layout.separator_y,
+                layout.separator_right,
+                layout.separator_y,
+            )
+        finally:
+            painter.end()
 
     def _invalidate_clock_face_cache(self) -> None:
         """Invalidate the cached clock face so it will be regenerated on next paint."""

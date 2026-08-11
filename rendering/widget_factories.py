@@ -162,6 +162,10 @@ class ClockWidgetFactory(WidgetFactory):
                 False,
             )
             show_date = SettingsManager.to_bool(_resolve_style('show_date', False), False)
+            show_digital_separator = SettingsManager.to_bool(
+                _resolve_style('show_digital_separator', False),
+                False,
+            )
             calendar_layout = str(_resolve_style('calendar_layout', 'shared_line'))
             try:
                 calendar_font_size = max(8, int(_resolve_style('calendar_font_size', 20)))
@@ -178,6 +182,7 @@ class ClockWidgetFactory(WidgetFactory):
                 show_timezone=show_timezone,
                 show_day_of_week=show_day_of_week,
                 show_date=show_date,
+                show_digital_separator=show_digital_separator,
                 calendar_layout=calendar_layout,
                 calendar_font_size=calendar_font_size,
             )

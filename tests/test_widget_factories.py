@@ -179,6 +179,7 @@ class TestClockWidgetFactory:
             base_clock_settings={
                 "show_day_of_week": True,
                 "show_date": True,
+                "show_digital_separator": True,
                 "calendar_layout": "two_lines",
                 "calendar_font_size": 27,
             },
@@ -188,6 +189,7 @@ class TestClockWidgetFactory:
         assert widget._timezone_str == "UTC+02:00"
         assert widget._show_day_of_week is True
         assert widget._show_date is True
+        assert widget._show_digital_separator is True
         assert widget._calendar_layout == "two_lines"
         assert widget._calendar_font_size == 27
         widget.deleteLater()

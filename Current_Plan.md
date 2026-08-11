@@ -68,9 +68,7 @@ extraction without waiting for a new prompt.
 
 ### Clock presentation and mode stability
 
-- [ ] Add an optional Digital separator line and optional secondary/day text beneath it; preserve existing saved/default behaviour when the options are disabled.
-- [ ] Remove the unusually large Digital day-text gap and keep Digital authored scale/geometry stable across repeated Digital → Analogue → Digital mode switches; preserve the already-correct Analogue result.
-- [ ] Add settings round-trip, repeated mode-switch, layout/geometry and installed visual checks for the affected clock paths.
+- [ ] Validate the compact day/date group, optional separator, and repeated Digital → Analogue → Digital authored scale in installed Normal and MC builds; include Settings apply/restart and confirm CUSTOM persists only `font_size` plus `geometry_variant`.
 
 ### Media playback progress
 

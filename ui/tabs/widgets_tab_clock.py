@@ -77,6 +77,9 @@ def _update_clock_calendar_visibility(tab: WidgetsTab) -> None:
         controls.setVisible(show_day or show_date)
     if layout_row is not None:
         layout_row.setVisible(show_day and show_date)
+    separator = getattr(tab, 'clock_show_digital_separator', None)
+    if separator is not None:
+        separator.setEnabled(show_day or show_date)
 
 
 def _sync_clock_swatch(tab: WidgetsTab, btn_attr: str, color_attr: str) -> None:
@@ -337,6 +340,18 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _digital_layout.setContentsMargins(0, 0, 0, 12)
     _digital_layout.setSpacing(12)
 
+    tab.clock_show_digital_separator = QCheckBox("Show Separator Above Day / Date")
+    tab.clock_show_digital_separator.setProperty("circleIndicator", True)
+    tab.clock_show_digital_separator.setChecked(
+        tab._default_bool('clock', 'show_digital_separator', False)
+    )
+    tab.clock_show_digital_separator.setToolTip(
+        "Draw a compact horizontal separator between the Digital time and optional day/date text."
+    )
+    tab.clock_show_digital_separator.stateChanged.connect(tab._save_settings)
+    tab.clock_show_digital_separator.stateChanged.connect(tab._update_stack_status)
+    _digital_layout.addWidget(tab.clock_show_digital_separator)
+
     time_layout.addWidget(tab._clock_digital_container)
 
     tab.clock_analog_mode.stateChanged.connect(lambda: _update_clock_mode_visibility(tab))
@@ -563,6 +578,9 @@ def load_clock_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.clock_show_date.setChecked(
         tab._config_bool('clock', clock_config, 'show_date', False)
     )
+    tab.clock_show_digital_separator.setChecked(
+        tab._config_bool('clock', clock_config, 'show_digital_separator', False)
+    )
     calendar_layout = tab._config_str(
         'clock',
         clock_config,
@@ -668,6 +686,7 @@ def save_clock_settings(tab: WidgetsTab) -> tuple[dict, dict, dict]:
         'show_timezone': tab.clock_show_tz.isChecked(),
         'show_day_of_week': tab.clock_show_day_of_week.isChecked(),
         'show_date': tab.clock_show_date.isChecked(),
+        'show_digital_separator': tab.clock_show_digital_separator.isChecked(),
         'calendar_layout': tab.clock_calendar_layout.currentData() or 'shared_line',
         'calendar_font_size': tab.clock_calendar_font_size.value(),
         'position': tab.clock_position.currentText(),

@@ -4,7 +4,7 @@ from copy import deepcopy
 from datetime import datetime
 
 import pytest
-from PySide6.QtCore import QPoint, QRect
+from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QFont, QFontMetrics, QImage, QPainter
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QWidget
@@ -98,6 +98,112 @@ def test_digital_clock_secondary_rows_share_painted_text_shadow_authority(qtbot)
     assert isinstance(clock._tz_label, PaintedShadowLabel)
     assert clock._calendar_label._shadow_config is shadow_config
     assert clock._tz_label._shadow_config is shadow_config
+
+
+def test_digital_clock_footer_is_compact_and_separator_reserves_only_its_lane(qtbot) -> None:
+    parent = QWidget()
+    parent.resize(900, 600)
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(parent=parent, show_day_of_week=True, calendar_font_size=22)
+    qtbot.addWidget(clock)
+    clock.resize(600, 260)
+    clock.set_font_size(78)
+    clock.setText("18:49:11")
+    assert clock._calendar_label is not None
+    clock._calendar_label.setText("WEDNESDAY")
+    clock._calendar_label.adjustSize()
+    clock._update_stylesheet()
+    clock._position_secondary_labels()
+
+    without_separator = clock._digital_footer_layout()
+    assert clock.alignment() == (
+        Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom
+    )
+    assert without_separator.separator_y is None
+    assert without_separator.calendar_rect == clock._calendar_label.geometry()
+    assert (
+        without_separator.calendar_rect.top() - (clock.contentsRect().bottom() + 1)
+        == clock.DIGITAL_FOOTER_GAP
+    )
+
+    bottom_margin_without = clock.contentsMargins().bottom()
+    clock.set_show_digital_separator(True)
+    with_separator = clock._digital_footer_layout()
+
+    assert with_separator.separator_y is not None
+    assert with_separator.separator_left < with_separator.separator_right
+    assert with_separator.separator_y - (clock.contentsRect().bottom() + 1) == clock.DIGITAL_FOOTER_GAP
+    assert (
+        with_separator.calendar_rect.top() - with_separator.separator_y
+        == clock.DIGITAL_SEPARATOR_HEIGHT + clock.DIGITAL_SEPARATOR_CALENDAR_GAP
+    )
+    assert clock.contentsMargins().bottom() == (
+        bottom_margin_without
+        + clock.DIGITAL_SEPARATOR_HEIGHT
+        + clock.DIGITAL_SEPARATOR_CALENDAR_GAP
+    )
+
+
+def test_digital_mode_switch_reuses_authored_size_and_font_fit(qtbot) -> None:
+    parent = QWidget()
+    parent.resize(1800, 1200)
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(parent=parent, show_day_of_week=True)
+    qtbot.addWidget(clock)
+    clock.set_font_size(78)
+
+    digital_states: list[tuple[int, int, int]] = []
+    analog_states: list[tuple[int, int]] = []
+    for _ in range(2):
+        clock.set_display_mode("analog")
+        analog_states.append((clock.width(), clock.height()))
+        clock.set_display_mode("digital")
+        digital_states.append(
+            (
+                clock.width(),
+                clock.height(),
+                clock._effective_digital_font_size,
+            )
+        )
+
+    assert len(set(analog_states)) == 1
+    assert len(set(digital_states)) == 1
+    assert digital_states[0][2] == 78
+    assert clock._font_size == 78
+
+
+def test_digital_font_fit_uses_explicit_minimum_when_no_candidate_fits(qtbot) -> None:
+    clock = ClockWidget()
+    qtbot.addWidget(clock)
+    clock.resize(24, 20)
+    clock.set_font_size(78)
+
+    assert clock._effective_digital_font_size == 8
+
+
+def test_narrow_custom_calendar_fit_commits_matching_footer_margin(qtbot) -> None:
+    parent = QWidget()
+    parent.resize(500, 400)
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(parent=parent)
+    qtbot.addWidget(clock)
+    custom_rect = QRect(20, 20, 150, 120)
+    clock.setGeometry(custom_rect)
+    clock._custom_layout_local_rect = QRect(custom_rect)
+    clock.set_calendar_font_size(144)
+    clock.set_show_day_of_week(True)
+    clock.set_show_digital_separator(True)
+
+    assert clock.geometry() == custom_rect
+    assert clock._effective_calendar_font_size < 144
+    assert clock.contentsMargins().bottom() == clock._compute_digital_padding()[3]
+    assert clock.contentsRect().height() > 0
 
 
 def test_analog_clock_calendar_reserves_footer_space(qtbot) -> None:
@@ -629,7 +735,7 @@ def test_digital_clock_tick_does_not_rebuild_stylesheet_for_time_only_change(qtb
     assert calls == []
 
 
-def test_digital_clock_timezone_label_biases_upward_inside_reserved_bottom_band(qtbot):
+def test_digital_clock_timezone_label_uses_explicit_footer_anchor(qtbot):
     parent = QWidget()
     parent.resize(900, 600)
     parent._screen = QGuiApplication.primaryScreen()
@@ -650,19 +756,12 @@ def test_digital_clock_timezone_label_biases_upward_inside_reserved_bottom_band(
     clock._tz_label.adjustSize()
     clock._update_position()
 
-    _, _, _, bottom_pad = clock._compute_digital_padding(clock._tz_label.height())
-    reserved_top = max(0, clock.height() - bottom_pad)
-    reserved_height = max(clock._tz_label.height(), clock.height() - reserved_top)
-    available_slack = max(0, reserved_height - clock._tz_label.height())
-    expected_y = reserved_top + max(
-        0,
-        int(round(available_slack * clock.DIGITAL_TZ_UPPER_SLACK_RATIO)),
-    )
+    layout = clock._digital_footer_layout()
     bottom_gap = clock.height() - (clock._tz_label.y() + clock._tz_label.height())
-    top_gap = clock._tz_label.y() - reserved_top
 
-    assert clock._tz_label.y() == expected_y
-    assert bottom_gap > top_gap
+    assert clock._tz_label.geometry() == layout.timezone_rect
+    assert layout.main_bottom == clock.contentsRect().bottom() + 1
+    assert bottom_gap == clock.DIGITAL_BOTTOM_PAD
 
 
 def test_clock_double_click_rebuilds_custom_runtime_rect_from_digital_to_analog(qtbot):

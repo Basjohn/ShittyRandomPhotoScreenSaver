@@ -435,6 +435,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         signal_block_attrs=(
             "clock_enabled", "clock_format", "clock_seconds", "clock_timezone",
             "clock_show_tz", "clock_show_day_of_week", "clock_show_date",
+            "clock_show_digital_separator",
             "clock_calendar_layout", "clock_calendar_font_size",
             "clock_position", "clock_font_combo", "clock_font_size",
             "clock_margin", "clock_show_background", "clock_bg_opacity",
@@ -2238,6 +2239,7 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
             WidgetPreviewFieldDescriptor("show_timezone_label", "clock_show_tz", "checked", False),
             WidgetPreviewFieldDescriptor("show_day_of_week", "clock_show_day_of_week", "checked", False),
             WidgetPreviewFieldDescriptor("show_date", "clock_show_date", "checked", False),
+            WidgetPreviewFieldDescriptor("show_digital_separator", "clock_show_digital_separator", "checked", False),
             WidgetPreviewFieldDescriptor("calendar_layout", "clock_calendar_layout", "current_data", "shared_line"),
             WidgetPreviewFieldDescriptor("calendar_font_size", "clock_calendar_font_size", "value", 20),
         ),
