@@ -28,7 +28,7 @@ Do not start a surface merge yet. Current evidence shows:
 
 - GUI request age dominates paint duration;
 - `set_processed_image()`/`generic_pair_warm` are large GUI/context transactions;
-- retained-current/next-old identity is repaired at the display-owned DPR handoff; installed timing A/B remains;
+- retained-current/next-old identity is closed at the display-owned DPR handoff and in a current live repeated-transition run;
 - active-display GPU busy is material but not yet separated by owner;
 - screen 1 is 60 Hz while visualizer overlay state/update/paint windows can approach ~100 Hz.
 

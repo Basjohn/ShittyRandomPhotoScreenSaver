@@ -102,8 +102,18 @@ consumes the display-owned DPR and skips no-op mutation. Focused automation prov
 retained destination is the next old cache hit and only the following destination
 uploads under unchanged context/generation/size/transform identity.
 
-- [ ] Re-run identical transition sequences and prove lower `generic_pair_warm`, setter, request-age, and visualizer-tick tails without increasing retained texture/PBO count.
-- [ ] After installed identity A/B confirms the repair, measure simultaneous multi-display GUI commits. If they still create back-to-back starvation, allow at most one bounded prepared display commit per queued GUI turn while preserving source timing and authoritative first frame.
+The current live typical-load run at
+`logs/evidence_chest/08_11_51ff1e03_03_14_03_21_typical/` closes the runtime identity
+bar: all `20/20` steady transitions report `old_key == retained_key`, an old cache hit,
+one allocation and one upload. All 26 terminal samples retain exactly one texture and
+one idle PBO. Steady `generic_pair_warm` fell from the historical reference median/p95
+`23.48/39.80 ms` to `13.64/20.98 ms`; setter median/p95 fell from `33.40/52.59 ms` to
+`25.66/34.72 ms`. Request-age and visualizer-tick tails did not improve, so the broad
+GUI-availability problem remains active and is not a texture-identity problem.
+
+- [x] Validate retained-current → next-old reuse in a live repeated-transition run without increasing terminal texture/PBO ownership.
+- [ ] Re-run the same typical scenario after queued logging and require lower request-age/visualizer-tick tails while preserving the closed texture/resource bars.
+- [ ] Change multi-display commit scheduling only if post-extraction steady evidence shows back-to-back prepared commits are a remaining owner. The current run's three large stagger delays occurred only during cold runtime starts and do not justify a scheduling change.
 - [ ] Keep transition names and one terminal GL metric bracket per real transition; no repaint retry or scheduler/cadence compensation.
 
 ## P5.2A UI-Thread Workload Extraction
@@ -153,7 +163,7 @@ to cap Bubble/Spectrum logical cadence to display refresh.
 - [ ] Log support/sample counts so a zero GPU duration means measured zero only when samples exist.
 - [ ] Split GPU attribution among image texture upload/warm, transition shader/render work, visualizer overlay/context work, overdraw/composition, and driver/context overhead.
 - [ ] Record per-display refresh, logical visualizer state publication rate, update-request rate and paint rate together. Do not infer waste solely from one counter.
-- [ ] Measure GPU busy and visualizer update/paint rate again after texture identity reuse so duplicate uploads are not blamed on the overlay.
+- [x] Measure GPU busy after texture identity reuse: the typical run records process GPU busy median/max `9.1/32.7%` while the steady texture path uploads new only. Remaining GPU work still needs owner attribution.
 - [ ] Feed the result into Phase 7: if logical integration remains correct while physical presentation is above useful display opportunities, decouple presentation through latest immutable render state rather than reducing simulation/source cadence.
 - [ ] Do not begin Phase 8 one-surface compositor work until Phase 7 proves missed paints cannot alter logical state and GPU/context evidence shows the merge is worth its lifecycle risk.
 
@@ -203,7 +213,7 @@ refinement before Phase 8.
 ## Phase 5 Exit Gate
 
 - [ ] Bubble and Spectrum are separately approved equal or better than `ff934616`; other supported modes retain current behaviour.
-- [ ] The proven texture old/current identity miss is corrected and steady transitions reuse old + upload only new under unchanged identity.
+- [x] The proven texture old/current identity miss is corrected and steady transitions reuse old + upload only new under unchanged identity.
 - [ ] Routine logging/persistence and proven service/cache preparation no longer perform avoidable synchronous GUI I/O/data work.
 - [ ] Host-pressure request-age/tick tails materially improve or remaining owners are named without cadence hacks.
 - [ ] GPU busy is attributed by owner enough to distinguish transition/upload/visualizer/presentation cost and guide Phase 7/8 rationally.

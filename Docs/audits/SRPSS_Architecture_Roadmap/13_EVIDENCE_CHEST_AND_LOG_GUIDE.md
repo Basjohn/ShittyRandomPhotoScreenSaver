@@ -82,7 +82,7 @@ titles/URLs or copyrighted audio.
 
 - distinguish direct log fact, source fact, inference and user visual verdict;
 - state confidence below 90%;
-- one mixed-load run can identify owner correlations but is not a clean code-only A/B;
+- one mixed-load run can identify owner correlations but is not a controlled implementation comparison;
 - a driver GPU busy metric is not theoretical GPU utilization;
 - logs diagnose visualizer timing but cannot certify feel;
 - solved historical incidents remain useful anti-regression evidence without staying active tasks.

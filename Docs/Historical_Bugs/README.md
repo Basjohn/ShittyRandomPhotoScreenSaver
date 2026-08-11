@@ -14,9 +14,9 @@ own the full narratives.
 
 ## Active / Pending
 
-R-60 is repaired in code with installed identical-sequence timing validation pending.
-No R-series lifecycle/recreation incident is currently active. Ongoing Phase 5
-memory/GPU/plateau and workload work remains architecture/performance work.
+No R-series lifecycle/recreation incident is currently active. R-60 is solved by the
+current live repeated-transition evidence. Ongoing Phase 5 memory/GPU/plateau and
+workload work remains architecture/performance work.
 
 ## R Records
 

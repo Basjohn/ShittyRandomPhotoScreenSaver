@@ -1,6 +1,6 @@
 # 12 — Test and Benchmark Protocol
 
-Last reconciled: 2026-08-10
+Last reconciled: 2026-08-11
 
 ## Objective
 
@@ -34,8 +34,8 @@ Center does not own a duplicate capture.
 - **S12 mixed load** — explicit start/end timestamps for each pressure source.
 - **S13 long soak** — post-warmup slopes/outlier timeline.
 - **S14 topology/system lifecycle** — display route/DPR/resolution/sleep-wake where supported.
-- **S15 texture identity A/B** — same image/transition sequence before/after current→old reuse correction.
-- **S16 logging/persistence A/B** — same diagnostics/settings activity before/after queued writer ownership.
+- **S15 texture identity comparison** — historical causal reference versus the same current-live image/transition sequence after current→old reuse correction.
+- **S16 logging/persistence comparison** — repeat the same current-live diagnostics/settings scenario after queued writer ownership.
 
 ## Required Metrics
 

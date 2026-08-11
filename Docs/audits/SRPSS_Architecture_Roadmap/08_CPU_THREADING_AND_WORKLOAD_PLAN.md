@@ -60,7 +60,8 @@ for the dominant tail.
 
 The late run also carried materially higher host pressure: machine CPU samples
 reached roughly `21–25%`, while SRPSS application CPU reached roughly `98–109%`.
-That makes this a useful mixed-load robustness checkpoint, not a clean code-only A/B.
+That makes this a useful mixed-load robustness checkpoint, not a controlled
+implementation comparison.
 Future intentional pressure tests must mark load-change timestamps explicitly.
 
 ### The image-install probe found a concrete root cause
@@ -106,8 +107,17 @@ ID is the next old ID, records one old cache hit, and uploads only the following
 image. The 45-cycle resource harness still passes with one retained terminal texture,
 bounded PBO reuse, and zero owned bytes after strict resets. Context/generation,
 physical size, DPR/transform change, cancellation-to-old, and a genuinely different
-terminal pixmap remain explicit invalidation boundaries. Installed identical-sequence
-timing/resource A/B remains active in `Current_Plan.md`.
+terminal pixmap remain explicit invalidation boundaries.
+
+The current live typical-load run at
+`logs/evidence_chest/08_11_51ff1e03_03_14_03_21_typical/` closes the runtime handoff
+bar. All `20/20` retained steady transitions have exact retained/next-old key equality,
+an old cache hit, one allocation and one upload. Every one of the 26 terminal records
+retains one texture and one idle PBO. Against the historical causal reference, steady
+`generic_pair_warm` median/p95 falls from `23.48/39.80 ms` to `13.64/20.98 ms`, and
+setter median/p95 from `33.40/52.59 ms` to `25.66/34.72 ms`. Request-age and
+visualizer-tick tails remain high, which isolates the remaining work to broader GUI
+availability rather than texture identity.
 
 ### Cold widget rendering is still visible at rebuild time
 
@@ -306,7 +316,7 @@ ownership problems.
    - queue normal records;
    - dedicated bounded writer owns formatting/rotation/file writes;
    - preserve direct fatal/emergency path;
-   - A/B UI/request-age tails with PERF/VIZ diagnostics enabled.
+   - repeat the same typical scenario and compare UI/request-age tails with PERF/VIZ diagnostics enabled.
 
 2. **Ordered async settings persistence**
    - keep in-memory setting mutation synchronous/authoritative;
@@ -314,11 +324,12 @@ ownership problems.
    - add revision, flush and shutdown tests;
    - prove no stale write can win.
 
-3. **Image/transition texture identity repair — implemented; installed A/B pending**
+3. **Image/transition texture identity repair — complete**
    - the stale presenter/display DPR split and exact `+2` cache-key divergence are removed;
    - focused automation verifies one old reuse + one new upload after terminal handoff;
    - exact context/share generation, transform boundaries and byte accounting remain unchanged;
-   - remeasure `generic_pair_warm`, setter and request-age tails in identical installed sequences.
+   - current live evidence verifies `20/20` steady old hits, one new upload and bounded terminal resources;
+   - request-age/tick tails remain workload-extraction targets, not identity-validation debt.
 
 These three come before visualizer scheduler changes because they attack broad GUI
 starvation without altering Bubble/Spectrum time semantics.

@@ -16,9 +16,9 @@ set.
 
 ## Active / Pending Records
 
-R-60 is repaired in code with installed identical-sequence timing validation pending.
-No R-series recreation/lifecycle incident is active. Current Phase 5 performance and
-resource follow-up remains tracked by `Current_Plan.md`.
+No R-series recreation/lifecycle incident is active. R-60 is solved by the current
+live repeated-transition evidence. Current Phase 5 performance and resource follow-up
+remains tracked by `Current_Plan.md`.
 
 ## Standalone R Records
 

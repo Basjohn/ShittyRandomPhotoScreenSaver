@@ -1,14 +1,14 @@
 # R-60 — ImagePresenter DPR Split Rekeyed The Retained Current Texture
 
 Date: 2026-08-11
-Status: Resolved In Code, Installed Timing Validation Pending
+Status: Solved
 
 ## Classification
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 ## Observed Failure
 
@@ -43,13 +43,20 @@ focused display/texture/compositor suites pass, and the 45-cycle Phase 4 resourc
 harness still retains one terminal texture/PBO and returns owned bytes to zero on
 strict resets.
 
-## Remaining Runtime Validation
+## Runtime Validation
 
-Repeat identical installed transition sequences and require `old_cached_before=true`,
-one new upload, lower `generic_pair_warm`/setter/request-age tails, and no increase in
-terminal texture or PBO count. Context or generation recreation, physical size or
-DPR/transform change, cancellation that retains old, and a genuinely different final
-pixmap remain deliberate invalidation boundaries.
+The current live typical-load run at
+`logs/evidence_chest/08_11_51ff1e03_03_14_03_21_typical/` contains 20 retained steady
+handoffs. All `20/20` report exact retained/next-old key equality,
+`old_cached_before=true`, one allocation and one upload. All 26 terminal samples retain
+one texture and one idle PBO. Steady `generic_pair_warm` median/p95 improved from the
+historical causal reference's `23.48/39.80 ms` to `13.64/20.98 ms`; setter median/p95
+improved from `33.40/52.59 ms` to `25.66/34.72 ms`.
+
+Request-age and visualizer-tick tails remain high, but the exact reuse and resource
+bars prove they are not caused by the repaired identity split. Context or generation
+recreation, physical size or DPR/transform change, cancellation that retains old, and
+a genuinely different final pixmap remain deliberate invalidation boundaries.
 
 ## Guardrail
 

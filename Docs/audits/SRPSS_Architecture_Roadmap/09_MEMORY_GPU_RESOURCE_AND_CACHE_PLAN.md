@@ -49,8 +49,11 @@ after texture retention and reproduced the canonical `retained_key + 2` next-old
 The presenter now reads the display-owned DPR and skips no-op mutation. Focused
 automation proves old cache hit + only new upload on a steady transition, and the
 45-cycle resource harness retains one terminal texture without larger budgets,
-historical texture staircases or weaker teardown. Installed identical-sequence timing,
-GPU and retained-count comparison remains active Phase 5 validation.
+historical texture staircases or weaker teardown. The current live typical-load run
+then verifies exact retained/next-old equality and old cache hits on all `20/20` steady
+handoffs, with one allocation/upload and one terminal texture/idle PBO. Process GPU
+busy remains material (median/max `9.1/32.7%`) but can no longer be attributed to
+duplicate steady old-texture upload; owner-level GPU attribution remains active.
 
 ## GPU Attribution Program
 

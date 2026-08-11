@@ -22,7 +22,8 @@ rejected persistent lane:       666624d421b08f978c5f610571a078570150a1e7
 rejected Spectrum second clock: ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
 historical candidate/reference: 7376bb9bb380253f3bd14079e65d7bdbca062fad
 active task owner:              Current_Plan.md
-current canonical evidence:     logs/evidence_chest/08_09_ca830d7_14_59/
+historical causal reference:    logs/evidence_chest/08_09_ca830d7_14_59/
+current typical-load evidence:  logs/evidence_chest/08_11_51ff1e03_03_14_03_21_typical/
 ```
 
 Historical commits are negative controls/reference only. Current architecture starts
@@ -107,7 +108,6 @@ from `main`.
 
 | Area | Required result |
 |---|---|
-| Texture A/B | installed repeated transitions confirm the repaired old hit/new-only upload and lower UI/request-age tails |
 | UI workload | routine logging/persistence and proven service/cache preparation leave GUI ownership |
 | GPU | transition/visualizer/upload/presentation costs are separately measurable and actionable |
 | Visualizer evidence | stronger temporal + paint-receipt controls protect exact logical cadence |
