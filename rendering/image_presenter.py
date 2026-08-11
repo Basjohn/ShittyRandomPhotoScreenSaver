@@ -49,7 +49,7 @@ class ImagePresenter(QObject):
     
     Responsibilities:
     - Pixmap lifecycle and state tracking
-    - Device pixel ratio handling
+    - Applying the parent display's authoritative device pixel ratio
     - Seed pixmap management for transition smoothness
 
     Phase E Context:
@@ -141,6 +141,32 @@ class ImagePresenter(QObject):
     # =========================================================================
     # Pixmap Lifecycle
     # =========================================================================
+
+    def _apply_display_device_pixel_ratio(self, pixmap: QPixmap) -> None:
+        """Apply the owning display's DPR only when the pixmap differs.
+
+        ``DisplayWidget`` owns the live screen/DPR identity.  Keeping a stale
+        presenter-local value can toggle a transition destination after its GL
+        texture has been retained, changing ``QPixmap.cacheKey()`` before that
+        pixmap becomes the next transition's old image.
+        """
+        try:
+            target_dpr = float(
+                getattr(self._parent, "_device_pixel_ratio", self._device_pixel_ratio)
+            )
+        except (TypeError, ValueError):
+            target_dpr = float(self._device_pixel_ratio)
+        if target_dpr <= 0.0:
+            target_dpr = 1.0
+        self._device_pixel_ratio = target_dpr
+
+        try:
+            current_dpr = float(pixmap.devicePixelRatio())
+        except Exception:
+            current_dpr = None
+        if current_dpr is not None and abs(current_dpr - target_dpr) <= 1e-6:
+            return
+        pixmap.setDevicePixelRatio(target_dpr)
     
     def set_current(self, pixmap: QPixmap, update_seed: bool = True) -> None:
         """
@@ -154,7 +180,7 @@ class ImagePresenter(QObject):
         
         if pixmap:
             try:
-                pixmap.setDevicePixelRatio(self._device_pixel_ratio)
+                self._apply_display_device_pixel_ratio(pixmap)
             except Exception as e:
                 logger.debug("[IMAGE_PRESENTER] Exception suppressed: %s", e)
         
@@ -192,7 +218,7 @@ class ImagePresenter(QObject):
         
         if self._current_pixmap:
             try:
-                self._current_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
+                self._apply_display_device_pixel_ratio(self._current_pixmap)
             except Exception as e:
                 logger.debug("[IMAGE_PRESENTER] Exception suppressed: %s", e)
         

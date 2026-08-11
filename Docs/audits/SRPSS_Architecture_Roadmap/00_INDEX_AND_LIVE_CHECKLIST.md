@@ -58,13 +58,13 @@ from `main`.
 ### Phase 4 — Resource containment
 
 - [x] CPU image caches, prefetch, textures, PBOs and shared-memory ownership are bounded/accounted.
-- [!] Exact current-texture reuse is broken at the next-transition identity boundary and is active Phase 5 work.
+- [x] Exact current-texture reuse is repaired at the display/presenter DPR handoff; the deterministic retained-ID/one-new-upload bar passes.
 - [!] Absolute RSS/private commit/VRAM and GPU busy still need owner-level reduction/attribution.
 
 ### Phase 5 — Workload, delivery, GPU and resource efficiency
 
 - [-] Active. `Current_Plan.md` owns exact order.
-- [ ] Repair retained-current → next-old texture identity reuse.
+- [x] Repair retained-current → next-old texture identity reuse.
 - [ ] Remove avoidable GUI-thread logging/persistence/service/cache preparation.
 - [ ] Attribute GPU busy across upload/transition/visualizer/presentation owners.
 - [ ] Remove proven temporary compatibility/fallback debris without changing behaviour.
@@ -107,7 +107,7 @@ from `main`.
 
 | Area | Required result |
 |---|---|
-| Texture identity | retained current is the next old cache hit; steady transitions upload only new |
+| Texture A/B | installed repeated transitions confirm the repaired old hit/new-only upload and lower UI/request-age tails |
 | UI workload | routine logging/persistence and proven service/cache preparation leave GUI ownership |
 | GPU | transition/visualizer/upload/presentation costs are separately measurable and actionable |
 | Visualizer evidence | stronger temporal + paint-receipt controls protect exact logical cadence |

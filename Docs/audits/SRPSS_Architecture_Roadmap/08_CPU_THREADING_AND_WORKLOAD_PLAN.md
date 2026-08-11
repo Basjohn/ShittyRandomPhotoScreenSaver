@@ -1,6 +1,6 @@
 # 08 — CPU, Threading, and Workload Plan
 
-Last reconciled: 2026-08-10
+Last reconciled: 2026-08-11
 
 Current `main` is the implementation authority. Historical commits are used only as negative controls or forensic references; this plan contains no historical-candidate extraction seam.
 
@@ -93,12 +93,21 @@ warm performs two allocations/uploads. Repeated examples show the retained and n
 old keys moving together but remaining distinct, so this is an identity/reuse
 contract failure, not merely insufficient texture capacity.
 
-Do not guess the exact Qt/QPixmap mechanism from the numeric key pattern alone. The
-source repair must identify why the same logical current image acquires a different
-lookup identity before the next transition and preserve context/generation/size
-correctness. The acceptance result is simple: retained current texture is found as
-the next old texture and steady transitions upload only the new image unless an
-explicit invalidation boundary requires otherwise.
+The 2026-08-11 source trace identified the exact mechanism rather than inferring it
+from the numeric pattern. `DisplayWidget` owned DPR `1.5`, while `ImagePresenter` was
+constructed with an independent `1.0` DPR and never synchronized. The presenter reset
+the destination to `1.0` before texture warm/retention; terminal completion then wrote
+`1.5` and the presenter wrote `1.0` again. Those two real pixmap mutations reproduce
+the observed `retained_key + 2 == next_old_key` divergence.
+
+`ImagePresenter` now consumes the parent display's authoritative DPR and skips no-op
+mutation. A production-shaped manager/presenter regression proves the retained texture
+ID is the next old ID, records one old cache hit, and uploads only the following new
+image. The 45-cycle resource harness still passes with one retained terminal texture,
+bounded PBO reuse, and zero owned bytes after strict resets. Context/generation,
+physical size, DPR/transform change, cancellation-to-old, and a genuinely different
+terminal pixmap remain explicit invalidation boundaries. Installed identical-sequence
+timing/resource A/B remains active in `Current_Plan.md`.
 
 ### Cold widget rendering is still visible at rebuild time
 
@@ -305,12 +314,11 @@ ownership problems.
    - add revision, flush and shutdown tests;
    - prove no stale write can win.
 
-3. **Image/transition texture identity repair**
-   - trace retained-current logical identity into the next old-image lookup;
-   - eliminate the proven steady two-upload miss;
-   - preserve exact context/share generation and byte accounting;
-   - verify one old reuse + one new upload after steady terminal handoff;
-   - then remeasure `generic_pair_warm`, setter and request-age tails.
+3. **Image/transition texture identity repair — implemented; installed A/B pending**
+   - the stale presenter/display DPR split and exact `+2` cache-key divergence are removed;
+   - focused automation verifies one old reuse + one new upload after terminal handoff;
+   - exact context/share generation, transform boundaries and byte accounting remain unchanged;
+   - remeasure `generic_pair_warm`, setter and request-age tails in identical installed sequences.
 
 These three come before visualizer scheduler changes because they attack broad GUI
 starvation without altering Bubble/Spectrum time semantics.
@@ -390,8 +398,8 @@ Phase 5 GUI owner and replay/temporal tests prove identical evolution.
 
 #### First visualizer strategy: remove external starvation
 
-Before changing any visualizer owner, complete the broad GUI extractions and image
-identity repair, then repeat the same Bubble/Spectrum transition scenario. If tick
+Before changing any visualizer owner, complete the broad GUI extractions, then repeat
+the same Bubble/Spectrum transition scenario on the repaired texture-identity build. If tick
 and source-age tails improve while the visualizer code is unchanged, that is the
 preferred solution. A transition-start visualizer stall is not proof that its clock
 belongs on another thread when the final Qt/GL presentation must still wait for the

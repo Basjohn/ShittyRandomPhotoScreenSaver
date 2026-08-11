@@ -268,7 +268,7 @@ Count-only cache tests are insufficient.
 
 Phase 4 owns these concrete automated bars:
 
-- `tests/test_phase4_resource_containment.py` — exact texture-byte eviction with active-pair pinning, exact terminal current-texture retention, one bounded reusable terminal PBO, transition-local allocation/upload/delete and slow-upload proxy diagnostics, Particle/Burn cancellation, and cross-display QPixmap alias deduplication;
+- `tests/test_phase4_resource_containment.py` — exact texture-byte eviction with active-pair pinning, display/presenter DPR-stable terminal-current → next-old texture identity with one new-only upload, one bounded reusable terminal PBO, transition-local allocation/upload/delete and slow-upload proxy diagnostics, Particle/Burn cancellation, and cross-display QPixmap alias deduplication;
 - `tests/test_image_cache_accounting.py` — exact QImage/QPixmap logical-byte eviction and detached metadata;
 - `tests/test_image_prefetcher.py` — concurrency/count/future-byte backlog bounds, worker-safe QImage results, source-generation invalidation, and rejection of stale raw/scaled callbacks that would otherwise repopulate the cache or release a newer same-key owner;
 - `tests/test_image_pipeline.py` — exact transform sharing plus non-sharing across differing source/target/DPR identity, including previous-image replay and DPR-aware scaled-cache keys;

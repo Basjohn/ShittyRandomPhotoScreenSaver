@@ -94,14 +94,16 @@ set_processed_image               median 35.84 ms  p95 117.43 ms max 128.42 ms
 generic_pair_warm                 median 26.62 ms  p95 64.45 ms  max 80.41 ms
 ```
 
-Exact telemetry proves a terminally retained current texture is not cache-hitting the
-next transition's old-image identity on repeated steady transitions, causing avoidable
-old+new allocation/upload work.
+The source-level identity defect is repaired. `ImagePresenter` previously retained an
+independent `1.0` DPR while the display-owned DPR was `1.5`; its pre-terminal and
+post-terminal writes changed the destination pixmap cache identity, including the exact
+`retained_key + 2 == next_old_key` pattern in the canonical run. The presenter now
+consumes the display-owned DPR and skips no-op mutation. Focused automation proves the
+retained destination is the next old cache hit and only the following destination
+uploads under unchanged context/generation/size/transform identity.
 
-- [ ] Repair the exact current-image identity/reuse contract so the terminal current texture becomes the next old texture when context/generation/size identity is unchanged.
-- [ ] Require steady transitions to reuse old and upload only new; explicit invalidation boundaries must be named rather than hidden by fallback.
 - [ ] Re-run identical transition sequences and prove lower `generic_pair_warm`, setter, request-age, and visualizer-tick tails without increasing retained texture/PBO count.
-- [ ] After identity reuse is fixed, measure simultaneous multi-display GUI commits. If they still create back-to-back starvation, allow at most one bounded prepared display commit per queued GUI turn while preserving source timing and authoritative first frame.
+- [ ] After installed identity A/B confirms the repair, measure simultaneous multi-display GUI commits. If they still create back-to-back starvation, allow at most one bounded prepared display commit per queued GUI turn while preserving source timing and authoritative first frame.
 - [ ] Keep transition names and one terminal GL metric bracket per real transition; no repaint retry or scheduler/cadence compensation.
 
 ## P5.2A UI-Thread Workload Extraction

@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import MappingProxyType, SimpleNamespace
 from unittest.mock import MagicMock
 
+from PySide6.QtCore import QObject
 from PySide6.QtGui import QImage, QPixmap
 
 from core.performance.resource_metrics import collect_resource_accounting
@@ -14,6 +15,7 @@ from rendering.image_resource_accounting import (
     get_display_image_accounting,
     refresh_display_image_accounting,
 )
+from rendering.image_presenter import ImagePresenter
 from rendering.transition_state import BurnState, CrossfadeState, ParticleState
 from rendering.gl_compositor_pkg.transition_lifecycle import cancel_current_transition
 
@@ -144,6 +146,71 @@ def test_terminal_transition_retires_history_and_retains_destination(monkeypatch
     assert manager.get_stats()["texture_count"] == terminal_stats["texture_count"]
     assert manager.get_stats()["texture_bytes"] == terminal_stats["texture_bytes"]
     assert fake_gl.glDeleteTextures.call_count == delete_count
+
+
+def test_terminal_destination_survives_display_presenter_handoff_as_next_old_texture(
+    monkeypatch,
+    qt_app,
+):
+    fake_gl = MagicMock()
+    monkeypatch.setattr(texture_module, "gl", fake_gl)
+
+    manager = GLTextureManager(
+        owner="display:dpr-handoff",
+        generation=7,
+        max_cached_texture_bytes=1024 * 1024,
+    )
+    uploads: list[tuple[int, int]] = []
+
+    def _upload(pixmap: QPixmap) -> int:
+        texture_id = 100 + len(uploads)
+        texture_bytes = int(pixmap.width()) * int(pixmap.height()) * 4
+        uploads.append((texture_id, int(pixmap.cacheKey())))
+        manager._texture_bytes_by_id[texture_id] = texture_bytes
+        manager._current_texture_bytes += texture_bytes
+        return texture_id
+
+    manager.upload_pixmap = _upload
+
+    display = QObject()
+    display._device_pixel_ratio = 1.5
+    presenter = ImagePresenter(display, device_pixel_ratio=1.0)
+
+    old = QPixmap.fromImage(QImage(17, 9, QImage.Format.Format_ARGB32))
+    current = QPixmap.fromImage(QImage(17, 9, QImage.Format.Format_ARGB32))
+    following = QPixmap.fromImage(QImage(13, 7, QImage.Format.Format_ARGB32))
+    old.setDevicePixelRatio(display._device_pixel_ratio)
+    current.setDevicePixelRatio(display._device_pixel_ratio)
+    following.setDevicePixelRatio(display._device_pixel_ratio)
+
+    # Production installs the destination into ImagePresenter before warming
+    # the pair, then the compositor retains that destination at terminal time.
+    presenter.set_current(current)
+    assert manager.prepare_transition_textures(old, current) is True
+    retained_texture_id = manager.new_tex_id
+    manager.release_transition_textures(retain_active="new")
+    retained_cache_key = next(iter(manager._texture_cache))
+
+    # Display completion and ImagePresenter completion must not mutate the
+    # retained pixmap's identity when DPR/size/transform are unchanged.
+    current.setDevicePixelRatio(display._device_pixel_ratio)
+    presenter.complete_transition(current)
+
+    # The next installation prepares only the following destination.  Its old
+    # side is the terminally retained current pixmap from the prior transition.
+    presenter.set_current(following)
+    stats_before = manager.get_stats()
+    assert manager.prepare_transition_textures(current, following) is True
+    stats_after = manager.get_stats()
+
+    assert int(current.cacheKey()) == retained_cache_key
+    assert current.devicePixelRatio() == display._device_pixel_ratio
+    assert manager.old_tex_id == retained_texture_id
+    assert stats_after["texture_cache_hits"] - stats_before["texture_cache_hits"] == 1
+    assert len(uploads) == 3  # first old + first new + following new only
+
+    manager.release_transition_textures(retain_active="new")
+    assert manager.get_stats()["texture_count"] == 1
 
 
 def test_terminal_retention_log_is_transition_local_and_byte_aware(

@@ -1,6 +1,6 @@
 # Compositor Architecture
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 Current target architecture for fullscreen presentation. `main` is the implementation
 authority; historical candidates exist only as negative controls/reference.
@@ -28,7 +28,7 @@ Do not start a surface merge yet. Current evidence shows:
 
 - GUI request age dominates paint duration;
 - `set_processed_image()`/`generic_pair_warm` are large GUI/context transactions;
-- retained current texture fails next-old identity reuse, causing paired warm/upload work;
+- retained-current/next-old identity is repaired at the display-owned DPR handoff; installed timing A/B remains;
 - active-display GPU busy is material but not yet separated by owner;
 - screen 1 is 60 Hz while visualizer overlay state/update/paint windows can approach ~100 Hz.
 
@@ -60,6 +60,11 @@ surface/context if GPU/context evidence justifies it.
 Current texture retention must use a stable identity that survives terminal handoff into
 the next old-image lookup under unchanged source/transform/size/context generation.
 Steady transition target: old cache hit + new upload only.
+
+`DisplayWidget` is the live DPR owner. `ImagePresenter` consumes that value and must not
+apply an independent stale DPR or otherwise mutate an unchanged terminal pixmap after
+its texture has been retained. Focused automation covers the full presenter/manager
+handoff and the old-hit/new-only-upload result.
 
 Do not solve identity failure through larger caches or retaining historical image sets.
 

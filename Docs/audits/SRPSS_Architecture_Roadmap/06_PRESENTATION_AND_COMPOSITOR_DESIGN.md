@@ -1,6 +1,6 @@
 # 06 — Presentation and Compositor Design
 
-Last reconciled: 2026-08-10
+Last reconciled: 2026-08-11
 
 ## Design Objective
 
@@ -19,7 +19,7 @@ Current evidence says:
 
 - request age, not paint cost, dominates frame gaps;
 - `set_processed_image()` and `generic_pair_warm` are large GUI/context transactions;
-- retained-current texture identity currently misses next-old reuse and causes paired uploads;
+- the retained-current/next-old DPR identity defect is repaired in code and focused automation; installed paired-sequence A/B remains;
 - process GPU busy is material but not yet split by owner;
 - visualizer screen 1 is 60 Hz while overlay state/update/paint windows can approach ~100 Hz.
 

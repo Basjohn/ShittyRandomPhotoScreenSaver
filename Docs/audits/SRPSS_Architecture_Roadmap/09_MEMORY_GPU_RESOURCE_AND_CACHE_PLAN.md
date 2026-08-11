@@ -1,6 +1,6 @@
 # 09 — RAM, Commit, VRAM, GPU, Resource, and Cache Plan
 
-Last reconciled: 2026-08-10
+Last reconciled: 2026-08-11
 
 ## Current Conclusion
 
@@ -39,14 +39,18 @@ Report separately:
 - transition GL timer-query duration/support/sample count;
 - visualizer state/update/paint rates per display/refresh.
 
-## Active Texture Reuse Work
+## Texture Reuse Result
 
-The exact current-texture identity defect is a resource/performance bug as well as a UI
-stall. Terminal current retention is only useful if next transition old lookup uses the
-same stable identity under unchanged context/generation/size/transform.
+The exact current-texture identity defect was the stale DPR split between display and
+presenter ownership. `DisplayWidget` used the live `1.5` DPR while `ImagePresenter`
+retained its construction default `1.0`; terminal completion toggled the pixmap twice
+after texture retention and reproduced the canonical `retained_key + 2` next-old miss.
 
-Acceptance: old cache hit + only new upload on steady transition; no larger budget,
-historical texture staircase or weaker teardown.
+The presenter now reads the display-owned DPR and skips no-op mutation. Focused
+automation proves old cache hit + only new upload on a steady transition, and the
+45-cycle resource harness retains one terminal texture without larger budgets,
+historical texture staircases or weaker teardown. Installed identical-sequence timing,
+GPU and retained-count comparison remains active Phase 5 validation.
 
 ## GPU Attribution Program
 
@@ -58,7 +62,7 @@ Promoted from Future Cleanup into active Phase 5:
 - log support and sample counts so zero is not confused with “not measured”;
 - correlate per-transition GPU time with process GPU busy, texture uploads, update/paint rates and event-loop/request age;
 - separate visualizer overlay/context work from image transition/compositor work;
-- repeat after texture identity repair before attributing duplicate upload cost to persistent rendering.
+- repeat on the texture-identity-fixed build before attributing remaining cost to persistent rendering.
 
 ## Visualizer Presentation Efficiency
 

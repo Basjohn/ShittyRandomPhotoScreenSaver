@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 Compact status/navigation index for significant SRPSS regressions. Full incident
 narratives are authoritative under `Docs/Historical_Bugs/`.
@@ -16,12 +16,13 @@ set.
 
 ## Active / Pending Records
 
-No R-series recreation/lifecycle incident is active. R-53/R-56/R-57/R-59 are solved;
-current Phase 5 performance/resource work is tracked by `Current_Plan.md` rather than by
-keeping those incidents artificially open.
+R-60 is repaired in code with installed identical-sequence timing validation pending.
+No R-series recreation/lifecycle incident is active. Current Phase 5 performance and
+resource follow-up remains tracked by `Current_Plan.md`.
 
 ## Standalone R Records
 
+- [R-60 — ImagePresenter DPR Split Rekeyed The Retained Current Texture](Historical_Bugs/R-60_ImagePresenter_DPR_Texture_Identity.md)
 - [R-59 — Frozen Settings/Edit Recreation Retained Compiled Bound Methods](Historical_Bugs/R-59_Runtime_Settings_Request_Input_Stack_Teardown.md)
 - [R-58 — Move To Custom Copied Stale Backing Values Instead Of The Curated Runtime State](Historical_Bugs/R-58_Visualizer_Move_To_Custom_Preset_Authority.md)
 - [R-57 — Scaled Prefetch Popped Selection Order Instead Of Descending Indices](Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Order.md)
