@@ -1,6 +1,9 @@
-import pytest
-from PySide6.QtCore import Qt
 import inspect
+
+import pytest
+from PySide6.QtCore import QPoint, Qt
+
+from widgets.context_menu import ScreensaverContextMenu
 
 
 @pytest.mark.qt
@@ -35,6 +38,49 @@ def test_mc_display_widget_receives_hotkeys(qt_app, qtbot, settings_manager, mon
     assert counts["c"] == 1
     assert counts["s"] == 1
     assert counts["esc"] == 1
+
+
+@pytest.mark.qt
+def test_mc_escape_from_context_menu_exits_owning_display(
+    qt_app,
+    qtbot,
+    settings_manager,
+    monkeypatch,
+):
+    monkeypatch.setattr("sys.argv", ["SRPSS_MC.exe"])
+
+    from rendering.display_widget import DisplayWidget
+
+    widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
+    qtbot.addWidget(widget)
+    widget.resize(640, 360)
+    widget.show()
+
+    menu = ScreensaverContextMenu(parent=widget, is_mc_build=True)
+    qtbot.addWidget(menu)
+    first_action = menu.addAction("First test action")
+    second_action = menu.addAction("Second test action")
+    menu.popup(widget.mapToGlobal(QPoint(20, 20)))
+    qt_app.processEvents()
+    menu.setActiveAction(first_action)
+
+    exit_count = 0
+
+    def _record_exit() -> None:
+        nonlocal exit_count
+        exit_count += 1
+
+    widget.exit_requested.connect(_record_exit)
+
+    # Non-Escape menu navigation remains QMenu-owned.
+    qtbot.keyClick(menu, Qt.Key.Key_Down)
+    assert menu.activeAction() is second_action
+    assert exit_count == 0
+
+    qtbot.keyClick(menu, Qt.Key.Key_Escape)
+    qt_app.processEvents()
+
+    assert exit_count == 1
 
 
 def test_mc_interaction_clicks_reclaim_focus():

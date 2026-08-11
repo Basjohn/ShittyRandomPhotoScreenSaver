@@ -416,6 +416,22 @@ def handle_eventFilter(widget, watched, event):
                 top_level = None
             if isinstance(top_level, DisplayWidget):
                 owning_display = top_level
+            elif event is not None and event.type() == QEvent.Type.KeyPress:
+                # Popup menus are top-level windows even when they are owned by a
+                # DisplayWidget, so window() cannot recover their display. Only
+                # Escape needs to cross that popup boundary; all other menu keys
+                # must remain owned by QMenu for normal navigation.
+                try:
+                    is_escape = event.key() == Qt.Key.Key_Escape
+                except Exception:
+                    is_escape = False
+                if is_escape:
+                    parent = watched.parentWidget()
+                    while parent is not None:
+                        if isinstance(parent, DisplayWidget):
+                            owning_display = parent
+                            break
+                        parent = parent.parentWidget()
         # Bail out for widgets that aren't part of any DisplayWidget tree (e.g. settings dialog)
         if owning_display is None:
             return QWidget.eventFilter(widget, watched, event)
@@ -458,7 +474,11 @@ def handle_eventFilter(widget, watched, event):
         if event is not None and event.type() == QEvent.Type.KeyPress:
             try:
                 key_event = event  # QKeyEvent
-                target = widget._coordinator.focus_owner
+                target = (
+                    owning_display
+                    if key_event.key() == Qt.Key.Key_Escape
+                    else widget._coordinator.focus_owner
+                )
                 if target is None or not isinstance(target, DisplayWidget) or not target.isVisible():
                     target = widget
                 if isinstance(target, DisplayWidget) and target.isVisible():
