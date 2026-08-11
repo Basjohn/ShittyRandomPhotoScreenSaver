@@ -79,7 +79,7 @@ def test_shadow_tuning_payload_backfills_new_sections_without_clobbering_existin
     assert payload["text_large"]["offset_x"] == shadow_tuning._TEXT_LARGE_DEFAULTS["offset_x"]
     assert payload["header"]["alpha"] == 70
     assert "icon" in payload
-    assert payload["icon"]["alpha"] == 67
+    assert payload["icon"]["alpha"] == shadow_tuning._ICON_DEFAULTS["alpha"]
     assert payload["icon"]["scale"] == shadow_tuning._ICON_DEFAULTS["scale"]
     assert "control" in payload
     assert payload["control"]["spread"] == shadow_tuning._CONTROL_DEFAULTS["spread"]
