@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.8"
+PARSER_VERSION = "1.9"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
@@ -167,16 +167,41 @@ def _log_file_identity(path: Path) -> tuple[str, int] | None:
     return match.group("base"), int(match.group("rotation") or 0)
 
 
-def _directory_hash(path: Path) -> str:
-    digest = hashlib.sha256()
-    for log_path in sorted(
-        (
+def _directory_log_paths(path: Path) -> tuple[Path, ...]:
+    """Select the log files that belong to one directory evidence source.
+
+    The product writes its active sidecars directly under a directory named
+    ``logs``.  That directory can also contain archived captures and derived
+    analysis trees with the same sidecar basenames, so descending from the live
+    root would mix distinct runs and create false rotation collisions.
+
+    Explicit evidence-run directories retain recursive discovery for backwards
+    compatibility with copied/extracted layouts.
+    """
+
+    if path.name.casefold() == "logs":
+        candidates = (
+            candidate
+            for candidate in path.iterdir()
+            if candidate.is_file() and _log_file_identity(candidate) is not None
+        )
+    else:
+        candidates = (
             candidate
             for candidate in path.rglob("*")
             if candidate.is_file() and _log_file_identity(candidate) is not None
-        ),
-        key=lambda item: item.relative_to(path).as_posix().lower(),
-    ):
+        )
+    return tuple(
+        sorted(
+            candidates,
+            key=lambda item: item.relative_to(path).as_posix().lower(),
+        )
+    )
+
+
+def _directory_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    for log_path in _directory_log_paths(path):
         relative = log_path.relative_to(path).as_posix()
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
@@ -206,15 +231,7 @@ def _read_source(path: Path) -> tuple[dict[str, list[str]], dict[str, int]]:
         sizes[Path(name).name] = size
 
     if path.is_dir():
-        for log_path in sorted(
-            (
-                candidate
-                for candidate in path.rglob("*")
-                if candidate.is_file()
-                and _log_file_identity(candidate) is not None
-            ),
-            key=lambda item: item.relative_to(path).as_posix().lower(),
-        ):
+        for log_path in _directory_log_paths(path):
             text = log_path.read_text(encoding="utf-8", errors="replace")
             add_log(log_path.name, text, log_path.stat().st_size)
         return {
@@ -1311,13 +1328,16 @@ def write_analysis(analysis: ArchiveAnalysis, output_dir: Path) -> None:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Parse an SRPSS evidence subfolder or legacy ZIP archive."
+        description=(
+            "Parse an SRPSS live logs directory, evidence subfolder, "
+            "or legacy ZIP archive."
+        )
     )
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument(
         "--source",
         type=Path,
-        help="Evidence subfolder (preferred) or legacy ZIP archive.",
+        help="Live logs directory, evidence subfolder, or legacy ZIP archive.",
     )
     source.add_argument(
         "--archive",

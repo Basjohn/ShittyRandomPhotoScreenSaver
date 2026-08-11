@@ -175,7 +175,18 @@ Evidence location and format:
 logs/evidence_chest/<run_name>/
 ```
 
-New captures are plain disposable subfolders. Parse the folder directly; do not create a ZIP merely for analysis:
+Parse the current live root directly when the active sidecars are still in place:
+
+```powershell
+python tools/recovery_evidence_parser.py --source logs --output-dir logs/_analysis_live
+```
+
+Parser 1.9 treats a directory named `logs` as the live sidecar root: it reads only
+immediate `.log` files and their rotations, ignoring `evidence_chest`, derived-analysis,
+and other descendant trees. Its source hash covers exactly that selected live set.
+
+New captures are plain disposable subfolders. Parse an explicitly selected capture
+directly; do not create a ZIP merely for analysis:
 
 ```powershell
 python tools/recovery_evidence_parser.py --source logs/evidence_chest/phase4plus_a2f7bd89 --output-dir logs/evidence_chest/derived/phase4plus_a2f7bd89
@@ -183,7 +194,9 @@ python tools/recovery_evidence_parser.py --source logs/evidence_chest/phase4plus
 
 The parser filename is historical and remains stable; its name does not make any historical branch or candidate an implementation authority.
 
-Parser 1.7 joins copied sidecar rotations oldest-first and then reads the active
+Explicit evidence-run folders retain recursive discovery for copied/extracted layouts;
+select one run rather than the whole `evidence_chest` parent. Parser 1.9 joins copied
+sidecar rotations oldest-first and then reads the active
 `.log`, so a session that crosses `screensaver_verbose.log.1` or
 `screensaver_lifecycle.log.1` remains continuous. Copy only the rotations needed
 to cover the authoritative live session. The generated `summary.json` describes

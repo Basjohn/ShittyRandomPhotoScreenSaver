@@ -363,3 +363,77 @@ def test_plain_evidence_parser_includes_rotated_sidecars_in_chronological_order(
             evidence_dir / "screensaver_perf.log.1"
         ).stat().st_size,
     }
+
+
+def test_live_logs_root_ignores_nested_archives_and_hashes_only_live_sidecars(
+    tmp_path: Path,
+) -> None:
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
+    rotated = logs_dir / "screensaver_perf.log.1"
+    active = logs_dir / "screensaver_perf.log"
+    rotated.write_text(
+        "2026-08-11 03:00:00 - metrics - INFO - "
+        "[PERF] [GL PAINT] Slide metrics: screen=0, frames=10, "
+        "avg_fps=20.0, dt_max=80.0ms, target_fps=60, outcome=completed\n",
+        encoding="utf-8",
+    )
+    active.write_text(
+        "2026-08-11 03:30:00 - metrics - INFO - "
+        "[PERF] [GL PAINT] Slide metrics: screen=0, frames=60, "
+        "avg_fps=60.0, dt_max=20.0ms, target_fps=60, outcome=completed\n",
+        encoding="utf-8",
+    )
+    archived_dir = logs_dir / "evidence_chest" / "historical_run"
+    archived_dir.mkdir(parents=True)
+    archived = archived_dir / "screensaver_perf.log"
+    archived.write_text(
+        "2026-08-09 14:59:00 - historical - INFO - "
+        "[PERF] [GL PAINT] Slide metrics: screen=0, frames=1, "
+        "avg_fps=1.0, dt_max=1000.0ms, target_fps=60, outcome=completed\n",
+        encoding="utf-8",
+    )
+
+    analysis = analyze_evidence_source(logs_dir)
+    original_hash = analysis.summary["source_sha256"]
+
+    assert [row["timestamp"] for row in analysis.frame_rows] == [
+        "2026-08-11 03:00:00",
+        "2026-08-11 03:30:00",
+    ]
+    assert analysis.summary["time_range"] == {
+        "first": "2026-08-11 03:00:00",
+        "last": "2026-08-11 03:30:00",
+    }
+    assert analysis.summary["source_files"] == {
+        active.name: active.stat().st_size,
+        rotated.name: rotated.stat().st_size,
+    }
+
+    archived.write_text("changed historical content\n", encoding="utf-8")
+    assert analyze_evidence_source(logs_dir).summary["source_sha256"] == original_hash
+
+
+def test_explicit_evidence_directory_retains_recursive_log_discovery(
+    tmp_path: Path,
+) -> None:
+    evidence_dir = tmp_path / "selected_evidence"
+    nested_dir = evidence_dir / "copied_sidecars"
+    nested_dir.mkdir(parents=True)
+    (nested_dir / "screensaver_perf.log").write_text(
+        "2026-08-10 12:00:00 - metrics - INFO - "
+        "[PERF] [GL PAINT] Slide metrics: screen=0, frames=60, "
+        "avg_fps=60.0, dt_max=20.0ms, target_fps=60, outcome=completed\n",
+        encoding="utf-8",
+    )
+
+    analysis = analyze_evidence_source(evidence_dir)
+
+    assert [row["timestamp"] for row in analysis.frame_rows] == [
+        "2026-08-10 12:00:00"
+    ]
+    assert analysis.summary["source_files"] == {
+        "screensaver_perf.log": (
+            nested_dir / "screensaver_perf.log"
+        ).stat().st_size,
+    }
