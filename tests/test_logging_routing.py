@@ -54,12 +54,38 @@ def test_non_perf_filter_blocks_perf_records():
         args=(),
         exc_info=None,
     )
+
+    perf_warning_record = logging.LogRecord(
+        name="test",
+        level=logging.WARNING,
+        pathname="",
+        lineno=0,
+        msg="[PERF] Warning metric",
+        args=(),
+        exc_info=None,
+    )
     
     # PERF record should be blocked
     assert filter_obj.filter(perf_record) is False
     
     # Normal record should pass
     assert filter_obj.filter(normal_record) is True
+    assert filter_obj.filter(perf_warning_record) is True
+
+
+def test_cache_filter_accepts_gl_cache_family():
+    filter_obj = CacheLogFilter()
+    record = logging.LogRecord(
+        name="transitions.texture_manager",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="[GL CACHE] old_cached_before=true",
+        args=(),
+        exc_info=None,
+    )
+
+    assert filter_obj.filter(record) is True
 
 
 def test_non_spotify_filter_blocks_spotify_records():

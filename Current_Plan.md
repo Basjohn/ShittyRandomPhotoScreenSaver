@@ -122,7 +122,7 @@ Target contract: **Prepare → Commit → Persist**.
 
 ### Priority 0 — broad architectural removal
 
-- [ ] **Queued ordinary logging:** caller threads enqueue bounded records; one process-owned writer performs normal formatting/rotation/file writes. Preserve a direct emergency/faulthandler path independent of the queue. Measure caller cost, queue depth, writer lag, drops and flush duration.
+- [x] **Queued ordinary logging:** caller threads enqueue bounded snapshots; one process-owned writer performs normal filtering/formatting/deduplication/rotation/file writes. Queue saturation/drop/caller-cost/writer-lag/high-water/flush metrics, serialized WARNING+ emergency visibility, bounded reconfiguration/shutdown, and independent crash/faulthandler ownership are covered by focused automation. The same typical-load runtime comparison remains the next evidence gate.
 - [ ] **Ordered settings persistence:** in-memory settings become authoritative synchronously; JSON serialization/temp-write/atomic replace move to one ordered persistence owner. Coalesce only superseded pending revisions where semantics allow and expose explicit durability flush points.
 - [ ] **Structured logging family metadata:** the queued record should carry a family/category field so routing is not permanently dependent on human message tokens such as `[CACHE]` versus `[GL CACHE]`.
 
@@ -197,8 +197,8 @@ P5 changes the logging execution architecture; late Phase 7 performs the full ta
 refinement before Phase 8.
 
 - [x] Preserve parser rotation/time-range semantics, exact texture-key image-install evidence, startup identity, bounded action telemetry and all warning/error visibility.
-- [ ] Fix the known routing defect while queued logging is introduced: `08_09_ca830d7_14_59` contains 132 routine `[GL CACHE]` INFO records in `screensaver.log` and zero in `screensaver_cache.log`. `[GL CACHE]` is currently missed by a filter that expects `[CACHE]`.
-- [ ] Main log contract: readable high-level runtime narrative plus every `WARNING`/`ERROR`/`CRITICAL`; routine enabled-family INFO/DEBUG belongs in its sidecar and should not duplicate into main.
+- [x] Fix the known `[GL CACHE]` routing defect: routine INFO now follows the cache sidecar and WARNING+ remains visible in main and cache.
+- [x] Main log contract: readable high-level runtime narrative plus every `WARNING`/`ERROR`/`CRITICAL`; routine enabled-family INFO/DEBUG belongs in its sidecar and should not duplicate into main.
 - [ ] Late Phase 7 logging refinement: inventory high-volume families, move routine records to existing sidecars, add a new sidecar only for a genuinely distinct domain, replace token-guess routing with structured family metadata, and preserve cross-sidecar ordering/correlation fields.
 - [ ] Keep diagnostic/perf instrumentation passive and bounded; never improve a performance run by simply deleting the evidence required to understand it.
 

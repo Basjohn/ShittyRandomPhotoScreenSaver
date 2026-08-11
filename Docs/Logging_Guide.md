@@ -1,6 +1,6 @@
 # Logging Guide
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 ## Purpose
 
@@ -35,19 +35,19 @@ Existing sidecars remain the first destinations for their domains:
 Do not create a new sidecar merely because one logger is noisy. Add a family only when a
 distinct high-volume domain has a coherent correlation workflow.
 
-## Known Routing Defect
+## Current Cache Routing
 
-Current cache routing relies partly on message text and expects `[CACHE]`. The current
-mixed-load evidence contains **132 `[GL CACHE]` INFO records in `screensaver.log` and
-zero in `screensaver_cache.log`**. `[GL CACHE]` therefore bypasses the intended cache
-sidecar suppression.
+Cache routing still relies partly on message text. It now recognizes both `[CACHE]`
+and `[GL CACHE]`; focused routing automation requires routine `[GL CACHE]` INFO in
+`screensaver_cache.log` and absent from main when the sidecar is active, while a
+`[GL CACHE]` WARNING remains in both.
 
-This should be fixed while the logging architecture is queued. Do not solve it by
-lowering those records to DEBUG or deleting useful cache evidence.
+Structured family metadata remains the later replacement for token-based routing. Do
+not regress this repair by lowering records to DEBUG or deleting useful cache evidence.
 
 ## Phase 5 Execution Architecture
 
-Normal logging should use one bounded process-owned queue/writer:
+Normal logging uses one bounded process-owned queue/writer:
 
 ```text
 caller thread
@@ -66,6 +66,18 @@ Requirements:
 - one writer owns normal file rotation/writes;
 - shutdown exposes a bounded flush/close contract;
 - fatal/native crash breadcrumbs and faulthandler output remain direct and independent of the queue.
+
+Current implementation details:
+
+- the root logger exposes one producer-facing ingress; real handlers and filters are writer-owned;
+- `SRPSSLogWriter` survives Settings/Edit runtime-generation retirement and is not a `ThreadManager` task;
+- queue capacity is 4096 records; DEBUG/INFO may drop only on saturation/closing and are counted by level;
+- WARNING+ saturation uses the serialized direct-main emergency path and is never silently dropped;
+- shutdown atomically replaces queue ingress with a warning-only closing sink, preserving main visibility through writer finalization and retiring that sink on reconfiguration/atexit;
+- the final `[LOG_QUEUE]` record reports enqueue/dequeue counts, high-water, drops, caller cost, writer lag, emergency/reentry fallbacks, writer errors and flush duration;
+- `flush_logging()` is the bounded visibility barrier used before the exit PERF parser;
+- `flush_and_close_logging()` is the supported ordinary-logging shutdown/reconfiguration API and runs before diagnostic crash-capture close;
+- direct `logging.shutdown()` is not a substitute for the controller-aware drain/close contract.
 
 ## Structured Family Metadata
 
@@ -107,7 +119,7 @@ specific frozen-only failure requires it.
 
 - no per-frame routine INFO stream;
 - no logging-driven repaint/cadence/control flow;
-- no UI-thread file/rotation work once queued architecture lands;
+- no UI-thread normal file/rotation work; only the explicit saturated WARNING+ emergency path may write synchronously;
 - no hiding WARNING+ from main;
 - no “performance improvement” achieved by deleting evidence instead of moving/routing it cheaply;
 - no unbounded logging queue.

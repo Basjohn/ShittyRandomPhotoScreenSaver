@@ -4,15 +4,19 @@ Centralized logging configuration for screensaver application.
 Uses rotating file handler with logs stored in logs/ directory.
 Includes colored console output for debug mode.
 """
+import atexit
 import logging
 import os
+import queue
 import sys
 import tempfile
 import threading
+import time
+import traceback
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 from core.build_profile import is_compiled_runtime, is_diagnostic_build
 
@@ -44,6 +48,581 @@ _LOGGING_DISABLED: bool = _IS_FROZEN
 _BASE_DIR: Path = Path(__file__).parent.parent.parent
 _FORCED_LOG_DIR: Path | None = None
 _ACTIVE_LOG_DIR: Path | None = None
+
+# Ordinary logging is process-owned rather than tied to a recreatable runtime
+# generation. Caller threads only snapshot/enqueue records; one writer owns
+# filtering, formatting, rotation and normal file output.
+_LOG_QUEUE_CAPACITY = 4096
+_LOG_FLUSH_TIMEOUT_SECONDS = 3.0
+_ACTIVE_LOGGING_CONTROLLER = None
+_ACTIVE_CLOSING_WARNING_HANDLER = None
+_LOGGING_CONTROLLER_LOCK = threading.RLock()
+_LOGGING_LIFECYCLE_LOCK = threading.RLock()
+
+
+def _safe_log_text(value: object) -> str:
+    try:
+        return str(value)
+    except Exception:
+        return f"<{type(value).__name__}>"
+
+
+def _notify_handler_error(handler: logging.Handler) -> None:
+    callback = getattr(handler, "_srpss_error_callback", None)
+    if not callable(callback):
+        return
+    try:
+        callback()
+    except Exception:
+        pass
+
+
+def _snapshot_log_value(value: Any, *, depth: int = 0) -> Any:
+    """Detach common mutable/Qt values without formatting the whole message."""
+
+    if value is None or isinstance(value, (str, bytes, bool, int, float, complex)):
+        return value
+    if depth >= 6:
+        return _safe_log_text(value)
+    if isinstance(value, tuple):
+        return tuple(_snapshot_log_value(item, depth=depth + 1) for item in value)
+    if isinstance(value, list):
+        return [_snapshot_log_value(item, depth=depth + 1) for item in value]
+    if isinstance(value, dict):
+        return {
+            _snapshot_log_value(key, depth=depth + 1): _snapshot_log_value(
+                item,
+                depth=depth + 1,
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, set):
+        return {_snapshot_log_value(item, depth=depth + 1) for item in value}
+    if isinstance(value, frozenset):
+        return frozenset(
+            _snapshot_log_value(item, depth=depth + 1) for item in value
+        )
+    if isinstance(value, Path):
+        return str(value)
+    return _safe_log_text(value)
+
+
+def _snapshot_log_record(record: logging.LogRecord) -> logging.LogRecord:
+    """Copy a record for deferred formatting without retaining traceback frames."""
+
+    state = {
+        key: _snapshot_log_value(value)
+        for key, value in record.__dict__.items()
+        if key not in {"args", "exc_info", "exc_text", "message", "msg"}
+    }
+    state["msg"] = _snapshot_log_value(record.msg)
+    state["args"] = _snapshot_log_value(record.args)
+    state["exc_info"] = None
+    exc_text = getattr(record, "exc_text", None)
+    traceback_snapshot = None
+    if record.exc_info and not exc_text:
+        try:
+            traceback_snapshot = traceback.TracebackException(
+                *record.exc_info,
+                lookup_lines=False,
+                capture_locals=False,
+                compact=True,
+            )
+        except Exception:
+            exc_text = "<exception formatting failed>"
+    state["exc_text"] = _snapshot_log_value(exc_text)
+    state["_srpss_traceback"] = traceback_snapshot
+    state["_srpss_queue_enqueued_ns"] = time.perf_counter_ns()
+    return logging.makeLogRecord(state)
+
+
+def _render_queued_exception(record: logging.LogRecord) -> None:
+    """Render a detached traceback snapshot on the writer thread."""
+
+    snapshot = getattr(record, "_srpss_traceback", None)
+    if snapshot is None or getattr(record, "exc_text", None):
+        return
+    try:
+        record.exc_text = "".join(snapshot.format()).rstrip()
+    except Exception:
+        record.exc_text = "<exception formatting failed>"
+    finally:
+        try:
+            delattr(record, "_srpss_traceback")
+        except Exception:
+            pass
+
+
+class _QueuedLogHandler(logging.Handler):
+    """Producer-facing handler; routing and formatting stay behind the queue."""
+
+    def __init__(self, controller: "_QueuedLoggingController") -> None:
+        super().__init__(logging.NOTSET)
+        self._controller = controller
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self._controller.enqueue(record)
+
+
+class _ClosingWarningHandler(logging.Handler):
+    """Keep WARNING+ main-visible after ordinary queue shutdown handoff."""
+
+    def __init__(self, controller: "_QueuedLoggingController") -> None:
+        super().__init__(logging.WARNING)
+        self.controller = controller
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.controller._emergency_emit(record, allow_reopen=True)
+
+    def close(self) -> None:
+        try:
+            self.controller.close_emergency_output()
+        finally:
+            super().close()
+
+
+class _QueuedLoggingController:
+    """Bounded process-lifetime queue with one ordinary-log writer."""
+
+    def __init__(
+        self,
+        output_handlers: Iterable[logging.Handler],
+        *,
+        main_handler: logging.Handler,
+        capacity: int,
+    ) -> None:
+        self.output_handlers = tuple(output_handlers)
+        self.main_handler = main_handler
+        self.capacity = max(1, int(capacity))
+        self.ingress_handler = _QueuedLogHandler(self)
+        self._queue: queue.Queue[logging.LogRecord] = queue.Queue(
+            maxsize=self.capacity
+        )
+        self._accept_lock = threading.Lock()
+        self._close_lock = threading.Lock()
+        self._dispatch_lock = threading.RLock()
+        self._metrics_lock = threading.Lock()
+        self._stop_requested = threading.Event()
+        self._finalize_allowed = threading.Event()
+        self._closed_event = threading.Event()
+        self._dispatch_state = threading.local()
+        self._accepting = True
+        self._outputs_closed = False
+        self._flush_started_ns = 0
+        self._flush_duration_ns = 0
+        self._flush_timed_out = False
+        self._enqueued = 0
+        self._dequeued = 0
+        self._dropped_debug = 0
+        self._dropped_info = 0
+        self._dropped_other_low = 0
+        self._emergency_attempts = 0
+        self._emergency_writes = 0
+        self._emergency_stderr_fallbacks = 0
+        self._reentry_fallbacks = 0
+        self._snapshot_errors = 0
+        self._writer_errors = 0
+        self._queue_high_water = 0
+        self._caller_records = 0
+        self._caller_total_ns = 0
+        self._caller_max_ns = 0
+        self._writer_lag_records = 0
+        self._writer_lag_total_ns = 0
+        self._writer_lag_max_ns = 0
+        self._thread = threading.Thread(
+            target=self._run,
+            name="SRPSSLogWriter",
+            daemon=True,
+        )
+        for handler in self.output_handlers:
+            try:
+                setattr(
+                    handler,
+                    "_srpss_error_callback",
+                    self._record_writer_error,
+                )
+            except Exception:
+                pass
+        self._thread.start()
+
+    @property
+    def writer_thread(self) -> threading.Thread:
+        return self._thread
+
+    def enqueue(self, source_record: logging.LogRecord) -> None:
+        started_ns = time.perf_counter_ns()
+        try:
+            if bool(getattr(self._dispatch_state, "in_dispatch", False)):
+                self._reentry_fallback(source_record)
+                return
+            try:
+                record = _snapshot_log_record(source_record)
+            except Exception:
+                with self._metrics_lock:
+                    self._snapshot_errors += 1
+                if source_record.levelno >= logging.WARNING:
+                    self._emergency_emit(
+                        source_record,
+                        allow_reopen=self._stop_requested.is_set(),
+                    )
+                else:
+                    self._record_low_priority_drop(source_record.levelno)
+                return
+
+            emergency = False
+            emergency_allow_reopen = False
+            drop_level: int | None = None
+            with self._accept_lock:
+                if not self._accepting:
+                    if record.levelno >= logging.WARNING:
+                        emergency = True
+                        emergency_allow_reopen = True
+                    else:
+                        drop_level = record.levelno
+                else:
+                    try:
+                        self._queue.put_nowait(record)
+                    except queue.Full:
+                        if record.levelno >= logging.WARNING:
+                            emergency = True
+                        else:
+                            drop_level = record.levelno
+                    else:
+                        depth = self._queue.qsize()
+                        with self._metrics_lock:
+                            self._enqueued += 1
+                            self._queue_high_water = max(
+                                self._queue_high_water,
+                                depth,
+                            )
+            if emergency:
+                # Saturation/closing is an exceptional direct path. The
+                # dispatch lock serializes it with writer-owned rotation.
+                self._emergency_emit(
+                    record,
+                    allow_reopen=emergency_allow_reopen,
+                )
+            elif drop_level is not None:
+                self._record_low_priority_drop(drop_level)
+        finally:
+            elapsed_ns = max(0, time.perf_counter_ns() - started_ns)
+            with self._metrics_lock:
+                self._caller_records += 1
+                self._caller_total_ns += elapsed_ns
+                self._caller_max_ns = max(self._caller_max_ns, elapsed_ns)
+
+    def _record_low_priority_drop(self, levelno: int) -> None:
+        with self._metrics_lock:
+            if levelno <= logging.DEBUG:
+                self._dropped_debug += 1
+            elif levelno <= logging.INFO:
+                self._dropped_info += 1
+            else:
+                self._dropped_other_low += 1
+
+    def _record_writer_error(self) -> None:
+        with self._metrics_lock:
+            self._writer_errors += 1
+
+    def _direct_stderr(self, prefix: str, record: logging.LogRecord) -> None:
+        try:
+            message = record.getMessage()
+        except Exception:
+            message = _safe_log_text(getattr(record, "msg", "<unavailable>"))
+        message = message[:2000]
+        try:
+            sys.__stderr__.write(f"{prefix}{message}\n")
+            sys.__stderr__.flush()
+        except Exception:
+            pass
+
+    def _reentry_fallback(self, record: logging.LogRecord) -> None:
+        with self._metrics_lock:
+            self._reentry_fallbacks += 1
+        self._direct_stderr("SRPSS logging reentry: ", record)
+
+    def _emergency_emit(
+        self,
+        record: logging.LogRecord,
+        *,
+        allow_reopen: bool = False,
+    ) -> None:
+        with self._metrics_lock:
+            self._emergency_attempts += 1
+        if bool(getattr(self._dispatch_state, "in_dispatch", False)):
+            self._reentry_fallback(record)
+            return
+        previous_dispatch = bool(
+            getattr(self._dispatch_state, "in_dispatch", False)
+        )
+        self._dispatch_state.in_dispatch = True
+        emitted = False
+        should_fallback = False
+        try:
+            _render_queued_exception(record)
+            with self._dispatch_lock:
+                if self._outputs_closed and not allow_reopen:
+                    raise RuntimeError("logging outputs already closed")
+                with self._metrics_lock:
+                    errors_before = self._writer_errors
+                if record.levelno >= self.main_handler.level:
+                    self.main_handler.handle(record)
+                    with self._metrics_lock:
+                        emitted = self._writer_errors == errors_before
+                    should_fallback = not emitted
+        except Exception:
+            should_fallback = True
+        finally:
+            self._dispatch_state.in_dispatch = previous_dispatch
+        if should_fallback:
+            with self._metrics_lock:
+                self._emergency_stderr_fallbacks += 1
+            self._direct_stderr("SRPSS emergency log: ", record)
+        if emitted:
+            with self._metrics_lock:
+                self._emergency_writes += 1
+
+    def close_emergency_output(self) -> None:
+        """Close a main handler that a late closing warning may have reopened."""
+
+        with self._dispatch_lock:
+            try:
+                self.main_handler.flush()
+            except Exception:
+                self._record_writer_error()
+            try:
+                self.main_handler.close()
+            except Exception:
+                self._record_writer_error()
+            try:
+                setattr(self.main_handler, "_srpss_error_callback", None)
+            except Exception:
+                pass
+
+    def _dispatch_record(
+        self,
+        record: logging.LogRecord,
+        *,
+        count_record: bool = True,
+        measure_lag: bool = True,
+    ) -> None:
+        _render_queued_exception(record)
+        if measure_lag:
+            enqueued_ns = int(
+                getattr(record, "_srpss_queue_enqueued_ns", 0) or 0
+            )
+            if enqueued_ns:
+                lag_ns = max(0, time.perf_counter_ns() - enqueued_ns)
+                with self._metrics_lock:
+                    self._writer_lag_records += 1
+                    self._writer_lag_total_ns += lag_ns
+                    self._writer_lag_max_ns = max(
+                        self._writer_lag_max_ns,
+                        lag_ns,
+                    )
+
+        previous_dispatch = bool(
+            getattr(self._dispatch_state, "in_dispatch", False)
+        )
+        self._dispatch_state.in_dispatch = True
+        try:
+            with self._dispatch_lock:
+                for handler in self.output_handlers:
+                    if record.levelno < handler.level:
+                        continue
+                    try:
+                        handler.handle(record)
+                    except Exception:
+                        self._record_writer_error()
+        finally:
+            self._dispatch_state.in_dispatch = previous_dispatch
+        if count_record:
+            with self._metrics_lock:
+                self._dequeued += 1
+
+    def _run(self) -> None:
+        try:
+            while True:
+                if self._stop_requested.is_set() and self._queue.empty():
+                    break
+                try:
+                    record = self._queue.get(timeout=0.05)
+                except queue.Empty:
+                    continue
+                try:
+                    self._dispatch_record(record)
+                finally:
+                    self._queue.task_done()
+        finally:
+            self._finalize_allowed.wait()
+            self._finalize_outputs()
+
+    def _finalize_outputs(self) -> None:
+        drain_ns = 0
+        if self._flush_started_ns:
+            drain_ns = max(0, time.perf_counter_ns() - self._flush_started_ns)
+        with self._metrics_lock:
+            self._flush_duration_ns = drain_ns
+        metrics = self.metrics()
+        caller_avg_ms = (
+            metrics["caller_enqueue_total_ms"] / metrics["caller_records"]
+            if metrics["caller_records"]
+            else 0.0
+        )
+        writer_avg_ms = (
+            metrics["writer_lag_total_ms"] / metrics["writer_lag_records"]
+            if metrics["writer_lag_records"]
+            else 0.0
+        )
+        summary = logging.LogRecord(
+            "core.logging.writer",
+            logging.INFO,
+            __file__,
+            0,
+            (
+                "[LOG_QUEUE] final enqueued=%d dequeued=%d "
+                "dropped_debug=%d dropped_info=%d dropped_other_low=%d "
+                "emergency_attempts=%d emergency_main_writes=%d "
+                "emergency_stderr_fallbacks=%d reentry_fallbacks=%d "
+                "snapshot_errors=%d writer_errors=%d "
+                "high_water=%d capacity=%d caller_avg_ms=%.4f "
+                "caller_max_ms=%.4f writer_lag_avg_ms=%.4f "
+                "writer_lag_max_ms=%.4f flush_ms=%.3f"
+            ),
+            (
+                metrics["enqueued"],
+                metrics["dequeued"],
+                metrics["dropped_debug"],
+                metrics["dropped_info"],
+                metrics["dropped_other_low"],
+                metrics["emergency_attempts"],
+                metrics["emergency_writes"],
+                metrics["emergency_stderr_fallbacks"],
+                metrics["reentry_fallbacks"],
+                metrics["snapshot_errors"],
+                metrics["writer_errors"],
+                metrics["queue_high_water"],
+                metrics["capacity"],
+                caller_avg_ms,
+                metrics["caller_enqueue_max_ms"],
+                writer_avg_ms,
+                metrics["writer_lag_max_ms"],
+                metrics["flush_duration_ms"],
+            ),
+            None,
+        )
+        try:
+            self._dispatch_record(
+                summary,
+                count_record=False,
+                measure_lag=False,
+            )
+        finally:
+            with self._dispatch_lock:
+                for handler in self.output_handlers:
+                    try:
+                        handler.flush()
+                    except Exception:
+                        self._record_writer_error()
+                for handler in self.output_handlers:
+                    try:
+                        handler.close()
+                    except Exception:
+                        self._record_writer_error()
+                self._outputs_closed = True
+            if self._flush_started_ns:
+                with self._metrics_lock:
+                    self._flush_duration_ns = max(
+                        0,
+                        time.perf_counter_ns() - self._flush_started_ns,
+                    )
+            self._closed_event.set()
+
+    def begin_close(self) -> None:
+        """Stop queue admission without waiting behind output I/O."""
+
+        with self._close_lock:
+            if not self._stop_requested.is_set():
+                with self._accept_lock:
+                    self._accepting = False
+                    self._flush_started_ns = time.perf_counter_ns()
+                    self._stop_requested.set()
+
+    def allow_finalize(self) -> None:
+        """Permit the drained writer to emit its summary and close outputs."""
+
+        self._finalize_allowed.set()
+
+    def wait_closed(
+        self,
+        timeout_seconds: float,
+    ) -> dict[str, int | float | bool]:
+        timeout = max(0.0, float(timeout_seconds))
+        closed = self._closed_event.wait(timeout)
+        if not closed:
+            with self._metrics_lock:
+                self._flush_timed_out = True
+                if self._flush_started_ns:
+                    self._flush_duration_ns = max(
+                        0,
+                        time.perf_counter_ns() - self._flush_started_ns,
+                    )
+        elif threading.current_thread() is not self._thread:
+            self._thread.join(timeout=0.1)
+        return self.metrics()
+
+    def close(self, timeout_seconds: float) -> dict[str, int | float | bool]:
+        deadline = time.monotonic() + max(0.0, float(timeout_seconds))
+        self.begin_close()
+        self.allow_finalize()
+        if threading.current_thread() is self._thread:
+            return self.metrics()
+        metrics = self.wait_closed(max(0.0, deadline - time.monotonic()))
+        if not metrics["active"]:
+            self.close_emergency_output()
+            metrics = self.metrics()
+        return metrics
+
+    def flush(self, timeout_seconds: float) -> bool:
+        """Wait for currently accepted records and flush outputs without stopping."""
+
+        deadline = time.monotonic() + max(0.0, float(timeout_seconds))
+        with self._queue.all_tasks_done:
+            while self._queue.unfinished_tasks:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                self._queue.all_tasks_done.wait(remaining)
+        return True
+
+    def metrics(self) -> dict[str, int | float | bool]:
+        with self._metrics_lock:
+            return {
+                "active": not self._closed_event.is_set(),
+                "capacity": self.capacity,
+                "queue_depth": self._queue.qsize(),
+                "queue_high_water": self._queue_high_water,
+                "enqueued": self._enqueued,
+                "dequeued": self._dequeued,
+                "dropped_debug": self._dropped_debug,
+                "dropped_info": self._dropped_info,
+                "dropped_other_low": self._dropped_other_low,
+                "emergency_attempts": self._emergency_attempts,
+                "emergency_writes": self._emergency_writes,
+                "emergency_stderr_fallbacks": self._emergency_stderr_fallbacks,
+                "reentry_fallbacks": self._reentry_fallbacks,
+                "snapshot_errors": self._snapshot_errors,
+                "writer_errors": self._writer_errors,
+                "caller_records": self._caller_records,
+                "caller_enqueue_total_ms": self._caller_total_ns / 1_000_000.0,
+                "caller_enqueue_max_ms": self._caller_max_ns / 1_000_000.0,
+                "writer_lag_records": self._writer_lag_records,
+                "writer_lag_total_ms": self._writer_lag_total_ns / 1_000_000.0,
+                "writer_lag_max_ms": self._writer_lag_max_ns / 1_000_000.0,
+                "flush_duration_ms": self._flush_duration_ns / 1_000_000.0,
+                "flush_timed_out": self._flush_timed_out,
+                "writer_alive": self._thread.is_alive(),
+            }
 
 
 @dataclass(frozen=True)
@@ -281,6 +860,7 @@ class DeduplicatingRotatingFileHandler(RotatingFileHandler):
                     if self._last_record is None:
                         self._last_record = record
         except Exception:
+            _notify_handler_error(self)
             self.handleError(record)
     
     def _flush_suppression(self) -> None:
@@ -340,6 +920,7 @@ class SuppressingStreamHandler(logging.StreamHandler):
         try:
             self._emit_with_suppression(record)
         except Exception:
+            _notify_handler_error(self)
             self.handleError(record)
 
     def _emit_with_suppression(self, record: logging.LogRecord) -> None:
@@ -427,6 +1008,7 @@ class SuppressingStreamHandler(logging.StreamHandler):
                 # Ignore flush errors for console output.
                 pass
         except Exception:
+            _notify_handler_error(self)
             self.handleError(record)
 
     def _flush_summary(self) -> None:
@@ -496,6 +1078,8 @@ class NonPerfFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        if record.levelno >= logging.WARNING:
+            return True
         try:
             msg = record.getMessage()
         except Exception:
@@ -609,6 +1193,7 @@ class CacheLogFilter(logging.Filter):
     )
     _MESSAGE_TOKENS = (
         "[CACHE]",
+        "[GL CACHE]",
     )
 
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
@@ -731,6 +1316,8 @@ class WidgetPerfVisibilityFilter(logging.Filter):
     """Blocks widget PERF records from a handler unless verbose mode is enabled."""
 
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        if record.levelno >= logging.WARNING:
+            return True
         try:
             msg = record.getMessage()
         except Exception:
@@ -783,6 +1370,157 @@ def get_log_dir() -> Path:
     if _FORCED_LOG_DIR is not None:
         return _FORCED_LOG_DIR
     return _BASE_DIR / "logs"
+
+
+def _install_closing_warning_handoff(
+    controller: _QueuedLoggingController,
+) -> _ClosingWarningHandler:
+    """Atomically replace queue ingress with a late WARNING+ main sink."""
+
+    global _ACTIVE_CLOSING_WARNING_HANDLER
+
+    with _LOGGING_CONTROLLER_LOCK:
+        existing = _ACTIVE_CLOSING_WARNING_HANDLER
+        if existing is not None and existing.controller is controller:
+            return existing
+        closing_handler = _ClosingWarningHandler(controller)
+        root_logger = logging.getLogger()
+        logging._acquireLock()
+        try:
+            handlers = list(root_logger.handlers)
+            replaced = False
+            for index, handler in enumerate(handlers):
+                if handler is controller.ingress_handler:
+                    handlers[index] = closing_handler
+                    replaced = True
+            if not replaced:
+                handlers.append(closing_handler)
+            root_logger.handlers = handlers
+        finally:
+            logging._releaseLock()
+        _ACTIVE_CLOSING_WARNING_HANDLER = closing_handler
+    try:
+        controller.ingress_handler.close()
+    except Exception:
+        pass
+    return closing_handler
+
+
+def _retire_closing_warning_handoff() -> None:
+    """Remove the late-warning sink and close any reopened main output."""
+
+    global _ACTIVE_CLOSING_WARNING_HANDLER
+
+    with _LOGGING_CONTROLLER_LOCK:
+        closing_handler = _ACTIVE_CLOSING_WARNING_HANDLER
+        _ACTIVE_CLOSING_WARNING_HANDLER = None
+    if closing_handler is None:
+        return
+    root_logger = logging.getLogger()
+    logging._acquireLock()
+    try:
+        root_logger.handlers = [
+            handler
+            for handler in root_logger.handlers
+            if handler is not closing_handler
+        ]
+    finally:
+        logging._releaseLock()
+    try:
+        closing_handler.close()
+    except Exception:
+        pass
+
+
+def _inactive_logging_metrics() -> dict[str, int | float | bool]:
+    return {
+        "active": False,
+        "capacity": _LOG_QUEUE_CAPACITY,
+        "queue_depth": 0,
+        "queue_high_water": 0,
+        "enqueued": 0,
+        "dequeued": 0,
+        "dropped_debug": 0,
+        "dropped_info": 0,
+        "dropped_other_low": 0,
+        "emergency_attempts": 0,
+        "emergency_writes": 0,
+        "emergency_stderr_fallbacks": 0,
+        "reentry_fallbacks": 0,
+        "snapshot_errors": 0,
+        "writer_errors": 0,
+        "caller_records": 0,
+        "caller_enqueue_total_ms": 0.0,
+        "caller_enqueue_max_ms": 0.0,
+        "writer_lag_records": 0,
+        "writer_lag_total_ms": 0.0,
+        "writer_lag_max_ms": 0.0,
+        "flush_duration_ms": 0.0,
+        "flush_timed_out": False,
+        "writer_alive": False,
+    }
+
+
+def get_logging_queue_metrics() -> dict[str, int | float | bool]:
+    """Return a passive snapshot of the process-owned logging queue."""
+
+    with _LOGGING_CONTROLLER_LOCK:
+        controller = _ACTIVE_LOGGING_CONTROLLER
+    if controller is None:
+        return _inactive_logging_metrics()
+    return controller.metrics()
+
+
+def get_logging_output_handlers() -> tuple[logging.Handler, ...]:
+    """Expose writer-owned outputs for bounded diagnostics and configuration tests."""
+
+    with _LOGGING_CONTROLLER_LOCK:
+        controller = _ACTIVE_LOGGING_CONTROLLER
+    if controller is None:
+        return ()
+    return controller.output_handlers
+
+
+def flush_logging(timeout_seconds: float = _LOG_FLUSH_TIMEOUT_SECONDS) -> bool:
+    """Boundedly flush records accepted so far while keeping logging active."""
+
+    with _LOGGING_CONTROLLER_LOCK:
+        controller = _ACTIVE_LOGGING_CONTROLLER
+    if controller is None:
+        return True
+    return controller.flush(timeout_seconds)
+
+
+def flush_and_close_logging(
+    timeout_seconds: float = _LOG_FLUSH_TIMEOUT_SECONDS,
+) -> dict[str, int | float | bool]:
+    """Stop admission, drain accepted records and close ordinary log outputs."""
+
+    global _ACTIVE_LOGGING_CONTROLLER
+
+    with _LOGGING_LIFECYCLE_LOCK:
+        with _LOGGING_CONTROLLER_LOCK:
+            controller = _ACTIVE_LOGGING_CONTROLLER
+        if controller is None:
+            _retire_closing_warning_handoff()
+            return _inactive_logging_metrics()
+
+        deadline = time.monotonic() + max(0.0, float(timeout_seconds))
+        controller.begin_close()
+        _install_closing_warning_handoff(controller)
+        controller.allow_finalize()
+
+        metrics = controller.wait_closed(
+            max(0.0, deadline - time.monotonic())
+        )
+        if not metrics["active"]:
+            with _LOGGING_CONTROLLER_LOCK:
+                if _ACTIVE_LOGGING_CONTROLLER is controller:
+                    _ACTIVE_LOGGING_CONTROLLER = None
+        return metrics
+
+
+atexit.register(flush_and_close_logging)
 
 
 def _resolve_runtime_log_dir(*, diagnostic_build: bool = False) -> Path:
@@ -962,6 +1700,14 @@ def setup_logging(
     global _GEOMETRY_LOGGING_ENABLED, _SETTINGS_LOGGING_ENABLED, _LIFECYCLE_LOGGING_ENABLED
     global _CACHE_LOGGING_ENABLED, _STEAM_LOGGING_ENABLED, _WIDGET_PERF_VERBOSE
     global _BASE_DIR, _FORCED_LOG_DIR, _ACTIVE_LOG_DIR
+    global _ACTIVE_LOGGING_CONTROLLER
+
+    previous_metrics = flush_and_close_logging()
+    if previous_metrics["active"]:
+        raise RuntimeError(
+            "Previous logging writer did not stop within the bounded flush timeout"
+        )
+    _retire_closing_warning_handoff()
 
     if diagnostic_build:
         diagnostic_profile = resolve_logging_bootstrap_profile((), diagnostic_build=True)
@@ -1077,6 +1823,7 @@ def setup_logging(
         '%(asctime)s - %(name)-30s - %(levelname)-8s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
+    output_handlers: list[logging.Handler] = []
     
     # File handler with rotation and deduplication (1MB cap with line-by-line
     # duplicate suppression keeps logs small and readable).
@@ -1126,12 +1873,13 @@ def setup_logging(
     console_handler.addFilter(DedicatedFamilySuppressFilter(SteamLogFilter(), is_steam_logging_enabled))
     console_handler.addFilter(WidgetPerfVisibilityFilter())
     
-    # Configure root logger
+    # Configure the producer-facing root logger. All real outputs remain
+    # writer-owned behind the bounded queue.
     root_logger.setLevel(root_level)
-    root_logger.addHandler(main_handler)
+    output_handlers.append(main_handler)
     
     if debug_enabled:
-        root_logger.addHandler(console_handler)
+        output_handlers.append(console_handler)
 
     # Dedicated PERF metrics log capturing any record whose message contains
     # the "[PERF]" tag. This keeps performance summaries readable even when
@@ -1147,7 +1895,7 @@ def setup_logging(
         perf_handler.setFormatter(formatter)
         perf_handler.setLevel(logging.INFO)
         perf_handler.addFilter(PerfLogFilter())
-        root_logger.addHandler(perf_handler)
+        output_handlers.append(perf_handler)
 
         widget_perf_log_file = log_dir / "perf_widgets.log"
         widget_perf_handler = DeduplicatingRotatingFileHandler(
@@ -1159,7 +1907,7 @@ def setup_logging(
         widget_perf_handler.setFormatter(formatter)
         widget_perf_handler.setLevel(logging.INFO)
         widget_perf_handler.addFilter(WidgetPerfLogFilter())
-        root_logger.addHandler(widget_perf_handler)
+        output_handlers.append(widget_perf_handler)
 
     if _USAGE_LOGGING_ENABLED:
         usage_log_file = log_dir / "screensaver_usage.log"
@@ -1172,7 +1920,7 @@ def setup_logging(
         usage_handler.setFormatter(formatter)
         usage_handler.setLevel(logging.INFO)
         usage_handler.addFilter(UsageLogFilter())
-        root_logger.addHandler(usage_handler)
+        output_handlers.append(usage_handler)
 
     if _VIZ_LOGGING_ENABLED:
         spotify_vis_log_file = log_dir / "screensaver_spotify_vis.log"
@@ -1185,7 +1933,7 @@ def setup_logging(
         spotify_vis_handler.setFormatter(spaced_formatter)
         spotify_vis_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
         spotify_vis_handler.addFilter(SpotifyVisLogFilter())
-        root_logger.addHandler(spotify_vis_handler)
+        output_handlers.append(spotify_vis_handler)
 
         spotify_vol_log_file = log_dir / "screensaver_spotify_vol.log"
         spotify_vol_handler = DeduplicatingRotatingFileHandler(
@@ -1197,7 +1945,7 @@ def setup_logging(
         spotify_vol_handler.setFormatter(formatter)
         spotify_vol_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
         spotify_vol_handler.addFilter(SpotifyVolLogFilter())
-        root_logger.addHandler(spotify_vol_handler)
+        output_handlers.append(spotify_vol_handler)
 
     if _GEOMETRY_LOGGING_ENABLED:
         geometry_log_file = log_dir / "screensaver_geometry.log"
@@ -1210,7 +1958,7 @@ def setup_logging(
         geometry_handler.setFormatter(formatter)
         geometry_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
         geometry_handler.addFilter(GeometryLogFilter())
-        root_logger.addHandler(geometry_handler)
+        output_handlers.append(geometry_handler)
 
     if _SETTINGS_LOGGING_ENABLED:
         settings_log_file = log_dir / "screensaver_settings.log"
@@ -1223,7 +1971,7 @@ def setup_logging(
         settings_handler.setFormatter(formatter)
         settings_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
         settings_handler.addFilter(SettingsLogFilter())
-        root_logger.addHandler(settings_handler)
+        output_handlers.append(settings_handler)
 
     if _LIFECYCLE_LOGGING_ENABLED:
         lifecycle_log_file = log_dir / "screensaver_lifecycle.log"
@@ -1236,7 +1984,7 @@ def setup_logging(
         lifecycle_handler.setFormatter(formatter)
         lifecycle_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
         lifecycle_handler.addFilter(LifecycleLogFilter())
-        root_logger.addHandler(lifecycle_handler)
+        output_handlers.append(lifecycle_handler)
 
     if _CACHE_LOGGING_ENABLED:
         cache_log_file = log_dir / "screensaver_cache.log"
@@ -1249,7 +1997,7 @@ def setup_logging(
         cache_handler.setFormatter(formatter)
         cache_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
         cache_handler.addFilter(CacheLogFilter())
-        root_logger.addHandler(cache_handler)
+        output_handlers.append(cache_handler)
 
     if _STEAM_LOGGING_ENABLED:
         steam_log_file = log_dir / "screensaver_steam.log"
@@ -1262,7 +2010,7 @@ def setup_logging(
         steam_handler.setFormatter(formatter)
         steam_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
         steam_handler.addFilter(SteamLogFilter())
-        root_logger.addHandler(steam_handler)
+        output_handlers.append(steam_handler)
     
     # Verbose debug log - captures ALL DEBUG/INFO with deduplication.
     # This is the "messy" log for deep debugging when console suppression
@@ -1291,7 +2039,16 @@ def setup_logging(
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(LifecycleLogFilter(), is_lifecycle_logging_enabled))
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(CacheLogFilter(), is_cache_logging_enabled))
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(SteamLogFilter(), is_steam_logging_enabled))
-        root_logger.addHandler(verbose_handler)
+        output_handlers.append(verbose_handler)
+
+    controller = _QueuedLoggingController(
+        output_handlers,
+        main_handler=main_handler,
+        capacity=_LOG_QUEUE_CAPACITY,
+    )
+    with _LOGGING_CONTROLLER_LOCK:
+        _ACTIVE_LOGGING_CONTROLLER = controller
+    root_logger.addHandler(controller.ingress_handler)
 
     # Tame particularly noisy third-party libraries so their DEBUG-level
     # chatter (HTTP connection pools, asyncio internals, etc.) only shows

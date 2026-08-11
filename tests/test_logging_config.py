@@ -2,7 +2,15 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import pytest
+
 from core.logging import logger as logger_mod
+
+
+@pytest.fixture(autouse=True)
+def _close_process_logging_after_test(monkeypatch):
+    yield
+    logger_mod.flush_and_close_logging()
 
 
 def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
@@ -37,9 +45,18 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     logging.getLogger("SettingsManager").info("[SETTINGS] write trace")
     logging.getLogger("widgets.spotify_visualizer_widget").info("[SPOTIFY_VIS] mode trace")
     logging.getLogger("engine.screensaver").info("[PERF] timing trace")
+    logging.getLogger("widgets.clock_widget").warning(
+        "[PERF_WIDGET] warning visibility trace"
+    )
     logging.getLogger("core.performance.usage_sampler").info("[USAGE] sample seq=1")
     logging.getLogger("core.process.supervisor").info("ProcessSupervisor initialized")
     logging.getLogger("engine.image_pipeline").info("[CACHE] cache authority trace")
+    logging.getLogger("transitions.texture_manager").info(
+        "[GL CACHE] retained texture trace"
+    )
+    logging.getLogger("transitions.texture_manager").warning(
+        "[GL CACHE] upload warning trace"
+    )
     logging.getLogger("utils.image_cache").info("[CACHE] Cache hit: image-a.jpg")
     logging.getLogger("engine.engine_lifecycle").info(
         "[PERF] [CACHE] ImageCacheFlow: raw_hits=1 raw_misses=0"
@@ -49,7 +66,8 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     )
     logging.getLogger("core.steam.backend").info("[STEAM] provider trace")
 
-    logging.shutdown()
+    metrics = logger_mod.flush_and_close_logging()
+    assert metrics["flush_timed_out"] is False
 
     assert logger_mod.is_perf_metrics_enabled() is True
     assert logger_mod.is_usage_logging_enabled() is True
@@ -66,24 +84,33 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     assert "[SETTINGS] write trace" not in main_log
     assert "[SPOTIFY_VIS] mode trace" not in main_log
     assert "[PERF] timing trace" not in main_log
+    assert "[PERF_WIDGET] warning visibility trace" in main_log
     assert "[USAGE] sample seq=1" not in main_log
     assert "ProcessSupervisor initialized" not in main_log
     assert "[CACHE] cache authority trace" not in main_log
+    assert "[GL CACHE] retained texture trace" not in main_log
+    assert "[GL CACHE] upload warning trace" in main_log
     assert "[CACHE] Cache hit: image-a.jpg" not in main_log
     assert "[PERF] [CACHE] ImageCacheFlow: raw_hits=1 raw_misses=0" not in main_log
     assert "[CACHE] [FALLBACK] Cache entry recovery failed" in main_log
     assert "[STEAM] provider trace" not in main_log
     assert "Specific logs available:" in main_log
     assert "Specific logs active:" in main_log
+    assert "[LOG_QUEUE] final" in main_log
 
     assert "[CUSTOM_LAYOUT] geometry trace" in (tmp_path / "screensaver_geometry.log").read_text(encoding="utf-8")
     assert "[SETTINGS] write trace" in (tmp_path / "screensaver_settings.log").read_text(encoding="utf-8")
     assert "[SPOTIFY_VIS] mode trace" in (tmp_path / "screensaver_spotify_vis.log").read_text(encoding="utf-8")
     assert "[PERF] timing trace" in (tmp_path / "screensaver_perf.log").read_text(encoding="utf-8")
+    assert "[PERF_WIDGET] warning visibility trace" in (
+        tmp_path / "perf_widgets.log"
+    ).read_text(encoding="utf-8")
     assert "[USAGE] sample seq=1" in (tmp_path / "screensaver_usage.log").read_text(encoding="utf-8")
     assert "ProcessSupervisor initialized" in (tmp_path / "screensaver_lifecycle.log").read_text(encoding="utf-8")
     assert "[CACHE] cache authority trace" in (tmp_path / "screensaver_cache.log").read_text(encoding="utf-8")
     cache_log = (tmp_path / "screensaver_cache.log").read_text(encoding="utf-8")
+    assert "[GL CACHE] retained texture trace" in cache_log
+    assert "[GL CACHE] upload warning trace" in cache_log
     assert "[CACHE] Cache hit: image-a.jpg" in cache_log
     assert "[PERF] [CACHE] ImageCacheFlow: raw_hits=1 raw_misses=0" in cache_log
     assert "[CACHE] [FALLBACK] Cache entry recovery failed" in cache_log
@@ -176,7 +203,7 @@ def test_old_logging_env_toggles_no_longer_enable_families(tmp_path, monkeypatch
     monkeypatch.setenv("SRPSS_SETTINGS_LOGGING", "1")
 
     logger_mod.setup_logging(debug=False, verbose=False)
-    logging.shutdown()
+    logger_mod.flush_and_close_logging()
 
     assert logger_mod.is_perf_metrics_enabled() is False
     assert logger_mod.is_usage_logging_enabled() is False
@@ -219,7 +246,7 @@ def test_diagnostic_build_enables_every_family_beside_frozen_executable(
     assert logger_mod.get_log_dir() == expected
     rotating = [
         handler
-        for handler in logging.getLogger().handlers
+        for handler in logger_mod.get_logging_output_handlers()
         if isinstance(handler, RotatingFileHandler)
     ]
     assert rotating
@@ -251,7 +278,7 @@ def test_diagnostic_build_enables_every_family_beside_frozen_executable(
         "screensaver_steam.log",
     } <= {Path(handler.baseFilename).name for handler in rotating}
 
-    logging.shutdown()
+    logger_mod.flush_and_close_logging()
     assert "diagnostic settings" in (expected / "screensaver_settings.log").read_text(
         encoding="utf-8"
     )
@@ -381,7 +408,7 @@ def test_script_mode_retains_main_log_only_without_diagnostic_flags(
     logger_mod.setup_logging()
     handlers = [
         handler
-        for handler in logging.getLogger().handlers
+        for handler in logger_mod.get_logging_output_handlers()
         if isinstance(handler, RotatingFileHandler)
     ]
 

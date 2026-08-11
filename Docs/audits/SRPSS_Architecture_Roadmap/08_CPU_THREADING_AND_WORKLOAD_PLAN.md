@@ -251,9 +251,13 @@ can reach disk before revision N.
 
 ### Logging writer
 
-Ordinary logging should enqueue bounded records to one process-owned writer that owns
-formatting/rotation/file writes. The caller-side path must be small and non-blocking
-under normal operation.
+Ordinary logging now snapshots/enqueues bounded records to one process-owned
+`SRPSSLogWriter` that owns filtering/formatting/deduplication/rotation/file writes. The
+caller-side path is normally non-blocking; only a saturated WARNING+ uses the
+serialized direct-main emergency path. The final queue record exposes caller cost,
+high-water, drops, writer lag, emergency/reentry fallbacks, writer errors and bounded
+flush duration. The writer is process-scoped and deliberately outside runtime
+`ThreadManager` generations.
 
 Keep fatal/native crash breadcrumbs separate: faulthandler/emergency crash records
 must not depend on a healthy logging queue or writer thread. Preserve enough ordering
@@ -313,9 +317,10 @@ ownership problems.
 ### Priority 0 — broad root-cause removals
 
 1. **Async ordinary logging**
-   - queue normal records;
-   - dedicated bounded writer owns formatting/rotation/file writes;
-   - preserve direct fatal/emergency path;
+   - implemented with a bounded process-owned writer and producer-facing ingress;
+   - normal filtering/formatting/deduplication/rotation/file writes are writer-owned;
+   - direct fatal capture remains independent and saturated WARNING+ remains main-visible;
+   - focused gates cover bounded close, shutdown handoff, reentry, drops/lag/high-water/flush telemetry and sidecar routing;
    - repeat the same typical scenario and compare UI/request-age tails with PERF/VIZ diagnostics enabled.
 
 2. **Ordered async settings persistence**

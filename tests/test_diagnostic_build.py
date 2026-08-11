@@ -128,7 +128,8 @@ def test_diagnostic_entrypoint_defaults_to_run_without_overriding_explicit_mode(
 
     monkeypatch.setattr(main_diagnostic.sys, "argv", ["SRPSS_Diagnostic.exe", "--perf"])
     main_diagnostic._inject_run_mode_arg()
-    assert main_diagnostic.sys.argv[-1] == "/s"
+    assert main_diagnostic.sys.argv[1] == "/s"
+    assert main_diagnostic.sys.argv[-1] == "--perf"
 
     monkeypatch.setattr(main_diagnostic.sys, "argv", ["SRPSS_Diagnostic.exe", "/c:1234"])
     main_diagnostic._inject_run_mode_arg()

@@ -16,6 +16,8 @@ from PySide6.QtCore import Qt, QCoreApplication
 from PySide6.QtGui import QSurfaceFormat, QImageReader, QIcon
 from core.logging.logger import (
     clear_logs_for_fresh_start,
+    flush_and_close_logging,
+    flush_logging,
     setup_logging,
     get_logger,
     get_log_dir,
@@ -806,12 +808,18 @@ def main(*, entrypoint: str = "main"):
     if diagnostic_record is not None:
         diagnostic_record("main_return", exit_code=exit_code)
 
+    logging_flushed_for_parser = flush_logging()
+    if not logging_flushed_for_parser and diagnostic_record is not None:
+        diagnostic_record(
+            "ordinary_logging_pre_parser_flush_timeout",
+        )
+
     # When PERF metrics are enabled for this run, automatically invoke the
     # PERF helper to summarise recent Spotify visualiser and Slide metrics
     # from the dedicated screensaver_perf.log. This is a best-effort helper
     # and failures are logged at DEBUG only so normal runs are unaffected.
     try:
-        if perf_mode:
+        if perf_mode and logging_flushed_for_parser:
             try:
                 from scripts import spotify_vis_metrics_parser as _sv  # type: ignore[import]
                 _sv.main()
@@ -824,6 +832,14 @@ def main(*, entrypoint: str = "main"):
         logger.debug(
             "[PERF] spotify_vis_metrics_parser auto-run guard failed",
             exc_info=True,
+        )
+
+    logging_metrics = flush_and_close_logging()
+    if logging_metrics.get("flush_timed_out") and diagnostic_record is not None:
+        diagnostic_record(
+            "ordinary_logging_flush_timeout",
+            queue_depth=logging_metrics.get("queue_depth", 0),
+            writer_alive=logging_metrics.get("writer_alive", False),
         )
     
     if diagnostic_close is not None:
