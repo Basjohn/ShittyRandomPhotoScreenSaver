@@ -67,12 +67,22 @@ Promoted from Future Cleanup into active Phase 5:
 - separate visualizer overlay/context work from image transition/compositor work;
 - repeat on the texture-identity-fixed build before attributing remaining cost to persistent rendering.
 
+The first attribution slice now wraps only the already-occurring visualizer overlay
+clear/render span in a fixed owner-context `GL_TIME_ELAPSED` query ring. It polls
+`GL_QUERY_RESULT_AVAILABLE`, never waits or flushes, drops a sample when the ring is
+full, and reports supported/submitted/collected/pending/dropped/discarded/error counts
+beside CPU paint and state-to-paint summaries. Query handles are ResourceManager-tracked
+and deleted on the exact overlay context. Runtime cost evidence is still required before
+any presentation policy change or extension to the compositor transition seam.
+
 ## Visualizer Presentation Efficiency
 
-Captured screen 1 is 60 Hz while overlay windows can approach ~1000 state/update/paint
-operations per 10 seconds. Phase 5 does not change Bubble/Spectrum logical/source
-cadence. Phase 7 may test whether immutable render snapshots can be coalesced to useful
-presentation opportunities **after** logical integration.
+Captured screen 1 is 60 Hz while the current typical-load run records Bubble medians of
+`89.75` state/update and `87.05` `paintGL()` calls per second, and Spectrum medians of
+`92.7` and `91.15`. Phase 5 does not change Bubble/Spectrum logical/source cadence.
+Phase 7 may test whether immutable render snapshots can be coalesced to useful
+presentation opportunities **after** logical integration and only after owner cost is
+measured.
 
 Measure before/after:
 

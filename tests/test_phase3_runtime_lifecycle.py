@@ -469,6 +469,67 @@ def test_strict_visualizer_overlay_cleanup_retains_failed_program_owner(monkeypa
     assert state.get_state() == GLContextState.DESTROYING
 
 
+def test_strict_visualizer_overlay_cleanup_retains_failed_timer_query_owner(monkeypatch) -> None:
+    class _TimerQueries:
+        def __init__(self) -> None:
+            self.poll_calls = 0
+            self.cleanup_calls = 0
+
+        def has_live_queries(self) -> bool:
+            return True
+
+        def poll(self, _gl) -> None:
+            self.poll_calls += 1
+
+        def cleanup(self, _gl) -> None:
+            self.cleanup_calls += 1
+            raise RuntimeError("driver refused timer query delete")
+
+    context = object()
+    state = GLStateManager("phase3-visualizer-query-owner")
+    assert state.transition(GLContextState.INITIALIZING)
+    assert state.transition(GLContextState.READY)
+    timer_queries = _TimerQueries()
+    overlay = SimpleNamespace(
+        _gl_program_warm_timer=None,
+        _gl_program_warm_queue=[],
+        _gl_programs={},
+        _gl_uniforms={},
+        _gl_program=None,
+        _gl_program_rids={},
+        _gl_mask_program=None,
+        _gl_vbo=None,
+        _gl_vbo_rid=None,
+        _gl_vao=None,
+        _gl_vao_rid=None,
+        _gpu_timer_queries=timer_queries,
+        _gl_state=state,
+        isValid=lambda: True,
+        makeCurrent=lambda: None,
+        doneCurrent=lambda: None,
+        context=lambda: context,
+        _release_resource_tracking=lambda _rid: None,
+    )
+    monkeypatch.setattr(overlay_module, "gl", object())
+    monkeypatch.setattr(
+        overlay_module,
+        "QCoreApplication",
+        SimpleNamespace(instance=lambda: None),
+    )
+    monkeypatch.setattr(
+        overlay_module,
+        "QOpenGLContext",
+        SimpleNamespace(currentContext=lambda: context),
+    )
+
+    with pytest.raises(RuntimeError, match="timer query delete"):
+        overlay_module.SpotifyBarsGLOverlay.cleanup_gl(overlay)
+
+    assert timer_queries.poll_calls == 1
+    assert timer_queries.cleanup_calls == 1
+    assert state.get_state() == GLContextState.DESTROYING
+
+
 def test_visualizer_overlay_destroy_retains_parent_reference_on_gl_failure() -> None:
     class _Overlay:
         def __init__(self):

@@ -114,7 +114,19 @@ def _write_archive(path: Path) -> None:
             "2026-07-23 19:38:08 - metrics - INFO - "
             "[PERF][SPOTIFY_VIS][OVERLAY] reason=set_state screen=1 mode=bubble "
             "elapsed_ms=10000.0 set_state=950 paint=910 update_requests=950 "
-            "geometry_changes=0 visible=True enabled=True playing=True",
+            "geometry_changes=0 refresh_hz=60.0 dpr=1.5 "
+            "paint_cpu_samples=910 paint_cpu_p50_ms=0.2 paint_cpu_p95_ms=0.4 "
+            "paint_cpu_max_ms=1.2 state_to_paint_samples=910 "
+            "state_to_paint_p50_ms=1.0 state_to_paint_p95_ms=3.0 "
+            "state_to_paint_max_ms=8.0 gpu_supported=True "
+            "gpu_reason=supported gpu_pending=2 gpu_errors=0 "
+            "visible=True enabled=True playing=True",
+            "2026-07-23 19:38:08 - metrics - INFO - "
+            "[PERF][SPOTIFY_VIS][OVERLAY_GPU] screen=1 mode=bubble "
+            "elapsed_ms=10000.0 gpu_supported=True gpu_reason=supported "
+            "gpu_submitted=908 gpu_collected=906 gpu_pending=2 "
+            "gpu_dropped_pending=2 gpu_discarded=0 gpu_samples=906 "
+            "gpu_p50_ms=0.11 gpu_p95_ms=0.23 gpu_max_ms=0.71",
             "2026-07-23 19:38:09 - metrics - INFO - "
             "[PERF][MEDIA_PRESENTATION] event=published metadata_changed=True "
             "presentation_changed=True deferred_for_transition=False transition_active=False "
@@ -247,6 +259,76 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
                     "median": 0.0,
                     "maximum": 0.0,
                 },
+                "refresh_hz": {
+                    "minimum": 60.0,
+                    "median": 60.0,
+                    "maximum": 60.0,
+                },
+                "paint_cpu_p95_ms": {
+                    "minimum": 0.4,
+                    "median": 0.4,
+                    "maximum": 0.4,
+                },
+                "state_to_paint_p95_ms": {
+                    "minimum": 3.0,
+                    "median": 3.0,
+                    "maximum": 3.0,
+                },
+            }
+        },
+    }
+    assert analysis.summary["phase5"]["visualizer_overlay_gpu"] == {
+        "records": 1,
+        "by_mode": {
+            "bubble": {
+                "records": 1,
+                "supported_records": 1,
+                "unsupported_records": 0,
+                "submitted": {
+                    "minimum": 908.0,
+                    "median": 908.0,
+                    "maximum": 908.0,
+                },
+                "collected": {
+                    "minimum": 906.0,
+                    "median": 906.0,
+                    "maximum": 906.0,
+                },
+                "pending": {
+                    "minimum": 2.0,
+                    "median": 2.0,
+                    "maximum": 2.0,
+                },
+                "dropped_pending": {
+                    "minimum": 2.0,
+                    "median": 2.0,
+                    "maximum": 2.0,
+                },
+                "discarded": {
+                    "minimum": 0.0,
+                    "median": 0.0,
+                    "maximum": 0.0,
+                },
+                "samples": {
+                    "minimum": 906.0,
+                    "median": 906.0,
+                    "maximum": 906.0,
+                },
+                "p50_ms": {
+                    "minimum": 0.11,
+                    "median": 0.11,
+                    "maximum": 0.11,
+                },
+                "p95_ms": {
+                    "minimum": 0.23,
+                    "median": 0.23,
+                    "maximum": 0.23,
+                },
+                "max_ms": {
+                    "minimum": 0.71,
+                    "median": 0.71,
+                    "maximum": 0.71,
+                },
             }
         },
     }
@@ -261,6 +343,18 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     assert overlay["paint"] == 910
     assert overlay["update_requests"] == 950
     assert overlay["geometry_changes"] == 0
+    assert overlay["refresh_hz"] == 60.0
+    assert overlay["paint_cpu_p95_ms"] == 0.4
+    assert overlay["state_to_paint_p95_ms"] == 3.0
+    overlay_gpu = next(
+        row for row in analysis.phase5_rows
+        if row["kind"] == "visualizer_overlay_gpu"
+    )
+    assert overlay_gpu["gpu_supported"] == "True"
+    assert overlay_gpu["gpu_submitted"] == 908
+    assert overlay_gpu["gpu_collected"] == 906
+    assert overlay_gpu["gpu_dropped_pending"] == 2
+    assert overlay_gpu["gpu_p95_ms"] == 0.23
     assert analysis.summary["phase5"]["cache"]["raw_hits"]["maximum"] == 8.0
     assert analysis.summary["phase5"]["cache"]["worker_requests"]["maximum"] == 4.0
     assert analysis.summary["phase5"]["cache"]["worker_fallbacks"]["maximum"] == 1.0

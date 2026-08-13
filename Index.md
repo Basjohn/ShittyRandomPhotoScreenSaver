@@ -59,6 +59,7 @@ Do not read every document by default.
 | Whole-process usage | `core/performance/usage_sampler.py` |
 | Image pipeline | `engine/image_pipeline.py` and image/prefetch helpers |
 | Compositor/GL programs | `rendering/gl_compositor.py`, `rendering/gl_compositor_pkg/`, `rendering/gl_programs/` |
+| Passive owner-context GPU timing | `rendering/gl_timer_queries.py` plus the owning renderer/compositor |
 | Media provider/GSMTC/progress presentation | `core/media/provider_registry.py`, `core/media/media_controller.py`, `widgets/media_widget.py`, `widgets/media/display_update.py`, `widgets/media/painting.py` |
 | Reddit provider/preparation/Qt/static commit | `core/reddit_post_provider.py`, `core/reddit_preparation.py`, `widgets/reddit_widget.py` |
 | Weather provider/preparation/Qt commit | `weather/open_meteo_provider.py`, `core/weather_preparation.py`, `widgets/weather_widget.py` |
@@ -75,7 +76,7 @@ Use `Docs/Contracts.md` before assuming a nearby helper is an authority.
 ```text
 working branch:      main
 approved visual ref: ff93461685476bd0657aa88312fc2e35e9037880
-current evidence:    logs/evidence_chest/08_09_ca830d7_14_59/
+current evidence:    logs/evidence_chest/08_13_1be7f01a_15_38_15_46_typical/
 roadmap:             Docs/audits/SRPSS_Architecture_Roadmap/
 phase reports:       Docs/phase_reports/
 historical lessons: Docs/audits/SRPSS_Architecture_Roadmap/10_HISTORICAL_CANDIDATE_LESSONS.md

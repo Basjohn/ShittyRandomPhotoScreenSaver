@@ -21,7 +21,9 @@ Current evidence says:
 - `set_processed_image()` and `generic_pair_warm` are large GUI/context transactions;
 - the retained-current/next-old DPR identity defect is closed in automation and a current live repeated-transition run (`20/20` steady old hits with one new upload);
 - process GPU busy is material but not yet split by owner;
-- visualizer screen 1 is 60 Hz while overlay state/update/paint windows can approach ~100 Hz.
+- visualizer screen 1 is 60 Hz while the current typical-load run measures Bubble
+  state/update/paint medians of `89.75/89.75/87.05` per second and Spectrum medians of
+  `92.7/92.7/91.15` per second, without geometry changes.
 
 The last point motivates Phase 7 presentation separation, not a logical cadence cap.
 
@@ -73,6 +75,12 @@ For each display record together:
 
 A rate above physical refresh is evidence to investigate, not proof that the logical
 producer should be slowed.
+
+The overlay now has the first passive attribution seam: CPU paint/state-to-paint
+windows plus a fixed non-blocking owner-context GPU query ring. It measures the Qt FBO
+clear/render span and does not claim SwapBuffers, composition or physical scanout.
+Unsupported, pending, dropped and discarded samples remain explicit. A current live
+capture must validate support, collection, teardown and cost before Phase 7 policy work.
 
 ## GUI-Local Update Coalescing
 

@@ -184,9 +184,21 @@ older run, so those percentages are **not** evidence by themselves of either reg
 or improvement. They strengthen the need for owner-level attribution before any
 presentation-rate or compositor change.
 
-- [ ] Promote truthful per-transition GPU timing to active work: route paint timing through the shared compositor seam and use non-blocking GL timer queries with delayed result collection for every exercised transition family where supported.
+The current typical-load capture
+`logs/evidence_chest/08_13_1be7f01a_15_38_15_46_typical/` (stable selected-source
+SHA-256 `A161B02F...F86590`) strengthens the presentation mismatch without changing
+that boundary. Its 24 Bubble windows measure `50.1/89.75/99.6` state/update requests
+per second and `47.2/87.05/99.2` `paintGL()` calls per second at min/median/max;
+four Spectrum windows measure `90.4/92.7/99.6` state/update and
+`79.3/91.15/99.5` paint. Geometry changes are zero throughout. These are Qt FBO paint
+attempts, not physical presents or scanout, and the capture predates owner timer-query
+instrumentation.
+
+- [x] Install the first truthful owner-local attribution slice on the visualizer overlay: a fixed non-blocking `GL_TIME_ELAPSED` ring polls only available results, records CPU paint/state-to-paint time, and never changes `update()`, logical work or cadence.
+- [ ] Validate that overlay slice in a current typical-load Bubble/Spectrum run, including supported/submitted/collected/pending/dropped/discarded query counts and strict cleanup.
+- [ ] Extend truthful GPU timing through the shared compositor seam for every exercised transition family where supported.
 - [ ] Never use `glFinish()` in ordinary profiling. It changes the workload and invalidates the measurement.
-- [ ] Log support/sample counts so a zero GPU duration means measured zero only when samples exist.
+- [x] Make visualizer-overlay support/sample/pending/drop/error counts explicit so a missing sample set cannot be read as zero GPU work.
 - [ ] Split GPU attribution among image texture upload/warm, transition shader/render work, visualizer overlay/context work, overdraw/composition, and driver/context overhead.
 - [ ] Record per-display refresh, logical visualizer state publication rate, update-request rate and paint rate together. Do not infer waste solely from one counter.
 - [x] Measure GPU busy after texture identity reuse: the typical run records process GPU busy median/max `9.1/32.7%` while the steady texture path uploads new only. Remaining GPU work still needs owner attribution.

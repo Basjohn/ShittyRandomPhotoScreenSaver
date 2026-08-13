@@ -678,6 +678,21 @@ class TestResourceAccountingSnapshot:
         cleanup.assert_not_called()
         assert resource_manager.get_accounting_snapshot()["total_resources"] == 0
 
+    def test_gl_stats_include_timer_queries(self, resource_manager):
+        resource_id = resource_manager.register_gl_handle(
+            44,
+            "query",
+            owner="visualizer:1",
+            generation=3,
+            format="GL_TIME_ELAPSED",
+        )
+
+        stats = resource_manager.get_gl_stats()
+
+        assert stats["query"] == 1
+        assert stats["total"] == 1
+        assert resource_manager.release_tracking(resource_id) is True
+
 
 class TestResourceRegistrationDiagnostics:
     """Ownership diagnostics must remain passive and avoid retaining owners."""

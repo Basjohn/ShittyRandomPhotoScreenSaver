@@ -77,6 +77,19 @@ def _engine():
                             "lease_count": None,
                         }
                     ),
+                    MappingProxyType(
+                        {
+                            "resource_id": "query-1",
+                            "resource_type": "NATIVE_HANDLE",
+                            "gl_handle_type": "query",
+                            "owner": "visualizer:1",
+                            "generation": 9,
+                            "dimensions": None,
+                            "format": "GL_TIME_ELAPSED",
+                            "tracked_bytes": None,
+                            "lease_count": None,
+                        }
+                    ),
                 ),
             }
         )
@@ -90,7 +103,7 @@ def test_collect_resource_accounting_keeps_exact_known_bytes_and_unknowns():
     assert snapshot.cpu_cache_bytes == 800
     assert snapshot.registry_known_bytes == 384
     assert snapshot.gl_known_bytes == 384
-    assert snapshot.gl_unknown_resources == 1
+    assert snapshot.gl_unknown_resources == 2
     assert snapshot.gl_texture_bytes == 128
     assert snapshot.gl_pbo_bytes == 256
     assert snapshot.gl_framebuffer_resources == 0

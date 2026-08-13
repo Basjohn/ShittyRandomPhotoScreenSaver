@@ -75,6 +75,7 @@ from `main`.
 - [x] Prepare the shared `BaseOverlayWidget` painted-frame cache at exact GUI state/geometry commits; paint validates and blits only, with explicit batching for known setter cascades.
 - [x] Move Weather startup cache selection and accepted-result persistence to shared IO; publish immutable, generation/location-gated GUI commits with newest-wins atomic durability.
 - [x] Move Gmail startup-cache, backend-config and DPAPI credential preparation to shared IO while retaining GUI-affine backend/OAuth facades and one coalesced settings/widget commit authority.
+- [x] Add bounded owner-context visualizer GPU timer queries plus CPU paint/state-age windows without changing logical or presentation cadence; current runtime validation remains open.
 - [ ] Remove proven GUI-thread service/cache preparation.
 - [ ] Attribute GPU busy across upload/transition/visualizer/presentation owners.
 - [ ] Remove proven temporary compatibility/fallback debris without changing behaviour.

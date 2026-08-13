@@ -17,6 +17,7 @@ from core.logging.logger import (
 from core.settings.visualizer_mode_registry import coerce_visualizer_mode_id
 from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_state_manager import GLStateManager, GLContextState
+from rendering.gl_timer_queries import GLTimerQueryRing
 from OpenGL import GL as gl
 from widgets.spotify_visualizer.energy_bands import EnergyBands
 from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
@@ -107,6 +108,22 @@ def prioritized_visualizer_compile_order(active_mode: str, available_modes: Sequ
     return ordered
 
 
+def _perf_duration_summary(values: Sequence[float]) -> tuple[int, float | None, float | None, float | None]:
+    if not values:
+        return 0, None, None, None
+    ordered = sorted(float(value) for value in values)
+
+    def percentile(quantile: float) -> float:
+        index = int(np.ceil(quantile * len(ordered))) - 1
+        return ordered[max(0, min(len(ordered) - 1, index))]
+
+    return len(ordered), percentile(0.50), percentile(0.95), ordered[-1]
+
+
+def _perf_metric_text(value: float | None) -> str:
+    return "na" if value is None else f"{float(value):.3f}"
+
+
 class SpotifyBarsGLOverlay(QOpenGLWidget):
     """Small GL surface that renders the Spotify bar field.
 
@@ -157,7 +174,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._perf_set_state_total: int = 0
         self._perf_paint_total: int = 0
         self._perf_update_request_total: int = 0
+        self._perf_metrics_enabled: bool = bool(is_perf_metrics_enabled())
         self._perf_last_log_ts: float = time.monotonic()
+        self._perf_last_state_commit_ts: float = 0.0
+        self._perf_paint_cpu_ms: list[float] = []
+        self._perf_state_to_paint_ms: list[float] = []
         
         # Active visualization mode
         self._vis_mode: str = coerce_visualizer_mode_id(initial_mode)
@@ -410,6 +431,16 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         
         # Centralized GL state manager for robust state tracking
         self._gl_state = GLStateManager(f"spotify_bars_{id(self)}")
+        self._gpu_timer_queries = (
+            GLTimerQueryRing(
+                owner=f"{type(self).__name__}:{id(self)}",
+                generation=id(self),
+                ring_size=4,
+                resource_group="spotify_vis_gl",
+            )
+            if self._perf_metrics_enabled
+            else None
+        )
 
     def request_mode_reset(self, mode: str) -> None:
         """Schedule a manual reset for ``mode`` prior to the next frame push."""
@@ -431,18 +462,50 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 return None
         return None
 
-    def _maybe_log_perf_counters(self, *, reason: str) -> None:
+    def _perf_display_refresh_hz(self) -> float | None:
+        parent = self.parent()
+        screen = getattr(parent, "_screen", None)
+        if screen is None:
+            try:
+                screen = parent.screen() if parent is not None else self.screen()
+            except Exception:
+                screen = None
+        try:
+            value = float(screen.refreshRate()) if screen is not None else 0.0
+        except Exception:
+            value = 0.0
+        return value if value > 0.0 else None
+
+    def _maybe_log_perf_counters(self, *, reason: str, force: bool = False) -> None:
         if not is_perf_metrics_enabled():
             return
         now = time.monotonic()
         elapsed = now - self._perf_last_log_ts
-        if elapsed < 10.0:
+        if elapsed < 10.0 and not force:
             return
         screen = self._perf_screen_index()
+        refresh_hz = self._perf_display_refresh_hz()
+        paint_cpu = _perf_duration_summary(self._perf_paint_cpu_ms)
+        state_to_paint = _perf_duration_summary(self._perf_state_to_paint_ms)
+        timer_queries = getattr(self, "_gpu_timer_queries", None)
+        if timer_queries is not None:
+            gpu_window = timer_queries.consume_window(include_labels=(self._vis_mode,))
+        else:
+            gpu_window = {
+                "supported": False,
+                "reason": "helper_unavailable",
+                "pending": 0,
+                "errors": 0,
+                "by_label": {},
+            }
         logger.info(
             "[PERF][SPOTIFY_VIS][OVERLAY] reason=%s screen=%s mode=%s elapsed_ms=%.1f "
             "set_state=%d paint=%d update_requests=%d geometry_changes=%d "
-            "visible=%s enabled=%s playing=%s",
+            "refresh_hz=%s dpr=%.3f paint_cpu_samples=%d paint_cpu_p50_ms=%s "
+            "paint_cpu_p95_ms=%s paint_cpu_max_ms=%s state_to_paint_samples=%d "
+            "state_to_paint_p50_ms=%s state_to_paint_p95_ms=%s "
+            "state_to_paint_max_ms=%s gpu_supported=%s gpu_reason=%s "
+            "gpu_pending=%d gpu_errors=%d visible=%s enabled=%s playing=%s",
             reason,
             screen if screen is not None else "<unknown>",
             self._vis_mode,
@@ -451,14 +514,51 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._perf_paint_count,
             self._perf_update_request_count,
             self._perf_geometry_change_count,
+            "na" if refresh_hz is None else f"{refresh_hz:.3f}",
+            self._get_dpr(),
+            paint_cpu[0],
+            _perf_metric_text(paint_cpu[1]),
+            _perf_metric_text(paint_cpu[2]),
+            _perf_metric_text(paint_cpu[3]),
+            state_to_paint[0],
+            _perf_metric_text(state_to_paint[1]),
+            _perf_metric_text(state_to_paint[2]),
+            _perf_metric_text(state_to_paint[3]),
+            gpu_window["supported"],
+            gpu_window["reason"],
+            gpu_window["pending"],
+            gpu_window["errors"],
             self.isVisible(),
             self._enabled,
             self._playing,
         )
+        for mode, metrics in gpu_window["by_label"].items():
+            logger.info(
+                "[PERF][SPOTIFY_VIS][OVERLAY_GPU] screen=%s mode=%s elapsed_ms=%.1f "
+                "gpu_supported=%s gpu_reason=%s gpu_submitted=%d gpu_collected=%d "
+                "gpu_pending=%d gpu_dropped_pending=%d gpu_discarded=%d "
+                "gpu_samples=%d gpu_p50_ms=%s gpu_p95_ms=%s gpu_max_ms=%s",
+                screen if screen is not None else "<unknown>",
+                mode,
+                elapsed * 1000.0,
+                gpu_window["supported"],
+                gpu_window["reason"],
+                metrics["submitted"],
+                metrics["collected"],
+                metrics["pending"],
+                metrics["dropped_pending"],
+                metrics["discarded"],
+                metrics["samples"],
+                _perf_metric_text(metrics["p50_ms"]),
+                _perf_metric_text(metrics["p95_ms"]),
+                _perf_metric_text(metrics["max_ms"]),
+            )
         self._perf_set_state_count = 0
         self._perf_paint_count = 0
         self._perf_update_request_count = 0
         self._perf_geometry_change_count = 0
+        self._perf_paint_cpu_ms.clear()
+        self._perf_state_to_paint_ms.clear()
         self._perf_last_log_ts = now
 
     def _request_frame_update(self, *, force: bool = False) -> None:
@@ -655,6 +755,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         ``SpotifyVisualizerWidget``.
         """
 
+        if self._perf_metrics_enabled:
+            requested_mode = coerce_visualizer_mode_id(vis_mode)
+            if requested_mode != self._vis_mode:
+                self._maybe_log_perf_counters(reason="mode_change", force=True)
         was_playing = bool(getattr(self, "_playing", False))
         if not apply_state_handoff(
             self,
@@ -1264,6 +1368,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             logger.debug("[SPOTIFY_VIS] Failed to show overlay", exc_info=True)
         _show_elapsed = (time.time() - _show_start) * 1000.0
 
+        if self._perf_metrics_enabled:
+            self._perf_last_state_commit_ts = time.perf_counter()
         _update_start = time.time()
         self._request_frame_update(force=geometry_changed or became_visible)
         _update_elapsed = (time.time() - _update_start) * 1000.0
@@ -1368,6 +1474,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         try:
             self._init_gl_pipeline()
+            if self._gpu_timer_queries is not None:
+                self._gpu_timer_queries.initialize(gl, context=self.context())
             # Transition to READY state on success
             self._gl_state.transition(GLContextState.READY)
         except Exception as e:
@@ -1377,8 +1485,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # GLStateManager now tracks initialization state - no separate flag needed
 
     def paintGL(self) -> None:  # type: ignore[override]
+        paint_started = time.perf_counter() if self._perf_metrics_enabled else 0.0
         self._perf_paint_count += 1
         self._perf_paint_total += 1
+        if self._gpu_timer_queries is not None:
+            self._gpu_timer_queries.poll(gl)
         # Skip rendering until initializeGL has completed to avoid
         # uninitialized buffer artifacts (green dots on first frame)
         # Use GLStateManager for proper state tracking
@@ -1389,19 +1500,37 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if rect.width() <= 0 or rect.height() <= 0:
             return
 
-        # Always clear the backing buffer so stale frames do not linger when
-        # the overlay is disabled between mode switches.
-        clear_overlay_backbuffer(gl, logger)
+        query_started = bool(
+            self._gpu_timer_queries is not None
+            and self._gpu_timer_queries.begin(gl, label=self._vis_mode)
+        )
+        try:
+            # Always clear the backing buffer so stale frames do not linger when
+            # the overlay is disabled between mode switches.
+            clear_overlay_backbuffer(gl, logger)
 
-        fade = resolve_frame_fade(self, logger)
-        if fade is None:
-            return
+            fade = resolve_frame_fade(self, logger)
+            if fade is not None:
+                render_overlay_frame(self, rect, fade, self._render_with_shader)
+        finally:
+            if query_started and self._gpu_timer_queries is not None:
+                self._gpu_timer_queries.end(gl)
+            if self._perf_metrics_enabled:
+                paint_finished = time.perf_counter()
+                self._perf_paint_cpu_ms.append(
+                    max(0.0, (paint_finished - paint_started) * 1000.0)
+                )
+                if self._perf_last_state_commit_ts > 0.0:
+                    self._perf_state_to_paint_ms.append(
+                        max(
+                            0.0,
+                            (paint_started - self._perf_last_state_commit_ts) * 1000.0,
+                        )
+                    )
 
-        render_overlay_frame(self, rect, fade, self._render_with_shader)
-
-        # set_state() is the repaint authority.  Scheduling from paintGL()
-        # creates a child-GL self-loop that can overdrive the owning display.
-        self._maybe_log_perf_counters(reason="paintGL")
+                # set_state() is the repaint authority. Scheduling from paintGL()
+                # creates a child-GL self-loop that can overdrive the owning display.
+                self._maybe_log_perf_counters(reason="paintGL")
 
     def _begin_painted_card_stencil_clip(self, rect: QRect) -> bool:
         if not self._painted_frame_shadow_enabled:
@@ -1839,6 +1968,10 @@ void main() {
             or self._gl_mask_program is not None
             or self._gl_vbo is not None
             or self._gl_vao is not None
+            or (
+                getattr(self, "_gpu_timer_queries", None) is not None
+                and self._gpu_timer_queries.has_live_queries()
+            )
         )
         state = self._gl_state.get_state()
         if state == GLContextState.DESTROYED:
@@ -1898,6 +2031,14 @@ void main() {
         ):
             errors.append(f"untracked_program:{int(self._gl_program)}")
         try:
+            timer_queries = getattr(self, "_gpu_timer_queries", None)
+            if timer_queries is not None:
+                try:
+                    timer_queries.poll(gl)
+                    timer_queries.cleanup(gl)
+                except Exception as exc:
+                    errors.append(f"timer_queries:{type(exc).__name__}:{exc}")
+
             for mode, program_id in list(self._gl_programs.items()):
                 try:
                     gl.glDeleteProgram(int(program_id))
@@ -1935,6 +2076,9 @@ void main() {
                     self._gl_vao = None
                     self._release_resource_tracking(self._gl_vao_rid)
                     self._gl_vao_rid = None
+            perf_logger = getattr(self, "_maybe_log_perf_counters", None)
+            if callable(perf_logger):
+                perf_logger(reason="cleanup", force=True)
         finally:
             try:
                 self.doneCurrent()

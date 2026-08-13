@@ -145,6 +145,14 @@ thread/presentation owner being unavailable. Phase 5 must first remove external 
 starvation and repeated GUI/context-bound work before changing Bubble or Spectrum
 clock semantics.
 
+The current typical-load `08_13_1be7f01a_15_38_15_46_typical` capture gives a stronger
+downstream observation: on the recorded 60 Hz visualizer display, Bubble's 24 windows
+reach `89.75` median state/update and `87.05` median `paintGL()` calls per second, while
+Spectrum reaches `92.7` and `91.15`. No geometry churn accompanies those windows.
+They are Qt FBO paint attempts rather than physical-present counts. The first passive
+owner-context CPU/GPU timing slice is now installed to attribute their cost; logical
+cadence, source capture, integration and publication remain frozen.
+
 ## Primary goal
 
 Reduce unnecessary work, duplication, allocations, callbacks, synchronous I/O and

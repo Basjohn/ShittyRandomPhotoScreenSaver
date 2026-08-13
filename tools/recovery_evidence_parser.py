@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.10"
+PARSER_VERSION = "1.11"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
@@ -65,6 +65,9 @@ _VISUALIZER_LANE_RE = re.compile(
 )
 _VISUALIZER_OVERLAY_RE = re.compile(
     r"\[PERF\]\[SPOTIFY_VIS\]\[OVERLAY\]\s+(?P<payload>.*)"
+)
+_VISUALIZER_OVERLAY_GPU_RE = re.compile(
+    r"\[PERF\]\[SPOTIFY_VIS\]\[OVERLAY_GPU\]\s+(?P<payload>.*)"
 )
 _MEDIA_PRESENTATION_RE = re.compile(
     r"\[PERF\]\[MEDIA_PRESENTATION\]\s+(?P<payload>.*)"
@@ -721,6 +724,9 @@ def _parse_phase5_telemetry(
                 match = _MEDIA_PRESENTATION_RE.search(line)
                 kind = "media_presentation"
             if not match:
+                match = _VISUALIZER_OVERLAY_GPU_RE.search(line)
+                kind = "visualizer_overlay_gpu"
+            if not match:
                 match = _VISUALIZER_OVERLAY_RE.search(line)
                 kind = "visualizer_overlay"
             if not match:
@@ -776,10 +782,32 @@ def _parse_phase5_telemetry(
                     "render_state_age_ms": _number(values.get("render_state_age_ms")),
                     "owner_age_ms": _number(values.get("last_ui_age_ms")),
                     "elapsed_ms": _number(values.get("elapsed_ms")),
+                    "refresh_hz": _number(values.get("refresh_hz")),
+                    "dpr": _number(values.get("dpr")),
                     "set_state": _integer(values.get("set_state")),
                     "paint": _integer(values.get("paint")),
                     "update_requests": _integer(values.get("update_requests")),
                     "geometry_changes": _integer(values.get("geometry_changes")),
+                    "paint_cpu_samples": _integer(values.get("paint_cpu_samples")),
+                    "paint_cpu_p50_ms": _number(values.get("paint_cpu_p50_ms")),
+                    "paint_cpu_p95_ms": _number(values.get("paint_cpu_p95_ms")),
+                    "paint_cpu_max_ms": _number(values.get("paint_cpu_max_ms")),
+                    "state_to_paint_samples": _integer(values.get("state_to_paint_samples")),
+                    "state_to_paint_p50_ms": _number(values.get("state_to_paint_p50_ms")),
+                    "state_to_paint_p95_ms": _number(values.get("state_to_paint_p95_ms")),
+                    "state_to_paint_max_ms": _number(values.get("state_to_paint_max_ms")),
+                    "gpu_supported": values.get("gpu_supported", ""),
+                    "gpu_reason": values.get("gpu_reason", ""),
+                    "gpu_submitted": _integer(values.get("gpu_submitted")),
+                    "gpu_collected": _integer(values.get("gpu_collected")),
+                    "gpu_pending": _integer(values.get("gpu_pending")),
+                    "gpu_dropped_pending": _integer(values.get("gpu_dropped_pending")),
+                    "gpu_discarded": _integer(values.get("gpu_discarded")),
+                    "gpu_errors": _integer(values.get("gpu_errors")),
+                    "gpu_samples": _integer(values.get("gpu_samples")),
+                    "gpu_p50_ms": _number(values.get("gpu_p50_ms")),
+                    "gpu_p95_ms": _number(values.get("gpu_p95_ms")),
+                    "gpu_max_ms": _number(values.get("gpu_max_ms")),
                     "visible": values.get("visible", ""),
                     "enabled": values.get("enabled", ""),
                     "playing": values.get("playing", ""),
@@ -1210,6 +1238,15 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                         "geometry_changes": _metric_summary(
                             row.get("geometry_changes") for row in rows
                         ),
+                        "refresh_hz": _metric_summary(
+                            row.get("refresh_hz") for row in rows
+                        ),
+                        "paint_cpu_p95_ms": _metric_summary(
+                            row.get("paint_cpu_p95_ms") for row in rows
+                        ),
+                        "state_to_paint_p95_ms": _metric_summary(
+                            row.get("state_to_paint_p95_ms") for row in rows
+                        ),
                     }
                     for mode in sorted({
                         str(row["mode"])
@@ -1219,6 +1256,60 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                     if (rows := [
                         row for row in phase5_rows
                         if row["kind"] == "visualizer_overlay" and row["mode"] == mode
+                    ])
+                },
+            },
+            "visualizer_overlay_gpu": {
+                "records": sum(
+                    row["kind"] == "visualizer_overlay_gpu" for row in phase5_rows
+                ),
+                "by_mode": {
+                    mode: {
+                        "records": len(rows),
+                        "supported_records": sum(
+                            str(row.get("gpu_supported", "")).lower() == "true"
+                            for row in rows
+                        ),
+                        "unsupported_records": sum(
+                            str(row.get("gpu_supported", "")).lower() == "false"
+                            for row in rows
+                        ),
+                        "submitted": _metric_summary(
+                            row.get("gpu_submitted") for row in rows
+                        ),
+                        "collected": _metric_summary(
+                            row.get("gpu_collected") for row in rows
+                        ),
+                        "pending": _metric_summary(
+                            row.get("gpu_pending") for row in rows
+                        ),
+                        "dropped_pending": _metric_summary(
+                            row.get("gpu_dropped_pending") for row in rows
+                        ),
+                        "discarded": _metric_summary(
+                            row.get("gpu_discarded") for row in rows
+                        ),
+                        "samples": _metric_summary(
+                            row.get("gpu_samples") for row in rows
+                        ),
+                        "p50_ms": _metric_summary(
+                            row.get("gpu_p50_ms") for row in rows
+                        ),
+                        "p95_ms": _metric_summary(
+                            row.get("gpu_p95_ms") for row in rows
+                        ),
+                        "max_ms": _metric_summary(
+                            row.get("gpu_max_ms") for row in rows
+                        ),
+                    }
+                    for mode in sorted({
+                        str(row["mode"])
+                        for row in phase5_rows
+                        if row["kind"] == "visualizer_overlay_gpu" and row["mode"]
+                    })
+                    if (rows := [
+                        row for row in phase5_rows
+                        if row["kind"] == "visualizer_overlay_gpu" and row["mode"] == mode
                     ])
                 },
             },

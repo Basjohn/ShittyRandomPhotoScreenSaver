@@ -42,6 +42,7 @@ This is not a second `Spec.md`. Find the owner here, then read only the owning c
 | Visualizer simulation | visualizer controller/model | `Docs/Visualizer_Reference.md` | Independent logical cadence and mode behaviour |
 | Visualizer changes | visualizer subsystem | `Docs/Visualizer_Change_Checklist.md` | Fidelity contract and complete change sweep |
 | Visualizer renderer integration | narrow renderer interface | `Docs/Compositor_Architecture.md` | No widget impersonation or paint acknowledgement |
+| Passive GL timing attribution | context-owning renderer plus `rendering/gl_timer_queries.py` | `Docs/Harness_Index.md` | Fixed non-blocking query ring; explicit support/sample state; exact owner-context deletion; never cadence |
 | CPU image pipeline/cache | image pipeline/cache owner plus transfer-scoped ImageWorker shared memory | `Docs/Compositor_Architecture.md` | Immutable worker result, one Qt-owned copy, byte-bounded storage, no retained transport mapping |
 | GPU resource store | explicit GL/context owner | `Docs/Compositor_Architecture.md` | Byte accounting, generation, leases, deletion |
 | Performance instrumentation | existing perf/usage modules | `Docs/Logging_Guide.md`, `Docs/TestSuite.md` | Passive sampled observation, never cadence |

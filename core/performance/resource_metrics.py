@@ -819,6 +819,7 @@ def collect_resource_accounting(
             "fbo",
             "renderbuffer",
             "rbo",
+            "query",
         }
     ]
     texture_records = [

@@ -522,7 +522,7 @@ class ResourceManager:
         
         Args:
             handle: The GL handle (integer from glGen*/glCreate*)
-            handle_type: Type of handle ("vao", "vbo", "texture", "program", "shader")
+            handle_type: Type of handle ("vao", "vbo", "texture", "program", "shader", "query")
             cleanup_func: Deprecated compatibility argument. It is never
                 retained or invoked because this registry does not own a GL
                 context.
@@ -628,7 +628,15 @@ class ResourceManager:
     def get_gl_stats(self) -> Dict[str, int]:
         """Get statistics about registered GL handles."""
         with self._lock:
-            stats = {"vao": 0, "vbo": 0, "texture": 0, "program": 0, "shader": 0, "total": 0}
+            stats = {
+                "vao": 0,
+                "vbo": 0,
+                "texture": 0,
+                "program": 0,
+                "shader": 0,
+                "query": 0,
+                "total": 0,
+            }
             for rid, info in self._resources.items():
                 if info.resource_type == ResourceType.NATIVE_HANDLE:
                     handle_type = info.metadata.get("gl_handle_type", "")
