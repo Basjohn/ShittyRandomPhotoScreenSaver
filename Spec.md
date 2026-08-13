@@ -70,6 +70,10 @@ Normal producers never wait for paint acknowledgement.
 
 A single pending GUI update may be coalesced, but it is not a producer scheduler.
 
+Producer timestamps and paint acknowledgement may not be combined to approximate a
+display-refresh clock. Any presentation coalescing must be display-owned and must prove
+that mode-authored short-lived responses remain visible.
+
 ### 4.3 Clocks
 
 Separate logical clocks exist for:
@@ -100,6 +104,8 @@ No distributed terminal transaction is part of the stable architecture.
 - Simulation does not subscribe to transition cadence.
 - Simulation does not wait for compositor paint.
 - Render-state coalescing occurs only after logical input/simulation processing.
+- Bubble render-state coalescing additionally requires an edge-preserving presentation
+  contract; final logical-state equality alone does not prove visible reactivity.
 - Mode-specific arrays/history/work do not bleed across activation.
 - All activation paths consume one resolved mode/preset payload.
 - A narrow explicit renderer interface replaces compatibility forwarding.

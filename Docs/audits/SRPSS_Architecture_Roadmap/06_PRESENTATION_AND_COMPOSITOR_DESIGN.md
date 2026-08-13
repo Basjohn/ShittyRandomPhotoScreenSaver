@@ -1,6 +1,6 @@
 # 06 — Presentation and Compositor Design
 
-Last reconciled: 2026-08-11
+Last reconciled: 2026-08-13
 
 ## Design Objective
 
@@ -26,6 +26,14 @@ Current evidence says:
   `92.7/92.7/91.15` per second, without geometry changes.
 
 The last point motivates Phase 7 presentation separation, not a logical cadence cap.
+
+The corrected-query `08_13_fa7e8196_16_33_16_37_gpu_queries_typical` run now
+attributes the visualizer surface itself. Bubble's normal overlay GPU p50/p95 is roughly
+`0.35–0.46/0.43–0.53 ms`; Spectrum is roughly `0.009–0.012/0.013 ms`. Both retain
+roughly `0.9–1.25 ms` CPU paint medians, yet the run still contains `40–130 ms`
+delivery gaps. Process GPU-busy peaks align more strongly with transition windows, so a
+matching non-blocking timer-query ring now wraps the existing shared-compositor draw and
+awaits a transition-heavy live gate.
 
 ## Absolute Rules
 
@@ -60,6 +68,13 @@ If ten presentation opportunities are missed, logical state must evolve exactly 
 would have otherwise. The next paint consumes the latest valid generation/activation
 state; it does not replay ten intermediate snapshots or ask the producer to catch up.
 
+That target is not yet sufficient for Bubble. The protected temporal trace contains a
+visible response that lasts one `100 Hz` logical publication; a phase-valid `60 Hz`
+latest-state sample can miss it completely. Phase 7 must therefore define an
+edge-preserving render-state contract, or otherwise prove equivalent authored
+visibility, before enabling coalescing for Bubble. Logical-series equality by itself is
+not acceptance.
+
 ## Presentation-Rate Attribution
 
 For each display record together:
@@ -76,6 +91,13 @@ For each display record together:
 A rate above physical refresh is evidence to investigate, not proof that the logical
 producer should be slowed.
 
+The rejected overlay cap was not actually display scheduled. Its elapsed-time threshold
+accepted a `100 Hz` producer every second tick (`~50 Hz` for a nominal `60 Hz` target),
+then a pending-until-paint latch made late Qt delivery an admission gate and produced the
+observed `~39–40 Hz`. `QOpenGLWidget.paintGL()` completion is neither scanout nor a
+stable physical-present opportunity. Producer-timestamp gates and paint acknowledgements
+are therefore prohibited as Phase 7 presentation clocks.
+
 The overlay now has the first passive attribution seam: CPU paint/state-to-paint
 windows plus a fixed non-blocking owner-context GPU query ring. It measures the Qt FBO
 clear/render span and does not claim SwapBuffers, composition or physical scanout.
@@ -83,9 +105,9 @@ Unsupported, pending, dropped and discarded samples remain explicit. A current l
 capture first proved the fail-closed path instead of GPU cost: PyOpenGL 3.1.10 raised a
 wrapper-side `KeyError` while retrieving `GL_QUERY_RESULT`. The helper now supplies the
 native uint64 output buffer explicitly and a real offscreen GL-context regression proves
-submission/collection/deletion. Runtime owner windows must still validate GPU samples
-and teardown before Phase 7 policy work. The same capture measures Bubble/Spectrum
-CPU-paint p95 window medians around `1.52/1.41 ms`; logical cadence remains protected.
+submission/collection/deletion. The corrected-query typical run then collected supported
+samples in all `26` overlay windows with no errors or drops and bounded pending handles;
+the measured costs are recorded above. Logical cadence remains protected.
 
 ## GUI-Local Update Coalescing
 

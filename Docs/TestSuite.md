@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-08-11
+Last updated: 2026-08-13
 
 Testing strategy, execution commands, and minimum quality gates.
 
@@ -194,6 +194,7 @@ The stronger affected-path temporal hazard lights are owned by:
 
 - `tests/test_bubble_cadence.py` for the real ordinary-executor discrete edge and first lane-free publication;
 - `tests/test_spectrum_presentation_smoothing.py` for authoritative-tick Spectrum rise/drop/settle/reset/stall behaviour and absence of an independent presentation cadence;
+- `tests/test_visualizer_presentation_negative_controls.py` for the rejected target-FPS gate arithmetic and phase-valid latest-state loss of Bubble's protected discrete edge;
 - `tests/fixtures/visualizer_temporal/v1/`;
 - `tests/goldens/visualizer_temporal/v1/manifest.json` and its immutable expected traces.
 
@@ -244,7 +245,8 @@ Phase 3 owns these concrete automated bars:
 - `tests/test_phase3_runtime_lifecycle.py` — 50/50/50 ownership churn, stale delayed publication, deferred GL warmup generation, strict context/deletion failure, visualizer overlay cleanup;
 - `tests/test_engine_lifecycle.py` — display cleanup precedes Settings dialog construction;
 - `tests/test_s_hotkey_workflow.py` — stop means full teardown and fresh rebuild, not hide/reuse;
-- `tests/test_gl_compositor_cleanup.py` — idempotent no-resource cleanup plus real Windows Qt context resource deletion, including two live per-display compositors with distinct program owners destroyed in the exact multi-display sequence;
+- `tests/test_gl_compositor_cleanup.py` — idempotent no-resource cleanup plus real Windows Qt context resource deletion, including two live per-display compositors with distinct program owners destroyed in the exact multi-display sequence and strict owner-context compositor timer-query deletion;
+- `tests/test_compositor_gpu_queries.py` and `tests/test_gl_timer_queries.py` — passive non-blocking draw-span query wrapping, transition labels, support/sample/error accounting and no scheduling/cadence side effects;
 - `tests/test_startup_shader_warmup.py`, `tests/test_fade_coordinator.py`, and `tests/test_widget_manager.py` — named critical startup holds, real fade completion, and one-at-a-time deferred warmup gating;
 - focused `TestDisplayManagerSync` rebuild cases;
 - `tests/test_image_pipeline.py`, `tests/test_image_prefetcher.py`, and `tests/test_image_worker.py` — GUI-independent QImage compute payload and async regression coverage.

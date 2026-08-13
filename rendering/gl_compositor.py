@@ -13,6 +13,7 @@ compositor over time.
 from __future__ import annotations
 
 from typing import Dict, Optional, Callable
+import time
 import weakref
 
 # Import metrics classes from extracted package
@@ -40,6 +41,7 @@ from core.animation.animator import AnimationManager
 from core.animation.frame_interpolator import FrameState
 from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_profiler import TransitionProfiler
+from rendering.gl_timer_queries import GLTimerQueryRing
 from transitions.base_transition import WipeDirection, SlideDirection
 from core.resources.manager import ResourceManager
 from rendering.transition_state import (
@@ -248,6 +250,17 @@ class GLCompositorWidget(QOpenGLWidget):
         # owned by GLCompositorWidget; ResourceManager is only aware of the
         # widget itself.
         self._resource_manager: Optional[ResourceManager] = None
+        self._gpu_timer_queries = (
+            GLTimerQueryRing(
+                owner=f"{type(self).__name__}:{id(self)}",
+                generation=id(self),
+                ring_size=4,
+                resource_group="gl_compositor_timer_queries",
+            )
+            if is_perf_metrics_enabled()
+            else None
+        )
+        self._gpu_timer_query_last_log_ts: float = time.monotonic()
 
         # PERFORMANCE: Cached viewport size to avoid per-frame DPR calculations.
         # Invalidated on resize events.

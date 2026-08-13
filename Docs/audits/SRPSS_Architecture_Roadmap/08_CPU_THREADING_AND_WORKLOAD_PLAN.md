@@ -153,6 +153,14 @@ They are Qt FBO paint attempts rather than physical-present counts. The first pa
 owner-context CPU/GPU timing slice is now installed to attribute their cost; logical
 cadence, source capture, integration and publication remain frozen.
 
+The corrected-query `08_13_fa7e8196_16_33_16_37_gpu_queries_typical` run shows the
+overlay is not the duration source of the worst stalls: normal Bubble GPU p50/p95 is
+roughly `0.35–0.46/0.43–0.53 ms`, Spectrum roughly `0.009–0.012/0.013 ms`, and CPU
+paint medians remain near `0.9–1.25 ms` while request/delivery gaps still reach
+`40–130 ms`. General COMPUTE and IO queues remain drained. Process CPU remains high at
+roughly `94%` median, with Bubble logical work around `85–93/s` and audio work around
+`64–68/s`, but that is not evidence to move or reduce Bubble cadence.
+
 ## Primary goal
 
 Reduce unnecessary work, duplication, allocations, callbacks, synchronous I/O and
@@ -715,11 +723,13 @@ Apply the same proof rule to other documented dead compatibility surfaces (`rend
 
 Active-display GPU busy in `08_09_ca830d7_14_59` measured median `10.8%`, p95 `27.8%`, max `32.9%`. Screen 1 is 60 Hz while visualizer overlay windows can approach ~100 state/update/paint operations per second. Phase 5 measures/attributes this without touching logical cadence. Phase 7 may later decouple physical presentation through latest immutable render state after logical integration.
 
-The current teardown-churn capture attributes real CPU presentation work without yet
-proving GPU duration: Bubble/Spectrum CPU-paint p95 window medians are about
-`1.52/1.41 ms`, while the first timer-query runtime exposed a PyOpenGL result-wrapper
-`KeyError`. The fixed explicit uint64 output-buffer path has a real offscreen GL-context
-test and still needs live owner-window validation. Logical cadence remains unchanged.
+The corrected-query typical run now proves owner-local GPU collection: all `26` overlay
+windows are supported, collect samples, have no query errors/drops and retain only the
+bounded pending ring state. Bubble's normal GPU span is sub-millisecond and Spectrum's
+is negligible; similar CPU-side QOpenGLWidget paint cost remains measurable in both.
+Logical cadence remains unchanged. Process GPU-busy peaks align more strongly with
+Crumble/Particle/Burn windows, so shared-compositor transition attribution is the next
+runtime gate.
 
 ## Acceptance gates
 

@@ -207,16 +207,35 @@ output buffer explicitly, exposes error counts in parser output, and has a real
 offscreen OpenGL-context regression test. A live validation of actual collection and
 strict cleanup remains the next instrumentation gate.
 
-- [x] Install the first truthful owner-local attribution slice on the visualizer overlay: a fixed non-blocking `GL_TIME_ELAPSED` ring polls only available results, records CPU paint/state-to-paint time, and never changes `update()`, logical work or cadence.
-- [ ] Validate that overlay slice in a current typical-load Bubble/Spectrum run, including supported/submitted/collected/pending/dropped/discarded query counts and strict cleanup.
-- [ ] Extend truthful GPU timing through the shared compositor seam for every exercised transition family where supported.
+The corrected-query typical-load capture
+`logs/evidence_chest/08_13_fa7e8196_16_33_16_37_gpu_queries_typical/` closes that
+validation bar. All `26` overlay GPU windows are supported, collect samples, report no
+query errors or drops and retain at most the expected bounded pending query. Normal
+Bubble GPU p50/p95 is roughly `0.35–0.46/0.43–0.53 ms`; Spectrum is roughly
+`0.009–0.012/0.013 ms`. Bubble/Spectrum CPU paint remains about `0.9–1.25 ms` p50,
+while the same run still contains `40–130 ms` request/delivery gaps. The visualizer
+overlay is therefore a real repeated owner but is not the direct duration source of the
+largest stalls. Process GPU-busy peaks align more strongly with Crumble/Particle/Burn
+transition windows, so the next passive slice times the existing shared-compositor draw
+by transition family.
+
+The rejected display-FPS cap is now understood precisely. Its source-timestamp gate used
+`0.92 * 1/60 s`; a `100 Hz` producer can satisfy that only every second tick, yielding
+`50 Hz` even with immediate paint. The additional pending-until-paint latch then coupled
+admission to late Qt delivery and pushed the observed result toward `39–40 Hz`. This was
+both a poor implementation and evidence of a real architectural constraint: Qt
+`QOpenGLWidget` paint acknowledgement is not a physical display-opportunity clock, and
+the protected Bubble temporal golden contains a one-logical-tick visible edge that a
+phase-valid `60 Hz` latest-state sampler can miss entirely. Phase 7 may not reintroduce a
+producer timestamp/paint-ack cap. It first needs an edge-preserving immutable render-state
+contract plus a runtime source-to-visible oracle proving Bubble attack and elasticity.
+
+- [ ] Validate the installed shared-compositor timer-query slice in a current transition-heavy run covering Crumble, Particle, Burn, Raindrops/Wipe, Bubble/Spectrum overlap, one Settings rebuild and final strict cleanup.
 - [ ] Never use `glFinish()` in ordinary profiling. It changes the workload and invalidates the measurement.
-- [x] Make visualizer-overlay support/sample/pending/drop/error counts explicit so a missing sample set cannot be read as zero GPU work.
 - [ ] Split GPU attribution among image texture upload/warm, transition shader/render work, visualizer overlay/context work, overdraw/composition, and driver/context overhead.
 - [ ] Record per-display refresh, logical visualizer state publication rate, update-request rate and paint rate together. Do not infer waste solely from one counter.
-- [x] Measure GPU busy after texture identity reuse: the typical run records process GPU busy median/max `9.1/32.7%` while the steady texture path uploads new only. Remaining GPU work still needs owner attribution.
 - [ ] Correlate repeated `>100 ms` transition request-age stalls that have cheap paint, healthy worker queues, and no matching long Python GUI callback against GPU timer results plus context/swap/native-event ownership before changing Python scheduling.
-- [ ] Feed the result into Phase 7: if logical integration remains correct while physical presentation is above useful display opportunities, decouple presentation through latest immutable render state rather than reducing simulation/source cadence.
+- [ ] Feed the result into Phase 7 only after an edge-preserving immutable render-state contract proves that phase-valid display sampling cannot hide Bubble's protected discrete response; never approximate display opportunities with producer timestamps or paint acknowledgements.
 - [ ] Do not begin Phase 8 one-surface compositor work until Phase 7 proves missed paints cannot alter logical state and GPU/context evidence shows the merge is worth its lifecycle risk.
 
 ## P5.2C Compatibility, Fallback, And Debris Leverage

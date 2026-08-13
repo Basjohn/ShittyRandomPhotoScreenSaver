@@ -66,6 +66,82 @@ def _active_shader_names(active_descriptors) -> list[str]:
     return [descriptor[0][0] for descriptor in active_descriptors]
 
 
+def _gpu_timer_query_label(widget) -> str:
+    """Return the compositor-owned transition label for one paint sample."""
+
+    current = str(getattr(widget, "_current_transition_name", "") or "").strip()
+    if current:
+        return current.lower()
+    active_descriptors = _active_transition_descriptors(widget)
+    if active_descriptors:
+        return str(active_descriptors[0][0][0] or "transition").lower()
+    return "steady"
+
+
+def _perf_metric_text(value: object) -> str:
+    if value is None:
+        return "na"
+    try:
+        return f"{float(value):.3f}"
+    except Exception:
+        return "na"
+
+
+def _gpu_timer_query_screen(widget) -> int | None:
+    try:
+        parent = widget.parentWidget()
+    except Exception:
+        try:
+            parent = widget.parent()
+        except Exception:
+            parent = None
+    value = getattr(parent, "screen_index", None)
+    try:
+        return int(value) if value is not None else None
+    except Exception:
+        return None
+
+
+def maybe_log_gpu_timer_query_window(widget, *, force: bool = False) -> None:
+    """Log bounded compositor GPU windows without influencing paint delivery."""
+
+    timer_queries = getattr(widget, "_gpu_timer_queries", None)
+    if timer_queries is None:
+        return
+    now = time.monotonic()
+    last = float(getattr(widget, "_gpu_timer_query_last_log_ts", now) or now)
+    elapsed = max(0.0, now - last)
+    if elapsed < 10.0 and not force:
+        return
+    current_label = _gpu_timer_query_label(widget)
+    gpu_window = timer_queries.consume_window(include_labels=(current_label,))
+    screen = _gpu_timer_query_screen(widget)
+    for transition, metrics in gpu_window["by_label"].items():
+        logger.info(
+            "[PERF][GL COMPOSITOR][GPU] screen=%s transition=%s elapsed_ms=%.1f "
+            "gpu_supported=%s gpu_reason=%s gpu_submitted=%d gpu_collected=%d "
+            "gpu_pending=%d gpu_dropped_pending=%d gpu_discarded=%d "
+            "gpu_errors=%d gpu_samples=%d gpu_p50_ms=%s gpu_p95_ms=%s "
+            "gpu_max_ms=%s",
+            screen if screen is not None else "<unknown>",
+            transition,
+            elapsed * 1000.0,
+            gpu_window["supported"],
+            gpu_window["reason"],
+            metrics["submitted"],
+            metrics["collected"],
+            metrics["pending"],
+            metrics["dropped_pending"],
+            metrics["discarded"],
+            gpu_window["errors"],
+            metrics["samples"],
+            _perf_metric_text(metrics["p50_ms"]),
+            _perf_metric_text(metrics["p95_ms"]),
+            _perf_metric_text(metrics["max_ms"]),
+        )
+    widget._gpu_timer_query_last_log_ts = now
+
+
 def _sync_transition_progress_from_frame_state(widget) -> None:
     """Refresh active shader progress from paint-time interpolation.
 
@@ -161,9 +237,21 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
     except Exception as e:
         logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)  # Non-critical - continue without frame budget
     
+    timer_queries = getattr(widget, "_gpu_timer_queries", None)
+    query_started = False
+    if timer_queries is not None and gl is not None:
+        timer_queries.poll(gl)
+        query_started = bool(
+            widget._gl_state.is_ready()
+            and timer_queries.begin(gl, label=_gpu_timer_query_label(widget))
+        )
+
     try:
         paintGL_impl(widget, )
     finally:
+        if query_started and timer_queries is not None and gl is not None:
+            timer_queries.end(gl)
+        maybe_log_gpu_timer_query_window(widget)
         _paint_end = time.perf_counter()
         paint_elapsed = (_paint_end - _paint_start) * 1000.0
         widget._record_paint_metrics(

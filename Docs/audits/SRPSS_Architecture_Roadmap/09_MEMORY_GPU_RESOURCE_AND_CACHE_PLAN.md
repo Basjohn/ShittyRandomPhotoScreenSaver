@@ -76,9 +76,13 @@ and deleted on the exact overlay context. Its first live run submitted a query o
 new overlay context but collected none because PyOpenGL 3.1.10 raised `KeyError` from
 the two-argument `GL_QUERY_RESULT` wrapper. Retrieval now supplies the native one-value
 uint64 output buffer explicitly, error counts are parsed, and a real offscreen
-OpenGL-context regression proves submission, collection and strict deletion. A live
-owner-window capture is still required before any presentation policy change or
-extension to the compositor transition seam.
+OpenGL-context regression proves submission, collection and strict deletion. The
+corrected-query `08_13_fa7e8196_16_33_16_37_gpu_queries_typical` run then collected
+supported samples in all `26` overlay windows with zero errors/drops and bounded pending
+state. Normal Bubble GPU p50/p95 is roughly `0.35–0.46/0.43–0.53 ms`; Spectrum is
+roughly `0.009–0.012/0.013 ms`. Process GPU peaks instead align more strongly with
+Crumble/Particle/Burn windows, so the same non-blocking ring is now installed at the
+shared compositor and awaits a transition-heavy runtime capture.
 
 ## Visualizer Presentation Efficiency
 
@@ -88,6 +92,14 @@ Captured screen 1 is 60 Hz while the current typical-load run records Bubble med
 Phase 7 may test whether immutable render snapshots can be coalesced to useful
 presentation opportunities **after** logical integration and only after owner cost is
 measured.
+
+The historical elapsed-time cap is a negative control, not a Phase 7 prototype. A
+`100 Hz` producer tested against `0.92 * 1/60 s` can request only every second tick
+(`50 Hz`), and holding the gate until paint adds variable Qt-delivery backpressure. A
+generic latest-state sampler is also unsafe for Bubble because its protected temporal
+trace includes a one-logical-tick visible edge that valid `60 Hz` phase alignment can
+miss. Future coalescing requires an edge-preserving render-state contract and real
+source-to-visible evidence, not cleaner update counters.
 
 Measure before/after:
 

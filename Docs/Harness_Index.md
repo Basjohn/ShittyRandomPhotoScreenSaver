@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-08-11
+Last updated: 2026-08-13
 
 Compact routing for recurring investigation commands.
 
@@ -118,7 +118,7 @@ Run the Bubble/Spectrum temporal checks without regenerating their versioned art
 
 ```powershell
 $env:QT_QPA_PLATFORM='offscreen'
-.\.venv\Scripts\python.exe -m pytest tests\test_bubble_cadence.py tests\test_spectrum_presentation_smoothing.py -q
+.\.venv\Scripts\python.exe -m pytest tests\test_bubble_cadence.py tests\test_spectrum_presentation_smoothing.py tests\test_visualizer_presentation_negative_controls.py -q
 ```
 
 The Bubble trace uses the ordinary production-shaped `ThreadManager` COMPUTE executor
@@ -128,6 +128,11 @@ existing UI visualizer tick and rejects independent timers, paint-local mutation
 overlay self-updates. The manifest under `tests/goldens/visualizer_temporal/v1/` is
 hand-reviewed evidence: do not auto-regenerate it. These checks do not replace the
 installed source/paint-receipt/operator gate.
+
+The presentation negative controls prove the rejected nominal-60-Hz producer gate
+quantizes a 100-Hz source to 50 Hz before paint latency, that the pending-until-paint
+latch turns delivery into admission, and that a legal 60-Hz phase can miss Bubble's
+protected one-tick visible edge.
 
 ## 4. Compositor Architecture Regression
 
@@ -181,7 +186,7 @@ Parse the current live root directly when the active sidecars are still in place
 python tools/recovery_evidence_parser.py --source logs --output-dir logs/_analysis_live
 ```
 
-Parser 1.12 treats a directory named `logs` as the live sidecar root: it reads only
+Parser 1.13 treats a directory named `logs` as the live sidecar root: it reads only
 immediate `.log` files and their rotations, ignoring `evidence_chest`, derived-analysis,
 and other descendant trees. Each selected file is read once; its recorded size and the
 source hash cover the exact byte prefix consumed even if a live sidecar continues growing
@@ -189,7 +194,7 @@ during analysis.
 
 Phase 5 output also promotes each 10-second
 `[PERF][SPOTIFY_VIS][OVERLAY]` window into structured per-mode state-publication,
-update-request, `paintGL`, CPU paint-duration, and state-to-paint rates. Parser 1.12
+update-request, `paintGL`, CPU paint-duration, and state-to-paint rates. Parser 1.13
 separately parses `[PERF][SPOTIFY_VIS][OVERLAY_GPU]` windows emitted by the
 non-blocking owner-context timer-query ring. A GPU duration is measured only when
 `gpu_supported=True` and `gpu_samples` is non-zero; unsupported, pending, dropped,
@@ -197,6 +202,11 @@ discarded, and error counts remain explicit, so a missing or zero sample set is 
 interpreted as zero GPU work. Correlate those records with the display refresh rate;
 they measure Qt FBO presentation pressure, not physical scanout/present count, and do
 not authorize a logical Bubble/Spectrum cadence change.
+
+Parser 1.13 additionally parses `[PERF][GL COMPOSITOR][GPU]` windows and groups their
+non-blocking timer-query samples by transition label. Correlate those samples with
+process GPU busy, texture uploads and frame/request-age windows; compositor queries
+measure the existing draw span, not swap/composition/scanout.
 
 New captures are plain disposable subfolders. Parse an explicitly selected capture
 directly; do not create a ZIP merely for analysis:
@@ -208,7 +218,7 @@ python tools/recovery_evidence_parser.py --source logs/evidence_chest/phase4plus
 The parser filename is historical and remains stable; its name does not make any historical branch or candidate an implementation authority.
 
 Explicit evidence-run folders retain recursive discovery for copied/extracted layouts;
-select one run rather than the whole `evidence_chest` parent. Parser 1.12 joins copied
+select one run rather than the whole `evidence_chest` parent. Parser 1.13 joins copied
 sidecar rotations oldest-first and then reads the active
 `.log`, so a session that crosses `screensaver_verbose.log.1` or
 `screensaver_lifecycle.log.1` remains continuous. Copy only the rotations needed
@@ -217,7 +227,7 @@ the complete copied time range; when system load or multiple runs share the
 folder, record the accepted timestamp interval in a `MANIFEST.md` and calculate
 that interval's frame, event-loop, visualizer, and usage result separately.
 
-Parser 1.12 also groups lifecycle barriers by reason and tracked resource samples by
+Parser 1.13 also groups lifecycle barriers by reason and tracked resource samples by
 stage. Use the reason split to distinguish runtime destruction (`settings`,
 `custom_edit`) from a dialog-lifetime barrier such as `settings_dialog_close`; use the
 stage plateaus to test equivalent rebuild generations for monotonic GL/resource growth.

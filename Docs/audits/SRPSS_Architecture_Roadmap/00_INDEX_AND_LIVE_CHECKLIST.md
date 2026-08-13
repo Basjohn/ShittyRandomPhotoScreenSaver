@@ -75,7 +75,9 @@ from `main`.
 - [x] Prepare the shared `BaseOverlayWidget` painted-frame cache at exact GUI state/geometry commits; paint validates and blits only, with explicit batching for known setter cascades.
 - [x] Move Weather startup cache selection and accepted-result persistence to shared IO; publish immutable, generation/location-gated GUI commits with newest-wins atomic durability.
 - [x] Move Gmail startup-cache, backend-config and DPAPI credential preparation to shared IO while retaining GUI-affine backend/OAuth facades and one coalesced settings/widget commit authority.
-- [x] Add bounded owner-context visualizer GPU timer queries plus CPU paint/state-age windows without changing logical or presentation cadence. The first live run exposed and now regression-tests the PyOpenGL uint64 result-buffer contract; successful live sample collection remains open.
+- [x] Add bounded owner-context visualizer GPU timer queries plus CPU paint/state-age windows without changing logical or presentation cadence. The first run exposed the PyOpenGL uint64 result-buffer contract; the corrected-query run successfully collects bounded samples.
+- [x] Validate visualizer owner-context GPU collection in the corrected-query typical run: all `26` windows supported/collected with no errors or drops; Bubble remains sub-millisecond GPU and Spectrum negligible.
+- [ ] Validate the installed shared-compositor per-transition GPU query seam in a transition-heavy runtime and correlate it with process GPU busy and request-age gaps.
 - [ ] Remove proven GUI-thread service/cache preparation.
 - [ ] Attribute GPU busy across upload/transition/visualizer/presentation owners.
 - [ ] Remove proven temporary compatibility/fallback debris without changing behaviour.

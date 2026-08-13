@@ -128,6 +128,12 @@ def _write_archive(path: Path) -> None:
             "gpu_dropped_pending=2 gpu_discarded=0 gpu_samples=906 "
             "gpu_errors=0 "
             "gpu_p50_ms=0.11 gpu_p95_ms=0.23 gpu_max_ms=0.71",
+            "2026-07-23 19:38:08 - metrics - INFO - "
+            "[PERF][GL COMPOSITOR][GPU] screen=0 transition=burn "
+            "elapsed_ms=10000.0 gpu_supported=True gpu_reason=supported "
+            "gpu_submitted=1200 gpu_collected=1199 gpu_pending=1 "
+            "gpu_dropped_pending=0 gpu_discarded=0 gpu_errors=0 "
+            "gpu_samples=1199 gpu_p50_ms=0.50 gpu_p95_ms=0.90 gpu_max_ms=1.50",
             "2026-07-23 19:38:09 - metrics - INFO - "
             "[PERF][MEDIA_PRESENTATION] event=published metadata_changed=True "
             "presentation_changed=True deferred_for_transition=False transition_active=False "
@@ -338,6 +344,11 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
             }
         },
     }
+    compositor_gpu = analysis.summary["phase5"]["compositor_gpu"]
+    assert compositor_gpu["records"] == 1
+    assert compositor_gpu["by_transition"]["burn"]["supported_records"] == 1
+    assert compositor_gpu["by_transition"]["burn"]["samples"]["median"] == 1199.0
+    assert compositor_gpu["by_transition"]["burn"]["p95_ms"]["median"] == 0.9
     overlay = next(
         row for row in analysis.phase5_rows
         if row["kind"] == "visualizer_overlay"
@@ -361,6 +372,14 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     assert overlay_gpu["gpu_collected"] == 906
     assert overlay_gpu["gpu_dropped_pending"] == 2
     assert overlay_gpu["gpu_p95_ms"] == 0.23
+    compositor_gpu_row = next(
+        row for row in analysis.phase5_rows
+        if row["kind"] == "compositor_gpu"
+    )
+    assert compositor_gpu_row["screen"] == 0
+    assert compositor_gpu_row["transition"] == "burn"
+    assert compositor_gpu_row["gpu_collected"] == 1199
+    assert compositor_gpu_row["gpu_p95_ms"] == 0.9
     assert analysis.summary["phase5"]["cache"]["raw_hits"]["maximum"] == 8.0
     assert analysis.summary["phase5"]["cache"]["worker_requests"]["maximum"] == 4.0
     assert analysis.summary["phase5"]["cache"]["worker_fallbacks"]["maximum"] == 1.0

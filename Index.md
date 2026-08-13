@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-08-11
+Last updated: 2026-08-13
 
 Navigation and ownership map for SRPSS. This file is not a specification.
 
@@ -76,7 +76,7 @@ Use `Docs/Contracts.md` before assuming a nearby helper is an authority.
 ```text
 working branch:      main
 approved visual ref: ff93461685476bd0657aa88312fc2e35e9037880
-current evidence:    logs/evidence_chest/08_13_ab429163_16_08_16_18_typical_teardown_churn/
+current evidence:    logs/evidence_chest/08_13_fa7e8196_16_33_16_37_gpu_queries_typical/
 roadmap:             Docs/audits/SRPSS_Architecture_Roadmap/
 phase reports:       Docs/phase_reports/
 historical lessons: Docs/audits/SRPSS_Architecture_Roadmap/10_HISTORICAL_CANDIDATE_LESSONS.md

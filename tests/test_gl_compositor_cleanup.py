@@ -11,6 +11,7 @@ import pytest
 from PySide6.QtWidgets import QApplication, QWidget
 
 from rendering.gl_compositor import GLCompositorWidget, gl as _gl
+from rendering import gl_compositor
 from rendering.gl_state_manager import GLContextState
 
 
@@ -173,3 +174,38 @@ def test_two_live_compositors_have_distinct_program_owners_and_cleanup(qapp):
 
     assert not compositors[0]._program_cache.has_live_programs()
     assert not compositors[1]._program_cache.has_live_programs()
+
+
+@pytest.mark.qt_no_exception_capture
+def test_compositor_perf_query_handles_use_real_owner_context_and_cleanup(
+    qapp,
+    monkeypatch,
+):
+    """Exercise production compositor query initialization and strict deletion."""
+
+    if _gl is None:
+        pytest.skip("PyOpenGL not available; skipping GL timer-query integration")
+    monkeypatch.setattr(gl_compositor, "is_perf_metrics_enabled", lambda: True)
+
+    parent = QWidget()
+    parent.resize(64, 64)
+    comp = gl_compositor.GLCompositorWidget(parent)
+    comp.setGeometry(parent.rect())
+    comp.show()
+    parent.show()
+    qapp.processEvents()
+
+    try:
+        comp.grabFramebuffer()
+    except Exception:
+        comp.cleanup()
+        pytest.skip("GL context unavailable for compositor timer-query test")
+
+    timer_queries = comp._gpu_timer_queries
+    if timer_queries is None or not timer_queries.supported:
+        comp.cleanup()
+        pytest.skip("GL timer queries unavailable on this compositor context")
+
+    assert timer_queries.has_live_queries()
+    comp.cleanup()
+    assert not timer_queries.has_live_queries()

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.12"
+PARSER_VERSION = "1.13"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
@@ -68,6 +68,9 @@ _VISUALIZER_OVERLAY_RE = re.compile(
 )
 _VISUALIZER_OVERLAY_GPU_RE = re.compile(
     r"\[PERF\]\[SPOTIFY_VIS\]\[OVERLAY_GPU\]\s+(?P<payload>.*)"
+)
+_COMPOSITOR_GPU_RE = re.compile(
+    r"\[PERF\]\[GL COMPOSITOR\]\[GPU\]\s+(?P<payload>.*)"
 )
 _MEDIA_PRESENTATION_RE = re.compile(
     r"\[PERF\]\[MEDIA_PRESENTATION\]\s+(?P<payload>.*)"
@@ -727,6 +730,9 @@ def _parse_phase5_telemetry(
                 match = _VISUALIZER_OVERLAY_GPU_RE.search(line)
                 kind = "visualizer_overlay_gpu"
             if not match:
+                match = _COMPOSITOR_GPU_RE.search(line)
+                kind = "compositor_gpu"
+            if not match:
                 match = _VISUALIZER_OVERLAY_RE.search(line)
                 kind = "visualizer_overlay"
             if not match:
@@ -1341,6 +1347,64 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                     if (rows := [
                         row for row in phase5_rows
                         if row["kind"] == "visualizer_overlay_gpu" and row["mode"] == mode
+                    ])
+                },
+            },
+            "compositor_gpu": {
+                "records": sum(
+                    row["kind"] == "compositor_gpu" for row in phase5_rows
+                ),
+                "by_transition": {
+                    transition: {
+                        "records": len(rows),
+                        "supported_records": sum(
+                            str(row.get("gpu_supported", "")).lower() == "true"
+                            for row in rows
+                        ),
+                        "unsupported_records": sum(
+                            str(row.get("gpu_supported", "")).lower() == "false"
+                            for row in rows
+                        ),
+                        "submitted": _metric_summary(
+                            row.get("gpu_submitted") for row in rows
+                        ),
+                        "collected": _metric_summary(
+                            row.get("gpu_collected") for row in rows
+                        ),
+                        "pending": _metric_summary(
+                            row.get("gpu_pending") for row in rows
+                        ),
+                        "dropped_pending": _metric_summary(
+                            row.get("gpu_dropped_pending") for row in rows
+                        ),
+                        "discarded": _metric_summary(
+                            row.get("gpu_discarded") for row in rows
+                        ),
+                        "errors": _metric_summary(
+                            row.get("gpu_errors") for row in rows
+                        ),
+                        "samples": _metric_summary(
+                            row.get("gpu_samples") for row in rows
+                        ),
+                        "p50_ms": _metric_summary(
+                            row.get("gpu_p50_ms") for row in rows
+                        ),
+                        "p95_ms": _metric_summary(
+                            row.get("gpu_p95_ms") for row in rows
+                        ),
+                        "max_ms": _metric_summary(
+                            row.get("gpu_max_ms") for row in rows
+                        ),
+                    }
+                    for transition in sorted({
+                        str(row["transition"])
+                        for row in phase5_rows
+                        if row["kind"] == "compositor_gpu" and row["transition"]
+                    })
+                    if (rows := [
+                        row for row in phase5_rows
+                        if row["kind"] == "compositor_gpu"
+                        and row["transition"] == transition
                     ])
                 },
             },

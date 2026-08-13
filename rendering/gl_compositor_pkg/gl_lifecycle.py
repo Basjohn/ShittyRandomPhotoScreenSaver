@@ -821,6 +821,9 @@ def handle_initializeGL(widget) -> None:  # type: ignore[override]
         widget._use_shaders = False
         widget._gl_disabled_for_session = False
         init_gl_pipeline(widget, )
+        timer_queries = getattr(widget, "_gpu_timer_queries", None)
+        if timer_queries is not None and gl is not None:
+            timer_queries.initialize(gl, context=ctx)
         
         # Transition to READY state on success
         if widget._gl_pipeline and widget._gl_pipeline.initialized:
@@ -935,6 +938,9 @@ def gl_pipeline_has_live_resources(widget) -> bool:
     program_cache = getattr(widget, "_program_cache", None)
     if program_cache is not None and program_cache.has_live_programs():
         return True
+    timer_queries = getattr(widget, "_gpu_timer_queries", None)
+    if timer_queries is not None and timer_queries.has_live_queries():
+        return True
 
     manager = getattr(widget, "_texture_manager", None)
     if manager is not None:
@@ -1006,6 +1012,28 @@ def cleanup_gl_pipeline(widget) -> None:
 
     cleanup_errors: list[str] = []
     try:
+        timer_queries = getattr(widget, "_gpu_timer_queries", None)
+        if timer_queries is not None:
+            try:
+                timer_queries.poll(gl)
+                timer_queries.cleanup(gl)
+            except Exception as exc:
+                cleanup_errors.append(
+                    f"timer_queries:{type(exc).__name__}:{exc}"
+                )
+            finally:
+                try:
+                    from rendering.gl_compositor_pkg.paint import (
+                        maybe_log_gpu_timer_query_window,
+                    )
+
+                    maybe_log_gpu_timer_query_window(widget, force=True)
+                except Exception:
+                    logger.debug(
+                        "[PERF][GL COMPOSITOR][GPU] Cleanup summary failed",
+                        exc_info=True,
+                    )
+
         manager = getattr(widget, "_texture_manager", None)
         if manager is not None:
             try:

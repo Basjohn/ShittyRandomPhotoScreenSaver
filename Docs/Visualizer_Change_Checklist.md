@@ -1,6 +1,6 @@
 # Visualizer Change Checklist
 
-Last updated: 2026-08-01
+Last updated: 2026-08-13
 
 Use this checklist whenever visualizer settings, presets, activation, runtime transport, renderer behavior, or card geometry changes.
 
@@ -59,6 +59,13 @@ For cadence, batching, coalescing, or task-frequency changes, also require:
 - installed manual review against the protected feel.
 
 Final-state equality, packet ordering, worker duration, average FPS, and a task-count cap cannot close a reactive visualizer change. If the runtime-visible complaint remains while these proxy tests pass, reject the change and strengthen the oracle.
+
+A target-refresh request gate is not a presentation scheduler. In particular, sampling a
+`90–100 Hz` producer against a `60 Hz` elapsed-time threshold can quantize to every second
+producer tick, and holding admission until `paintGL()` adds variable Qt-delivery
+backpressure. Before any latest-state presentation policy is enabled for Bubble, sample
+the protected discrete-edge trace across display-phase offsets and prove the edge remains
+visible exactly once; a legal phase that misses it rejects the generic coalescer.
 
 ## 7. Docs And Closure
 - Refresh `Spec.md`, `Index.md`, `Docs/Visualizer_Reference.md`, and `Docs/TestSuite.md` when contracts or validation inventory change.
