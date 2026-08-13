@@ -88,9 +88,14 @@ and temp transition ownership releases; no worker/image-pipeline terminal acknow
 
 ## 7. GPU Timing
 
-All transition families need shared-seam paint timing and non-blocking GL timer queries
-with delayed result collection. `glFinish()` is prohibited in ordinary profiling.
-Correlate timer samples with process GPU busy, texture uploads and event-loop/request age.
+All transition families share the same paint-timing seam. Ordinary `--perf` records CPU,
+frame and delivery evidence without creating OpenGL query handles or calling query
+availability/begin/end APIs. The explicitly heavier `--gpu-timing` profile implies
+`--perf`, samples one in eight existing paint observations and collects available results
+without waiting. It reports observed/sampled-out/poll/submission/result coverage and owns
+all handles on the exact compositor context. `glFinish()` is prohibited. Correlate these
+samples with process GPU busy, texture uploads and event-loop/request age, but never use
+the query path as presentation or cadence control flow.
 
 ## 8. GL Ownership
 

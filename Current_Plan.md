@@ -131,8 +131,18 @@ at about `0.70/6.79/11.24 ms`. Successful ownership extraction must therefore be
 even when request-age does not materially fall; continue attribution to the next GUI,
 native, or GL owner rather than rolling the extraction back or tuning visualizer cadence.
 
+The `08_13_1ece5167_19_33_19_39_parser119_typical` run confirms the repaired work
+again—`31/31` steady old-texture lookups hit, uploads/resources improve and teardown
+returns to zero—but frame delivery is materially worse. It is not yet a clean scheduler
+comparison: ordinary `--perf` was also issuing compositor and visualizer timer-query
+driver calls on every paint. Heavy owner-GPU timing is now a separate sampled
+`--gpu-timing` profile; ordinary `--perf` performs no GL query calls.
+
 - [x] Validate retained-current → next-old reuse in a live repeated-transition run without increasing terminal texture/PBO ownership.
 - [x] Re-run after queued logging and ordered settings persistence. Logging/settings terminal metrics are clean and bounded, texture/resource bars remain closed, and the result narrows rather than closes the remaining GUI-availability problem.
+- [x] Remove owner-local GL timer-query observer cost from ordinary `--perf`; keep heavy GPU attribution explicit, one-in-eight sampled and coverage-accounted under `--gpu-timing`.
+- [ ] Repeat the same typical-load Settings/CUSTOM/Bubble/Spectrum route with ordinary `--perf` and compare parser-1.20 per-screen/per-transition FPS, weighted request acceptance, request age, paint tails, CPU and warning rate against the frozen `1ece5167` run.
+- [ ] If ordinary `--perf` still under-delivers, attribute adaptive-render wakeup lateness separately from queued-dispatch-pending and paint-pending time before changing the coalescing or scheduling model.
 - [ ] Change multi-display commit scheduling only if post-extraction steady evidence shows back-to-back prepared commits are a remaining owner. Cold/recreation delays alone do not justify a scheduling change.
 - [ ] Keep transition names and one terminal GL metric bracket per real transition; no repaint retry or scheduler/cadence compensation.
 

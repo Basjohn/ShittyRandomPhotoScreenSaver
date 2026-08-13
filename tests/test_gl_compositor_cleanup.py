@@ -186,6 +186,7 @@ def test_compositor_perf_query_handles_use_real_owner_context_and_cleanup(
     if _gl is None:
         pytest.skip("PyOpenGL not available; skipping GL timer-query integration")
     monkeypatch.setattr(gl_compositor, "is_perf_metrics_enabled", lambda: True)
+    monkeypatch.setattr(gl_compositor, "is_gpu_timing_enabled", lambda: True)
 
     parent = QWidget()
     parent.resize(64, 64)

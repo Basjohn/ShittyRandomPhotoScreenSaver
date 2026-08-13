@@ -27,7 +27,7 @@ attributed. `Current_Plan.md` owns exact active order; this document owns depend
 
 1. **Repair the proven texture identity/reuse defect.** Current texture must be the next old texture under unchanged identity; measure before/after setter/request-age/GPU effects.
 2. **Extract broad avoidable GUI work.** Queue ordinary logging, serialize settings persistence off GUI, and move proven Reddit/Weather/Gmail prepare/cache work away from GUI/paint paths.
-3. **Make GPU attribution truthful.** Shared compositor paint/GPU timing across transition families; non-blocking timer queries only; separate upload/transition/visualizer/presentation costs.
+3. **Make GPU attribution truthful.** Shared compositor paint/GPU timing across transition families; explicit sampled `--gpu-timing` only, with ordinary `--perf` query-free; separate upload/transition/visualizer/presentation costs.
 4. **Remove high-confidence temporary compatibility/fallback debt.** Start with the Bubble executor façade; then audit the unused persistent compute-lane subsystem and other proven dead surfaces. One concern per checkpoint.
 5. **Remeasure the same mixed-load authored scenario.** Use deliberate load timestamps and unchanged visualizer/source/cache conditions.
 6. **Complete stronger visualizer temporal/paint-receipt protection.** This is a prerequisite to Phase 7, not permission to alter authored cadence in Phase 5.

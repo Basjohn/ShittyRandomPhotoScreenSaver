@@ -11,6 +11,7 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from core.logging.logger import (
     get_logger,
+    is_gpu_timing_enabled,
     is_perf_metrics_enabled,
     is_viz_diagnostics_enabled,
 )
@@ -438,7 +439,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 ring_size=4,
                 resource_group="spotify_vis_gl",
             )
-            if self._perf_metrics_enabled
+            if is_gpu_timing_enabled()
             else None
         )
 
@@ -493,7 +494,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         else:
             gpu_window = {
                 "supported": False,
-                "reason": "helper_unavailable",
+                "reason": "gpu_timing_disabled",
                 "pending": 0,
                 "errors": 0,
                 "by_label": {},
@@ -535,7 +536,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         for mode, metrics in gpu_window["by_label"].items():
             logger.info(
                 "[PERF][SPOTIFY_VIS][OVERLAY_GPU] screen=%s mode=%s elapsed_ms=%.1f "
-                "gpu_supported=%s gpu_reason=%s gpu_submitted=%d gpu_collected=%d "
+                "gpu_supported=%s gpu_reason=%s gpu_observed=%d gpu_sampled_out=%d "
+                "gpu_poll_attempts=%d gpu_sample_stride=%d "
+                "gpu_submitted=%d gpu_collected=%d "
                 "gpu_pending=%d gpu_dropped_pending=%d gpu_discarded=%d "
                 "gpu_errors=%d gpu_samples=%d gpu_p50_ms=%s gpu_p95_ms=%s "
                 "gpu_max_ms=%s",
@@ -544,6 +547,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 elapsed * 1000.0,
                 gpu_window["supported"],
                 gpu_window["reason"],
+                metrics["observed"],
+                metrics["sampled_out"],
+                metrics["poll_attempts"],
+                metrics["sample_stride"],
                 metrics["submitted"],
                 metrics["collected"],
                 metrics["pending"],
@@ -1490,8 +1497,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         paint_started = time.perf_counter() if self._perf_metrics_enabled else 0.0
         self._perf_paint_count += 1
         self._perf_paint_total += 1
-        if self._gpu_timer_queries is not None:
-            self._gpu_timer_queries.poll(gl)
         # Skip rendering until initializeGL has completed to avoid
         # uninitialized buffer artifacts (green dots on first frame)
         # Use GLStateManager for proper state tracking
@@ -1504,7 +1509,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         query_started = bool(
             self._gpu_timer_queries is not None
-            and self._gpu_timer_queries.begin(gl, label=self._vis_mode)
+            and self._gpu_timer_queries.begin_sampled(gl, label=self._vis_mode)
         )
         try:
             # Always clear the backing buffer so stale frames do not linger when

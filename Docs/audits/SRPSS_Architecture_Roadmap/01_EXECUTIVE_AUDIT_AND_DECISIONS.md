@@ -51,7 +51,7 @@ After logical integration, presentation may consume only the latest valid immuta
 
 ### ADR-H — GPU profiling must be truthful and non-blocking
 
-Transition GPU timing must be wired at a shared compositor seam with non-blocking timer queries and delayed result collection where supported. `glFinish()` is prohibited in ordinary profiling.
+Transition GPU timing must be wired at a shared compositor seam behind the explicit heavyweight `--gpu-timing` profile, with bounded non-blocking sampling and delayed result collection where supported. Ordinary `--perf` performs no query-driver calls; `glFinish()` is prohibited.
 
 ### ADR-I — Logging has two phases of work
 

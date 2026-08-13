@@ -72,9 +72,10 @@ def _gpu_timer_query_label(widget) -> str:
     current = str(getattr(widget, "_current_transition_name", "") or "").strip()
     if current:
         return current.lower()
-    active_descriptors = _active_transition_descriptors(widget)
-    if active_descriptors:
-        return str(active_descriptors[0][0][0] or "transition").lower()
+    paint_metrics = getattr(widget, "_paint_metrics", None)
+    metrics_label = str(getattr(paint_metrics, "label", "") or "").strip()
+    if metrics_label:
+        return metrics_label.lower()
     return "steady"
 
 
@@ -119,7 +120,9 @@ def maybe_log_gpu_timer_query_window(widget, *, force: bool = False) -> None:
     for transition, metrics in gpu_window["by_label"].items():
         logger.info(
             "[PERF][GL COMPOSITOR][GPU] screen=%s transition=%s elapsed_ms=%.1f "
-            "gpu_supported=%s gpu_reason=%s gpu_submitted=%d gpu_collected=%d "
+            "gpu_supported=%s gpu_reason=%s gpu_observed=%d gpu_sampled_out=%d "
+            "gpu_poll_attempts=%d gpu_sample_stride=%d "
+            "gpu_submitted=%d gpu_collected=%d "
             "gpu_pending=%d gpu_dropped_pending=%d gpu_discarded=%d "
             "gpu_errors=%d gpu_samples=%d gpu_p50_ms=%s gpu_p95_ms=%s "
             "gpu_max_ms=%s",
@@ -128,6 +131,10 @@ def maybe_log_gpu_timer_query_window(widget, *, force: bool = False) -> None:
             elapsed * 1000.0,
             gpu_window["supported"],
             gpu_window["reason"],
+            metrics["observed"],
+            metrics["sampled_out"],
+            metrics["poll_attempts"],
+            metrics["sample_stride"],
             metrics["submitted"],
             metrics["collected"],
             metrics["pending"],
@@ -275,11 +282,16 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
     
     timer_queries = getattr(widget, "_gpu_timer_queries", None)
     query_started = False
-    if timer_queries is not None and gl is not None:
-        timer_queries.poll(gl)
+    if (
+        timer_queries is not None
+        and gl is not None
+        and widget._gl_state.is_ready()
+    ):
         query_started = bool(
-            widget._gl_state.is_ready()
-            and timer_queries.begin(gl, label=_gpu_timer_query_label(widget))
+            timer_queries.begin_sampled(
+                gl,
+                label=_gpu_timer_query_label(widget),
+            )
         )
 
     try:
@@ -287,7 +299,8 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
     finally:
         if query_started and timer_queries is not None and gl is not None:
             timer_queries.end(gl)
-        maybe_log_gpu_timer_query_window(widget)
+        if timer_queries is not None:
+            maybe_log_gpu_timer_query_window(widget)
         _paint_end = time.perf_counter()
         paint_elapsed = (_paint_end - _paint_start) * 1000.0
         widget._record_paint_metrics(

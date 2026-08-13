@@ -23,7 +23,7 @@ rejected Spectrum second clock: ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
 historical candidate/reference: 7376bb9bb380253f3bd14079e65d7bdbca062fad
 active task owner:              Current_Plan.md
 historical causal reference:    logs/evidence_chest/08_09_ca830d7_14_59/
-current typical-load evidence:  logs/evidence_chest/08_13_ab429163_16_08_16_18_typical_teardown_churn/
+current typical-load evidence:  logs/evidence_chest/08_13_1ece5167_19_33_19_39_parser119_typical/
 ```
 
 Historical commits are negative controls/reference only. Current architecture starts
@@ -39,7 +39,8 @@ from `main`.
 ### Phase 1 — Measurement foundation
 
 - [x] Frame/request-age, task, lifecycle, resource, image-install and whole-process sampling exists.
-- [!] Transition GPU timing is not truthful across all transition families; owner-level GPU attribution is active P5.2B work.
+- [x] Owner-context visualizer/compositor GPU timing is supported, bounded and parser-visible.
+- [!] Per-paint query-driver calls materially contaminated the latest performance comparison; the heavyweight query profile is now explicit and awaits an ordinary-`--perf` control run.
 - [!] Absolute process memory/commit/VRAM still exceeds tracked application bytes.
 
 ### Phase 2 — Visualizer fidelity protection
@@ -82,7 +83,9 @@ from `main`.
 - [x] Attribute texture-upload CPU phases in a typical teardown/churn run: ordinary uploads are dominated by redundant image preparation/source copying rather than texture submission, while cold PBO staging and pair-warm residual remain separate owners.
 - [x] Validate native RGB32/ARGB32 plus direct read-only QImage-buffer upload: all `34/34` installed-run uploads use the direct path, the two copy spans are effectively eliminated, and pixel/identity/teardown bars remain closed.
 - [x] Validate the correlated cold-install probe under startup and Settings recreation: all `32/32` accepted IDs are complete, all `26` steady old lookups hit, and the six generation-first misses isolate native show/context creation plus an unnecessary no-transition old upload.
-- [ ] Validate the no-transition old-upload removal and parser-1.19 offscreen-surface/shared-context split under startup plus Settings recreation before changing context ownership or lifecycle.
+- [x] Validate no-transition old-upload removal and parser-1.19 offscreen-surface/shared-context split: all `37/37` accepted installs complete, all `31/31` steady old lookups hit, and generation-first installs upload only the new destination.
+- [x] Separate GL timer-query driver calls from ordinary `--perf`; `--gpu-timing` now implies PERF, samples one in eight paint observations and reports sampling coverage.
+- [ ] Repeat the same typical-load Settings/CUSTOM/Bubble/Spectrum route under ordinary `--perf` before attributing the observed frame-delivery regression or changing render admission.
 - [ ] Remove proven GUI-thread service/cache preparation.
 - [ ] Attribute GPU busy across upload/transition/visualizer/presentation owners.
 - [ ] Remove proven temporary compatibility/fallback debris without changing behaviour.

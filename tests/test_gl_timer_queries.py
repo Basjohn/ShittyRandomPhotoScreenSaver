@@ -95,11 +95,17 @@ class _FakeGL:
         self.delete_calls.append(handle)
 
 
-def _ring(*, size: int = 4, manager: _ResourceManager | None = None) -> GLTimerQueryRing:
+def _ring(
+    *,
+    size: int = 4,
+    manager: _ResourceManager | None = None,
+    sample_stride: int = 8,
+) -> GLTimerQueryRing:
     return GLTimerQueryRing(
         owner="test-owner",
         generation=7,
         ring_size=size,
+        sample_stride=sample_stride,
         resource_manager=manager,
     )
 
@@ -127,6 +133,10 @@ def test_timer_queries_collect_only_after_result_is_available() -> None:
     assert snapshot["pending"] == 0
     assert snapshot["errors"] == 0
     assert snapshot["by_label"]["bubble"] == {
+        "observed": 0,
+        "sampled_out": 0,
+        "poll_attempts": 0,
+        "sample_stride": 8,
         "submitted": 1,
         "collected": 1,
         "pending": 0,
@@ -137,6 +147,58 @@ def test_timer_queries_collect_only_after_result_is_available() -> None:
         "p95_ms": 1.5,
         "max_ms": 1.5,
     }
+
+
+def test_sampled_query_path_crosses_driver_only_once_per_stride() -> None:
+    gl = _FakeGL()
+    ring = _ring(sample_stride=8)
+    assert ring.initialize(gl, context=_Context()) is True
+
+    started = 0
+    for _ in range(80):
+        if ring.begin_sampled(gl, label="bubble"):
+            started += 1
+            ring.end(gl)
+            handle = 10 + started
+            gl.available[handle] = 1
+            gl.results_ns[handle] = 500_000
+
+    snapshot = ring.consume_window(include_labels=("bubble",))
+    metrics = snapshot["by_label"]["bubble"]
+
+    assert metrics["observed"] == 80
+    assert metrics["sampled_out"] == 70
+    assert metrics["poll_attempts"] == 10
+    assert metrics["sample_stride"] == 8
+    assert metrics["submitted"] == 10
+    assert len(gl.begin_calls) == 10
+    assert len(gl.end_calls) == 10
+    assert len(gl.availability_calls) == 9
+    assert len(gl.result_calls) == 9
+
+
+def test_sample_stride_is_independent_per_owner_label() -> None:
+    gl = _FakeGL()
+    gl.available.update({handle: 1 for handle in range(11, 15)})
+    gl.results_ns.update({handle: 250_000 for handle in range(11, 15)})
+    ring = _ring(sample_stride=8)
+    assert ring.initialize(gl, context=_Context()) is True
+
+    for _ in range(16):
+        for label in ("bubble", "spectrum"):
+            if ring.begin_sampled(gl, label=label):
+                ring.end(gl)
+
+    snapshot = ring.consume_window(include_labels=("bubble", "spectrum"))
+    for label in ("bubble", "spectrum"):
+        metrics = snapshot["by_label"][label]
+        assert metrics["observed"] == 16
+        assert metrics["sampled_out"] == 14
+        assert metrics["poll_attempts"] == 2
+        assert metrics["submitted"] == 2
+
+    assert len(gl.begin_calls) == 4
+    assert len(gl.end_calls) == 4
 
 
 def test_timer_query_ring_drops_samples_instead_of_waiting() -> None:

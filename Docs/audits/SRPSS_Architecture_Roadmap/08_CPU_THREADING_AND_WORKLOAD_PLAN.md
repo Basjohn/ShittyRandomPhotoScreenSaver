@@ -633,6 +633,23 @@ shared-context creation within the existing hidden-context route. This remains p
 measurement and is the prerequisite for deciding whether any deeper cold-context change
 is safe enough to justify.
 
+The installed `08_13_1ece5167_19_33_19_39_parser119_typical` run closes that narrow
+gate. All `37/37` accepted installs reach pair warm and the next existing paint; all
+`31/31` steady old-texture lookups hit, and generation-first/no-transition installs
+upload only the new destination. Upload, tracked-resource and teardown results improve,
+but active-transition delivery is materially worse even after matching display and
+transition families. That run is not a clean scheduler comparison: ordinary `--perf`
+also crossed into the GL driver for compositor and visualizer timer-query poll/begin/end
+on every paint, while paint medians roughly doubled and PERF evidence volume rose.
+
+The heavyweight owner-GPU probe is therefore now explicit `--gpu-timing` (which implies
+`--perf`) and samples one of every eight paint observations with coverage counters.
+Ordinary `--perf` creates no query handles and makes no query-driver calls. The next gate
+is a same-route ordinary-`--perf` control run. Only if delivery remains poor should the
+render path gain passive separation of adaptive-timer wakeup lateness, queued-dispatch
+pending and native paint-pending time. Do not change Bubble/Spectrum logical cadence,
+add retries, or tune coalescing before that control.
+
 ### Priority 2 — pool topology
 
 After workload classes are separated:

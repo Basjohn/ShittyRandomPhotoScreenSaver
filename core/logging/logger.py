@@ -41,6 +41,10 @@ _VERBOSE: bool = False
 # PERF metrics default to False for production builds. Script mode and frozen
 # builds opt in explicitly through CLI/config, not environment toggles.
 _PERF_METRICS_ENABLED: bool = False
+# Owner-local OpenGL timer queries cross into the driver and are deliberately
+# separated from ordinary PERF telemetry.  ``--gpu-timing`` implies PERF logs,
+# but ``--perf`` alone must remain free of query polling/begin/end overhead.
+_GPU_TIMING_ENABLED: bool = False
 _USAGE_LOGGING_ENABLED: bool = False
 # Widget PERF verbosity flag controls whether per-call summaries land in main log
 _WIDGET_PERF_VERBOSE: bool = False
@@ -647,6 +651,7 @@ class LoggingBootstrapProfile:
     debug: bool = False
     verbose: bool = False
     perf: bool = False
+    gpu_timing: bool = False
     usage: bool = False
     viz: bool = False
     viz_diag: bool = False
@@ -670,6 +675,7 @@ def resolve_logging_bootstrap_profile(
             debug=True,
             verbose=True,
             perf=True,
+            gpu_timing=True,
             usage=True,
             viz=True,
             viz_diag=True,
@@ -680,10 +686,12 @@ def resolve_logging_bootstrap_profile(
             steam_trace=True,
         )
     viz = "--viz" in args
+    gpu_timing = "--gpu-timing" in args
     return LoggingBootstrapProfile(
         debug="--debug" in args or "-d" in args,
         verbose="--verbose" in args or "-v" in args,
-        perf="--perf" in args,
+        perf="--perf" in args or gpu_timing,
+        gpu_timing=gpu_timing,
         usage="--usage" in args,
         viz=viz,
         viz_diag=viz or "--viz-diagnostics" in args or "--viz-diag" in args,
@@ -1745,6 +1753,7 @@ def setup_logging(
     debug: bool = False,
     verbose: bool = False,
     perf: bool = False,
+    gpu_timing: bool = False,
     usage: bool = False,
     viz: bool = False,
     viz_diag: bool = False,
@@ -1764,6 +1773,9 @@ def setup_logging(
             selected modules (media widget polling, raw settings dumps,
             etc.). Verbose mode also implies debug-level logging.
         perf: Enables performance/PERF logging families.
+        gpu_timing: Enables sampled owner-context OpenGL timer queries and
+            implies PERF logging. This is intentionally heavier than ordinary
+            PERF telemetry.
         usage: Enables low-cadence whole-process resource telemetry.
         viz: When True, enables visualizer-specific logging ([SPOTIFY_VIS],
             [SPOTIFY_VOL]) and visualizer diagnostics.
@@ -1777,7 +1789,8 @@ def setup_logging(
             diagnostic directory. Ordinary and Media Center release entry
             points never set this flag.
     """
-    global _VERBOSE, _PERF_METRICS_ENABLED, _USAGE_LOGGING_ENABLED
+    global _VERBOSE, _PERF_METRICS_ENABLED, _GPU_TIMING_ENABLED
+    global _USAGE_LOGGING_ENABLED
     global _VIZ_LOGGING_ENABLED, _VIZ_DIAGNOSTICS_ENABLED
     global _GEOMETRY_LOGGING_ENABLED, _SETTINGS_LOGGING_ENABLED, _LIFECYCLE_LOGGING_ENABLED
     global _CACHE_LOGGING_ENABLED, _STEAM_LOGGING_ENABLED, _WIDGET_PERF_VERBOSE
@@ -1796,6 +1809,7 @@ def setup_logging(
         debug = diagnostic_profile.debug
         verbose = diagnostic_profile.verbose
         perf = diagnostic_profile.perf
+        gpu_timing = diagnostic_profile.gpu_timing
         usage = diagnostic_profile.usage
         viz = diagnostic_profile.viz
         viz_diag = diagnostic_profile.viz_diag
@@ -1818,6 +1832,9 @@ def setup_logging(
             base_dir = exe_path.parent
 
     # Command-line flag overrides config file / environment fallback.
+    _GPU_TIMING_ENABLED = bool(gpu_timing)
+    if _GPU_TIMING_ENABLED:
+        perf = True
     if perf:
         _PERF_METRICS_ENABLED = True
     if usage:
@@ -1855,6 +1872,7 @@ def setup_logging(
     specific_logging_enabled = any(
         (
             _PERF_METRICS_ENABLED,
+            _GPU_TIMING_ENABLED,
             _USAGE_LOGGING_ENABLED,
             _VIZ_LOGGING_ENABLED,
             _VIZ_DIAGNOSTICS_ENABLED,
@@ -2203,10 +2221,11 @@ def setup_logging(
 
     root_logger.info("=" * 60)
     root_logger.info(
-        "Screensaver logging initialized (debug=%s, verbose=%s, perf=%s, usage=%s, viz=%s, geo=%s, set=%s, life=%s, cache=%s, steam=%s)",
+        "Screensaver logging initialized (debug=%s, verbose=%s, perf=%s, gpu_timing=%s, usage=%s, viz=%s, geo=%s, set=%s, life=%s, cache=%s, steam=%s)",
         debug_enabled,
         _VERBOSE,
         _PERF_METRICS_ENABLED,
+        _GPU_TIMING_ENABLED,
         _USAGE_LOGGING_ENABLED,
         _VIZ_LOGGING_ENABLED,
         _GEOMETRY_LOGGING_ENABLED,
@@ -2216,11 +2235,13 @@ def setup_logging(
         _STEAM_LOGGING_ENABLED,
     )
     root_logger.info(
-        "Specific logs available: --perf=screensaver_perf.log, --usage=screensaver_usage.log, --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log, --cache=screensaver_cache.log, --steam=screensaver_steam.log"
+        "Specific logs available: --perf=screensaver_perf.log, --gpu-timing=sampled GL timer queries + screensaver_perf.log, --usage=screensaver_usage.log, --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log, --cache=screensaver_cache.log, --steam=screensaver_steam.log"
     )
     active_specific_logs: list[str] = []
     if _PERF_METRICS_ENABLED:
         active_specific_logs.append("perf=screensaver_perf.log")
+    if _GPU_TIMING_ENABLED:
+        active_specific_logs.append("gpu_timing=sampled_owner_gl_queries")
     if _USAGE_LOGGING_ENABLED:
         active_specific_logs.append("usage=screensaver_usage.log")
     if _VIZ_LOGGING_ENABLED:
@@ -2444,6 +2465,12 @@ def is_perf_metrics_enabled() -> bool:
     """Return True when PERF metrics/telemetry are enabled globally."""
 
     return _PERF_METRICS_ENABLED
+
+
+def is_gpu_timing_enabled() -> bool:
+    """Return True only for the explicitly heavy GL timer-query profile."""
+
+    return _GPU_TIMING_ENABLED
 
 
 def is_usage_logging_enabled() -> bool:

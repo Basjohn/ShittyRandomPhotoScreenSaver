@@ -35,7 +35,11 @@ from PySide6.QtCore import Qt, QPoint, QRect, Slot
 from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage, QColor, QOpenGLContext
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
-from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.logging.logger import (
+    get_logger,
+    is_gpu_timing_enabled,
+    is_perf_metrics_enabled,
+)
 from core.animation.types import EasingCurve
 from core.animation.animator import AnimationManager
 from core.animation.frame_interpolator import FrameState
@@ -257,7 +261,7 @@ class GLCompositorWidget(QOpenGLWidget):
                 ring_size=4,
                 resource_group="gl_compositor_timer_queries",
             )
-            if is_perf_metrics_enabled()
+            if is_gpu_timing_enabled()
             else None
         )
         self._gpu_timer_query_last_log_ts: float = time.monotonic()

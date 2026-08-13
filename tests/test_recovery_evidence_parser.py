@@ -125,16 +125,18 @@ def _write_archive(path: Path) -> None:
             "2026-07-23 19:38:08 - metrics - INFO - "
             "[PERF][SPOTIFY_VIS][OVERLAY_GPU] screen=1 mode=bubble "
             "elapsed_ms=10000.0 gpu_supported=True gpu_reason=supported "
-            "gpu_submitted=908 gpu_collected=906 gpu_pending=2 "
-            "gpu_dropped_pending=2 gpu_discarded=0 gpu_samples=906 "
+            "gpu_observed=910 gpu_sampled_out=796 gpu_poll_attempts=114 "
+            "gpu_sample_stride=8 gpu_submitted=112 gpu_collected=110 gpu_pending=2 "
+            "gpu_dropped_pending=2 gpu_discarded=0 gpu_samples=110 "
             "gpu_errors=0 "
             "gpu_p50_ms=0.11 gpu_p95_ms=0.23 gpu_max_ms=0.71",
             "2026-07-23 19:38:08 - metrics - INFO - "
             "[PERF][GL COMPOSITOR][GPU] screen=0 transition=burn "
             "elapsed_ms=10000.0 gpu_supported=True gpu_reason=supported "
-            "gpu_submitted=1200 gpu_collected=1199 gpu_pending=1 "
+            "gpu_observed=1200 gpu_sampled_out=1050 gpu_poll_attempts=150 "
+            "gpu_sample_stride=8 gpu_submitted=149 gpu_collected=148 gpu_pending=1 "
             "gpu_dropped_pending=0 gpu_discarded=0 gpu_errors=0 "
-            "gpu_samples=1199 gpu_p50_ms=0.50 gpu_p95_ms=0.90 gpu_max_ms=1.50",
+            "gpu_samples=148 gpu_p50_ms=0.50 gpu_p95_ms=0.90 gpu_max_ms=1.50",
             "2026-07-23 19:38:09 - metrics - INFO - "
             "[PERF][MEDIA_PRESENTATION] event=published metadata_changed=True "
             "presentation_changed=True deferred_for_transition=False transition_active=False "
@@ -241,6 +243,12 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     assert analysis.frame_rows[0]["dt_p99_ms"] == 24.0
     assert analysis.frame_rows[0]["dt_max_ms"] == 45.0
     assert analysis.frame_rows[0]["request_age_p99_ms"] == 7.0
+    assert analysis.frame_rows[0]["transition_label"] == "Slide"
+    slide_delivery = analysis.summary["frame_delivery"]["by_screen_transition"]["0"]["slide"]["paint"]
+    assert slide_delivery["frames_total"] == 100
+    assert slide_delivery["weighted_request_acceptance_pct"] == pytest.approx(
+        102.0 / 104.0 * 100.0
+    )
     assert analysis.memory_rows[0]["tracked_known_bytes"] == 1248
     assert analysis.memory_rows[0]["rss_children_mb"] == 80.0
     assert analysis.memory_rows[0]["private_main_mb"] == 620.0
@@ -338,15 +346,35 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
                 "records": 1,
                 "supported_records": 1,
                 "unsupported_records": 0,
+                "observed": {
+                    "minimum": 910.0,
+                    "median": 910.0,
+                    "maximum": 910.0,
+                },
+                "sampled_out": {
+                    "minimum": 796.0,
+                    "median": 796.0,
+                    "maximum": 796.0,
+                },
+                "poll_attempts": {
+                    "minimum": 114.0,
+                    "median": 114.0,
+                    "maximum": 114.0,
+                },
+                "sample_stride": {
+                    "minimum": 8.0,
+                    "median": 8.0,
+                    "maximum": 8.0,
+                },
                 "submitted": {
-                    "minimum": 908.0,
-                    "median": 908.0,
-                    "maximum": 908.0,
+                    "minimum": 112.0,
+                    "median": 112.0,
+                    "maximum": 112.0,
                 },
                 "collected": {
-                    "minimum": 906.0,
-                    "median": 906.0,
-                    "maximum": 906.0,
+                    "minimum": 110.0,
+                    "median": 110.0,
+                    "maximum": 110.0,
                 },
                 "pending": {
                     "minimum": 2.0,
@@ -369,9 +397,9 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
                     "maximum": 0.0,
                 },
                 "samples": {
-                    "minimum": 906.0,
-                    "median": 906.0,
-                    "maximum": 906.0,
+                    "minimum": 110.0,
+                    "median": 110.0,
+                    "maximum": 110.0,
                 },
                 "p50_ms": {
                     "minimum": 0.11,
@@ -394,7 +422,9 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     compositor_gpu = analysis.summary["phase5"]["compositor_gpu"]
     assert compositor_gpu["records"] == 1
     assert compositor_gpu["by_transition"]["burn"]["supported_records"] == 1
-    assert compositor_gpu["by_transition"]["burn"]["samples"]["median"] == 1199.0
+    assert compositor_gpu["by_transition"]["burn"]["observed"]["median"] == 1200.0
+    assert compositor_gpu["by_transition"]["burn"]["sample_stride"]["median"] == 8.0
+    assert compositor_gpu["by_transition"]["burn"]["samples"]["median"] == 148.0
     assert compositor_gpu["by_transition"]["burn"]["p95_ms"]["median"] == 0.9
     overlay = next(
         row for row in analysis.phase5_rows
@@ -415,8 +445,10 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
         if row["kind"] == "visualizer_overlay_gpu"
     )
     assert overlay_gpu["gpu_supported"] == "True"
-    assert overlay_gpu["gpu_submitted"] == 908
-    assert overlay_gpu["gpu_collected"] == 906
+    assert overlay_gpu["gpu_observed"] == 910
+    assert overlay_gpu["gpu_sample_stride"] == 8
+    assert overlay_gpu["gpu_submitted"] == 112
+    assert overlay_gpu["gpu_collected"] == 110
     assert overlay_gpu["gpu_dropped_pending"] == 2
     assert overlay_gpu["gpu_p95_ms"] == 0.23
     compositor_gpu_row = next(
@@ -425,7 +457,8 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     )
     assert compositor_gpu_row["screen"] == 0
     assert compositor_gpu_row["transition"] == "burn"
-    assert compositor_gpu_row["gpu_collected"] == 1199
+    assert compositor_gpu_row["gpu_observed"] == 1200
+    assert compositor_gpu_row["gpu_collected"] == 148
     assert compositor_gpu_row["gpu_p95_ms"] == 0.9
     assert analysis.summary["phase5"]["cache"]["raw_hits"]["maximum"] == 8.0
     assert analysis.summary["phase5"]["cache"]["worker_requests"]["maximum"] == 4.0
@@ -814,7 +847,7 @@ def test_frame_gap_owner_parser_preserves_current_producer_context(
     analysis = analyze_evidence_source(evidence_dir)
     row = analysis.phase5_rows[0]
 
-    assert PARSER_VERSION == "1.19"
+    assert PARSER_VERSION == "1.20"
     assert row["last_ui"] == "display_image_apply"
     assert row["last_ui_ms"] == 5.0
     assert row["last_ui_age_ms"] == 10.0

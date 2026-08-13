@@ -23,6 +23,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
     monkeypatch.setattr(logger_mod, "_LOGGING_DISABLED", False)
     monkeypatch.setattr(logger_mod, "_PERF_METRICS_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_GPU_TIMING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_USAGE_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_VIZ_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_VIZ_DIAGNOSTICS_ENABLED", False)
@@ -37,6 +38,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
         debug=False,
         verbose=False,
         perf=True,
+        gpu_timing=True,
         usage=True,
         viz=True,
         geo=True,
@@ -96,6 +98,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     assert metrics["flush_timed_out"] is False
 
     assert logger_mod.is_perf_metrics_enabled() is True
+    assert logger_mod.is_gpu_timing_enabled() is True
     assert logger_mod.is_usage_logging_enabled() is True
     assert logger_mod.is_viz_logging_enabled() is True
     assert logger_mod.is_viz_diagnostics_enabled() is True
@@ -224,6 +227,7 @@ def test_old_logging_env_toggles_no_longer_enable_families(tmp_path, monkeypatch
     monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
     monkeypatch.setattr(logger_mod, "_LOGGING_DISABLED", False)
     monkeypatch.setattr(logger_mod, "_PERF_METRICS_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_GPU_TIMING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_USAGE_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_VIZ_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_VIZ_DIAGNOSTICS_ENABLED", False)
@@ -290,6 +294,7 @@ def test_diagnostic_build_enables_every_family_beside_frozen_executable(
     assert all(1 <= handler.backupCount <= 5 for handler in rotating)
     assert logger_mod.is_verbose_logging() is True
     assert logger_mod.is_perf_metrics_enabled() is True
+    assert logger_mod.is_gpu_timing_enabled() is True
     assert logger_mod.is_usage_logging_enabled() is True
     assert logger_mod.is_widget_perf_verbose() is True
     assert logger_mod.is_viz_logging_enabled() is True
@@ -388,6 +393,41 @@ def test_logging_bootstrap_profile_keeps_normal_collectors_off_without_flags():
     assert all(vars(diagnostic).values())
 
 
+def test_gpu_timing_is_explicit_and_implies_perf_logging():
+    ordinary_perf = logger_mod.resolve_logging_bootstrap_profile(
+        ("--perf",),
+        diagnostic_build=False,
+    )
+    gpu_timing = logger_mod.resolve_logging_bootstrap_profile(
+        ("--gpu-timing",),
+        diagnostic_build=False,
+    )
+
+    assert ordinary_perf.perf is True
+    assert ordinary_perf.gpu_timing is False
+    assert gpu_timing.perf is True
+    assert gpu_timing.gpu_timing is True
+
+
+def test_setup_logging_can_return_from_gpu_timing_to_ordinary_perf(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(logger_mod, "is_compiled_runtime", lambda: False)
+    monkeypatch.setattr(logger_mod, "_FORCED_LOG_DIR", tmp_path)
+    monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
+    monkeypatch.setattr(logger_mod, "_LOGGING_DISABLED", False)
+    monkeypatch.setattr(logger_mod, "_PERF_METRICS_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_GPU_TIMING_ENABLED", False)
+
+    logger_mod.setup_logging(perf=True, gpu_timing=True)
+    assert logger_mod.is_gpu_timing_enabled() is True
+
+    logger_mod.setup_logging(perf=True, gpu_timing=False)
+    assert logger_mod.is_perf_metrics_enabled() is True
+    assert logger_mod.is_gpu_timing_enabled() is False
+
+
 def test_normal_frozen_build_remains_logging_disabled(tmp_path, monkeypatch):
     executable = tmp_path / "SRPSS.scr"
     executable.write_bytes(b"fixture")
@@ -397,6 +437,7 @@ def test_normal_frozen_build_remains_logging_disabled(tmp_path, monkeypatch):
     monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
     for name in (
         "_PERF_METRICS_ENABLED",
+        "_GPU_TIMING_ENABLED",
         "_USAGE_LOGGING_ENABLED",
         "_VIZ_LOGGING_ENABLED",
         "_VIZ_DIAGNOSTICS_ENABLED",
@@ -416,6 +457,7 @@ def test_normal_frozen_build_remains_logging_disabled(tmp_path, monkeypatch):
     )
     assert not (tmp_path / "logs").exists()
     assert logger_mod.is_perf_metrics_enabled() is False
+    assert logger_mod.is_gpu_timing_enabled() is False
     assert logger_mod.is_usage_logging_enabled() is False
 
 
@@ -430,6 +472,7 @@ def test_script_mode_retains_main_log_only_without_diagnostic_flags(
     monkeypatch.setattr(logger_mod, "_LOGGING_DISABLED", False)
     for name in (
         "_PERF_METRICS_ENABLED",
+        "_GPU_TIMING_ENABLED",
         "_USAGE_LOGGING_ENABLED",
         "_VIZ_LOGGING_ENABLED",
         "_VIZ_DIAGNOSTICS_ENABLED",
@@ -452,4 +495,5 @@ def test_script_mode_retains_main_log_only_without_diagnostic_flags(
         "screensaver.log"
     }
     assert logger_mod.is_perf_metrics_enabled() is False
+    assert logger_mod.is_gpu_timing_enabled() is False
     assert logger_mod.is_usage_logging_enabled() is False

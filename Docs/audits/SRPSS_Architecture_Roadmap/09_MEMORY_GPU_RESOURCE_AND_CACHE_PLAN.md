@@ -36,7 +36,7 @@ Report separately:
 - tracked GL texture/FBO/PBO/program/buffer bytes;
 - dedicated and shared GPU memory;
 - process GPU-engine busy and sample timestamp/age;
-- transition GL timer-query duration/support/sample count;
+- transition GL timer-query duration/support/sample count and sampled-observation coverage;
 - visualizer state/update/paint rates per display/refresh.
 
 ## Texture Reuse Result
@@ -60,12 +60,19 @@ duplicate steady old-texture upload; owner-level GPU attribution remains active.
 Promoted from Future Cleanup into active Phase 5:
 
 - route transition paint timing through a shared compositor seam so every exercised family has real paint samples;
-- use non-blocking GL timer queries with delayed result collection where supported;
+- use non-blocking GL timer queries with delayed result collection where supported, only under the explicit heavyweight `--gpu-timing` profile;
 - never use `glFinish()` in ordinary profiling;
 - log support and sample counts so zero is not confused with “not measured”;
 - correlate per-transition GPU time with process GPU busy, texture uploads, update/paint rates and event-loop/request age;
 - separate visualizer overlay/context work from image transition/compositor work;
 - repeat on the texture-identity-fixed build before attributing remaining cost to persistent rendering.
+
+GPU timer queries are not part of the ordinary performance baseline. `--perf` retains
+CPU/frame/delivery/resource evidence without creating query handles or calling query
+availability/begin/end APIs. `--gpu-timing` implies `--perf`, samples one in eight paint
+observations per owner label and reports observed, sampled-out and poll-attempt counts so
+reduced probe pressure is never mistaken for missing work. The separate diagnostic
+product remains an explicit attribution product and is not baseline authority.
 
 The first attribution slice now wraps only the already-occurring visualizer overlay
 clear/render span in a fixed owner-context `GL_TIME_ELAPSED` query ring. It polls
@@ -133,6 +140,15 @@ The touched creation path now also destroys an uncommitted offscreen surface whe
 validation fails or shared-context construction throws. Direct failure-path automation
 protects both cases; the successful published context/surface pair keeps its existing
 compositor-generation owner and cleanup path.
+
+The follow-up `08_13_1ece5167_19_33_19_39_parser119_typical` capture confirms the
+resource-side changes without revealing a new leak: `31/31` steady old lookups hit,
+generation-first installs no longer upload an unusable old texture, tracked GL ownership
+returns to zero through repeated rebuilds, and warm memory/VRAM are no worse. Its frame
+delivery is nevertheless materially poorer. Because that run issued timer-query driver
+calls on every compositor and visualizer paint, it is retained as a heavyweight-profile
+negative control rather than accepted as a clean post-optimization timing baseline. The
+next runtime comparison must use ordinary `--perf` without `--gpu-timing`.
 
 ## Visualizer Presentation Efficiency
 

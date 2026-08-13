@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.19"
+PARSER_VERSION = "1.20"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
@@ -506,12 +506,16 @@ def _parse_frames(lines: Sequence[str]) -> list[dict[str, object]]:
             continue
         values = _kv(match.group("payload"))
         target = values.get("target_fps") or values.get("target")
+        transition_label = (
+            values.get("transition") or match.group("label").strip()
+        )
         rows.append(
             {
                 "timestamp": _timestamp(line),
                 "line": line_number,
                 "kind": match.group("kind").upper(),
                 "label": match.group("label").strip(),
+                "transition_label": transition_label,
                 "screen": _integer(values.get("screen")),
                 "frames": _integer(values.get("frames")),
                 "wakeups": _integer(values.get("wakeups")),
@@ -893,6 +897,10 @@ def _parse_phase5_telemetry(
                     "state_to_paint_max_ms": _number(values.get("state_to_paint_max_ms")),
                     "gpu_supported": values.get("gpu_supported", ""),
                     "gpu_reason": values.get("gpu_reason", ""),
+                    "gpu_observed": _integer(values.get("gpu_observed")),
+                    "gpu_sampled_out": _integer(values.get("gpu_sampled_out")),
+                    "gpu_poll_attempts": _integer(values.get("gpu_poll_attempts")),
+                    "gpu_sample_stride": _integer(values.get("gpu_sample_stride")),
                     "gpu_submitted": _integer(values.get("gpu_submitted")),
                     "gpu_collected": _integer(values.get("gpu_collected")),
                     "gpu_pending": _integer(values.get("gpu_pending")),
@@ -1126,6 +1134,111 @@ def _metric_summary_with_p95(values: Iterable[object]) -> dict[str, float] | Non
         "median": statistics.median(numeric),
         "p95": p95,
         "maximum": numeric[-1],
+    }
+
+
+def _integer_total(
+    rows: Sequence[Mapping[str, object]],
+    field: str,
+) -> int | None:
+    values = [row.get(field) for row in rows]
+    numeric = [int(value) for value in values if isinstance(value, int)]
+    return sum(numeric) if numeric else None
+
+
+def _frame_delivery_group_summary(
+    rows: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    """Summarize frame windows without mixing displays or transition labels."""
+
+    by_kind: dict[str, object] = {}
+    for kind in sorted({str(row.get("kind", "")) for row in rows}):
+        kind_rows = [row for row in rows if row.get("kind") == kind]
+        if not kind_rows:
+            continue
+        frames_total = _integer_total(kind_rows, "frames")
+        wakeups_total = _integer_total(kind_rows, "wakeups")
+        if kind == "PAINT":
+            accepted_total = _integer_total(kind_rows, "render_requests")
+            skipped_total = _integer_total(kind_rows, "skipped_requests")
+        elif kind == "RENDER":
+            accepted_total = frames_total
+            skipped_total = _integer_total(kind_rows, "pending_skips")
+        else:
+            accepted_total = None
+            skipped_total = None
+        attempts_total = (
+            accepted_total + skipped_total
+            if accepted_total is not None and skipped_total is not None
+            else wakeups_total
+        )
+        by_kind[kind.lower()] = {
+            "windows": len(kind_rows),
+            "frames_total": frames_total,
+            "wakeups_total": wakeups_total,
+            "accepted_requests_total": accepted_total,
+            "skipped_requests_total": skipped_total,
+            "weighted_request_acceptance_pct": (
+                accepted_total / attempts_total * 100.0
+                if accepted_total is not None
+                and attempts_total is not None
+                and attempts_total > 0
+                else None
+            ),
+            "average_fps": _metric_summary_with_p95(
+                row.get("average_fps") for row in kind_rows
+            ),
+            "dt_p99_ms": _metric_summary_with_p95(
+                row.get("dt_p99_ms") for row in kind_rows
+            ),
+            "dt_max_ms": _metric_summary_with_p95(
+                row.get("dt_max_ms") for row in kind_rows
+            ),
+            "paint_p99_ms": _metric_summary_with_p95(
+                row.get("paint_p99_ms") for row in kind_rows
+            ),
+            "request_age_p99_ms": _metric_summary_with_p95(
+                row.get("request_age_p99_ms") for row in kind_rows
+            ),
+        }
+    return by_kind
+
+
+def _frame_delivery_breakdown(
+    frame_rows: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    screens = sorted({
+        int(row["screen"])
+        for row in frame_rows
+        if isinstance(row.get("screen"), int)
+    })
+    return {
+        "by_screen": {
+            str(screen): _frame_delivery_group_summary(
+                [row for row in frame_rows if row.get("screen") == screen]
+            )
+            for screen in screens
+        },
+        "by_screen_transition": {
+            str(screen): {
+                transition: _frame_delivery_group_summary(
+                    [
+                        row
+                        for row in frame_rows
+                        if row.get("screen") == screen
+                        and str(row.get("transition_label", "")).strip().lower()
+                        == transition
+                    ]
+                )
+                for transition in sorted({
+                    str(row.get("transition_label", "")).strip().lower()
+                    for row in frame_rows
+                    if row.get("screen") == screen
+                    and str(row.get("transition_label", "")).strip()
+                })
+            }
+            for screen in screens
+        },
     }
 
 
@@ -1386,6 +1499,7 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
             for kind in sorted({str(row["kind"]) for row in frame_rows})
             if (rows := [row for row in frame_rows if row["kind"] == kind])
         },
+        "frame_delivery": _frame_delivery_breakdown(frame_rows),
         "event_loop": {
             "late_p99_ms": _metric_summary(
                 row.get("late_p99_ms") for row in event_loop_rows
@@ -1609,6 +1723,18 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                             str(row.get("gpu_supported", "")).lower() == "false"
                             for row in rows
                         ),
+                        "observed": _metric_summary(
+                            row.get("gpu_observed") for row in rows
+                        ),
+                        "sampled_out": _metric_summary(
+                            row.get("gpu_sampled_out") for row in rows
+                        ),
+                        "poll_attempts": _metric_summary(
+                            row.get("gpu_poll_attempts") for row in rows
+                        ),
+                        "sample_stride": _metric_summary(
+                            row.get("gpu_sample_stride") for row in rows
+                        ),
                         "submitted": _metric_summary(
                             row.get("gpu_submitted") for row in rows
                         ),
@@ -1665,6 +1791,18 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                         "unsupported_records": sum(
                             str(row.get("gpu_supported", "")).lower() == "false"
                             for row in rows
+                        ),
+                        "observed": _metric_summary(
+                            row.get("gpu_observed") for row in rows
+                        ),
+                        "sampled_out": _metric_summary(
+                            row.get("gpu_sampled_out") for row in rows
+                        ),
+                        "poll_attempts": _metric_summary(
+                            row.get("gpu_poll_attempts") for row in rows
+                        ),
+                        "sample_stride": _metric_summary(
+                            row.get("gpu_sample_stride") for row in rows
                         ),
                         "submitted": _metric_summary(
                             row.get("gpu_submitted") for row in rows

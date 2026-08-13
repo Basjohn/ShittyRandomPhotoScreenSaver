@@ -45,8 +45,10 @@ Do not enlarge texture budgets or retain historical image sets to hide the ident
 ## GPU Timing Contract
 
 Transition profiling must cover every transition family through a shared compositor
-paint seam. Use asynchronous/non-blocking GL timer queries with delayed collection where
-supported. Never `glFinish()` to obtain a number. Log support and sample counts.
+paint seam. Ordinary `--perf` performs no query-driver calls. The explicit heavyweight
+`--gpu-timing` profile uses sampled asynchronous/non-blocking GL timer queries with
+delayed collection where supported. Never `glFinish()` to obtain a number. Log support,
+observation, sampled-out, poll and collected counts.
 
 Separate:
 

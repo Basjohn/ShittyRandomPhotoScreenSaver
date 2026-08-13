@@ -21,6 +21,13 @@ from core.logging.logger import get_logger
 logger = get_logger(__name__)
 
 
+# Heavy GPU timing remains statistically useful without crossing into the GL
+# driver on every paint.  At the observed 60-165 Hz owner rates this retains
+# roughly 7-21 samples/second per active owner while removing 7/8 of the query
+# submission and availability-poll pressure.
+DEFAULT_GPU_QUERY_SAMPLE_STRIDE = 8
+
+
 @dataclass
 class _QuerySlot:
     handle: int
@@ -70,12 +77,14 @@ class GLTimerQueryRing:
         owner: str,
         generation: object,
         ring_size: int = 4,
+        sample_stride: int = DEFAULT_GPU_QUERY_SAMPLE_STRIDE,
         resource_group: str = "gl_timer_queries",
         resource_manager: Any | None = None,
     ) -> None:
         self._owner = str(owner)
         self._generation = generation
         self._ring_size = max(2, int(ring_size))
+        self._sample_stride = max(1, int(sample_stride))
         self._resource_group = str(resource_group)
         self._resource_manager = resource_manager
 
@@ -86,6 +95,10 @@ class GLTimerQueryRing:
         self._active_slot: _QuerySlot | None = None
 
         self._window_submitted: Counter[str] = Counter()
+        self._sample_sequence: Counter[str] = Counter()
+        self._window_observed: Counter[str] = Counter()
+        self._window_sampled_out: Counter[str] = Counter()
+        self._window_poll_attempts: Counter[str] = Counter()
         self._window_collected: Counter[str] = Counter()
         self._window_dropped_pending: Counter[str] = Counter()
         self._window_discarded: Counter[str] = Counter()
@@ -298,6 +311,26 @@ class GLTimerQueryRing:
         self._active_slot = slot
         return True
 
+    def begin_sampled(self, gl_api: Any, *, label: str) -> bool:
+        """Poll and begin only on the owner's fixed paint-count sample stride.
+
+        The first observation for each label is sampled, then every Nth one.
+        This method never schedules work and skipped observations perform no GL
+        query call.  Raw ``begin``/``poll`` remain available for focused tests
+        and strict cleanup.
+        """
+
+        normalized_label = str(label or "<unknown>")
+        self._sample_sequence[normalized_label] += 1
+        self._window_observed[normalized_label] += 1
+        sequence = int(self._sample_sequence[normalized_label])
+        if (sequence - 1) % self._sample_stride:
+            self._window_sampled_out[normalized_label] += 1
+            return False
+        self._window_poll_attempts[normalized_label] += 1
+        self.poll(gl_api)
+        return self.begin(gl_api, label=normalized_label)
+
     def end(self, gl_api: Any) -> None:
         slot = self._active_slot
         if slot is None:
@@ -323,6 +356,9 @@ class GLTimerQueryRing:
             str(label or "<unknown>") for label in include_labels
         }
         labels.update(self._window_submitted)
+        labels.update(self._window_observed)
+        labels.update(self._window_sampled_out)
+        labels.update(self._window_poll_attempts)
         labels.update(self._window_collected)
         labels.update(self._window_dropped_pending)
         labels.update(self._window_discarded)
@@ -333,6 +369,10 @@ class GLTimerQueryRing:
         for label in sorted(labels):
             samples = tuple(self._window_samples_ms.get(label, ()))
             by_label[label] = {
+                "observed": int(self._window_observed.get(label, 0)),
+                "sampled_out": int(self._window_sampled_out.get(label, 0)),
+                "poll_attempts": int(self._window_poll_attempts.get(label, 0)),
+                "sample_stride": self._sample_stride,
                 "submitted": int(self._window_submitted.get(label, 0)),
                 "collected": int(self._window_collected.get(label, 0)),
                 "pending": int(pending.get(label, 0)),
@@ -354,6 +394,9 @@ class GLTimerQueryRing:
             "by_label": by_label,
         }
         self._window_submitted.clear()
+        self._window_observed.clear()
+        self._window_sampled_out.clear()
+        self._window_poll_attempts.clear()
         self._window_collected.clear()
         self._window_dropped_pending.clear()
         self._window_discarded.clear()

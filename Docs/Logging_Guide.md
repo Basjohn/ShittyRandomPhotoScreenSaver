@@ -1,6 +1,6 @@
 # Logging Guide
 
-Last updated: 2026-08-11
+Last updated: 2026-08-13
 
 ## Purpose
 
@@ -24,6 +24,7 @@ debug fallback, not the place agents should read first when a dedicated sidecar 
 Existing sidecars remain the first destinations for their domains:
 
 - `--perf` → `screensaver_perf.log`, `perf_widgets.log`
+- `--gpu-timing` → sampled owner-context GL timing in `screensaver_perf.log` and implies `--perf`
 - `--usage` → `screensaver_usage.log`
 - `--viz` → `screensaver_spotify_vis.log`, `screensaver_spotify_vol.log`
 - `--geo` → `screensaver_geometry.log`
@@ -34,6 +35,11 @@ Existing sidecars remain the first destinations for their domains:
 
 Do not create a new sidecar merely because one logger is noisy. Add a family only when a
 distinct high-volume domain has a coherent correlation workflow.
+
+Ordinary `--perf` is the comparable CPU/frame/delivery profile. The heavier
+`--gpu-timing` route is separate because GL query polling and begin/end calls can alter
+paint cost. It samples one paint in eight and records coverage; use it only for an
+owner-GPU causal question, never as an unnamed baseline.
 
 ## Current Cache Routing
 

@@ -181,9 +181,10 @@ inactive. No image-worker/pipeline terminal acknowledgement is required.
 ## GPU Profiling Boundary
 
 Before Phase 8, every transition family needs truthful paint/GPU timing from a shared
-compositor seam. Use non-blocking timer queries and delayed result collection. Never use
-`glFinish()` in ordinary profiling. Zero GPU time is meaningful only with support/sample
-counts proving it was measured.
+compositor seam. Ordinary `--perf` must remain query-free; use the explicit heavyweight
+`--gpu-timing` profile for sampled non-blocking timer queries and delayed result
+collection. Never use `glFinish()`. Zero GPU time is meaningful only with
+support/observation/sample counts proving it was measured.
 
 ## Phase 8 Acceptance Prerequisites
 

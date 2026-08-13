@@ -108,6 +108,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --debug, -d - Enable debug logging
     - --verbose, -v - Enable full verbose log stream
     - --perf - Enable performance logging
+    - --gpu-timing - Enable sampled owner-context GL timer queries (implies --perf)
     - --usage - Enable low-cadence CPU/GPU/memory/thread usage logging
     - --viz - Enable visualizer logging and diagnostics
     - --geo - Enable geometry/z-order/edit-layout diagnostics
@@ -125,7 +126,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     """
     # Filter out debug/viz/dev-gate flags
     _filtered = {
-        "--debug", "-d", "--verbose", "-v", "--perf", "--usage", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
+        "--debug", "-d", "--verbose", "-v", "--perf", "--gpu-timing", "--usage", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
         "--noupdates",
         "--viz-diagnostics", "--viz-diag",
         "--fresh", "--devcurve", "--devsteam",
@@ -591,6 +592,7 @@ def main(*, entrypoint: str = "main"):
         debug=debug_mode,
         verbose=verbose_mode,
         perf=perf_mode,
+        gpu_timing=logging_profile.gpu_timing,
         usage=usage_mode,
         viz=logging_profile.viz,
         viz_diag=logging_profile.viz_diag,

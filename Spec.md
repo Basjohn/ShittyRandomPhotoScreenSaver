@@ -120,7 +120,7 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 - Every GL resource has one owner, context/share generation, byte size, and deterministic deletion path.
 - Compiled shader program IDs and uniform locations are compositor-local owner state. Reusing stateless shader helpers does not authorize sharing numeric GL handles; cross-compositor sharing requires explicit leases and exactly-once deletion.
 - `ResourceManager` records GL identity and bytes passively; it never deletes a GL handle or substitutes for the context-bound owner.
-- GPU timer-query diagnostics use a fixed owner-local handle set, poll availability without waiting, report unavailable/pending/dropped samples explicitly, and delete on the exact owner context. They never become presentation or cadence control flow.
+- GPU timer-query diagnostics require the explicit heavy GPU-timing profile, use a fixed owner-local handle set and bounded paint-count sampling, poll availability without waiting, report observed/sampled-out/unavailable/pending/dropped samples explicitly, and delete on the exact owner context. Ordinary performance telemetry performs no query-driver calls. GPU diagnostics never become presentation or cadence control flow.
 - Context-affinity errors are never suppressed as routine cleanup.
 - Settings, Edit, topology changes, and exit stop old work before destroying old GL resources.
 - Compositor/surface destruction occurs after child/native resource cleanup.
