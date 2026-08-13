@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.13"
+PARSER_VERSION = "1.14"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
@@ -638,6 +638,11 @@ def _parse_visualizer(lines: Sequence[str]) -> list[dict[str, object]]:
                     "screen": _integer(values.get("screen")),
                     "context": values.get("context", ""),
                     "transition_active": values.get("transition_active", ""),
+                    "transition_name": values.get("transition_name", ""),
+                    "transition_elapsed": _number(values.get("transition_elapsed")),
+                    "idle_age": _number(values.get("idle_age")),
+                    "trigger": values.get("trigger", ""),
+                    "boundary": "",
                     "samples": _integer(values.get("gap_samples")),
                     "p95_ms": _number(values.get("gap_p95_ms")),
                     "max_ms": _number(values.get("gap_max_ms")),
@@ -647,6 +652,20 @@ def _parse_visualizer(lines: Sequence[str]) -> list[dict[str, object]]:
             )
         elif spike:
             values = _kv(spike.group("payload"))
+            transition_active = str(values.get("transition_running", "")).lower() in {
+                "1",
+                "true",
+            }
+            transition_elapsed = _number(values.get("transition_elapsed"))
+            idle_age = _number(values.get("idle_age"))
+            if transition_active and transition_elapsed is not None and transition_elapsed <= 1.0:
+                boundary = "transition_start"
+            elif not transition_active and idle_age is not None and idle_age <= 0.25:
+                boundary = "transition_end"
+            elif transition_active:
+                boundary = "active_transition"
+            else:
+                boundary = "idle"
             rows.append(
                 {
                     "timestamp": _timestamp(line),
@@ -656,6 +675,11 @@ def _parse_visualizer(lines: Sequence[str]) -> list[dict[str, object]]:
                     "screen": None,
                     "context": "",
                     "transition_active": values.get("transition_running", ""),
+                    "transition_name": values.get("transition_name", ""),
+                    "transition_elapsed": transition_elapsed,
+                    "idle_age": idle_age,
+                    "trigger": "",
+                    "boundary": boundary,
                     "samples": None,
                     "p95_ms": None,
                     "max_ms": _number(spike.group("dt_ms")),
@@ -674,6 +698,11 @@ def _parse_visualizer(lines: Sequence[str]) -> list[dict[str, object]]:
                     "screen": None,
                     "context": "",
                     "transition_active": "",
+                    "transition_name": "",
+                    "transition_elapsed": None,
+                    "idle_age": None,
+                    "trigger": values.get("trigger", ""),
+                    "boundary": values.get("trigger", ""),
                     "samples": None,
                     "p95_ms": None,
                     "max_ms": _number(latency.group("lag_ms")),
@@ -1189,6 +1218,38 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                 for row in visualizer_rows
                 if row["event"] == "latency"
             ),
+            "tick_spikes_by_boundary": {
+                boundary: {
+                    "count": len(rows),
+                    "dt_ms": _metric_summary(row.get("max_ms") for row in rows),
+                }
+                for boundary in sorted({
+                    str(row.get("boundary"))
+                    for row in visualizer_rows
+                    if row["event"] == "tick_spike" and row.get("boundary")
+                })
+                if (rows := [
+                    row
+                    for row in visualizer_rows
+                    if row["event"] == "tick_spike" and row.get("boundary") == boundary
+                ])
+            },
+            "latency_by_trigger": {
+                trigger: {
+                    "count": len(rows),
+                    "lag_ms": _metric_summary(row.get("max_ms") for row in rows),
+                }
+                for trigger in sorted({
+                    str(row.get("trigger"))
+                    for row in visualizer_rows
+                    if row["event"] == "latency" and row.get("trigger")
+                })
+                if (rows := [
+                    row
+                    for row in visualizer_rows
+                    if row["event"] == "latency" and row.get("trigger") == trigger
+                ])
+            },
         },
         "phase5": {
             "frame_gap_owner": {

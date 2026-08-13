@@ -93,6 +93,13 @@ retains exactly one destination texture, steady presentation now consumes that e
 cached texture through the existing fullscreen program rather than creating a second
 full-pixmap presentation route. It does not expand texture/PBO budgets or upload in paint.
 
+The follow-up `08_13_2cb15ae4_17_17_17_20_retained_base_typical` run closes the live
+steady gate. Excluding startup/recreation outliers, steady GPU draw is about
+`0.03–0.10 ms` on both displays; all ordinary retained-old identities hit and only the
+new destination allocates/uploads. Settings/final teardown again returns compositor GL
+ownership to zero. The next resource-performance question is the unavoidable new-image
+upload/context transaction, not another steady-base cache or larger retained set.
+
 ## Visualizer Presentation Efficiency
 
 Captured screen 1 is 60 Hz while the current typical-load run records Bubble medians of

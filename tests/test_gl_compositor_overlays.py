@@ -86,6 +86,46 @@ def test_render_debug_overlay_image_throttles_rebuilds_within_refresh_window(mon
     assert widget._profiler.calls == first_calls
 
 
+@pytest.mark.qt_no_exception_capture
+def test_render_debug_overlay_image_clears_terminal_frame_within_refresh_window(monkeypatch, qt_app):
+    widget = _OverlayWidget()
+    monkeypatch.setattr(overlays, "is_perf_metrics_enabled", lambda: True)
+    clock = {"now": 100.0}
+    monkeypatch.setattr(overlays.time, "monotonic", lambda: clock["now"])
+
+    first = overlays.render_debug_overlay_image(widget)
+    first_calls = list(widget._profiler.calls)
+    widget._wipe = None
+    clock["now"] += overlays._DEBUG_OVERLAY_REFRESH_INTERVAL_S * 0.5
+    terminal = overlays.render_debug_overlay_image(widget)
+
+    assert first is not None
+    assert terminal is None
+    assert widget._debug_overlay_cache_image is None
+    assert widget._debug_overlay_cache_key is None
+    assert widget._profiler.calls == first_calls
+
+
+@pytest.mark.qt_no_exception_capture
+def test_render_debug_overlay_image_switches_transition_within_refresh_window(monkeypatch, qt_app):
+    widget = _OverlayWidget()
+    monkeypatch.setattr(overlays, "is_perf_metrics_enabled", lambda: True)
+    widget._profiler._metrics["slide"] = (90.0, 8.0, 14.0, None)
+    clock = {"now": 100.0}
+    monkeypatch.setattr(overlays.time, "monotonic", lambda: clock["now"])
+
+    first = overlays.render_debug_overlay_image(widget)
+    widget._wipe = None
+    widget._slide = SimpleNamespace(progress=0.1)
+    clock["now"] += overlays._DEBUG_OVERLAY_REFRESH_INTERVAL_S * 0.5
+    switched = overlays.render_debug_overlay_image(widget)
+
+    assert first is not None
+    assert switched is not None
+    assert switched is not first
+    assert "slide" in widget._profiler.calls
+
+
 def test_build_debug_overlay_payload_supports_burn_and_missing_attrs():
     widget = SimpleNamespace(
         _burn=SimpleNamespace(progress=0.33),

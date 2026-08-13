@@ -248,11 +248,29 @@ retained destination texture through the already-compiled fullscreen crossfade p
 it performs no pixmap/texture allocation or upload in paint and retains the existing
 QPainter path only when exact cached texture/GL capability is absent.
 
-- [ ] Validate the retained-base GL draw in a current typical transition run: steady GPU samples should materially fall from `7–12/36–41 ms`, terminal pixels must remain continuous, retained-current → next-old identity stays exact, and Settings/final teardown returns query/texture ownership to zero.
+The retained-base typical-load capture
+`logs/evidence_chest/08_13_2cb15ae4_17_17_17_20_retained_base_typical/`
+(selected-source SHA-256 `1EEBDE94...1B638`) closes that gate. Excluding first-frame and
+recreation outliers, its `20` steady compositor windows are about `0.03–0.10 ms` on both
+displays instead of `7–12/36–41 ms`. All `18/18` ordinary transitions reuse retained old
+and allocate/upload only the new destination; terminal retention and Settings/final GL
+cleanup remain bounded and return to zero. The real-context quadrant test protects exact
+orientation/pixels, and no terminal discontinuity was reported in the installed run.
+
+The same run names the next boundary rather than just another broad “visualizer” issue.
+Bubble worker cost remains about `1.4–1.5 ms` and overlay GPU p50/p95 about
+`0.36/0.43 ms`, while GUI-owned image installation is normally `18–33 ms` and reaches
+`95–162 ms` during cold/recreation work. Parser 1.14 now classifies tick gaps by
+transition boundary: transition-start gaps are `53.06/72.25/73.99 ms` min/median/max,
+but transition-end gaps are even more consistent at `75.36/78.24/93.23 ms`. Phase 7
+state/presentation decoupling cannot unblock a visualizer tick while the shared GUI owner
+is inside a texture upload; attribute/split that transaction before changing visualizer
+cadence or presentation.
+
 - [ ] Never use `glFinish()` in ordinary profiling. It changes the workload and invalidates the measurement.
-- [ ] Split GPU attribution among image texture upload/warm, transition shader/render work, visualizer overlay/context work, overdraw/composition, and driver/context overhead.
+- [ ] Complete the remaining GPU/GUI split around the new-destination texture upload: separate upload/context/swap/native-delivery time from already-cheap transition shader, retained-base and visualizer-overlay spans; do not move Qt/GL ownership to a worker speculatively.
 - [ ] Record per-display refresh, logical visualizer state publication rate, update-request rate and paint rate together. Do not infer waste solely from one counter.
-- [ ] Correlate repeated `>100 ms` transition request-age stalls that have cheap paint, healthy worker queues, and no matching long Python GUI callback against GPU timer results plus context/swap/native-event ownership before changing Python scheduling.
+- [ ] Correlate repeated `>100 ms` transition request-age stalls and parser-1.14 transition-start/end tick-gap classes against image-install monotonic spans, context/swap/native-event ownership and any long Python GUI callback before changing Python scheduling.
 - [ ] Feed the result into Phase 7 only after an edge-preserving immutable render-state contract proves that phase-valid display sampling cannot hide Bubble's protected discrete response; never approximate display opportunities with producer timestamps or paint acknowledgements.
 - [ ] Treat Phase 7 presentation coalescing as conditional, not inevitable. Re-measure the marginal overlay CPU/GPU cost after retained-base and remaining delivery fixes; prototype a display-owned consumer only if the residual saving is material. Bubble remains excluded until bounded event identity/history or an equivalent oracle proves no authored response can disappear.
 - [ ] Do not begin Phase 8 one-surface compositor work until Phase 7 proves missed paints cannot alter logical state and GPU/context evidence shows the merge is worth its lifecycle risk.

@@ -178,11 +178,27 @@ def _write_archive(path: Path) -> None:
             "interval_upload_total_ms=24.25",
         ]
     )
-    visualizer = (
-        "2026-07-23 19:38:02 - visualizer - INFO - "
-        "[PERF][SPOTIFY_VIS][MICROGAP] screen=0 mode=bubble "
-        "context=steady_idle gap_samples=30 gap_p95_ms=33.0 "
-        "gap_max_ms=80.0 wait_p95_ms=20.0 wait_max_ms=40.0"
+    visualizer = "\n".join(
+        [
+            "2026-07-23 19:38:02 - visualizer - INFO - "
+            "[PERF][SPOTIFY_VIS][MICROGAP] screen=0 mode=bubble "
+            "context=steady_idle gap_samples=30 gap_p95_ms=33.0 "
+            "gap_max_ms=80.0 wait_p95_ms=20.0 wait_max_ms=40.0",
+            "2026-07-23 19:38:03 - visualizer - WARNING - "
+            "[PERF] [SPOTIFY_VIS] Tick dt spike_ms=72.0 mode=bubble "
+            "transition_running=True transition_name=GLCompositorSlideTransition "
+            "transition_elapsed=0.41 idle_age=<n/a>",
+            "2026-07-23 19:38:04 - visualizer - WARNING - "
+            "[PERF] [SPOTIFY_VIS] Tick dt spike_ms=55.0 mode=bubble "
+            "transition_running=True transition_name=GLCompositorSlideTransition "
+            "transition_elapsed=2.00 idle_age=<n/a>",
+            "2026-07-23 19:38:05 - visualizer - WARNING - "
+            "[PERF] [SPOTIFY_VIS] Tick dt spike_ms=80.0 mode=bubble "
+            "transition_running=False transition_name=<none> "
+            "transition_elapsed=<n/a> idle_age=0.08",
+            "2026-07-23 19:38:05 - visualizer - WARNING - "
+            "[SPOTIFY_VIS][LATENCY] lag_ms=84.0 mode=bubble trigger=transition_end",
+        ]
     )
     lifecycle = "\n".join(
         [
@@ -234,6 +250,30 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     assert analysis.resource_rows[0]["cpu_display_bytes"] == 64
     assert analysis.resource_rows[0]["resource_detail_count"] == 1
     assert analysis.visualizer_rows[0]["p95_ms"] == 33.0
+    assert analysis.visualizer_rows[1]["boundary"] == "transition_start"
+    assert analysis.visualizer_rows[1]["transition_elapsed"] == 0.41
+    assert analysis.visualizer_rows[2]["boundary"] == "active_transition"
+    assert analysis.visualizer_rows[3]["boundary"] == "transition_end"
+    assert analysis.summary["visualizer"]["tick_spikes_by_boundary"] == {
+        "active_transition": {
+            "count": 1,
+            "dt_ms": {"minimum": 55.0, "median": 55.0, "maximum": 55.0},
+        },
+        "transition_end": {
+            "count": 1,
+            "dt_ms": {"minimum": 80.0, "median": 80.0, "maximum": 80.0},
+        },
+        "transition_start": {
+            "count": 1,
+            "dt_ms": {"minimum": 72.0, "median": 72.0, "maximum": 72.0},
+        },
+    }
+    assert analysis.summary["visualizer"]["latency_by_trigger"] == {
+        "transition_end": {
+            "count": 1,
+            "lag_ms": {"minimum": 84.0, "median": 84.0, "maximum": 84.0},
+        }
+    }
     assert analysis.summary["phase5"]["frame_gap_owner"]["severity_counts"] == {"over_50": 1}
     assert analysis.summary["phase5"]["adaptive_timer"]["frames"]["maximum"] == 120.0
     assert analysis.summary["phase5"]["visualizer_lanes"]["bubble_lane"]["published"]["maximum"] == 11.0
@@ -476,7 +516,7 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     assert retention_summary["retained_cache_keys"] == [111]
     assert retention_summary["interval_texture_uploads"]["maximum"] == 2.0
     assert retention_summary["interval_pbo_creations"]["maximum"] == 0.0
-    assert len(analysis.errors_and_warnings) == 2
+    assert len(analysis.errors_and_warnings) == 6
 
 
 def test_write_analysis_emits_required_recovery_artifacts(tmp_path: Path) -> None:

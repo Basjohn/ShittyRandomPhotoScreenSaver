@@ -44,6 +44,15 @@ QPainter full-pixmap draws repeatedly measure `7–12 ms` and `36–41 ms` respe
 The current slice therefore reuses the exact retained destination texture through the
 already-compiled fullscreen program and leaves presentation cadence untouched.
 
+The follow-up `08_13_2cb15ae4_17_17_17_20_retained_base_typical` capture validates the
+replacement. Outside first-frame/recreation outliers, steady compositor GPU draw is
+about `0.03–0.10 ms` on both displays; ordinary transitions retain old exactly and upload
+only new, and teardown returns compositor GL ownership to zero. The remaining
+transition-boundary kick is therefore not a steady-base or transition-shader cost.
+GUI-owned image installation is normally `18–33 ms` and can be much longer during
+recreation, so Phase 7 state/presentation decoupling cannot by itself unblock the
+visualizer timer while that shared GUI transaction is running.
+
 ## Absolute Rules
 
 - producers do not wait for `paintGL()`, `update()` or a presentation acknowledgement;

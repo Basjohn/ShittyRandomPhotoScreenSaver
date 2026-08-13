@@ -570,6 +570,15 @@ preferred solution. A transition-start visualizer stall is not proof that its cl
 belongs on another thread when the final Qt/GL presentation must still wait for the
 same blocked GUI owner.
 
+The `08_13_2cb15ae4_17_17_17_20_retained_base_typical` run makes that distinction
+concrete. Parser 1.14 classifies visualizer tick spikes by transition boundary: sampled
+transition-start spikes are `53.06/72.25/73.99 ms` min/median/max and transition-end
+spikes `75.36/78.24/93.23 ms`, while Bubble worker work stays about `1.4–1.5 ms` and
+overlay GPU p50/p95 about `0.36/0.43 ms`. Image installation immediately around the
+boundary remains a GUI/context transaction, normally `18–33 ms` and occasionally much
+larger during cold/recreation work. Continue attribution at that GUI/GL boundary; do not
+reinterpret Phase 7 as a way to run Qt presentation through a blocked GUI thread.
+
 ### Priority 2 — pool topology
 
 After workload classes are separated:

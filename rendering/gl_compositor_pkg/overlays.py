@@ -40,21 +40,32 @@ _DEBUG_OVERLAY_TRANSITIONS: tuple[tuple[str, str, str], ...] = (
 )
 
 
-def _build_debug_overlay_payload(widget) -> Optional[tuple[str, str]]:
-    """Return the PERF HUD lines for the currently active transition."""
+def _active_debug_overlay_transition(widget):
+    """Return the active transition identity without sampling profiler metrics."""
     for name, attr, label in _DEBUG_OVERLAY_TRANSITIONS:
         state = getattr(widget, attr, None)
-        if state is None:
-            continue
-        metrics = widget._profiler.get_metrics(name)
-        if metrics is None:
-            continue
-        avg_fps, min_dt_ms, max_dt_ms, _ = metrics
-        progress = getattr(state, "progress", 0.0)
-        line1 = f"{label} t={progress:.2f}"
-        line2 = f"{avg_fps:.1f} fps  dt_min={min_dt_ms:.1f}ms  dt_max={max_dt_ms:.1f}ms"
-        return line1, line2
+        if state is not None:
+            return name, state, label
     return None
+
+
+def _build_debug_overlay_payload(
+    widget,
+    active_transition=None,
+) -> Optional[tuple[str, str]]:
+    """Return the PERF HUD lines for the currently active transition."""
+    active_transition = active_transition or _active_debug_overlay_transition(widget)
+    if active_transition is None:
+        return None
+    name, state, label = active_transition
+    metrics = widget._profiler.get_metrics(name)
+    if metrics is None:
+        return None
+    avg_fps, min_dt_ms, max_dt_ms, _ = metrics
+    progress = getattr(state, "progress", 0.0)
+    line1 = f"{label} t={progress:.2f}"
+    line2 = f"{avg_fps:.1f} fps  dt_min={min_dt_ms:.1f}ms  dt_max={max_dt_ms:.1f}ms"
+    return line1, line2
 
 
 def _paint_debug_overlay_payload(painter: QPainter, payload: tuple[str, str]) -> None:
@@ -207,23 +218,32 @@ def render_debug_overlay_image(widget) -> Optional[QImage]:
     cached_image = getattr(widget, "_debug_overlay_cache_image", None)
     cached_built_at = float(getattr(widget, "_debug_overlay_cache_built_at", 0.0) or 0.0)
     cached_size = cached_key[:2] if isinstance(cached_key, tuple) and len(cached_key) >= 2 else None
+    cached_transition = cached_key[2] if isinstance(cached_key, tuple) and len(cached_key) >= 4 else None
     size_key = (size.width(), size.height())
+    active_transition = _active_debug_overlay_transition(widget)
+    if active_transition is None:
+        widget._debug_overlay_cache_key = None
+        widget._debug_overlay_cache_image = None
+        widget._debug_overlay_cache_built_at = 0.0
+        return None
+    active_name = active_transition[0]
     if (
         cached_image is not None
         and cached_size == size_key
+        and cached_transition == active_name
         and cached_built_at > 0.0
         and (now - cached_built_at) < _DEBUG_OVERLAY_REFRESH_INTERVAL_S
     ):
         return cached_image
 
-    payload = _build_debug_overlay_payload(widget)
+    payload = _build_debug_overlay_payload(widget, active_transition)
     if payload is None:
         widget._debug_overlay_cache_key = None
         widget._debug_overlay_cache_image = None
         widget._debug_overlay_cache_built_at = 0.0
         return None
 
-    cache_key = (size.width(), size.height(), payload)
+    cache_key = (size.width(), size.height(), active_name, payload)
     if cached_key == cache_key and cached_image is not None:
         return cached_image
 
