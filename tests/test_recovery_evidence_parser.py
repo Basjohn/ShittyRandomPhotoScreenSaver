@@ -176,6 +176,11 @@ def _write_archive(path: Path) -> None:
             "interval_texture_uploads=2 interval_texture_allocations=2 "
             "interval_pbo_creations=0 interval_pbo_reuses=2 "
             "interval_upload_total_ms=24.25",
+            "2026-07-23 19:38:15 - metrics - INFO - "
+            "[PERF][GL TEXTURE][UPLOAD] owner=compositor:1 size=3840x2160 "
+            "upload_bytes=33177600 path=pbo total_ms=18.250 image_prepare_ms=0.750 "
+            "bits_copy_ms=4.000 texture_alloc_ms=0.100 pbo_stage_ms=10.000 "
+            "texture_submit_ms=3.300 unattributed_ms=0.100",
         ]
     )
     visualizer = "\n".join(
@@ -501,6 +506,20 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     assert pair_warm["duration_ms"]["maximum"] == 18.25
     assert pair_warm["texture_uploads_delta"]["maximum"] == 1.0
     assert analysis.summary["phase5"]["image_ui"]["outcomes"] == {"completed": 1}
+    texture_upload = analysis.summary["phase5"]["texture_upload"]
+    assert texture_upload["records"] == 1
+    assert texture_upload["by_path"]["pbo"]["total_ms"] == {
+        "minimum": 18.25,
+        "median": 18.25,
+        "maximum": 18.25,
+    }
+    assert texture_upload["by_path"]["pbo"]["pbo_stage_ms"]["maximum"] == 10.0
+    upload_row = next(
+        row for row in analysis.phase5_rows if row["kind"] == "texture_upload"
+    )
+    assert upload_row["owner"] == "compositor:1"
+    assert upload_row["upload_bytes"] == 33177600
+    assert upload_row["texture_submit_ms"] == 3.3
     gl_retention = next(
         row for row in analysis.phase5_rows if row["kind"] == "gl_retention"
     )

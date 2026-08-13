@@ -6,6 +6,8 @@ Tests cover:
 - Texture upload performance
 - ResourceManager GL handle tracking
 """
+import logging
+
 import pytest
 
 
@@ -289,6 +291,81 @@ class TestPassiveGLAccounting:
         assert kwargs["format"] == "RGBA8"
         assert kwargs["tracked_bytes"] == 13 * 7 * 4
         assert manager._texture_resource_ids[55] == "texture-rid"
+
+    def test_upload_phase_probe_is_perf_only_and_reports_named_spans(
+        self,
+        monkeypatch,
+        caplog,
+    ):
+        from unittest.mock import MagicMock
+        from core.resources.manager import ResourceManager
+        from rendering.gl_programs import texture_manager as module
+
+        fake_gl = MagicMock()
+        fake_gl.glGenTextures.return_value = 55
+        fake_gl.GL_TEXTURE_2D = 1
+        fake_gl.GL_UNPACK_ALIGNMENT = 2
+        fake_gl.GL_TEXTURE_MIN_FILTER = 3
+        fake_gl.GL_TEXTURE_MAG_FILTER = 4
+        fake_gl.GL_LINEAR = 5
+        fake_gl.GL_TEXTURE_WRAP_S = 6
+        fake_gl.GL_TEXTURE_WRAP_T = 7
+        fake_gl.GL_CLAMP_TO_EDGE = 8
+        fake_gl.GL_RGBA8 = 9
+        fake_gl.GL_BGRA = 10
+        fake_gl.GL_UNSIGNED_BYTE = 11
+        registry = MagicMock()
+        registry.register_gl_texture.return_value = "texture-rid"
+        image = MagicMock()
+        image.convertToFormat.return_value = image
+        image.width.return_value = 13
+        image.height.return_value = 7
+        image.constBits.return_value.tobytes.return_value = b"x" * (13 * 7 * 4)
+        pixmap = MagicMock()
+        pixmap.isNull.return_value = False
+        pixmap.toImage.return_value = image
+        monkeypatch.setattr(module, "gl", fake_gl)
+        monkeypatch.setattr(
+            ResourceManager,
+            "get_or_create_app_shared",
+            classmethod(lambda cls: registry),
+        )
+
+        clock_calls: list[float] = []
+
+        def _clock() -> float:
+            value = 0.001 * (len(clock_calls) + 1)
+            clock_calls.append(value)
+            return value
+
+        monkeypatch.setattr(module.time, "perf_counter", _clock)
+        monkeypatch.setattr(module, "is_perf_metrics_enabled", lambda: False)
+        manager = module.GLTextureManager(owner="compositor:8", generation=8)
+        monkeypatch.setattr(manager, "_get_or_create_pbo", lambda size: 0)
+
+        assert manager.upload_pixmap(pixmap) == 55
+        assert len(clock_calls) == 2
+
+        clock_calls.clear()
+        caplog.clear()
+        caplog.set_level(logging.INFO, logger=module.__name__)
+        monkeypatch.setattr(module, "is_perf_metrics_enabled", lambda: True)
+        manager = module.GLTextureManager(owner="compositor:8", generation=8)
+        monkeypatch.setattr(manager, "_get_or_create_pbo", lambda size: 0)
+
+        assert manager.upload_pixmap(pixmap) == 55
+        assert len(clock_calls) == 7
+        message = next(
+            record.getMessage()
+            for record in caplog.records
+            if "[PERF][GL TEXTURE][UPLOAD]" in record.getMessage()
+        )
+        assert "owner=compositor:8" in message
+        assert "path=direct" in message
+        assert "image_prepare_ms=" in message
+        assert "bits_copy_ms=" in message
+        assert "pbo_stage_ms=" in message
+        assert "texture_submit_ms=" in message
 
     def test_failed_upload_reconciles_texture_allocation_and_delete_bytes(
         self,

@@ -322,7 +322,12 @@ def test_terminal_retention_log_is_transition_local_and_byte_aware(
     assert "interval_texture_uploads=0" in next_message
     assert "interval_pbo_creations=0" in next_message
     assert "interval_pbo_reuses=1" in next_message
-    assert info.call_count == 2
+    messages = [
+        call.args[0] % tuple(call.args[1:])
+        for call in info.call_args_list
+    ]
+    assert sum("[PERF] [GL RETENTION]" in message for message in messages) == 2
+    assert sum("[PERF][GL TEXTURE][UPLOAD]" in message for message in messages) == 2
 
 
 def test_terminal_retained_key_lookup_is_dormant_without_perf(monkeypatch):

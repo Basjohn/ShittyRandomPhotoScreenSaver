@@ -260,7 +260,7 @@ orientation/pixels, and no terminal discontinuity was reported in the installed 
 The same run names the next boundary rather than just another broad “visualizer” issue.
 Bubble worker cost remains about `1.4–1.5 ms` and overlay GPU p50/p95 about
 `0.36/0.43 ms`, while GUI-owned image installation is normally `18–33 ms` and reaches
-`95–162 ms` during cold/recreation work. Parser 1.14 now classifies tick gaps by
+`95–162 ms` during cold/recreation work. Parser 1.15 now classifies tick gaps by
 transition boundary: transition-start gaps are `53.06/72.25/73.99 ms` min/median/max,
 but transition-end gaps are even more consistent at `75.36/78.24/93.23 ms`. Phase 7
 state/presentation decoupling cannot unblock a visualizer tick while the shared GUI owner
@@ -268,9 +268,9 @@ is inside a texture upload; attribute/split that transaction before changing vis
 cadence or presentation.
 
 - [ ] Never use `glFinish()` in ordinary profiling. It changes the workload and invalidates the measurement.
-- [ ] Complete the remaining GPU/GUI split around the new-destination texture upload: separate upload/context/swap/native-delivery time from already-cheap transition shader, retained-base and visualizer-overlay spans; do not move Qt/GL ownership to a worker speculatively.
+- [ ] Run the parser-1.15 upload-phase probe under a typical transition/teardown scenario. Attribute `image_prepare`, CPU bits copy, texture allocation, PBO staging and texture submission separately, then decide whether actual non-blocking upload GPU timing is still needed; do not move Qt/GL ownership to a worker speculatively.
 - [ ] Record per-display refresh, logical visualizer state publication rate, update-request rate and paint rate together. Do not infer waste solely from one counter.
-- [ ] Correlate repeated `>100 ms` transition request-age stalls and parser-1.14 transition-start/end tick-gap classes against image-install monotonic spans, context/swap/native-event ownership and any long Python GUI callback before changing Python scheduling.
+- [ ] Correlate repeated `>100 ms` transition request-age stalls and parser-1.15 transition-start/end tick-gap classes against image-install monotonic spans, context/swap/native-event ownership and any long Python GUI callback before changing Python scheduling.
 - [ ] Feed the result into Phase 7 only after an edge-preserving immutable render-state contract proves that phase-valid display sampling cannot hide Bubble's protected discrete response; never approximate display opportunities with producer timestamps or paint acknowledgements.
 - [ ] Treat Phase 7 presentation coalescing as conditional, not inevitable. Re-measure the marginal overlay CPU/GPU cost after retained-base and remaining delivery fixes; prototype a display-owned consumer only if the residual saving is material. Bubble remains excluded until bounded event identity/history or an equivalent oracle proves no authored response can disappear.
 - [ ] Do not begin Phase 8 one-surface compositor work until Phase 7 proves missed paints cannot alter logical state and GPU/context evidence shows the merge is worth its lifecycle risk.

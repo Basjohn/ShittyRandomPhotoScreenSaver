@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.14"
+PARSER_VERSION = "1.15"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
@@ -92,6 +92,9 @@ _IMAGE_UI_SEGMENT_RE = re.compile(
 )
 _GL_RETENTION_RE = re.compile(
     r"\[PERF\]\s*\[GL RETENTION\]\s+(?P<payload>.*)"
+)
+_TEXTURE_UPLOAD_RE = re.compile(
+    r"\[PERF\]\[GL TEXTURE\]\[UPLOAD\]\s+(?P<payload>.*)"
 )
 
 
@@ -785,6 +788,9 @@ def _parse_phase5_telemetry(
                 match = _GL_RETENTION_RE.search(line)
                 kind = "gl_retention"
             if not match:
+                match = _TEXTURE_UPLOAD_RE.search(line)
+                kind = "texture_upload"
+            if not match:
                 continue
             seen.add(normalized)
             values = _kv(match.group("payload"))
@@ -885,6 +891,15 @@ def _parse_phase5_telemetry(
                     "pbo_creations": _integer(values.get("pbo_creations")),
                     "pbo_reuses": _integer(values.get("pbo_reuses")),
                     "upload_total_ms": _number(values.get("upload_total_ms")),
+                    "upload_cpu_total_ms": _number(values.get("total_ms")),
+                    "upload_bytes": _integer(values.get("upload_bytes")),
+                    "upload_path": values.get("path", ""),
+                    "image_prepare_ms": _number(values.get("image_prepare_ms")),
+                    "bits_copy_ms": _number(values.get("bits_copy_ms")),
+                    "texture_alloc_ms": _number(values.get("texture_alloc_ms")),
+                    "pbo_stage_ms": _number(values.get("pbo_stage_ms")),
+                    "texture_submit_ms": _number(values.get("texture_submit_ms")),
+                    "unattributed_ms": _number(values.get("unattributed_ms")),
                     "interval_scope": values.get("interval_scope", ""),
                     "interval_texture_uploads": _integer(values.get("interval_texture_uploads")),
                     "interval_texture_allocations": _integer(values.get("interval_texture_allocations")),
@@ -1570,6 +1585,31 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                         for row in phase5_rows
                         if row["kind"] == "image_ui_delay" and row["outcome"]
                     })
+                },
+            },
+            "texture_upload": {
+                "records": sum(row["kind"] == "texture_upload" for row in phase5_rows),
+                "by_path": {
+                    path: {
+                        "records": len(rows),
+                        "total_ms": _metric_summary(row.get("upload_cpu_total_ms") for row in rows),
+                        "image_prepare_ms": _metric_summary(row.get("image_prepare_ms") for row in rows),
+                        "bits_copy_ms": _metric_summary(row.get("bits_copy_ms") for row in rows),
+                        "texture_alloc_ms": _metric_summary(row.get("texture_alloc_ms") for row in rows),
+                        "pbo_stage_ms": _metric_summary(row.get("pbo_stage_ms") for row in rows),
+                        "texture_submit_ms": _metric_summary(row.get("texture_submit_ms") for row in rows),
+                        "unattributed_ms": _metric_summary(row.get("unattributed_ms") for row in rows),
+                    }
+                    for path in sorted({
+                        str(row.get("upload_path"))
+                        for row in phase5_rows
+                        if row["kind"] == "texture_upload" and row.get("upload_path")
+                    })
+                    if (rows := [
+                        row
+                        for row in phase5_rows
+                        if row["kind"] == "texture_upload" and row.get("upload_path") == path
+                    ])
                 },
             },
             "gl_retention": {

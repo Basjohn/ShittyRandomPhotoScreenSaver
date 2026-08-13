@@ -228,9 +228,17 @@ class GLTextureManager:
             return 0
         
         _upload_start = time.perf_counter()
+        _upload_perf_enabled = is_perf_metrics_enabled()
+        _phase_start = _upload_start if _upload_perf_enabled else 0.0
         
         # Convert to ARGB32 + GL_BGRA for correct channel ordering
         image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+        if _upload_perf_enabled:
+            _phase_now = time.perf_counter()
+            _image_prepare_ms = (_phase_now - _phase_start) * 1000.0
+            _phase_start = _phase_now
+        else:
+            _image_prepare_ms = 0.0
         w = image.width()
         h = image.height()
         if w <= 0 or h <= 0:
@@ -256,6 +264,12 @@ class GLTextureManager:
             return 0
         
         data_size = len(data)
+        if _upload_perf_enabled:
+            _phase_now = time.perf_counter()
+            _bits_copy_ms = (_phase_now - _phase_start) * 1000.0
+            _phase_start = _phase_now
+        else:
+            _bits_copy_ms = 0.0
         texture_bytes = w * h * 4
         tex = gl.glGenTextures(1)
         tex_id = int(tex)
@@ -267,6 +281,12 @@ class GLTextureManager:
                 "texture_allocation_bytes",
                 texture_bytes,
             )
+        if _upload_perf_enabled:
+            _phase_now = time.perf_counter()
+            _texture_alloc_ms = (_phase_now - _phase_start) * 1000.0
+            _phase_start = _phase_now
+        else:
+            _texture_alloc_ms = 0.0
         
         # Try PBO upload for better performance
         use_pbo = False
@@ -305,6 +325,12 @@ class GLTextureManager:
                 except Exception as e:
                     logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
                 pbo_id = 0
+        if _upload_perf_enabled:
+            _phase_now = time.perf_counter()
+            _pbo_stage_ms = (_phase_now - _phase_start) * 1000.0
+            _phase_start = _phase_now
+        else:
+            _pbo_stage_ms = 0.0
         
         # Upload texture - bind once, set all parameters in batch
         gl.glBindTexture(gl.GL_TEXTURE_2D, tex_id)
@@ -352,6 +378,12 @@ class GLTextureManager:
                     self._release_pbo(pbo_id)
                 except Exception as e:
                     logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
+
+        _texture_submit_ms = (
+            (time.perf_counter() - _phase_start) * 1000.0
+            if _upload_perf_enabled
+            else 0.0
+        )
         
         # Log slow uploads
         _upload_elapsed = (time.perf_counter() - _upload_start) * 1000.0
@@ -401,6 +433,32 @@ class GLTextureManager:
         if _upload_elapsed > self.UPLOAD_STALL_THRESHOLD_MS and is_perf_metrics_enabled():
             logger.warning("[PERF] [GL TEXTURE] Slow upload: %.2fms (%dx%d, pbo=%s)", 
                           _upload_elapsed, w, h, use_pbo)
+        if _upload_perf_enabled:
+            _accounted_ms = (
+                _image_prepare_ms
+                + _bits_copy_ms
+                + _texture_alloc_ms
+                + _pbo_stage_ms
+                + _texture_submit_ms
+            )
+            logger.info(
+                "[PERF][GL TEXTURE][UPLOAD] owner=%s size=%dx%d upload_bytes=%d "
+                "path=%s total_ms=%.3f image_prepare_ms=%.3f bits_copy_ms=%.3f "
+                "texture_alloc_ms=%.3f pbo_stage_ms=%.3f texture_submit_ms=%.3f "
+                "unattributed_ms=%.3f",
+                self._owner,
+                w,
+                h,
+                data_size,
+                "pbo" if use_pbo else "direct",
+                _upload_elapsed,
+                _image_prepare_ms,
+                _bits_copy_ms,
+                _texture_alloc_ms,
+                _pbo_stage_ms,
+                _texture_submit_ms,
+                max(0.0, _upload_elapsed - _accounted_ms),
+            )
         
         # Register texture with ResourceManager for VRAM leak prevention
         try:
