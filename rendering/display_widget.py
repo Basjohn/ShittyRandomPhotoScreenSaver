@@ -1040,19 +1040,22 @@ class DisplayWidget(QWidget):
         _on_transition_finished(self, *args, **kwargs)
         # ``set_transition_work_pending(False)`` is intentionally emitted at
         # transition start, while has_transition_work_pending() remains true
-        # through the active animation. Notify MediaWidget again after the
-        # transition object has been cleared so the last display to finish can
-        # flush all newest-only prepared artwork.
-        media_widget = getattr(self, "media_widget", None)
-        callback = getattr(media_widget, "on_parent_transition_work_pending", None)
-        if callable(callback):
-            try:
-                callback(False)
-            except Exception as e:
-                logger.debug(
-                    "[DISPLAY_WIDGET] Transition completion media callback failed: %s",
-                    e,
-                )
+        # through the active animation. Notify interested widgets again after the
+        # transition object has been cleared so transition-deferred widget work
+        # can commit once. Media performs an all-display idle gate; Reddit uses
+        # the same terminal notification for one coalesced static-cache build.
+        for attr_name in ("reddit_widget", "reddit2_widget", "media_widget"):
+            widget = getattr(self, attr_name, None)
+            callback = getattr(widget, "on_parent_transition_work_pending", None)
+            if callable(callback):
+                try:
+                    callback(False)
+                except Exception as e:
+                    logger.debug(
+                        "[DISPLAY_WIDGET] Transition completion callback failed for %s: %s",
+                        attr_name,
+                        e,
+                    )
 
     def _warm_transition_if_needed(
         self,

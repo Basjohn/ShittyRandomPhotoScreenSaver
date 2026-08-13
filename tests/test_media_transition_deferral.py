@@ -747,6 +747,32 @@ def test_final_display_transition_completion_flushes_all_media_artwork(
         media1.close()
 
 
+def test_display_transition_completion_notifies_reddit_cache_consumers(
+    monkeypatch,
+):
+    callbacks = []
+    reddit0 = SimpleNamespace(
+        on_parent_transition_work_pending=lambda pending: callbacks.append(("reddit", pending))
+    )
+    reddit1 = SimpleNamespace(
+        on_parent_transition_work_pending=lambda pending: callbacks.append(("reddit2", pending))
+    )
+    display = SimpleNamespace(
+        reddit_widget=reddit0,
+        reddit2_widget=reddit1,
+        media_widget=None,
+    )
+    monkeypatch.setattr(
+        display_image_ops,
+        "_on_transition_finished",
+        lambda _display, *_args, **_kwargs: None,
+    )
+
+    DisplayWidget._on_transition_finished(display)
+
+    assert callbacks == [("reddit", False), ("reddit2", False)]
+
+
 def test_destroyed_media_widget_discards_pending_qimage_once(
     qt_app,
     monkeypatch,

@@ -71,6 +71,7 @@ from `main`.
 - [x] Move settings serialization/temp-write/fsync/atomic replace behind one ordered process-owned writer with revision and explicit durability boundaries.
 - [x] Move Reddit normal fetch-result preparation, sparse-cache merge and post-cache persistence behind the shared IO worker and publish one immutable GUI commit.
 - [x] Move Reddit startup post-cache/gate loading and blocked-gate persistence off GUI; use worker-refreshed process metadata for runtime cadence checks.
+- [x] Prepare Reddit's GUI-owned static content cache before paint with exact size/DPR/revision identity, snapshot-matched hit routing and one transition-terminal coalesced rebuild.
 - [x] Move Weather startup cache selection and accepted-result persistence to shared IO; publish immutable, generation/location-gated GUI commits with newest-wins atomic durability.
 - [x] Move Gmail startup-cache, backend-config and DPAPI credential preparation to shared IO while retaining GUI-affine backend/OAuth facades and one coalesced settings/widget commit authority.
 - [ ] Remove proven GUI-thread service/cache preparation.

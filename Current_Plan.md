@@ -141,7 +141,6 @@ Target contract: **Prepare → Commit → Persist**.
 
 ### Priority 1 — service/widget preparation
 
-- [ ] Reddit: cold static rendering must not be discovered inside `paintEvent()`. Prefer invalidation-time preparation before worker-rendered text unless measurement justifies the extra complexity.
 - [ ] Shared overlay frame shadow: audit the inherited `BaseOverlayWidget` lazy painted-frame `QPixmap` build still reachable from `paintEvent()` and move it only with shared-widget visual/cache parity coverage.
 - [ ] Audit other widget/provider callbacks for JSON/filesystem/filter/sort work and apply the same owner rule only where source inspection proves it. Gmail's user-triggered backend-mode write, IMAP credential save/delete, OAuth local-token deletion, revoke call and expired-token refresh are explicit follow-up candidates; keep them separate from the now-closed cold-construction contract.
 

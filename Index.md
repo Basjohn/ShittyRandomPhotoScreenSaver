@@ -59,7 +59,7 @@ Do not read every document by default.
 | Image pipeline | `engine/image_pipeline.py` and image/prefetch helpers |
 | Compositor/GL programs | `rendering/gl_compositor.py`, `rendering/gl_compositor_pkg/`, `rendering/gl_programs/` |
 | Media provider/GSMTC/progress presentation | `core/media/provider_registry.py`, `core/media/media_controller.py`, `widgets/media_widget.py`, `widgets/media/display_update.py`, `widgets/media/painting.py` |
-| Reddit provider/preparation/Qt commit | `core/reddit_post_provider.py`, `core/reddit_preparation.py`, `widgets/reddit_widget.py` |
+| Reddit provider/preparation/Qt/static commit | `core/reddit_post_provider.py`, `core/reddit_preparation.py`, `widgets/reddit_widget.py` |
 | Weather provider/preparation/Qt commit | `weather/open_meteo_provider.py`, `core/weather_preparation.py`, `widgets/weather_widget.py` |
 | Gmail cache/backend preparation and Qt commit | `core/gmail/gmail_preparation.py`, `core/gmail/gmail_bootstrap.py`, `core/gmail/gmail_backend.py`, `core/gmail/gmail_oauth.py`, `widgets/gmail_widget.py` |
 | Visualizer model/runtime | `widgets/spotify_visualizer/` and `widgets/spotify_visualizer_widget.py` |

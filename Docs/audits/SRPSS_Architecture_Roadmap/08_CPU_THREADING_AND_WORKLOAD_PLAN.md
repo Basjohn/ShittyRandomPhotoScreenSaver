@@ -121,11 +121,11 @@ availability rather than texture identity.
 
 ### Cold widget rendering is still visible at rebuild time
 
-The widget profiler shows cached Reddit paints normally around `1–3 ms`, but cold or
-recreation paints still reach tens of milliseconds (`~40–61 ms` for the primary
-Reddit widget in this run, with smaller but still visible Reddit2 spikes). Gmail's
-stable cache regeneration is smaller, roughly `~6–10 ms`, but is still currently
-allowed to occur inside the paint path.
+The source run showed cached Reddit paints normally around `1–3 ms`, but cold or
+recreation paints reached tens of milliseconds (`~40–61 ms` for the primary Reddit
+widget, with smaller but still visible Reddit2 spikes). Gmail's stable regeneration
+was smaller at roughly `~6–10 ms`. Both widget-owned static layers now prepare before
+paint; the inherited shared frame-shadow cache remains the next cold-paint owner.
 
 This supports a general rule: `paintEvent()` should consume prepared/cached state,
 not discover that expensive static content preparation must happen synchronously
@@ -376,10 +376,8 @@ cached content first, then evaluates freshness/cooldown from that snapshot. Runt
 cadence checks read a process-shared in-memory timestamp registry updated by worker
 cache writes and gate touches, so they do not `stat`, create or touch files on GUI.
 Late snapshots are rejected after deactivation or receipt of any newer authoritative
-live result. The unused
-legacy startup-attempt marker had no production caller and was removed rather than
-promoted into a persistence contract. Remaining Reddit work is the cold static
-paint-cache contract below.
+live result. The unused legacy startup-attempt marker had no production caller and was
+removed rather than promoted into a persistence contract.
 
 **Weather prepare/commit/persist — complete**
 
@@ -454,14 +452,30 @@ rendering remains unnecessary; consider detached `QImage` preparation only if in
 measurement proves this bounded GUI commit remains material and visual/interaction
 parity can be preserved.
 
-**Remaining static paint-cache contract**
+**Reddit static paint-cache preparation — complete**
 
-Reddit still needs the same cold-static-layer extraction. The inherited
-`BaseOverlayWidget` painted-frame shadow cache can also build lazily from `paintEvent()`;
-audit that shared path independently with cross-widget parity rather than folding it
-into Gmail's widget-owned static layer. Invalidation may schedule/perform preparation,
-but paint should not discover an expensive cold layer before delivering a frame. Keep
-dynamic spinner/hit-state regions narrow and separate from static cache.
+Reddit data commits now prepare its GUI-owned static `QPixmap` after content geometry
+settles and before first reveal. Ordinary visual, resize and screen-DPR invalidations
+coalesce into one GUI callback with an exact logical-size/DPR/static-revision identity.
+Paint only accepts that exact-current snapshot, blits it, then paints the refresh spiral
+as a narrow dynamic region. Static pixels, row/header hit geometry and the header's
+subreddit routing identity are committed and withheld together, so a queued invalidation
+or pending subreddit fetch cannot expose mismatched pixels and click targets.
+
+If an invalidation lands while image transition work is pending/running, Reddit retains
+the invalid state but performs no static rebuild. The existing terminal transition
+notification schedules exactly one deferred preparation after the compositor becomes
+idle; there is no retry timer or additional cadence. Relative-age labels retain their
+established snapshot policy and change only when data/style/size invalidates the cache.
+Worker text rendering remains unjustified without new installed evidence and parity bars.
+
+**Remaining shared static paint-cache contract**
+
+The inherited `BaseOverlayWidget` painted-frame shadow cache can still build lazily from
+`paintEvent()`. Audit that shared path independently with cross-widget parity rather than
+folding it into either widget-owned content layer. Invalidation may schedule/perform
+preparation, but paint should not discover an expensive cold layer before delivering a
+frame.
 
 ### Priority 1 — visualizer reductions with cadence frozen
 

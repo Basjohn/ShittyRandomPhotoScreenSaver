@@ -18,7 +18,7 @@ import time
 import random
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QUrl
+from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QThread, QTimer, QUrl
 from PySide6.QtGui import (
     QFont,
     QColor,
@@ -33,7 +33,7 @@ from PySide6.QtWidgets import QWidget
 from shiboken6 import isValid as shiboken_isValid
 
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
-from core.performance import widget_paint_sample
+from core.performance import widget_paint_sample, widget_timer_sample
 from core.reddit_post_provider import (
     RedditFetchRequest,
     RedditPostProvider,
@@ -138,6 +138,7 @@ class RedditWidget(BaseOverlayWidget):
         # Logical placement and source configuration
         self._reddit_position = position  # Keep original enum for compatibility
         self._subreddit: str = self._normalise_subreddit(subreddit)
+        self._displayed_subreddit: str = self._subreddit
         self._sort: str = "hot"
         self._configured_capacity: int = clamp_list_capacity(10, default=10)
         self._effective_visible_capacity: int = self._configured_capacity
@@ -164,7 +165,12 @@ class RedditWidget(BaseOverlayWidget):
         
         # Paint caching: only repaint when data changes (every 10 min)
         self._cached_content_pixmap: Optional[QPixmap] = None
-        self._cache_invalidated: bool = True  # Start invalidated to force first paint
+        self._cached_content_identity: Optional[tuple[int, int, float, int]] = None
+        self._cache_invalidated: bool = True
+        self._cache_revision: int = 0
+        self._cache_prepare_scheduled: bool = False
+        self._cache_prepare_deferred_for_transition: bool = False
+        self._paint_cache_cancelled: bool = False
 
         # Override base class font size default
         self._font_size = 18
@@ -177,6 +183,7 @@ class RedditWidget(BaseOverlayWidget):
         self._header_content_y_offset: int = -1
         self._brand_pixmap: Optional[QPixmap] = self._load_brand_pixmap()
         self._header_hit_rect: Optional[QRect] = None
+        self._header_hit_subreddit: Optional[str] = None
         self._show_refresh_spiral: bool = True
         self._refresh_hit_rect: Optional[QRect] = None
         self._refreshing: bool = False
@@ -255,6 +262,8 @@ class RedditWidget(BaseOverlayWidget):
     
     def _activate_impl(self) -> None:
         """Activate reddit widget - start fetching (lifecycle hook)."""
+        self._paint_cache_cancelled = False
+        self._cache_prepare_deferred_for_transition = False
         if not self._ensure_thread_manager("RedditWidget._activate_impl"):
             raise RuntimeError("ThreadManager not available")
         
@@ -263,6 +272,7 @@ class RedditWidget(BaseOverlayWidget):
     
     def _deactivate_impl(self) -> None:
         """Deactivate reddit widget - stop fetching (lifecycle hook)."""
+        self._paint_cache_cancelled = True
         self._startup_snapshot_request_id += 1
         stop_overlay_timer_pair(
             self,
@@ -279,7 +289,7 @@ class RedditWidget(BaseOverlayWidget):
         self._reset_deferred_runtime_state(delete_qtimers=False)
         
         self._posts.clear()
-        self._row_hit_rects.clear()
+        self._clear_paint_cache()
         logger.debug("[LIFECYCLE] RedditWidget deactivated")
     
     def _cleanup_impl(self) -> None:
@@ -307,6 +317,8 @@ class RedditWidget(BaseOverlayWidget):
             return
 
         self._enabled = True
+        self._paint_cache_cancelled = False
+        self._cache_prepare_deferred_for_transition = False
         
         # CRITICAL: Hide widget immediately - it will be shown by fade sync
         self.hide()
@@ -418,7 +430,8 @@ class RedditWidget(BaseOverlayWidget):
 
         self._enabled = False
         self._posts.clear()
-        self._row_hit_rects.clear()
+        self._paint_cache_cancelled = True
+        self._clear_paint_cache()
         try:
             self.hide()
         except Exception as e:
@@ -426,6 +439,7 @@ class RedditWidget(BaseOverlayWidget):
 
     def cleanup(self) -> None:
         logger.debug("Cleaning up Reddit widget")
+        self._paint_cache_cancelled = True
         self.stop()
         stop_qtimer_attr(
             self,
@@ -448,6 +462,7 @@ class RedditWidget(BaseOverlayWidget):
             logger.debug("[REDDIT] Exception suppressed: %s", e)
         self._refresh_spin_timer = None
         self._reset_deferred_runtime_state(delete_qtimers=True)
+        self._clear_paint_cache()
 
     def is_running(self) -> bool:
         return self._enabled
@@ -485,7 +500,10 @@ class RedditWidget(BaseOverlayWidget):
         )
 
     def set_subreddit(self, subreddit: str) -> None:
-        self._subreddit = self._normalise_subreddit(subreddit)
+        next_subreddit = self._normalise_subreddit(subreddit)
+        self._subreddit = next_subreddit
+        # _displayed_subreddit changes only with an authoritative row commit,
+        # keeping the last complete header+rows snapshot together on failure.
         # Refresh immediately on change
         if self._enabled:
             self._fetch_feed()
@@ -544,6 +562,8 @@ class RedditWidget(BaseOverlayWidget):
             self._effective_visible_capacity = len(self._posts) or self._configured_capacity
             self._invalidate_paint_cache()
             self.update()
+        else:
+            self._invalidate_paint_cache()
 
     @property
     def configured_capacity(self) -> int:
@@ -555,20 +575,68 @@ class RedditWidget(BaseOverlayWidget):
 
     def set_font_size(self, size: int) -> None:  # type: ignore[override]
         before = self._font_size
-        super().set_font_size(size)
-        if self._font_size == before:
+        next_size = max(8, int(size))
+        if before == next_size:
             return
-        self._sync_header_metrics()
         self._invalidate_paint_cache()
+        super().set_font_size(size)
+        self._sync_header_metrics()
         self._update_card_height_from_content(len(self._posts) or self._effective_visible_capacity)
 
     def set_font_family(self, family: str) -> None:  # type: ignore[override]
-        before = self._font_family
-        super().set_font_family(family)
-        if self._font_family == before:
+        next_family = family or self.DEFAULT_FONT_FAMILY
+        if self._font_family == next_family:
             return
         self._invalidate_paint_cache()
+        super().set_font_family(next_family)
         self._update_card_height_from_content(len(self._posts) or self._effective_visible_capacity)
+
+    def set_text_color(self, color: QColor) -> None:  # type: ignore[override]
+        if not isinstance(color, QColor) or self._text_color == color:
+            return
+        self._invalidate_paint_cache()
+        super().set_text_color(color)
+
+    def set_show_background(self, show: bool) -> None:  # type: ignore[override]
+        next_value = bool(show)
+        if self._show_background == next_value:
+            return
+        self._invalidate_paint_cache()
+        super().set_show_background(next_value)
+
+    def set_background_color(self, color: QColor) -> None:  # type: ignore[override]
+        if not isinstance(color, QColor) or self._bg_color == color:
+            return
+        self._invalidate_paint_cache()
+        super().set_background_color(color)
+
+    def set_background_opacity(self, opacity: float) -> None:  # type: ignore[override]
+        next_value = max(0.0, min(1.0, float(opacity)))
+        if abs(float(self._bg_opacity) - next_value) <= 1e-9:
+            return
+        self._invalidate_paint_cache()
+        super().set_background_opacity(next_value)
+
+    def set_background_border(self, width: int, color: QColor) -> None:  # type: ignore[override]
+        next_width = max(0, int(width))
+        next_color = color if isinstance(color, QColor) else self._bg_border_color
+        if int(self._bg_border_width) == next_width and self._bg_border_color == next_color:
+            return
+        self._invalidate_paint_cache()
+        super().set_background_border(width, color)
+
+    def set_background_corner_radius(self, radius: int) -> None:  # type: ignore[override]
+        next_radius = max(0, int(radius))
+        if int(self._bg_corner_radius) == next_radius:
+            return
+        self._invalidate_paint_cache()
+        super().set_background_corner_radius(next_radius)
+
+    def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:  # type: ignore[override]
+        if self._shadow_config == config:
+            return
+        self._invalidate_paint_cache()
+        super().set_shadow_config(config)
 
     def _sync_header_metrics(self) -> None:
         base_font = max(6, int(self._font_size))
@@ -1036,6 +1104,14 @@ class RedditWidget(BaseOverlayWidget):
             restart_callback=lambda timer: timer.start(),
             update_callback=self._update_refresh_button_region,
         )
+        if (
+            not pending
+            and self._cache_prepare_deferred_for_transition
+            and not self._parent_transition_running()
+        ):
+            self._cache_prepare_deferred_for_transition = False
+            if self._cache_invalidated and not self._paint_cache_cancelled:
+                self._schedule_content_cache_prepare()
 
     def _defer_refresh_if_transition(self) -> bool:
         return defer_refresh_if_transition(
@@ -1234,10 +1310,12 @@ class RedditWidget(BaseOverlayWidget):
         # Provider results and startup cache snapshots arrive pre-sorted; this
         # GUI method owns only visible state and Qt layout/paint invalidation.
         self._posts = list(posts)
+        self._displayed_subreddit = self._subreddit
         self._row_hit_rects.clear()
         
-        # Invalidate paint cache since data changed
-        self._invalidate_paint_cache()
+        # Invalidate now, then synchronously prepare the GUI-owned stable layer
+        # after content-driven geometry settles and before first reveal.
+        self._invalidate_paint_cache(schedule_prepare=False)
 
         # Update typography metrics for the header based on the current
         # base font size; the header itself is painted in paintEvent.
@@ -1250,6 +1328,8 @@ class RedditWidget(BaseOverlayWidget):
         
         if self.parent():
             self._update_position()
+
+        self._prepare_static_content_cache()
         
         # Trigger repaint if widget is visible
         if self.isVisible():
@@ -1332,82 +1412,26 @@ class RedditWidget(BaseOverlayWidget):
     # ------------------------------------------------------------------
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
-        """Paint background via QLabel then overlay header and posts.
-        
-        Uses paint caching: content is rendered to a pixmap only when data
-        changes (every 10 minutes). Subsequent paints just blit the cached
-        pixmap, reducing paint time from ~6ms to <0.5ms.
-        """
+        """Paint the base frame, exact-current stable cache, and spinner."""
         with widget_paint_sample(self, "reddit.paint"):
             self._paint_cached(event)
 
     def _paint_cached(self, event) -> None:
-        """Paint using cached pixmap, regenerating only when invalidated."""
+        """Blit prepared static pixels; paint never builds the cold layer."""
         # Let QLabel paint its background
         super().paintEvent(event)
-        
-        if not self._posts:
+
+        painter = QPainter(self)
+        try:
+            pixmap = self._prepared_content_pixmap_for_paint()
+            if pixmap is not None:
+                painter.drawPixmap(0, 0, pixmap)
             if self._show_refresh_spiral:
-                painter = QPainter(self)
-                try:
-                    self._paint_refresh_button(painter)
-                finally:
-                    painter.end()
-            return
-        
-        widget_size = self.size()
-        
-        # Check if cache needs regeneration (compare logical sizes accounting for DPR)
-        cache_valid = False
-        if self._cached_content_pixmap is not None and not self._cached_content_pixmap.isNull():
-            try:
-                cached_dpr = self._cached_content_pixmap.devicePixelRatio()
-                cached_logical_w = int(self._cached_content_pixmap.width() / cached_dpr)
-                cached_logical_h = int(self._cached_content_pixmap.height() / cached_dpr)
-                # Use tolerance for size comparison (±2 pixels) to avoid regeneration
-                # due to minor layout differences
-                width_ok = abs(cached_logical_w - widget_size.width()) <= 2
-                height_ok = abs(cached_logical_h - widget_size.height()) <= 2
-                cache_valid = width_ok and height_ok
-            except Exception:
-                cache_valid = False
-        
-        needs_regen = self._cache_invalidated or not cache_valid
-        if needs_regen and self._parent_transition_running():
-            if self._cached_content_pixmap is not None and not self._cached_content_pixmap.isNull():
-                needs_regen = False
-                if is_perf_metrics_enabled():
-                    logger.debug("[PERF] Reddit widget cache regeneration deferred during transition")
-        
-        # Rate limit: don't regenerate more than once per 0.3s (was 1s — too long for refresh)
-        if needs_regen:
-            now = time.time()
-            last_regen = getattr(self, "_last_cache_regen_ts", 0.0)
-            if now - last_regen < 0.3:
-                # Too soon, use existing cache even if not perfect
-                needs_regen = False
-                if is_perf_metrics_enabled() and self._cache_invalidated:
-                    logger.debug("[PERF] Reddit widget cache regeneration deferred (rate limited)")
+                self._paint_refresh_button(painter)
             else:
-                self._last_cache_regen_ts = now
-        
-        if needs_regen:
-            # Regenerate the cached pixmap
-            if is_perf_metrics_enabled():
-                logger.debug("[PERF] Reddit widget regenerating paint cache (invalidated=%s, cache_valid=%s)",
-                           self._cache_invalidated, cache_valid)
-            self._regenerate_cache(widget_size)
-            self._cache_invalidated = False
-        
-        # Blit cached content
-        if self._cached_content_pixmap is not None and not self._cached_content_pixmap.isNull():
-            painter = QPainter(self)
-            try:
-                painter.drawPixmap(0, 0, self._cached_content_pixmap)
-                if self._show_refresh_spiral:
-                    self._paint_refresh_button(painter)
-            finally:
-                painter.end()
+                self._refresh_hit_rect = None
+        finally:
+            painter.end()
 
     def _paint_refresh_button(self, painter: QPainter) -> None:
         margins = self.contentsMargins()
@@ -1444,31 +1468,131 @@ class RedditWidget(BaseOverlayWidget):
         finally:
             painter.restore()
     
-    def _regenerate_cache(self, size) -> None:
-        """Regenerate the cached content pixmap."""
+    def _current_content_cache_identity(
+        self,
+        size: Optional[QSize] = None,
+        dpr: Optional[float] = None,
+    ) -> tuple[int, int, float, int]:
+        current_size = size or self.size()
+        if dpr is None:
+            try:
+                dpr = float(self.devicePixelRatioF())
+            except Exception:
+                dpr = 1.0
+        return (
+            int(current_size.width()),
+            int(current_size.height()),
+            float(dpr),
+            int(self._cache_revision),
+        )
+
+    def _prepared_content_pixmap_for_paint(self) -> Optional[QPixmap]:
+        """Return only pixels whose static state and hit geometry are current."""
+
+        pixmap = self._cached_content_pixmap
+        if self._cache_invalidated or pixmap is None or pixmap.isNull():
+            return None
+        if self._cached_content_identity != self._current_content_cache_identity():
+            return None
+        return pixmap
+
+    def _prepare_static_content_cache(self, size: Optional[QSize] = None) -> bool:
+        """Build stable Reddit content on the GUI thread before paint delivery."""
+
+        try:
+            if QThread.currentThread() != self.thread():
+                logger.error("[REDDIT] Refusing static content-cache preparation off GUI thread")
+                return False
+        except RuntimeError:
+            return False
+
+        target_size = size or self.size()
+        if target_size.width() <= 0 or target_size.height() <= 0:
+            self._cached_content_pixmap = None
+            self._cached_content_identity = None
+            self._cache_invalidated = True
+            return False
         try:
             dpr = self.devicePixelRatioF()
         except Exception:
             dpr = 1.0
-        
-        # Create pixmap with proper DPI scaling
-        pixmap = QPixmap(int(size.width() * dpr), int(size.height() * dpr))
-        pixmap.setDevicePixelRatio(dpr)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        
-        painter = QPainter(pixmap)
+        dpr = float(dpr)
+        identity = self._current_content_cache_identity(target_size, dpr)
+        if (
+            not self._cache_invalidated
+            and self._cached_content_identity == identity
+            and self._cached_content_pixmap is not None
+            and not self._cached_content_pixmap.isNull()
+        ):
+            return False
+
+        with widget_timer_sample(self, "reddit.cache.regen"):
+            pixmap = QPixmap(
+                max(1, int(target_size.width() * dpr)),
+                max(1, int(target_size.height() * dpr)),
+            )
+            pixmap.setDevicePixelRatio(dpr)
+            pixmap.fill(Qt.GlobalColor.transparent)
+
+            painter = QPainter(pixmap)
+            try:
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+                self._paint_content_to_painter(painter)
+            finally:
+                painter.end()
+
+            self._cached_content_pixmap = pixmap
+            self._cached_content_identity = identity
+            self._cache_invalidated = False
+        return True
+
+    def _regenerate_cache(self, _size: QSize) -> None:
+        """Compatibility helper for explicit GUI-side cache preparation."""
+
+        self._prepare_static_content_cache()
+
+    def _schedule_content_cache_prepare(self) -> None:
+        if self._cache_prepare_scheduled:
+            return
+        self._cache_prepare_scheduled = True
         try:
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-            self._paint_content_to_painter(painter)
-        finally:
-            painter.end()
-        
-        self._cached_content_pixmap = pixmap
-    
-    def _invalidate_paint_cache(self) -> None:
-        """Mark the paint cache as needing regeneration."""
+            ThreadManager.single_shot(0, self._flush_content_cache_prepare)
+        except Exception:
+            self._cache_prepare_scheduled = False
+            logger.debug("[REDDIT] Failed to schedule static content-cache preparation", exc_info=True)
+
+    def _flush_content_cache_prepare(self) -> None:
+        self._cache_prepare_scheduled = False
+        if self._paint_cache_cancelled or not shiboken_isValid(self):
+            return
+        if self._parent_transition_running():
+            self._cache_prepare_deferred_for_transition = True
+            return
+        self._cache_prepare_deferred_for_transition = False
+        if self._prepare_static_content_cache():
+            self.update()
+
+    def _invalidate_paint_cache(self, *, schedule_prepare: bool = True) -> None:
+        """Invalidate stable pixels and their matching click geometry."""
+
+        self._cache_revision += 1
         self._cache_invalidated = True
+        self._header_hit_rect = None
+        self._header_hit_subreddit = None
+        self._row_hit_rects.clear()
+        if schedule_prepare:
+            self._schedule_content_cache_prepare()
+
+    def _clear_paint_cache(self) -> None:
+        self._cached_content_pixmap = None
+        self._cached_content_identity = None
+        self._cache_revision += 1
+        self._cache_invalidated = True
+        self._cache_prepare_deferred_for_transition = False
+        self._header_hit_rect = None
+        self._header_hit_subreddit = None
+        self._row_hit_rects.clear()
     
     def _paint_content_to_painter(self, painter: QPainter) -> None:
         """Paint the actual content to a painter (used for caching)."""
@@ -1537,7 +1661,8 @@ class RedditWidget(BaseOverlayWidget):
         else:
             x += 4
 
-        subreddit_label = f"r/{self._subreddit}" if self._subreddit else "r/<subreddit>"
+        displayed_subreddit = self._displayed_subreddit
+        subreddit_label = f"r/{displayed_subreddit}" if displayed_subreddit else "r/<subreddit>"
         painter.setPen(QColor(255, 255, 255, 255))
         available_header_width = max(0, rect.right() - x)
         if available_header_width > 0:
@@ -1570,6 +1695,7 @@ class RedditWidget(BaseOverlayWidget):
                 min(header_width, rect.width()),
                 header_height + 8,
             )
+            self._header_hit_subreddit = displayed_subreddit
 
         # Posts list
         now_ts = time.time()
@@ -1716,7 +1842,7 @@ class RedditWidget(BaseOverlayWidget):
             return None
         header_rect = self._header_hit_rect
         if header_rect is not None and header_rect.contains(local_pos):
-            slug = self._subreddit
+            slug = self._header_hit_subreddit or self._subreddit
             if slug:
                 return f"https://www.reddit.com/r/{slug}"
             return "https://www.reddit.com"
@@ -1984,11 +2110,21 @@ class RedditWidget(BaseOverlayWidget):
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
+        if hasattr(self, "_cache_revision"):
+            self._invalidate_paint_cache()
         if self._enabled and self._has_seen_first_sample and self.parent():
             try:
                 self._update_position()
             except Exception as e:
                 logger.debug("[REDDIT] Exception suppressed: %s", e)
+
+    def event(self, event) -> bool:  # type: ignore[override]
+        if event.type() in (
+            QEvent.Type.DevicePixelRatioChange,
+            QEvent.Type.ScreenChangeInternal,
+        ) and hasattr(self, "_cache_revision"):
+            self._invalidate_paint_cache()
+        return super().event(event)
 
     def handle_hover(self, local_pos: QPoint, global_pos: QPoint) -> None:
         # Tooltips disabled for performance - hover handling is a no-op
