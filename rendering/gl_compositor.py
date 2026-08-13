@@ -1922,6 +1922,11 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.shader_dispatch import paint_crossfade_shader
         paint_crossfade_shader(self, target)
 
+    def _paint_retained_base_texture(self, target: QRect) -> bool:
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_retained_base_texture
+
+        return paint_retained_base_texture(self, target)
+
     def _paint_diffuse_shader(self, target: QRect) -> None:
         from rendering.gl_compositor_pkg.shader_dispatch import paint_diffuse_shader
         paint_diffuse_shader(self, target)

@@ -336,11 +336,15 @@ def paintGL_impl(widget) -> None:
             if widget._try_shader_path(name, state, can_use_fn, paint_fn, target, prep_fn):
                 shader_success = True
                 break
+    else:
+        paint_retained_base = getattr(widget, "_paint_retained_base_texture", None)
+        if callable(paint_retained_base):
+            shader_success = bool(paint_retained_base(target))
 
     _mark_section("shader_render" if shader_success else "shader_attempt")
 
     if not shader_success:
-        # Idle or shader failure — render base image via QPainter.
+        # Missing retained base texture or shader failure — use QPainter.
         if any_transition_active:
             _log_shader_fallback_once(widget, active_names)
         painter = QPainter(widget)

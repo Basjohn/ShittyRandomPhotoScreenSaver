@@ -175,6 +175,10 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 - Context-local GL objects remain context-local.
 - Prefetch is bounded by bytes and outstanding work.
 - Same-image reuse is permitted only for exact source/transform/size/mode/DPR identity; differing targets retain independent representations.
+- When transition completion retains the exact destination texture, steady compositor
+  presentation consumes that texture directly. It does not redraw the same full-screen
+  pixmap through a second presentation path; QPainter remains a capability/missing-cache
+  fallback only.
 - Terminal transition completion or cancellation releases active texture pins; owner-context teardown returns application-owned GL resources to zero.
 - Deterministic application-owned byte accounting is required in automation; driver-reported VRAM remains a real-platform validation gate.
 

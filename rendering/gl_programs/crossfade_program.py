@@ -87,8 +87,54 @@ void main() {
         if gl is None:
             return
 
-        vp_w, vp_h = viewport
         progress = max(0.0, min(1.0, float(getattr(state, "progress", 0.0))))
+
+        self._render_textures(
+            program=program,
+            uniforms=uniforms,
+            viewport=viewport,
+            old_tex=old_tex,
+            new_tex=new_tex,
+            progress=progress,
+            quad_vao=quad_vao,
+        )
+
+    def render_single_texture(
+        self,
+        *,
+        program: int,
+        uniforms: Dict[str, int],
+        viewport: Tuple[int, int],
+        texture_id: int,
+        quad_vao: int,
+    ) -> None:
+        """Draw one retained base texture through the existing fullscreen program."""
+
+        self._render_textures(
+            program=program,
+            uniforms=uniforms,
+            viewport=viewport,
+            old_tex=texture_id,
+            new_tex=texture_id,
+            progress=1.0,
+            quad_vao=quad_vao,
+        )
+
+    def _render_textures(
+        self,
+        *,
+        program: int,
+        uniforms: Dict[str, int],
+        viewport: Tuple[int, int],
+        old_tex: int,
+        new_tex: int,
+        progress: float,
+        quad_vao: int,
+    ) -> None:
+        if gl is None:
+            return
+
+        vp_w, vp_h = viewport
 
         gl.glViewport(0, 0, vp_w, vp_h)
         gl.glDisable(gl.GL_DEPTH_TEST)

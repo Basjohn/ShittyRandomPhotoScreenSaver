@@ -76,7 +76,7 @@ Use `Docs/Contracts.md` before assuming a nearby helper is an authority.
 ```text
 working branch:      main
 approved visual ref: ff93461685476bd0657aa88312fc2e35e9037880
-current evidence:    logs/evidence_chest/08_13_fa7e8196_16_33_16_37_gpu_queries_typical/
+current evidence:    logs/evidence_chest/08_13_5bf68d6b_17_00_17_04_compositor_gpu_typical/
 roadmap:             Docs/audits/SRPSS_Architecture_Roadmap/
 phase reports:       Docs/phase_reports/
 historical lessons: Docs/audits/SRPSS_Architecture_Roadmap/10_HISTORICAL_CANDIDATE_LESSONS.md

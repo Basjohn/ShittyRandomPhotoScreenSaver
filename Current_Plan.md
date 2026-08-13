@@ -230,12 +230,31 @@ phase-valid `60 Hz` latest-state sampler can miss entirely. Phase 7 may not rein
 producer timestamp/paint-ack cap. It first needs an edge-preserving immutable render-state
 contract plus a runtime source-to-visible oracle proving Bubble attack and elasticity.
 
-- [ ] Validate the installed shared-compositor timer-query slice in a current transition-heavy run covering Crumble, Particle, Burn, Raindrops/Wipe, Bubble/Spectrum overlap, one Settings rebuild and final strict cleanup.
+The shared-compositor capture
+`logs/evidence_chest/08_13_5bf68d6b_17_00_17_04_compositor_gpu_typical/`
+(selected-source SHA-256 `B59864A4...01D441`) closes the compositor query gate for
+the exercised Block Flip, Wipe, Diffuse, Block Spin, Burn, Warp and Raindrops families.
+All `42` windows are supported and error/drop free. Active transition draws are normally
+cheap: screen 0 p50/p95 is roughly `0.05–0.21/0.87–1.02 ms`; physical-4K screen 1 is
+roughly `0.12–0.48/3.13–3.38 ms`. Process GPU busy is only `4.55%` median and `5.1%`
+max in this run, so transition shaders do not explain the repeated `51.46 ms` median
+frame gaps.
+
+The sparse terminal/steady samples name a concrete avoidable owner instead: the previous
+idle path ignored the useful retained-texture presentation route and drew the full base
+pixmap through `QPainter`, repeatedly costing about `7–12 ms` on screen 0 and
+`36–41 ms` on the 4K screen. The first corrective slice now draws the exact terminally
+retained destination texture through the already-compiled fullscreen crossfade program;
+it performs no pixmap/texture allocation or upload in paint and retains the existing
+QPainter path only when exact cached texture/GL capability is absent.
+
+- [ ] Validate the retained-base GL draw in a current typical transition run: steady GPU samples should materially fall from `7–12/36–41 ms`, terminal pixels must remain continuous, retained-current → next-old identity stays exact, and Settings/final teardown returns query/texture ownership to zero.
 - [ ] Never use `glFinish()` in ordinary profiling. It changes the workload and invalidates the measurement.
 - [ ] Split GPU attribution among image texture upload/warm, transition shader/render work, visualizer overlay/context work, overdraw/composition, and driver/context overhead.
 - [ ] Record per-display refresh, logical visualizer state publication rate, update-request rate and paint rate together. Do not infer waste solely from one counter.
 - [ ] Correlate repeated `>100 ms` transition request-age stalls that have cheap paint, healthy worker queues, and no matching long Python GUI callback against GPU timer results plus context/swap/native-event ownership before changing Python scheduling.
 - [ ] Feed the result into Phase 7 only after an edge-preserving immutable render-state contract proves that phase-valid display sampling cannot hide Bubble's protected discrete response; never approximate display opportunities with producer timestamps or paint acknowledgements.
+- [ ] Treat Phase 7 presentation coalescing as conditional, not inevitable. Re-measure the marginal overlay CPU/GPU cost after retained-base and remaining delivery fixes; prototype a display-owned consumer only if the residual saving is material. Bubble remains excluded until bounded event identity/history or an equivalent oracle proves no authored response can disappear.
 - [ ] Do not begin Phase 8 one-surface compositor work until Phase 7 proves missed paints cannot alter logical state and GPU/context evidence shows the merge is worth its lifecycle risk.
 
 ## P5.2C Compatibility, Fallback, And Debris Leverage

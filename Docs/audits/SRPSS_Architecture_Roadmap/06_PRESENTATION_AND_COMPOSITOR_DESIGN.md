@@ -35,6 +35,15 @@ delivery gaps. Process GPU-busy peaks align more strongly with transition window
 matching non-blocking timer-query ring now wraps the existing shared-compositor draw and
 awaits a transition-heavy live gate.
 
+The `08_13_5bf68d6b_17_00_17_04_compositor_gpu_typical` run closes that live gate for
+seven exercised transition families. All `42` compositor windows are supported and
+error/drop free. Active transition p95 is roughly `0.87–1.02 ms` on screen 0 and
+`3.13–3.38 ms` on the physical-4K screen 1; whole-process GPU busy is only `4.55%`
+median and `5.1%` max. The surprising owner is sparse idle/base presentation:
+QPainter full-pixmap draws repeatedly measure `7–12 ms` and `36–41 ms` respectively.
+The current slice therefore reuses the exact retained destination texture through the
+already-compiled fullscreen program and leaves presentation cadence untouched.
+
 ## Absolute Rules
 
 - producers do not wait for `paintGL()`, `update()` or a presentation acknowledgement;
@@ -74,6 +83,14 @@ latest-state sample can miss it completely. Phase 7 must therefore define an
 edge-preserving render-state contract, or otherwise prove equivalent authored
 visibility, before enabling coalescing for Bubble. Logical-series equality by itself is
 not acceptance.
+
+Phase 7 is an option, not a required cap. The measured overlay GPU span is already
+sub-millisecond, so the marginal saving must be re-measured after higher-value compositor
+and delivery fixes. If a later prototype is justified, it is a display-owned consumer:
+logical integration continues unchanged, producer admission never depends on paint, and
+Bubble requires bounded event identity/history (or an equivalent edge-preserving state)
+so a skipped snapshot cannot erase authored attack. Modes may remain uncoalesced when
+that proof is absent.
 
 ## Presentation-Rate Attribution
 

@@ -427,6 +427,26 @@ class GLTextureManager:
     # -------------------------------------------------------------------------
     # Texture Caching
     # -------------------------------------------------------------------------
+
+    def get_cached_texture_id(self, pixmap: QPixmap) -> int:
+        """Return an existing exact-identity texture without uploading in paint."""
+
+        if pixmap is None or pixmap.isNull():
+            return 0
+        try:
+            key = int(pixmap.cacheKey())
+        except Exception as exc:
+            logger.debug("[GL TEXTURE] cacheKey unavailable: %s", exc)
+            return 0
+        if key <= 0:
+            return 0
+        texture_id = int(self._texture_cache.get(key, 0) or 0)
+        if not texture_id:
+            return 0
+        if key in self._texture_lru:
+            self._texture_lru.remove(key)
+        self._texture_lru.append(key)
+        return texture_id
     
     def get_or_create_texture(self, pixmap: QPixmap) -> int:
         """Get or upload a texture under count and exact RGBA8 byte budgets."""
@@ -441,13 +461,10 @@ class GLTextureManager:
             logger.debug("[GL TEXTURE] cacheKey unavailable: %s", exc)
 
         if key > 0:
-            texture_id = int(self._texture_cache.get(key, 0) or 0)
+            texture_id = self.get_cached_texture_id(pixmap)
             if texture_id:
                 self._texture_cache_hits += 1
                 self._record_transition_metric("texture_cache_hits")
-                if key in self._texture_lru:
-                    self._texture_lru.remove(key)
-                self._texture_lru.append(key)
                 return texture_id
 
         texture_id = int(self.upload_pixmap(pixmap) or 0)

@@ -312,3 +312,28 @@ class GLTransitionRenderer:
                 painter.drawPixmap(target, pixmap)
         else:
             painter.fillRect(target, Qt.GlobalColor.black)
+
+    def render_retained_base_texture(self, texture_id: int) -> bool:
+        """Draw the already-retained destination texture without a QPainter blit."""
+
+        pipeline = self._get_pipeline()
+        helper_getter = self._program_getters.get("crossfade")
+        if (
+            gl is None
+            or pipeline is None
+            or not texture_id
+            or not getattr(pipeline, "crossfade_program", 0)
+            or helper_getter is None
+        ):
+            return False
+        helper = helper_getter()
+        if helper is None:
+            return False
+        helper.render_single_texture(
+            program=pipeline.crossfade_program,
+            uniforms=pipeline.crossfade_uniforms,
+            viewport=self._get_viewport_size(),
+            texture_id=int(texture_id),
+            quad_vao=pipeline.quad_vao,
+        )
+        return True

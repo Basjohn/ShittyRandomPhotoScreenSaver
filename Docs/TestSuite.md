@@ -247,6 +247,7 @@ Phase 3 owns these concrete automated bars:
 - `tests/test_s_hotkey_workflow.py` — stop means full teardown and fresh rebuild, not hide/reuse;
 - `tests/test_gl_compositor_cleanup.py` — idempotent no-resource cleanup plus real Windows Qt context resource deletion, including two live per-display compositors with distinct program owners destroyed in the exact multi-display sequence and strict owner-context compositor timer-query deletion;
 - `tests/test_compositor_gpu_queries.py` and `tests/test_gl_timer_queries.py` — passive non-blocking draw-span query wrapping, transition labels, support/sample/error accounting and no scheduling/cadence side effects;
+- `tests/test_retained_base_texture.py` — exact cached-texture lookup without upload/hit distortion, same-texture fullscreen draw, dimming/overlay order, idle paint avoiding the full-surface QPainter base path, and real-context quadrant/orientation pixel parity;
 - `tests/test_startup_shader_warmup.py`, `tests/test_fade_coordinator.py`, and `tests/test_widget_manager.py` — named critical startup holds, real fade completion, and one-at-a-time deferred warmup gating;
 - focused `TestDisplayManagerSync` rebuild cases;
 - `tests/test_image_pipeline.py`, `tests/test_image_prefetcher.py`, and `tests/test_image_worker.py` — GUI-independent QImage compute payload and async regression coverage.

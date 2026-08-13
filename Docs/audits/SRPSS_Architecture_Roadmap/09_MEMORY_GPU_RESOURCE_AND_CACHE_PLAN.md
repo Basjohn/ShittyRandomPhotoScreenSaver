@@ -81,8 +81,17 @@ corrected-query `08_13_fa7e8196_16_33_16_37_gpu_queries_typical` run then collec
 supported samples in all `26` overlay windows with zero errors/drops and bounded pending
 state. Normal Bubble GPU p50/p95 is roughly `0.35–0.46/0.43–0.53 ms`; Spectrum is
 roughly `0.009–0.012/0.013 ms`. Process GPU peaks instead align more strongly with
-Crumble/Particle/Burn windows, so the same non-blocking ring is now installed at the
-shared compositor and awaits a transition-heavy runtime capture.
+Crumble/Particle/Burn windows, so the same non-blocking ring was installed at the shared
+compositor for the transition-heavy runtime capture below.
+
+That capture is now preserved as
+`08_13_5bf68d6b_17_00_17_04_compositor_gpu_typical`. All `42` compositor windows are
+supported and error/drop free. Active transition p95 is roughly `0.87–1.02 ms` on
+screen 0 and `3.13–3.38 ms` on the physical-4K screen, while sparse steady QPainter
+base draws repeatedly cost `7–12 ms` and `36–41 ms`. Because terminal ownership already
+retains exactly one destination texture, steady presentation now consumes that exact
+cached texture through the existing fullscreen program rather than creating a second
+full-pixmap presentation route. It does not expand texture/PBO budgets or upload in paint.
 
 ## Visualizer Presentation Efficiency
 

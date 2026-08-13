@@ -161,6 +161,12 @@ paint medians remain near `0.9–1.25 ms` while request/delivery gaps still reac
 roughly `94%` median, with Bubble logical work around `85–93/s` and audio work around
 `64–68/s`, but that is not evidence to move or reduce Bubble cadence.
 
+The subsequent shared-compositor run keeps the same CPU conclusion while narrowing GPU
+ownership. Process CPU remains about `96.75%` median, COMPUTE/IO snapshots remain
+drained, and frame gaps remain about `51.46/125.64 ms` median/max. Active transition GPU
+draw is normally only `0.05–0.48 ms` p50 depending on display; the concrete avoidable
+GUI/GL boundary is the terminal steady QPainter pixmap draw, not visualizer logical work.
+
 ## Primary goal
 
 Reduce unnecessary work, duplication, allocations, callbacks, synchronous I/O and

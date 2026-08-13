@@ -325,6 +325,43 @@ def paint_crossfade_shader(comp: "GLCompositorWidget", target: QRect) -> None:
         "crossfade_program", "crossfade_uniforms", "crossfade"
     )
 
+
+def paint_retained_base_texture(comp: "GLCompositorWidget", target: QRect) -> bool:
+    """Draw the terminally retained current texture on the idle compositor path."""
+
+    del target
+    if gl is None or comp._gl_disabled_for_session:
+        return False
+    pipeline = comp._gl_pipeline
+    texture_manager = comp._texture_manager
+    pixmap = comp._base_pixmap
+    if (
+        pipeline is None
+        or not pipeline.initialized
+        or not getattr(pipeline, "crossfade_program", 0)
+        or texture_manager is None
+        or pixmap is None
+        or pixmap.isNull()
+    ):
+        return False
+    texture_id = texture_manager.get_cached_texture_id(pixmap)
+    if not texture_id:
+        return False
+    try:
+        if not comp._transition_renderer.render_retained_base_texture(texture_id):
+            return False
+        from rendering.gl_compositor_pkg.overlays import paint_dimming_gl
+
+        paint_dimming_gl(comp)
+        paint_qpainter_overlays_gl(comp)
+        return True
+    except Exception:
+        logger.debug(
+            "[GL SHADER] Retained base-texture draw failed; using QPainter fallback",
+            exc_info=True,
+        )
+        return False
+
 def paint_diffuse_shader(comp: "GLCompositorWidget", target: QRect) -> None:
     render_simple_shader(
         comp, lambda: can_use_diffuse_shader(comp), comp._diffuse,
