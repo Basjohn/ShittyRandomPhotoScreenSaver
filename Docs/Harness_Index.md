@@ -187,6 +187,12 @@ and other descendant trees. Each selected file is read once; its recorded size a
 source hash cover the exact byte prefix consumed even if a live sidecar continues growing
 during analysis.
 
+Phase 5 output also promotes each 10-second
+`[PERF][SPOTIFY_VIS][OVERLAY]` window into structured per-mode state-publication,
+update-request and `paintGL` rates. Correlate those rates with the recorded display
+refresh and GPU samples; they measure presentation pressure but do not authorize a
+logical Bubble/Spectrum cadence change.
+
 New captures are plain disposable subfolders. Parse an explicitly selected capture
 directly; do not create a ZIP merely for analysis:
 

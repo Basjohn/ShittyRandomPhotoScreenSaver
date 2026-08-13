@@ -111,6 +111,10 @@ def _write_archive(path: Path) -> None:
             "2026-07-23 19:38:08 - metrics - INFO - "
             "[PERF][MEDIA_PRESENTATION] event=unchanged_refresh_suppressed "
             "deferred_for_transition=False update_requested=False layout_mutations=0",
+            "2026-07-23 19:38:08 - metrics - INFO - "
+            "[PERF][SPOTIFY_VIS][OVERLAY] reason=set_state screen=1 mode=bubble "
+            "elapsed_ms=10000.0 set_state=950 paint=910 update_requests=950 "
+            "geometry_changes=0 visible=True enabled=True playing=True",
             "2026-07-23 19:38:09 - metrics - INFO - "
             "[PERF][MEDIA_PRESENTATION] event=published metadata_changed=True "
             "presentation_changed=True deferred_for_transition=False transition_active=False "
@@ -218,6 +222,45 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
         "applied": 1,
         "unchanged_refresh_suppressed": 1,
     }
+    assert analysis.summary["phase5"]["visualizer_overlay"] == {
+        "records": 1,
+        "by_mode": {
+            "bubble": {
+                "records": 1,
+                "set_state_per_sec": {
+                    "minimum": 95.0,
+                    "median": 95.0,
+                    "maximum": 95.0,
+                },
+                "update_requests_per_sec": {
+                    "minimum": 95.0,
+                    "median": 95.0,
+                    "maximum": 95.0,
+                },
+                "paint_per_sec": {
+                    "minimum": 91.0,
+                    "median": 91.0,
+                    "maximum": 91.0,
+                },
+                "geometry_changes": {
+                    "minimum": 0.0,
+                    "median": 0.0,
+                    "maximum": 0.0,
+                },
+            }
+        },
+    }
+    overlay = next(
+        row for row in analysis.phase5_rows
+        if row["kind"] == "visualizer_overlay"
+    )
+    assert overlay["screen"] == 1
+    assert overlay["mode"] == "bubble"
+    assert overlay["elapsed_ms"] == 10000.0
+    assert overlay["set_state"] == 950
+    assert overlay["paint"] == 910
+    assert overlay["update_requests"] == 950
+    assert overlay["geometry_changes"] == 0
     assert analysis.summary["phase5"]["cache"]["raw_hits"]["maximum"] == 8.0
     assert analysis.summary["phase5"]["cache"]["worker_requests"]["maximum"] == 4.0
     assert analysis.summary["phase5"]["cache"]["worker_fallbacks"]["maximum"] == 1.0

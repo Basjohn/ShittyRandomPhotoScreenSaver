@@ -63,6 +63,9 @@ _ADAPTIVE_TIMER_METRICS_RE = re.compile(
 _VISUALIZER_LANE_RE = re.compile(
     r"\[PERF\]\s*\[SPOTIFY_VIS\]\[(?P<lane>BUBBLE_LANE|AUDIO_LANE)\]\s+(?P<payload>.*)"
 )
+_VISUALIZER_OVERLAY_RE = re.compile(
+    r"\[PERF\]\[SPOTIFY_VIS\]\[OVERLAY\]\s+(?P<payload>.*)"
+)
 _MEDIA_PRESENTATION_RE = re.compile(
     r"\[PERF\]\[MEDIA_PRESENTATION\]\s+(?P<payload>.*)"
 )
@@ -718,6 +721,9 @@ def _parse_phase5_telemetry(
                 match = _MEDIA_PRESENTATION_RE.search(line)
                 kind = "media_presentation"
             if not match:
+                match = _VISUALIZER_OVERLAY_RE.search(line)
+                kind = "visualizer_overlay"
+            if not match:
                 match = _CACHE_REPRESENTATIONS_RE.search(line)
                 kind = "cache_representations"
             if not match:
@@ -752,6 +758,8 @@ def _parse_phase5_telemetry(
                     "barrier_event": extra.get("barrier_event", ""),
                     "event": values.get("event", ""),
                     "display": values.get("display", ""),
+                    "screen": _integer(values.get("screen")),
+                    "mode": values.get("mode", ""),
                     "callable": values.get("callable", ""),
                     "stage": values.get("stage", ""),
                     "generation": _integer(values.get("generation")),
@@ -768,6 +776,13 @@ def _parse_phase5_telemetry(
                     "render_state_age_ms": _number(values.get("render_state_age_ms")),
                     "owner_age_ms": _number(values.get("last_ui_age_ms")),
                     "elapsed_ms": _number(values.get("elapsed_ms")),
+                    "set_state": _integer(values.get("set_state")),
+                    "paint": _integer(values.get("paint")),
+                    "update_requests": _integer(values.get("update_requests")),
+                    "geometry_changes": _integer(values.get("geometry_changes")),
+                    "visible": values.get("visible", ""),
+                    "enabled": values.get("enabled", ""),
+                    "playing": values.get("playing", ""),
                     "delay_ms": _number(values.get("delay_ms")),
                     "queue_late_ms": _number(values.get("queue_late_ms")),
                     "guard_ms": _number(values.get("guard_ms")),
@@ -1163,6 +1178,49 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                     "execution_ms_max": _metric_summary(row.get("execution_ms_max") for row in phase5_rows if row["kind"] == "visualizer_lane" and row["lane"] == lane),
                 }
                 for lane in sorted({str(row["lane"]) for row in phase5_rows if row["kind"] == "visualizer_lane"})
+            },
+            "visualizer_overlay": {
+                "records": sum(
+                    row["kind"] == "visualizer_overlay" for row in phase5_rows
+                ),
+                "by_mode": {
+                    mode: {
+                        "records": len(rows),
+                        "set_state_per_sec": _metric_summary(
+                            (float(row["set_state"]) * 1000.0 / float(row["elapsed_ms"]))
+                            for row in rows
+                            if isinstance(row.get("set_state"), int)
+                            and isinstance(row.get("elapsed_ms"), (int, float))
+                            and float(row["elapsed_ms"]) > 0
+                        ),
+                        "update_requests_per_sec": _metric_summary(
+                            (float(row["update_requests"]) * 1000.0 / float(row["elapsed_ms"]))
+                            for row in rows
+                            if isinstance(row.get("update_requests"), int)
+                            and isinstance(row.get("elapsed_ms"), (int, float))
+                            and float(row["elapsed_ms"]) > 0
+                        ),
+                        "paint_per_sec": _metric_summary(
+                            (float(row["paint"]) * 1000.0 / float(row["elapsed_ms"]))
+                            for row in rows
+                            if isinstance(row.get("paint"), int)
+                            and isinstance(row.get("elapsed_ms"), (int, float))
+                            and float(row["elapsed_ms"]) > 0
+                        ),
+                        "geometry_changes": _metric_summary(
+                            row.get("geometry_changes") for row in rows
+                        ),
+                    }
+                    for mode in sorted({
+                        str(row["mode"])
+                        for row in phase5_rows
+                        if row["kind"] == "visualizer_overlay" and row["mode"]
+                    })
+                    if (rows := [
+                        row for row in phase5_rows
+                        if row["kind"] == "visualizer_overlay" and row["mode"] == mode
+                    ])
+                },
             },
             "media_presentation": {
                 "applied": sum(row["kind"] == "media_presentation" and row["update_requested"].lower() == "true" for row in phase5_rows),
