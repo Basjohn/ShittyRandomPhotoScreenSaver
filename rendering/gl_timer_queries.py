@@ -8,6 +8,7 @@ render span, and delete the handles on that same context during strict teardown.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+import ctypes
 from dataclasses import dataclass
 import math
 from typing import Any, Iterable
@@ -255,12 +256,17 @@ class GLTimerQueryRing:
             if not available:
                 continue
             try:
-                elapsed_ns = _scalar_int(
-                    gl_api.glGetQueryObjectui64v(
-                        slot.handle,
-                        gl_api.GL_QUERY_RESULT,
-                    )
+                # PyOpenGL 3.1.10 does not include GL_QUERY_RESULT in the
+                # dynamic output-size table used by its two-argument wrapper.
+                # Supplying the one-value output buffer explicitly avoids that
+                # wrapper-side KeyError and mirrors the native GL signature.
+                elapsed_output = (ctypes.c_uint64 * 1)()
+                gl_api.glGetQueryObjectui64v(
+                    slot.handle,
+                    gl_api.GL_QUERY_RESULT,
+                    elapsed_output,
                 )
+                elapsed_ns = int(elapsed_output[0])
             except Exception as exc:
                 self._disable_runtime(f"result_error:{type(exc).__name__}")
                 return
@@ -376,4 +382,3 @@ class GLTimerQueryRing:
             raise RuntimeError(
                 "GL timer-query deletion incomplete: " + " | ".join(errors)
             )
-

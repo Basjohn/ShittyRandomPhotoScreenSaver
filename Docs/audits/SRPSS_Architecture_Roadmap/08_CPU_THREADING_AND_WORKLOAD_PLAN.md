@@ -306,6 +306,14 @@ finite COMPUTE workers if measurement confirms meaningful occupancy/contention. 
 future extraction may use a small dedicated presentation timing service that owns
 sleep/deadline waiting only.
 
+The `08_13_ab429163_16_08_16_18_typical_teardown_churn` capture observes exactly two
+per-display `presentation.adaptive_timer` tasks continuously active, with drained IO and
+COMPUTE queues, COMPUTE queue wait about `1/2/3.02 ms` median/p95/max, and observed
+execution about `2.51/4.89/9.3 ms`. This proves long-lived waiter ownership but does not
+prove contention. Keep the current service in place unless later runtime evidence shows
+finite work delayed behind it; do not create a new pool merely to lower active-task
+counts.
+
 This service is **not** a visualizer clock, may not integrate Bubble/Spectrum state,
 and may not alter transition deadlines or GUI/context ownership. It is lower priority
 than removing proven GUI work and the texture identity defect.
@@ -706,6 +714,12 @@ Apply the same proof rule to other documented dead compatibility surfaces (`rend
 ## GPU/presentation relationship
 
 Active-display GPU busy in `08_09_ca830d7_14_59` measured median `10.8%`, p95 `27.8%`, max `32.9%`. Screen 1 is 60 Hz while visualizer overlay windows can approach ~100 state/update/paint operations per second. Phase 5 measures/attributes this without touching logical cadence. Phase 7 may later decouple physical presentation through latest immutable render state after logical integration.
+
+The current teardown-churn capture attributes real CPU presentation work without yet
+proving GPU duration: Bubble/Spectrum CPU-paint p95 window medians are about
+`1.52/1.41 ms`, while the first timer-query runtime exposed a PyOpenGL result-wrapper
+`KeyError`. The fixed explicit uint64 output-buffer path has a real offscreen GL-context
+test and still needs live owner-window validation. Logical cadence remains unchanged.
 
 ## Acceptance gates
 

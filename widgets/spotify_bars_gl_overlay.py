@@ -537,7 +537,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 "[PERF][SPOTIFY_VIS][OVERLAY_GPU] screen=%s mode=%s elapsed_ms=%.1f "
                 "gpu_supported=%s gpu_reason=%s gpu_submitted=%d gpu_collected=%d "
                 "gpu_pending=%d gpu_dropped_pending=%d gpu_discarded=%d "
-                "gpu_samples=%d gpu_p50_ms=%s gpu_p95_ms=%s gpu_max_ms=%s",
+                "gpu_errors=%d gpu_samples=%d gpu_p50_ms=%s gpu_p95_ms=%s "
+                "gpu_max_ms=%s",
                 screen if screen is not None else "<unknown>",
                 mode,
                 elapsed * 1000.0,
@@ -548,6 +549,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 metrics["pending"],
                 metrics["dropped_pending"],
                 metrics["discarded"],
+                gpu_window["errors"],
                 metrics["samples"],
                 _perf_metric_text(metrics["p50_ms"]),
                 _perf_metric_text(metrics["p95_ms"]),

@@ -126,6 +126,7 @@ def _write_archive(path: Path) -> None:
             "elapsed_ms=10000.0 gpu_supported=True gpu_reason=supported "
             "gpu_submitted=908 gpu_collected=906 gpu_pending=2 "
             "gpu_dropped_pending=2 gpu_discarded=0 gpu_samples=906 "
+            "gpu_errors=0 "
             "gpu_p50_ms=0.11 gpu_p95_ms=0.23 gpu_max_ms=0.71",
             "2026-07-23 19:38:09 - metrics - INFO - "
             "[PERF][MEDIA_PRESENTATION] event=published metadata_changed=True "
@@ -309,6 +310,11 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
                     "median": 0.0,
                     "maximum": 0.0,
                 },
+                "errors": {
+                    "minimum": 0.0,
+                    "median": 0.0,
+                    "maximum": 0.0,
+                },
                 "samples": {
                     "minimum": 906.0,
                     "median": 906.0,
@@ -359,6 +365,45 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     assert analysis.summary["phase5"]["cache"]["worker_requests"]["maximum"] == 4.0
     assert analysis.summary["phase5"]["cache"]["worker_fallbacks"]["maximum"] == 1.0
     assert analysis.summary["phase5"]["lifecycle_barrier"]["complete"] == 1
+    assert analysis.summary["phase5"]["lifecycle_barrier"]["by_reason"] == {
+        "settings": {
+            "armed": 1,
+            "complete": 1,
+            "elapsed_ms": {
+                "minimum": 15.5,
+                "median": 15.5,
+                "maximum": 15.5,
+            },
+        }
+    }
+    assert analysis.summary["resources"]["by_stage"]["after_restart"] == {
+        "records": 1,
+        "tracked_known_bytes": {
+            "minimum": 1248.0,
+            "median": 1248.0,
+            "maximum": 1248.0,
+        },
+        "cpu_cache_bytes": {
+            "minimum": 800.0,
+            "median": 800.0,
+            "maximum": 800.0,
+        },
+        "gl_known_bytes": {
+            "minimum": 384.0,
+            "median": 384.0,
+            "maximum": 384.0,
+        },
+        "gl_resources": {
+            "minimum": 3.0,
+            "median": 3.0,
+            "maximum": 3.0,
+        },
+        "gl_unknown_resources": {
+            "minimum": 1.0,
+            "median": 1.0,
+            "maximum": 1.0,
+        },
+    }
     image_delay = next(row for row in analysis.phase5_rows if row["kind"] == "image_ui_delay")
     assert image_delay["reason"] == "transition_display_stagger"
     assert image_delay["display"] == "1"

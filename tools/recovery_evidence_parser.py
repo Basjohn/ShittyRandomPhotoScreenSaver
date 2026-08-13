@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.11"
+PARSER_VERSION = "1.12"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
@@ -1133,6 +1133,34 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
             "gl_unknown_resources": _metric_summary(
                 row.get("gl_unknown_resources") for row in resource_rows
             ),
+            "by_stage": {
+                stage: {
+                    "records": len(rows),
+                    "tracked_known_bytes": _metric_summary(
+                        row.get("tracked_known_bytes") for row in rows
+                    ),
+                    "cpu_cache_bytes": _metric_summary(
+                        row.get("cpu_cache_bytes") for row in rows
+                    ),
+                    "gl_known_bytes": _metric_summary(
+                        row.get("gl_known_bytes") for row in rows
+                    ),
+                    "gl_resources": _metric_summary(
+                        row.get("gl_resources") for row in rows
+                    ),
+                    "gl_unknown_resources": _metric_summary(
+                        row.get("gl_unknown_resources") for row in rows
+                    ),
+                }
+                for stage in sorted({
+                    str(row["stage"])
+                    for row in resource_rows
+                    if row.get("stage")
+                })
+                if (rows := [
+                    row for row in resource_rows if row.get("stage") == stage
+                ])
+            },
         },
         "visualizer": {
             "microgap_p95_ms": _metric_summary(
@@ -1289,6 +1317,9 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                         "discarded": _metric_summary(
                             row.get("gpu_discarded") for row in rows
                         ),
+                        "errors": _metric_summary(
+                            row.get("gpu_errors") for row in rows
+                        ),
                         "samples": _metric_summary(
                             row.get("gpu_samples") for row in rows
                         ),
@@ -1331,6 +1362,30 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                 "armed": sum(row["kind"] == "lifecycle_barrier" and row["barrier_event"] == "armed" for row in phase5_rows),
                 "complete": sum(row["kind"] == "lifecycle_barrier" and row["barrier_event"] == "complete" for row in phase5_rows),
                 "elapsed_ms": _metric_summary(row.get("elapsed_ms") for row in phase5_rows if row["kind"] == "lifecycle_barrier" and row["barrier_event"] == "complete"),
+                "by_reason": {
+                    reason: {
+                        "armed": sum(
+                            row["barrier_event"] == "armed" for row in rows
+                        ),
+                        "complete": sum(
+                            row["barrier_event"] == "complete" for row in rows
+                        ),
+                        "elapsed_ms": _metric_summary(
+                            row.get("elapsed_ms") for row in rows
+                            if row["barrier_event"] == "complete"
+                        ),
+                    }
+                    for reason in sorted({
+                        str(row["reason"])
+                        for row in phase5_rows
+                        if row["kind"] == "lifecycle_barrier" and row["reason"]
+                    })
+                    if (rows := [
+                        row for row in phase5_rows
+                        if row["kind"] == "lifecycle_barrier"
+                        and row["reason"] == reason
+                    ])
+                },
             },
             "image_ui": {
                 "delay_records": sum(row["kind"] == "image_ui_delay" for row in phase5_rows),

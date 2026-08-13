@@ -146,15 +146,17 @@ Target contract: **Prepare → Commit → Persist**.
 
 ### Priority 2 — worker topology after extraction
 
-Interim post-extraction evidence does **not** show a saturated general executor:
-COMPUTE queue wait is about `1.0/1.62 ms` median/p95, COMPUTE execution about
-`2.09/4.52 ms`, and IO queue wait is effectively zero at median/p95. Bubble worker
-samples remain roughly `1–2 ms`. Do not widen pools or move visualizer scheduling on
-this evidence; finish owner extraction first, then measure topology deliberately.
+The teardown-churn capture
+`logs/evidence_chest/08_13_ab429163_16_08_16_18_typical_teardown_churn/`
+does **not** show a saturated general executor. COMPUTE and IO queues remain drained;
+COMPUTE queue wait is about `1/2/3.02 ms` median/p95/max and observed execution is
+about `2.51/4.89/9.3 ms`. Two per-display `presentation.adaptive_timer` tasks remain
+active because they own long-lived deadline/event waits, but the available evidence
+does not show those waiters delaying finite work. Bubble work remains roughly `1–2 ms`.
+Do not widen pools or move visualizer scheduling on this evidence.
 
-- [ ] Measure general COMPUTE occupancy/queue age/native GIL release after unrelated I/O/persistence/logging ownership has been removed from GUI contention.
-- [ ] Audit long-lived presentation/deadline waiters that consume finite COMPUTE workers while mostly sleeping; move waiting ownership only when measured contention exists.
-- [ ] Benchmark worker width instead of assuming `cpu_count - 1` remains ideal after workload classes are separated.
+- [ ] Revisit a dedicated or multiplexed presentation timing service only if later runtime evidence shows general-COMPUTE contention; do not move deadline waiting merely to reduce an active-task counter.
+- [ ] Benchmark worker width only if a separated workload class produces queue or execution pressure; do not assume `cpu_count - 1` is currently wrong.
 
 ## P5.2B GPU Work Attribution And Efficiency
 
@@ -194,6 +196,17 @@ four Spectrum windows measure `90.4/92.7/99.6` state/update and
 attempts, not physical presents or scanout, and the capture predates owner timer-query
 instrumentation.
 
+The teardown-churn capture on `ab429163` strengthens the CPU side of that result:
+Bubble state/update and paint medians are about `80.62/77.12 Hz`, Spectrum about
+`91.4/88.4 Hz`, on the 60 Hz display. Bubble/Spectrum CPU-paint p95 window medians are
+about `1.52/1.41 ms`, with state-to-paint p95 medians about `4.20/2.85 ms`. The first
+live GPU-query attempt did **not** measure GPU time: every context submitted one query,
+then PyOpenGL 3.1.10 raised a wrapper-side `KeyError` retrieving `GL_QUERY_RESULT` and
+the ring correctly disabled itself. The query helper now supplies the native uint64
+output buffer explicitly, exposes error counts in parser output, and has a real
+offscreen OpenGL-context regression test. A live validation of actual collection and
+strict cleanup remains the next instrumentation gate.
+
 - [x] Install the first truthful owner-local attribution slice on the visualizer overlay: a fixed non-blocking `GL_TIME_ELAPSED` ring polls only available results, records CPU paint/state-to-paint time, and never changes `update()`, logical work or cadence.
 - [ ] Validate that overlay slice in a current typical-load Bubble/Spectrum run, including supported/submitted/collected/pending/dropped/discarded query counts and strict cleanup.
 - [ ] Extend truthful GPU timing through the shared compositor seam for every exercised transition family where supported.
@@ -221,6 +234,15 @@ Delete one proven authority at a time; do not combine cleanup with behaviour cha
 - [ ] Keep each debris deletion in its own reversible checkpoint with focused tests; passing checkpoints continue automatically.
 
 ## P5.3 Absolute Memory, Commit, VRAM, And Cache Efficiency
+
+The teardown-churn capture includes two CUSTOM rebuilds, one Settings runtime rebuild,
+the Settings-dialog lifetime, and final exit. Each runtime teardown returns tracked GL
+to exactly zero and each replacement settles at the same `25`-handle/`14`-unknown
+plateau; cleanup callbacks retaining owners and invalid QObjects remain zero. No
+generation-sized resource, thread, handle, or VRAM staircase is visible. This separates
+containment from the still-open absolute-efficiency problem: final RSS/private are about
+`936 MiB/3.00 GiB`, peaks reach about `1.04 GiB/3.08 GiB`, and rebuilt dedicated VRAM
+remains roughly `539–608 MiB` despite dropping to `8 MiB` at zero GL ownership.
 
 - [ ] Capture cold, warm, active-transition, steady-image, quiescent-runtime and post-churn snapshots under one controlled authored scenario.
 - [ ] Reconcile whole/main/child RSS, private commit, USS, worker mappings, thread stacks, Qt/native heaps, driver mappings and tracked application bytes.

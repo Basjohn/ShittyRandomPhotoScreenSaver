@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from PySide6.QtGui import QOffscreenSurface, QOpenGLContext, QSurfaceFormat
 
 from rendering.gl_timer_queries import GLTimerQueryRing
 
@@ -81,9 +82,11 @@ class _FakeGL:
         self.availability_calls.append(int(handle))
         return int(self.available.get(int(handle), 0))
 
-    def glGetQueryObjectui64v(self, handle: int, _pname: int) -> int:
+    def glGetQueryObjectui64v(self, handle: int, _pname: int, params=None) -> None:
         self.result_calls.append(int(handle))
-        return int(self.results_ns.get(int(handle), 0))
+        if params is None:
+            raise KeyError("GL_QUERY_RESULT has no automatic output size")
+        params[0] = int(self.results_ns.get(int(handle), 0))
 
     def glDeleteQueries(self, _count: int, handles) -> None:
         handle = int(handles[0])
@@ -204,3 +207,54 @@ def test_timer_query_helper_has_no_blocking_gpu_sync_call() -> None:
     assert "glFlush" not in source
     assert "GL_QUERY_RESULT_AVAILABLE" in source
 
+
+@pytest.mark.qt
+def test_timer_query_result_retrieval_uses_real_pyopengl_contract(qt_app) -> None:
+    """Exercise the installed PyOpenGL uint64 output wrapper on a real context."""
+
+    fmt = QSurfaceFormat()
+    fmt.setRenderableType(QSurfaceFormat.OpenGL)
+    fmt.setProfile(QSurfaceFormat.CoreProfile)
+    fmt.setVersion(3, 3)
+    fmt.setSwapBehavior(QSurfaceFormat.SingleBuffer)
+
+    context = QOpenGLContext()
+    context.setFormat(fmt)
+    if not context.create():
+        pytest.skip("OpenGL 3.3 context unavailable on this runner")
+
+    surface = QOffscreenSurface()
+    surface.setFormat(fmt)
+    surface.create()
+    if not surface.isValid() or not context.makeCurrent(surface):
+        pytest.skip("Unable to make an offscreen OpenGL context current")
+
+    from OpenGL import GL as gl
+
+    manager = _ResourceManager()
+    ring = _ring(size=2, manager=manager)
+    try:
+        if not ring.initialize(gl, context=context):
+            pytest.skip(f"Timer queries unavailable: {ring.support_reason}")
+        assert ring.begin(gl, label="real_context") is True
+        gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+        ring.end(gl)
+
+        # Test-only synchronization makes wrapper compatibility deterministic;
+        # production polling remains availability-only and never calls this.
+        gl.glFinish()
+        ring.poll(gl)
+
+        snapshot = ring.consume_window(include_labels=("real_context",))
+        assert snapshot["supported"] is True
+        assert snapshot["errors"] == 0
+        assert snapshot["by_label"]["real_context"]["submitted"] == 1
+        assert snapshot["by_label"]["real_context"]["collected"] == 1
+        assert snapshot["by_label"]["real_context"]["samples"] == 1
+    finally:
+        if ring.has_live_queries():
+            ring.cleanup(gl)
+        context.doneCurrent()
+        if hasattr(surface, "destroy"):
+            surface.destroy()

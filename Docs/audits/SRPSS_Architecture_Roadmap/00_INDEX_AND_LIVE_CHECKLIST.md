@@ -23,7 +23,7 @@ rejected Spectrum second clock: ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9
 historical candidate/reference: 7376bb9bb380253f3bd14079e65d7bdbca062fad
 active task owner:              Current_Plan.md
 historical causal reference:    logs/evidence_chest/08_09_ca830d7_14_59/
-current typical-load evidence:  logs/evidence_chest/08_11_51ff1e03_03_14_03_21_typical/
+current typical-load evidence:  logs/evidence_chest/08_13_ab429163_16_08_16_18_typical_teardown_churn/
 ```
 
 Historical commits are negative controls/reference only. Current architecture starts
@@ -75,7 +75,7 @@ from `main`.
 - [x] Prepare the shared `BaseOverlayWidget` painted-frame cache at exact GUI state/geometry commits; paint validates and blits only, with explicit batching for known setter cascades.
 - [x] Move Weather startup cache selection and accepted-result persistence to shared IO; publish immutable, generation/location-gated GUI commits with newest-wins atomic durability.
 - [x] Move Gmail startup-cache, backend-config and DPAPI credential preparation to shared IO while retaining GUI-affine backend/OAuth facades and one coalesced settings/widget commit authority.
-- [x] Add bounded owner-context visualizer GPU timer queries plus CPU paint/state-age windows without changing logical or presentation cadence; current runtime validation remains open.
+- [x] Add bounded owner-context visualizer GPU timer queries plus CPU paint/state-age windows without changing logical or presentation cadence. The first live run exposed and now regression-tests the PyOpenGL uint64 result-buffer contract; successful live sample collection remains open.
 - [ ] Remove proven GUI-thread service/cache preparation.
 - [ ] Attribute GPU busy across upload/transition/visualizer/presentation owners.
 - [ ] Remove proven temporary compatibility/fallback debris without changing behaviour.

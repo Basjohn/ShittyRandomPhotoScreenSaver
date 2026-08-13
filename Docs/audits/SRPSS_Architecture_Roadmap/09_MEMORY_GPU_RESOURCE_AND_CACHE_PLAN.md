@@ -1,6 +1,6 @@
 # 09 — RAM, Commit, VRAM, GPU, Resource, and Cache Plan
 
-Last reconciled: 2026-08-11
+Last reconciled: 2026-08-13
 
 ## Current Conclusion
 
@@ -72,8 +72,13 @@ clear/render span in a fixed owner-context `GL_TIME_ELAPSED` query ring. It poll
 `GL_QUERY_RESULT_AVAILABLE`, never waits or flushes, drops a sample when the ring is
 full, and reports supported/submitted/collected/pending/dropped/discarded/error counts
 beside CPU paint and state-to-paint summaries. Query handles are ResourceManager-tracked
-and deleted on the exact overlay context. Runtime cost evidence is still required before
-any presentation policy change or extension to the compositor transition seam.
+and deleted on the exact overlay context. Its first live run submitted a query on every
+new overlay context but collected none because PyOpenGL 3.1.10 raised `KeyError` from
+the two-argument `GL_QUERY_RESULT` wrapper. Retrieval now supplies the native one-value
+uint64 output buffer explicitly, error counts are parsed, and a real offscreen
+OpenGL-context regression proves submission, collection and strict deletion. A live
+owner-window capture is still required before any presentation policy change or
+extension to the compositor transition seam.
 
 ## Visualizer Presentation Efficiency
 
@@ -96,6 +101,21 @@ Measure before/after:
 - visible response.
 
 A lower paint rate is not a win if logical latency or feel worsens.
+
+## Teardown-Churn Containment Result
+
+The `08_13_ab429163_16_08_16_18_typical_teardown_churn` run intentionally exercises
+two CUSTOM rebuilds, one Settings runtime rebuild, the Settings-dialog lifetime, and
+final exit. Every runtime teardown reaches `0` tracked GL bytes/resources/unknowns;
+each replacement settles at the same `25` GL resources and `14` unknown resources.
+Cleanup callbacks retaining an owner and invalid QObjects remain zero. Threads and
+handles fluctuate without a generation-sized staircase, and dedicated VRAM drops to
+`8 MiB` during the zero-GL Settings interval before rebuilding to roughly
+`539–608 MiB`. This is positive containment evidence, not an absolute-efficiency pass:
+final RSS/private are about `936 MiB/3.00 GiB`, peaks reach about
+`1.04 GiB/3.08 GiB`, and warm VRAM remains above the provisional target. Tracked CPU
+cache growth follows legitimate fill under its `256 MiB` cap rather than a teardown
+owner leak.
 
 ## Memory/Representation Audit
 

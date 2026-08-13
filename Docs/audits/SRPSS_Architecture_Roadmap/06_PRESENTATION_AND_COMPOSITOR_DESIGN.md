@@ -80,7 +80,12 @@ The overlay now has the first passive attribution seam: CPU paint/state-to-paint
 windows plus a fixed non-blocking owner-context GPU query ring. It measures the Qt FBO
 clear/render span and does not claim SwapBuffers, composition or physical scanout.
 Unsupported, pending, dropped and discarded samples remain explicit. A current live
-capture must validate support, collection, teardown and cost before Phase 7 policy work.
+capture first proved the fail-closed path instead of GPU cost: PyOpenGL 3.1.10 raised a
+wrapper-side `KeyError` while retrieving `GL_QUERY_RESULT`. The helper now supplies the
+native uint64 output buffer explicitly and a real offscreen GL-context regression proves
+submission/collection/deletion. Runtime owner windows must still validate GPU samples
+and teardown before Phase 7 policy work. The same capture measures Bubble/Spectrum
+CPU-paint p95 window medians around `1.52/1.41 ms`; logical cadence remains protected.
 
 ## GUI-Local Update Coalescing
 
