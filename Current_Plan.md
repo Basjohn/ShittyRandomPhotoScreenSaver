@@ -60,8 +60,8 @@ whole-browser volume behaviour remain to be validated.
 
 ## P5.0A Immediate User-Requested Runtime Slices
 
-Complete these bounded slices after the Weather IO checkpoint, then resume P5.2A workload
-extraction without waiting for a new prompt.
+The bounded implementation slices are in place. Installed validation remains and does not
+interrupt the resumed P5.2A workload-extraction track.
 
 ### Clock presentation and mode stability
 
@@ -112,7 +112,7 @@ consumes the display-owned DPR and skips no-op mutation. Focused automation prov
 retained destination is the next old cache hit and only the following destination
 uploads under unchanged context/generation/size/transform identity.
 
-The current live typical-load run at
+The live typical-load run at
 `logs/evidence_chest/08_11_51ff1e03_03_14_03_21_typical/` closes the runtime identity
 bar: all `20/20` steady transitions report `old_key == retained_key`, an old cache hit,
 one allocation and one upload. All 26 terminal samples retain exactly one texture and
@@ -121,9 +121,18 @@ one idle PBO. Steady `generic_pair_warm` fell from the historical reference medi
 `25.66/34.72 ms`. Request-age and visualizer-tick tails did not improve, so the broad
 GUI-availability problem remains active and is not a texture-identity problem.
 
+The subsequent post-extraction run confirms that queued logging, ordered settings
+persistence, Reddit/Weather preparation, and retained-texture reuse are healthy but are
+not the dominant remaining delivery owner. Steady `generic_pair_warm` is now about
+`13.18/18.87 ms` median/p95 and `set_processed_image` about `19.89/27.09 ms`, while
+request-age remains about `35.65/71.60/123.19 ms` median/p95/max and paint remains cheap
+at about `0.70/6.79/11.24 ms`. Successful ownership extraction must therefore be retained
+even when request-age does not materially fall; continue attribution to the next GUI,
+native, or GL owner rather than rolling the extraction back or tuning visualizer cadence.
+
 - [x] Validate retained-current → next-old reuse in a live repeated-transition run without increasing terminal texture/PBO ownership.
-- [ ] Re-run the same typical scenario after queued logging and ordered settings persistence. Require lower request-age/visualizer-tick tails, clean bounded logging/settings-writer terminal metrics, and preservation of the closed texture/resource bars.
-- [ ] Change multi-display commit scheduling only if post-extraction steady evidence shows back-to-back prepared commits are a remaining owner. The current run's three large stagger delays occurred only during cold runtime starts and do not justify a scheduling change.
+- [x] Re-run after queued logging and ordered settings persistence. Logging/settings terminal metrics are clean and bounded, texture/resource bars remain closed, and the result narrows rather than closes the remaining GUI-availability problem.
+- [ ] Change multi-display commit scheduling only if post-extraction steady evidence shows back-to-back prepared commits are a remaining owner. Cold/recreation delays alone do not justify a scheduling change.
 - [ ] Keep transition names and one terminal GL metric bracket per real transition; no repaint retry or scheduler/cadence compensation.
 
 ## P5.2A UI-Thread Workload Extraction
@@ -132,12 +141,17 @@ Target contract: **Prepare → Commit → Persist**.
 
 ### Priority 1 — service/widget preparation
 
-- [ ] Gmail backend construction: move the proven eager `gmail_backend.json` and DPAPI credential reads out of GUI-side widget construction without changing backend/settings authority.
 - [ ] Reddit: cold static rendering must not be discovered inside `paintEvent()`. Prefer invalidation-time preparation before worker-rendered text unless measurement justifies the extra complexity.
 - [ ] Shared overlay frame shadow: audit the inherited `BaseOverlayWidget` lazy painted-frame `QPixmap` build still reachable from `paintEvent()` and move it only with shared-widget visual/cache parity coverage.
-- [ ] Audit other widget/provider callbacks for JSON/filesystem/filter/sort work and apply the same owner rule only where source inspection proves it.
+- [ ] Audit other widget/provider callbacks for JSON/filesystem/filter/sort work and apply the same owner rule only where source inspection proves it. Gmail's user-triggered backend-mode write, IMAP credential save/delete, OAuth local-token deletion, revoke call and expired-token refresh are explicit follow-up candidates; keep them separate from the now-closed cold-construction contract.
 
 ### Priority 2 — worker topology after extraction
+
+Interim post-extraction evidence does **not** show a saturated general executor:
+COMPUTE queue wait is about `1.0/1.62 ms` median/p95, COMPUTE execution about
+`2.09/4.52 ms`, and IO queue wait is effectively zero at median/p95. Bubble worker
+samples remain roughly `1–2 ms`. Do not widen pools or move visualizer scheduling on
+this evidence; finish owner extraction first, then measure topology deliberately.
 
 - [ ] Measure general COMPUTE occupancy/queue age/native GIL release after unrelated I/O/persistence/logging ownership has been removed from GUI contention.
 - [ ] Audit long-lived presentation/deadline waiters that consume finite COMPUTE workers while mostly sleeping; move waiting ownership only when measured contention exists.
@@ -161,12 +175,20 @@ paintGL` calls. Current visualizer timing starts from a 16 ms UI timer and can t
 roughly 90–100 Hz. This is a **presentation-rate mismatch to explain**, not permission
 to cap Bubble/Spectrum logical cadence to display refresh.
 
+The post-extraction run still shows sustained GPU work at roughly `15.0/16.5/17.0/35.9%`
+median/p90/p95/max while the 60 Hz visualizer display commonly receives roughly
+`89–100` update/paint calls per second. Host pressure and workload mix differ from the
+older run, so those percentages are **not** evidence by themselves of either regression
+or improvement. They strengthen the need for owner-level attribution before any
+presentation-rate or compositor change.
+
 - [ ] Promote truthful per-transition GPU timing to active work: route paint timing through the shared compositor seam and use non-blocking GL timer queries with delayed result collection for every exercised transition family where supported.
 - [ ] Never use `glFinish()` in ordinary profiling. It changes the workload and invalidates the measurement.
 - [ ] Log support/sample counts so a zero GPU duration means measured zero only when samples exist.
 - [ ] Split GPU attribution among image texture upload/warm, transition shader/render work, visualizer overlay/context work, overdraw/composition, and driver/context overhead.
 - [ ] Record per-display refresh, logical visualizer state publication rate, update-request rate and paint rate together. Do not infer waste solely from one counter.
 - [x] Measure GPU busy after texture identity reuse: the typical run records process GPU busy median/max `9.1/32.7%` while the steady texture path uploads new only. Remaining GPU work still needs owner attribution.
+- [ ] Correlate repeated `>100 ms` transition request-age stalls that have cheap paint, healthy worker queues, and no matching long Python GUI callback against GPU timer results plus context/swap/native-event ownership before changing Python scheduling.
 - [ ] Feed the result into Phase 7: if logical integration remains correct while physical presentation is above useful display opportunities, decouple presentation through latest immutable render state rather than reducing simulation/source cadence.
 - [ ] Do not begin Phase 8 one-surface compositor work until Phase 7 proves missed paints cannot alter logical state and GPU/context evidence shows the merge is worth its lifecycle risk.
 
@@ -210,7 +232,7 @@ refinement before Phase 8.
 - [ ] Run focused owning-subsystem tests after every change; do not default to monolithic `pytest -q`.
 - [ ] For risky changes, checkpoint after the focused gate and continue if it passes.
 - [ ] Use `tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log` only when a broader release gate is useful; classify existing unrelated failures rather than weakening current contracts.
-- [ ] Repeat the same canonical mixed-load scenario after the texture reuse and broad UI-thread extractions, with deliberate host-load timestamps and identical visualizer/image/cache conditions.
+- [ ] After the remaining P5.2A extraction work, repeat the canonical mixed-load scenario with deliberate host-load timestamps and matching visualizer/image/cache conditions. Compare against both `08_09_ca830d7_14_59` and the post-extraction run; do not require every individually-correct extraction to reduce request age by itself.
 - [ ] Require unchanged visualizer temporal goldens and negative controls for any visualizer-adjacent cleanup, including Bubble façade removal.
 
 ## Phase 5 Exit Gate

@@ -259,6 +259,7 @@ For Gmail/Reddit/Weather-like widgets:
 - keep refresh/result apply transition-aware when the display is busy,
 - use canonical storage paths for persistent cache/state,
 - keep initial visible cache rendering separate from live provider refresh,
+- keep GUI-affine service/backend QObjects construction-inert; cold JSON, filesystem, credential/decryption and migration work belongs in a coalesced worker preparation whose GUI commit is lifetime/generation gated,
 - and ensure the settings UI never turns section construction into a provider probe, credential test, cache migration, or refresh dispatch.
 
 Do not widen shared service-backed helpers based only on “this widget does network too”.

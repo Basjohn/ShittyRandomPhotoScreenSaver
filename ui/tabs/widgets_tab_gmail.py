@@ -148,6 +148,15 @@ def _get_gmail_thread_manager(tab: WidgetsTab) -> ThreadManager:
     return manager
 
 
+def _get_gmail_bootstrap_thread_manager(tab: WidgetsTab, backend) -> ThreadManager:
+    """Use process-lifetime ownership for process-singleton Gmail preparation."""
+
+    getter = getattr(backend, "get_bootstrap_thread_manager", None)
+    if callable(getter):
+        return getter()
+    return _get_gmail_thread_manager(tab)
+
+
 def _is_imap_selected_in_combo(tab: WidgetsTab) -> bool:
     combo = getattr(tab, "gmail_backend_combo", None)
     if combo is not None and hasattr(combo, "currentText"):
@@ -230,7 +239,7 @@ def _begin_gmail_backend_bootstrap(tab: WidgetsTab) -> None:
             status_label.setText("Gmail unavailable")
 
     try:
-        manager = _get_gmail_thread_manager(tab)
+        manager = _get_gmail_bootstrap_thread_manager(tab, backend)
         if not backend.ensure_initialized(manager, _ready):
             _ready(False)
     except Exception as exc:
@@ -361,7 +370,7 @@ def _on_gmail_authorize_clicked(tab: WidgetsTab) -> None:
 
     try:
         backend.reload_oauth_client_config(
-            _get_gmail_thread_manager(tab),
+            _get_gmail_bootstrap_thread_manager(tab, backend),
             _after_refresh,
         )
     except Exception as exc:

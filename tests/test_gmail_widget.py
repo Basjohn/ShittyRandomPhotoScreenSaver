@@ -843,7 +843,12 @@ def test_gmail_fetch_dispatch_failure_has_no_synchronous_network_fallback(
 
     widget = GmailWidget()
     widget.set_thread_manager(_RejectingManager())
-    widget._backend = SimpleNamespace(is_authenticated=True, client=_Client())
+    widget._backend = SimpleNamespace(
+        is_initialized=True,
+        is_authenticated=True,
+        client=_Client(),
+    )
+    widget._backend_ready = True
 
     try:
         assert widget._fetch_emails() is False

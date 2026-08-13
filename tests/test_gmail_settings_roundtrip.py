@@ -340,10 +340,6 @@ def test_gmail_backend_visibility_hidden_before_parent_show(qt_app, monkeypatch)
         is_authenticated = False
         status_text = "Enter email & app password"
 
-    class FakeManager:
-        def _load_client_config(self):
-            return None
-
     tab = QWidget()
     tab.gmail_auth_status = QLabel(tab)
     tab.gmail_authorize_btn = QPushButton("Authorize", tab)
@@ -352,7 +348,6 @@ def test_gmail_backend_visibility_hidden_before_parent_show(qt_app, monkeypatch)
     tab._gmail_imap_panel = QWidget(tab)
 
     monkeypatch.setattr(widgets_tab_gmail, "_get_gmail_backend", lambda: FakeBackend())
-    monkeypatch.setattr(widgets_tab_gmail, "_get_gmail_oauth_manager", lambda: FakeManager())
 
     widgets_tab_gmail._refresh_gmail_auth_state(tab)  # type: ignore[arg-type]
 

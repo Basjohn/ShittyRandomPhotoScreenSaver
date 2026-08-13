@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Callable, Optional
 import weakref
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QCoreApplication, QObject, Signal
 from shiboken6 import Shiboken
 
 from core.gmail.gmail_bootstrap import (
@@ -73,6 +73,9 @@ class GmailBackend(QObject):
         self._initialization_callbacks: list[Callable[[bool], None]] = []
         self._client_config_refreshing = False
         self._client_config_callbacks: list[Callable[[bool], None]] = []
+        self._bootstrap_thread_manager: Optional[ThreadManager] = None
+        self._owns_bootstrap_thread_manager = False
+        self._bootstrap_shutdown_hook_connected = False
 
         self._oauth_manager.auth_completed.connect(self._on_oauth_completed)
         self._oauth_manager.auth_revoked.connect(self._on_oauth_revoked)
@@ -88,6 +91,49 @@ class GmailBackend(QObject):
     @property
     def app_data_path(self) -> Optional[Path]:
         return self._app_data
+
+    def get_bootstrap_thread_manager(self) -> ThreadManager:
+        """Return a process-lifetime manager for singleton bootstrap work."""
+
+        manager = self._bootstrap_thread_manager
+        if manager is not None and not getattr(manager, "_shutdown", False):
+            return manager
+
+        manager = ThreadManager.get_app_shared()
+        if manager is None:
+            manager = ThreadManager.create_helper_manager()
+            self._owns_bootstrap_thread_manager = True
+        else:
+            self._owns_bootstrap_thread_manager = False
+        self._bootstrap_thread_manager = manager
+
+        if not self._bootstrap_shutdown_hook_connected:
+            app = QCoreApplication.instance()
+            if app is not None:
+                try:
+                    app.aboutToQuit.connect(self.shutdown)
+                    self._bootstrap_shutdown_hook_connected = True
+                except Exception as exc:
+                    logger.debug(
+                        "[GMAIL_BACKEND] Failed to attach bootstrap shutdown hook: %s",
+                        exc,
+                    )
+        return manager
+
+    def shutdown(self) -> None:
+        """Release a backend-owned fallback manager at process shutdown."""
+
+        manager = self._bootstrap_thread_manager
+        self._bootstrap_thread_manager = None
+        if self._owns_bootstrap_thread_manager and manager is not None:
+            try:
+                manager.shutdown(wait=True, timeout=2.0)
+            except Exception as exc:
+                logger.debug(
+                    "[GMAIL_BACKEND] Bootstrap manager shutdown suppressed: %s",
+                    exc,
+                )
+        self._owns_bootstrap_thread_manager = False
 
     def ensure_initialized(
         self,

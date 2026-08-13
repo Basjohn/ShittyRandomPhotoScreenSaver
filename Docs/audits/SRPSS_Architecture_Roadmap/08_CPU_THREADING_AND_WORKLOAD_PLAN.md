@@ -420,10 +420,22 @@ paths skip durability/service work instead of reading, writing or fetching synch
 Malformed cache roots fail open to the ordinary background refresh path while valid
 metadata rows preserve stored order and invalid individual rows remain filtered.
 
-The remaining Gmail service startup violation is separate: widget construction eagerly
-creates `GmailBackend`, which reads backend configuration and DPAPI-backed IMAP
-credentials on GUI. Extract that ownership independently rather than folding it into
-the content-cache contract.
+**Gmail backend bootstrap preparation — complete**
+
+`GmailBackend` and `GmailOAuthManager` remain GUI-affine singleton QObjects, but their
+constructors are now filesystem-inert. The first widget/settings consumer joins one
+process-coalesced shared-IO bootstrap which resolves/creates storage, reads and parses
+backend/OAuth configuration, DPAPI-decrypts IMAP and OAuth credentials, and performs
+legacy OAuth migration with atomic encrypted replacement. It publishes a frozen,
+non-repr secret-bearing snapshot; the GUI commit installs the existing backend/OAuth
+authority and creates only memory-local clients.
+
+Widget activation may load visible mail cache independently, but live fetch waits for
+backend readiness. Widget callbacks are weak/lifecycle-request gated, multiple displays
+and Settings share the single in-flight preparation, and Settings keeps backend actions
+disabled while loading. Missing-worker/dispatch failure does not fall back to GUI disk
+or DPAPI work. User-triggered config/credential mutations and token refresh/revoke are
+separate callback/persistence audit items, not part of this closed construction slice.
 
 **Gmail static paint-cache preparation — complete**
 

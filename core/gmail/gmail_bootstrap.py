@@ -216,12 +216,24 @@ def _migrate_legacy_oauth_credentials(
             token_path,
             pickle.dumps(_credentials_to_mapping(credentials)),
         )
-        legacy_path.unlink()
-        logger.info("[GMAIL_OAUTH] Migrated legacy token to encrypted storage")
-        return credentials
     except Exception as exc:
         logger.warning("[GMAIL_OAUTH] Legacy token migration failed: %s", exc)
         return None
+
+    _remove_legacy_oauth_token(legacy_path)
+    logger.info("[GMAIL_OAUTH] Migrated legacy token to encrypted storage")
+    return credentials
+
+
+def _remove_legacy_oauth_token(legacy_path: Path) -> bool:
+    """Best-effort cleanup after encrypted credentials are authoritative."""
+
+    try:
+        legacy_path.unlink(missing_ok=True)
+        return True
+    except OSError as exc:
+        logger.warning("[GMAIL_OAUTH] Legacy token cleanup deferred: %s", exc)
+        return False
 
 
 def prepare_gmail_backend_bootstrap(
@@ -251,6 +263,10 @@ def prepare_gmail_backend_bootstrap(
             legacy_token_path,
             token_path,
         )
+    else:
+        # Retry removal after a prior launch durably migrated the encrypted
+        # token but could not delete the legacy plaintext file.
+        _remove_legacy_oauth_token(legacy_token_path)
 
     imap_email, imap_password = _load_imap_credentials(imap_credentials_path)
     return PreparedGmailBootstrap(
