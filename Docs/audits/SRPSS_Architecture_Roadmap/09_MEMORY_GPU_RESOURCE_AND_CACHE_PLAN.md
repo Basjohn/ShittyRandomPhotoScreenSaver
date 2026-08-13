@@ -100,6 +100,16 @@ new destination allocates/uploads. Settings/final teardown again returns composi
 ownership to zero. The next resource-performance question is the unavoidable new-image
 upload/context transaction, not another steady-base cache or larger retained set.
 
+The `08_13_e40eee8b_17_42_17_47_upload_phases_typical` capture splits that transaction:
+`65.2%` of measured upload CPU time is QPixmap image preparation plus a Python
+frame-sized bits copy, while ordinary texture submission is sub-millisecond at 4K.
+Initial PBO staging spikes and cold pair-warm residual remain separate. The current
+copy-control slice therefore reuses native `RGB32/ARGB32` BGRA storage and passes its
+read-only buffer address into the existing bounded PBO staging copy. It adds no retained
+representation, texture, PBO or worker-owned Qt/GL state; non-native formats keep the
+old explicit conversion. Parser 1.16 and a real-context pixel readback protect the path,
+with installed resource/timing validation still required.
+
 ## Visualizer Presentation Efficiency
 
 Captured screen 1 is 60 Hz while the current typical-load run records Bubble medians of

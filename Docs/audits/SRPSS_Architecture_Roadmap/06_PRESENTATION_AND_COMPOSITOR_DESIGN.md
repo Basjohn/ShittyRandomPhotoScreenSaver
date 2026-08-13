@@ -53,6 +53,14 @@ GUI-owned image installation is normally `18–33 ms` and can be much longer dur
 recreation, so Phase 7 state/presentation decoupling cannot by itself unblock the
 visualizer timer while that shared GUI transaction is running.
 
+The next typical-load phase split shows why presentation decoupling is still not the
+first correction. Ordinary physical-4K texture submission itself is about `0.482 ms`
+median, while QPixmap image preparation plus source copying is about `11.689 ms` median.
+The current upload slice removes the proven native-format conversion and Python bytes
+clone while retaining one GUI/context-owned PBO copy. It does not add another surface,
+clock, texture identity or presentation acknowledgement. Cold context/PBO staging and
+pair-warm residual remain separately attributable before any Phase 7 prototype.
+
 ## Absolute Rules
 
 - producers do not wait for `paintGL()`, `update()` or a presentation acknowledgement;

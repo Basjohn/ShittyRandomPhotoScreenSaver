@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from PySide6.QtGui import QImage, QPixmap
+from shiboken6 import VoidPtr
 
 try:
     from OpenGL import GL as gl
@@ -21,6 +22,59 @@ except ImportError:
 from core.logging.logger import is_perf_metrics_enabled
 
 logger = logging.getLogger(__name__)
+
+
+_DIRECT_UPLOAD_IMAGE_FORMATS = {
+    QImage.Format.Format_ARGB32: "argb32",
+    QImage.Format.Format_RGB32: "rgb32",
+}
+
+
+def _prepare_pixmap_upload_image(pixmap: QPixmap) -> tuple[QImage, str]:
+    """Return BGRA-compatible image storage without needless opaque conversion.
+
+    Qt's Windows raster backing commonly exposes an opaque ``QPixmap`` as
+    ``Format_RGB32``. Its native bytes have the same BGRA layout consumed by
+    the existing GL upload, so converting it to ``Format_ARGB32`` only copies
+    the full frame without changing pixel bytes. Other formats retain the
+    previous explicit conversion so alpha and channel semantics do not drift.
+    """
+
+    image = pixmap.toImage()
+    direct_label = _DIRECT_UPLOAD_IMAGE_FORMATS.get(image.format())
+    if direct_label is not None:
+        return image, direct_label
+    return image.convertToFormat(QImage.Format.Format_ARGB32), "converted_argb32"
+
+
+def _image_upload_buffer(image: QImage) -> tuple[object, int, int, str]:
+    """Expose stable image storage for the duration of one owner-side upload.
+
+    Shiboken exposes the address of Qt's read-only ``constBits()`` view, so the
+    mapped PBO can copy directly from QImage storage without either detaching
+    the image through writable ``bits()`` or materializing a frame-sized Python
+    ``bytes`` object. The copied fallback preserves compatibility with bindings
+    or test doubles that cannot expose that address.
+    """
+
+    try:
+        data = image.constBits()
+        data_size = int(image.sizeInBytes())
+        if data_size <= 0 or len(data) < data_size:
+            raise ValueError("QImage bits do not cover the declared storage")
+        data_address = int(VoidPtr(data))
+        if data_address <= 0:
+            raise ValueError("QImage bits do not expose a valid address")
+        return data, data_size, data_address, "direct_const_view"
+    except Exception:
+        ptr = image.constBits()
+        if hasattr(ptr, "tobytes"):
+            data = ptr.tobytes()
+        else:
+            if hasattr(ptr, "setsize"):
+                ptr.setsize(image.sizeInBytes())
+            data = bytes(ptr)
+        return data, len(data), 0, "copied_fallback"
 
 
 @dataclass
@@ -231,8 +285,9 @@ class GLTextureManager:
         _upload_perf_enabled = is_perf_metrics_enabled()
         _phase_start = _upload_start if _upload_perf_enabled else 0.0
         
-        # Convert to ARGB32 + GL_BGRA for correct channel ordering
-        image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+        # RGB32 and ARGB32 already have the native BGRA byte layout consumed by
+        # GL below. Preserve the explicit conversion for every other format.
+        image, image_format = _prepare_pixmap_upload_image(pixmap)
         if _upload_perf_enabled:
             _phase_now = time.perf_counter()
             _image_prepare_ms = (_phase_now - _phase_start) * 1000.0
@@ -251,19 +306,15 @@ class GLTextureManager:
                 logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
             return 0
         
-        # Get image data
+        # Keep the QImage and its exported buffer alive through the GL call.
+        # The normal path points directly at QImage storage; only incompatible
+        # bindings/test doubles materialize a copied bytes fallback.
         try:
-            ptr = image.constBits()
-            if hasattr(ptr, "setsize"):
-                ptr.setsize(image.sizeInBytes())
-                data = bytes(ptr)
-            else:
-                data = ptr.tobytes()
+            data, data_size, data_address, bits_path = _image_upload_buffer(image)
         except Exception:
             logger.debug("[GL TEXTURE] Failed to access image bits", exc_info=True)
             return 0
-        
-        data_size = len(data)
+
         if _upload_perf_enabled:
             _phase_now = time.perf_counter()
             _bits_copy_ms = (_phase_now - _phase_start) * 1000.0
@@ -304,7 +355,11 @@ class GLTextureManager:
                         gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, pbo_capacity, None, gl.GL_STREAM_DRAW)
                         mapped_ptr = gl.glMapBuffer(gl.GL_PIXEL_UNPACK_BUFFER, gl.GL_WRITE_ONLY)
                         if mapped_ptr:
-                            ctypes.memmove(mapped_ptr, data, data_size)
+                            ctypes.memmove(
+                                mapped_ptr,
+                                data_address if data_address else data,
+                                data_size,
+                            )
                             gl.glUnmapBuffer(gl.GL_PIXEL_UNPACK_BUFFER)
                             use_pbo = True
                         else:
@@ -443,7 +498,8 @@ class GLTextureManager:
             )
             logger.info(
                 "[PERF][GL TEXTURE][UPLOAD] owner=%s size=%dx%d upload_bytes=%d "
-                "path=%s total_ms=%.3f image_prepare_ms=%.3f bits_copy_ms=%.3f "
+                "path=%s image_format=%s bits_path=%s total_ms=%.3f "
+                "image_prepare_ms=%.3f bits_copy_ms=%.3f "
                 "texture_alloc_ms=%.3f pbo_stage_ms=%.3f texture_submit_ms=%.3f "
                 "unattributed_ms=%.3f",
                 self._owner,
@@ -451,6 +507,8 @@ class GLTextureManager:
                 h,
                 data_size,
                 "pbo" if use_pbo else "direct",
+                image_format,
+                bits_path,
                 _upload_elapsed,
                 _image_prepare_ms,
                 _bits_copy_ms,

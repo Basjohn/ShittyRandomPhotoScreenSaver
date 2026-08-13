@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.15"
+PARSER_VERSION = "1.16"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
@@ -894,6 +894,8 @@ def _parse_phase5_telemetry(
                     "upload_cpu_total_ms": _number(values.get("total_ms")),
                     "upload_bytes": _integer(values.get("upload_bytes")),
                     "upload_path": values.get("path", ""),
+                    "upload_image_format": values.get("image_format", ""),
+                    "upload_bits_path": values.get("bits_path", ""),
                     "image_prepare_ms": _number(values.get("image_prepare_ms")),
                     "bits_copy_ms": _number(values.get("bits_copy_ms")),
                     "texture_alloc_ms": _number(values.get("texture_alloc_ms")),
@@ -1589,6 +1591,32 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
             },
             "texture_upload": {
                 "records": sum(row["kind"] == "texture_upload" for row in phase5_rows),
+                "image_formats": {
+                    image_format: sum(
+                        row["kind"] == "texture_upload"
+                        and row.get("upload_image_format") == image_format
+                        for row in phase5_rows
+                    )
+                    for image_format in sorted({
+                        str(row.get("upload_image_format"))
+                        for row in phase5_rows
+                        if row["kind"] == "texture_upload"
+                        and row.get("upload_image_format")
+                    })
+                },
+                "bits_paths": {
+                    bits_path: sum(
+                        row["kind"] == "texture_upload"
+                        and row.get("upload_bits_path") == bits_path
+                        for row in phase5_rows
+                    )
+                    for bits_path in sorted({
+                        str(row.get("upload_bits_path"))
+                        for row in phase5_rows
+                        if row["kind"] == "texture_upload"
+                        and row.get("upload_bits_path")
+                    })
+                },
                 "by_path": {
                     path: {
                         "records": len(rows),

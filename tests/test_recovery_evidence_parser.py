@@ -178,7 +178,8 @@ def _write_archive(path: Path) -> None:
             "interval_upload_total_ms=24.25",
             "2026-07-23 19:38:15 - metrics - INFO - "
             "[PERF][GL TEXTURE][UPLOAD] owner=compositor:1 size=3840x2160 "
-            "upload_bytes=33177600 path=pbo total_ms=18.250 image_prepare_ms=0.750 "
+            "upload_bytes=33177600 path=pbo image_format=rgb32 bits_path=direct_const_view "
+            "total_ms=18.250 image_prepare_ms=0.750 "
             "bits_copy_ms=4.000 texture_alloc_ms=0.100 pbo_stage_ms=10.000 "
             "texture_submit_ms=3.300 unattributed_ms=0.100",
         ]
@@ -508,6 +509,8 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     assert analysis.summary["phase5"]["image_ui"]["outcomes"] == {"completed": 1}
     texture_upload = analysis.summary["phase5"]["texture_upload"]
     assert texture_upload["records"] == 1
+    assert texture_upload["image_formats"] == {"rgb32": 1}
+    assert texture_upload["bits_paths"] == {"direct_const_view": 1}
     assert texture_upload["by_path"]["pbo"]["total_ms"] == {
         "minimum": 18.25,
         "median": 18.25,
@@ -519,6 +522,8 @@ def test_analyze_archive_derives_rates_and_deduplicates_warnings(tmp_path: Path)
     )
     assert upload_row["owner"] == "compositor:1"
     assert upload_row["upload_bytes"] == 33177600
+    assert upload_row["upload_image_format"] == "rgb32"
+    assert upload_row["upload_bits_path"] == "direct_const_view"
     assert upload_row["texture_submit_ms"] == 3.3
     gl_retention = next(
         row for row in analysis.phase5_rows if row["kind"] == "gl_retention"
@@ -742,3 +747,29 @@ def test_explicit_evidence_directory_retains_recursive_log_discovery(
             nested_dir / "screensaver_perf.log"
         ).stat().st_size,
     }
+
+
+def test_texture_upload_parser_keeps_pre_1_16_records(tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "selected_evidence"
+    evidence_dir.mkdir()
+    (evidence_dir / "screensaver_perf.log").write_text(
+        "2026-08-13 17:42:45 - metrics - INFO - "
+        "[PERF][GL TEXTURE][UPLOAD] owner=compositor:0 size=2560x1440 "
+        "upload_bytes=14745600 path=pbo total_ms=10.000 "
+        "image_prepare_ms=4.000 bits_copy_ms=2.000 texture_alloc_ms=0.100 "
+        "pbo_stage_ms=3.500 texture_submit_ms=0.400 unattributed_ms=0.000\n",
+        encoding="utf-8",
+    )
+
+    analysis = analyze_evidence_source(evidence_dir)
+    upload_summary = analysis.summary["phase5"]["texture_upload"]
+    upload_row = next(
+        row for row in analysis.phase5_rows if row["kind"] == "texture_upload"
+    )
+
+    assert upload_summary["records"] == 1
+    assert upload_summary["image_formats"] == {}
+    assert upload_summary["bits_paths"] == {}
+    assert upload_summary["by_path"]["pbo"]["total_ms"]["maximum"] == 10.0
+    assert upload_row["upload_image_format"] == ""
+    assert upload_row["upload_bits_path"] == ""

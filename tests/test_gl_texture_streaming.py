@@ -6,6 +6,7 @@ Tests cover:
 - Texture upload performance
 - ResourceManager GL handle tracking
 """
+import ctypes
 import logging
 
 import pytest
@@ -292,6 +293,78 @@ class TestPassiveGLAccounting:
         assert kwargs["tracked_bytes"] == 13 * 7 * 4
         assert manager._texture_resource_ids[55] == "texture-rid"
 
+    def test_native_bgra_image_formats_expose_direct_upload_storage(self):
+        from PySide6.QtGui import QColor, QImage
+        from rendering.gl_programs.texture_manager import (
+            _image_upload_buffer,
+            _prepare_pixmap_upload_image,
+        )
+
+        class _PixmapImage:
+            def __init__(self, image):
+                self._image = image
+
+            def toImage(self):
+                return self._image
+
+        for image_format, expected_label in (
+            (QImage.Format.Format_RGB32, "rgb32"),
+            (QImage.Format.Format_ARGB32, "argb32"),
+        ):
+            source = QImage(3, 2, image_format)
+            source.fill(QColor(12, 34, 56, 78))
+
+            image, format_label = _prepare_pixmap_upload_image(_PixmapImage(source))
+            data, data_size, data_address, bits_path = _image_upload_buffer(image)
+
+            assert image is source
+            assert format_label == expected_label
+            assert bits_path == "direct_const_view"
+            assert isinstance(data, memoryview)
+            assert data_size == source.sizeInBytes() == 3 * 2 * 4
+            assert data_address > 0
+            assert ctypes.string_at(data_address, data_size) == source.constBits().tobytes()
+
+    def test_non_native_upload_format_retains_explicit_argb32_conversion(self):
+        from PySide6.QtGui import QColor, QImage
+        from rendering.gl_programs.texture_manager import _prepare_pixmap_upload_image
+
+        class _PixmapImage:
+            def __init__(self, image):
+                self._image = image
+
+            def toImage(self):
+                return self._image
+
+        source = QImage(2, 1, QImage.Format.Format_RGBA8888)
+        source.fill(QColor(12, 34, 56, 78))
+
+        image, format_label = _prepare_pixmap_upload_image(_PixmapImage(source))
+
+        assert image.format() == QImage.Format.Format_ARGB32
+        assert format_label == "converted_argb32"
+        assert image.pixelColor(0, 0) == source.pixelColor(0, 0)
+
+    def test_upload_buffer_copied_fallback_preserves_bytes(self, monkeypatch):
+        from PySide6.QtGui import QColor, QImage
+        from rendering.gl_programs import texture_manager as module
+
+        image = QImage(3, 2, QImage.Format.Format_ARGB32)
+        image.fill(QColor(12, 34, 56, 78))
+
+        def _reject_pointer(_data):
+            raise TypeError("address export unavailable")
+
+        monkeypatch.setattr(module, "VoidPtr", _reject_pointer)
+
+        data, data_size, data_address, bits_path = module._image_upload_buffer(image)
+
+        assert bits_path == "copied_fallback"
+        assert isinstance(data, bytes)
+        assert data_size == image.sizeInBytes()
+        assert data_address == 0
+        assert data == image.constBits().tobytes()
+
     def test_upload_phase_probe_is_perf_only_and_reports_named_spans(
         self,
         monkeypatch,
@@ -517,3 +590,137 @@ class TestPassiveGLAccounting:
         assert manager.get_stats()["pbo_deletions"] == 0
         assert manager.get_stats()["pbo_deleted_bytes"] == 0
         registry.release_tracking.assert_not_called()
+
+
+@pytest.mark.qt
+def test_texture_upload_native_bgra_paths_preserve_pixels_in_real_context(
+    qt_app,
+    monkeypatch,
+):
+    """Exercise the installed PyOpenGL upload wrappers and exact pixel bytes."""
+
+    from unittest.mock import MagicMock
+
+    from PySide6.QtGui import (
+        QColor,
+        QImage,
+        QOffscreenSurface,
+        QOpenGLContext,
+        QSurfaceFormat,
+    )
+
+    from core.resources.manager import ResourceManager
+    from rendering.gl_programs import texture_manager as module
+
+    fmt = QSurfaceFormat()
+    fmt.setRenderableType(QSurfaceFormat.OpenGL)
+    fmt.setProfile(QSurfaceFormat.CoreProfile)
+    fmt.setVersion(3, 3)
+    fmt.setSwapBehavior(QSurfaceFormat.SingleBuffer)
+
+    context = QOpenGLContext()
+    context.setFormat(fmt)
+    if not context.create():
+        pytest.skip("OpenGL 3.3 context unavailable on this runner")
+
+    surface = QOffscreenSurface()
+    surface.setFormat(fmt)
+    surface.create()
+    if not surface.isValid() or not context.makeCurrent(surface):
+        pytest.skip("Unable to make an offscreen OpenGL context current")
+
+    from OpenGL import GL as gl
+
+    if not hasattr(gl, "glGetTexImage"):
+        context.doneCurrent()
+        pytest.skip("Desktop texture readback unavailable")
+
+    registry = MagicMock()
+    registry.register_gl_texture.return_value = ""
+    registry.register_gl_vbo.return_value = ""
+    monkeypatch.setattr(
+        ResourceManager,
+        "get_or_create_app_shared",
+        classmethod(lambda cls: registry),
+    )
+    monkeypatch.setattr(
+        ResourceManager,
+        "get_app_shared",
+        classmethod(lambda cls: registry),
+    )
+
+    class _PixmapImage:
+        def __init__(self, image, key):
+            self._image = image
+            self._key = key
+
+        def isNull(self):
+            return False
+
+        def toImage(self):
+            return self._image
+
+        def cacheKey(self):
+            return self._key
+
+    cases = (
+        (
+            QImage.Format.Format_RGB32,
+            (
+                QColor(255, 0, 0),
+                QColor(0, 255, 0),
+                QColor(0, 0, 255),
+                QColor(12, 34, 56),
+            ),
+            [
+                255, 0, 0, 255,
+                0, 255, 0, 255,
+                0, 0, 255, 255,
+                12, 34, 56, 255,
+            ],
+        ),
+        (
+            QImage.Format.Format_ARGB32,
+            (
+                QColor(255, 0, 0, 64),
+                QColor(0, 255, 0, 96),
+                QColor(0, 0, 255, 128),
+                QColor(12, 34, 56, 160),
+            ),
+            [
+                255, 0, 0, 64,
+                0, 255, 0, 96,
+                0, 0, 255, 128,
+                12, 34, 56, 160,
+            ],
+        ),
+    )
+
+    manager = module.GLTextureManager(owner="real-upload-test", generation=1)
+    try:
+        assert manager.initialize() is True
+        for key, (image_format, colors, expected) in enumerate(cases, start=1):
+            image = QImage(2, 2, image_format)
+            for index, color in enumerate(colors):
+                image.setPixelColor(index % 2, index // 2, color)
+
+            texture_id = manager.get_or_create_texture(_PixmapImage(image, key))
+            assert texture_id > 0
+            gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
+            result = (ctypes.c_ubyte * 16)()
+            gl.glGetTexImage(
+                gl.GL_TEXTURE_2D,
+                0,
+                gl.GL_RGBA,
+                gl.GL_UNSIGNED_BYTE,
+                result,
+            )
+            assert list(result) == expected
+        assert manager.get_stats()["pbo_uploads"] == len(cases)
+        assert manager.get_stats()["direct_uploads"] == 0
+        gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+    finally:
+        manager.cleanup(strict=True)
+        context.doneCurrent()
+        if hasattr(surface, "destroy"):
+            surface.destroy()

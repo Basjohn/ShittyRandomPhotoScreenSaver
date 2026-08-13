@@ -79,6 +79,8 @@ from `main`.
 - [x] Validate visualizer owner-context GPU collection in the corrected-query typical run: all `26` windows supported/collected with no errors or drops; Bubble remains sub-millisecond GPU and Spectrum negligible.
 - [x] Validate the shared-compositor query seam: `42` supported/error-free windows show active transition shaders are normally cheap and isolate a `36–41 ms` physical-4K steady QPainter base draw.
 - [x] Validate exact retained-texture steady presentation removes that base-draw spike without terminal visual discontinuity, identity regression or teardown residue.
+- [x] Attribute texture-upload CPU phases in a typical teardown/churn run: ordinary uploads are dominated by redundant image preparation/source copying rather than texture submission, while cold PBO staging and pair-warm residual remain separate owners.
+- [ ] Validate native RGB32/ARGB32 plus direct read-only QImage-buffer upload removes those two proven copies without fallback, pixel, identity or teardown regression.
 - [ ] Remove proven GUI-thread service/cache preparation.
 - [ ] Attribute GPU busy across upload/transition/visualizer/presentation owners.
 - [ ] Remove proven temporary compatibility/fallback debris without changing behaviour.

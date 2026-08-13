@@ -579,6 +579,22 @@ boundary remains a GUI/context transaction, normally `18–33 ms` and occasional
 larger during cold/recreation work. Continue attribution at that GUI/GL boundary; do not
 reinterpret Phase 7 as a way to run Qt presentation through a blocked GUI thread.
 
+The follow-up parser-1.15 capture
+`08_13_e40eee8b_17_42_17_47_upload_phases_typical` closes the first upload-attribution
+gate. Across `30` PBO uploads, image preparation plus source-bit copying consumes
+`283.391/434.594 ms` (`65.2%`) of measured upload CPU time. Ordinary physical-4K medians
+are `6.260 ms` image preparation, `5.429 ms` bits copy and only `0.482 ms` texture
+submission. Initial PBO staging spikes (`15.061/27.162 ms`) and roughly `206.449 ms` of
+cold pair-warm residual are distinct follow-ups rather than evidence for moving GL.
+
+The narrow copy-control slice keeps QPixmap and GL on their current owner. Native Qt
+`RGB32/ARGB32` storage already matches the BGRA upload contract, so it bypasses the old
+full-frame ARGB32 conversion; a Shiboken address for the read-only `constBits()` view
+then feeds the existing mapped-PBO copy without creating a Python `bytes` clone. Other
+formats still convert explicitly. Parser 1.16 distinguishes native/converted formats and
+direct/copy-fallback buffer paths; a real-context texture readback verifies exact RGB and
+alpha bytes. Installed timing and teardown validation remains open.
+
 ### Priority 2 — pool topology
 
 After workload classes are separated:

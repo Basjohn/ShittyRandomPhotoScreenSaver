@@ -267,8 +267,30 @@ state/presentation decoupling cannot unblock a visualizer tick while the shared 
 is inside a texture upload; attribute/split that transaction before changing visualizer
 cadence or presentation.
 
+The parser-1.15 typical-load capture is preserved at
+`logs/evidence_chest/08_13_e40eee8b_17_42_17_47_upload_phases_typical/` (selected-source
+SHA-256 `242A1161...22470`). Its `30` PBO uploads spend `283.391 ms` of `434.594 ms`
+total CPU time (`65.2%`) in QPixmap image preparation plus a Python source-bits copy.
+Ordinary physical-4K uploads have `6.260/5.429/0.482 ms` medians for image preparation,
+bits copy and texture submission respectively. The largest initial/recreation outliers
+are instead PBO staging (`15.061/27.162 ms`), and six cold pair warms still contain about
+`206.449 ms` outside the measured upload phases. This is not one universal upload cause.
+
+Source inspection names two exact avoidable copies in the ordinary path: opaque Qt
+pixmaps expose native `RGB32` storage that was unconditionally converted to `ARGB32`,
+then `constBits()` was materialized as a second frame-sized Python `bytes` object before
+the mapped-PBO copy. The current corrective slice accepts native `RGB32/ARGB32` BGRA
+storage and uses the Shiboken address of the read-only `constBits()` view for the one
+required owner-side PBO copy. Other image formats retain explicit ARGB32 conversion;
+QPixmap/GL/context ownership, cache identity, PBO bounds and cadence are unchanged.
+Parser 1.16 records both the image-format and source-buffer path, and a real OpenGL
+readback test protects exact RGB and alpha bytes. Installed runtime validation remains
+required before this slice is closed.
+
 - [ ] Never use `glFinish()` in ordinary profiling. It changes the workload and invalidates the measurement.
-- [ ] Run the parser-1.15 upload-phase probe under a typical transition/teardown scenario. Attribute `image_prepare`, CPU bits copy, texture allocation, PBO staging and texture submission separately, then decide whether actual non-blocking upload GPU timing is still needed; do not move Qt/GL ownership to a worker speculatively.
+- [x] Run the parser-1.15 upload-phase probe under a typical transition/teardown scenario and preserve the exact source. CPU image preparation/copy dominates ordinary uploads; initial PBO staging and cold-pair residual are distinct owners, so non-blocking upload-GPU timing is not the next gate.
+- [ ] Validate the native-format/direct-const-view upload path in an installed typical transition/teardown run: require `bits_path=direct_const_view` with zero copied fallback for ordinary uploads, materially lower image-prepare/bits-copy spans, exact visuals and bounded terminal GL/PBO ownership.
+- [ ] Split the cold/rebuild pair-warm residual with one correlation identity across context acquisition, cache/context reset and post-upload work; do not infer causality from a last-UI-owner label alone.
 - [ ] Record per-display refresh, logical visualizer state publication rate, update-request rate and paint rate together. Do not infer waste solely from one counter.
 - [ ] Correlate repeated `>100 ms` transition request-age stalls and parser-1.15 transition-start/end tick-gap classes against image-install monotonic spans, context/swap/native-event ownership and any long Python GUI callback before changing Python scheduling.
 - [ ] Feed the result into Phase 7 only after an edge-preserving immutable render-state contract proves that phase-valid display sampling cannot hide Bubble's protected discrete response; never approximate display opportunities with producer timestamps or paint acknowledgements.
