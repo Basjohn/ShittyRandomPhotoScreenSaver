@@ -1836,7 +1836,11 @@ class GLCompositorWidget(QOpenGLWidget):
             "outcome=%s total_ms=%.3f pipeline_was_ready=%s pipeline_outcome=%s "
             "pipeline_ensure_ms=%.3f pipeline_make_current_ms=%.3f "
             "pipeline_initialize_ms=%.3f pipeline_release_ms=%.3f "
-            "context_route=%s hidden_context_created=%s context_acquire_ms=%.3f "
+            "context_route=%s hidden_context_created=%s hidden_context_reused=%s "
+            "share_context_present=%s share_context_valid=%s "
+            "preserve_live_surface=%s live_base_visible=%s "
+            "offscreen_surface_create_ms=%.3f shared_context_create_ms=%.3f "
+            "context_acquire_ms=%.3f "
             "context_prepare_ms=%.3f context_make_current_ms=%.3f "
             "context_release_ms=%.3f manager_present_before=%s "
             "manager_ensure_ms=%.3f manager_initialize_ms=%.3f "
@@ -1854,6 +1858,13 @@ class GLCompositorWidget(QOpenGLWidget):
             _float("pipeline_release_ms"),
             str(trace.get("context_route", "none")),
             str(bool(trace.get("hidden_context_created", False))).lower(),
+            str(bool(trace.get("hidden_context_reused", False))).lower(),
+            str(bool(trace.get("share_context_present", False))).lower(),
+            str(bool(trace.get("share_context_valid", False))).lower(),
+            str(bool(trace.get("preserve_live_surface", False))).lower(),
+            str(bool(trace.get("live_base_visible", False))).lower(),
+            _float("offscreen_surface_create_ms"),
+            _float("shared_context_create_ms"),
             _float("context_acquire_ms"),
             _float("context_prepare_ms"),
             _float("context_make_current_ms"),

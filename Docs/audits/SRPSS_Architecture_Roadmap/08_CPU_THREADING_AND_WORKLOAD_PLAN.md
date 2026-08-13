@@ -614,6 +614,25 @@ pair/paint spans are listed per ID. This is passive measurement only: no timer, 
 retry, repaint request, context-route change or visualizer scheduling change is
 introduced.
 
+The installed correlated run
+`08_13_8dc29866_18_48_18_53_correlated_install_typical` closes that instrumentation
+gate. All `32/32` accepted IDs contain one pair-warm and one next-paint record. Every one
+of the `26` steady old lookups hits the retained terminal texture; the six misses are
+exactly the first install on both displays across three runtime generations. Those first
+installs do not transition but still uploaded both old and new. Native compositor
+`show()` costs `41.877–107.393 ms`, hidden shared-context preparation costs
+`26.710–32.375 ms`, and the unnecessary old upload costs `2.536–20.169 ms`. Median/max
+process GPU busy is only `3.55/9.6%`, while visualizer boundary gaps remain much larger
+than its measured worker or overlay-GPU work. Do not reinterpret this as a visualizer
+scheduler defect.
+
+The next narrow slice preserves the existing transition gate and GL ownership: when no
+transition can run, generic warmup uploads only the new destination; transition-capable
+installs still warm old and new. Parser 1.19 separately records offscreen-surface and
+shared-context creation within the existing hidden-context route. This remains passive
+measurement and is the prerequisite for deciding whether any deeper cold-context change
+is safe enough to justify.
+
 ### Priority 2 — pool topology
 
 After workload classes are separated:

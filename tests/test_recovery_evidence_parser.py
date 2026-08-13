@@ -814,7 +814,7 @@ def test_frame_gap_owner_parser_preserves_current_producer_context(
     analysis = analyze_evidence_source(evidence_dir)
     row = analysis.phase5_rows[0]
 
-    assert PARSER_VERSION == "1.18"
+    assert PARSER_VERSION == "1.19"
     assert row["last_ui"] == "display_image_apply"
     assert row["last_ui_ms"] == 5.0
     assert row["last_ui_age_ms"] == 10.0
@@ -889,6 +889,10 @@ def test_image_install_trace_parser_correlates_cold_subspans(tmp_path: Path) -> 
                 "pipeline_ensure_ms=8 pipeline_make_current_ms=1 "
                 "pipeline_initialize_ms=6 pipeline_release_ms=1 "
                 "context_route=hidden_shared hidden_context_created=true "
+                "hidden_context_reused=false share_context_present=true "
+                "share_context_valid=true preserve_live_surface=true "
+                "live_base_visible=true offscreen_surface_create_ms=2 "
+                "shared_context_create_ms=3 "
                 "context_acquire_ms=7 context_prepare_ms=5 context_make_current_ms=2 "
                 "context_release_ms=1 manager_present_before=false manager_ensure_ms=1 "
                 "manager_initialize_ms=2 old_present=true old_texture_ms=0.1 "
@@ -936,6 +940,10 @@ def test_image_install_trace_parser_correlates_cold_subspans(tmp_path: Path) -> 
     assert summary["pair_warm"]["pipeline_initialize_ms"]["maximum"] == 6.0
     assert summary["pair_warm"]["pipeline_make_current_ms"]["p95"] == 1.0
     assert summary["pair_warm"]["context_release_ms"]["maximum"] == 1.0
+    assert summary["pair_warm"]["offscreen_surface_create_ms"]["maximum"] == 2.0
+    assert summary["pair_warm"]["shared_context_create_ms"]["maximum"] == 3.0
+    assert summary["pair_warm"]["hidden_context_created_records"] == 1
+    assert summary["pair_warm"]["hidden_context_reused_records"] == 0
     assert summary["texture_lookup"]["by_role"]["old"]["cache_hits"] == 1
     assert summary["texture_lookup"]["by_role"]["new"]["upload_call_ms"]["maximum"] == 10.0
     assert summary["next_paint"]["install_to_next_paint_ms"]["maximum"] == 45.0

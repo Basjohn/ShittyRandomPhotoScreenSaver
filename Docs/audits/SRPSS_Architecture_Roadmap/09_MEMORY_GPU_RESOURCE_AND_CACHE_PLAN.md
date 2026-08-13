@@ -120,6 +120,20 @@ registration and texture-manager byte/cache publication under the same install I
 old/new lookup and upload. This is measurement, not a new resource owner or retention
 path; the installed gate must still show terminal GL/PBO ownership returning to zero.
 
+The installed `08_13_8dc29866_18_48_18_53_correlated_install_typical` gate does so after
+startup, CUSTOM edit, Settings recreation and final exit. It also proves that every
+steady retained-old identity hits; the six old misses are generation-first installs where
+no transition can run. Removing those six old uploads does not enlarge retention: each
+first install still uploads and retains exactly the new destination, which becomes the
+next transition's old cache hit. Parser 1.19 now splits the existing hidden warmup
+context's offscreen-surface and shared-context creation cost; no second resource store,
+live-surface `makeCurrent()` route, timer or GL fence is introduced.
+
+The touched creation path now also destroys an uncommitted offscreen surface when surface
+validation fails or shared-context construction throws. Direct failure-path automation
+protects both cases; the successful published context/surface pair keeps its existing
+compositor-generation owner and cleanup path.
+
 ## Visualizer Presentation Efficiency
 
 Captured screen 1 is 60 Hz while the current typical-load run records Bubble medians of

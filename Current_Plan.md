@@ -306,10 +306,36 @@ that the new image or physical scanout has occurred. Missing pair/paint spans re
 explicit per ID. The probe adds no timer, fence, retry, repaint request or normal-run
 phase clock.
 
+The installed parser-1.18 correlated run is preserved at
+`logs/evidence_chest/08_13_8dc29866_18_48_18_53_correlated_install_typical/`
+(selected-source SHA-256 `10BCD7A3...10E41`). All `32/32` accepted install IDs contain
+exactly one pair-warm and one next-paint record. The retained-current contract is healthy:
+all `26` steady old lookups hit and the only six misses are the first install on each
+display in runtime generations 0, 1 and 2. Those six installs cannot transition, yet each
+still uploaded an old texture (`2.536–20.169 ms`) as well as the new destination. Their
+native compositor `show()` costs `41.877–107.393 ms`, and creating the hidden shared
+warmup context costs another `26.710–32.375 ms`. This is a cold/recreation transaction,
+not evidence for changing steady texture identity or visualizer cadence.
+
+The corrective slice now computes the existing transition gate before generic warmup and
+passes no old pixmap when a transition cannot run. The new destination is still uploaded
+and retained, and transition-capable installs still warm the exact old/new pair. Parser
+1.19 keeps the probe passive while splitting hidden-context preparation into offscreen
+surface creation and shared-context creation; it also makes `cold_compositor` mean a
+missing valid context, initialized pipeline, or texture manager rather than mere Python
+object absence. A fresh startup plus Settings-recreation run is the runtime gate before
+considering any context-lifecycle redesign.
+
+The same review closed a bounded failure-path leak in the existing hidden-context creator:
+an invalid offscreen surface or exception during shared-context construction now destroys
+the uncommitted surface in `finally` while retaining the measured failed span. Successful
+context publication and terminal compositor cleanup are unchanged.
+
 - [ ] Never use `glFinish()` in ordinary profiling. It changes the workload and invalidates the measurement.
 - [x] Run the parser-1.15 upload-phase probe under a typical transition/teardown scenario and preserve the exact source. CPU image preparation/copy dominates ordinary uploads; initial PBO staging and cold-pair residual are distinct owners, so non-blocking upload-GPU timing is not the next gate.
 - [x] Validate the native-format/direct-const-view upload path in an installed typical transition/teardown run: `34/34` uploads use `direct_const_view`, preparation/copy medians are effectively eliminated, visuals remain exact, and terminal GL/PBO ownership is bounded.
-- [ ] Run the parser-1.18 correlated cold/rebuild probe through startup plus Settings recreation. Attribute `show()`/pipeline/context/old/new/resource/cache/next-paint spans per install ID; require missing/superseded spans and teardown ownership to remain explicit, and do not infer causality from a last-UI-owner label alone.
+- [x] Run the parser-1.18 correlated cold/rebuild probe through startup plus Settings recreation. All `32/32` accepted IDs are complete, steady retained-old reuse is `26/26`, six generation-first installs isolate native `show()` plus hidden-context creation and an avoidable no-transition old upload, and teardown returns tracked GL to zero.
+- [ ] Validate the parser-1.19 no-transition warm and cold-context split in one fresh startup plus Settings-recreation run. Require first installs to report `old_present=false`, one new upload, exact retained-new reuse on the following transition, and separate offscreen-surface/shared-context creation spans without new timers, fences, paint requests or teardown residue.
 - [ ] Record per-display refresh, logical visualizer state publication rate, update-request rate and paint rate together. Do not infer waste solely from one counter.
 - [ ] Correlate repeated `>100 ms` transition request-age stalls and parser-1.15 transition-start/end tick-gap classes against image-install monotonic spans, context/swap/native-event ownership and any long Python GUI callback before changing Python scheduling.
 - [ ] Feed the result into Phase 7 only after an edge-preserving immutable render-state contract proves that phase-valid display sampling cannot hide Bubble's protected discrete response; never approximate display opportunities with producer timestamps or paint acknowledgements.

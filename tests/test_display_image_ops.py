@@ -294,6 +294,67 @@ def test_sync_spotify_visualizer_overlay_geometry_prefers_committed_custom_rect_
     assert overlay.updated is True
 
 
+def test_transition_pair_requirement_matches_transition_gate():
+    enabled = SimpleNamespace(
+        settings_manager=object(),
+        _has_rendered_first_frame=True,
+        _transitions_enabled=True,
+    )
+    first_frame = SimpleNamespace(
+        settings_manager=object(),
+        _has_rendered_first_frame=False,
+        _transitions_enabled=True,
+    )
+    disabled = SimpleNamespace(
+        settings_manager=object(),
+        _has_rendered_first_frame=True,
+        _transitions_enabled=False,
+    )
+    unmanaged = SimpleNamespace(
+        settings_manager=None,
+        _has_rendered_first_frame=True,
+        _transitions_enabled=True,
+    )
+
+    assert display_image_ops._transition_pair_required(enabled) is True
+    assert display_image_ops._transition_pair_required(first_frame) is False
+    assert display_image_ops._transition_pair_required(disabled) is False
+    assert display_image_ops._transition_pair_required(unmanaged) is False
+
+
+def test_compositor_texture_runtime_warmth_requires_context_pipeline_and_manager(monkeypatch):
+    class _Context:
+        def __init__(self, valid: bool) -> None:
+            self._valid = valid
+
+        def isValid(self) -> bool:
+            return self._valid
+
+    class _FakeCompositor:
+        def __init__(self) -> None:
+            self._context = _Context(True)
+            self._gl_pipeline = SimpleNamespace(initialized=True)
+            self._texture_manager = object()
+
+        def context(self):
+            return self._context
+
+    monkeypatch.setattr(display_image_ops, "GLCompositorWidget", _FakeCompositor)
+
+    compositor = _FakeCompositor()
+    assert display_image_ops._compositor_texture_runtime_is_warm(compositor) is True
+
+    compositor._texture_manager = None
+    assert display_image_ops._compositor_texture_runtime_is_warm(compositor) is False
+    compositor._texture_manager = object()
+    compositor._gl_pipeline.initialized = False
+    assert display_image_ops._compositor_texture_runtime_is_warm(compositor) is False
+    compositor._gl_pipeline.initialized = True
+    compositor._context = _Context(False)
+    assert display_image_ops._compositor_texture_runtime_is_warm(compositor) is False
+    assert display_image_ops._compositor_texture_runtime_is_warm(object()) is False
+
+
 def test_schedule_startup_first_frame_ready_flushes_visible_compositor_before_emit(monkeypatch):
     scheduled = []
 
@@ -383,6 +444,7 @@ def test_schedule_startup_first_frame_ready_latest_token_wins(monkeypatch):
 def test_failed_transition_start_restores_widget_stack(qt_app, monkeypatch):
     calls: list[str] = []
     perf_messages: list[str] = []
+    warmed_pairs: list[tuple[object, object]] = []
 
     class _FakeSignal:
         def connect(self, _callback):
@@ -414,9 +476,10 @@ def test_failed_transition_start_restores_widget_stack(qt_app, monkeypatch):
         def raise_(self):
             calls.append("comp_raise")
 
-        def warm_shader_textures(self, *_args, **kwargs):
+        def warm_shader_textures(self, *args, **kwargs):
             calls.append("comp_warm")
             calls.append(f"warm_trace:{kwargs.get('perf_install_id', '')}")
+            warmed_pairs.append((args[0], args[1]))
 
         def get_texture_cache_perf_probe(self, old_pixmap, new_pixmap):
             warmed = "comp_warm" in calls
@@ -529,6 +592,7 @@ def test_failed_transition_start_restores_widget_stack(qt_app, monkeypatch):
 
     assert "transition_start" in calls
     assert "transition_cleanup" in calls
+    assert warmed_pairs == [(old_pixmap, new_pixmap)]
     assert "raise_widgets" in calls
     raise_indices = [idx for idx, call in enumerate(calls) if call == "raise_widgets"]
     assert any(idx > calls.index("transition_cleanup") for idx in raise_indices)
@@ -562,6 +626,7 @@ def test_failed_transition_start_restores_widget_stack(qt_app, monkeypatch):
 
 def test_set_processed_image_keeps_animation_manager_owned_until_controller_stop(qt_app, monkeypatch):
     calls: list[str] = []
+    warmed_pairs: list[tuple[object, object]] = []
 
     class _FakeSignal:
         def emit(self, *_args):
@@ -594,8 +659,9 @@ def test_set_processed_image_keeps_animation_manager_owned_until_controller_stop
         def raise_(self):
             calls.append("comp_raise")
 
-        def warm_shader_textures(self, *_args, **_kwargs):
+        def warm_shader_textures(self, *args, **_kwargs):
             calls.append("comp_warm")
+            warmed_pairs.append((args[0], args[1]))
 
     monkeypatch.setattr(display_image_ops, "GLCompositorWidget", _FakeCompositor)
 
@@ -662,3 +728,4 @@ def test_set_processed_image_keeps_animation_manager_owned_until_controller_stop
     assert "controller_stop" in calls
     assert "cancel_all" in calls
     assert widget._animation_manager is not None
+    assert warmed_pairs == [(None, new_pixmap)]

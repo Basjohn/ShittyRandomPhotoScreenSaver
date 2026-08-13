@@ -81,7 +81,8 @@ from `main`.
 - [x] Validate exact retained-texture steady presentation removes that base-draw spike without terminal visual discontinuity, identity regression or teardown residue.
 - [x] Attribute texture-upload CPU phases in a typical teardown/churn run: ordinary uploads are dominated by redundant image preparation/source copying rather than texture submission, while cold PBO staging and pair-warm residual remain separate owners.
 - [x] Validate native RGB32/ARGB32 plus direct read-only QImage-buffer upload: all `34/34` installed-run uploads use the direct path, the two copy spans are effectively eliminated, and pixel/identity/teardown bars remain closed.
-- [ ] Validate the correlated cold-install probe under startup and Settings recreation; split compositor show/pipeline/context/lookup/resource/cache/next-paint spans per install ID without adding scheduling or GL fences.
+- [x] Validate the correlated cold-install probe under startup and Settings recreation: all `32/32` accepted IDs are complete, all `26` steady old lookups hit, and the six generation-first misses isolate native show/context creation plus an unnecessary no-transition old upload.
+- [ ] Validate the no-transition old-upload removal and parser-1.19 offscreen-surface/shared-context split under startup plus Settings recreation before changing context ownership or lifecycle.
 - [ ] Remove proven GUI-thread service/cache preparation.
 - [ ] Attribute GPU busy across upload/transition/visualizer/presentation owners.
 - [ ] Remove proven temporary compatibility/fallback debris without changing behaviour.

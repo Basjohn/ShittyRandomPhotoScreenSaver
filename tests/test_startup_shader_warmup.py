@@ -496,6 +496,148 @@ def test_failed_shader_compile_still_consumes_only_one_warmup_slice(
     assert scheduled == [_warm_next_transition_program]
 
 
+def test_hidden_shared_warmup_context_trace_splits_creation_cost(monkeypatch) -> None:
+    class _Surface:
+        def __init__(self) -> None:
+            self._valid = False
+
+        def setFormat(self, _fmt) -> None:
+            return None
+
+        def create(self) -> None:
+            self._valid = True
+
+        def isValid(self) -> bool:
+            return self._valid
+
+        def destroy(self) -> None:
+            self._valid = False
+
+    class _Context:
+        def __init__(self) -> None:
+            self._valid = False
+            self._share_context = None
+
+        def format(self):
+            return "test-format"
+
+        def setFormat(self, _fmt) -> None:
+            return None
+
+        def setShareContext(self, share_context) -> None:
+            self._share_context = share_context
+
+        def create(self) -> bool:
+            self._valid = True
+            return True
+
+        def isValid(self) -> bool:
+            return self._valid
+
+    share_context = _Context()
+    share_context._valid = True
+    widget = SimpleNamespace(
+        _deferred_warmup_context=None,
+        _deferred_warmup_surface=None,
+        context=lambda: share_context,
+    )
+    monkeypatch.setattr(gl_lifecycle, "QOffscreenSurface", _Surface)
+    monkeypatch.setattr(gl_lifecycle, "QOpenGLContext", _Context)
+
+    trace: dict[str, object] = {}
+    target = gl_lifecycle._ensure_hidden_shared_warmup_context(
+        widget,
+        perf_trace=trace,
+    )
+
+    assert target is not None
+    assert trace["hidden_context_reused"] is False
+    assert trace["share_context_present"] is True
+    assert trace["share_context_valid"] is True
+    assert trace["offscreen_surface_create_ms"] >= 0.0
+    assert trace["shared_context_create_ms"] >= 0.0
+
+    reuse_trace: dict[str, object] = {}
+    assert gl_lifecycle._ensure_hidden_shared_warmup_context(
+        widget,
+        perf_trace=reuse_trace,
+    ) == target
+    assert reuse_trace["hidden_context_reused"] is True
+    assert reuse_trace["offscreen_surface_create_ms"] == 0.0
+    assert reuse_trace["shared_context_create_ms"] == 0.0
+
+
+def test_hidden_shared_warmup_context_destroys_surface_on_creation_failure(
+    monkeypatch,
+) -> None:
+    surface_valid = {"value": False}
+
+    class _Surface:
+        instances: list["_Surface"] = []
+
+        def __init__(self) -> None:
+            self.destroyed = False
+            self._valid = False
+            self.instances.append(self)
+
+        def setFormat(self, _fmt) -> None:
+            return None
+
+        def create(self) -> None:
+            self._valid = surface_valid["value"]
+
+        def isValid(self) -> bool:
+            return self._valid
+
+        def destroy(self) -> None:
+            self.destroyed = True
+            self._valid = False
+
+    class _ShareContext:
+        def format(self):
+            return "test-format"
+
+        def isValid(self) -> bool:
+            return True
+
+    class _FailingContext:
+        def setFormat(self, _fmt) -> None:
+            return None
+
+        def setShareContext(self, _share_context) -> None:
+            return None
+
+        def create(self) -> bool:
+            raise RuntimeError("context creation failed")
+
+    def _widget():
+        return SimpleNamespace(
+            _deferred_warmup_context=None,
+            _deferred_warmup_surface=None,
+            context=lambda: _ShareContext(),
+        )
+
+    monkeypatch.setattr(gl_lifecycle, "QOffscreenSurface", _Surface)
+    monkeypatch.setattr(gl_lifecycle, "QOpenGLContext", _FailingContext)
+
+    invalid_surface_trace: dict[str, object] = {}
+    assert gl_lifecycle._ensure_hidden_shared_warmup_context(
+        _widget(),
+        perf_trace=invalid_surface_trace,
+    ) is None
+    assert _Surface.instances[-1].destroyed is True
+    assert invalid_surface_trace["offscreen_surface_create_ms"] >= 0.0
+
+    surface_valid["value"] = True
+    thrown_context_trace: dict[str, object] = {}
+    assert gl_lifecycle._ensure_hidden_shared_warmup_context(
+        _widget(),
+        perf_trace=thrown_context_trace,
+    ) is None
+    assert _Surface.instances[-1].destroyed is True
+    assert thrown_context_trace["shared_context_create_ms"] >= 0.0
+
+
 def test_safe_warmup_context_trace_reports_hidden_and_deferred_routes(
     monkeypatch,
 ) -> None:
@@ -523,7 +665,7 @@ def test_safe_warmup_context_trace_reports_hidden_and_deferred_routes(
     monkeypatch.setattr(
         gl_lifecycle,
         "_ensure_hidden_shared_warmup_context",
-        lambda _widget: (context, surface),
+        lambda _widget, **_kwargs: (context, surface),
     )
 
     trace: dict[str, object] = {}
@@ -544,7 +686,7 @@ def test_safe_warmup_context_trace_reports_hidden_and_deferred_routes(
     monkeypatch.setattr(
         gl_lifecycle,
         "_ensure_hidden_shared_warmup_context",
-        lambda _widget: None,
+        lambda _widget, **_kwargs: None,
     )
     monkeypatch.setattr(
         gl_lifecycle,

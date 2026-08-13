@@ -339,7 +339,29 @@ def _has_live_visible_base_surface(widget) -> bool:
 
 def _ensure_hidden_shared_warmup_context(
     widget,
+    *,
+    perf_trace: dict[str, object] | None = None,
 ) -> tuple[QOpenGLContext, QOffscreenSurface] | None:
+    trace_enabled = perf_trace is not None
+    if trace_enabled:
+        perf_trace.update(
+            hidden_context_reused=False,
+            share_context_present=False,
+            share_context_valid=False,
+            offscreen_surface_create_ms=0.0,
+            shared_context_create_ms=0.0,
+        )
+        try:
+            share_context_probe = widget.context()
+        except Exception:
+            share_context_probe = None
+        perf_trace["share_context_present"] = share_context_probe is not None
+        try:
+            perf_trace["share_context_valid"] = bool(
+                share_context_probe is not None and share_context_probe.isValid()
+            )
+        except Exception:
+            perf_trace["share_context_valid"] = False
     try:
         existing_ctx = getattr(widget, "_deferred_warmup_context", None)
         existing_surface = getattr(widget, "_deferred_warmup_surface", None)
@@ -349,6 +371,8 @@ def _ensure_hidden_shared_warmup_context(
             and existing_ctx.isValid()
             and existing_surface.isValid()
         ):
+            if trace_enabled:
+                perf_trace["hidden_context_reused"] = True
             return existing_ctx, existing_surface
     except Exception:
         logger.debug("[GL COMPOSITOR] Failed to reuse deferred warmup context", exc_info=True)
@@ -358,35 +382,74 @@ def _ensure_hidden_shared_warmup_context(
         share_ctx = widget.context()
     except Exception:
         logger.debug("[GL COMPOSITOR] Failed to access compositor context for deferred warmup", exc_info=True)
+    if trace_enabled:
+        perf_trace["share_context_present"] = share_ctx is not None
+        try:
+            perf_trace["share_context_valid"] = bool(
+                share_ctx is not None and share_ctx.isValid()
+            )
+        except Exception:
+            perf_trace["share_context_valid"] = False
     if share_ctx is None:
         return None
 
+    surface = None
+    surface_started: float | None = None
+    context_started: float | None = None
+    committed = False
     try:
         fmt = share_ctx.format()
+        surface_started = time.perf_counter() if trace_enabled else None
         surface = QOffscreenSurface()
         surface.setFormat(fmt)
         surface.create()
+        if trace_enabled and surface_started is not None:
+            perf_trace["offscreen_surface_create_ms"] = (
+                time.perf_counter() - surface_started
+            ) * 1000.0
+            surface_started = None
         if not surface.isValid():
             logger.warning("[GL COMPOSITOR] Offscreen surface creation failed for deferred warmup")
             return None
 
+        context_started = time.perf_counter() if trace_enabled else None
         context = QOpenGLContext()
         context.setFormat(fmt)
         context.setShareContext(share_ctx)
-        if not context.create() or not context.isValid():
+        context_created = context.create()
+        if trace_enabled and context_started is not None:
+            perf_trace["shared_context_create_ms"] = (
+                time.perf_counter() - context_started
+            ) * 1000.0
+            context_started = None
+        if not context_created or not context.isValid():
             logger.warning("[GL COMPOSITOR] Shared offscreen context creation failed for deferred warmup")
-            try:
-                surface.destroy()
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Failed to destroy deferred warmup surface", exc_info=True)
             return None
 
         widget._deferred_warmup_context = context
         widget._deferred_warmup_surface = surface
+        committed = True
         return context, surface
     except Exception:
         logger.debug("[GL COMPOSITOR] Hidden shared deferred warmup context creation failed", exc_info=True)
         return None
+    finally:
+        if trace_enabled and surface_started is not None:
+            perf_trace["offscreen_surface_create_ms"] = (
+                time.perf_counter() - surface_started
+            ) * 1000.0
+        if trace_enabled and context_started is not None:
+            perf_trace["shared_context_create_ms"] = (
+                time.perf_counter() - context_started
+            ) * 1000.0
+        if not committed and surface is not None:
+            try:
+                surface.destroy()
+            except Exception:
+                logger.debug(
+                    "[GL COMPOSITOR] Failed to destroy deferred warmup surface",
+                    exc_info=True,
+                )
 
 
 def acquire_safe_warmup_context(
@@ -406,20 +469,25 @@ def acquire_safe_warmup_context(
     """
 
     trace_enabled = perf_trace is not None
-    hidden_context_preexisting = False
-    if trace_enabled:
-        hidden_context_preexisting = bool(
-            getattr(widget, "_deferred_warmup_context", None) is not None
-            and getattr(widget, "_deferred_warmup_surface", None) is not None
-        )
     context_prepare_started = time.perf_counter() if trace_enabled else 0.0
-    warmup_target = _ensure_hidden_shared_warmup_context(widget)
+    if trace_enabled:
+        perf_trace["preserve_live_surface"] = bool(preserve_live_surface)
+        perf_trace["live_base_visible"] = bool(
+            _has_live_visible_base_surface(widget)
+        )
+        warmup_target = _ensure_hidden_shared_warmup_context(
+            widget,
+            perf_trace=perf_trace,
+        )
+    else:
+        warmup_target = _ensure_hidden_shared_warmup_context(widget)
     if trace_enabled:
         perf_trace["context_prepare_ms"] = (
             time.perf_counter() - context_prepare_started
         ) * 1000.0
         perf_trace["hidden_context_created"] = bool(
-            warmup_target is not None and not hidden_context_preexisting
+            warmup_target is not None
+            and not bool(perf_trace.get("hidden_context_reused", False))
         )
     if warmup_target is not None:
         context, surface = warmup_target

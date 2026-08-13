@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.18"
+PARSER_VERSION = "1.19"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
@@ -945,6 +945,17 @@ def _parse_phase5_telemetry(
                     "pipeline_release_ms": _number(values.get("pipeline_release_ms")),
                     "context_route": values.get("context_route", ""),
                     "hidden_context_created": values.get("hidden_context_created", ""),
+                    "hidden_context_reused": values.get("hidden_context_reused", ""),
+                    "share_context_present": values.get("share_context_present", ""),
+                    "share_context_valid": values.get("share_context_valid", ""),
+                    "preserve_live_surface": values.get("preserve_live_surface", ""),
+                    "live_base_visible": values.get("live_base_visible", ""),
+                    "offscreen_surface_create_ms": _number(
+                        values.get("offscreen_surface_create_ms")
+                    ),
+                    "shared_context_create_ms": _number(
+                        values.get("shared_context_create_ms")
+                    ),
                     "context_acquire_ms": _number(values.get("context_acquire_ms")),
                     "context_prepare_ms": _number(values.get("context_prepare_ms")),
                     "context_make_current_ms": _number(values.get("context_make_current_ms")),
@@ -1851,6 +1862,14 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                         row.get("context_prepare_ms") for row in phase5_rows
                         if row["kind"] == "texture_pair_warm"
                     ),
+                    "offscreen_surface_create_ms": _metric_summary_with_p95(
+                        row.get("offscreen_surface_create_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
+                    "shared_context_create_ms": _metric_summary_with_p95(
+                        row.get("shared_context_create_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
                     "context_make_current_ms": _metric_summary_with_p95(
                         row.get("context_make_current_ms") for row in phase5_rows
                         if row["kind"] == "texture_pair_warm"
@@ -1899,6 +1918,16 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                             if row["kind"] == "texture_pair_warm" and row.get("context_route")
                         })
                     },
+                    "hidden_context_created_records": sum(
+                        row["kind"] == "texture_pair_warm"
+                        and str(row.get("hidden_context_created", "")).lower() == "true"
+                        for row in phase5_rows
+                    ),
+                    "hidden_context_reused_records": sum(
+                        row["kind"] == "texture_pair_warm"
+                        and str(row.get("hidden_context_reused", "")).lower() == "true"
+                        for row in phase5_rows
+                    ),
                 },
                 "texture_lookup": {
                     "records": sum(

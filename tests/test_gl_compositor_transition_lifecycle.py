@@ -690,6 +690,13 @@ def test_warm_shader_textures_emits_one_correlated_passive_trace(
         perf_trace.update(
             context_route="hidden_shared",
             hidden_context_created=True,
+            hidden_context_reused=False,
+            share_context_present=True,
+            share_context_valid=True,
+            preserve_live_surface=True,
+            live_base_visible=True,
+            offscreen_surface_create_ms=1.25,
+            shared_context_create_ms=1.75,
             context_prepare_ms=3.0,
             context_make_current_ms=1.5,
         )
@@ -734,5 +741,10 @@ def test_warm_shader_textures_emits_one_correlated_passive_trace(
     assert "outcome=completed" in message
     assert "context_route=hidden_shared" in message
     assert "hidden_context_created=true" in message
+    assert "hidden_context_reused=false" in message
+    assert "preserve_live_surface=true" in message
+    assert "live_base_visible=true" in message
+    assert "offscreen_surface_create_ms=1.250" in message
+    assert "shared_context_create_ms=1.750" in message
     assert "old_present=true" in message
     assert "new_present=true" in message

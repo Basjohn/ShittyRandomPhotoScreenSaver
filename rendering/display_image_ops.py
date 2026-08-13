@@ -67,6 +67,31 @@ def _texture_cache_perf_probe(
     }
 
 
+def _transition_pair_required(widget) -> bool:
+    """Return whether this install can consume both old and new textures."""
+    return bool(
+        widget.settings_manager
+        and widget._has_rendered_first_frame
+        and widget._transitions_enabled
+    )
+
+
+def _compositor_texture_runtime_is_warm(compositor) -> bool:
+    """Return whether the compositor can service an existing texture install."""
+    if not isinstance(compositor, GLCompositorWidget):
+        return False
+    try:
+        context = compositor.context()
+        if context is None or not context.isValid():
+            return False
+    except Exception:
+        return False
+    pipeline = getattr(compositor, "_gl_pipeline", None)
+    if pipeline is None or not bool(getattr(pipeline, "initialized", False)):
+        return False
+    return getattr(compositor, "_texture_manager", None) is not None
+
+
 def _next_image_install_perf_id(widget) -> str:
     """Return one display-local correlation identity for a perf-gated install."""
     sequence = int(getattr(widget, "_perf_image_install_sequence", 0) or 0) + 1
@@ -361,6 +386,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
     
     # Cache previous pixmap reference before we mutate current_pixmap
     previous_pixmap_ref = widget.current_pixmap
+    use_transition = _transition_pair_required(widget)
 
     # Seed base widget with the new frame before starting transitions.
     # This prevents fallback paints (black bands) while overlays warm up.
@@ -395,9 +421,11 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
         # its GL surface is active before any animated transition starts.
         # This reduces first-use flicker, especially on secondary
         # displays, by avoiding late compositor initialization.
-        cold_compositor = not isinstance(
-            getattr(widget, "_gl_compositor", None),
-            GLCompositorWidget,
+        cold_compositor = bool(
+            perf_enabled
+            and not _compositor_texture_runtime_is_warm(
+                getattr(widget, "_gl_compositor", None)
+            )
         )
         ensure_started = time.perf_counter() if perf_enabled else 0.0
         try:
@@ -487,15 +515,16 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                 )
                 warm_started = time.perf_counter() if perf_enabled else 0.0
                 warm_outcome = "completed"
+                warm_old_pixmap = previous_pixmap_ref if use_transition else None
                 try:
                     if perf_enabled:
                         comp.warm_shader_textures(
-                            previous_pixmap_ref,
+                            warm_old_pixmap,
                             new_pixmap,
                             perf_install_id=install_id,
                         )
                     else:
-                        comp.warm_shader_textures(previous_pixmap_ref, new_pixmap)
+                        comp.warm_shader_textures(warm_old_pixmap, new_pixmap)
                 except Exception:
                     warm_outcome = "error"
                     logger.debug(
@@ -529,12 +558,8 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     cold_compositor=cold_compositor,
                 )
 
-        use_transition = bool(widget.settings_manager) and widget._has_rendered_first_frame
         if widget.settings_manager and not widget._has_rendered_first_frame:
             logger.debug("[INIT] First frame - presenting without transition to avoid black flicker")
-
-        if not widget._transitions_enabled:
-            use_transition = False
 
         if use_transition:
             construct_started = time.perf_counter() if perf_enabled else 0.0
