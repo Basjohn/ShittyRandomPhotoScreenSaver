@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.17"
+PARSER_VERSION = "1.18"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
@@ -95,6 +95,15 @@ _GL_RETENTION_RE = re.compile(
 )
 _TEXTURE_UPLOAD_RE = re.compile(
     r"\[PERF\]\[GL TEXTURE\]\[UPLOAD\]\s+(?P<payload>.*)"
+)
+_TEXTURE_LOOKUP_RE = re.compile(
+    r"\[PERF\]\[GL TEXTURE\]\[LOOKUP\]\s+(?P<payload>.*)"
+)
+_TEXTURE_PAIR_WARM_RE = re.compile(
+    r"\[PERF\]\[GL TEXTURE\]\[PAIR_WARM\]\s+(?P<payload>.*)"
+)
+_IMAGE_INSTALL_NEXT_PAINT_RE = re.compile(
+    r"\[PERF\]\[IMAGE_INSTALL\]\[NEXT_PAINT\]\s+(?P<payload>.*)"
 )
 
 
@@ -791,6 +800,15 @@ def _parse_phase5_telemetry(
                 match = _TEXTURE_UPLOAD_RE.search(line)
                 kind = "texture_upload"
             if not match:
+                match = _TEXTURE_LOOKUP_RE.search(line)
+                kind = "texture_lookup"
+            if not match:
+                match = _TEXTURE_PAIR_WARM_RE.search(line)
+                kind = "texture_pair_warm"
+            if not match:
+                match = _IMAGE_INSTALL_NEXT_PAINT_RE.search(line)
+                kind = "image_install_next_paint"
+            if not match:
                 continue
             seen.add(normalized)
             values = _kv(match.group("payload"))
@@ -809,6 +827,8 @@ def _parse_phase5_telemetry(
                     "mode": values.get("mode", ""),
                     "callable": values.get("callable", ""),
                     "stage": values.get("stage", ""),
+                    "install_id": values.get("install_id", ""),
+                    "role": values.get("role", ""),
                     "generation": _integer(values.get("generation")),
                     "outcome": values.get("outcome", ""),
                     "update_requested": values.get("update_requested", ""),
@@ -896,6 +916,7 @@ def _parse_phase5_telemetry(
                     "start_mono_ms": _number(values.get("start_mono_ms")),
                     "end_mono_ms": _number(values.get("end_mono_ms")),
                     "duration_ms": _number(values.get("duration_ms")),
+                    "trace_total_ms": _number(values.get("total_ms")),
                     "size": values.get("size", ""),
                     "cold_compositor": values.get("cold_compositor", ""),
                     "manager_before": values.get("manager_before", ""),
@@ -912,6 +933,38 @@ def _parse_phase5_telemetry(
                     "cache_hits_delta": _integer(values.get("cache_hits_delta")),
                     "texture_allocations_delta": _integer(values.get("texture_allocations_delta")),
                     "texture_uploads_delta": _integer(values.get("texture_uploads_delta")),
+                    "geometry_ms": _number(values.get("geometry_ms")),
+                    "set_base_ms": _number(values.get("set_base_ms")),
+                    "show_ms": _number(values.get("show_ms")),
+                    "raise_ms": _number(values.get("raise_ms")),
+                    "pipeline_was_ready": values.get("pipeline_was_ready", ""),
+                    "pipeline_outcome": values.get("pipeline_outcome", ""),
+                    "pipeline_ensure_ms": _number(values.get("pipeline_ensure_ms")),
+                    "pipeline_make_current_ms": _number(values.get("pipeline_make_current_ms")),
+                    "pipeline_initialize_ms": _number(values.get("pipeline_initialize_ms")),
+                    "pipeline_release_ms": _number(values.get("pipeline_release_ms")),
+                    "context_route": values.get("context_route", ""),
+                    "hidden_context_created": values.get("hidden_context_created", ""),
+                    "context_acquire_ms": _number(values.get("context_acquire_ms")),
+                    "context_prepare_ms": _number(values.get("context_prepare_ms")),
+                    "context_make_current_ms": _number(values.get("context_make_current_ms")),
+                    "context_release_ms": _number(values.get("context_release_ms")),
+                    "manager_present_before": values.get("manager_present_before", ""),
+                    "manager_ensure_ms": _number(values.get("manager_ensure_ms")),
+                    "manager_initialize_ms": _number(values.get("manager_initialize_ms")),
+                    "old_present": values.get("old_present", ""),
+                    "old_texture_ms": _number(values.get("old_texture_ms")),
+                    "new_present": values.get("new_present", ""),
+                    "new_texture_ms": _number(values.get("new_texture_ms")),
+                    "cache_hit": values.get("cache_hit", ""),
+                    "cache_key": _integer(values.get("cache_key")),
+                    "texture_id": _integer(values.get("texture_id")),
+                    "cache_lookup_ms": _number(values.get("cache_lookup_ms")),
+                    "upload_call_ms": _number(values.get("upload_call_ms")),
+                    "cache_publish_ms": _number(values.get("cache_publish_ms")),
+                    "install_to_next_paint_ms": _number(values.get("install_to_next_paint_ms")),
+                    "base_mark_to_next_paint_ms": _number(values.get("base_mark_to_next_paint_ms")),
+                    "scene_generation": _integer(values.get("scene_generation")),
                     "terminal": _integer(values.get("terminal")),
                     "retain_active": values.get("retain_active", ""),
                     "retained_texture": _integer(values.get("retained_texture")),
@@ -935,6 +988,9 @@ def _parse_phase5_telemetry(
                     "texture_alloc_ms": _number(values.get("texture_alloc_ms")),
                     "pbo_stage_ms": _number(values.get("pbo_stage_ms")),
                     "texture_submit_ms": _number(values.get("texture_submit_ms")),
+                    "upload_end_to_end_ms": _number(values.get("end_to_end_ms")),
+                    "resource_tracking_ms": _number(values.get("resource_tracking_ms")),
+                    "manager_publish_ms": _number(values.get("manager_publish_ms")),
                     "unattributed_ms": _number(values.get("unattributed_ms")),
                     "interval_scope": values.get("interval_scope", ""),
                     "interval_texture_uploads": _integer(values.get("interval_texture_uploads")),
@@ -1096,6 +1152,74 @@ def _frame_gap_last_ui_summary(
         }
         for label in sorted({str(row["last_ui"]) for row in frame_gap_rows})
         if (rows := [row for row in frame_gap_rows if row["last_ui"] == label])
+    }
+
+
+def _image_install_correlation_summary(
+    phase5_rows: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    """Join passive image-install spans without treating missing parts as causal."""
+    install_ids = sorted({
+        str(row.get("install_id"))
+        for row in phase5_rows
+        if row.get("install_id") not in (None, "", "none")
+    })
+    by_install_id: dict[str, dict[str, object]] = {}
+    for install_id in install_ids:
+        rows = [row for row in phase5_rows if row.get("install_id") == install_id]
+        stage_rows = [row for row in rows if row["kind"] == "image_ui_segment"]
+        lookup_rows = [row for row in rows if row["kind"] == "texture_lookup"]
+        upload_rows = [row for row in rows if row["kind"] == "texture_upload"]
+        by_install_id[install_id] = {
+            "image_ui_stages": sorted({
+                str(row.get("stage")) for row in stage_rows if row.get("stage")
+            }),
+            "pair_warm_records": sum(
+                row["kind"] == "texture_pair_warm" for row in rows
+            ),
+            "lookup_roles": sorted({
+                str(row.get("role")) for row in lookup_rows if row.get("role")
+            }),
+            "lookup_records": len(lookup_rows),
+            "upload_roles": sorted({
+                str(row.get("role")) for row in upload_rows if row.get("role")
+            }),
+            "upload_records": len(upload_rows),
+            "next_paint_records": sum(
+                row["kind"] == "image_install_next_paint" for row in rows
+            ),
+            "accepted_setup": any(
+                row.get("stage") == "compositor_setup"
+                and row.get("outcome") == "completed"
+                for row in stage_rows
+            ),
+        }
+    accepted_ids = [
+        install_id
+        for install_id, summary in by_install_id.items()
+        if bool(summary["accepted_setup"])
+    ]
+    return {
+        "install_ids": len(install_ids),
+        "accepted_install_ids": len(accepted_ids),
+        "by_install_id": by_install_id,
+        "without_accepted_setup": [
+            install_id
+            for install_id, summary in by_install_id.items()
+            if not bool(summary["accepted_setup"])
+        ],
+        "without_pair_warm": [
+            install_id
+            for install_id in accepted_ids
+            for summary in (by_install_id[install_id],)
+            if int(summary["pair_warm_records"]) == 0
+        ],
+        "without_next_paint": [
+            install_id
+            for install_id in accepted_ids
+            for summary in (by_install_id[install_id],)
+            if int(summary["next_paint_records"]) == 0
+        ],
     }
 
 
@@ -1658,6 +1782,22 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                             row.get("texture_uploads_delta") for row in phase5_rows
                             if row["kind"] == "image_ui_segment" and row["stage"] == stage
                         ),
+                        "geometry_ms": _metric_summary_with_p95(
+                            row.get("geometry_ms") for row in phase5_rows
+                            if row["kind"] == "image_ui_segment" and row["stage"] == stage
+                        ),
+                        "set_base_ms": _metric_summary_with_p95(
+                            row.get("set_base_ms") for row in phase5_rows
+                            if row["kind"] == "image_ui_segment" and row["stage"] == stage
+                        ),
+                        "show_ms": _metric_summary_with_p95(
+                            row.get("show_ms") for row in phase5_rows
+                            if row["kind"] == "image_ui_segment" and row["stage"] == stage
+                        ),
+                        "raise_ms": _metric_summary_with_p95(
+                            row.get("raise_ms") for row in phase5_rows
+                            if row["kind"] == "image_ui_segment" and row["stage"] == stage
+                        ),
                     }
                     for stage in sorted({
                         str(row["stage"])
@@ -1675,6 +1815,142 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                         for row in phase5_rows
                         if row["kind"] == "image_ui_delay" and row["outcome"]
                     })
+                },
+            },
+            "image_install_trace": {
+                **_image_install_correlation_summary(phase5_rows),
+                "pair_warm": {
+                    "records": sum(
+                        row["kind"] == "texture_pair_warm" for row in phase5_rows
+                    ),
+                    "total_ms": _metric_summary_with_p95(
+                        row.get("trace_total_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
+                    "pipeline_ensure_ms": _metric_summary_with_p95(
+                        row.get("pipeline_ensure_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
+                    "pipeline_make_current_ms": _metric_summary_with_p95(
+                        row.get("pipeline_make_current_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
+                    "pipeline_initialize_ms": _metric_summary_with_p95(
+                        row.get("pipeline_initialize_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
+                    "pipeline_release_ms": _metric_summary_with_p95(
+                        row.get("pipeline_release_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
+                    "context_acquire_ms": _metric_summary_with_p95(
+                        row.get("context_acquire_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
+                    "context_prepare_ms": _metric_summary_with_p95(
+                        row.get("context_prepare_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
+                    "context_make_current_ms": _metric_summary_with_p95(
+                        row.get("context_make_current_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
+                    "context_release_ms": _metric_summary_with_p95(
+                        row.get("context_release_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
+                    "manager_ensure_ms": _metric_summary_with_p95(
+                        row.get("manager_ensure_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
+                    "manager_initialize_ms": _metric_summary_with_p95(
+                        row.get("manager_initialize_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
+                    "old_texture_ms": _metric_summary_with_p95(
+                        row.get("old_texture_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
+                    "new_texture_ms": _metric_summary_with_p95(
+                        row.get("new_texture_ms") for row in phase5_rows
+                        if row["kind"] == "texture_pair_warm"
+                    ),
+                    "outcomes": {
+                        outcome: sum(
+                            row["kind"] == "texture_pair_warm"
+                            and row.get("outcome") == outcome
+                            for row in phase5_rows
+                        )
+                        for outcome in sorted({
+                            str(row.get("outcome"))
+                            for row in phase5_rows
+                            if row["kind"] == "texture_pair_warm" and row.get("outcome")
+                        })
+                    },
+                    "context_routes": {
+                        route: sum(
+                            row["kind"] == "texture_pair_warm"
+                            and row.get("context_route") == route
+                            for row in phase5_rows
+                        )
+                        for route in sorted({
+                            str(row.get("context_route"))
+                            for row in phase5_rows
+                            if row["kind"] == "texture_pair_warm" and row.get("context_route")
+                        })
+                    },
+                },
+                "texture_lookup": {
+                    "records": sum(
+                        row["kind"] == "texture_lookup" for row in phase5_rows
+                    ),
+                    "by_role": {
+                        role: {
+                            "records": len(rows),
+                            "cache_hits": sum(
+                                row.get("cache_hit") == "true" for row in rows
+                            ),
+                            "total_ms": _metric_summary_with_p95(
+                                row.get("trace_total_ms") for row in rows
+                            ),
+                            "cache_lookup_ms": _metric_summary_with_p95(
+                                row.get("cache_lookup_ms") for row in rows
+                            ),
+                            "upload_call_ms": _metric_summary_with_p95(
+                                row.get("upload_call_ms") for row in rows
+                            ),
+                            "cache_publish_ms": _metric_summary_with_p95(
+                                row.get("cache_publish_ms") for row in rows
+                            ),
+                        }
+                        for role in sorted({
+                            str(row.get("role"))
+                            for row in phase5_rows
+                            if row["kind"] == "texture_lookup" and row.get("role")
+                        })
+                        if (rows := [
+                            row for row in phase5_rows
+                            if row["kind"] == "texture_lookup" and row.get("role") == role
+                        ])
+                    },
+                },
+                "next_paint": {
+                    "records": sum(
+                        row["kind"] == "image_install_next_paint"
+                        for row in phase5_rows
+                    ),
+                    "install_to_next_paint_ms": _metric_summary_with_p95(
+                        row.get("install_to_next_paint_ms") for row in phase5_rows
+                        if row["kind"] == "image_install_next_paint"
+                    ),
+                    "base_mark_to_next_paint_ms": _metric_summary_with_p95(
+                        row.get("base_mark_to_next_paint_ms") for row in phase5_rows
+                        if row["kind"] == "image_install_next_paint"
+                    ),
+                    "paint_ms": _metric_summary_with_p95(
+                        row.get("paint_ms") for row in phase5_rows
+                        if row["kind"] == "image_install_next_paint"
+                    ),
                 },
             },
             "texture_upload": {
@@ -1714,6 +1990,9 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                         "texture_alloc_ms": _metric_summary(row.get("texture_alloc_ms") for row in rows),
                         "pbo_stage_ms": _metric_summary(row.get("pbo_stage_ms") for row in rows),
                         "texture_submit_ms": _metric_summary(row.get("texture_submit_ms") for row in rows),
+                        "end_to_end_ms": _metric_summary_with_p95(row.get("upload_end_to_end_ms") for row in rows),
+                        "resource_tracking_ms": _metric_summary_with_p95(row.get("resource_tracking_ms") for row in rows),
+                        "manager_publish_ms": _metric_summary_with_p95(row.get("manager_publish_ms") for row in rows),
                         "unattributed_ms": _metric_summary(row.get("unattributed_ms") for row in rows),
                     }
                     for path in sorted({

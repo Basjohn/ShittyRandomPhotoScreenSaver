@@ -186,7 +186,7 @@ Parse the current live root directly when the active sidecars are still in place
 python tools/recovery_evidence_parser.py --source logs --output-dir logs/_analysis_live
 ```
 
-Parser 1.17 treats a directory named `logs` as the live sidecar root: it reads only
+Parser 1.18 treats a directory named `logs` as the live sidecar root: it reads only
 immediate `.log` files and their rotations, ignoring `evidence_chest`, derived-analysis,
 and other descendant trees. Each selected file is read once; its recorded size and the
 source hash cover the exact byte prefix consumed even if a live sidecar continues growing
@@ -194,7 +194,7 @@ during analysis.
 
 Phase 5 output also promotes each 10-second
 `[PERF][SPOTIFY_VIS][OVERLAY]` window into structured per-mode state-publication,
-update-request, `paintGL`, CPU paint-duration, and state-to-paint rates. Parser 1.17
+update-request, `paintGL`, CPU paint-duration, and state-to-paint rates. Parser 1.18
 separately parses `[PERF][SPOTIFY_VIS][OVERLAY_GPU]` windows emitted by the
 non-blocking owner-context timer-query ring. A GPU duration is measured only when
 `gpu_supported=True` and `gpu_samples` is non-zero; unsupported, pending, dropped,
@@ -203,24 +203,34 @@ interpreted as zero GPU work. Correlate those records with the display refresh r
 they measure Qt FBO presentation pressure, not physical scanout/present count, and do
 not authorize a logical Bubble/Spectrum cadence change.
 
-Parser 1.17 additionally parses `[PERF][GL COMPOSITOR][GPU]` windows and groups their
+Parser 1.18 additionally parses `[PERF][GL COMPOSITOR][GPU]` windows and groups their
 non-blocking timer-query samples by transition label. Correlate those samples with
 process GPU busy, texture uploads and frame/request-age windows; compositor queries
 measure the existing draw span, not swap/composition/scanout.
 
-Parser 1.17 preserves visualizer transition name/elapsed/idle-age/latency-trigger fields
+Parser 1.18 preserves visualizer transition name/elapsed/idle-age/latency-trigger fields
 and classifies tick spikes as transition-start, active-transition, transition-end or
 idle. The boundary summaries are causal triage aids: they do not prove that transition
 state caused a gap, but they prevent start/end stalls from disappearing into one global
 tick distribution and make repeated runtime comparisons deterministic.
 
-Parser 1.17 also promotes each perf-only `[PERF][GL TEXTURE][UPLOAD]` record into a
+Parser 1.18 also promotes each perf-only `[PERF][GL TEXTURE][UPLOAD]` record into a
 CPU-phase breakdown: QPixmap/QImage preparation, source-bits copy, texture allocation,
 PBO staging, texture submission and unattributed remainder. It also reports the source
 image format and whether upload consumed the direct read-only QImage view or a copied
 fallback. The probe adds no normal-run phase clocks or logging. Use its typical-run
 result to decide whether a second, non-blocking owner-context GPU query around upload
 submission is justified.
+
+Parser 1.18 joins one perf-only image-install identity across detailed compositor setup,
+pipeline/safe-context acquisition, old/new cache lookup or upload, resource registration,
+cache publication, and the next already-requested compositor paint. The summary retains
+min/median/p95/max subspans, separates IDs that never reached accepted compositor setup,
+and lists accepted IDs without pair-warm or next-paint records instead of hiding them in
+global aggregates. `NEXT_PAINT` is only the next compositor paint
+after the accepted install boundary; it does not claim that the new image was already
+visible or that physical scanout occurred. The probe never schedules a paint or changes
+GL/context fallback behavior.
 
 New captures are plain disposable subfolders. Parse an explicitly selected capture
 directly; do not create a ZIP merely for analysis:
@@ -232,7 +242,7 @@ python tools/recovery_evidence_parser.py --source logs/evidence_chest/phase4plus
 The parser filename is historical and remains stable; its name does not make any historical branch or candidate an implementation authority.
 
 Explicit evidence-run folders retain recursive discovery for copied/extracted layouts;
-select one run rather than the whole `evidence_chest` parent. Parser 1.17 joins copied
+select one run rather than the whole `evidence_chest` parent. Parser 1.18 joins copied
 sidecar rotations oldest-first and then reads the active
 `.log`, so a session that crosses `screensaver_verbose.log.1` or
 `screensaver_lifecycle.log.1` remains continuous. Copy only the rotations needed
@@ -254,7 +264,7 @@ latter separates `QImage→QPixmap` conversion from display
 setter/transition-start cost. Do not change display staggering from a
 last-callback correlation alone.
 
-Parser 1.17 retains the full passive `[FRAME_GAP_OWNER]` snapshot: last-completed UI
+Parser 1.18 retains the full passive `[FRAME_GAP_OWNER]` snapshot: last-completed UI
 callback duration and age, UI/worker queue and active counts, worker execution/callback
 spans, and media/overlay/render-request deltas. Its `by_last_ui` summary is descriptive
 only. A label whose completed duration is tiny or whose age exceeds the frame gap is not

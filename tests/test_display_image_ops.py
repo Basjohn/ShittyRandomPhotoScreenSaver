@@ -402,14 +402,21 @@ def test_failed_transition_start_restores_widget_stack(qt_app, monkeypatch):
         def set_base_pixmap(self, *_args):
             calls.append("comp_base")
 
+        def mark_image_install_next_paint_perf_trace(self, install_id, _started_ts):
+            calls.append(f"install_trace:{install_id}")
+
+        def clear_image_install_next_paint_perf_trace(self, install_id):
+            calls.append(f"clear_install_trace:{install_id}")
+
         def show(self):
             calls.append("comp_show")
 
         def raise_(self):
             calls.append("comp_raise")
 
-        def warm_shader_textures(self, *_args):
+        def warm_shader_textures(self, *_args, **kwargs):
             calls.append("comp_warm")
+            calls.append(f"warm_trace:{kwargs.get('perf_install_id', '')}")
 
         def get_texture_cache_perf_probe(self, old_pixmap, new_pixmap):
             warmed = "comp_warm" in calls
@@ -534,6 +541,21 @@ def test_failed_transition_start_restores_widget_stack(qt_app, monkeypatch):
     assert f"retained_key_before={old_pixmap.cacheKey()}" in generic_warm
     assert "old_cached_before=true" in generic_warm
     assert "texture_allocations_delta=1" in generic_warm
+    install_ids = {
+        message.split("install_id=", 1)[1].split(" ", 1)[0]
+        for message in perf_messages
+        if "install_id=" in message
+    }
+    assert len(install_ids) == 1
+    install_id = install_ids.pop()
+    assert install_id != "none"
+    assert f"install_trace:{install_id}" in calls
+    assert f"warm_trace:{install_id}" in calls
+    compositor_setup = next(
+        message for message in perf_messages if "stage=compositor_setup" in message
+    )
+    for field in ("geometry_ms=", "set_base_ms=", "show_ms=", "raise_ms="):
+        assert field in compositor_setup
     assert any("stage=transition_specific_warm" in message for message in perf_messages)
     assert any("stage=transition_controller_start" in message for message in perf_messages)
 
@@ -572,7 +594,7 @@ def test_set_processed_image_keeps_animation_manager_owned_until_controller_stop
         def raise_(self):
             calls.append("comp_raise")
 
-        def warm_shader_textures(self, *_args):
+        def warm_shader_textures(self, *_args, **_kwargs):
             calls.append("comp_warm")
 
     monkeypatch.setattr(display_image_ops, "GLCompositorWidget", _FakeCompositor)

@@ -115,6 +115,11 @@ bytes/resources/unknowns to zero, so the saving does not trade for a retained
 representation or resource leak. Cold PBO staging and pair-warm/context setup remain
 separate attribution work.
 
+The current correlated cold-install probe separately times application resource
+registration and texture-manager byte/cache publication under the same install ID as
+old/new lookup and upload. This is measurement, not a new resource owner or retention
+path; the installed gate must still show terminal GL/PBO ownership returning to zero.
+
 ## Visualizer Presentation Efficiency
 
 Captured screen 1 is 60 Hz while the current typical-load run records Bubble medians of

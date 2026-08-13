@@ -67,16 +67,46 @@ def _texture_cache_perf_probe(
     }
 
 
+def _next_image_install_perf_id(widget) -> str:
+    """Return one display-local correlation identity for a perf-gated install."""
+    sequence = int(getattr(widget, "_perf_image_install_sequence", 0) or 0) + 1
+    widget._perf_image_install_sequence = sequence
+    screen = getattr(widget, "screen_index", "x")
+    generation = getattr(widget, "_runtime_generation", 0)
+    generation_text = "_".join(str(generation if generation is not None else 0).split())
+    return f"d{screen}-g{generation_text}-i{sequence}"
+
+
+def _format_image_ui_extra_fields(values: Optional[dict[str, object]]) -> str:
+    """Format controlled perf fields without paying work outside perf logging."""
+    if not values:
+        return ""
+    fields: list[str] = []
+    for key, value in values.items():
+        if value is None:
+            rendered = "na"
+        elif isinstance(value, bool):
+            rendered = str(value).lower()
+        elif isinstance(value, float):
+            rendered = f"{value:.3f}"
+        else:
+            rendered = "_".join(str(value).split())
+        fields.append(f"{key}={rendered}")
+    return " " + " ".join(fields)
+
+
 def _log_image_ui_stage(
     widget,
     *,
     stage: str,
     started_ts: float,
+    install_id: str = "",
     transition: str = "none",
     outcome: str = "completed",
     cold_compositor: bool = False,
     before_probe: Optional[dict[str, int | bool]] = None,
     after_probe: Optional[dict[str, int | bool]] = None,
+    extra_fields: Optional[dict[str, object]] = None,
 ) -> None:
     """Emit one bounded, perf-only substage record for image installation."""
     if not started_ts:
@@ -114,14 +144,15 @@ def _log_image_ui_stage(
         height = 0
     logger.info(
         "[PERF] [IMAGE_UI_SEGMENT] reason=display_setter_detail display=%s "
-        "stage=%s duration_ms=%.2f transition=%s outcome=%s size=%dx%d "
+        "stage=%s install_id=%s duration_ms=%.2f transition=%s outcome=%s size=%dx%d "
         "cold_compositor=%s manager_before=%s manager_after=%s "
         "cache_size_before=%d cache_size_after=%d retained_key_before=%d "
         "old_key=%d new_key=%d old_cached_before=%s new_cached_before=%s "
         "old_texture_before=%d new_texture_before=%d cache_hits_delta=%d "
-        "texture_allocations_delta=%d texture_uploads_delta=%d",
+        "texture_allocations_delta=%d texture_uploads_delta=%d%s",
         getattr(widget, "screen_index", "?"),
         stage,
+        install_id or "none",
         max(0.0, (time.perf_counter() - started_ts) * 1000.0),
         transition or "none",
         outcome,
@@ -142,6 +173,7 @@ def _log_image_ui_stage(
         cache_hits_delta,
         allocations_delta,
         uploads_delta,
+        _format_image_ui_extra_fields(extra_fields),
     )
 
 
@@ -291,6 +323,8 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
         return
 
     perf_enabled = is_perf_metrics_enabled()
+    install_started = time.perf_counter() if perf_enabled else 0.0
+    install_id = _next_image_install_perf_id(widget) if perf_enabled else ""
 
     # Use the pre-processed pixmap directly - no UI thread blocking
     new_pixmap = processed_pixmap
@@ -322,6 +356,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
         widget,
         stage="retire_previous_transition",
         started_ts=retire_started,
+        install_id=install_id,
     )
     
     # Cache previous pixmap reference before we mutate current_pixmap
@@ -374,6 +409,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
             widget,
             stage="ensure_compositor",
             started_ts=ensure_started,
+            install_id=install_id,
             cold_compositor=cold_compositor,
             after_probe=(
                 _texture_cache_perf_probe(comp, previous_pixmap_ref, new_pixmap)
@@ -384,20 +420,61 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
         if isinstance(comp, GLCompositorWidget):
             compositor_setup_ok = True
             setup_started = time.perf_counter() if perf_enabled else 0.0
+            setup_phase_started = setup_started if perf_enabled else 0.0
+            setup_fields: Optional[dict[str, object]] = {} if perf_enabled else None
             try:
                 comp.setGeometry(0, 0, widget.width(), widget.height())
+                if perf_enabled:
+                    setup_phase_now = time.perf_counter()
+                    setup_fields["geometry_ms"] = (
+                        setup_phase_now - setup_phase_started
+                    ) * 1000.0
+                    setup_phase_started = setup_phase_now
                 comp.set_base_pixmap(widget.current_pixmap)
+                if perf_enabled:
+                    setup_phase_now = time.perf_counter()
+                    setup_fields["set_base_ms"] = (
+                        setup_phase_now - setup_phase_started
+                    ) * 1000.0
+                    setup_phase_started = setup_phase_now
+                    mark_install = getattr(
+                        comp,
+                        "mark_image_install_next_paint_perf_trace",
+                        None,
+                    )
+                    if callable(mark_install):
+                        mark_install(install_id, install_started)
                 comp.show()
+                if perf_enabled:
+                    setup_phase_now = time.perf_counter()
+                    setup_fields["show_ms"] = (
+                        setup_phase_now - setup_phase_started
+                    ) * 1000.0
+                    setup_phase_started = setup_phase_now
                 comp.raise_()
+                if perf_enabled:
+                    setup_fields["raise_ms"] = (
+                        time.perf_counter() - setup_phase_started
+                    ) * 1000.0
             except Exception:
                 compositor_setup_ok = False
+                if perf_enabled:
+                    clear_install = getattr(
+                        comp,
+                        "clear_image_install_next_paint_perf_trace",
+                        None,
+                    )
+                    if callable(clear_install):
+                        clear_install(install_id)
                 logger.debug("[GL COMPOSITOR] Failed to pre-warm compositor with base frame", exc_info=True)
             _log_image_ui_stage(
                 widget,
                 stage="compositor_setup",
                 started_ts=setup_started,
+                install_id=install_id,
                 outcome="completed" if compositor_setup_ok else "error",
                 cold_compositor=cold_compositor,
+                extra_fields=setup_fields,
             )
             if compositor_setup_ok:
                 # Prewarm shader textures for the upcoming transition so
@@ -411,7 +488,14 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                 warm_started = time.perf_counter() if perf_enabled else 0.0
                 warm_outcome = "completed"
                 try:
-                    comp.warm_shader_textures(previous_pixmap_ref, new_pixmap)
+                    if perf_enabled:
+                        comp.warm_shader_textures(
+                            previous_pixmap_ref,
+                            new_pixmap,
+                            perf_install_id=install_id,
+                        )
+                    else:
+                        comp.warm_shader_textures(previous_pixmap_ref, new_pixmap)
                 except Exception:
                     warm_outcome = "error"
                     logger.debug(
@@ -427,6 +511,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     widget,
                     stage="generic_pair_warm",
                     started_ts=warm_started,
+                    install_id=install_id,
                     outcome=warm_outcome,
                     cold_compositor=cold_compositor,
                     before_probe=warm_before,
@@ -440,6 +525,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     widget,
                     stage="prewarm_overlay_raise",
                     started_ts=prewarm_raise_started,
+                    install_id=install_id,
                     cold_compositor=cold_compositor,
                 )
 
@@ -458,6 +544,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                 widget,
                 stage="transition_construct",
                 started_ts=construct_started,
+                install_id=install_id,
                 transition=transition_name,
                 outcome="completed" if transition else "none",
                 cold_compositor=cold_compositor,
@@ -501,6 +588,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     widget,
                     stage="transition_specific_warm",
                     started_ts=transition_warm_started,
+                    install_id=install_id,
                     transition=transition.__class__.__name__,
                     cold_compositor=cold_compositor,
                     before_probe=transition_warm_before,
@@ -538,6 +626,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     widget,
                     stage="transition_controller_start",
                     started_ts=transition_start_started,
+                    install_id=install_id,
                     transition=transition.__class__.__name__,
                     outcome="completed" if success else "refused",
                     cold_compositor=cold_compositor,
@@ -577,6 +666,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                         widget,
                         stage="post_start_overlay_accounting",
                         started_ts=post_start_started,
+                        install_id=install_id,
                         transition=transition.__class__.__name__,
                         cold_compositor=cold_compositor,
                     )
@@ -632,6 +722,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
             widget,
             stage="immediate_display_accounting",
             started_ts=immediate_started,
+            install_id=install_id,
             transition="none",
             cold_compositor=cold_compositor,
         )

@@ -87,6 +87,54 @@ class TestTextureCache:
         assert manager.old_tex_id == 0
         assert manager.new_tex_id == 0
 
+    def test_correlated_lookup_trace_distinguishes_hit_and_upload(
+        self,
+        monkeypatch,
+        caplog,
+    ):
+        from rendering.gl_programs import texture_manager as module
+
+        class _Pixmap:
+            def __init__(self, key):
+                self._key = key
+
+            def isNull(self):
+                return False
+
+            def cacheKey(self):
+                return self._key
+
+        monkeypatch.setattr(module, "gl", object())
+        monkeypatch.setattr(module, "is_perf_metrics_enabled", lambda: True)
+        manager = module.GLTextureManager(owner="compositor:trace", generation=7)
+        manager._texture_cache[41] = 51
+        manager._texture_lru.append(41)
+        monkeypatch.setattr(manager, "upload_pixmap", lambda _pixmap, **_kwargs: 52)
+
+        with caplog.at_level(logging.INFO, logger=module.__name__):
+            assert manager.get_or_create_texture(
+                _Pixmap(41),
+                perf_install_id="d0-g7-i1",
+                perf_role="old",
+            ) == 51
+            assert manager.get_or_create_texture(
+                _Pixmap(42),
+                perf_install_id="d0-g7-i1",
+                perf_role="new",
+            ) == 52
+
+        messages = [
+            record.getMessage()
+            for record in caplog.records
+            if "[PERF][GL TEXTURE][LOOKUP]" in record.getMessage()
+        ]
+        assert len(messages) == 2
+        assert "role=old" in messages[0]
+        assert "outcome=cache_hit" in messages[0]
+        assert "role=new" in messages[1]
+        assert "outcome=uploaded" in messages[1]
+        assert all("install_id=d0-g7-i1" in message for message in messages)
+
 
 class TestGLTextureManagerLifecycle:
     """Tests for GLTextureManager lifecycle."""
@@ -427,7 +475,7 @@ class TestPassiveGLAccounting:
         monkeypatch.setattr(manager, "_get_or_create_pbo", lambda size: 0)
 
         assert manager.upload_pixmap(pixmap) == 55
-        assert len(clock_calls) == 7
+        assert len(clock_calls) == 12
         message = next(
             record.getMessage()
             for record in caplog.records
@@ -439,6 +487,9 @@ class TestPassiveGLAccounting:
         assert "bits_copy_ms=" in message
         assert "pbo_stage_ms=" in message
         assert "texture_submit_ms=" in message
+        assert "end_to_end_ms=" in message
+        assert "resource_tracking_ms=" in message
+        assert "manager_publish_ms=" in message
 
     def test_failed_upload_reconciles_texture_allocation_and_delete_bytes(
         self,

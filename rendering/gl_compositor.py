@@ -261,6 +261,7 @@ class GLCompositorWidget(QOpenGLWidget):
             else None
         )
         self._gpu_timer_query_last_log_ts: float = time.monotonic()
+        self._perf_pending_image_install: Optional[dict[str, object]] = None
 
         # PERFORMANCE: Cached viewport size to avoid per-frame DPR calculations.
         # Invalidated on resize events.
@@ -696,6 +697,26 @@ class GLCompositorWidget(QOpenGLWidget):
         if self._crossfade is None:
             self.update()
 
+    def mark_image_install_next_paint_perf_trace(
+        self,
+        install_id: str,
+        install_started_ts: float,
+    ) -> None:
+        """Attach an accepted install boundary to the next existing paint."""
+        if not is_perf_metrics_enabled() or not install_id or install_started_ts <= 0.0:
+            return
+        self._perf_pending_image_install = {
+            "install_id": str(install_id),
+            "install_started_ts": float(install_started_ts),
+            "base_mark_ts": time.perf_counter(),
+        }
+
+    def clear_image_install_next_paint_perf_trace(self, install_id: str) -> None:
+        """Discard a failed setup marker without disturbing a newer install."""
+        pending = self._perf_pending_image_install
+        if isinstance(pending, dict) and pending.get("install_id") == install_id:
+            self._perf_pending_image_install = None
+
     def set_spotify_visualizer_state(
         self,
         rect: QRect,
@@ -980,34 +1001,73 @@ class GLCompositorWidget(QOpenGLWidget):
         except Exception as e:
             logger.debug("[GL COMPOSITOR] %s complete handler failed: %s", name.capitalize(), e, exc_info=True)
 
-    def _ensure_gl_pipeline_ready(self) -> bool:
+    def _ensure_gl_pipeline_ready(
+        self,
+        perf_trace: Optional[dict[str, object]] = None,
+    ) -> bool:
         """Ensure the GLSL pipeline is initialised and ready for use."""
+        trace_enabled = perf_trace is not None
+        if trace_enabled:
+            perf_trace["pipeline_was_ready"] = bool(
+                self._gl_pipeline is not None and self._gl_pipeline.initialized
+            )
         if gl is None or self._gl_disabled_for_session:
+            if trace_enabled:
+                perf_trace["pipeline_outcome"] = "unavailable"
             return False
         if self._gl_pipeline is not None and self._gl_pipeline.initialized:
+            if trace_enabled:
+                perf_trace["pipeline_outcome"] = "ready"
             return True
 
+        make_current_started = time.perf_counter() if trace_enabled else 0.0
         try:
             self.makeCurrent()
+            if trace_enabled:
+                perf_trace["pipeline_make_current_ms"] = (
+                    time.perf_counter() - make_current_started
+                ) * 1000.0
         except Exception as e:
+            if trace_enabled:
+                perf_trace["pipeline_make_current_ms"] = (
+                    time.perf_counter() - make_current_started
+                ) * 1000.0
+                perf_trace["pipeline_outcome"] = "make_current_failed"
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             return False
 
+        initialize_started = time.perf_counter() if trace_enabled else 0.0
         try:
             if self._gl_pipeline is None:
                 self._gl_pipeline = _GLPipelineState()
                 self._use_shaders = False
                 self._gl_disabled_for_session = False
             self._init_gl_pipeline()
-            return self._gl_pipeline is not None and self._gl_pipeline.initialized
+            ready = self._gl_pipeline is not None and self._gl_pipeline.initialized
+            if trace_enabled:
+                perf_trace["pipeline_initialize_ms"] = (
+                    time.perf_counter() - initialize_started
+                ) * 1000.0
+                perf_trace["pipeline_outcome"] = "initialized" if ready else "init_failed"
+            return ready
         except Exception:
+            if trace_enabled:
+                perf_trace["pipeline_initialize_ms"] = (
+                    time.perf_counter() - initialize_started
+                ) * 1000.0
+                perf_trace["pipeline_outcome"] = "exception"
             logger.debug("[GL COMPOSITOR] Failed to initialise GL pipeline", exc_info=True)
             return False
         finally:
+            release_started = time.perf_counter() if trace_enabled else 0.0
             try:
                 self.doneCurrent()
             except Exception as e:
                 logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+            if trace_enabled:
+                perf_trace["pipeline_release_ms"] = (
+                    time.perf_counter() - release_started
+                ) * 1000.0
 
     def _ensure_transition_program_ready(self, identity: object) -> bool:
         """Delegate program binding to the shared GL lifecycle seam."""
@@ -1202,6 +1262,9 @@ class GLCompositorWidget(QOpenGLWidget):
         self,
         old_pixmap: Optional[QPixmap],
         new_pixmap: Optional[QPixmap],
+        *,
+        perf_install_id: str = "",
+        perf_trace: Optional[dict[str, object]] = None,
     ) -> bool:
         """Upload/cache the provided pixmaps while the caller owns the current GL context."""
         if gl is None or self._gl_disabled_for_session:
@@ -1210,17 +1273,68 @@ class GLCompositorWidget(QOpenGLWidget):
         if (old_pixmap is None or old_pixmap.isNull()) and (new_pixmap is None or new_pixmap.isNull()):
             return False
 
+        trace_enabled = perf_trace is not None
         try:
+            manager_present_before = self._texture_manager is not None
+            manager_started = time.perf_counter() if trace_enabled else 0.0
             manager = self._ensure_texture_manager()
-            if not manager.is_initialized() and not manager.initialize():
-                return False
+            if trace_enabled:
+                perf_trace["manager_present_before"] = manager_present_before
+                perf_trace["manager_ensure_ms"] = (
+                    time.perf_counter() - manager_started
+                ) * 1000.0
+            if not manager.is_initialized():
+                initialize_started = time.perf_counter() if trace_enabled else 0.0
+                initialized = manager.initialize()
+                if trace_enabled:
+                    perf_trace["manager_initialize_ms"] = (
+                        time.perf_counter() - initialize_started
+                    ) * 1000.0
+                if not initialized:
+                    return False
+            elif trace_enabled:
+                perf_trace["manager_initialize_ms"] = 0.0
 
             success = True
 
             if old_pixmap is not None and not old_pixmap.isNull():
-                success = bool(manager.get_or_create_texture(old_pixmap)) and success
+                old_started = time.perf_counter() if trace_enabled else 0.0
+                if trace_enabled:
+                    old_texture = manager.get_or_create_texture(
+                        old_pixmap,
+                        perf_install_id=perf_install_id,
+                        perf_role="old",
+                    )
+                else:
+                    old_texture = manager.get_or_create_texture(old_pixmap)
+                success = bool(old_texture) and success
+                if trace_enabled:
+                    perf_trace["old_texture_ms"] = (
+                        time.perf_counter() - old_started
+                    ) * 1000.0
+                    perf_trace["old_present"] = True
+            elif trace_enabled:
+                perf_trace["old_texture_ms"] = 0.0
+                perf_trace["old_present"] = False
             if new_pixmap is not None and not new_pixmap.isNull():
-                success = bool(manager.get_or_create_texture(new_pixmap)) and success
+                new_started = time.perf_counter() if trace_enabled else 0.0
+                if trace_enabled:
+                    new_texture = manager.get_or_create_texture(
+                        new_pixmap,
+                        perf_install_id=perf_install_id,
+                        perf_role="new",
+                    )
+                else:
+                    new_texture = manager.get_or_create_texture(new_pixmap)
+                success = bool(new_texture) and success
+                if trace_enabled:
+                    perf_trace["new_texture_ms"] = (
+                        time.perf_counter() - new_started
+                    ) * 1000.0
+                    perf_trace["new_present"] = True
+            elif trace_enabled:
+                perf_trace["new_texture_ms"] = 0.0
+                perf_trace["new_present"] = False
             return success
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to warm pixmap textures", exc_info=True)
@@ -1567,6 +1681,7 @@ class GLCompositorWidget(QOpenGLWidget):
         """Destroy GL resources; never report DESTROYED after a failed delete."""
         from rendering.gl_compositor_pkg.gl_lifecycle import gl_pipeline_has_live_resources
 
+        self._perf_pending_image_install = None
         if (
             self._gl_state.get_state() == GLContextState.DESTROYED
             and not gl_pipeline_has_live_resources(self)
@@ -1695,27 +1810,147 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.shader_dispatch import can_use_burn_shader
         return can_use_burn_shader(self)
 
-    def warm_shader_textures(self, old_pixmap: Optional[QPixmap], new_pixmap: Optional[QPixmap]) -> None:
-        """Best-effort prewarm of shader textures for a pixmap pair."""
-        if not self._ensure_gl_pipeline_ready():
-            return
-        from rendering.gl_compositor_pkg.gl_lifecycle import acquire_safe_warmup_context
-
-        release_current = acquire_safe_warmup_context(
-            self,
-            fallback_label="pair texture warmup",
-            preserve_live_surface=True,
-        )
-        if release_current is None:
-            return
-
+    def _log_pair_warm_perf_trace(
+        self,
+        install_id: str,
+        outcome: str,
+        trace: dict[str, object],
+    ) -> None:
+        """Emit one bounded correlated record for the existing synchronous warm."""
+        manager = self._texture_manager
+        owner = getattr(manager, "_owner", f"{type(self).__name__}:{id(self)}")
         try:
-            self._warm_pixmap_textures_in_current_context(old_pixmap, new_pixmap)
-        finally:
+            parent = self.parentWidget()
+        except Exception:
+            parent = None
+        screen = getattr(parent, "screen_index", "?")
+
+        def _float(name: str) -> float:
             try:
-                release_current()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+                return float(trace.get(name, 0.0) or 0.0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        logger.info(
+            "[PERF][GL TEXTURE][PAIR_WARM] install_id=%s screen=%s owner=%s "
+            "outcome=%s total_ms=%.3f pipeline_was_ready=%s pipeline_outcome=%s "
+            "pipeline_ensure_ms=%.3f pipeline_make_current_ms=%.3f "
+            "pipeline_initialize_ms=%.3f pipeline_release_ms=%.3f "
+            "context_route=%s hidden_context_created=%s context_acquire_ms=%.3f "
+            "context_prepare_ms=%.3f context_make_current_ms=%.3f "
+            "context_release_ms=%.3f manager_present_before=%s "
+            "manager_ensure_ms=%.3f manager_initialize_ms=%.3f "
+            "old_present=%s old_texture_ms=%.3f new_present=%s new_texture_ms=%.3f",
+            install_id or "none",
+            screen,
+            owner,
+            outcome,
+            _float("total_ms"),
+            str(bool(trace.get("pipeline_was_ready", False))).lower(),
+            str(trace.get("pipeline_outcome", "unknown")),
+            _float("pipeline_ensure_ms"),
+            _float("pipeline_make_current_ms"),
+            _float("pipeline_initialize_ms"),
+            _float("pipeline_release_ms"),
+            str(trace.get("context_route", "none")),
+            str(bool(trace.get("hidden_context_created", False))).lower(),
+            _float("context_acquire_ms"),
+            _float("context_prepare_ms"),
+            _float("context_make_current_ms"),
+            _float("context_release_ms"),
+            str(bool(trace.get("manager_present_before", False))).lower(),
+            _float("manager_ensure_ms"),
+            _float("manager_initialize_ms"),
+            str(bool(trace.get("old_present", False))).lower(),
+            _float("old_texture_ms"),
+            str(bool(trace.get("new_present", False))).lower(),
+            _float("new_texture_ms"),
+        )
+
+    def warm_shader_textures(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: Optional[QPixmap],
+        *,
+        perf_install_id: str = "",
+    ) -> None:
+        """Best-effort prewarm of shader textures for a pixmap pair."""
+        if not perf_install_id or not is_perf_metrics_enabled():
+            if not self._ensure_gl_pipeline_ready():
+                return
+            from rendering.gl_compositor_pkg.gl_lifecycle import acquire_safe_warmup_context
+
+            release_current = acquire_safe_warmup_context(
+                self,
+                fallback_label="pair texture warmup",
+                preserve_live_surface=True,
+            )
+            if release_current is None:
+                return
+            try:
+                self._warm_pixmap_textures_in_current_context(old_pixmap, new_pixmap)
+            finally:
+                try:
+                    release_current()
+                except Exception as e:
+                    logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+            return
+
+        perf_trace: dict[str, object] = {}
+        total_started = time.perf_counter()
+        outcome = "pipeline_unavailable"
+        release_current = None
+        try:
+            pipeline_started = time.perf_counter()
+            pipeline_ready = self._ensure_gl_pipeline_ready(perf_trace=perf_trace)
+            perf_trace["pipeline_ensure_ms"] = (
+                time.perf_counter() - pipeline_started
+            ) * 1000.0
+            if not pipeline_ready:
+                return
+
+            from rendering.gl_compositor_pkg.gl_lifecycle import acquire_safe_warmup_context
+
+            context_started = time.perf_counter()
+            release_current = acquire_safe_warmup_context(
+                self,
+                fallback_label="pair texture warmup",
+                preserve_live_surface=True,
+                perf_trace=perf_trace,
+            )
+            perf_trace["context_acquire_ms"] = (
+                time.perf_counter() - context_started
+            ) * 1000.0
+            if release_current is None:
+                outcome = "context_deferred"
+                return
+
+            warmed = self._warm_pixmap_textures_in_current_context(
+                old_pixmap,
+                new_pixmap,
+                perf_install_id=perf_install_id,
+                perf_trace=perf_trace,
+            )
+            outcome = "completed" if warmed else "warm_failed"
+        finally:
+            if release_current is not None:
+                release_started = time.perf_counter()
+                try:
+                    release_current()
+                except Exception as e:
+                    outcome = "release_failed"
+                    logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+                perf_trace["context_release_ms"] = (
+                    time.perf_counter() - release_started
+                ) * 1000.0
+            perf_trace["total_ms"] = (
+                time.perf_counter() - total_started
+            ) * 1000.0
+            self._log_pair_warm_perf_trace(
+                perf_install_id,
+                outcome,
+                perf_trace,
+            )
 
     def get_texture_cache_perf_probe(
         self,

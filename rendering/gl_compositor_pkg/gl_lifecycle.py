@@ -394,6 +394,7 @@ def acquire_safe_warmup_context(
     *,
     fallback_label: str,
     preserve_live_surface: bool = True,
+    perf_trace: dict[str, object] | None = None,
 ):
     """Acquire a GL context for best-effort warm work without poisoning live presentation.
 
@@ -404,11 +405,32 @@ def acquire_safe_warmup_context(
     Returns a zero-arg release callable when a context was acquired, otherwise ``None``.
     """
 
+    trace_enabled = perf_trace is not None
+    hidden_context_preexisting = False
+    if trace_enabled:
+        hidden_context_preexisting = bool(
+            getattr(widget, "_deferred_warmup_context", None) is not None
+            and getattr(widget, "_deferred_warmup_surface", None) is not None
+        )
+    context_prepare_started = time.perf_counter() if trace_enabled else 0.0
     warmup_target = _ensure_hidden_shared_warmup_context(widget)
+    if trace_enabled:
+        perf_trace["context_prepare_ms"] = (
+            time.perf_counter() - context_prepare_started
+        ) * 1000.0
+        perf_trace["hidden_context_created"] = bool(
+            warmup_target is not None and not hidden_context_preexisting
+        )
     if warmup_target is not None:
         context, surface = warmup_target
+        make_current_started = time.perf_counter() if trace_enabled else 0.0
         try:
             if context.makeCurrent(surface):
+                if trace_enabled:
+                    perf_trace["context_route"] = "hidden_shared"
+                    perf_trace["context_make_current_ms"] = (
+                        time.perf_counter() - make_current_started
+                    ) * 1000.0
                 return context.doneCurrent
         except Exception:
             logger.debug(
@@ -416,8 +438,14 @@ def acquire_safe_warmup_context(
                 fallback_label,
                 exc_info=True,
             )
+        if trace_enabled:
+            perf_trace["context_make_current_ms"] = (
+                time.perf_counter() - make_current_started
+            ) * 1000.0
 
     if preserve_live_surface and _has_live_visible_base_surface(widget):
+        if trace_enabled:
+            perf_trace["context_route"] = "deferred"
         logger.warning(
             "[GL COMPOSITOR][FALLBACK] Hidden shared warmup context unavailable; "
             "deferring %s to first-use warmup to preserve live surface",
@@ -425,10 +453,21 @@ def acquire_safe_warmup_context(
         )
         return None
 
+    make_current_started = time.perf_counter() if trace_enabled else 0.0
     try:
         widget.makeCurrent()
+        if trace_enabled:
+            perf_trace["context_route"] = "compositor"
+            perf_trace["context_make_current_ms"] = (
+                time.perf_counter() - make_current_started
+            ) * 1000.0
         return widget.doneCurrent
     except Exception:
+        if trace_enabled:
+            perf_trace["context_route"] = "failed"
+            perf_trace["context_make_current_ms"] = (
+                time.perf_counter() - make_current_started
+            ) * 1000.0
         logger.debug(
             "[GL COMPOSITOR] Failed to make compositor context current for %s",
             fallback_label,

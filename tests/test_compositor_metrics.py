@@ -633,3 +633,78 @@ def test_paint_metrics_window_drops_oldest_samples():
     assert len(metrics.samples) == 512
     assert metrics.samples[0].frame_index == 2
     assert metrics.samples[-1].scene_generation == 512
+
+
+def test_image_install_next_paint_trace_is_consumed_once_without_requesting_work(
+    caplog,
+):
+    widget = SimpleNamespace(
+        _perf_pending_image_install={
+            "install_id": "d0-g7-i1",
+            "install_started_ts": 1.0,
+            "base_mark_ts": 1.01,
+        },
+        _paint_metrics=SimpleNamespace(
+            samples=[
+                SimpleNamespace(
+                    request_to_paint_age_ms=4.0,
+                    scene_generation=3,
+                )
+            ]
+        ),
+        parentWidget=lambda: SimpleNamespace(screen_index=0),
+    )
+
+    with caplog.at_level(
+        logging.INFO,
+        logger="rendering.gl_compositor_pkg.paint",
+    ):
+        paint_module._record_image_install_next_paint(
+            widget,
+            paint_start_ts=1.05,
+            paint_duration_ms=0.5,
+        )
+        paint_module._record_image_install_next_paint(
+            widget,
+            paint_start_ts=1.06,
+            paint_duration_ms=0.5,
+        )
+
+    records = [
+        record.getMessage()
+        for record in caplog.records
+        if "[PERF][IMAGE_INSTALL][NEXT_PAINT]" in record.getMessage()
+    ]
+    assert len(records) == 1
+    assert "install_id=d0-g7-i1" in records[0]
+    assert "install_to_next_paint_ms=50.000" in records[0]
+    assert "base_mark_to_next_paint_ms=40.000" in records[0]
+    assert widget._perf_pending_image_install is None
+    assert not hasattr(widget, "update")
+
+
+def test_failed_install_marker_clear_cannot_remove_a_newer_install(monkeypatch):
+    monkeypatch.setattr("rendering.gl_compositor.is_perf_metrics_enabled", lambda: True)
+    widget = SimpleNamespace(_perf_pending_image_install=None)
+
+    GLCompositorWidget.mark_image_install_next_paint_perf_trace(
+        widget,
+        "d0-g7-i1",
+        1.0,
+    )
+    GLCompositorWidget.mark_image_install_next_paint_perf_trace(
+        widget,
+        "d0-g7-i2",
+        2.0,
+    )
+    GLCompositorWidget.clear_image_install_next_paint_perf_trace(
+        widget,
+        "d0-g7-i1",
+    )
+
+    assert widget._perf_pending_image_install["install_id"] == "d0-g7-i2"
+    GLCompositorWidget.clear_image_install_next_paint_perf_trace(
+        widget,
+        "d0-g7-i2",
+    )
+    assert widget._perf_pending_image_install is None

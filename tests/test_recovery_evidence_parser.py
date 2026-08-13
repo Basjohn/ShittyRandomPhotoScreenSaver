@@ -814,7 +814,7 @@ def test_frame_gap_owner_parser_preserves_current_producer_context(
     analysis = analyze_evidence_source(evidence_dir)
     row = analysis.phase5_rows[0]
 
-    assert PARSER_VERSION == "1.17"
+    assert PARSER_VERSION == "1.18"
     assert row["last_ui"] == "display_image_apply"
     assert row["last_ui_ms"] == 5.0
     assert row["last_ui_age_ms"] == 10.0
@@ -869,3 +869,81 @@ def test_frame_gap_owner_parser_keeps_pre_1_17_records_compatible(
     assert row["media_display"] is None
     assert row["waiting_engine"] is None
     assert analysis.summary["phase5"]["frame_gap_owner"]["by_last_ui"] == {}
+
+
+def test_image_install_trace_parser_correlates_cold_subspans(tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "image_install_trace"
+    evidence_dir.mkdir()
+    install_id = "d0-g7-i1"
+    evidence_dir.joinpath("screensaver_perf.log").write_text(
+        "\n".join(
+            [
+                "2026-08-13 19:00:00 - metrics - INFO - "
+                f"[PERF] [IMAGE_UI_SEGMENT] stage=compositor_setup install_id={install_id} "
+                "outcome=completed duration_ms=40 geometry_ms=1 set_base_ms=2 "
+                "show_ms=35 raise_ms=2",
+                "2026-08-13 19:00:00 - metrics - INFO - "
+                f"[PERF][GL TEXTURE][PAIR_WARM] install_id={install_id} screen=0 "
+                "owner=GLCompositorWidget:1 outcome=completed total_ms=30 "
+                "pipeline_was_ready=false pipeline_outcome=initialized "
+                "pipeline_ensure_ms=8 pipeline_make_current_ms=1 "
+                "pipeline_initialize_ms=6 pipeline_release_ms=1 "
+                "context_route=hidden_shared hidden_context_created=true "
+                "context_acquire_ms=7 context_prepare_ms=5 context_make_current_ms=2 "
+                "context_release_ms=1 manager_present_before=false manager_ensure_ms=1 "
+                "manager_initialize_ms=2 old_present=true old_texture_ms=0.1 "
+                "new_present=true new_texture_ms=12",
+                "2026-08-13 19:00:00 - metrics - INFO - "
+                f"[PERF][GL TEXTURE][LOOKUP] install_id={install_id} role=old owner=o "
+                "outcome=cache_hit cache_hit=true cache_key=10 texture_id=20 "
+                "cache_lookup_ms=0.1 upload_call_ms=0 cache_publish_ms=0 total_ms=0.1",
+                "2026-08-13 19:00:00 - metrics - INFO - "
+                f"[PERF][GL TEXTURE][LOOKUP] install_id={install_id} role=new owner=o "
+                "outcome=uploaded cache_hit=false cache_key=11 texture_id=21 "
+                "cache_lookup_ms=0.2 upload_call_ms=10 cache_publish_ms=0.3 total_ms=10.5",
+                "2026-08-13 19:00:00 - metrics - INFO - "
+                f"[PERF][GL TEXTURE][UPLOAD] install_id={install_id} role=new owner=o "
+                "size=10x10 upload_bytes=400 path=pbo image_format=rgb32 "
+                "bits_path=direct_const_view total_ms=8 end_to_end_ms=10 "
+                "image_prepare_ms=0.01 bits_copy_ms=0.01 texture_alloc_ms=0.1 "
+                "pbo_stage_ms=7 texture_submit_ms=0.5 resource_tracking_ms=1 "
+                "manager_publish_ms=0.2 unattributed_ms=0.38",
+                "2026-08-13 19:00:00 - metrics - INFO - "
+                f"[PERF][IMAGE_INSTALL][NEXT_PAINT] install_id={install_id} screen=0 "
+                "install_to_next_paint_ms=45 base_mark_to_next_paint_ms=40 "
+                "paint_ms=0.5",
+                "2026-08-13 19:00:01 - metrics - INFO - "
+                "[PERF] [IMAGE_UI_SEGMENT] stage=compositor_setup outcome=error "
+                "install_id=d0-g7-i2 duration_ms=1",
+            ]
+        ) + "\n",
+        encoding="utf-8",
+    )
+
+    analysis = analyze_evidence_source(evidence_dir)
+    summary = analysis.summary["phase5"]["image_install_trace"]
+
+    assert summary["install_ids"] == 2
+    assert summary["accepted_install_ids"] == 1
+    assert summary["by_install_id"][install_id]["pair_warm_records"] == 1
+    assert summary["by_install_id"][install_id]["lookup_roles"] == ["new", "old"]
+    assert summary["by_install_id"][install_id]["next_paint_records"] == 1
+    assert summary["without_accepted_setup"] == ["d0-g7-i2"]
+    assert summary["without_pair_warm"] == []
+    assert summary["without_next_paint"] == []
+    assert summary["pair_warm"]["records"] == 1
+    assert summary["pair_warm"]["context_routes"] == {"hidden_shared": 1}
+    assert summary["pair_warm"]["pipeline_initialize_ms"]["maximum"] == 6.0
+    assert summary["pair_warm"]["pipeline_make_current_ms"]["p95"] == 1.0
+    assert summary["pair_warm"]["context_release_ms"]["maximum"] == 1.0
+    assert summary["texture_lookup"]["by_role"]["old"]["cache_hits"] == 1
+    assert summary["texture_lookup"]["by_role"]["new"]["upload_call_ms"]["maximum"] == 10.0
+    assert summary["next_paint"]["install_to_next_paint_ms"]["maximum"] == 45.0
+    setup = analysis.summary["phase5"]["image_ui"]["segments_by_stage"]["compositor_setup"]
+    assert setup["show_ms"]["maximum"] == 35.0
+    upload = analysis.summary["phase5"]["texture_upload"]["by_path"]["pbo"]
+    assert upload["end_to_end_ms"]["maximum"] == 10.0
+    assert upload["resource_tracking_ms"]["maximum"] == 1.0
+
+    kinds = {row["kind"] for row in analysis.phase5_rows}
+    assert {"texture_pair_warm", "texture_lookup", "image_install_next_paint"} <= kinds

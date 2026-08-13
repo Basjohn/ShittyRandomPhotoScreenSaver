@@ -273,7 +273,13 @@ class GLTextureManager:
     # Texture Upload
     # -------------------------------------------------------------------------
     
-    def upload_pixmap(self, pixmap: QPixmap) -> int:
+    def upload_pixmap(
+        self,
+        pixmap: QPixmap,
+        *,
+        perf_install_id: str = "",
+        perf_role: str = "",
+    ) -> int:
         """Upload a QPixmap as a GL texture and return its ID.
         
         Returns 0 on failure. Uses PBO for async DMA transfer when available.
@@ -488,37 +494,8 @@ class GLTextureManager:
         if _upload_elapsed > self.UPLOAD_STALL_THRESHOLD_MS and is_perf_metrics_enabled():
             logger.warning("[PERF] [GL TEXTURE] Slow upload: %.2fms (%dx%d, pbo=%s)", 
                           _upload_elapsed, w, h, use_pbo)
-        if _upload_perf_enabled:
-            _accounted_ms = (
-                _image_prepare_ms
-                + _bits_copy_ms
-                + _texture_alloc_ms
-                + _pbo_stage_ms
-                + _texture_submit_ms
-            )
-            logger.info(
-                "[PERF][GL TEXTURE][UPLOAD] owner=%s size=%dx%d upload_bytes=%d "
-                "path=%s image_format=%s bits_path=%s total_ms=%.3f "
-                "image_prepare_ms=%.3f bits_copy_ms=%.3f "
-                "texture_alloc_ms=%.3f pbo_stage_ms=%.3f texture_submit_ms=%.3f "
-                "unattributed_ms=%.3f",
-                self._owner,
-                w,
-                h,
-                data_size,
-                "pbo" if use_pbo else "direct",
-                image_format,
-                bits_path,
-                _upload_elapsed,
-                _image_prepare_ms,
-                _bits_copy_ms,
-                _texture_alloc_ms,
-                _pbo_stage_ms,
-                _texture_submit_ms,
-                max(0.0, _upload_elapsed - _accounted_ms),
-            )
-        
         # Register texture with ResourceManager for VRAM leak prevention
+        _resource_tracking_started = time.perf_counter() if _upload_perf_enabled else 0.0
         try:
             from core.resources.manager import ResourceManager
             rm = ResourceManager.get_or_create_app_shared()
@@ -535,9 +512,56 @@ class GLTextureManager:
                 self._texture_resource_ids[tex_id] = rid
         except Exception as e:
             logger.debug("[GL TEXTURE] Exception suppressed: %s", e)  # Non-critical - texture still usable
-        
+        _resource_tracking_ms = (
+            (time.perf_counter() - _resource_tracking_started) * 1000.0
+            if _upload_perf_enabled
+            else 0.0
+        )
+
+        _manager_publish_started = time.perf_counter() if _upload_perf_enabled else 0.0
         self._texture_bytes_by_id[tex_id] = texture_bytes
         self._current_texture_bytes += texture_bytes
+        _manager_publish_ms = (
+            (time.perf_counter() - _manager_publish_started) * 1000.0
+            if _upload_perf_enabled
+            else 0.0
+        )
+        if _upload_perf_enabled:
+            _accounted_ms = (
+                _image_prepare_ms
+                + _bits_copy_ms
+                + _texture_alloc_ms
+                + _pbo_stage_ms
+                + _texture_submit_ms
+            )
+            _end_to_end_ms = (time.perf_counter() - _upload_start) * 1000.0
+            logger.info(
+                "[PERF][GL TEXTURE][UPLOAD] install_id=%s role=%s owner=%s "
+                "size=%dx%d upload_bytes=%d path=%s image_format=%s bits_path=%s "
+                "total_ms=%.3f end_to_end_ms=%.3f image_prepare_ms=%.3f "
+                "bits_copy_ms=%.3f texture_alloc_ms=%.3f pbo_stage_ms=%.3f "
+                "texture_submit_ms=%.3f resource_tracking_ms=%.3f "
+                "manager_publish_ms=%.3f unattributed_ms=%.3f",
+                perf_install_id or "none",
+                perf_role or "unscoped",
+                self._owner,
+                w,
+                h,
+                data_size,
+                "pbo" if use_pbo else "direct",
+                image_format,
+                bits_path,
+                _upload_elapsed,
+                _end_to_end_ms,
+                _image_prepare_ms,
+                _bits_copy_ms,
+                _texture_alloc_ms,
+                _pbo_stage_ms,
+                _texture_submit_ms,
+                _resource_tracking_ms,
+                _manager_publish_ms,
+                max(0.0, _upload_elapsed - _accounted_ms),
+            )
         return tex_id
     
     # -------------------------------------------------------------------------
@@ -564,11 +588,50 @@ class GLTextureManager:
         self._texture_lru.append(key)
         return texture_id
     
-    def get_or_create_texture(self, pixmap: QPixmap) -> int:
+    def _log_texture_lookup_perf(
+        self,
+        *,
+        install_id: str,
+        role: str,
+        outcome: str,
+        cache_key: int,
+        texture_id: int,
+        cache_lookup_ms: float,
+        upload_call_ms: float,
+        cache_publish_ms: float,
+        total_ms: float,
+    ) -> None:
+        logger.info(
+            "[PERF][GL TEXTURE][LOOKUP] install_id=%s role=%s owner=%s "
+            "outcome=%s cache_hit=%s cache_key=%d texture_id=%d "
+            "cache_lookup_ms=%.3f upload_call_ms=%.3f "
+            "cache_publish_ms=%.3f total_ms=%.3f",
+            install_id,
+            role or "unscoped",
+            self._owner,
+            outcome,
+            str(outcome == "cache_hit").lower(),
+            int(cache_key),
+            int(texture_id),
+            cache_lookup_ms,
+            upload_call_ms,
+            cache_publish_ms,
+            total_ms,
+        )
+
+    def get_or_create_texture(
+        self,
+        pixmap: QPixmap,
+        *,
+        perf_install_id: str = "",
+        perf_role: str = "",
+    ) -> int:
         """Get or upload a texture under count and exact RGBA8 byte budgets."""
         if gl is None or pixmap is None or pixmap.isNull():
             return 0
 
+        trace_enabled = bool(perf_install_id) and is_perf_metrics_enabled()
+        trace_started = time.perf_counter() if trace_enabled else 0.0
         key = 0
         try:
             if hasattr(pixmap, "cacheKey"):
@@ -581,12 +644,59 @@ class GLTextureManager:
             if texture_id:
                 self._texture_cache_hits += 1
                 self._record_transition_metric("texture_cache_hits")
+                if trace_enabled:
+                    lookup_ms = (time.perf_counter() - trace_started) * 1000.0
+                    self._log_texture_lookup_perf(
+                        install_id=perf_install_id,
+                        role=perf_role,
+                        outcome="cache_hit",
+                        cache_key=key,
+                        texture_id=texture_id,
+                        cache_lookup_ms=lookup_ms,
+                        upload_call_ms=0.0,
+                        cache_publish_ms=0.0,
+                        total_ms=lookup_ms,
+                    )
                 return texture_id
 
-        texture_id = int(self.upload_pixmap(pixmap) or 0)
+        lookup_ms = (
+            (time.perf_counter() - trace_started) * 1000.0
+            if trace_enabled
+            else 0.0
+        )
+        upload_started = time.perf_counter() if trace_enabled else 0.0
+        if trace_enabled:
+            texture_id = int(
+                self.upload_pixmap(
+                    pixmap,
+                    perf_install_id=perf_install_id,
+                    perf_role=perf_role,
+                )
+                or 0
+            )
+        else:
+            texture_id = int(self.upload_pixmap(pixmap) or 0)
+        upload_call_ms = (
+            (time.perf_counter() - upload_started) * 1000.0
+            if trace_enabled
+            else 0.0
+        )
         if not texture_id:
+            if trace_enabled:
+                self._log_texture_lookup_perf(
+                    install_id=perf_install_id,
+                    role=perf_role,
+                    outcome="upload_failed",
+                    cache_key=key,
+                    texture_id=0,
+                    cache_lookup_ms=lookup_ms,
+                    upload_call_ms=upload_call_ms,
+                    cache_publish_ms=0.0,
+                    total_ms=(time.perf_counter() - trace_started) * 1000.0,
+                )
             return 0
 
+        publish_started = time.perf_counter() if trace_enabled else 0.0
         cache_key = key if key > 0 else -texture_id
         replaced_id = int(self._texture_cache.get(cache_key, 0) or 0)
         if replaced_id and replaced_id != texture_id:
@@ -598,6 +708,19 @@ class GLTextureManager:
         self._evict_cache_to_budget(
             protected_ids={texture_id, self._old_tex_id, self._new_tex_id}
         )
+        if trace_enabled:
+            publish_ms = (time.perf_counter() - publish_started) * 1000.0
+            self._log_texture_lookup_perf(
+                install_id=perf_install_id,
+                role=perf_role,
+                outcome="uploaded",
+                cache_key=cache_key,
+                texture_id=texture_id,
+                cache_lookup_ms=lookup_ms,
+                upload_call_ms=upload_call_ms,
+                cache_publish_ms=publish_ms,
+                total_ms=(time.perf_counter() - trace_started) * 1000.0,
+            )
         return texture_id
 
     def _delete_cached_texture(self, cache_key: int) -> bool:

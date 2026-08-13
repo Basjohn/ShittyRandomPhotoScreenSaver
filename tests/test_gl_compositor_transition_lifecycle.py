@@ -661,3 +661,78 @@ def test_warm_shader_textures_skips_live_surface_when_hidden_context_is_unavaila
     assert done_current_calls["count"] == 0
     assert texture_calls == []
     assert any("deferring pair texture warmup to first-use warmup" in message for message in caplog.messages)
+
+
+@pytest.mark.qt_no_exception_capture
+def test_warm_shader_textures_emits_one_correlated_passive_trace(
+    qt_app,
+    monkeypatch,
+    caplog,
+):
+    parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
+    old_pm = solid_pixmap(64, 64, Qt.GlobalColor.red)
+    new_pm = solid_pixmap(64, 64, Qt.GlobalColor.blue)
+    released: list[str] = []
+
+    monkeypatch.setattr("rendering.gl_compositor.is_perf_metrics_enabled", lambda: True)
+
+    def _pipeline_ready(*, perf_trace=None):
+        perf_trace.update(
+            pipeline_was_ready=False,
+            pipeline_outcome="initialized",
+            pipeline_make_current_ms=1.0,
+            pipeline_initialize_ms=2.0,
+            pipeline_release_ms=0.5,
+        )
+        return True
+
+    def _acquire(_widget, *, perf_trace=None, **_kwargs):
+        perf_trace.update(
+            context_route="hidden_shared",
+            hidden_context_created=True,
+            context_prepare_ms=3.0,
+            context_make_current_ms=1.5,
+        )
+        return lambda: released.append("released")
+
+    def _warm(_old, _new, *, perf_trace=None, perf_install_id=""):
+        assert perf_install_id == "d0-g7-i1"
+        perf_trace.update(
+            manager_present_before=False,
+            manager_ensure_ms=0.1,
+            manager_initialize_ms=0.2,
+            old_present=True,
+            old_texture_ms=0.3,
+            new_present=True,
+            new_texture_ms=0.4,
+        )
+        return True
+
+    monkeypatch.setattr(comp, "_ensure_gl_pipeline_ready", _pipeline_ready)
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.gl_lifecycle.acquire_safe_warmup_context",
+        _acquire,
+    )
+    monkeypatch.setattr(comp, "_warm_pixmap_textures_in_current_context", _warm)
+
+    with caplog.at_level(logging.INFO, logger="rendering.gl_compositor"):
+        comp.warm_shader_textures(
+            old_pm,
+            new_pm,
+            perf_install_id="d0-g7-i1",
+        )
+
+    assert released == ["released"]
+    records = [
+        record.getMessage()
+        for record in caplog.records
+        if "[PERF][GL TEXTURE][PAIR_WARM]" in record.getMessage()
+    ]
+    assert len(records) == 1
+    message = records[0]
+    assert "install_id=d0-g7-i1" in message
+    assert "outcome=completed" in message
+    assert "context_route=hidden_shared" in message
+    assert "hidden_context_created=true" in message
+    assert "old_present=true" in message
+    assert "new_present=true" in message

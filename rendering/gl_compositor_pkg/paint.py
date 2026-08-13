@@ -212,9 +212,45 @@ def _log_shader_fallback_once(widget, active_names: list[str]) -> None:
     )
 
 
+def _record_image_install_next_paint(
+    widget,
+    *,
+    paint_start_ts: float,
+    paint_duration_ms: float,
+) -> None:
+    """Consume the latest accepted install boundary at the next existing paint."""
+    pending = getattr(widget, "_perf_pending_image_install", None)
+    if not isinstance(pending, dict):
+        return
+    widget._perf_pending_image_install = None
+    try:
+        install_started_ts = float(pending.get("install_started_ts", 0.0) or 0.0)
+        base_mark_ts = float(pending.get("base_mark_ts", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return
+    if install_started_ts <= 0.0 or base_mark_ts <= 0.0:
+        return
+
+    try:
+        parent = widget.parentWidget()
+    except Exception:
+        parent = None
+    logger.info(
+        "[PERF][IMAGE_INSTALL][NEXT_PAINT] install_id=%s screen=%s "
+        "install_to_next_paint_ms=%.3f base_mark_to_next_paint_ms=%.3f "
+        "paint_ms=%.3f",
+        pending.get("install_id", "none"),
+        getattr(parent, "screen_index", "?"),
+        max(0.0, (paint_start_ts - install_started_ts) * 1000.0),
+        max(0.0, (paint_start_ts - base_mark_ts) * 1000.0),
+        max(0.0, paint_duration_ms),
+    )
+
+
 def handle_paintGL(widget) -> None:  # type: ignore[override]
     _paint_start = time.perf_counter()
-    if is_perf_metrics_enabled():
+    _perf_metrics_enabled = is_perf_metrics_enabled()
+    if _perf_metrics_enabled:
         record_paint_start = getattr(widget, "_record_paint_start_metrics", None)
         if callable(record_paint_start):
             record_paint_start(_paint_start)
@@ -259,6 +295,12 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
             paint_start_ts=_paint_start,
             paint_end_ts=_paint_end,
         )
+        if _perf_metrics_enabled:
+            _record_image_install_next_paint(
+                widget,
+                paint_start_ts=_paint_start,
+                paint_duration_ms=paint_elapsed,
+            )
         
         # End frame budget tracking and re-enable GC
         try:
@@ -274,7 +316,7 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
         
-        if paint_elapsed > 50.0 and is_perf_metrics_enabled():
+        if paint_elapsed > 50.0 and _perf_metrics_enabled:
             # Phase 8: Include GLStateManager transition history on dt_max spikes
             history = widget._gl_state.get_transition_history(limit=5)
             history_str = ", ".join(f"{h[0].name}→{h[1].name}" for h in history) if history else "none"

@@ -295,10 +295,21 @@ zero. Cold startup/recreation still reaches `82.69 ms` compositor setup and `96.
 pair warm, while Bubble tick gaps remain `56.70/105.57 ms` median/max. The removed
 copies were real, but they were not the remaining broad GUI-delivery cause.
 
+Parser 1.17 also corrects a misleading correlation in this run. The Media callback is
+the last completed UI label for `96` frame gaps, but its duration p95 is only `1.33 ms`
+and only `3` records completed within their gap window; Cursor Halo is similarly only
+`1.24 ms` p95. These labels are not demonstrated duration owners. Parser 1.18 and the
+current perf-only probe now carry one install ID through compositor setup, pipeline and
+safe-context acquisition, old/new cache lookup or upload, resource/cache publication,
+and the next existing Qt paint after the accepted install boundary. This does not claim
+that the new image or physical scanout has occurred. Missing pair/paint spans remain
+explicit per ID. The probe adds no timer, fence, retry, repaint request or normal-run
+phase clock.
+
 - [ ] Never use `glFinish()` in ordinary profiling. It changes the workload and invalidates the measurement.
 - [x] Run the parser-1.15 upload-phase probe under a typical transition/teardown scenario and preserve the exact source. CPU image preparation/copy dominates ordinary uploads; initial PBO staging and cold-pair residual are distinct owners, so non-blocking upload-GPU timing is not the next gate.
 - [x] Validate the native-format/direct-const-view upload path in an installed typical transition/teardown run: `34/34` uploads use `direct_const_view`, preparation/copy medians are effectively eliminated, visuals remain exact, and terminal GL/PBO ownership is bounded.
-- [ ] Split the cold/rebuild pair-warm residual with one correlation identity across context acquisition, cache/context reset and post-upload work; do not infer causality from a last-UI-owner label alone.
+- [ ] Run the parser-1.18 correlated cold/rebuild probe through startup plus Settings recreation. Attribute `show()`/pipeline/context/old/new/resource/cache/next-paint spans per install ID; require missing/superseded spans and teardown ownership to remain explicit, and do not infer causality from a last-UI-owner label alone.
 - [ ] Record per-display refresh, logical visualizer state publication rate, update-request rate and paint rate together. Do not infer waste solely from one counter.
 - [ ] Correlate repeated `>100 ms` transition request-age stalls and parser-1.15 transition-start/end tick-gap classes against image-install monotonic spans, context/swap/native-event ownership and any long Python GUI callback before changing Python scheduling.
 - [ ] Feed the result into Phase 7 only after an edge-preserving immutable render-state contract proves that phase-valid display sampling cannot hide Bubble's protected discrete response; never approximate display opportunities with producer timestamps or paint acknowledgements.

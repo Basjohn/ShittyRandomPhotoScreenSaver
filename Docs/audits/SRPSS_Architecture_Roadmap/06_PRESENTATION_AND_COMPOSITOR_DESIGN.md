@@ -66,6 +66,11 @@ median falls from `13.320 ms` to `2.982 ms`, and teardown remains clean. Tick ga
 not materially fall, so Phase 7 still cannot substitute for attribution of the cold
 GUI/context setup and unrelated GUI-owner stalls.
 
+The next passive probe records the first existing compositor paint associated with each
+install ID after splitting setup and pair warm. It does not request another paint and it
+does not call that event a physical present; missing or superseded paint receipts remain
+visible in parser output.
+
 ## Absolute Rules
 
 - producers do not wait for `paintGL()`, `update()` or a presentation acknowledgement;

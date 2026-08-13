@@ -604,6 +604,16 @@ Settings/final GL ownership again reaches zero. Bubble tick gaps remain
 (`96.74 ms` max) are now the distinct GUI/context attribution target; the broad stall
 cannot be assigned to the removed upload copies.
 
+Parser 1.18 prevents two attribution errors in the next run. It retains completed UI
+callback duration/age and queue/worker/presentation deltas, so a stale last-callback
+label is not treated as the gap owner. It also joins one perf-only install ID through
+compositor setup, GL pipeline and safe-context acquisition, old/new lookup or upload,
+resource/cache publication and the next existing Qt paint after the accepted install
+boundary. It does not claim new-content visibility or physical scanout, and missing
+pair/paint spans are listed per ID. This is passive measurement only: no timer, fence,
+retry, repaint request, context-route change or visualizer scheduling change is
+introduced.
+
 ### Priority 2 — pool topology
 
 After workload classes are separated:

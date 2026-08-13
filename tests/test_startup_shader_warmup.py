@@ -494,3 +494,68 @@ def test_failed_shader_compile_still_consumes_only_one_warmup_slice(
         ("warp", "warp_program", "warp_uniforms"),
     ]
     assert scheduled == [_warm_next_transition_program]
+
+
+def test_safe_warmup_context_trace_reports_hidden_and_deferred_routes(
+    monkeypatch,
+) -> None:
+    released: list[str] = []
+
+    class _Context:
+        def makeCurrent(self, _surface):
+            return True
+
+        def doneCurrent(self):
+            released.append("hidden")
+
+    widget = type(
+        "_Widget",
+        (),
+        {
+            "_deferred_warmup_context": None,
+            "_deferred_warmup_surface": None,
+            "makeCurrent": lambda self: released.append("compositor_make"),
+            "doneCurrent": lambda self: released.append("compositor_done"),
+        },
+    )()
+    context = _Context()
+    surface = object()
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_ensure_hidden_shared_warmup_context",
+        lambda _widget: (context, surface),
+    )
+
+    trace: dict[str, object] = {}
+    release = gl_lifecycle.acquire_safe_warmup_context(
+        widget,
+        fallback_label="test",
+        perf_trace=trace,
+    )
+
+    assert callable(release)
+    assert trace["context_route"] == "hidden_shared"
+    assert trace["hidden_context_created"] is True
+    assert trace["context_prepare_ms"] >= 0.0
+    assert trace["context_make_current_ms"] >= 0.0
+    release()
+    assert released == ["hidden"]
+
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_ensure_hidden_shared_warmup_context",
+        lambda _widget: None,
+    )
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_has_live_visible_base_surface",
+        lambda _widget: True,
+    )
+    deferred_trace: dict[str, object] = {}
+    assert gl_lifecycle.acquire_safe_warmup_context(
+        widget,
+        fallback_label="test",
+        perf_trace=deferred_trace,
+    ) is None
+    assert deferred_trace["context_route"] == "deferred"
+    assert "compositor_make" not in released
