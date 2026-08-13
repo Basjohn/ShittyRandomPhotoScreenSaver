@@ -570,6 +570,7 @@ class MediaWidget(BaseOverlayWidget):
         """Clean up resources (called from DisplayWidget)."""
 
         logger.debug("Cleaning up media widget")
+        self._cancel_painted_frame_shadow_preparation()
         self._discard_pending_artwork()
         self.stop()
 

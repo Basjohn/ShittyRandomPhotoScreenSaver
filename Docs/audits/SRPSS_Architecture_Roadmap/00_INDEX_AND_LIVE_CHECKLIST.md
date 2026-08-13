@@ -1,6 +1,6 @@
 # 00 — Index and Live Checklist
 
-Last reconciled: 2026-08-11
+Last reconciled: 2026-08-13
 
 This is the compact roadmap status ledger. Detailed active tasks belong only in
 `Current_Plan.md`.
@@ -72,6 +72,7 @@ from `main`.
 - [x] Move Reddit normal fetch-result preparation, sparse-cache merge and post-cache persistence behind the shared IO worker and publish one immutable GUI commit.
 - [x] Move Reddit startup post-cache/gate loading and blocked-gate persistence off GUI; use worker-refreshed process metadata for runtime cadence checks.
 - [x] Prepare Reddit's GUI-owned static content cache before paint with exact size/DPR/revision identity, snapshot-matched hit routing and one transition-terminal coalesced rebuild.
+- [x] Prepare the shared `BaseOverlayWidget` painted-frame cache at exact GUI state/geometry commits; paint validates and blits only, with explicit batching for known setter cascades.
 - [x] Move Weather startup cache selection and accepted-result persistence to shared IO; publish immutable, generation/location-gated GUI commits with newest-wins atomic durability.
 - [x] Move Gmail startup-cache, backend-config and DPAPI credential preparation to shared IO while retaining GUI-affine backend/OAuth facades and one coalesced settings/widget commit authority.
 - [ ] Remove proven GUI-thread service/cache preparation.

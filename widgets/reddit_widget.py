@@ -439,6 +439,7 @@ class RedditWidget(BaseOverlayWidget):
 
     def cleanup(self) -> None:
         logger.debug("Cleaning up Reddit widget")
+        self._cancel_painted_frame_shadow_preparation()
         self._paint_cache_cancelled = True
         self.stop()
         stop_qtimer_attr(

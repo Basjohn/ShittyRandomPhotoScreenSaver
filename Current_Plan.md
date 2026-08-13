@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-08-11  
+Last updated: 2026-08-13
 Branch: `main`  
 Active phase: Phase 5 — workload, delivery, GPU attribution, and resource efficiency
 
@@ -76,6 +76,7 @@ interrupt the resumed P5.2A workload-extraction track.
 - [x] Keep `ff93461685476bd0657aa88312fc2e35e9037880` as the current Bubble/Spectrum behavioural authority.
 - [x] Preserve the rejected persistent-lane `666624d4` and paint-local Spectrum `ebfec397` shapes as negative controls.
 - [ ] Capture approved numerical source features/playback offsets and source-to-state/source-to-visible timing for Bubble and Spectrum.
+- [ ] Use current Preset 1 as a viable capture anchor across every supported visualizer mode in the next golden run; retain per-mode temporal and visual acceptance rather than treating one preset as proof by itself.
 - [ ] Add installed Spectrum state-publication → overlay-state → paint receipt with bounded distributions and display refresh identity.
 - [ ] Exercise attack, drop, rapid alternation, pause/resume, transition overlap, mode switches, and deliberate GUI stalls without changing authored cadence.
 - [ ] Visually validate Sine Waves, Oscilloscope, and Dev Curve against the current shared source.
@@ -141,7 +142,6 @@ Target contract: **Prepare → Commit → Persist**.
 
 ### Priority 1 — service/widget preparation
 
-- [ ] Shared overlay frame shadow: audit the inherited `BaseOverlayWidget` lazy painted-frame `QPixmap` build still reachable from `paintEvent()` and move it only with shared-widget visual/cache parity coverage.
 - [ ] Audit other widget/provider callbacks for JSON/filesystem/filter/sort work and apply the same owner rule only where source inspection proves it. Gmail's user-triggered backend-mode write, IMAP credential save/delete, OAuth local-token deletion, revoke call and expired-token refresh are explicit follow-up candidates; keep them separate from the now-closed cold-construction contract.
 
 ### Priority 2 — worker topology after extraction
@@ -171,8 +171,11 @@ max     32.9%
 On the visualizer display, runtime geometry identifies screen 1 as 60 Hz, yet captured
 10-second overlay windows reach roughly `1000 set_state / 1000 update requests / 1000
 paintGL` calls. Current visualizer timing starts from a 16 ms UI timer and can target
-roughly 90–100 Hz. This is a **presentation-rate mismatch to explain**, not permission
-to cap Bubble/Spectrum logical cadence to display refresh.
+roughly 90–100 Hz. Bubble's logical worker remains only about `1–2 ms`; its authored
+logical cadence is not under suspicion. The unresolved question is downstream GUI/GPU
+presentation cost and whether multiple requests reach one useful display opportunity.
+This is a **presentation-rate mismatch to attribute**, not permission to reduce, batch,
+reschedule or cap Bubble/Spectrum logical work to display refresh.
 
 The post-extraction run still shows sustained GPU work at roughly `15.0/16.5/17.0/35.9%`
 median/p90/p95/max while the 60 Hz visualizer display commonly receives roughly
@@ -233,6 +236,17 @@ refinement before Phase 8.
 - [ ] Use `tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log` only when a broader release gate is useful; classify existing unrelated failures rather than weakening current contracts.
 - [ ] After the remaining P5.2A extraction work, repeat the canonical mixed-load scenario with deliberate host-load timestamps and matching visualizer/image/cache conditions. Compare against both `08_09_ca830d7_14_59` and the post-extraction run; do not require every individually-correct extraction to reduce request age by itself.
 - [ ] Require unchanged visualizer temporal goldens and negative controls for any visualizer-adjacent cleanup, including Bubble façade removal.
+
+## Low-Priority Presentation Follow-Ups
+
+These remain behind active performance, usage, GPU-attribution and callback-ownership
+work. They may reuse existing snapshots and commit boundaries, but may not introduce a
+polling cadence, repaint loop, synchronous service call or GUI-thread blur/allocation
+path.
+
+- [ ] Media progress interaction: add click-to-seek through the existing accepted GSMTC session/controller authority, with exact progress-pill hit testing, duration/session/generation validation and no direct UI-thread provider query.
+- [ ] Media progress glow: replace the current outline-like treatment with a genuine soft halo whose cached/style-invalidated rendering adds no per-frame blur, allocation or independent update pressure.
+- [ ] Clock separator: expose it in Analogue as well as Digital mode and add colour, line width/length, thickness and clock-versus-day spacing bias while preserving authored clock cadence, stable mode-switch geometry and settings round-trip.
 
 ## Phase 5 Exit Gate
 

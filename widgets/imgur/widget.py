@@ -104,6 +104,11 @@ class ImgurWidget(BaseOverlayWidget):
     """
     
     DEFAULT_FONT_SIZE = 11
+
+    def uses_shared_painted_frame_shadow_cache(self) -> bool:
+        """Imgur's retired custom paint path owns its complete background layer."""
+
+        return False
     
     def __init__(
         self,

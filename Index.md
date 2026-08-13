@@ -51,6 +51,7 @@ Do not read every document by default.
 | Display topology | `engine/display_manager.py` |
 | Fullscreen presenter | `rendering/display_widget.py` |
 | Widget lifecycle | `rendering/widget_manager.py` |
+| Shared overlay painted-frame cache | `widgets/base_overlay_widget.py` |
 | Thread/task ownership | `core/threading/manager.py` |
 | Settings in-memory authority | `core/settings/settings_manager.py` |
 | Settings ordered durability | `core/settings/persistence.py`, `core/settings/json_store.py` |

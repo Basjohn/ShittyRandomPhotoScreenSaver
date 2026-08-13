@@ -1,6 +1,6 @@
 # 08 — CPU, Threading, and Workload Plan
 
-Last reconciled: 2026-08-11
+Last reconciled: 2026-08-13
 
 Current `main` is the implementation authority. Historical commits are used only as negative controls or forensic references; this plan contains no historical-candidate extraction seam.
 
@@ -124,8 +124,8 @@ availability rather than texture identity.
 The source run showed cached Reddit paints normally around `1–3 ms`, but cold or
 recreation paints reached tens of milliseconds (`~40–61 ms` for the primary Reddit
 widget, with smaller but still visible Reddit2 spikes). Gmail's stable regeneration
-was smaller at roughly `~6–10 ms`. Both widget-owned static layers now prepare before
-paint; the inherited shared frame-shadow cache remains the next cold-paint owner.
+was smaller at roughly `~6–10 ms`. Both widget-owned static layers and the inherited
+shared frame-shadow layer now prepare before paint.
 
 This supports a general rule: `paintEvent()` should consume prepared/cached state,
 not discover that expensive static content preparation must happen synchronously
@@ -469,13 +469,22 @@ idle; there is no retry timer or additional cadence. Relative-age labels retain 
 established snapshot policy and change only when data/style/size invalidates the cache.
 Worker text rendering remains unjustified without new installed evidence and parity bars.
 
-**Remaining shared static paint-cache contract**
+**Shared overlay frame-shadow preparation — complete**
 
-The inherited `BaseOverlayWidget` painted-frame shadow cache can still build lazily from
-`paintEvent()`. Audit that shared path independently with cross-widget parity rather than
-folding it into either widget-owned content layer. Invalidation may schedule/perform
-preparation, but paint should not discover an expensive cold layer before delivering a
-frame.
+`BaseOverlayWidget` now owns an exact logical-size/DPR/style/revision identity for its
+GUI-owned painted-frame `QPixmap`. Visible style and geometry commits synchronously
+publish the exact replacement before requesting paint; hidden construction accumulates
+invalidations and prewarms once at show. Known multi-setting application paths and Clock
+mode changes use an explicit GUI commit batch, so they publish only the final identity
+without relying on timer ordering. Resize, screen/DPR changes and fade completion obey
+the same boundary.
+
+Base paint now performs lookup/validation and blit only; a stale or absent identity is
+never rebuilt or drawn from paint. Worker preparation is rejected and cleanup clears
+pending/cache ownership. Clock Analogue and Imgur explicitly opt out because their
+custom painters own different shapes; Clock Digital, Gmail, Reddit, Weather, Media and
+Steam retain the shared rectangular frame path. Specialized Spotify volume/visualizer
+shadows remain separate owners and were not silently folded into this contract.
 
 ### Priority 1 — visualizer reductions with cadence frozen
 

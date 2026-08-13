@@ -1726,6 +1726,7 @@ class WeatherWidget(BaseOverlayWidget):
     def cleanup(self) -> None:
         """Clean up resources."""
         logger.debug("Cleaning up weather widget")
+        self._cancel_painted_frame_shadow_preparation()
         self.stop()
 
     def _fade_in(self) -> None:
