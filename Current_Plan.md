@@ -276,20 +276,28 @@ bits copy and texture submission respectively. The largest initial/recreation ou
 are instead PBO staging (`15.061/27.162 ms`), and six cold pair warms still contain about
 `206.449 ms` outside the measured upload phases. This is not one universal upload cause.
 
-Source inspection names two exact avoidable copies in the ordinary path: opaque Qt
-pixmaps expose native `RGB32` storage that was unconditionally converted to `ARGB32`,
+Source inspection named two exact avoidable copies in the ordinary path: opaque Qt
+pixmaps exposed native `RGB32` storage that was unconditionally converted to `ARGB32`,
 then `constBits()` was materialized as a second frame-sized Python `bytes` object before
-the mapped-PBO copy. The current corrective slice accepts native `RGB32/ARGB32` BGRA
-storage and uses the Shiboken address of the read-only `constBits()` view for the one
-required owner-side PBO copy. Other image formats retain explicit ARGB32 conversion;
+the mapped-PBO copy. The corrective slice accepts native `RGB32/ARGB32` BGRA storage and
+uses the Shiboken address of the read-only `constBits()` view for the one required
+owner-side PBO copy. Other image formats retain explicit ARGB32 conversion;
 QPixmap/GL/context ownership, cache identity, PBO bounds and cadence are unchanged.
-Parser 1.16 records both the image-format and source-buffer path, and a real OpenGL
-readback test protects exact RGB and alpha bytes. Installed runtime validation remains
-required before this slice is closed.
+
+The installed typical-load capture
+`logs/evidence_chest/08_13_8d419765_18_08_18_14_direct_upload_typical/` (selected-source
+SHA-256 `BE70CABC...AEAA`) closes this copy-removal gate. All `34/34` uploads are native
+`rgb32` plus `direct_const_view` with zero copied fallback. Upload median fell from
+`13.320 ms` to `2.982 ms`; image preparation/copy fell from `5.330/3.914 ms` to
+`0.011/0.008 ms`. Ordinary pair warm is now usually `2–7 ms`, exact visuals were
+reported healthy, and Settings/final cleanup again returns application-owned GL to
+zero. Cold startup/recreation still reaches `82.69 ms` compositor setup and `96.74 ms`
+pair warm, while Bubble tick gaps remain `56.70/105.57 ms` median/max. The removed
+copies were real, but they were not the remaining broad GUI-delivery cause.
 
 - [ ] Never use `glFinish()` in ordinary profiling. It changes the workload and invalidates the measurement.
 - [x] Run the parser-1.15 upload-phase probe under a typical transition/teardown scenario and preserve the exact source. CPU image preparation/copy dominates ordinary uploads; initial PBO staging and cold-pair residual are distinct owners, so non-blocking upload-GPU timing is not the next gate.
-- [ ] Validate the native-format/direct-const-view upload path in an installed typical transition/teardown run: require `bits_path=direct_const_view` with zero copied fallback for ordinary uploads, materially lower image-prepare/bits-copy spans, exact visuals and bounded terminal GL/PBO ownership.
+- [x] Validate the native-format/direct-const-view upload path in an installed typical transition/teardown run: `34/34` uploads use `direct_const_view`, preparation/copy medians are effectively eliminated, visuals remain exact, and terminal GL/PBO ownership is bounded.
 - [ ] Split the cold/rebuild pair-warm residual with one correlation identity across context acquisition, cache/context reset and post-upload work; do not infer causality from a last-UI-owner label alone.
 - [ ] Record per-display refresh, logical visualizer state publication rate, update-request rate and paint rate together. Do not infer waste solely from one counter.
 - [ ] Correlate repeated `>100 ms` transition request-age stalls and parser-1.15 transition-start/end tick-gap classes against image-install monotonic spans, context/swap/native-event ownership and any long Python GUI callback before changing Python scheduling.

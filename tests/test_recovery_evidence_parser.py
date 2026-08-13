@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from tools.recovery_evidence_parser import (
+    PARSER_VERSION,
     analyze_archive,
     analyze_evidence_source,
     write_analysis,
@@ -773,3 +774,98 @@ def test_texture_upload_parser_keeps_pre_1_16_records(tmp_path: Path) -> None:
     assert upload_summary["by_path"]["pbo"]["total_ms"]["maximum"] == 10.0
     assert upload_row["upload_image_format"] == ""
     assert upload_row["upload_bits_path"] == ""
+
+
+def test_frame_gap_owner_parser_preserves_current_producer_context(
+    tmp_path: Path,
+) -> None:
+    evidence_dir = tmp_path / "current_frame_gaps"
+    evidence_dir.mkdir()
+    current_fields = (
+        "transition_active=1 transition=fade vis_mode=bubble vis_phase=2 "
+        "waiting_engine=0 waiting_frame=1 bubble_worker=1 bubble_result=0 "
+        "io_queue=2 compute_queue=3 io_active=4 compute_active=5 "
+        "io_callbacks=6 compute_callbacks=7 io_queue_wait_ms=1.50 "
+        "compute_queue_wait_ms=2.50 io_exec_ms=3.50 compute_exec_ms=4.50 "
+        "io_callback_ms=5.50 compute_callback_ms=6.50 ui_callbacks=8 "
+        "ui_active=9 ui_queue=10 ui_failed=11 media_display=12 media_emit=13 "
+        "media_repaints=14 overlay_set=15 overlay_repaints=16 overlay_paints=17 "
+        "render_requests=18 skipped_requests=19"
+    )
+    evidence_dir.joinpath("screensaver_perf.log").write_text(
+        "\n".join(
+            [
+                "2026-08-13 18:00:00 - metrics - WARNING - "
+                "[PERF][FRAME_GAP_OWNER] severity=over_50 screen=0 gap_ms=20 "
+                "request_age_ms=1 source_age_ms=2 simulation_age_ms=3 "
+                "render_state_age_ms=4 last_ui=display_image_apply last_ui_ms=5 "
+                "last_ui_age_ms=10 " + current_fields,
+                "2026-08-13 18:00:01 - metrics - WARNING - "
+                "[PERF][FRAME_GAP_OWNER] severity=over_50 screen=0 gap_ms=50 "
+                "last_ui=display_image_apply last_ui_ms=10 last_ui_age_ms=60",
+                "2026-08-13 18:00:02 - metrics - WARNING - "
+                "[PERF][FRAME_GAP_OWNER] severity=over_50 screen=0 gap_ms=100 "
+                "last_ui=display_image_apply last_ui_ms=30 last_ui_age_ms=100",
+            ]
+        ) + "\n",
+        encoding="utf-8",
+    )
+
+    analysis = analyze_evidence_source(evidence_dir)
+    row = analysis.phase5_rows[0]
+
+    assert PARSER_VERSION == "1.17"
+    assert row["last_ui"] == "display_image_apply"
+    assert row["last_ui_ms"] == 5.0
+    assert row["last_ui_age_ms"] == 10.0
+    assert row["owner"] == "display_image_apply"
+    assert row["owner_age_ms"] == 10.0
+    assert row["transition_active"] == 1
+    assert row["transition"] == "fade"
+    assert row["vis_mode"] == "bubble"
+    assert row["vis_phase"] == 2
+    assert [row[field] for field in ("waiting_engine", "waiting_frame", "bubble_worker", "bubble_result")] == [0, 1, 1, 0]
+    assert [row[field] for field in ("io_queue", "compute_queue", "io_active", "compute_active")] == [2, 3, 4, 5]
+    assert [row[field] for field in ("io_callbacks", "compute_callbacks", "ui_callbacks", "ui_active", "ui_queue", "ui_failed")] == [6, 7, 8, 9, 10, 11]
+    assert [row[field] for field in ("io_queue_wait_ms", "compute_queue_wait_ms", "io_exec_ms", "compute_exec_ms", "io_callback_ms", "compute_callback_ms")] == [1.5, 2.5, 3.5, 4.5, 5.5, 6.5]
+    assert [row[field] for field in ("media_display", "media_emit", "media_repaints", "overlay_set", "overlay_repaints", "overlay_paints", "render_requests", "skipped_requests")] == [12, 13, 14, 15, 16, 17, 18, 19]
+    assert analysis.summary["phase5"]["frame_gap_owner"]["by_last_ui"] == {
+        "display_image_apply": {
+            "count": 3,
+            "gap_ms": {"minimum": 20.0, "median": 50.0, "p95": 95.0, "maximum": 100.0},
+            "last_ui_ms": {"minimum": 5.0, "median": 10.0, "p95": 28.0, "maximum": 30.0},
+            "last_ui_age_ms": {"minimum": 10.0, "median": 60.0, "p95": 96.0, "maximum": 100.0},
+            "last_ui_age_at_most_gap_count": 2,
+            "last_ui_ms_at_least_10_count": 2,
+        }
+    }
+
+
+def test_frame_gap_owner_parser_keeps_pre_1_17_records_compatible(
+    tmp_path: Path,
+) -> None:
+    evidence_dir = tmp_path / "legacy_frame_gap"
+    evidence_dir.mkdir()
+    evidence_dir.joinpath("screensaver_perf.log").write_text(
+        "2026-07-23 19:38:04 - metrics - WARNING - "
+        "[PERF][FRAME_GAP_OWNER] severity=over_50 screen=0 gap_ms=52.00 "
+        "paint_ms=4.00 request_age_ms=8.00 source_age_ms=12.00 "
+        "simulation_age_ms=9.00 render_state_age_ms=7.00 target_hz=60 "
+        "transition_active=1 transition=fade vis_mode=bubble\n",
+        encoding="utf-8",
+    )
+
+    analysis = analyze_evidence_source(evidence_dir)
+    row = analysis.phase5_rows[0]
+
+    assert row["source_age_ms"] == 12.0
+    assert row["simulation_age_ms"] == 9.0
+    assert row["render_state_age_ms"] == 7.0
+    assert row["last_ui"] == ""
+    assert row["last_ui_ms"] is None
+    assert row["last_ui_age_ms"] is None
+    assert row["ui_callbacks"] is None
+    assert row["io_queue"] is None
+    assert row["media_display"] is None
+    assert row["waiting_engine"] is None
+    assert analysis.summary["phase5"]["frame_gap_owner"]["by_last_ui"] == {}

@@ -593,7 +593,16 @@ full-frame ARGB32 conversion; a Shiboken address for the read-only `constBits()`
 then feeds the existing mapped-PBO copy without creating a Python `bytes` clone. Other
 formats still convert explicitly. Parser 1.16 distinguishes native/converted formats and
 direct/copy-fallback buffer paths; a real-context texture readback verifies exact RGB and
-alpha bytes. Installed timing and teardown validation remains open.
+alpha bytes.
+
+The installed `08_13_8d419765_18_08_18_14_direct_upload_typical` capture closes that
+gate: all `34/34` uploads are native `rgb32` plus `direct_const_view`, with zero copied
+fallback. Median image preparation/copy falls from `5.330/3.914 ms` to
+`0.011/0.008 ms`, and total upload median falls from `13.320 ms` to `2.982 ms` while
+Settings/final GL ownership again reaches zero. Bubble tick gaps remain
+`56.70/105.57 ms` median/max. Cold compositor setup (`82.69 ms` max) and pair warm
+(`96.74 ms` max) are now the distinct GUI/context attribution target; the broad stall
+cannot be assigned to the removed upload copies.
 
 ### Priority 2 — pool topology
 

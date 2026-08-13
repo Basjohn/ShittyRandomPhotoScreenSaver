@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.16"
+PARSER_VERSION = "1.17"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
@@ -814,7 +814,17 @@ def _parse_phase5_telemetry(
                     "update_requested": values.get("update_requested", ""),
                     "reason": values.get("reason", ""),
                     "transition": values.get("transition", ""),
+                    "transition_active": _integer(values.get("transition_active")),
+                    "vis_mode": values.get("vis_mode", ""),
+                    "vis_phase": _integer(values.get("vis_phase")),
+                    "waiting_engine": _integer(values.get("waiting_engine")),
+                    "waiting_frame": _integer(values.get("waiting_frame")),
+                    "bubble_worker": _integer(values.get("bubble_worker")),
+                    "bubble_result": _integer(values.get("bubble_result")),
                     "owner": values.get("owner", values.get("last_ui", "")),
+                    "last_ui": values.get("last_ui", ""),
+                    "last_ui_ms": _number(values.get("last_ui_ms")),
+                    "last_ui_age_ms": _number(values.get("last_ui_age_ms")),
                     "gap_ms": _number(values.get("gap_ms")),
                     "paint_ms": _number(values.get("paint_ms")),
                     "request_age_ms": _number(values.get("request_age_ms")),
@@ -822,6 +832,30 @@ def _parse_phase5_telemetry(
                     "simulation_age_ms": _number(values.get("simulation_age_ms")),
                     "render_state_age_ms": _number(values.get("render_state_age_ms")),
                     "owner_age_ms": _number(values.get("last_ui_age_ms")),
+                    "io_queue": _integer(values.get("io_queue")),
+                    "compute_queue": _integer(values.get("compute_queue")),
+                    "io_active": _integer(values.get("io_active")),
+                    "compute_active": _integer(values.get("compute_active")),
+                    "io_callbacks": _integer(values.get("io_callbacks")),
+                    "compute_callbacks": _integer(values.get("compute_callbacks")),
+                    "io_queue_wait_ms": _number(values.get("io_queue_wait_ms")),
+                    "compute_queue_wait_ms": _number(values.get("compute_queue_wait_ms")),
+                    "io_exec_ms": _number(values.get("io_exec_ms")),
+                    "compute_exec_ms": _number(values.get("compute_exec_ms")),
+                    "io_callback_ms": _number(values.get("io_callback_ms")),
+                    "compute_callback_ms": _number(values.get("compute_callback_ms")),
+                    "ui_callbacks": _integer(values.get("ui_callbacks")),
+                    "ui_active": _integer(values.get("ui_active")),
+                    "ui_queue": _integer(values.get("ui_queue")),
+                    "ui_failed": _integer(values.get("ui_failed")),
+                    "media_display": _integer(values.get("media_display")),
+                    "media_emit": _integer(values.get("media_emit")),
+                    "media_repaints": _integer(values.get("media_repaints")),
+                    "overlay_set": _integer(values.get("overlay_set")),
+                    "overlay_repaints": _integer(values.get("overlay_repaints")),
+                    "overlay_paints": _integer(values.get("overlay_paints")),
+                    "render_requests": _integer(values.get("render_requests")),
+                    "skipped_requests": _integer(values.get("skipped_requests")),
                     "elapsed_ms": _number(values.get("elapsed_ms")),
                     "refresh_hz": _number(values.get("refresh_hz")),
                     "dpr": _number(values.get("dpr")),
@@ -1009,6 +1043,59 @@ def _metric_summary(values: Iterable[object]) -> dict[str, float] | None:
         "minimum": min(numeric),
         "median": statistics.median(numeric),
         "maximum": max(numeric),
+    }
+
+
+def _metric_summary_with_p95(values: Iterable[object]) -> dict[str, float] | None:
+    numeric = sorted(float(value) for value in values if isinstance(value, (int, float)))
+    if not numeric:
+        return None
+    position = (len(numeric) - 1) * 0.95
+    lower = int(position)
+    upper = min(lower + 1, len(numeric) - 1)
+    p95 = numeric[lower] + (numeric[upper] - numeric[lower]) * (position - lower)
+    return {
+        "minimum": numeric[0],
+        "median": statistics.median(numeric),
+        "p95": p95,
+        "maximum": numeric[-1],
+    }
+
+
+def _frame_gap_last_ui_summary(
+    phase5_rows: Sequence[Mapping[str, object]],
+) -> dict[str, dict[str, object]]:
+    """Describe frame-gap snapshots by the reported last UI callback label."""
+
+    frame_gap_rows = [
+        row
+        for row in phase5_rows
+        if row["kind"] == "frame_gap_owner" and row.get("last_ui")
+    ]
+    return {
+        label: {
+            "count": len(rows),
+            "gap_ms": _metric_summary_with_p95(row.get("gap_ms") for row in rows),
+            "last_ui_ms": _metric_summary_with_p95(
+                row.get("last_ui_ms") for row in rows
+            ),
+            "last_ui_age_ms": _metric_summary_with_p95(
+                row.get("last_ui_age_ms") for row in rows
+            ),
+            "last_ui_age_at_most_gap_count": sum(
+                isinstance(row.get("last_ui_age_ms"), (int, float))
+                and isinstance(row.get("gap_ms"), (int, float))
+                and float(row["last_ui_age_ms"]) <= float(row["gap_ms"])
+                for row in rows
+            ),
+            "last_ui_ms_at_least_10_count": sum(
+                isinstance(row.get("last_ui_ms"), (int, float))
+                and float(row["last_ui_ms"]) >= 10.0
+                for row in rows
+            ),
+        }
+        for label in sorted({str(row["last_ui"]) for row in frame_gap_rows})
+        if (rows := [row for row in frame_gap_rows if row["last_ui"] == label])
     }
 
 
@@ -1295,6 +1382,7 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
                     row.get("owner_age_ms") for row in phase5_rows
                     if row["kind"] == "frame_gap_owner"
                 ),
+                "by_last_ui": _frame_gap_last_ui_summary(phase5_rows),
                 "severity_counts": {
                     severity: sum(
                         row["kind"] == "frame_gap_owner" and row["severity"] == severity

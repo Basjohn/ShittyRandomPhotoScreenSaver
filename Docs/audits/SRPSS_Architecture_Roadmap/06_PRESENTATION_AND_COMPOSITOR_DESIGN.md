@@ -56,10 +56,15 @@ visualizer timer while that shared GUI transaction is running.
 The next typical-load phase split shows why presentation decoupling is still not the
 first correction. Ordinary physical-4K texture submission itself is about `0.482 ms`
 median, while QPixmap image preparation plus source copying is about `11.689 ms` median.
-The current upload slice removes the proven native-format conversion and Python bytes
+The upload slice removes the proven native-format conversion and Python bytes
 clone while retaining one GUI/context-owned PBO copy. It does not add another surface,
 clock, texture identity or presentation acknowledgement. Cold context/PBO staging and
-pair-warm residual remain separately attributable before any Phase 7 prototype.
+pair-warm residual remain separately attributable before any Phase 7 prototype. The
+installed `08_13_8d419765_18_08_18_14_direct_upload_typical` capture validates that
+boundary: `34/34` uploads use native `rgb32` plus the direct read-only view, upload
+median falls from `13.320 ms` to `2.982 ms`, and teardown remains clean. Tick gaps do
+not materially fall, so Phase 7 still cannot substitute for attribution of the cold
+GUI/context setup and unrelated GUI-owner stalls.
 
 ## Absolute Rules
 
