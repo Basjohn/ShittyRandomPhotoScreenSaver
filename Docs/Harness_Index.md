@@ -181,9 +181,11 @@ Parse the current live root directly when the active sidecars are still in place
 python tools/recovery_evidence_parser.py --source logs --output-dir logs/_analysis_live
 ```
 
-Parser 1.9 treats a directory named `logs` as the live sidecar root: it reads only
+Parser 1.10 treats a directory named `logs` as the live sidecar root: it reads only
 immediate `.log` files and their rotations, ignoring `evidence_chest`, derived-analysis,
-and other descendant trees. Its source hash covers exactly that selected live set.
+and other descendant trees. Each selected file is read once; its recorded size and the
+source hash cover the exact byte prefix consumed even if a live sidecar continues growing
+during analysis.
 
 New captures are plain disposable subfolders. Parse an explicitly selected capture
 directly; do not create a ZIP merely for analysis:
@@ -195,7 +197,7 @@ python tools/recovery_evidence_parser.py --source logs/evidence_chest/phase4plus
 The parser filename is historical and remains stable; its name does not make any historical branch or candidate an implementation authority.
 
 Explicit evidence-run folders retain recursive discovery for copied/extracted layouts;
-select one run rather than the whole `evidence_chest` parent. Parser 1.9 joins copied
+select one run rather than the whole `evidence_chest` parent. Parser 1.10 joins copied
 sidecar rotations oldest-first and then reads the active
 `.log`, so a session that crosses `screensaver_verbose.log.1` or
 `screensaver_lifecycle.log.1` remains continuous. Copy only the rotations needed

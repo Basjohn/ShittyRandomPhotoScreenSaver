@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import zipfile
 from pathlib import Path
@@ -412,6 +413,50 @@ def test_live_logs_root_ignores_nested_archives_and_hashes_only_live_sidecars(
 
     archived.write_text("changed historical content\n", encoding="utf-8")
     assert analyze_evidence_source(logs_dir).summary["source_sha256"] == original_hash
+
+
+def test_live_source_hash_and_size_describe_exact_bytes_consumed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
+    active = logs_dir / "screensaver_perf.log"
+    parsed_payload = (
+        "2026-08-13 15:38:23 - metrics - INFO - "
+        "[PERF] [GL PAINT] Slide metrics: screen=0, frames=60, "
+        "avg_fps=60.0, dt_max=20.0ms, target_fps=60, outcome=completed\n"
+    ).encode("utf-8")
+    appended_payload = b"2026-08-13 15:38:24 - still writing\n"
+    active.write_bytes(parsed_payload)
+
+    original_read_bytes = Path.read_bytes
+    mutated = False
+
+    def read_bytes_then_append(path: Path) -> bytes:
+        nonlocal mutated
+        payload = original_read_bytes(path)
+        if path == active and not mutated:
+            mutated = True
+            active.write_bytes(payload + appended_payload)
+        return payload
+
+    monkeypatch.setattr(Path, "read_bytes", read_bytes_then_append)
+
+    analysis = analyze_evidence_source(logs_dir)
+    expected_digest = hashlib.sha256()
+    expected_digest.update(active.name.encode("utf-8"))
+    expected_digest.update(b"\0")
+    expected_digest.update(parsed_payload)
+
+    assert analysis.summary["source_sha256"] == expected_digest.hexdigest().upper()
+    assert analysis.summary["source_archive_sha256"] == expected_digest.hexdigest().upper()
+    assert analysis.summary["source_files"] == {active.name: len(parsed_payload)}
+    assert active.stat().st_size == len(parsed_payload + appended_payload)
+    assert analysis.summary["time_range"] == {
+        "first": "2026-08-13 15:38:23",
+        "last": "2026-08-13 15:38:23",
+    }
 
 
 def test_explicit_evidence_directory_retains_recursive_log_discovery(

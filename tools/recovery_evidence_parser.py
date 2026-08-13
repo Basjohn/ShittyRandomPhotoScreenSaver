@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-PARSER_VERSION = "1.9"
+PARSER_VERSION = "1.10"
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
@@ -199,23 +199,17 @@ def _directory_log_paths(path: Path) -> tuple[Path, ...]:
     )
 
 
-def _directory_hash(path: Path) -> str:
-    digest = hashlib.sha256()
-    for log_path in _directory_log_paths(path):
-        relative = log_path.relative_to(path).as_posix()
-        digest.update(relative.encode("utf-8"))
-        digest.update(b"\0")
-        with log_path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-    return digest.hexdigest().upper()
+def _read_source(
+    path: Path,
+) -> tuple[dict[str, list[str]], dict[str, int], str]:
+    """Read one selected source and hash the exact bytes that were consumed.
 
+    Live sidecars may still be growing.  Reading them again after parsing would
+    let the reported source hash and sizes describe newer bytes than the rows in
+    the analysis.  Directory sources therefore hash each selected byte prefix in
+    the same pass that decodes it.
+    """
 
-def _source_hash(path: Path) -> str:
-    return _directory_hash(path) if path.is_dir() else _file_hash(path)
-
-
-def _read_source(path: Path) -> tuple[dict[str, list[str]], dict[str, int]]:
     rotated_logs: dict[str, dict[int, list[str]]] = {}
     sizes: dict[str, int] = {}
 
@@ -231,32 +225,42 @@ def _read_source(path: Path) -> tuple[dict[str, list[str]], dict[str, int]]:
         sizes[Path(name).name] = size
 
     if path.is_dir():
+        digest = hashlib.sha256()
         for log_path in _directory_log_paths(path):
-            text = log_path.read_text(encoding="utf-8", errors="replace")
-            add_log(log_path.name, text, log_path.stat().st_size)
-        return {
+            relative = log_path.relative_to(path).as_posix()
+            payload = log_path.read_bytes()
+            digest.update(relative.encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(payload)
+            add_log(
+                log_path.name,
+                payload.decode("utf-8", errors="replace"),
+                len(payload),
+            )
+        return ({
             base: [
                 line
                 for rotation in sorted(versions, reverse=True)
                 for line in versions[rotation]
             ]
             for base, versions in rotated_logs.items()
-        }, sizes
+        }, sizes, digest.hexdigest().upper())
 
+    source_hash = _file_hash(path)
     with zipfile.ZipFile(path) as archive:
         for info in archive.infolist():
             if info.is_dir() or _log_file_identity(Path(info.filename)) is None:
                 continue
             text = archive.read(info).decode("utf-8", errors="replace")
             add_log(Path(info.filename).name, text, info.file_size)
-    return {
+    return ({
         base: [
             line
             for rotation in sorted(versions, reverse=True)
             for line in versions[rotation]
         ]
         for base, versions in rotated_logs.items()
-    }, sizes
+    }, sizes, source_hash)
 
 
 def _parse_usage(
@@ -915,7 +919,7 @@ def _metric_summary(values: Iterable[object]) -> dict[str, float] | None:
 
 def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
     path = path.resolve()
-    logs, sizes = _read_source(path)
+    logs, sizes, source_hash = _read_source(path)
     usage_lines = logs.get("screensaver_usage.log", [])
     perf_lines = logs.get("screensaver_perf.log", [])
     visualizer_lines = logs.get("screensaver_spotify_vis.log", [])
@@ -963,10 +967,10 @@ def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
         "parser_version": PARSER_VERSION,
         "source_kind": "folder" if path.is_dir() else "zip",
         "source_path": str(path),
-        "source_sha256": _source_hash(path),
+        "source_sha256": source_hash,
         # Compatibility fields retained for existing downstream reports.
         "source_archive": str(path),
-        "source_archive_sha256": _source_hash(path),
+        "source_archive_sha256": source_hash,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "source_files": sizes,
         "time_range": {
