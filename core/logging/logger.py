@@ -8,6 +8,7 @@ import atexit
 import logging
 import os
 import queue
+import shutil
 import sys
 import tempfile
 import threading
@@ -208,10 +209,12 @@ class _QueuedLoggingController:
         output_handlers: Iterable[logging.Handler],
         *,
         main_handler: logging.Handler,
+        console_handler: logging.Handler | None = None,
         capacity: int,
     ) -> None:
         self.output_handlers = tuple(output_handlers)
         self.main_handler = main_handler
+        self.console_handler = console_handler
         self.capacity = max(1, int(capacity))
         self.ingress_handler = _QueuedLogHandler(self)
         self._queue: queue.Queue[logging.LogRecord] = queue.Queue(
@@ -248,6 +251,12 @@ class _QueuedLoggingController:
         self._writer_lag_records = 0
         self._writer_lag_total_ns = 0
         self._writer_lag_max_ns = 0
+        self._file_commit_lag_records = 0
+        self._file_commit_lag_total_ns = 0
+        self._file_commit_lag_max_ns = 0
+        self._console_emit_records = 0
+        self._console_emit_total_ns = 0
+        self._console_emit_max_ns = 0
         self._thread = threading.Thread(
             target=self._run,
             name="SRPSSLogWriter",
@@ -426,6 +435,7 @@ class _QueuedLoggingController:
         measure_lag: bool = True,
     ) -> None:
         _render_queued_exception(record)
+        enqueued_ns = 0
         if measure_lag:
             enqueued_ns = int(
                 getattr(record, "_srpss_queue_enqueued_ns", 0) or 0
@@ -446,13 +456,53 @@ class _QueuedLoggingController:
         self._dispatch_state.in_dispatch = True
         try:
             with self._dispatch_lock:
+                # Persistent outputs always go first. This means expensive
+                # human console formatting/output cannot postpone main/sidecar
+                # visibility for the record currently being dispatched.
                 for handler in self.output_handlers:
+                    if handler is self.console_handler:
+                        continue
                     if record.levelno < handler.level:
                         continue
                     try:
                         handler.handle(record)
                     except Exception:
                         self._record_writer_error()
+
+                if enqueued_ns:
+                    file_commit_lag_ns = max(
+                        0,
+                        time.perf_counter_ns() - enqueued_ns,
+                    )
+                    with self._metrics_lock:
+                        self._file_commit_lag_records += 1
+                        self._file_commit_lag_total_ns += file_commit_lag_ns
+                        self._file_commit_lag_max_ns = max(
+                            self._file_commit_lag_max_ns,
+                            file_commit_lag_ns,
+                        )
+
+                if (
+                    self.console_handler is not None
+                    and record.levelno >= self.console_handler.level
+                ):
+                    console_started_ns = time.perf_counter_ns()
+                    try:
+                        self.console_handler.handle(record)
+                    except Exception:
+                        self._record_writer_error()
+                    finally:
+                        console_elapsed_ns = max(
+                            0,
+                            time.perf_counter_ns() - console_started_ns,
+                        )
+                        with self._metrics_lock:
+                            self._console_emit_records += 1
+                            self._console_emit_total_ns += console_elapsed_ns
+                            self._console_emit_max_ns = max(
+                                self._console_emit_max_ns,
+                                console_elapsed_ns,
+                            )
         finally:
             self._dispatch_state.in_dispatch = previous_dispatch
         if count_record:
@@ -493,6 +543,16 @@ class _QueuedLoggingController:
             if metrics["writer_lag_records"]
             else 0.0
         )
+        file_commit_avg_ms = (
+            metrics["file_commit_lag_total_ms"] / metrics["file_commit_lag_records"]
+            if metrics["file_commit_lag_records"]
+            else 0.0
+        )
+        console_emit_avg_ms = (
+            metrics["console_emit_total_ms"] / metrics["console_emit_records"]
+            if metrics["console_emit_records"]
+            else 0.0
+        )
         summary = logging.LogRecord(
             "core.logging.writer",
             logging.INFO,
@@ -506,7 +566,9 @@ class _QueuedLoggingController:
                 "snapshot_errors=%d writer_errors=%d "
                 "high_water=%d capacity=%d caller_avg_ms=%.4f "
                 "caller_max_ms=%.4f writer_lag_avg_ms=%.4f "
-                "writer_lag_max_ms=%.4f flush_ms=%.3f"
+                "writer_lag_max_ms=%.4f file_commit_lag_avg_ms=%.4f "
+                "file_commit_lag_max_ms=%.4f console_emit_avg_ms=%.4f "
+                "console_emit_max_ms=%.4f flush_ms=%.3f"
             ),
             (
                 metrics["enqueued"],
@@ -526,6 +588,10 @@ class _QueuedLoggingController:
                 metrics["caller_enqueue_max_ms"],
                 writer_avg_ms,
                 metrics["writer_lag_max_ms"],
+                file_commit_avg_ms,
+                metrics["file_commit_lag_max_ms"],
+                console_emit_avg_ms,
+                metrics["console_emit_max_ms"],
                 metrics["flush_duration_ms"],
             ),
             None,
@@ -638,6 +704,12 @@ class _QueuedLoggingController:
                 "writer_lag_records": self._writer_lag_records,
                 "writer_lag_total_ms": self._writer_lag_total_ns / 1_000_000.0,
                 "writer_lag_max_ms": self._writer_lag_max_ns / 1_000_000.0,
+                "file_commit_lag_records": self._file_commit_lag_records,
+                "file_commit_lag_total_ms": self._file_commit_lag_total_ns / 1_000_000.0,
+                "file_commit_lag_max_ms": self._file_commit_lag_max_ns / 1_000_000.0,
+                "console_emit_records": self._console_emit_records,
+                "console_emit_total_ms": self._console_emit_total_ns / 1_000_000.0,
+                "console_emit_max_ms": self._console_emit_max_ns / 1_000_000.0,
                 "flush_duration_ms": self._flush_duration_ns / 1_000_000.0,
                 "flush_timed_out": self._flush_timed_out,
                 "writer_alive": self._thread.is_alive(),
@@ -773,61 +845,712 @@ def _determine_logging_disabled(exe_path: Path | None) -> bool:
 
 
 class ColoredFormatter(logging.Formatter):
-    """Formatter that adds colors to console output."""
-    
-    # ANSI color codes
+    """Comprehensive human-facing console formatter for debug mode.
+
+    Goals:
+      * the terminal owns no accidental wrapping;
+      * metadata columns remain fixed on every continuation row;
+      * structured key/value telemetry is presented as aligned tables;
+      * long values receive full-width rows rather than destroying the grid;
+      * WARNING+ records use heavier diagnostic cards and named sections;
+      * source names cannot push the message column sideways;
+      * the underlying LogRecord payload is never mutated.
+
+    This class is console presentation only. File persistence, sidecars,
+    queueing, rotation, emergency WARNING+ writes and Diagnostic crash capture
+    remain independent of it.
+    """
+
     COLORS = {
-        'DEBUG': '\033[36m',       # Cyan
-        'INFO': '\033[32m',        # Green
-        'WARNING': '\033[33m',     # Yellow
-        'ERROR': '\033[31m',       # Red
-        'CRITICAL': '\033[35m',    # Magenta
+        "DEBUG": "\033[36m",
+        "INFO": "\033[32m",
+        "WARNING": "\033[33m",
+        "ERROR": "\033[31m",
+        "CRITICAL": "\033[35m",
     }
-    FALLBACK_COLOR = '\033[38;5;208m'
-    PREWARM_COLOR = '\033[38;5;135m'   # Purple for prewarm/flicker diagnostics
-    RESET = '\033[0m'
-    BOLD = '\033[1m'
-    
-    def format(self, record):
-        # Save original values
-        original_levelname = record.levelname
-        original_msg = record.msg
+    SOURCE_COLOR = "\033[38;5;75m"
+    TAG_COLOR = "\033[38;5;141m"
+    KEY_COLOR = "\033[38;5;110m"
+    VALUE_COLOR = "\033[97m"
+    LABEL_COLOR = "\033[38;5;75m"
+    PROSE_COLOR = "\033[97m"
+    DIM = "\033[2m"
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
 
-        msg_text = str(record.msg)
-        # Check if this is a fallback or prewarm/flicker-related message
-        is_fallback = '[FALLBACK]' in msg_text
-        is_prewarm = ('[PREWARM]' in msg_text
-                      or 'flicker' in msg_text.lower()
-                      or 'Seed pixmap' in msg_text)
-        
-        # Color the entire line
-        color = None
-        if is_fallback:
-            # Highlight any fallback path in a distinct bright color so they
-            # stand out regardless of level.
-            color = self.FALLBACK_COLOR
-        elif is_prewarm:
-            # Use dedicated purple for prewarm/flicker diagnostics
-            color = self.PREWARM_COLOR
-        elif record.levelname in self.COLORS:
-            color = self.COLORS[record.levelname]
+    _TIME_WIDTH = 8
+    _LEVEL_WIDTH = 8
+    _SOURCE_WIDTH = 46
+    _MIN_CONSOLE_WIDTH = 112
+    _DEFAULT_CONSOLE_WIDTH = 144
+    _MAX_CONSOLE_WIDTH = 164
+    _MIN_MESSAGE_WIDTH = 36
 
-        if color is not None:
-            # Color the level name in bold
-            record.levelname = f"{self.BOLD}{color}{record.levelname}{self.RESET}"
-            # Format the message
-            message = super().format(record)
-            # Color the entire formatted message
-            colored_message = f"{color}{message}{self.RESET}"
-            # Restore original values
-            record.levelname = original_levelname
-            record.msg = original_msg
-            return colored_message
-        
-        # Restore original values for non-colored output
-        record.levelname = original_levelname
-        record.msg = original_msg
-        return super().format(record)
+    _FRAME_GAP_SECTIONS = (
+        (
+            "FRAME",
+            (
+                "severity", "screen", "gap_ms", "paint_ms", "request_age_ms",
+                "source_age_ms", "simulation_age_ms", "render_state_age_ms",
+                "target_hz",
+            ),
+        ),
+        (
+            "STATE",
+            (
+                "transition_active", "transition", "vis_mode", "vis_phase",
+                "waiting_engine", "waiting_frame", "bubble_worker", "bubble_result",
+            ),
+        ),
+        (
+            "WORK",
+            (
+                "io_queue", "compute_queue", "io_active", "compute_active",
+                "io_callbacks", "compute_callbacks", "io_queue_wait_ms",
+                "compute_queue_wait_ms", "io_exec_ms", "compute_exec_ms",
+                "io_callback_ms", "compute_callback_ms",
+            ),
+        ),
+        (
+            "GUI",
+            (
+                "ui_callbacks", "ui_active", "ui_queue", "ui_failed",
+                "last_ui", "last_ui_ms", "last_ui_age_ms",
+            ),
+        ),
+        (
+            "PRESENT",
+            (
+                "media_display", "media_emit", "media_repaints", "overlay_set",
+                "overlay_repaints", "overlay_paints", "render_requests",
+                "skipped_requests",
+            ),
+        ),
+        ("GC", ("gc_enabled", "gc_counts")),
+    )
+
+    def __init__(self, *args, use_color: bool = True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.use_color = bool(use_color)
+
+        # One terminal-size query at logger setup. We intentionally avoid doing
+        # this on every record. Leave one spare visible column so PowerShell does
+        # not soft-wrap exactly at the right edge.
+        terminal_columns = shutil.get_terminal_size(
+            fallback=(self._DEFAULT_CONSOLE_WIDTH, 30)
+        ).columns
+        self.console_width = max(
+            self._MIN_CONSOLE_WIDTH,
+            min(self._MAX_CONSOLE_WIDTH, int(terminal_columns) - 1),
+        )
+        self.prefix_width = (
+            self._TIME_WIDTH
+            + 3
+            + self._LEVEL_WIDTH
+            + 3
+            + self._SOURCE_WIDTH
+            + 3
+        )
+        self.message_width = max(
+            self._MIN_MESSAGE_WIDTH,
+            self.console_width - self.prefix_width,
+        )
+        self.card_width = self.console_width
+        self.card_body_width = max(48, self.card_width - 4)
+
+    def _paint(
+        self,
+        text: str,
+        color: str = "",
+        *,
+        bold: bool = False,
+        dim: bool = False,
+    ) -> str:
+        if not self.use_color:
+            return text
+        prefix = ""
+        if bold:
+            prefix += self.BOLD
+        if dim:
+            prefix += self.DIM
+        prefix += color
+        return f"{prefix}{text}{self.RESET}"
+
+    @staticmethod
+    def _split_canonical(rendered: str) -> tuple[str, str, str, str] | None:
+        pieces = rendered.split(" - ", 3)
+        if len(pieces) != 4:
+            return None
+        when, source, level, payload = pieces
+        return when.strip(), source.strip(), level.strip(), payload
+
+    @staticmethod
+    def _is_separator_message(message: str) -> bool:
+        stripped = message.strip()
+        return len(stripped) >= 20 and set(stripped) == {"="}
+
+    @staticmethod
+    def _tag_prefix(payload: str) -> tuple[str, str]:
+        cursor = 0
+        tags: list[str] = []
+        length = len(payload)
+        while cursor < length:
+            while cursor < length and payload[cursor].isspace():
+                cursor += 1
+            if cursor >= length or payload[cursor] != "[":
+                break
+            end = payload.find("]", cursor + 1)
+            if end < 0:
+                break
+            tags.append(payload[cursor : end + 1])
+            cursor = end + 1
+        return "".join(tags), payload[cursor:].lstrip()
+
+    @staticmethod
+    def _field_key(token: str) -> str | None:
+        if "=" not in token:
+            return None
+        key, _value = token.split("=", 1)
+        if not key:
+            return None
+        if not (key[0].isalpha() or key[0] == "_"):
+            return None
+        if not all(char.isalnum() or char == "_" for char in key):
+            return None
+        return key
+
+    @staticmethod
+    def _field_parts(token: str) -> tuple[str, str] | None:
+        if "=" not in token:
+            return None
+        key, value = token.split("=", 1)
+        if not key:
+            return None
+        if not (key[0].isalpha() or key[0] == "_"):
+            return None
+        if not all(char.isalnum() or char == "_" for char in key):
+            return None
+        return key, value
+
+    @staticmethod
+    def _compact_source(source: str, width: int) -> str:
+        """Fit a logger name without letting it move the message column."""
+
+        if len(source) <= width:
+            return source
+        if width <= 5:
+            return source[:width]
+        # Preserve both hierarchy root and the useful leaf name.
+        left = max(1, (width - 1) // 2)
+        right = max(1, width - left - 1)
+        return f"{source[:left]}…{source[-right:]}"
+
+    @staticmethod
+    def _wrap_words(words: list[str], width: int) -> list[list[str]]:
+        target = max(12, int(width))
+        rows: list[list[str]] = []
+        current: list[str] = []
+        current_len = 0
+
+        for word in words:
+            word_len = len(word)
+            separator = 1 if current else 0
+            if current and current_len + separator + word_len > target:
+                rows.append(current)
+                current = [word]
+                current_len = word_len
+            else:
+                current.append(word)
+                current_len += separator + word_len
+
+        if current:
+            rows.append(current)
+        return rows or [[]]
+
+    @staticmethod
+    def _split_long_value(value: str, width: int) -> list[str]:
+        """Wrap a long value at sensible punctuation before hard slicing."""
+
+        if len(value) <= width:
+            return [value]
+
+        chunks: list[str] = []
+        remaining = value
+        preferred = ("/", "\\", ".", ":", ",", ";", "_", "-", ">")
+
+        while len(remaining) > width:
+            split_at = -1
+            window = remaining[: width + 1]
+            # Prefer a break late in the available window.
+            for marker in preferred:
+                candidate = window.rfind(marker, max(1, width // 2))
+                if candidate > split_at:
+                    split_at = candidate + 1
+            if split_at <= 0:
+                split_at = width
+            chunks.append(remaining[:split_at])
+            remaining = remaining[split_at:]
+        if remaining:
+            chunks.append(remaining)
+        return chunks
+
+    def _format_key(self, key: str, width: int) -> str:
+        padded = f"{key:<{width}}"
+        return self._paint(padded, self.KEY_COLOR)
+
+    def _format_value(self, value: str) -> str:
+        return self._paint(value, self.VALUE_COLOR)
+
+    def _format_equals(self) -> str:
+        return self._paint(" = ", dim=True)
+
+    def _render_field_table(
+        self,
+        tokens: list[str],
+        *,
+        width: int,
+        preferred_columns: int = 2,
+    ) -> list[str]:
+        """Render key=value tokens as a real aligned table.
+
+        Pair short fields into two columns. Any field that cannot fit cleanly in
+        one half-width cell is promoted to a full-width row. Long full-width
+        values wrap underneath their own value column.
+        """
+
+        fields: list[tuple[str, str]] = []
+        leftovers: list[str] = []
+        for token in tokens:
+            parts = self._field_parts(token)
+            if parts is None:
+                leftovers.append(token)
+            else:
+                fields.append(parts)
+
+        lines: list[str] = []
+
+        if leftovers:
+            lines.extend(
+                " ".join(row)
+                for row in self._wrap_words(leftovers, width)
+            )
+
+        if not fields:
+            return lines
+
+        key_width = min(
+            22,
+            max(8, max(len(key) for key, _value in fields)),
+        )
+        gap = 4
+        columns = 2 if preferred_columns >= 2 and width >= 70 else 1
+        cell_width = (
+            (width - gap) // 2
+            if columns == 2
+            else width
+        )
+        value_width_in_cell = max(
+            8,
+            cell_width - key_width - 3,
+        )
+
+        def pairable(field: tuple[str, str]) -> bool:
+            key, value = field
+            return (
+                len(key) <= key_width
+                and len(value) <= value_width_in_cell
+            )
+
+        pair_buffer: list[tuple[str, str]] = []
+
+        def flush_pairs() -> None:
+            nonlocal pair_buffer
+            while pair_buffer:
+                if columns == 2 and len(pair_buffer) >= 2:
+                    left = pair_buffer.pop(0)
+                    right = pair_buffer.pop(0)
+                    left_text = (
+                        self._format_key(left[0], key_width)
+                        + self._format_equals()
+                        + self._format_value(left[1])
+                    )
+                    # Pad by visible width, not ANSI byte length.
+                    left_visible_len = key_width + 3 + len(left[1])
+                    padding = max(1, cell_width - left_visible_len + gap)
+                    right_text = (
+                        self._format_key(right[0], key_width)
+                        + self._format_equals()
+                        + self._format_value(right[1])
+                    )
+                    lines.append(left_text + (" " * padding) + right_text)
+                else:
+                    field = pair_buffer.pop(0)
+                    lines.extend(render_full(field))
+
+        def render_full(field: tuple[str, str]) -> list[str]:
+            key, value = field
+            value_width = max(12, width - key_width - 3)
+            value_chunks = self._split_long_value(value, value_width)
+            rendered: list[str] = []
+            for index, chunk in enumerate(value_chunks):
+                if index == 0:
+                    rendered.append(
+                        self._format_key(key, key_width)
+                        + self._format_equals()
+                        + self._format_value(chunk)
+                    )
+                else:
+                    rendered.append(
+                        (" " * key_width)
+                        + self._format_equals()
+                        + self._format_value(chunk)
+                    )
+            return rendered
+
+        for field in fields:
+            if pairable(field):
+                pair_buffer.append(field)
+                if len(pair_buffer) == columns:
+                    flush_pairs()
+            else:
+                flush_pairs()
+                lines.extend(render_full(field))
+
+        flush_pairs()
+        return lines
+
+    def _ordinary_prefix(
+        self,
+        when: str,
+        level: str,
+        source: str,
+        *,
+        continuation: bool,
+    ) -> str:
+        if continuation:
+            plain = (
+                f"{'':<{self._TIME_WIDTH}}"
+                f" │ {'':<{self._LEVEL_WIDTH}}"
+                f" │ {'':<{self._SOURCE_WIDTH}}"
+                " │ "
+            )
+            return self._paint(plain, dim=True)
+
+        compact_source = self._compact_source(source, self._SOURCE_WIDTH)
+        level_color = self.COLORS.get(level, self.COLORS["INFO"])
+        return (
+            self._paint(f"{when:<{self._TIME_WIDTH}}", dim=True)
+            + " │ "
+            + self._paint(
+                f"{level:<{self._LEVEL_WIDTH}}",
+                level_color,
+                bold=True,
+            )
+            + " │ "
+            + self._paint(
+                f"{compact_source:<{self._SOURCE_WIDTH}}",
+                self.SOURCE_COLOR,
+            )
+            + " │ "
+        )
+
+    def _wrap_prose(self, text: str, width: int) -> list[str]:
+        words = text.split()
+        if not words:
+            return [""]
+        return [" ".join(row) for row in self._wrap_words(words, width)]
+
+    def _ordinary_message_lines(self, payload: str) -> list[str]:
+        tags, rest = self._tag_prefix(payload)
+        rows: list[str] = []
+
+        logical_lines = rest.splitlines() if rest else []
+        if not logical_lines and not tags:
+            logical_lines = payload.splitlines() or [""]
+
+        # Put a tag chain on its own row whenever there is meaningful payload
+        # after it. This gives every structured record a visual heading.
+        if tags:
+            rows.append(self._paint(tags, self.TAG_COLOR, bold=True))
+
+        for logical_line in logical_lines:
+            stripped = logical_line.strip()
+            if not stripped:
+                rows.append("")
+                continue
+
+            tokens = stripped.split()
+            first_field = next(
+                (
+                    index
+                    for index, token in enumerate(tokens)
+                    if self._field_key(token) is not None
+                ),
+                None,
+            )
+
+            if first_field is None:
+                rows.extend(self._wrap_prose(stripped, self.message_width))
+                continue
+
+            prose_tokens = tokens[:first_field]
+            field_tokens = tokens[first_field:]
+
+            if prose_tokens:
+                rows.extend(
+                    self._wrap_prose(
+                        " ".join(prose_tokens),
+                        self.message_width,
+                    )
+                )
+
+            rows.extend(
+                self._render_field_table(
+                    field_tokens,
+                    width=self.message_width,
+                    preferred_columns=2,
+                )
+            )
+
+        # A tag-only event remains useful by itself.
+        if tags and not logical_lines:
+            return rows
+
+        return rows or [""]
+
+    def _ordinary_record(
+        self,
+        when: str,
+        source: str,
+        level: str,
+        payload: str,
+    ) -> str:
+        rows = self._ordinary_message_lines(payload)
+        first_prefix = self._ordinary_prefix(
+            when,
+            level,
+            source,
+            continuation=False,
+        )
+        continuation_prefix = self._ordinary_prefix(
+            "",
+            "",
+            "",
+            continuation=True,
+        )
+        return "\n".join(
+            (first_prefix if index == 0 else continuation_prefix) + row
+            for index, row in enumerate(rows)
+        )
+
+    def _frame_gap_body(self, payload: str) -> list[str]:
+        tags, rest = self._tag_prefix(payload)
+        ordered: list[tuple[str | None, str]] = []
+        by_key: dict[str, str] = {}
+        free_tokens: list[str] = []
+
+        for token in rest.split():
+            key = self._field_key(token)
+            ordered.append((key, token))
+            if key is None:
+                free_tokens.append(token)
+            else:
+                by_key[key] = token
+
+        consumed: set[str] = set()
+        body: list[str] = []
+
+        if tags:
+            body.append(self._paint(tags, self.TAG_COLOR, bold=True))
+
+        if free_tokens:
+            body.extend(
+                self._wrap_prose(
+                    " ".join(free_tokens),
+                    self.card_body_width,
+                )
+            )
+
+        for label, keys in self._FRAME_GAP_SECTIONS:
+            section_tokens = [by_key[key] for key in keys if key in by_key]
+            consumed.update(key for key in keys if key in by_key)
+            if not section_tokens:
+                continue
+
+            if body:
+                body.append("")
+            body.append(self._paint(label, self.LABEL_COLOR, bold=True))
+            body.extend(
+                self._render_field_table(
+                    section_tokens,
+                    width=self.card_body_width,
+                    preferred_columns=2,
+                )
+            )
+
+        leftovers = [
+            token
+            for key, token in ordered
+            if key is not None and key not in consumed
+        ]
+        if leftovers:
+            if body:
+                body.append("")
+            body.append(self._paint("OTHER", self.LABEL_COLOR, bold=True))
+            body.extend(
+                self._render_field_table(
+                    leftovers,
+                    width=self.card_body_width,
+                    preferred_columns=2,
+                )
+            )
+
+        return body or [payload]
+
+    def _generic_severity_body(self, payload: str) -> list[str]:
+        tags, rest = self._tag_prefix(payload)
+        body: list[str] = []
+
+        if tags:
+            body.append(self._paint(tags, self.TAG_COLOR, bold=True))
+
+        logical_lines = rest.splitlines() if rest else []
+        if not logical_lines and not tags:
+            logical_lines = payload.splitlines() or [""]
+
+        for line_index, logical_line in enumerate(logical_lines):
+            # Traceback continuations and explicitly indented lines should keep
+            # their original visual structure rather than being tokenized into
+            # telemetry fields.
+            if line_index > 0 or logical_line[:1].isspace():
+                raw = logical_line.rstrip()
+                if len(raw) <= self.card_body_width:
+                    body.append(raw)
+                else:
+                    body.extend(
+                        self._split_long_value(
+                            raw,
+                            self.card_body_width,
+                        )
+                    )
+                continue
+
+            stripped = logical_line.strip()
+            if not stripped:
+                body.append("")
+                continue
+
+            tokens = stripped.split()
+            first_field = next(
+                (
+                    index
+                    for index, token in enumerate(tokens)
+                    if self._field_key(token) is not None
+                ),
+                None,
+            )
+
+            if first_field is None:
+                body.extend(
+                    self._wrap_prose(
+                        stripped,
+                        self.card_body_width,
+                    )
+                )
+                continue
+
+            prose_tokens = tokens[:first_field]
+            field_tokens = tokens[first_field:]
+            if prose_tokens:
+                body.extend(
+                    self._wrap_prose(
+                        " ".join(prose_tokens),
+                        self.card_body_width,
+                    )
+                )
+            body.extend(
+                self._render_field_table(
+                    field_tokens,
+                    width=self.card_body_width,
+                    preferred_columns=2,
+                )
+            )
+
+        return body or [""]
+
+    def _severity_card(
+        self,
+        record: logging.LogRecord,
+        when: str,
+        source: str,
+        payload: str,
+    ) -> str:
+        level = str(record.levelname or "WARNING")
+        color = self.COLORS.get(level, self.COLORS["WARNING"])
+
+        if record.levelno >= logging.CRITICAL:
+            icon, corners, rule = "☠", ("╔", "╠", "╚"), "═"
+        elif record.levelno >= logging.ERROR:
+            icon, corners, rule = "✖", ("╔", "╠", "╚"), "═"
+        else:
+            icon, corners, rule = "⚠", ("╭", "├", "╰"), "─"
+
+        top_corner, middle_corner, bottom_corner = corners
+        label_plain = f" {icon}  {level} "
+        rule_count = max(8, self.card_width - len(label_plain) - 4)
+        top_plain = f"{top_corner}{rule * 3}{label_plain}{rule * rule_count}"
+        divider_plain = f"{middle_corner}{rule * (self.card_width - 1)}"
+        bottom_plain = f"{bottom_corner}{rule * (self.card_width - 1)}"
+
+        meta_source = self._compact_source(source, self.card_width - 24)
+        meta = (
+            f"│  {self._paint(when, dim=True)}"
+            f"   {self._paint('·', dim=True)}   "
+            f"{self._paint(meta_source, self.SOURCE_COLOR, bold=True)}"
+        )
+
+        if "[FRAME_GAP_OWNER]" in payload:
+            body_lines = self._frame_gap_body(payload)
+        else:
+            body_lines = self._generic_severity_body(payload)
+
+        body = "\n".join(
+            "│  " + line if line else "│"
+            for line in body_lines
+        )
+
+        return "\n".join(
+            (
+                self._paint(top_plain, color, bold=True),
+                meta,
+                self._paint(divider_plain, color),
+                body,
+                self._paint(bottom_plain, color),
+            )
+        )
+
+    def _separator_rule(self) -> str:
+        return self._paint(
+            "━" * self.console_width,
+            self.SOURCE_COLOR,
+            bold=True,
+        )
+
+    def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
+        rendered = super().format(record)
+        split = self._split_canonical(rendered)
+        if split is None:
+            return rendered
+
+        when, source, level, payload = split
+
+        if self._is_separator_message(record.getMessage()):
+            return self._separator_rule()
+
+        if record.levelno >= logging.WARNING:
+            return self._severity_card(record, when, source, payload)
+
+        return self._ordinary_record(when, source, level, payload)
 
 
 class SpacedLogFormatter(logging.Formatter):
@@ -928,15 +1651,10 @@ class MainLogFormatter(logging.Formatter):
         return f"{top}\n{meta}\n{divider}\n{body}\n{bottom}"
 
     def _format_startup_separator(self, when: str) -> str:
-        # RotatingFileHandler may format the same record once while deciding
-        # whether to roll over and again while actually writing it. Keep this
-        # presentation deliberately stateless and idempotent.
-        rule = "━"
-        title = " SRPSS MAIN LOG "
-        fill = max(8, self._RULE_WIDTH - len(title))
-        left = fill // 2
-        right = fill - left
-        return f"{rule * left}{title}{rule * right}"
+        # RotatingFileHandler may format the same record more than once while
+        # deciding whether to roll over. Keep separator presentation stateless,
+        # idempotent and deliberately low-noise.
+        return "━" * self._RULE_WIDTH
 
     def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
         rendered = super().format(record)
@@ -1196,7 +1914,10 @@ class SuppressingStreamHandler(logging.StreamHandler):
         summary.threadName = last.threadName
         summary.process = last.process
         summary.processName = last.processName
-        super().emit(summary)
+        # Use the same Unicode-safe path as ordinary console records so rich
+        # box-drawing/ANSI presentation cannot turn suppression summaries into
+        # logging errors on legacy Windows console encodings.
+        self._emit_record(summary)
 
         self._suppress_count = 0
         self._last_record = None
@@ -2050,8 +2771,10 @@ def setup_logging(
     # duplicate suppression keeps logs small and readable).
     main_handler = DeduplicatingRotatingFileHandler(
         log_file,
-        maxBytes=2 * 1024 * 1024,  # 2MB
-        backupCount=5,
+        maxBytes=2 * 1024 * 1024,  # 2 MiB chunks
+        # Main is the chronological/warning spine. Keep more overlap with the
+        # family sidecars without making ordinary captures unbounded.
+        backupCount=11 if diagnostic_build else 7,
         encoding='utf-8'
     )
     main_handler.setFormatter(main_formatter)
@@ -2071,18 +2794,12 @@ def setup_logging(
     main_handler.addFilter(WidgetPerfVisibilityFilter())
     
     console_handler = SuppressingStreamHandler(sys.stdout)
-    if debug_enabled and sys.stdout.isatty():
-        colored_formatter = ColoredFormatter(
-            '%(asctime)s - %(name)-30s - %(levelname)-8s - %(message)s',
-            datefmt='%H:%M:%S',
-        )
-        console_handler.setFormatter(colored_formatter)
-    else:
-        console_formatter = logging.Formatter(
-            '%(asctime)s - %(name)-30s - %(levelname)-8s - %(message)s',
-            datefmt='%H:%M:%S',
-        )
-        console_handler.setFormatter(console_formatter)
+    console_formatter = ColoredFormatter(
+        '%(asctime)s - %(name)-30s - %(levelname)-8s - %(message)s',
+        datefmt='%H:%M:%S',
+        use_color=bool(debug_enabled and sys.stdout.isatty()),
+    )
+    console_handler.setFormatter(console_formatter)
     console_handler.setLevel(main_level)
     console_handler.addFilter(NonPerfFilter())
     console_handler.addFilter(DedicatedFamilySuppressFilter(SpotifyVisLogFilter(), is_viz_logging_enabled))
@@ -2099,9 +2816,6 @@ def setup_logging(
     root_logger.setLevel(root_level)
     output_handlers.append(main_handler)
     
-    if debug_enabled:
-        output_handlers.append(console_handler)
-
     # Dedicated PERF metrics log capturing any record whose message contains
     # the "[PERF]" tag. This keeps performance summaries readable even when
     # the main log is busy with other diagnostics.
@@ -2199,7 +2913,9 @@ def setup_logging(
         lifecycle_handler = DeduplicatingRotatingFileHandler(
             lifecycle_log_file,
             maxBytes=2 * 1024 * 1024,
-            backupCount=5,
+            # Frozen-runtime/lifecycle soaks are exactly where hours-later
+            # reconstruction history matters. Ordinary retention stays bounded.
+            backupCount=11 if diagnostic_build else 5,
             encoding='utf-8',
         )
         lifecycle_handler.setFormatter(formatter)
@@ -2262,9 +2978,15 @@ def setup_logging(
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(SteamLogFilter(), is_steam_logging_enabled))
         output_handlers.append(verbose_handler)
 
+    # Human console output is deliberately last. All persistent file sinks are
+    # attempted before terminal formatting/output for each record.
+    if debug_enabled:
+        output_handlers.append(console_handler)
+
     controller = _QueuedLoggingController(
         output_handlers,
         main_handler=main_handler,
+        console_handler=console_handler if debug_enabled else None,
         capacity=_LOG_QUEUE_CAPACITY,
     )
     with _LOGGING_CONTROLLER_LOCK:
