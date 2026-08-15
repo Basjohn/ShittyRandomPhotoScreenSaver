@@ -7,6 +7,8 @@ browser host, not the web site that supplied the media.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
+import re
 from typing import Iterable, Optional
 
 
@@ -36,6 +38,22 @@ _BROWSER_HOST_IDS = frozenset(
 _BROWSER_GSMTC_SOURCE_IDS = frozenset(
     {*_BROWSER_HOST_IDS, *(name.removesuffix(".exe") for name in _BROWSER_HOST_IDS)}
 )
+
+# GSMTC exposes SourceAppUserModelId, which is not guaranteed to be the
+# executable name. Chromium-family browsers commonly embed a browser identity
+# in the AUMID, while Firefox can use an installer/profile-generated taskbar ID.
+# Keep executable names as a fast path, then resolve only explicit browser-host
+# identities; never infer a browser from spotify.com or arbitrary metadata.
+_BROWSER_AUMID_TOKENS: dict[str, frozenset[str]] = {
+    "chrome.exe": frozenset({"chrome", "googlechrome"}),
+    "msedge.exe": frozenset({"msedge", "microsoftedge"}),
+    "firefox.exe": frozenset({"firefox", "mozillafirefox"}),
+    "brave.exe": frozenset({"brave", "bravebrowser"}),
+    "opera.exe": frozenset({"opera", "operastable", "operagx"}),
+    "vivaldi.exe": frozenset({"vivaldi", "vivaldistable"}),
+}
+_AUMID_TOKEN_RE = re.compile(r"[a-z0-9]+")
+_FIREFOX_PRIVATE_SUFFIX = ";privatebrowsingaumid"
 
 
 MEDIA_PROVIDER_REGISTRY: dict[str, MediaProviderDescriptor] = {
@@ -135,15 +153,106 @@ def _source_id_basename(source_app_user_model_id: str) -> str:
     return source_app_user_model_id.replace("/", "\\").rsplit("\\", 1)[-1].casefold()
 
 
+def _source_id_tokens(source_app_user_model_id: str) -> frozenset[str]:
+    """Return bounded lexical tokens from an AUMID for registered-host matching."""
+
+    return frozenset(_AUMID_TOKEN_RE.findall(source_app_user_model_id.casefold()))
+
+
+def _strip_firefox_private_suffix(source_app_user_model_id: str) -> str:
+    source_id = source_app_user_model_id.casefold()
+    if source_id.endswith(_FIREFOX_PRIVATE_SUFFIX):
+        return source_id[: -len(_FIREFOX_PRIVATE_SUFFIX)]
+    return source_id
+
+
+@lru_cache(maxsize=1)
+def _firefox_registered_taskbar_ids() -> frozenset[str]:
+    """Return Firefox installer TaskBarIDs visible to this Windows user.
+
+    Firefox normally gives its Win32 process/window an installer-generated
+    AppUserModelID stored under ``Software\\Mozilla\\Firefox\\TaskBarIDs``.
+    GSMTC exposes that AUMID, so matching only ``firefox.exe`` rejects a valid
+    Firefox media session. Registry failure is deliberately a soft no-match.
+    """
+
+    try:
+        import winreg
+    except Exception:
+        return frozenset()
+
+    values: set[str] = set()
+    access_views = [0]
+    for flag_name in ("KEY_WOW64_64KEY", "KEY_WOW64_32KEY"):
+        flag = int(getattr(winreg, flag_name, 0) or 0)
+        if flag and flag not in access_views:
+            access_views.append(flag)
+
+    for root in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        for view_flag in access_views:
+            try:
+                key = winreg.OpenKey(
+                    root,
+                    r"Software\Mozilla\Firefox\TaskBarIDs",
+                    0,
+                    int(getattr(winreg, "KEY_READ", 0)) | view_flag,
+                )
+            except OSError:
+                continue
+            try:
+                index = 0
+                while True:
+                    try:
+                        _name, data, _value_type = winreg.EnumValue(key, index)
+                    except OSError:
+                        break
+                    index += 1
+                    if isinstance(data, str) and data.strip():
+                        values.add(data.strip().casefold())
+            finally:
+                try:
+                    winreg.CloseKey(key)
+                except Exception:
+                    pass
+
+    return frozenset(values)
+
+
+def _resolve_browser_process_exe_name(source_app_user_model_id: str) -> Optional[str]:
+    """Resolve one GSMTC browser AUMID to an exact registered browser process."""
+
+    source_id = source_app_user_model_id.strip().casefold()
+    if not source_id:
+        return None
+
+    basename = _source_id_basename(source_id)
+    for process_name in sorted(_BROWSER_HOST_IDS):
+        process_id = process_name.casefold()
+        process_stem = process_id.removesuffix(".exe")
+        if source_id in (process_id, process_stem) or basename in (process_id, process_stem):
+            return process_name
+
+    tokens = _source_id_tokens(source_id)
+    for process_name in sorted(_BROWSER_HOST_IDS):
+        if tokens.intersection(_BROWSER_AUMID_TOKENS.get(process_name, ())):
+            return process_name
+
+    firefox_source_id = _strip_firefox_private_suffix(source_id)
+    if firefox_source_id in _firefox_registered_taskbar_ids():
+        return "firefox.exe"
+
+    return None
+
+
 def provider_matches_source_app_user_model_id(
     provider: object,
     source_app_user_model_id: object,
 ) -> bool:
     """Return whether an explicit GSMTC identity belongs to *provider*.
 
-    Full identifiers and path basenames are compared for exact equality.  In
-    particular, this never treats a browser source id as Spotify merely
-    because the tab happens to be playing spotify.com.
+    Desktop providers retain exact source-id/path matching. Browser mode also
+    resolves browser-owned AUMIDs to an exact registered host process. This is
+    intentionally host-only: website/tab metadata is never used for matching.
     """
 
     descriptor = get_media_provider(provider)
@@ -152,6 +261,8 @@ def provider_matches_source_app_user_model_id(
     source_id = source_app_user_model_id.strip().casefold()
     if not source_id:
         return False
+    if descriptor.provider_id == "spotify_browser":
+        return _resolve_browser_process_exe_name(source_id) is not None
     return (
         source_id in descriptor.source_app_user_model_ids
         or _source_id_basename(source_id) in descriptor.source_app_user_model_ids
@@ -173,14 +284,16 @@ def get_provider_process_exe_name_for_source(
 ) -> Optional[str]:
     """Resolve one exact GSMTC source identity to its registered process.
 
-    This is intentionally narrower than :func:`get_provider_process_exe_names`:
-    callers must never turn an unknown Browser GSMTC identity into a scan of
-    every supported browser audio session.
+    Browser mode resolves the accepted AUMID to one exact host executable so
+    Core Audio fallback never widens into a scan of every browser session.
     """
 
-    if not provider_matches_source_app_user_model_id(provider, source_app_user_model_id):
+    descriptor = get_media_provider(provider)
+    if descriptor is None or not isinstance(source_app_user_model_id, str):
         return None
-    if not isinstance(source_app_user_model_id, str):
+    if descriptor.provider_id == "spotify_browser":
+        return _resolve_browser_process_exe_name(source_app_user_model_id)
+    if not provider_matches_source_app_user_model_id(provider, source_app_user_model_id):
         return None
 
     source_id = source_app_user_model_id.strip().casefold()

@@ -321,9 +321,11 @@ class WindowsGlobalMediaController(BaseMediaController):
     ) -> tuple[Optional[str], object | None]:
         """Select one provider/session from a single GSMTC enumeration.
 
-        Provider order is authoritative. Within a provider, the current
-        matching session wins, then a playing match, then stable source-id
-        ordering. This permits failover without one GSMTC query per provider.
+        Playing sessions win across the primary/fallback chain, with provider
+        order breaking ties. If nothing is playing, provider order remains
+        authoritative and a matching current session wins within that provider.
+        This lets an actively playing browser take over from a stale/paused
+        desktop provider without changing single-provider selection semantics.
         """
 
         providers: list[str] = []
@@ -372,7 +374,8 @@ class WindowsGlobalMediaController(BaseMediaController):
             except Exception:
                 return False
 
-        for provider_id in providers:
+        def _matching_sessions(provider_id: str) -> list[object]:
+            matches: list[object] = []
             if (
                 current_session is not None
                 and provider_matches_source_app_user_model_id(
@@ -380,21 +383,50 @@ class WindowsGlobalMediaController(BaseMediaController):
                     self._session_source_id(current_session),
                 )
             ):
-                return provider_id, current_session
-            matching_sessions = [
-                session
-                for session in sessions
+                matches.append(current_session)
+            for session in sessions:
+                if session is current_session:
+                    continue
                 if provider_matches_source_app_user_model_id(
                     provider_id,
                     self._session_source_id(session),
-                )
+                ):
+                    matches.append(session)
+            return matches
+
+        matches_by_provider = {
+            provider_id: _matching_sessions(provider_id)
+            for provider_id in providers
+        }
+
+        # Active playback outranks a stale/paused higher-priority provider.
+        # Provider order remains the tie-breaker when more than one source is
+        # actively playing.
+        for provider_id in providers:
+            playing_sessions = [
+                session
+                for session in matches_by_provider[provider_id]
+                if _is_playing(session)
             ]
+            if not playing_sessions:
+                continue
+            if current_session in playing_sessions:
+                return provider_id, current_session
+            return provider_id, min(
+                playing_sessions,
+                key=lambda session: self._session_source_id(session).casefold(),
+            )
+
+        # Nothing is playing: preserve the original provider-order/current
+        # semantics so a paused configured provider remains stable.
+        for provider_id in providers:
+            matching_sessions = matches_by_provider[provider_id]
             if not matching_sessions:
                 continue
-            playing_sessions = [session for session in matching_sessions if _is_playing(session)]
-            candidates = playing_sessions or matching_sessions
+            if current_session in matching_sessions:
+                return provider_id, current_session
             return provider_id, min(
-                candidates,
+                matching_sessions,
                 key=lambda session: self._session_source_id(session).casefold(),
             )
 

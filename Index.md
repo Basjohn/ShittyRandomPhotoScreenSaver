@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-08-13
+Last updated: 2026-08-15
 
 Navigation and ownership map for SRPSS. This file is not a specification.
 
@@ -16,8 +16,9 @@ Navigation and ownership map for SRPSS. This file is not a specification.
 | Compositor/presentation/GL | `Docs/Compositor_Architecture.md` |
 | Threading/UI workload | `Docs/audits/SRPSS_Architecture_Roadmap/08_CPU_THREADING_AND_WORKLOAD_PLAN.md` |
 | Memory/GPU/cache | `Docs/audits/SRPSS_Architecture_Roadmap/09_MEMORY_GPU_RESOURCE_AND_CACHE_PLAN.md` |
-| Logging | `Docs/Logging_Guide.md` |
-| Tests/harnesses | `Docs/TestSuite.md`, `Docs/Harness_Index.md` |
+| Logging/routing/retention | `Docs/Logging_Guide.md` |
+| Evidence parsing and recurring probes | `Docs/Harness_Index.md` |
+| Tests/release gates | `Docs/TestSuite.md` |
 | Prior fragile regression | `Docs/Historical_Bugs/README.md` |
 | Deferred cleanup | `Future_Cleanup.md` |
 
@@ -34,9 +35,9 @@ Do not read every document by default.
 | `Current_Plan.md` | active unfinished work only |
 | `Docs/audits/SRPSS_Architecture_Roadmap/README.md` | current architecture roadmap and phase program |
 | `Docs/Compositor_Architecture.md` | current presentation/compositor target |
-| `Docs/Logging_Guide.md` | logging architecture/routing contract |
+| `Docs/Logging_Guide.md` | logging architecture, routing, retention and correlation contract |
 | `Docs/TestSuite.md` | test levels/release gates |
-| `Docs/Harness_Index.md` | recurring commands/probes |
+| `Docs/Harness_Index.md` | recurring commands/probes and evidence parser usage |
 | `Docs/Historical_Bugs/README.md` | historical incident index |
 | `Docs/Historical_Bugs.md` | compact historical navigation/status |
 | `Future_Cleanup.md` | deferred low-priority cleanup only |
@@ -67,20 +68,25 @@ Do not read every document by default.
 | Visualizer model/runtime | `widgets/spotify_visualizer/` and `widgets/spotify_visualizer_widget.py` |
 | Visualizer presentation | `widgets/spotify_bars_gl_overlay.py` plus display-local Qt/GL ownership |
 | CUSTOM layout | custom-layout manager/contract modules |
-| Logging | `core/logging/logger.py` and focused logging helpers |
+| Logging ingress/routing/writer/rotation | `core/logging/logger.py`, `core/logging/tags.py` |
+| Diagnostic fatal/native crash breadcrumbs | `core/logging/crash_capture.py` |
+| Read-only evidence analysis | `tools/recovery_evidence_parser.py` and focused parsers under `tools/` |
 
 Use `Docs/Contracts.md` before assuming a nearby helper is an authority.
 
 ## Architecture Evidence References
 
 ```text
-working branch:      main
-approved visual ref: ff93461685476bd0657aa88312fc2e35e9037880
-current evidence:    logs/evidence_chest/08_13_1ece5167_19_33_19_39_parser119_typical/
-roadmap:             Docs/audits/SRPSS_Architecture_Roadmap/
-phase reports:       Docs/phase_reports/
-historical lessons: Docs/audits/SRPSS_Architecture_Roadmap/10_HISTORICAL_CANDIDATE_LESSONS.md
+working branch:          main
+approved visual ref:     ff93461685476bd0657aa88312fc2e35e9037880
+active evidence pointer: Current_Plan.md
+roadmap:                 Docs/audits/SRPSS_Architecture_Roadmap/
+phase reports:           Docs/phase_reports/
+historical lessons:      Docs/audits/SRPSS_Architecture_Roadmap/10_HISTORICAL_CANDIDATE_LESSONS.md
 ```
+
+Do not freeze a dated "current evidence" path into this navigation file. `Current_Plan.md`
+owns the active evidence pointer and exact next gate.
 
 Historical baseline/candidate commits are opened only for a named forensic question or
 negative control. They are not current implementation seams.
@@ -97,9 +103,11 @@ negative control. They are not current implementation seams.
 - `tests/conftest.py` — shared isolation/fixtures.
 - `tests/run_chunked.py` — bounded subprocess full-suite execution.
 - `tools/visualizer_replay.py` — protected visualizer replay/negative controls.
-- phase/resource/thread benchmarks and evidence parser — use via `Docs/Harness_Index.md`.
+- `tools/recovery_evidence_parser.py` — read-only evidence parser; use only after its focused parser tests pass.
+- phase/resource/thread benchmarks and other probes — use via `Docs/Harness_Index.md`.
 
 ## Navigation Rule
 
-Add only architectural owners/critical entry points. Detailed implementation narratives,
-benchmark numbers and completed work belong in focused docs/reports/history.
+Add only architectural owners and critical entry points. Detailed implementation
+narratives, benchmark numbers and completed work belong in focused docs, reports or
+history.

@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import timedelta
 from types import SimpleNamespace
 
+import core.media.provider_registry as provider_registry
 from core.media.media_controller import MediaPlaybackState, WindowsGlobalMediaController
 from core.media.provider_registry import (
     get_media_provider_display_name,
@@ -40,6 +41,61 @@ def test_spotify_browser_provider_uses_explicit_browser_host_identities() -> Non
     )
     assert get_provider_process_exe_name_for_source("spotify_browser", "chromium.exe") is None
     assert get_provider_process_exe_name_for_source("spotify_browser", "mychrome.exe") is None
+
+
+def test_browser_aumid_resolution_accepts_registered_host_shapes() -> None:
+    cases = {
+        "Google.Chrome.Profile.Default": "chrome.exe",
+        "Microsoft.MicrosoftEdge_8wekyb3d8bbwe!MicrosoftEdge": "msedge.exe",
+        "Mozilla.Firefox.Profile.Default": "firefox.exe",
+        "BraveSoftware.BraveBrowser.Profile 1": "brave.exe",
+        "OperaStable": "opera.exe",
+        "OperaGX": "opera.exe",
+        "VivaldiStable": "vivaldi.exe",
+    }
+
+    for source_id, expected_process in cases.items():
+        assert provider_matches_source_app_user_model_id("spotify_browser", source_id)
+        assert (
+            get_provider_process_exe_name_for_source("spotify_browser", source_id)
+            == expected_process
+        )
+
+
+def test_firefox_opaque_registered_taskbar_aumid_and_private_suffix(monkeypatch) -> None:
+    opaque_aumid = "308046b0af4a39cb"
+    monkeypatch.setattr(
+        provider_registry,
+        "_firefox_registered_taskbar_ids",
+        lambda: frozenset({opaque_aumid}),
+    )
+
+    for source_id in (opaque_aumid, f"{opaque_aumid};PrivateBrowsingAUMID"):
+        assert provider_matches_source_app_user_model_id("spotify_browser", source_id)
+        assert (
+            get_provider_process_exe_name_for_source("spotify_browser", source_id)
+            == "firefox.exe"
+        )
+
+
+def test_unknown_opaque_browser_aumid_remains_inert(monkeypatch) -> None:
+    monkeypatch.setattr(
+        provider_registry,
+        "_firefox_registered_taskbar_ids",
+        lambda: frozenset({"known-firefox-aumid"}),
+    )
+
+    assert not provider_matches_source_app_user_model_id(
+        "spotify_browser",
+        "totally-opaque-unregistered-id",
+    )
+    assert (
+        get_provider_process_exe_name_for_source(
+            "spotify_browser",
+            "totally-opaque-unregistered-id",
+        )
+        is None
+    )
 
 
 def test_registry_has_stable_process_and_failover_identities() -> None:
@@ -136,7 +192,7 @@ def test_session_selection_prefers_current_matching_session_then_playing_then_so
 def test_session_selection_accepts_matching_current_browser_when_enumeration_is_empty() -> None:
     controller = _controller("spotify_browser")
 
-    for source_id in ("firefox.exe", "chrome.exe"):
+    for source_id in ("firefox.exe", "Mozilla.Firefox.Profile.Default", "chrome.exe"):
         current = _Session(source_id, _PlaybackStatus.PLAYING)
         assert controller._select_media_session(_Manager([], current)) is current
 
@@ -150,9 +206,9 @@ def test_session_source_diagnostics_are_bounded() -> None:
     assert values[-1] == "<4 more>"
 
 
-def test_provider_failover_uses_one_session_snapshot_in_registry_order() -> None:
+def test_provider_failover_prefers_active_playback_and_uses_one_session_snapshot() -> None:
     spotify = _Session("Spotify.exe", _PlaybackStatus.PAUSED)
-    browser = _Session("msedge.exe", _PlaybackStatus.PLAYING)
+    browser = _Session("Microsoft.MicrosoftEdge_8wekyb3d8bbwe!MicrosoftEdge", _PlaybackStatus.PLAYING)
     manager = _Manager([browser, spotify], browser)
     manager.session_reads = 0
     original_get_sessions = manager.get_sessions
@@ -169,8 +225,34 @@ def test_provider_failover_uses_one_session_snapshot_in_registry_order() -> None
         ("spotify", "spotify_browser", "musicbee"),
     )
 
-    assert (provider, session) == ("spotify", spotify)
+    assert (provider, session) == ("spotify_browser", browser)
     assert manager.session_reads == 1
+
+
+def test_provider_failover_keeps_primary_when_nothing_is_playing() -> None:
+    spotify = _Session("Spotify.exe", _PlaybackStatus.PAUSED)
+    browser = _Session("Mozilla.Firefox.Profile.Default", _PlaybackStatus.PAUSED)
+    controller = _controller("spotify")
+
+    provider, session = controller._select_media_session_for_providers(
+        _Manager([browser, spotify], browser),
+        ("spotify", "spotify_browser", "musicbee"),
+    )
+
+    assert (provider, session) == ("spotify", spotify)
+
+
+def test_provider_failover_provider_order_breaks_active_playback_ties() -> None:
+    spotify = _Session("Spotify.exe", _PlaybackStatus.PLAYING)
+    browser = _Session("Mozilla.Firefox.Profile.Default", _PlaybackStatus.PLAYING)
+    controller = _controller("spotify")
+
+    provider, session = controller._select_media_session_for_providers(
+        _Manager([browser, spotify], browser),
+        ("spotify", "spotify_browser", "musicbee"),
+    )
+
+    assert (provider, session) == ("spotify", spotify)
 
 
 def test_io_worker_failover_runs_one_inline_gsmtc_query_without_nested_submit() -> None:
@@ -203,7 +285,7 @@ def test_io_worker_failover_runs_one_inline_gsmtc_query_without_nested_submit() 
                 position=timedelta(seconds=65),
             )
 
-    browser = _BrowserSession("msedge.exe", _PlaybackStatus.PLAYING)
+    browser = _BrowserSession("Mozilla.Firefox.Profile.Default", _PlaybackStatus.PLAYING)
     manager = _Manager([browser], browser)
 
     class _MediaManager:
@@ -233,7 +315,7 @@ def test_io_worker_failover_runs_one_inline_gsmtc_query_without_nested_submit() 
 
     assert provider == "spotify_browser"
     assert info is not None and info.title == "Browser Track"
-    assert info.source_app_user_model_id == "msedge.exe"
+    assert info.source_app_user_model_id == "Mozilla.Firefox.Profile.Default"
     assert info.position_ms == 60_000
     assert info.duration_ms == 240_000
     assert browser.timeline_reads == 1

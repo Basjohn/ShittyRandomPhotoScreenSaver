@@ -1,11 +1,13 @@
 # Logging Guide
 
-Last updated: 2026-08-13
+Last updated: 2026-08-15
 
 ## Purpose
 
 Keep logs readable, attributable and cheap enough that diagnostics do not become the
 workload they are measuring.
+
+The human console may be fancy. The diagnostic record must remain boringly trustworthy.
 
 ## Main Contract
 
@@ -15,9 +17,39 @@ workload they are measuring.
 - **every WARNING, ERROR and CRITICAL from every family**;
 - only routine INFO that genuinely belongs in the general sequence.
 
+The main file is human-readable and may use aligned columns or framed severity cards.
+That presentation layer must preserve the record's timestamp, logger, message payload,
+visible tags and `key=value` content.
+
 When a dedicated family sidecar is enabled, routine family INFO/DEBUG belongs in that
-sidecar and should not duplicate into main. `screensaver_verbose.log` remains the broad
-debug fallback, not the place agents should read first when a dedicated sidecar exists.
+sidecar and should not duplicate into main. Sidecars retain the compact canonical
+machine-oriented format.
+
+`screensaver_verbose.log` remains the broad debug fallback, not the place agents should
+read first when a dedicated sidecar exists.
+
+## Debug Console Contract
+
+Script/debug console output is an operator view, not an evidence authority.
+
+Current console formatting may:
+
+- adapt once to terminal width;
+- align fixed time/level/source/message columns;
+- align structured `key = value` tables;
+- promote long values to full-width rows;
+- use heavier WARNING/ERROR/CRITICAL cards;
+- apply ANSI colour when the terminal supports it.
+
+It may not:
+
+- mutate the underlying `LogRecord`;
+- change family routing;
+- remove fields to look cleaner;
+- become the only copy of a record;
+- delay persistent file handling for the current dequeued record.
+
+Raw `print()`/stdout written outside Python logging is outside this formatter contract.
 
 ## Dedicated Families
 
@@ -41,27 +73,55 @@ Ordinary `--perf` is the comparable CPU/frame/delivery profile. The heavier
 paint cost. It samples one paint in eight and records coverage; use it only for an
 owner-GPU causal question, never as an unnamed baseline.
 
-## Current Cache Routing
+## Rotation and Retention
 
-The real GL program-cache producer declares structured `cache` ownership. Its visible
+Rotating runtime logs use **2 MiB chunks**.
+
+Current intended retention profile:
+
+| Log family | Ordinary retention | Diagnostic retention |
+|---|---:|---:|
+| `screensaver.log` | active + 7 backups ≈ 16 MiB | active + 11 backups ≈ 24 MiB |
+| most enabled sidecars | active + 5 backups ≈ 12 MiB | normally the same unless listed below |
+| `screensaver_usage.log` | active + 5 backups ≈ 12 MiB | active + 11 backups ≈ 24 MiB |
+| `screensaver_lifecycle.log` | active + 5 backups ≈ 12 MiB | active + 11 backups ≈ 24 MiB |
+| `screensaver_verbose.log` | active + 3 backups ≈ 8 MiB | same chunk/backup shape |
+
+The purpose of extra Diagnostic retention is long soak/frozen-runtime reconstruction,
+not performance comparison.
+
+If a future capture loses useful history, prefer increasing the affected family's backup
+count over making every individual rotation huge.
+
+`diagnostic_crash.log` is a separate bounded direct crash channel and is not part of the
+ordinary queued retention table.
+
+## Cache Routing
+
+The GL program-cache producer declares structured `cache` ownership. Its visible
 `[GL CACHE]` text remains for people and parsers, but no longer controls routing.
-Focused automation requires routine `[GL CACHE]` INFO in `screensaver_cache.log` and
-absent from main when the sidecar is active, while a `[GL CACHE]` WARNING remains in
-both. Unmigrated cache producers still retain compatible `[CACHE]`/`[GL CACHE]`
-fallback; do not regress them by lowering records to DEBUG or deleting useful evidence.
 
-## Phase 5 Execution Architecture
+Routine `[GL CACHE]` INFO belongs in `screensaver_cache.log` and is absent from main when
+that sidecar is active. `[GL CACHE]` WARNING+ remains visible in both.
+
+Unmigrated cache producers retain compatible token/name fallback. Do not regress them by
+lowering useful records to DEBUG or deleting evidence.
+
+## Execution Architecture
 
 Normal logging uses one bounded process-owned queue/writer:
 
 ```text
 caller thread
-   -> cheap structured LogRecord enqueue
-   -> process-owned writer
+   -> cheap detached LogRecord enqueue
+   -> SRPSSLogWriter
       -> family routing
-      -> formatting/deduplication
-      -> rotation/file writes
+      -> persistent main/sidecar formatting + dedup + rotation/write
+      -> optional human console formatting/output
 ```
+
+Persistent file handlers are serviced **before** the console handler for each dequeued
+record. A slow terminal therefore cannot postpone the main/sidecar write for that record.
 
 Requirements:
 
@@ -76,50 +136,95 @@ Current implementation details:
 
 - the root logger exposes one producer-facing ingress; real handlers and filters are writer-owned;
 - `SRPSSLogWriter` survives Settings/Edit runtime-generation retirement and is not a `ThreadManager` task;
-- queue capacity is 4096 records; DEBUG/INFO may drop only on saturation/closing and are counted by level;
+- queue capacity is 4096 records;
+- DEBUG/INFO may drop only on saturation/closing and are counted by level;
 - WARNING+ saturation uses the serialized direct-main emergency path and is never silently dropped;
-- shutdown atomically replaces queue ingress with a warning-only closing sink, preserving main visibility through writer finalization and retiring that sink on reconfiguration/atexit;
-- the final `[LOG_QUEUE]` record reports enqueue/dequeue counts, high-water, drops, caller cost, writer lag, emergency/reentry fallbacks, writer errors and flush duration;
+- shutdown replaces queue ingress with a warning-only closing sink while writer finalization completes;
+- persistent handlers are attempted before optional console output;
 - `flush_logging()` is the bounded visibility barrier used before the exit PERF parser;
 - `flush_and_close_logging()` is the supported ordinary-logging shutdown/reconfiguration API and runs before diagnostic crash-capture close;
 - direct `logging.shutdown()` is not a substitute for the controller-aware drain/close contract.
 
+### Final queue telemetry
+
+The final `[LOG_QUEUE]` record reports:
+
+- enqueue/dequeue counts;
+- drops by priority;
+- high-water and capacity;
+- caller enqueue average/max;
+- writer queue-lag average/max;
+- file-commit lag average/max;
+- console emit average/max;
+- emergency/reentry fallback counts;
+- snapshot/writer errors;
+- bounded flush duration.
+
+Interpretation:
+
+- `writer_lag_*` measures time waiting for the writer to start the record;
+- `file_commit_lag_*` measures time from enqueue until persistent outputs have been serviced;
+- `console_emit_*` isolates human-terminal presentation cost.
+
+These are passive diagnostics, not scheduling inputs.
+
+## Crash and Abrupt-Failure Safety
+
+Asynchronous normal logging cannot guarantee persistence of records still waiting in the
+queue when the process is killed instantly.
+
+The safety contract is therefore layered:
+
+1. caller path remains cheap and bounded;
+2. WARNING+ saturation has a serialized direct-main emergency path;
+3. once the writer dequeues a record, persistent sinks are serviced before console output;
+4. shutdown uses the bounded controller-aware drain/close contract;
+5. Diagnostic fatal/native crash breadcrumbs and faulthandler output are direct and independent of the normal queue.
+
+Do not "solve" abrupt-crash uncertainty by moving normal file I/O back onto render/UI
+callers.
+
 ## Structured Family Metadata
 
 SRPSS records may carry `srpss_log_families`, an immutable tuple because one record can
-intentionally belong to multiple destinations such as `("perf", "cache")`. Canonical
-families live in `core/logging/tags.py`. Bind them with
-`get_logger(name, families=(...))`; the adapter preserves ordinary logging kwargs and
-other `extra` fields while owning this reserved field.
+intentionally belong to multiple destinations such as `("perf", "cache")`.
+
+Canonical families live in `core/logging/tags.py`. Bind them with
+`get_logger(name, families=(...))`.
 
 Valid explicit metadata is authoritative over logger-name and visible-token heuristics.
 Absent or wholly unknown metadata falls back to existing name/tag routing so third-party
-and unmigrated records remain compatible. The tuple survives queued record detachment;
-filters and formatting still execute on `SRPSSLogWriter`. Human-readable tags such as
-`[PERF]`, `[CACHE]` and `[GL CACHE]` remain useful for people and existing parsers, but
-newly migrated producers must not depend on them for delivery.
+and unmigrated records remain compatible.
+
+Human-readable tags such as `[PERF]`, `[CACHE]` and `[GL CACHE]` remain useful for people
+and existing parsers, but newly migrated producers must not depend on them for delivery.
 
 Late Phase 7 should migrate high-volume families systematically and simplify filters so
 routing no longer depends on token quirks.
 
-## Late Phase 7 Taxonomy Refinement
+## Evidence Parser Compatibility
 
-Before Phase 8 compositor work:
+The main log's human presentation is allowed to evolve, but evidence parsing must remain
+backward compatible.
 
-1. inventory routine INFO/DEBUG volume by family/logger;
-2. ensure existing sidecar families receive their own routine records;
-3. keep every WARNING+ visible in main regardless of sidecar;
-4. add sidecars only for genuinely distinct domains;
-5. remove redundant main/verbose duplication where a family sidecar is active;
-6. preserve correlation identifiers/timestamps across files;
-7. update parser rules/tests together with routing.
+The canonical parser contract is:
+
+- old canonical main-log lines remain readable;
+- framed WARNING/ERROR/CRITICAL cards normalize back to one logical record;
+- presentation-only borders/rules do not pollute unknown-line output;
+- family sidecars keep their canonical compact format and remain the primary structured evidence;
+- rotation order and exact source/time-range semantics are preserved;
+- parser changes are read-only and must pass focused parser tests before official evidence use.
+
+Do not change sidecar schemas merely to make the main log prettier.
 
 ## Diagnostic Runtime
 
 Diagnostic remains an opt-in frozen-runtime attribution product. It may enable all
-families automatically and retain bounded crash/owner breadcrumbs. It is not a
-performance baseline, and ordinary work must not trigger a Diagnostic rebuild unless a
-specific frozen-only failure requires it.
+families automatically and retain longer bounded usage/lifecycle/main history.
+
+It is not a performance baseline, and ordinary work must not trigger a Diagnostic rebuild
+unless a specific frozen-only failure requires it.
 
 ## Correlation Workflow
 
@@ -127,12 +232,17 @@ specific frozen-only failure requires it.
 2. Follow the owning sidecar for routine family detail.
 3. Use shared timestamps/correlation ids to cross-reference perf/usage/lifecycle/cache/viz.
 4. Use verbose only when the general + family sidecars are insufficient.
+5. For long captures, include the rotations that overlap the interval being claimed.
+
+The main log is the spine. The sidecars are the detailed forensic payload.
 
 ## Guardrails
 
 - no per-frame routine INFO stream;
 - no logging-driven repaint/cadence/control flow;
-- no UI-thread normal file/rotation work; only the explicit saturated WARNING+ emergency path may write synchronously;
+- no UI-thread normal file/rotation work;
+- only the explicit saturated WARNING+ emergency path may write synchronously;
 - no hiding WARNING+ from main;
-- no “performance improvement” achieved by deleting evidence instead of moving/routing it cheaply;
-- no unbounded logging queue.
+- no performance claim achieved by deleting evidence instead of routing it cheaply;
+- no unbounded logging queue;
+- no console formatting that becomes a persistence dependency.

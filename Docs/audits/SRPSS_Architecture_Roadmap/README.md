@@ -1,13 +1,15 @@
 # SRPSS Architecture Roadmap
 
-Last reconciled: 2026-08-11
+Last reconciled: 2026-08-15
 
 ## Purpose
 
 This package is the maintained architecture and validation roadmap for SRPSS. It is
-written for **current `main`**. Historical baseline/candidate commits are retained only
-as negative controls, provenance, and forensic evidence when they answer a specific
-question; they are not implementation sources or an extraction seam that current work must follow.
+written for **current `main`**.
+
+Historical baseline/candidate commits are retained only as negative controls,
+provenance, and forensic evidence when they answer a specific question. They are not
+implementation sources.
 
 ## Authority Order
 
@@ -27,20 +29,28 @@ question; they are not implementation sources or an extraction seam that current
 | Rejected persistent-lane negative control | `666624d421b08f978c5f610571a078570150a1e7` |
 | Rejected paint-local Spectrum negative control | `ebfec397fb2ae0bbc1f3e95c5298c0e7d6ff1db9` |
 | Historical candidate/reference | `7376bb9bb380253f3bd14079e65d7bdbca062fad` |
-| Current mixed-load evidence | `logs/evidence_chest/08_09_ca830d7_14_59/` |
+| Active evidence pointer | `Current_Plan.md` |
+| Historical mixed-load causal checkpoint | `logs/evidence_chest/08_09_ca830d7_14_59/` |
+
+Do not duplicate a rapidly changing "current evidence" path here. `Current_Plan.md` owns
+the exact active run and next gate.
 
 Settings/Edit/Diagnostic ownership and clock-shadow incidents are solved. Their rules
-remain architecture contracts; their investigation is not active work.
+remain architecture contracts; their investigations are not active Phase 5 work.
 
 ## Current Architecture Reality
 
-- GUI availability is the dominant observed delivery problem: request age is much larger than paint cost in the current mixed-load evidence.
-- The image setter has a proven steady texture identity/reuse failure: retained current is not found as the next old texture, causing avoidable two-texture warm/upload work.
-- Routine logging and some settings/service/cache work still execute avoidable I/O/data preparation on the GUI owner.
-- Active-display process GPU busy is material (median `10.8%`, p95 `27.8%`, max `32.9%` in the current evidence) and needs owner-level attribution.
-- The visualizer display is 60 Hz while captured overlay windows can approach ~100 state/update/paint operations per second. This is a presentation-rate investigation, not permission to lower visualizer logical cadence.
-- Bubble/Spectrum timing is protected. Phase 5 first removes external starvation and cadence-neutral overhead; Phase 7 owns the state/presentation boundary.
-- Temporary compatibility/fallback architecture is now an explicit simplification target when it has no current external/persistence contract.
+- GUI/request delivery remains the dominant unresolved frame-tail problem: repeated stalls show request age much larger than paint duration.
+- Retained-current → next-old texture identity is repaired and validated; it is no longer an active root-cause hypothesis.
+- The previous steady full-surface QPainter base draw is replaced by exact retained-texture presentation where capability/cache identity allows it.
+- Redundant ordinary upload conversion/source-buffer copies are removed; direct native RGB32/ARGB32 read-only upload is validated and steady pair warm is substantially cheaper.
+- Routine logging and ordered settings durability are process-owned background writers; Reddit/Weather/Gmail preparation and shared static overlay-cache preparation have moved off avoidable GUI work where proven.
+- Heavy owner-context GL timer queries are isolated behind explicit sampled `--gpu-timing`; ordinary `--perf` performs no GL query-driver calls.
+- The ordinary-PERF control did not recover the remaining delivery regression. Profiling overhead is no longer the active suspect.
+- The next delivery gate is stage attribution: adaptive-render wakeup lateness versus queued GUI dispatch waiting versus already-dispatched paint waiting.
+- Bubble/Spectrum worker/paint/GPU costs remain too small to explain the largest delivery stalls. Their authored logical timing stays protected.
+- Absolute process RSS/private commit/driver VRAM still exceeds tracked application ownership enough to justify continued owner-level attribution.
+- Temporary compatibility/fallback architecture remains a cleanup target only after call-graph and runtime proof.
 
 ## Operating Principle
 
@@ -54,8 +64,10 @@ remain architecture contracts; their investigation is not active work.
 ## Checkpoint Principle
 
 A clean commit after a risky slice is a rollback point, not a mandatory human stop.
-Focused tests/evidence pass → continue. Stop on failure, contradictory evidence, or a
-change whose visual result genuinely needs operator judgement.
+
+Focused tests/evidence pass → continue. Stop on failure, contradictory evidence, dirty or
+conflicted repository state, or a visual change that genuinely requires operator
+judgement.
 
 ## Roadmap Documents
 
@@ -80,7 +92,8 @@ change whose visual result genuinely needs operator judgement.
 
 The architecture succeeds when current approved visual behaviour survives stronger
 temporal and installed validation; GUI work is limited to real affinity requirements;
-GPU/CPU/memory costs have named owners; lifecycle remains deterministically fail-closed;
-no hidden compatibility/fallback authority remains without a current contract; and
-canonical `main.py` passes hostile/soak validation with a resource footprint appropriate
-for a screensaver.
+delivery stalls have named stage/owners rather than cadence workarounds; GPU/CPU/memory
+costs have named owners; lifecycle remains deterministically fail-closed; logging remains
+useful without becoming the measured workload; no hidden compatibility/fallback authority
+remains without a current contract; and canonical `main.py` passes hostile/soak validation
+with a resource footprint appropriate for a screensaver.
