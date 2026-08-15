@@ -1,2271 +1,296 @@
-"""Read-only forensic parser for SRPSS architecture-recovery evidence.
+"""SRPSS recovery evidence parser compatibility front-end, parser 1.21.
 
-Plain evidence subfolders are the current format.  Legacy ZIP archives remain
-readable for old frozen comparisons.  Derived artifacts are written only to
-the caller-selected output directory.
+This intentionally reuses the repository's parser 1.20 for all established
+telemetry parsing and adds compatibility for the polished ``screensaver.log``
+presentation introduced by the logging-only formatting change.
+
+Run exactly like the existing parser, for example:
+
+    python tools/recovery_evidence_parser_1_21.py --source logs --output-dir analysis
+
+Old canonical logs remain supported because parser 1.20 remains the underlying
+authority.  The compatibility layer only:
+  * recognizes fancy WARNING / ERROR / CRITICAL cards in screensaver.log;
+  * reconstructs their canonical logical record for errors_and_warnings.txt;
+  * removes presentation-only borders/header rows from unknown_lines.txt;
+  * reports parser_version=1.21.
+
+All PERF, usage, lifecycle, cache, visualizer and Phase-5 telemetry remains parsed
+by the existing repository parser without semantic changes.
 """
 from __future__ import annotations
 
 import argparse
-import csv
-import hashlib
-import json
 import re
-import statistics
 import zipfile
-from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import Mapping, Sequence
+
+try:
+    # Running directly from tools/.
+    import recovery_evidence_parser as _base
+except ImportError:  # pragma: no cover - package/module invocation fallback
+    from tools import recovery_evidence_parser as _base  # type: ignore
 
 
-PARSER_VERSION = "1.20"
+PARSER_VERSION = "1.21"
 
-_TIMESTAMP_RE = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
-_LOG_FILE_RE = re.compile(r"^(?P<base>.+\.log)(?:\.(?P<rotation>\d+))?$")
-_KV_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>[^,\s]+)")
-_FRAME_RE = re.compile(
-    r"\[GL (?P<kind>RENDER|PAINT|ANIM)\](?P<label>.*?)"
-    r"(?:Timer )?metrics:\s*(?P<payload>.*)",
-    re.IGNORECASE,
+_FANCY_HEADER_RE = re.compile(
+    r"^[╭╔][─═]{3}\s+"
+    r"(?:(?P<warning>⚠\s+WARNING)|(?P<error>✖\s+ERROR)|(?P<critical>☠\s+CRITICAL))"
 )
-_MICROGAP_RE = re.compile(r"\[SPOTIFY_VIS\]\[MICROGAP\]\s*(?P<payload>.*)")
-_TICK_SPIKE_RE = re.compile(
-    r"\[SPOTIFY_VIS\]\s+Tick dt spike_ms=(?P<dt_ms>[0-9.]+)(?P<payload>.*)"
+_FANCY_META_RE = re.compile(
+    r"^│\s{2}(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
+    r"\s+·\s+(?P<source>.+?)\s*$"
 )
-_LATENCY_RE = re.compile(
-    r"\[SPOTIFY_VIS\]\[LATENCY\]\s+lag_ms=(?P<lag_ms>[0-9.]+)(?P<payload>.*)"
-)
-_EVENT_LOOP_RE = re.compile(r"\[EVENT LOOP\] summary\s+(?P<payload>.*)")
-_RESOURCE_RE = re.compile(r"\[RESOURCE\] snapshot\s+(?P<payload>.*)")
-_RESOURCE_DETAILS_RE = re.compile(r"\bresources_json=(?P<payload>\[.*\])\s*$")
-_MODE_RE = re.compile(r"\bmode=(?P<mode>[A-Za-z0-9_-]+)")
-_DISPLAY_RE = re.compile(
-    r"Showing on screen (?P<screen>\d+): "
-    r"(?P<width>\d+)x(?P<height>\d+) at "
-    r"\((?P<x>-?\d+), (?P<y>-?\d+)\) DPR=(?P<dpr>[0-9.]+)"
-)
-_REFRESH_RE = re.compile(
-    r"\[REFRESH_DIAG\].*?screen=(?P<screen>\d+).*?"
-    r"detected_hz=(?P<detected_hz>[0-9.]+).*?"
-    r"target_fps=(?P<target_fps>[0-9.]+)"
-)
-_LEVEL_RE = re.compile(r"\s-\s(?P<level>WARNING|ERROR|CRITICAL)\s+-\s")
-_LIFECYCLE_TERMS = re.compile(
-    r"settings|edit|shutdown|cleanup|destroy|context|generation|"
-    r"recreate|stop|start|quies|makecurrent|donecurrent|error|warning",
-    re.IGNORECASE,
-)
-_FRAME_GAP_OWNER_RE = re.compile(r"\[PERF\]\[FRAME_GAP_OWNER\]\s+(?P<payload>.*)")
-_ADAPTIVE_TIMER_METRICS_RE = re.compile(
-    r"\[ADAPTIVE_TIMER\]\s+Metrics:\s*(?P<payload>.*)", re.IGNORECASE
-)
-_VISUALIZER_LANE_RE = re.compile(
-    r"\[PERF\]\s*\[SPOTIFY_VIS\]\[(?P<lane>BUBBLE_LANE|AUDIO_LANE)\]\s+(?P<payload>.*)"
-)
-_VISUALIZER_OVERLAY_RE = re.compile(
-    r"\[PERF\]\[SPOTIFY_VIS\]\[OVERLAY\]\s+(?P<payload>.*)"
-)
-_VISUALIZER_OVERLAY_GPU_RE = re.compile(
-    r"\[PERF\]\[SPOTIFY_VIS\]\[OVERLAY_GPU\]\s+(?P<payload>.*)"
-)
-_COMPOSITOR_GPU_RE = re.compile(
-    r"\[PERF\]\[GL COMPOSITOR\]\[GPU\]\s+(?P<payload>.*)"
-)
-_MEDIA_PRESENTATION_RE = re.compile(
-    r"\[PERF\]\[MEDIA_PRESENTATION\]\s+(?P<payload>.*)"
-)
-_CACHE_REPRESENTATIONS_RE = re.compile(
-    r"\[PERF\]\s*\[CACHE\]\s+ImageCacheRepresentations:\s*(?P<payload>.*)"
-)
-_CACHE_FLOW_RE = re.compile(
-    r"\[PERF\]\s*\[CACHE\]\s+ImageCacheFlow:\s*(?P<payload>.*)"
-)
-_LIFECYCLE_BARRIER_RE = re.compile(
-    r"\[LIFECYCLE_BARRIER\]\s+(?P<event>armed|complete)\s+(?P<payload>.*)"
-)
-_IMAGE_UI_DELAY_RE = re.compile(
-    r"\[PERF\]\s*\[IMAGE_UI_DELAY\]\s+(?P<payload>.*)"
-)
-_IMAGE_UI_SEGMENT_RE = re.compile(
-    r"\[PERF\]\s*\[IMAGE_UI_SEGMENT\]\s+(?P<payload>.*)"
-)
-_GL_RETENTION_RE = re.compile(
-    r"\[PERF\]\s*\[GL RETENTION\]\s+(?P<payload>.*)"
-)
-_TEXTURE_UPLOAD_RE = re.compile(
-    r"\[PERF\]\[GL TEXTURE\]\[UPLOAD\]\s+(?P<payload>.*)"
-)
-_TEXTURE_LOOKUP_RE = re.compile(
-    r"\[PERF\]\[GL TEXTURE\]\[LOOKUP\]\s+(?P<payload>.*)"
-)
-_TEXTURE_PAIR_WARM_RE = re.compile(
-    r"\[PERF\]\[GL TEXTURE\]\[PAIR_WARM\]\s+(?P<payload>.*)"
-)
-_IMAGE_INSTALL_NEXT_PAINT_RE = re.compile(
-    r"\[PERF\]\[IMAGE_INSTALL\]\[NEXT_PAINT\]\s+(?P<payload>.*)"
-)
+_OLD_ERROR_PREFIX_RE = re.compile(r"^(?P<source>.+?):(?P<line>\d+): ")
+_UNKNOWN_PREFIX_RE = _OLD_ERROR_PREFIX_RE
+
+_RULE_CHARS = frozenset("━═─╭╮╰╯╔╗╚╝├┤╠╣│ ")
+_COLUMN_HEADER = "TIME                │ LEVEL    │ SOURCE                         │ EVENT"
 
 
-@dataclass(frozen=True)
-class ArchiveAnalysis:
-    summary: dict[str, object]
-    frame_rows: list[dict[str, object]]
-    task_rows: list[dict[str, object]]
-    memory_rows: list[dict[str, object]]
-    gpu_rows: list[dict[str, object]]
-    event_loop_rows: list[dict[str, object]]
-    resource_rows: list[dict[str, object]]
-    lifecycle_rows: list[dict[str, object]]
-    visualizer_rows: list[dict[str, object]]
-    phase5_rows: list[dict[str, object]]
-    errors_and_warnings: list[str]
-    unknown_lines: list[str]
-
-
-def _timestamp(line: str) -> str:
-    match = _TIMESTAMP_RE.match(line)
-    return match.group("timestamp") if match else ""
-
-
-def _timestamp_value(value: str) -> datetime | None:
-    if not value:
+def _severity_from_header(line: str) -> str | None:
+    match = _FANCY_HEADER_RE.match(line)
+    if not match:
         return None
-    try:
-        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
-    except ValueError:
+    if match.group("critical"):
+        return "CRITICAL"
+    if match.group("error"):
+        return "ERROR"
+    return "WARNING"
+
+
+def _is_presentation_only_line(line: str) -> bool:
+    """Return True only for human decoration, never for diagnostic payload."""
+
+    stripped = line.strip()
+    if not stripped:
+        return True
+    if stripped == _COLUMN_HEADER.strip():
+        return True
+    if "SRPSS MAIN LOG" in stripped and stripped.startswith("━"):
+        return True
+    # Pure box/rule rows have no alphanumeric payload.
+    if set(stripped) <= _RULE_CHARS:
+        return True
+    return False
+
+
+def _parse_prefixed_reference(value: str) -> tuple[str, int] | None:
+    match = _OLD_ERROR_PREFIX_RE.match(value)
+    if not match:
         return None
+    return match.group("source"), int(match.group("line"))
 
 
-def _kv(payload: str) -> dict[str, str]:
-    return {
-        match.group("key"): match.group("value")
-        for match in _KV_RE.finditer(payload)
-    }
-
-
-def _json_object_after_marker(line: str, marker: str) -> dict[str, object]:
-    """Decode one nested JSON object without assuming it ends the log line."""
-
-    marker_index = line.find(marker)
-    if marker_index < 0:
-        return {}
-    payload = line[marker_index + len(marker):].lstrip()
-    try:
-        decoded, _end = json.JSONDecoder().raw_decode(payload)
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return {}
-    return decoded if isinstance(decoded, dict) else {}
-
-
-def _number(value: str | None) -> float | None:
-    if value is None or value.lower() in {"na", "none", "<none>", "n/a"}:
-        return None
-    cleaned = value.rstrip("%").removesuffix("ms").removesuffix("Hz").removesuffix("s")
-    try:
-        return float(cleaned)
-    except ValueError:
-        return None
-
-
-def _integer(value: str | None) -> int | None:
-    number = _number(value)
-    return int(number) if number is not None else None
-
-
-def _file_hash(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest().upper()
-
-
-def _log_file_identity(path: Path) -> tuple[str, int] | None:
-    match = _LOG_FILE_RE.match(path.name)
-    if match is None:
-        return None
-    return match.group("base"), int(match.group("rotation") or 0)
-
-
-def _directory_log_paths(path: Path) -> tuple[Path, ...]:
-    """Select the log files that belong to one directory evidence source.
-
-    The product writes its active sidecars directly under a directory named
-    ``logs``.  That directory can also contain archived captures and derived
-    analysis trees with the same sidecar basenames, so descending from the live
-    root would mix distinct runs and create false rotation collisions.
-
-    Explicit evidence-run directories retain recursive discovery for backwards
-    compatibility with copied/extracted layouts.
-    """
-
-    if path.name.casefold() == "logs":
-        candidates = (
-            candidate
-            for candidate in path.iterdir()
-            if candidate.is_file() and _log_file_identity(candidate) is not None
-        )
-    else:
-        candidates = (
-            candidate
-            for candidate in path.rglob("*")
-            if candidate.is_file() and _log_file_identity(candidate) is not None
-        )
-    return tuple(
-        sorted(
-            candidates,
-            key=lambda item: item.relative_to(path).as_posix().lower(),
-        )
-    )
-
-
-def _read_source(
-    path: Path,
-) -> tuple[dict[str, list[str]], dict[str, int], str]:
-    """Read one selected source and hash the exact bytes that were consumed.
-
-    Live sidecars may still be growing.  Reading them again after parsing would
-    let the reported source hash and sizes describe newer bytes than the rows in
-    the analysis.  Directory sources therefore hash each selected byte prefix in
-    the same pass that decodes it.
-    """
-
-    rotated_logs: dict[str, dict[int, list[str]]] = {}
-    sizes: dict[str, int] = {}
-
-    def add_log(name: str, text: str, size: int) -> None:
-        identity = _log_file_identity(Path(name))
-        if identity is None:
-            return
-        base, rotation = identity
-        versions = rotated_logs.setdefault(base, {})
-        if rotation in versions:
-            raise ValueError(f"Duplicate log rotation in evidence source: {name}")
-        versions[rotation] = text.splitlines()
-        sizes[Path(name).name] = size
-
-    if path.is_dir():
-        digest = hashlib.sha256()
-        for log_path in _directory_log_paths(path):
-            relative = log_path.relative_to(path).as_posix()
-            payload = log_path.read_bytes()
-            digest.update(relative.encode("utf-8"))
-            digest.update(b"\0")
-            digest.update(payload)
-            add_log(
-                log_path.name,
-                payload.decode("utf-8", errors="replace"),
-                len(payload),
-            )
-        return ({
-            base: [
-                line
-                for rotation in sorted(versions, reverse=True)
-                for line in versions[rotation]
-            ]
-            for base, versions in rotated_logs.items()
-        }, sizes, digest.hexdigest().upper())
-
-    source_hash = _file_hash(path)
-    with zipfile.ZipFile(path) as archive:
-        for info in archive.infolist():
-            if info.is_dir() or _log_file_identity(Path(info.filename)) is None:
-                continue
-            text = archive.read(info).decode("utf-8", errors="replace")
-            add_log(Path(info.filename).name, text, info.file_size)
-    return ({
-        base: [
-            line
-            for rotation in sorted(versions, reverse=True)
-            for line in versions[rotation]
-        ]
-        for base, versions in rotated_logs.items()
-    }, sizes, source_hash)
-
-
-def _parse_usage(
-    lines: Sequence[str],
-) -> tuple[
-    list[dict[str, object]],
-    list[dict[str, object]],
-    list[dict[str, object]],
-]:
-    memory_rows: list[dict[str, object]] = []
-    gpu_rows: list[dict[str, object]] = []
-    counters: list[dict[str, object]] = []
-
-    for line_number, line in enumerate(lines, 1):
-        if "[USAGE] sample " not in line:
-            continue
-        values = _kv(line.split("[USAGE] sample ", 1)[1])
-        common = {
-            "timestamp": _timestamp(line),
-            "line": line_number,
-            "sequence": _integer(values.get("seq")),
-        }
-        memory_rows.append(
-            {
-                **common,
-                "rss_app_mb": _number(values.get("rss_app_mb")),
-                "rss_main_mb": _number(values.get("rss_main_mb")),
-                "rss_children_mb": _number(values.get("rss_children_mb")),
-                "image_worker_pid": _integer(values.get("image_worker_pid")),
-                "image_worker_rss_mb": _number(
-                    values.get("image_worker_rss_mb")
-                ),
-                "image_worker_vms_mb": _number(
-                    values.get("image_worker_vms_mb")
-                ),
-                "shm_segments_created": _integer(
-                    values.get("shm_segments_created")
-                ),
-                "shm_segments_live": _integer(
-                    values.get("shm_segments_live")
-                ),
-                "shm_live_bytes": _integer(values.get("shm_live_bytes")),
-                "shm_segments_consumed": _integer(
-                    values.get("shm_segments_consumed")
-                ),
-                "shm_segments_reclaimed_late": _integer(
-                    values.get("shm_segments_reclaimed_late")
-                ),
-                "shm_unlink_failures": _integer(
-                    values.get("shm_unlink_failures")
-                ),
-                "private_app_mb": _number(values.get("private_app_mb")),
-                "private_main_mb": _number(values.get("private_main_mb")),
-                "private_children_mb": _number(
-                    values.get("private_children_mb")
-                ),
-                "uss_app_mb": _number(values.get("uss_app_mb")),
-                "uss_main_mb": _number(values.get("uss_main_mb")),
-                "uss_children_mb": _number(values.get("uss_children_mb")),
-                "vms_app_mb": _number(values.get("vms_app_mb")),
-                "threads_app": _integer(values.get("threads_app")),
-                "handles_app": _integer(values.get("handles_app")),
-                "image_cache_items": _integer(
-                    values.get("cpu_cache_resources") or values.get("img_cache_items")
-                ),
-                "image_cache_est_mb": _number(values.get("img_cache_est_mb")),
-                "image_cache_budget_mb": _number(values.get("img_cache_budget_mb")),
-                "image_cache_tracked_bytes": _integer(
-                    values.get("cpu_cache_bytes") or values.get("img_cache_tracked_bytes")
-                ),
-                "display_image_resources": _integer(values.get("cpu_display_resources")),
-                "display_image_tracked_bytes": _integer(values.get("cpu_display_bytes")),
-                "tracked_resources": _integer(values.get("tracked_resources")),
-                "tracked_known_bytes": _integer(values.get("tracked_known_bytes")),
-                "resource_total": _integer(
-                    values.get("rm_resources") or values.get("rm_total")
-                ),
-                "resource_known_bytes": _integer(values.get("rm_known_bytes")),
-                "resource_unknown_count": _integer(values.get("rm_unknown_resources")),
-                "resource_gl_total": _integer(
-                    values.get("gl_resources") or values.get("rm_gl_total")
-                ),
-                "resource_gl_known_bytes": _integer(values.get("gl_known_bytes")),
-                "resource_gl_unknown_count": _integer(values.get("gl_unknown_resources")),
-                "resource_gl_texture": _integer(
-                    values.get("gl_texture_resources") or values.get("rm_gl_texture")
-                ),
-                "resource_gl_texture_bytes": _integer(values.get("gl_texture_bytes")),
-                "resource_gl_framebuffer": _integer(
-                    values.get("gl_framebuffer_resources") or values.get("rm_gl_framebuffer")
-                ),
-                "resource_gl_framebuffer_bytes": _integer(values.get("gl_framebuffer_bytes")),
-                "resource_gl_renderbuffer": _integer(
-                    values.get("gl_renderbuffer_resources") or values.get("rm_gl_renderbuffer")
-                ),
-                "resource_gl_renderbuffer_bytes": _integer(values.get("gl_renderbuffer_bytes")),
-                "resource_gl_pbo": _integer(values.get("gl_pbo_resources")),
-                "resource_gl_pbo_bytes": _integer(values.get("gl_pbo_bytes")),
-                "qt_default_fbo": values.get("qt_default_fbo"),
-                "resource_gl_texture_est_mb": _number(
-                    values.get("rm_gl_texture_est_mb")
-                ),
-                "resource_gl_pbo_est_mb": _number(values.get("rm_gl_pbo_est_mb")),
-            }
-        )
-        gpu_rows.append(
-            {
-                **common,
-                "gpu_supported": values.get("gpu_supported"),
-                "gpu_active": values.get("gpu_active"),
-                "gpu_status": values.get("gpu_status"),
-                "gpu_busy_pct": _number(values.get("gpu_busy_pct")),
-                "gpu_engine_sum_pct": _number(values.get("gpu_engine_sum_pct")),
-                "vram_supported": values.get("vram_supported"),
-                "vram_dedicated_mb": _number(values.get("vram_dedicated_mb")),
-                "vram_shared_mb": _number(values.get("vram_shared_mb")),
-            }
-        )
-        category_payload = _json_object_after_marker(line, "tm_categories=")
-        category_submitted = {
-            str(category): int(counts.get("submitted", 0) or 0)
-            for category, counts in category_payload.items()
-            if isinstance(counts, dict)
-        }
-        counters.append(
-            {
-                **common,
-                "cpu_app_pct": _number(values.get("cpu_app_pct")),
-                "cpu_main_pct": _number(values.get("cpu_main_pct")),
-                "cpu_system_pct": _number(values.get("cpu_system_pct")),
-                "compute_submitted": _integer(values.get("tm_compute_submitted")),
-                "compute_completed": _integer(values.get("tm_compute_completed")),
-                "io_submitted": _integer(values.get("tm_io_submitted")),
-                "io_completed": _integer(values.get("tm_io_completed")),
-                "active_tasks": _integer(values.get("tm_active")),
-                "category_submitted": category_submitted,
-            }
-        )
-
-    task_rows: list[dict[str, object]] = []
-    for previous, current in zip(counters, counters[1:]):
-        previous_time = _timestamp_value(str(previous["timestamp"]))
-        current_time = _timestamp_value(str(current["timestamp"]))
-        if previous_time is None or current_time is None:
-            continue
-        elapsed = (current_time - previous_time).total_seconds()
-        if elapsed <= 0:
-            continue
-        compute_delta = _counter_delta(
-            previous.get("compute_submitted"), current.get("compute_submitted")
-        )
-        io_delta = _counter_delta(previous.get("io_submitted"), current.get("io_submitted"))
-        previous_categories = previous.get("category_submitted", {})
-        current_categories = current.get("category_submitted", {})
-        category_deltas: dict[str, int] = {}
-        if isinstance(previous_categories, dict) and isinstance(current_categories, dict):
-            for category in sorted(set(previous_categories) | set(current_categories)):
-                before = int(previous_categories.get(category, 0) or 0)
-                after = int(current_categories.get(category, 0) or 0)
-                if after >= before:
-                    category_deltas[str(category)] = after - before
-        category_rates = {
-            category: delta / elapsed
-            for category, delta in category_deltas.items()
-        }
-        category_total_delta = sum(category_deltas.values())
-        explicit_category_delta = sum(
-            delta
-            for category, delta in category_deltas.items()
-            if category not in {"uncategorized", "other"}
-        )
-        task_rows.append(
-            {
-                "timestamp": current["timestamp"],
-                "line": current["line"],
-                "sequence": current["sequence"],
-                "interval_seconds": elapsed,
-                "compute_submitted_delta": compute_delta,
-                "compute_submitted_per_sec": (
-                    compute_delta / elapsed if compute_delta is not None else None
-                ),
-                "io_submitted_delta": io_delta,
-                "io_submitted_per_sec": (
-                    io_delta / elapsed if io_delta is not None else None
-                ),
-                "total_submitted_per_sec": (
-                    (compute_delta + io_delta) / elapsed
-                    if compute_delta is not None and io_delta is not None
-                    else None
-                ),
-                "category_submitted_delta": json.dumps(
-                    category_deltas, separators=(",", ":"), sort_keys=True
-                ),
-                "category_submitted_per_sec": json.dumps(
-                    category_rates, separators=(",", ":"), sort_keys=True
-                ),
-                "category_coverage_pct": (
-                    explicit_category_delta / category_total_delta * 100.0
-                    if category_total_delta > 0
-                    else None
-                ),
-                "active_tasks": current.get("active_tasks"),
-                "cpu_app_pct": current.get("cpu_app_pct"),
-                "cpu_main_pct": current.get("cpu_main_pct"),
-                "cpu_system_pct": current.get("cpu_system_pct"),
-            }
-        )
-    return task_rows, memory_rows, gpu_rows
-
-
-def _counter_delta(previous: object, current: object) -> int | None:
-    if not isinstance(previous, int) or not isinstance(current, int) or current < previous:
-        return None
-    return current - previous
-
-
-def _parse_frames(lines: Sequence[str]) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    for line_number, line in enumerate(lines, 1):
-        match = _FRAME_RE.search(line)
-        if not match:
-            continue
-        values = _kv(match.group("payload"))
-        target = values.get("target_fps") or values.get("target")
-        transition_label = (
-            values.get("transition") or match.group("label").strip()
-        )
-        rows.append(
-            {
-                "timestamp": _timestamp(line),
-                "line": line_number,
-                "kind": match.group("kind").upper(),
-                "label": match.group("label").strip(),
-                "transition_label": transition_label,
-                "screen": _integer(values.get("screen")),
-                "frames": _integer(values.get("frames")),
-                "wakeups": _integer(values.get("wakeups")),
-                "average_fps": _number(values.get("avg_fps")),
-                "dt_min_ms": _number(values.get("dt_min")),
-                "dt_p50_ms": _number(values.get("dt_p50_ms")),
-                "dt_p90_ms": _number(values.get("dt_p90_ms")),
-                "dt_p95_ms": _number(values.get("dt_p95_ms")),
-                "dt_p99_ms": _number(values.get("dt_p99_ms")),
-                "dt_max_ms": _number(values.get("dt_max_ms") or values.get("dt_max")),
-                "dt_over_25_ms": _integer(values.get("dt_over_25_ms")),
-                "dt_over_33_ms": _integer(values.get("dt_over_33_ms")),
-                "dt_over_50_ms": _integer(values.get("dt_over_50_ms")),
-                "dt_over_100_ms": _integer(values.get("dt_over_100_ms")),
-                "paint_p50_ms": _number(values.get("paint_p50_ms")),
-                "paint_p90_ms": _number(values.get("paint_p90_ms")),
-                "paint_p95_ms": _number(values.get("paint_p95_ms")),
-                "paint_p99_ms": _number(values.get("paint_p99_ms")),
-                "paint_max_ms": _number(values.get("paint_max_ms")),
-                "request_age_p50_ms": _number(values.get("request_age_p50_ms")),
-                "request_age_p90_ms": _number(values.get("request_age_p90_ms")),
-                "request_age_p95_ms": _number(values.get("request_age_p95_ms")),
-                "request_age_p99_ms": _number(values.get("request_age_p99_ms")),
-                "request_age_max_ms": _number(values.get("request_age_max_ms")),
-                "window_frames": _integer(values.get("window_frames")),
-                "render_requests": _integer(values.get("render_requests")),
-                "skipped_requests": _integer(values.get("skipped_requests")),
-                "request_acceptance_pct": _number(values.get("request_acceptance_pct")),
-                "last_presented_frame": _integer(values.get("last_presented_frame")),
-                "scene_generation": _integer(values.get("scene_generation")),
-                "target_fps": _number(target),
-                "pending_skips": _integer(values.get("pending_skips")),
-                "slow_frames": _integer(values.get("slow_frames")),
-                "outcome": values.get("outcome", ""),
-            }
-        )
-    return rows
-
-
-def _parse_event_loop(lines: Sequence[str]) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    for line_number, line in enumerate(lines, 1):
-        match = _EVENT_LOOP_RE.search(line)
-        if not match:
-            continue
-        values = _kv(match.group("payload"))
-        rows.append(
-            {
-                "timestamp": _timestamp(line),
-                "line": line_number,
-                "samples": _integer(values.get("samples")),
-                "retained": _integer(values.get("retained")),
-                "interval_ms": _number(values.get("interval_ms")),
-                "late_p50_ms": _number(values.get("late_p50_ms")),
-                "late_p90_ms": _number(values.get("late_p90_ms")),
-                "late_p95_ms": _number(values.get("late_p95_ms")),
-                "late_p99_ms": _number(values.get("late_p99_ms")),
-                "late_max_ms": _number(values.get("late_max_ms")),
-                "over_25_ms": _integer(values.get("over_25_ms")),
-                "over_50_ms": _integer(values.get("over_50_ms")),
-                "over_100_ms": _integer(values.get("over_100_ms")),
-                "outcome": values.get("outcome", ""),
-            }
-        )
-    return rows
-
-
-def _parse_resources(lines: Sequence[str]) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    for line_number, line in enumerate(lines, 1):
-        match = _RESOURCE_RE.search(line)
-        if not match:
-            continue
-        values = _kv(match.group("payload"))
-        details: list[object] = []
-        details_match = _RESOURCE_DETAILS_RE.search(line)
-        if details_match:
-            try:
-                decoded = json.loads(details_match.group("payload"))
-                if isinstance(decoded, list):
-                    details = decoded
-            except (TypeError, ValueError, json.JSONDecodeError):
-                details = []
-        rows.append(
-            {
-                "timestamp": _timestamp(line),
-                "line": line_number,
-                "event": values.get("event", ""),
-                "stage": values.get("stage", ""),
-                "tracked_resources": _integer(values.get("tracked_resources")),
-                "tracked_known_bytes": _integer(values.get("tracked_known_bytes")),
-                "cpu_cache_resources": _integer(values.get("cpu_cache_resources")),
-                "cpu_cache_bytes": _integer(values.get("cpu_cache_bytes")),
-                "cpu_display_resources": _integer(values.get("cpu_display_resources")),
-                "cpu_display_bytes": _integer(values.get("cpu_display_bytes")),
-                "rm_resources": _integer(values.get("rm_resources")),
-                "rm_known_bytes": _integer(values.get("rm_known_bytes")),
-                "rm_unknown_resources": _integer(values.get("rm_unknown_resources")),
-                "gl_resources": _integer(values.get("gl_resources")),
-                "gl_known_bytes": _integer(values.get("gl_known_bytes")),
-                "gl_unknown_resources": _integer(values.get("gl_unknown_resources")),
-                "gl_texture_resources": _integer(values.get("gl_texture_resources")),
-                "gl_texture_bytes": _integer(values.get("gl_texture_bytes")),
-                "gl_framebuffer_resources": _integer(values.get("gl_framebuffer_resources")),
-                "gl_framebuffer_bytes": _integer(values.get("gl_framebuffer_bytes")),
-                "gl_renderbuffer_resources": _integer(values.get("gl_renderbuffer_resources")),
-                "gl_renderbuffer_bytes": _integer(values.get("gl_renderbuffer_bytes")),
-                "gl_pbo_resources": _integer(values.get("gl_pbo_resources")),
-                "gl_pbo_bytes": _integer(values.get("gl_pbo_bytes")),
-                "qt_default_fbo": values.get("qt_default_fbo", ""),
-                "resource_detail_count": len(details),
-                "resources_json": json.dumps(
-                    details,
-                    separators=(",", ":"),
-                    sort_keys=True,
-                ),
-            }
-        )
-    return rows
-
-
-def _parse_visualizer(lines: Sequence[str]) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    for line_number, line in enumerate(lines, 1):
-        microgap = _MICROGAP_RE.search(line)
-        spike = _TICK_SPIKE_RE.search(line)
-        latency = _LATENCY_RE.search(line)
-        if microgap:
-            values = _kv(microgap.group("payload"))
-            rows.append(
-                {
-                    "timestamp": _timestamp(line),
-                    "line": line_number,
-                    "event": "microgap",
-                    "mode": values.get("mode", ""),
-                    "screen": _integer(values.get("screen")),
-                    "context": values.get("context", ""),
-                    "transition_active": values.get("transition_active", ""),
-                    "transition_name": values.get("transition_name", ""),
-                    "transition_elapsed": _number(values.get("transition_elapsed")),
-                    "idle_age": _number(values.get("idle_age")),
-                    "trigger": values.get("trigger", ""),
-                    "boundary": "",
-                    "samples": _integer(values.get("gap_samples")),
-                    "p95_ms": _number(values.get("gap_p95_ms")),
-                    "max_ms": _number(values.get("gap_max_ms")),
-                    "wait_p95_ms": _number(values.get("wait_p95_ms")),
-                    "wait_max_ms": _number(values.get("wait_max_ms")),
-                }
-            )
-        elif spike:
-            values = _kv(spike.group("payload"))
-            transition_active = str(values.get("transition_running", "")).lower() in {
-                "1",
-                "true",
-            }
-            transition_elapsed = _number(values.get("transition_elapsed"))
-            idle_age = _number(values.get("idle_age"))
-            if transition_active and transition_elapsed is not None and transition_elapsed <= 1.0:
-                boundary = "transition_start"
-            elif not transition_active and idle_age is not None and idle_age <= 0.25:
-                boundary = "transition_end"
-            elif transition_active:
-                boundary = "active_transition"
-            else:
-                boundary = "idle"
-            rows.append(
-                {
-                    "timestamp": _timestamp(line),
-                    "line": line_number,
-                    "event": "tick_spike",
-                    "mode": values.get("mode", ""),
-                    "screen": None,
-                    "context": "",
-                    "transition_active": values.get("transition_running", ""),
-                    "transition_name": values.get("transition_name", ""),
-                    "transition_elapsed": transition_elapsed,
-                    "idle_age": idle_age,
-                    "trigger": "",
-                    "boundary": boundary,
-                    "samples": None,
-                    "p95_ms": None,
-                    "max_ms": _number(spike.group("dt_ms")),
-                    "wait_p95_ms": None,
-                    "wait_max_ms": None,
-                }
-            )
-        elif latency:
-            values = _kv(latency.group("payload"))
-            rows.append(
-                {
-                    "timestamp": _timestamp(line),
-                    "line": line_number,
-                    "event": "latency",
-                    "mode": values.get("mode", ""),
-                    "screen": None,
-                    "context": "",
-                    "transition_active": "",
-                    "transition_name": "",
-                    "transition_elapsed": None,
-                    "idle_age": None,
-                    "trigger": values.get("trigger", ""),
-                    "boundary": values.get("trigger", ""),
-                    "samples": None,
-                    "p95_ms": None,
-                    "max_ms": _number(latency.group("lag_ms")),
-                    "wait_p95_ms": None,
-                    "wait_max_ms": None,
-                }
-            )
-    return rows
-
-
-def _parse_lifecycle(lines: Sequence[str]) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    for line_number, line in enumerate(lines, 1):
-        if not _LIFECYCLE_TERMS.search(line):
-            continue
-        rows.append(
-            {
-                "timestamp": _timestamp(line),
-                "line": line_number,
-                "event": line,
-            }
-        )
-    return rows
-
-
-def _parse_phase5_telemetry(
+def _collect_fancy_main_cards(
     logs: Mapping[str, Sequence[str]],
-) -> list[dict[str, object]]:
-    """Parse current compact Phase 5 records without assuming a log sidecar."""
-    rows: list[dict[str, object]] = []
-    seen: set[str] = set()
-    for source, lines in sorted(logs.items()):
-        for line_number, line in enumerate(lines, 1):
-            normalized = line.strip()
-            if normalized in seen:
-                continue
-            match = _FRAME_GAP_OWNER_RE.search(line)
-            kind = "frame_gap_owner"
-            extra: dict[str, object] = {}
-            if match:
-                extra["severity"] = _kv(match.group("payload")).get("severity", "")
-            else:
-                match = _ADAPTIVE_TIMER_METRICS_RE.search(line)
-                kind = "adaptive_timer_metrics"
-            if not match:
-                match = _VISUALIZER_LANE_RE.search(line)
-                kind = "visualizer_lane"
-                if match:
-                    extra["lane"] = match.group("lane").lower()
-            if not match:
-                match = _MEDIA_PRESENTATION_RE.search(line)
-                kind = "media_presentation"
-            if not match:
-                match = _VISUALIZER_OVERLAY_GPU_RE.search(line)
-                kind = "visualizer_overlay_gpu"
-            if not match:
-                match = _COMPOSITOR_GPU_RE.search(line)
-                kind = "compositor_gpu"
-            if not match:
-                match = _VISUALIZER_OVERLAY_RE.search(line)
-                kind = "visualizer_overlay"
-            if not match:
-                match = _CACHE_REPRESENTATIONS_RE.search(line)
-                kind = "cache_representations"
-            if not match:
-                match = _CACHE_FLOW_RE.search(line)
-                kind = "cache_flow"
-            if not match:
-                match = _LIFECYCLE_BARRIER_RE.search(line)
-                kind = "lifecycle_barrier"
-                if match:
-                    extra["barrier_event"] = match.group("event")
-            if not match:
-                match = _IMAGE_UI_DELAY_RE.search(line)
-                kind = "image_ui_delay"
-            if not match:
-                match = _IMAGE_UI_SEGMENT_RE.search(line)
-                kind = "image_ui_segment"
-            if not match:
-                match = _GL_RETENTION_RE.search(line)
-                kind = "gl_retention"
-            if not match:
-                match = _TEXTURE_UPLOAD_RE.search(line)
-                kind = "texture_upload"
-            if not match:
-                match = _TEXTURE_LOOKUP_RE.search(line)
-                kind = "texture_lookup"
-            if not match:
-                match = _TEXTURE_PAIR_WARM_RE.search(line)
-                kind = "texture_pair_warm"
-            if not match:
-                match = _IMAGE_INSTALL_NEXT_PAINT_RE.search(line)
-                kind = "image_install_next_paint"
-            if not match:
-                continue
-            seen.add(normalized)
-            values = _kv(match.group("payload"))
-            rows.append(
-                {
-                    "timestamp": _timestamp(line),
-                    "source": source,
-                    "line": line_number,
-                    "kind": kind,
-                    "severity": extra.get("severity", ""),
-                    "lane": extra.get("lane", ""),
-                    "barrier_event": extra.get("barrier_event", ""),
-                    "event": values.get("event", ""),
-                    "display": values.get("display", ""),
-                    "screen": _integer(values.get("screen")),
-                    "mode": values.get("mode", ""),
-                    "callable": values.get("callable", ""),
-                    "stage": values.get("stage", ""),
-                    "install_id": values.get("install_id", ""),
-                    "role": values.get("role", ""),
-                    "generation": _integer(values.get("generation")),
-                    "outcome": values.get("outcome", ""),
-                    "update_requested": values.get("update_requested", ""),
-                    "reason": values.get("reason", ""),
-                    "transition": values.get("transition", ""),
-                    "transition_active": _integer(values.get("transition_active")),
-                    "vis_mode": values.get("vis_mode", ""),
-                    "vis_phase": _integer(values.get("vis_phase")),
-                    "waiting_engine": _integer(values.get("waiting_engine")),
-                    "waiting_frame": _integer(values.get("waiting_frame")),
-                    "bubble_worker": _integer(values.get("bubble_worker")),
-                    "bubble_result": _integer(values.get("bubble_result")),
-                    "owner": values.get("owner", values.get("last_ui", "")),
-                    "last_ui": values.get("last_ui", ""),
-                    "last_ui_ms": _number(values.get("last_ui_ms")),
-                    "last_ui_age_ms": _number(values.get("last_ui_age_ms")),
-                    "gap_ms": _number(values.get("gap_ms")),
-                    "paint_ms": _number(values.get("paint_ms")),
-                    "request_age_ms": _number(values.get("request_age_ms")),
-                    "source_age_ms": _number(values.get("source_age_ms")),
-                    "simulation_age_ms": _number(values.get("simulation_age_ms")),
-                    "render_state_age_ms": _number(values.get("render_state_age_ms")),
-                    "owner_age_ms": _number(values.get("last_ui_age_ms")),
-                    "io_queue": _integer(values.get("io_queue")),
-                    "compute_queue": _integer(values.get("compute_queue")),
-                    "io_active": _integer(values.get("io_active")),
-                    "compute_active": _integer(values.get("compute_active")),
-                    "io_callbacks": _integer(values.get("io_callbacks")),
-                    "compute_callbacks": _integer(values.get("compute_callbacks")),
-                    "io_queue_wait_ms": _number(values.get("io_queue_wait_ms")),
-                    "compute_queue_wait_ms": _number(values.get("compute_queue_wait_ms")),
-                    "io_exec_ms": _number(values.get("io_exec_ms")),
-                    "compute_exec_ms": _number(values.get("compute_exec_ms")),
-                    "io_callback_ms": _number(values.get("io_callback_ms")),
-                    "compute_callback_ms": _number(values.get("compute_callback_ms")),
-                    "ui_callbacks": _integer(values.get("ui_callbacks")),
-                    "ui_active": _integer(values.get("ui_active")),
-                    "ui_queue": _integer(values.get("ui_queue")),
-                    "ui_failed": _integer(values.get("ui_failed")),
-                    "media_display": _integer(values.get("media_display")),
-                    "media_emit": _integer(values.get("media_emit")),
-                    "media_repaints": _integer(values.get("media_repaints")),
-                    "overlay_set": _integer(values.get("overlay_set")),
-                    "overlay_repaints": _integer(values.get("overlay_repaints")),
-                    "overlay_paints": _integer(values.get("overlay_paints")),
-                    "render_requests": _integer(values.get("render_requests")),
-                    "skipped_requests": _integer(values.get("skipped_requests")),
-                    "elapsed_ms": _number(values.get("elapsed_ms")),
-                    "refresh_hz": _number(values.get("refresh_hz")),
-                    "dpr": _number(values.get("dpr")),
-                    "set_state": _integer(values.get("set_state")),
-                    "paint": _integer(values.get("paint")),
-                    "update_requests": _integer(values.get("update_requests")),
-                    "geometry_changes": _integer(values.get("geometry_changes")),
-                    "paint_cpu_samples": _integer(values.get("paint_cpu_samples")),
-                    "paint_cpu_p50_ms": _number(values.get("paint_cpu_p50_ms")),
-                    "paint_cpu_p95_ms": _number(values.get("paint_cpu_p95_ms")),
-                    "paint_cpu_max_ms": _number(values.get("paint_cpu_max_ms")),
-                    "state_to_paint_samples": _integer(values.get("state_to_paint_samples")),
-                    "state_to_paint_p50_ms": _number(values.get("state_to_paint_p50_ms")),
-                    "state_to_paint_p95_ms": _number(values.get("state_to_paint_p95_ms")),
-                    "state_to_paint_max_ms": _number(values.get("state_to_paint_max_ms")),
-                    "gpu_supported": values.get("gpu_supported", ""),
-                    "gpu_reason": values.get("gpu_reason", ""),
-                    "gpu_observed": _integer(values.get("gpu_observed")),
-                    "gpu_sampled_out": _integer(values.get("gpu_sampled_out")),
-                    "gpu_poll_attempts": _integer(values.get("gpu_poll_attempts")),
-                    "gpu_sample_stride": _integer(values.get("gpu_sample_stride")),
-                    "gpu_submitted": _integer(values.get("gpu_submitted")),
-                    "gpu_collected": _integer(values.get("gpu_collected")),
-                    "gpu_pending": _integer(values.get("gpu_pending")),
-                    "gpu_dropped_pending": _integer(values.get("gpu_dropped_pending")),
-                    "gpu_discarded": _integer(values.get("gpu_discarded")),
-                    "gpu_errors": _integer(values.get("gpu_errors")),
-                    "gpu_samples": _integer(values.get("gpu_samples")),
-                    "gpu_p50_ms": _number(values.get("gpu_p50_ms")),
-                    "gpu_p95_ms": _number(values.get("gpu_p95_ms")),
-                    "gpu_max_ms": _number(values.get("gpu_max_ms")),
-                    "visible": values.get("visible", ""),
-                    "enabled": values.get("enabled", ""),
-                    "playing": values.get("playing", ""),
-                    "delay_ms": _number(values.get("delay_ms")),
-                    "queue_late_ms": _number(values.get("queue_late_ms")),
-                    "guard_ms": _number(values.get("guard_ms")),
-                    "callback_ms": _number(values.get("callback_ms")),
-                    "total_age_ms": _number(values.get("total_age_ms")),
-                    "scheduled_mono_ms": _number(values.get("scheduled_mono_ms")),
-                    "due_mono_ms": _number(values.get("due_mono_ms")),
-                    "start_mono_ms": _number(values.get("start_mono_ms")),
-                    "end_mono_ms": _number(values.get("end_mono_ms")),
-                    "duration_ms": _number(values.get("duration_ms")),
-                    "trace_total_ms": _number(values.get("total_ms")),
-                    "size": values.get("size", ""),
-                    "cold_compositor": values.get("cold_compositor", ""),
-                    "manager_before": values.get("manager_before", ""),
-                    "manager_after": values.get("manager_after", ""),
-                    "cache_size_before": _integer(values.get("cache_size_before")),
-                    "cache_size_after": _integer(values.get("cache_size_after")),
-                    "retained_key_before": _integer(values.get("retained_key_before")),
-                    "old_key": _integer(values.get("old_key")),
-                    "new_key": _integer(values.get("new_key")),
-                    "old_cached_before": values.get("old_cached_before", ""),
-                    "new_cached_before": values.get("new_cached_before", ""),
-                    "old_texture_before": _integer(values.get("old_texture_before")),
-                    "new_texture_before": _integer(values.get("new_texture_before")),
-                    "cache_hits_delta": _integer(values.get("cache_hits_delta")),
-                    "texture_allocations_delta": _integer(values.get("texture_allocations_delta")),
-                    "texture_uploads_delta": _integer(values.get("texture_uploads_delta")),
-                    "geometry_ms": _number(values.get("geometry_ms")),
-                    "set_base_ms": _number(values.get("set_base_ms")),
-                    "show_ms": _number(values.get("show_ms")),
-                    "raise_ms": _number(values.get("raise_ms")),
-                    "pipeline_was_ready": values.get("pipeline_was_ready", ""),
-                    "pipeline_outcome": values.get("pipeline_outcome", ""),
-                    "pipeline_ensure_ms": _number(values.get("pipeline_ensure_ms")),
-                    "pipeline_make_current_ms": _number(values.get("pipeline_make_current_ms")),
-                    "pipeline_initialize_ms": _number(values.get("pipeline_initialize_ms")),
-                    "pipeline_release_ms": _number(values.get("pipeline_release_ms")),
-                    "context_route": values.get("context_route", ""),
-                    "hidden_context_created": values.get("hidden_context_created", ""),
-                    "hidden_context_reused": values.get("hidden_context_reused", ""),
-                    "share_context_present": values.get("share_context_present", ""),
-                    "share_context_valid": values.get("share_context_valid", ""),
-                    "preserve_live_surface": values.get("preserve_live_surface", ""),
-                    "live_base_visible": values.get("live_base_visible", ""),
-                    "offscreen_surface_create_ms": _number(
-                        values.get("offscreen_surface_create_ms")
-                    ),
-                    "shared_context_create_ms": _number(
-                        values.get("shared_context_create_ms")
-                    ),
-                    "context_acquire_ms": _number(values.get("context_acquire_ms")),
-                    "context_prepare_ms": _number(values.get("context_prepare_ms")),
-                    "context_make_current_ms": _number(values.get("context_make_current_ms")),
-                    "context_release_ms": _number(values.get("context_release_ms")),
-                    "manager_present_before": values.get("manager_present_before", ""),
-                    "manager_ensure_ms": _number(values.get("manager_ensure_ms")),
-                    "manager_initialize_ms": _number(values.get("manager_initialize_ms")),
-                    "old_present": values.get("old_present", ""),
-                    "old_texture_ms": _number(values.get("old_texture_ms")),
-                    "new_present": values.get("new_present", ""),
-                    "new_texture_ms": _number(values.get("new_texture_ms")),
-                    "cache_hit": values.get("cache_hit", ""),
-                    "cache_key": _integer(values.get("cache_key")),
-                    "texture_id": _integer(values.get("texture_id")),
-                    "cache_lookup_ms": _number(values.get("cache_lookup_ms")),
-                    "upload_call_ms": _number(values.get("upload_call_ms")),
-                    "cache_publish_ms": _number(values.get("cache_publish_ms")),
-                    "install_to_next_paint_ms": _number(values.get("install_to_next_paint_ms")),
-                    "base_mark_to_next_paint_ms": _number(values.get("base_mark_to_next_paint_ms")),
-                    "scene_generation": _integer(values.get("scene_generation")),
-                    "terminal": _integer(values.get("terminal")),
-                    "retain_active": values.get("retain_active", ""),
-                    "retained_texture": _integer(values.get("retained_texture")),
-                    "retained_cache_key": _integer(values.get("retained_cache_key")),
-                    "texture_count": _integer(values.get("texture_count")),
-                    "texture_cache_hits": _integer(values.get("texture_cache_hits")),
-                    "texture_allocations": _integer(values.get("texture_allocations")),
-                    "texture_uploads": _integer(values.get("texture_uploads")),
-                    "texture_deletions": _integer(values.get("texture_deletions")),
-                    "pbo_count": _integer(values.get("pbo_count")),
-                    "pbo_creations": _integer(values.get("pbo_creations")),
-                    "pbo_reuses": _integer(values.get("pbo_reuses")),
-                    "upload_total_ms": _number(values.get("upload_total_ms")),
-                    "upload_cpu_total_ms": _number(values.get("total_ms")),
-                    "upload_bytes": _integer(values.get("upload_bytes")),
-                    "upload_path": values.get("path", ""),
-                    "upload_image_format": values.get("image_format", ""),
-                    "upload_bits_path": values.get("bits_path", ""),
-                    "image_prepare_ms": _number(values.get("image_prepare_ms")),
-                    "bits_copy_ms": _number(values.get("bits_copy_ms")),
-                    "texture_alloc_ms": _number(values.get("texture_alloc_ms")),
-                    "pbo_stage_ms": _number(values.get("pbo_stage_ms")),
-                    "texture_submit_ms": _number(values.get("texture_submit_ms")),
-                    "upload_end_to_end_ms": _number(values.get("end_to_end_ms")),
-                    "resource_tracking_ms": _number(values.get("resource_tracking_ms")),
-                    "manager_publish_ms": _number(values.get("manager_publish_ms")),
-                    "unattributed_ms": _number(values.get("unattributed_ms")),
-                    "interval_scope": values.get("interval_scope", ""),
-                    "interval_texture_uploads": _integer(values.get("interval_texture_uploads")),
-                    "interval_texture_allocations": _integer(values.get("interval_texture_allocations")),
-                    "interval_pbo_creations": _integer(values.get("interval_pbo_creations")),
-                    "interval_pbo_reuses": _integer(values.get("interval_pbo_reuses")),
-                    "interval_upload_total_ms": _number(values.get("interval_upload_total_ms")),
-                    "frames": _integer(values.get("frames")),
-                    "transitions": _integer(values.get("transitions")),
-                    "time_idle_ms": _number(values.get("time_idle")),
-                    "time_paused_ms": _number(values.get("time_paused")),
-                    "time_running_ms": _number(values.get("time_running")),
-                    "total_runtime_seconds": _number(values.get("total_runtime")),
-                    "logical_steps": _integer(values.get("logical_steps")),
-                    "published": _integer(values.get("published")),
-                    "executor_tasks": _integer(values.get("executor_tasks")),
-                    "handoff_ms_max": _number(values.get("handoff_ms_max")),
-                    "execution_ms_max": _number(values.get("execution_ms_max")),
-                    "callback_ms_max": _number(values.get("callback_ms_max")),
-                    "raw_items": _integer(values.get("raw_items")),
-                    "scaled_items": _integer(values.get("scaled_items")),
-                    "raw_mb": _number(values.get("raw_mb")),
-                    "scaled_mb": _number(values.get("scaled_mb")),
-                    "raw_hits": _integer(values.get("raw_hits")),
-                    "raw_misses": _integer(values.get("raw_misses")),
-                    "scaled_hits": _integer(values.get("scaled_hits")),
-                    "scaled_misses": _integer(values.get("scaled_misses")),
-                    "worker_requests": _integer(values.get("worker_requests")),
-                    "worker_fallbacks": _integer(values.get("worker_fallbacks")),
-                    "qobjects": _integer(values.get("qobjects")),
-                    "python_owners": _integer(values.get("python_owners")),
-                    "values_json": json.dumps(values, separators=(",", ":"), sort_keys=True),
-                }
-            )
-    return rows
+) -> tuple[list[str], set[tuple[str, int]], set[tuple[str, int]]]:
+    """Collect fancy severity cards and all presentation-owned line references.
 
+    Returns:
+        normalized_errors:
+            Canonical logical warning/error records suitable for the existing
+            ``errors_and_warnings.txt`` artifact.
+        card_lines:
+            Every physical line owned by a parsed severity card.
+        presentation_lines:
+            Card lines plus decorative main-log banner/header/rule rows.
+    """
 
-def _collect_errors(logs: Mapping[str, Sequence[str]]) -> list[str]:
-    found: list[str] = []
-    seen: set[str] = set()
-    for source, lines in sorted(logs.items()):
-        for line_number, line in enumerate(lines, 1):
-            if not (
-                _LEVEL_RE.search(line)
-                or "Traceback (most recent call last)" in line
-                or "QOpenGLContext" in line
-            ):
-                continue
-            normalized = line.strip()
-            if normalized in seen:
-                continue
-            seen.add(normalized)
-            found.append(f"{source}:{line_number}: {line}")
-    return found
+    normalized_errors: list[str] = []
+    card_lines: set[tuple[str, int]] = set()
+    presentation_lines: set[tuple[str, int]] = set()
 
-
-def _collect_modes(logs: Mapping[str, Sequence[str]]) -> list[str]:
-    visualizer_markers = (
-        "[SPOTIFY_VIS][CFG]",
-        "[SPOTIFY_VIS][OVERLAY]",
-        "[SPOTIFY_VIS][MICROGAP]",
-        "[SPOTIFY_VIS][LATENCY]",
-        "[SPOTIFY_VIS] Tick dt spike",
-        "[SPOTIFY_VIS][MODE]",
-    )
-    return sorted(
-        {
-            match.group("mode").lower()
-            for lines in logs.values()
-            for line in lines
-            if any(marker in line for marker in visualizer_markers)
-            for match in _MODE_RE.finditer(line)
-        }
-    )
-
-
-def _collect_displays(logs: Mapping[str, Sequence[str]]) -> list[dict[str, object]]:
-    by_screen: dict[int, dict[str, object]] = {}
-    for lines in logs.values():
-        for line in lines:
-            display = _DISPLAY_RE.search(line)
-            if display:
-                screen = int(display.group("screen"))
-                by_screen[screen] = {
-                    "screen": screen,
-                    "logical_width": int(display.group("width")),
-                    "logical_height": int(display.group("height")),
-                    "x": int(display.group("x")),
-                    "y": int(display.group("y")),
-                    "dpr": float(display.group("dpr")),
-                }
-            refresh = _REFRESH_RE.search(line)
-            if refresh:
-                screen = int(refresh.group("screen"))
-                target = by_screen.setdefault(screen, {"screen": screen})
-                target["detected_hz"] = float(refresh.group("detected_hz"))
-                target["target_fps"] = float(refresh.group("target_fps"))
-    return [by_screen[key] for key in sorted(by_screen)]
-
-
-def _metric_summary(values: Iterable[object]) -> dict[str, float] | None:
-    numeric = [float(value) for value in values if isinstance(value, (int, float))]
-    if not numeric:
-        return None
-    return {
-        "minimum": min(numeric),
-        "median": statistics.median(numeric),
-        "maximum": max(numeric),
-    }
-
-
-def _metric_summary_with_p95(values: Iterable[object]) -> dict[str, float] | None:
-    numeric = sorted(float(value) for value in values if isinstance(value, (int, float)))
-    if not numeric:
-        return None
-    position = (len(numeric) - 1) * 0.95
-    lower = int(position)
-    upper = min(lower + 1, len(numeric) - 1)
-    p95 = numeric[lower] + (numeric[upper] - numeric[lower]) * (position - lower)
-    return {
-        "minimum": numeric[0],
-        "median": statistics.median(numeric),
-        "p95": p95,
-        "maximum": numeric[-1],
-    }
-
-
-def _integer_total(
-    rows: Sequence[Mapping[str, object]],
-    field: str,
-) -> int | None:
-    values = [row.get(field) for row in rows]
-    numeric = [int(value) for value in values if isinstance(value, int)]
-    return sum(numeric) if numeric else None
-
-
-def _frame_delivery_group_summary(
-    rows: Sequence[Mapping[str, object]],
-) -> dict[str, object]:
-    """Summarize frame windows without mixing displays or transition labels."""
-
-    by_kind: dict[str, object] = {}
-    for kind in sorted({str(row.get("kind", "")) for row in rows}):
-        kind_rows = [row for row in rows if row.get("kind") == kind]
-        if not kind_rows:
+    for log_name, lines in logs.items():
+        if log_name != "screensaver.log":
             continue
-        frames_total = _integer_total(kind_rows, "frames")
-        wakeups_total = _integer_total(kind_rows, "wakeups")
-        if kind == "PAINT":
-            accepted_total = _integer_total(kind_rows, "render_requests")
-            skipped_total = _integer_total(kind_rows, "skipped_requests")
-        elif kind == "RENDER":
-            accepted_total = frames_total
-            skipped_total = _integer_total(kind_rows, "pending_skips")
-        else:
-            accepted_total = None
-            skipped_total = None
-        attempts_total = (
-            accepted_total + skipped_total
-            if accepted_total is not None and skipped_total is not None
-            else wakeups_total
-        )
-        by_kind[kind.lower()] = {
-            "windows": len(kind_rows),
-            "frames_total": frames_total,
-            "wakeups_total": wakeups_total,
-            "accepted_requests_total": accepted_total,
-            "skipped_requests_total": skipped_total,
-            "weighted_request_acceptance_pct": (
-                accepted_total / attempts_total * 100.0
-                if accepted_total is not None
-                and attempts_total is not None
-                and attempts_total > 0
-                else None
-            ),
-            "average_fps": _metric_summary_with_p95(
-                row.get("average_fps") for row in kind_rows
-            ),
-            "dt_p99_ms": _metric_summary_with_p95(
-                row.get("dt_p99_ms") for row in kind_rows
-            ),
-            "dt_max_ms": _metric_summary_with_p95(
-                row.get("dt_max_ms") for row in kind_rows
-            ),
-            "paint_p99_ms": _metric_summary_with_p95(
-                row.get("paint_p99_ms") for row in kind_rows
-            ),
-            "request_age_p99_ms": _metric_summary_with_p95(
-                row.get("request_age_p99_ms") for row in kind_rows
-            ),
-        }
-    return by_kind
 
+        for line_number, line in enumerate(lines, 1):
+            if _is_presentation_only_line(line):
+                presentation_lines.add((log_name, line_number))
 
-def _frame_delivery_breakdown(
-    frame_rows: Sequence[Mapping[str, object]],
-) -> dict[str, object]:
-    screens = sorted({
-        int(row["screen"])
-        for row in frame_rows
-        if isinstance(row.get("screen"), int)
-    })
-    return {
-        "by_screen": {
-            str(screen): _frame_delivery_group_summary(
-                [row for row in frame_rows if row.get("screen") == screen]
+        index = 0
+        while index < len(lines):
+            header = lines[index]
+            level = _severity_from_header(header)
+            if level is None:
+                index += 1
+                continue
+
+            start_index = index
+            start_line = start_index + 1
+            refs: list[tuple[str, int]] = [(log_name, start_line)]
+
+            # Meta line should immediately follow the header.
+            meta_index = index + 1
+            if meta_index >= len(lines):
+                index += 1
+                continue
+            meta = _FANCY_META_RE.match(lines[meta_index])
+            if meta is None:
+                index += 1
+                continue
+            refs.append((log_name, meta_index + 1))
+
+            timestamp = meta.group("timestamp")
+            source = meta.group("source").strip()
+
+            # Divider.
+            divider_index = meta_index + 1
+            if divider_index >= len(lines) or not lines[divider_index].startswith(("├", "╠")):
+                index += 1
+                continue
+            refs.append((log_name, divider_index + 1))
+
+            body: list[str] = []
+            cursor = divider_index + 1
+            footer_found = False
+            while cursor < len(lines):
+                candidate = lines[cursor]
+                refs.append((log_name, cursor + 1))
+                if candidate.startswith(("╰", "╚")):
+                    footer_found = True
+                    cursor += 1
+                    break
+                if candidate.startswith("│  "):
+                    body.append(candidate[3:])
+                elif candidate.startswith("│"):
+                    body.append(candidate[1:].lstrip())
+                else:
+                    # A malformed/incomplete card should not swallow unrelated
+                    # following records.  Leave it to the legacy unknown/error
+                    # handling instead.
+                    break
+                cursor += 1
+
+            if not footer_found:
+                index += 1
+                continue
+
+            card_lines.update(refs)
+            presentation_lines.update(refs)
+
+            payload = "\n".join(body).rstrip()
+            canonical = (
+                f"{timestamp} - {source:<30} - {level:<8} - {payload}"
             )
-            for screen in screens
-        },
-        "by_screen_transition": {
-            str(screen): {
-                transition: _frame_delivery_group_summary(
-                    [
-                        row
-                        for row in frame_rows
-                        if row.get("screen") == screen
-                        and str(row.get("transition_label", "")).strip().lower()
-                        == transition
-                    ]
-                )
-                for transition in sorted({
-                    str(row.get("transition_label", "")).strip().lower()
-                    for row in frame_rows
-                    if row.get("screen") == screen
-                    and str(row.get("transition_label", "")).strip()
-                })
-            }
-            for screen in screens
-        },
-    }
+            normalized_errors.append(
+                f"{log_name}:{start_line}: {canonical}"
+            )
+            index = cursor
+
+    return normalized_errors, card_lines, presentation_lines
 
 
-def _frame_gap_last_ui_summary(
-    phase5_rows: Sequence[Mapping[str, object]],
-) -> dict[str, dict[str, object]]:
-    """Describe frame-gap snapshots by the reported last UI callback label."""
+def _merge_errors(
+    legacy_errors: Sequence[str],
+    fancy_errors: Sequence[str],
+    fancy_card_lines: set[tuple[str, int]],
+) -> list[str]:
+    """Keep old-format findings and replace card-internal fragments with one card."""
 
-    frame_gap_rows = [
-        row
-        for row in phase5_rows
-        if row["kind"] == "frame_gap_owner" and row.get("last_ui")
-    ]
-    return {
-        label: {
-            "count": len(rows),
-            "gap_ms": _metric_summary_with_p95(row.get("gap_ms") for row in rows),
-            "last_ui_ms": _metric_summary_with_p95(
-                row.get("last_ui_ms") for row in rows
-            ),
-            "last_ui_age_ms": _metric_summary_with_p95(
-                row.get("last_ui_age_ms") for row in rows
-            ),
-            "last_ui_age_at_most_gap_count": sum(
-                isinstance(row.get("last_ui_age_ms"), (int, float))
-                and isinstance(row.get("gap_ms"), (int, float))
-                and float(row["last_ui_age_ms"]) <= float(row["gap_ms"])
-                for row in rows
-            ),
-            "last_ui_ms_at_least_10_count": sum(
-                isinstance(row.get("last_ui_ms"), (int, float))
-                and float(row["last_ui_ms"]) >= 10.0
-                for row in rows
-            ),
-        }
-        for label in sorted({str(row["last_ui"]) for row in frame_gap_rows})
-        if (rows := [row for row in frame_gap_rows if row["last_ui"] == label])
-    }
+    merged: list[str] = []
+    seen: set[str] = set()
+
+    for value in legacy_errors:
+        ref = _parse_prefixed_reference(value)
+        if ref is not None and ref in fancy_card_lines:
+            continue
+        normalized = value.strip()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            merged.append(value)
+
+    for value in fancy_errors:
+        normalized = value.strip()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            merged.append(value)
+
+    return merged
 
 
-def _image_install_correlation_summary(
-    phase5_rows: Sequence[Mapping[str, object]],
-) -> dict[str, object]:
-    """Join passive image-install spans without treating missing parts as causal."""
-    install_ids = sorted({
-        str(row.get("install_id"))
-        for row in phase5_rows
-        if row.get("install_id") not in (None, "", "none")
-    })
-    by_install_id: dict[str, dict[str, object]] = {}
-    for install_id in install_ids:
-        rows = [row for row in phase5_rows if row.get("install_id") == install_id]
-        stage_rows = [row for row in rows if row["kind"] == "image_ui_segment"]
-        lookup_rows = [row for row in rows if row["kind"] == "texture_lookup"]
-        upload_rows = [row for row in rows if row["kind"] == "texture_upload"]
-        by_install_id[install_id] = {
-            "image_ui_stages": sorted({
-                str(row.get("stage")) for row in stage_rows if row.get("stage")
-            }),
-            "pair_warm_records": sum(
-                row["kind"] == "texture_pair_warm" for row in rows
-            ),
-            "lookup_roles": sorted({
-                str(row.get("role")) for row in lookup_rows if row.get("role")
-            }),
-            "lookup_records": len(lookup_rows),
-            "upload_roles": sorted({
-                str(row.get("role")) for row in upload_rows if row.get("role")
-            }),
-            "upload_records": len(upload_rows),
-            "next_paint_records": sum(
-                row["kind"] == "image_install_next_paint" for row in rows
-            ),
-            "accepted_setup": any(
-                row.get("stage") == "compositor_setup"
-                and row.get("outcome") == "completed"
-                for row in stage_rows
-            ),
-        }
-    accepted_ids = [
-        install_id
-        for install_id, summary in by_install_id.items()
-        if bool(summary["accepted_setup"])
-    ]
-    return {
-        "install_ids": len(install_ids),
-        "accepted_install_ids": len(accepted_ids),
-        "by_install_id": by_install_id,
-        "without_accepted_setup": [
-            install_id
-            for install_id, summary in by_install_id.items()
-            if not bool(summary["accepted_setup"])
-        ],
-        "without_pair_warm": [
-            install_id
-            for install_id in accepted_ids
-            for summary in (by_install_id[install_id],)
-            if int(summary["pair_warm_records"]) == 0
-        ],
-        "without_next_paint": [
-            install_id
-            for install_id in accepted_ids
-            for summary in (by_install_id[install_id],)
-            if int(summary["next_paint_records"]) == 0
-        ],
-    }
+def _filter_unknown_lines(
+    legacy_unknown: Sequence[str],
+    presentation_lines: set[tuple[str, int]],
+) -> list[str]:
+    filtered: list[str] = []
+    for value in legacy_unknown:
+        ref = _parse_prefixed_reference(value)
+        if ref is not None and ref in presentation_lines:
+            continue
+        filtered.append(value)
+    return filtered
 
 
-def analyze_evidence_source(path: Path) -> ArchiveAnalysis:
-    path = path.resolve()
-    logs, sizes, source_hash = _read_source(path)
-    usage_lines = logs.get("screensaver_usage.log", [])
-    perf_lines = logs.get("screensaver_perf.log", [])
-    visualizer_lines = logs.get("screensaver_spotify_vis.log", [])
-    lifecycle_lines = logs.get("screensaver_lifecycle.log", [])
+def analyze_evidence_source(path: Path):
+    """Run parser 1.20 semantics plus main-log presentation compatibility."""
 
-    task_rows, memory_rows, gpu_rows = _parse_usage(usage_lines)
-    frame_rows = _parse_frames(perf_lines)
-    event_loop_rows = _parse_event_loop(perf_lines)
-    resource_rows = _parse_resources(perf_lines)
-    visualizer_rows = _parse_visualizer(visualizer_lines)
-    lifecycle_rows = _parse_lifecycle(lifecycle_lines)
-    phase5_rows = _parse_phase5_telemetry(logs)
-    errors = _collect_errors(logs)
+    resolved = path.resolve()
+    analysis = _base.analyze_evidence_source(resolved)
 
-    recognized = {
-        ("screensaver_usage.log", row["line"]) for row in memory_rows
-    } | {
-        ("screensaver_perf.log", row["line"]) for row in frame_rows
-    } | {
-        ("screensaver_perf.log", row["line"]) for row in event_loop_rows
-    } | {
-        ("screensaver_perf.log", row["line"]) for row in resource_rows
-    } | {
-        ("screensaver_spotify_vis.log", row["line"]) for row in visualizer_rows
-    } | {
-        ("screensaver_lifecycle.log", row["line"]) for row in lifecycle_rows
-    } | {
-        (str(row["source"]), row["line"]) for row in phase5_rows
-    }
-    unknown = [
-        f"{source}:{line_number}: {line}"
-        for source, lines in sorted(logs.items())
-        for line_number, line in enumerate(lines, 1)
-        if line.strip() and (source, line_number) not in recognized
-    ]
+    # Re-read through the base parser's exact source/rotation logic so the
+    # compatibility layer sees the same bytes and physical line numbering.
+    logs, _sizes, _source_hash = _base._read_source(resolved)
 
-    timestamps = [
-        value
-        for lines in logs.values()
-        for line in lines
-        if (value := _timestamp(line))
-    ]
-    usage_cpu = [row.get("cpu_app_pct") for row in task_rows]
-    summary: dict[str, object] = {
-        "parser_version": PARSER_VERSION,
-        "source_kind": "folder" if path.is_dir() else "zip",
-        "source_path": str(path),
-        "source_sha256": source_hash,
-        # Compatibility fields retained for existing downstream reports.
-        "source_archive": str(path),
-        "source_archive_sha256": source_hash,
-        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "source_files": sizes,
-        "time_range": {
-            "first": min(timestamps) if timestamps else None,
-            "last": max(timestamps) if timestamps else None,
-        },
-        "assumptions": [
-            "Canonical sidecar logs are parsed by category to avoid double-counting verbose-log duplicates.",
-            "Rotated sidecars are joined oldest rotation first, followed by the active .log file.",
-            "Task rates are deltas between cumulative usage-sampler counters.",
-            "Frame rows are aggregate metric windows; the archives do not contain every raw frame interval.",
-            "Unknown non-empty lines are retained verbatim in unknown_lines.txt.",
-        ],
-        "visualizer_modes_observed": _collect_modes(logs),
-        "displays_observed": _collect_displays(logs),
-        "counts": {
-            "frame_windows": len(frame_rows),
-            "task_rate_intervals": len(task_rows),
-            "usage_samples": len(memory_rows),
-            "event_loop_windows": len(event_loop_rows),
-            "resource_snapshots": len(resource_rows),
-            "visualizer_events": len(visualizer_rows),
-            "lifecycle_events": len(lifecycle_rows),
-            "phase5_telemetry_records": len(phase5_rows),
-            "deduplicated_errors_and_warnings": len(errors),
-            "unknown_lines": len(unknown),
-        },
-        "usage": {
-            "cpu_app_pct": _metric_summary(usage_cpu),
-            "rss_app_mb": _metric_summary(
-                row.get("rss_app_mb") for row in memory_rows
-            ),
-            "rss_main_mb": _metric_summary(
-                row.get("rss_main_mb") for row in memory_rows
-            ),
-            "rss_children_mb": _metric_summary(
-                row.get("rss_children_mb") for row in memory_rows
-            ),
-            "image_worker_rss_mb": _metric_summary(
-                row.get("image_worker_rss_mb") for row in memory_rows
-            ),
-            "shm_segments_live": _metric_summary(
-                row.get("shm_segments_live") for row in memory_rows
-            ),
-            "shm_live_bytes": _metric_summary(
-                row.get("shm_live_bytes") for row in memory_rows
-            ),
-            "shm_unlink_failures": _metric_summary(
-                row.get("shm_unlink_failures") for row in memory_rows
-            ),
-            "private_app_mb": _metric_summary(
-                row.get("private_app_mb") for row in memory_rows
-            ),
-            "private_main_mb": _metric_summary(
-                row.get("private_main_mb") for row in memory_rows
-            ),
-            "private_children_mb": _metric_summary(
-                row.get("private_children_mb") for row in memory_rows
-            ),
-            "uss_app_mb": _metric_summary(
-                row.get("uss_app_mb") for row in memory_rows
-            ),
-            "uss_main_mb": _metric_summary(
-                row.get("uss_main_mb") for row in memory_rows
-            ),
-            "uss_children_mb": _metric_summary(
-                row.get("uss_children_mb") for row in memory_rows
-            ),
-            "vram_dedicated_mb": _metric_summary(
-                row.get("vram_dedicated_mb") for row in gpu_rows
-            ),
-            "gpu_busy_pct": _metric_summary(
-                row.get("gpu_busy_pct") for row in gpu_rows
-            ),
-            "compute_submitted_per_sec": _metric_summary(
-                row.get("compute_submitted_per_sec") for row in task_rows
-            ),
-            "total_submitted_per_sec": _metric_summary(
-                row.get("total_submitted_per_sec") for row in task_rows
-            ),
-        },
-        "frame_windows": {
-            kind: {
-                "count": len(rows),
-                "average_fps": _metric_summary(
-                    row.get("average_fps") for row in rows
-                ),
-                "dt_p95_ms": _metric_summary(row.get("dt_p95_ms") for row in rows),
-                "dt_p99_ms": _metric_summary(row.get("dt_p99_ms") for row in rows),
-                "dt_max_ms": _metric_summary(row.get("dt_max_ms") for row in rows),
-                "paint_p99_ms": _metric_summary(row.get("paint_p99_ms") for row in rows),
-                "request_age_p99_ms": _metric_summary(
-                    row.get("request_age_p99_ms") for row in rows
-                ),
-            }
-            for kind in sorted({str(row["kind"]) for row in frame_rows})
-            if (rows := [row for row in frame_rows if row["kind"] == kind])
-        },
-        "frame_delivery": _frame_delivery_breakdown(frame_rows),
-        "event_loop": {
-            "late_p99_ms": _metric_summary(
-                row.get("late_p99_ms") for row in event_loop_rows
-            ),
-            "late_max_ms": _metric_summary(
-                row.get("late_max_ms") for row in event_loop_rows
-            ),
-        },
-        "resources": {
-            "tracked_known_bytes": _metric_summary(
-                row.get("tracked_known_bytes") for row in resource_rows
-            ),
-            "cpu_cache_bytes": _metric_summary(
-                row.get("cpu_cache_bytes") for row in resource_rows
-            ),
-            "gl_known_bytes": _metric_summary(
-                row.get("gl_known_bytes") for row in resource_rows
-            ),
-            "gl_unknown_resources": _metric_summary(
-                row.get("gl_unknown_resources") for row in resource_rows
-            ),
-            "by_stage": {
-                stage: {
-                    "records": len(rows),
-                    "tracked_known_bytes": _metric_summary(
-                        row.get("tracked_known_bytes") for row in rows
-                    ),
-                    "cpu_cache_bytes": _metric_summary(
-                        row.get("cpu_cache_bytes") for row in rows
-                    ),
-                    "gl_known_bytes": _metric_summary(
-                        row.get("gl_known_bytes") for row in rows
-                    ),
-                    "gl_resources": _metric_summary(
-                        row.get("gl_resources") for row in rows
-                    ),
-                    "gl_unknown_resources": _metric_summary(
-                        row.get("gl_unknown_resources") for row in rows
-                    ),
-                }
-                for stage in sorted({
-                    str(row["stage"])
-                    for row in resource_rows
-                    if row.get("stage")
-                })
-                if (rows := [
-                    row for row in resource_rows if row.get("stage") == stage
-                ])
-            },
-        },
-        "visualizer": {
-            "microgap_p95_ms": _metric_summary(
-                row.get("p95_ms")
-                for row in visualizer_rows
-                if row["event"] == "microgap"
-            ),
-            "microgap_max_ms": _metric_summary(
-                row.get("max_ms")
-                for row in visualizer_rows
-                if row["event"] == "microgap"
-            ),
-            "tick_spike_ms": _metric_summary(
-                row.get("max_ms")
-                for row in visualizer_rows
-                if row["event"] == "tick_spike"
-            ),
-            "latency_ms": _metric_summary(
-                row.get("max_ms")
-                for row in visualizer_rows
-                if row["event"] == "latency"
-            ),
-            "tick_spikes_by_boundary": {
-                boundary: {
-                    "count": len(rows),
-                    "dt_ms": _metric_summary(row.get("max_ms") for row in rows),
-                }
-                for boundary in sorted({
-                    str(row.get("boundary"))
-                    for row in visualizer_rows
-                    if row["event"] == "tick_spike" and row.get("boundary")
-                })
-                if (rows := [
-                    row
-                    for row in visualizer_rows
-                    if row["event"] == "tick_spike" and row.get("boundary") == boundary
-                ])
-            },
-            "latency_by_trigger": {
-                trigger: {
-                    "count": len(rows),
-                    "lag_ms": _metric_summary(row.get("max_ms") for row in rows),
-                }
-                for trigger in sorted({
-                    str(row.get("trigger"))
-                    for row in visualizer_rows
-                    if row["event"] == "latency" and row.get("trigger")
-                })
-                if (rows := [
-                    row
-                    for row in visualizer_rows
-                    if row["event"] == "latency" and row.get("trigger") == trigger
-                ])
-            },
-        },
-        "phase5": {
-            "frame_gap_owner": {
-                "count": sum(row["kind"] == "frame_gap_owner" for row in phase5_rows),
-                "gap_ms": _metric_summary(
-                    row.get("gap_ms") for row in phase5_rows
-                    if row["kind"] == "frame_gap_owner"
-                ),
-                "request_age_ms": _metric_summary(
-                    row.get("request_age_ms") for row in phase5_rows
-                    if row["kind"] == "frame_gap_owner"
-                ),
-                "source_age_ms": _metric_summary(
-                    row.get("source_age_ms") for row in phase5_rows
-                    if row["kind"] == "frame_gap_owner"
-                ),
-                "simulation_age_ms": _metric_summary(
-                    row.get("simulation_age_ms") for row in phase5_rows
-                    if row["kind"] == "frame_gap_owner"
-                ),
-                "render_state_age_ms": _metric_summary(
-                    row.get("render_state_age_ms") for row in phase5_rows
-                    if row["kind"] == "frame_gap_owner"
-                ),
-                "owner_age_ms": _metric_summary(
-                    row.get("owner_age_ms") for row in phase5_rows
-                    if row["kind"] == "frame_gap_owner"
-                ),
-                "by_last_ui": _frame_gap_last_ui_summary(phase5_rows),
-                "severity_counts": {
-                    severity: sum(
-                        row["kind"] == "frame_gap_owner" and row["severity"] == severity
-                        for row in phase5_rows
-                    )
-                    for severity in sorted({str(row["severity"]) for row in phase5_rows if row["kind"] == "frame_gap_owner"})
-                },
-            },
-            "adaptive_timer": {
-                "count": sum(row["kind"] == "adaptive_timer_metrics" for row in phase5_rows),
-                "frames": _metric_summary(row.get("frames") for row in phase5_rows if row["kind"] == "adaptive_timer_metrics"),
-                "transitions": _metric_summary(row.get("transitions") for row in phase5_rows if row["kind"] == "adaptive_timer_metrics"),
-                "time_running_ms": _metric_summary(row.get("time_running_ms") for row in phase5_rows if row["kind"] == "adaptive_timer_metrics"),
-                "total_runtime_seconds": _metric_summary(row.get("total_runtime_seconds") for row in phase5_rows if row["kind"] == "adaptive_timer_metrics"),
-            },
-            "visualizer_lanes": {
-                lane: {
-                    "count": sum(row["kind"] == "visualizer_lane" and row["lane"] == lane for row in phase5_rows),
-                    "logical_steps": _metric_summary(row.get("logical_steps") for row in phase5_rows if row["kind"] == "visualizer_lane" and row["lane"] == lane),
-                    "published": _metric_summary(row.get("published") for row in phase5_rows if row["kind"] == "visualizer_lane" and row["lane"] == lane),
-                    "execution_ms_max": _metric_summary(row.get("execution_ms_max") for row in phase5_rows if row["kind"] == "visualizer_lane" and row["lane"] == lane),
-                }
-                for lane in sorted({str(row["lane"]) for row in phase5_rows if row["kind"] == "visualizer_lane"})
-            },
-            "visualizer_overlay": {
-                "records": sum(
-                    row["kind"] == "visualizer_overlay" for row in phase5_rows
-                ),
-                "by_mode": {
-                    mode: {
-                        "records": len(rows),
-                        "set_state_per_sec": _metric_summary(
-                            (float(row["set_state"]) * 1000.0 / float(row["elapsed_ms"]))
-                            for row in rows
-                            if isinstance(row.get("set_state"), int)
-                            and isinstance(row.get("elapsed_ms"), (int, float))
-                            and float(row["elapsed_ms"]) > 0
-                        ),
-                        "update_requests_per_sec": _metric_summary(
-                            (float(row["update_requests"]) * 1000.0 / float(row["elapsed_ms"]))
-                            for row in rows
-                            if isinstance(row.get("update_requests"), int)
-                            and isinstance(row.get("elapsed_ms"), (int, float))
-                            and float(row["elapsed_ms"]) > 0
-                        ),
-                        "paint_per_sec": _metric_summary(
-                            (float(row["paint"]) * 1000.0 / float(row["elapsed_ms"]))
-                            for row in rows
-                            if isinstance(row.get("paint"), int)
-                            and isinstance(row.get("elapsed_ms"), (int, float))
-                            and float(row["elapsed_ms"]) > 0
-                        ),
-                        "geometry_changes": _metric_summary(
-                            row.get("geometry_changes") for row in rows
-                        ),
-                        "refresh_hz": _metric_summary(
-                            row.get("refresh_hz") for row in rows
-                        ),
-                        "paint_cpu_p95_ms": _metric_summary(
-                            row.get("paint_cpu_p95_ms") for row in rows
-                        ),
-                        "state_to_paint_p95_ms": _metric_summary(
-                            row.get("state_to_paint_p95_ms") for row in rows
-                        ),
-                    }
-                    for mode in sorted({
-                        str(row["mode"])
-                        for row in phase5_rows
-                        if row["kind"] == "visualizer_overlay" and row["mode"]
-                    })
-                    if (rows := [
-                        row for row in phase5_rows
-                        if row["kind"] == "visualizer_overlay" and row["mode"] == mode
-                    ])
-                },
-            },
-            "visualizer_overlay_gpu": {
-                "records": sum(
-                    row["kind"] == "visualizer_overlay_gpu" for row in phase5_rows
-                ),
-                "by_mode": {
-                    mode: {
-                        "records": len(rows),
-                        "supported_records": sum(
-                            str(row.get("gpu_supported", "")).lower() == "true"
-                            for row in rows
-                        ),
-                        "unsupported_records": sum(
-                            str(row.get("gpu_supported", "")).lower() == "false"
-                            for row in rows
-                        ),
-                        "observed": _metric_summary(
-                            row.get("gpu_observed") for row in rows
-                        ),
-                        "sampled_out": _metric_summary(
-                            row.get("gpu_sampled_out") for row in rows
-                        ),
-                        "poll_attempts": _metric_summary(
-                            row.get("gpu_poll_attempts") for row in rows
-                        ),
-                        "sample_stride": _metric_summary(
-                            row.get("gpu_sample_stride") for row in rows
-                        ),
-                        "submitted": _metric_summary(
-                            row.get("gpu_submitted") for row in rows
-                        ),
-                        "collected": _metric_summary(
-                            row.get("gpu_collected") for row in rows
-                        ),
-                        "pending": _metric_summary(
-                            row.get("gpu_pending") for row in rows
-                        ),
-                        "dropped_pending": _metric_summary(
-                            row.get("gpu_dropped_pending") for row in rows
-                        ),
-                        "discarded": _metric_summary(
-                            row.get("gpu_discarded") for row in rows
-                        ),
-                        "errors": _metric_summary(
-                            row.get("gpu_errors") for row in rows
-                        ),
-                        "samples": _metric_summary(
-                            row.get("gpu_samples") for row in rows
-                        ),
-                        "p50_ms": _metric_summary(
-                            row.get("gpu_p50_ms") for row in rows
-                        ),
-                        "p95_ms": _metric_summary(
-                            row.get("gpu_p95_ms") for row in rows
-                        ),
-                        "max_ms": _metric_summary(
-                            row.get("gpu_max_ms") for row in rows
-                        ),
-                    }
-                    for mode in sorted({
-                        str(row["mode"])
-                        for row in phase5_rows
-                        if row["kind"] == "visualizer_overlay_gpu" and row["mode"]
-                    })
-                    if (rows := [
-                        row for row in phase5_rows
-                        if row["kind"] == "visualizer_overlay_gpu" and row["mode"] == mode
-                    ])
-                },
-            },
-            "compositor_gpu": {
-                "records": sum(
-                    row["kind"] == "compositor_gpu" for row in phase5_rows
-                ),
-                "by_transition": {
-                    transition: {
-                        "records": len(rows),
-                        "supported_records": sum(
-                            str(row.get("gpu_supported", "")).lower() == "true"
-                            for row in rows
-                        ),
-                        "unsupported_records": sum(
-                            str(row.get("gpu_supported", "")).lower() == "false"
-                            for row in rows
-                        ),
-                        "observed": _metric_summary(
-                            row.get("gpu_observed") for row in rows
-                        ),
-                        "sampled_out": _metric_summary(
-                            row.get("gpu_sampled_out") for row in rows
-                        ),
-                        "poll_attempts": _metric_summary(
-                            row.get("gpu_poll_attempts") for row in rows
-                        ),
-                        "sample_stride": _metric_summary(
-                            row.get("gpu_sample_stride") for row in rows
-                        ),
-                        "submitted": _metric_summary(
-                            row.get("gpu_submitted") for row in rows
-                        ),
-                        "collected": _metric_summary(
-                            row.get("gpu_collected") for row in rows
-                        ),
-                        "pending": _metric_summary(
-                            row.get("gpu_pending") for row in rows
-                        ),
-                        "dropped_pending": _metric_summary(
-                            row.get("gpu_dropped_pending") for row in rows
-                        ),
-                        "discarded": _metric_summary(
-                            row.get("gpu_discarded") for row in rows
-                        ),
-                        "errors": _metric_summary(
-                            row.get("gpu_errors") for row in rows
-                        ),
-                        "samples": _metric_summary(
-                            row.get("gpu_samples") for row in rows
-                        ),
-                        "p50_ms": _metric_summary(
-                            row.get("gpu_p50_ms") for row in rows
-                        ),
-                        "p95_ms": _metric_summary(
-                            row.get("gpu_p95_ms") for row in rows
-                        ),
-                        "max_ms": _metric_summary(
-                            row.get("gpu_max_ms") for row in rows
-                        ),
-                    }
-                    for transition in sorted({
-                        str(row["transition"])
-                        for row in phase5_rows
-                        if row["kind"] == "compositor_gpu" and row["transition"]
-                    })
-                    if (rows := [
-                        row for row in phase5_rows
-                        if row["kind"] == "compositor_gpu"
-                        and row["transition"] == transition
-                    ])
-                },
-            },
-            "media_presentation": {
-                "applied": sum(row["kind"] == "media_presentation" and row["update_requested"].lower() == "true" for row in phase5_rows),
-                "unchanged_refresh_suppressed": sum(row["kind"] == "media_presentation" and row["event"] == "unchanged_refresh_suppressed" for row in phase5_rows),
-            },
-            "cache": {
-                "representation_records": sum(row["kind"] == "cache_representations" for row in phase5_rows),
-                "flow_records": sum(row["kind"] == "cache_flow" for row in phase5_rows),
-                "raw_items": _metric_summary(row.get("raw_items") for row in phase5_rows if row["kind"] == "cache_representations"),
-                "scaled_items": _metric_summary(row.get("scaled_items") for row in phase5_rows if row["kind"] == "cache_representations"),
-                "raw_hits": _metric_summary(row.get("raw_hits") for row in phase5_rows if row["kind"] == "cache_flow"),
-                "scaled_hits": _metric_summary(row.get("scaled_hits") for row in phase5_rows if row["kind"] == "cache_flow"),
-                "worker_requests": _metric_summary(row.get("worker_requests") for row in phase5_rows if row["kind"] == "cache_flow"),
-                "worker_fallbacks": _metric_summary(row.get("worker_fallbacks") for row in phase5_rows if row["kind"] == "cache_flow"),
-            },
-            "lifecycle_barrier": {
-                "armed": sum(row["kind"] == "lifecycle_barrier" and row["barrier_event"] == "armed" for row in phase5_rows),
-                "complete": sum(row["kind"] == "lifecycle_barrier" and row["barrier_event"] == "complete" for row in phase5_rows),
-                "elapsed_ms": _metric_summary(row.get("elapsed_ms") for row in phase5_rows if row["kind"] == "lifecycle_barrier" and row["barrier_event"] == "complete"),
-                "by_reason": {
-                    reason: {
-                        "armed": sum(
-                            row["barrier_event"] == "armed" for row in rows
-                        ),
-                        "complete": sum(
-                            row["barrier_event"] == "complete" for row in rows
-                        ),
-                        "elapsed_ms": _metric_summary(
-                            row.get("elapsed_ms") for row in rows
-                            if row["barrier_event"] == "complete"
-                        ),
-                    }
-                    for reason in sorted({
-                        str(row["reason"])
-                        for row in phase5_rows
-                        if row["kind"] == "lifecycle_barrier" and row["reason"]
-                    })
-                    if (rows := [
-                        row for row in phase5_rows
-                        if row["kind"] == "lifecycle_barrier"
-                        and row["reason"] == reason
-                    ])
-                },
-            },
-            "image_ui": {
-                "delay_records": sum(row["kind"] == "image_ui_delay" for row in phase5_rows),
-                "segment_records": sum(row["kind"] == "image_ui_segment" for row in phase5_rows),
-                "queue_late_ms": _metric_summary(
-                    row.get("queue_late_ms") for row in phase5_rows
-                    if row["kind"] == "image_ui_delay"
-                ),
-                "guard_ms": _metric_summary(
-                    row.get("guard_ms") for row in phase5_rows
-                    if row["kind"] == "image_ui_delay"
-                ),
-                "callback_ms": _metric_summary(
-                    row.get("callback_ms") for row in phase5_rows
-                    if row["kind"] == "image_ui_delay"
-                ),
-                "total_age_ms": _metric_summary(
-                    row.get("total_age_ms") for row in phase5_rows
-                    if row["kind"] == "image_ui_delay"
-                ),
-                "segment_duration_ms": _metric_summary(
-                    row.get("duration_ms") for row in phase5_rows
-                    if row["kind"] == "image_ui_segment"
-                ),
-                "segments_by_stage": {
-                    stage: {
-                        "count": sum(
-                            row["kind"] == "image_ui_segment" and row["stage"] == stage
-                            for row in phase5_rows
-                        ),
-                        "duration_ms": _metric_summary(
-                            row.get("duration_ms") for row in phase5_rows
-                            if row["kind"] == "image_ui_segment" and row["stage"] == stage
-                        ),
-                        "texture_allocations_delta": _metric_summary(
-                            row.get("texture_allocations_delta") for row in phase5_rows
-                            if row["kind"] == "image_ui_segment" and row["stage"] == stage
-                        ),
-                        "texture_uploads_delta": _metric_summary(
-                            row.get("texture_uploads_delta") for row in phase5_rows
-                            if row["kind"] == "image_ui_segment" and row["stage"] == stage
-                        ),
-                        "geometry_ms": _metric_summary_with_p95(
-                            row.get("geometry_ms") for row in phase5_rows
-                            if row["kind"] == "image_ui_segment" and row["stage"] == stage
-                        ),
-                        "set_base_ms": _metric_summary_with_p95(
-                            row.get("set_base_ms") for row in phase5_rows
-                            if row["kind"] == "image_ui_segment" and row["stage"] == stage
-                        ),
-                        "show_ms": _metric_summary_with_p95(
-                            row.get("show_ms") for row in phase5_rows
-                            if row["kind"] == "image_ui_segment" and row["stage"] == stage
-                        ),
-                        "raise_ms": _metric_summary_with_p95(
-                            row.get("raise_ms") for row in phase5_rows
-                            if row["kind"] == "image_ui_segment" and row["stage"] == stage
-                        ),
-                    }
-                    for stage in sorted({
-                        str(row["stage"])
-                        for row in phase5_rows
-                        if row["kind"] == "image_ui_segment" and row["stage"]
-                    })
-                },
-                "outcomes": {
-                    outcome: sum(
-                        row["kind"] == "image_ui_delay" and row["outcome"] == outcome
-                        for row in phase5_rows
-                    )
-                    for outcome in sorted({
-                        str(row["outcome"])
-                        for row in phase5_rows
-                        if row["kind"] == "image_ui_delay" and row["outcome"]
-                    })
-                },
-            },
-            "image_install_trace": {
-                **_image_install_correlation_summary(phase5_rows),
-                "pair_warm": {
-                    "records": sum(
-                        row["kind"] == "texture_pair_warm" for row in phase5_rows
-                    ),
-                    "total_ms": _metric_summary_with_p95(
-                        row.get("trace_total_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "pipeline_ensure_ms": _metric_summary_with_p95(
-                        row.get("pipeline_ensure_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "pipeline_make_current_ms": _metric_summary_with_p95(
-                        row.get("pipeline_make_current_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "pipeline_initialize_ms": _metric_summary_with_p95(
-                        row.get("pipeline_initialize_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "pipeline_release_ms": _metric_summary_with_p95(
-                        row.get("pipeline_release_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "context_acquire_ms": _metric_summary_with_p95(
-                        row.get("context_acquire_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "context_prepare_ms": _metric_summary_with_p95(
-                        row.get("context_prepare_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "offscreen_surface_create_ms": _metric_summary_with_p95(
-                        row.get("offscreen_surface_create_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "shared_context_create_ms": _metric_summary_with_p95(
-                        row.get("shared_context_create_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "context_make_current_ms": _metric_summary_with_p95(
-                        row.get("context_make_current_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "context_release_ms": _metric_summary_with_p95(
-                        row.get("context_release_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "manager_ensure_ms": _metric_summary_with_p95(
-                        row.get("manager_ensure_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "manager_initialize_ms": _metric_summary_with_p95(
-                        row.get("manager_initialize_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "old_texture_ms": _metric_summary_with_p95(
-                        row.get("old_texture_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "new_texture_ms": _metric_summary_with_p95(
-                        row.get("new_texture_ms") for row in phase5_rows
-                        if row["kind"] == "texture_pair_warm"
-                    ),
-                    "outcomes": {
-                        outcome: sum(
-                            row["kind"] == "texture_pair_warm"
-                            and row.get("outcome") == outcome
-                            for row in phase5_rows
-                        )
-                        for outcome in sorted({
-                            str(row.get("outcome"))
-                            for row in phase5_rows
-                            if row["kind"] == "texture_pair_warm" and row.get("outcome")
-                        })
-                    },
-                    "context_routes": {
-                        route: sum(
-                            row["kind"] == "texture_pair_warm"
-                            and row.get("context_route") == route
-                            for row in phase5_rows
-                        )
-                        for route in sorted({
-                            str(row.get("context_route"))
-                            for row in phase5_rows
-                            if row["kind"] == "texture_pair_warm" and row.get("context_route")
-                        })
-                    },
-                    "hidden_context_created_records": sum(
-                        row["kind"] == "texture_pair_warm"
-                        and str(row.get("hidden_context_created", "")).lower() == "true"
-                        for row in phase5_rows
-                    ),
-                    "hidden_context_reused_records": sum(
-                        row["kind"] == "texture_pair_warm"
-                        and str(row.get("hidden_context_reused", "")).lower() == "true"
-                        for row in phase5_rows
-                    ),
-                },
-                "texture_lookup": {
-                    "records": sum(
-                        row["kind"] == "texture_lookup" for row in phase5_rows
-                    ),
-                    "by_role": {
-                        role: {
-                            "records": len(rows),
-                            "cache_hits": sum(
-                                row.get("cache_hit") == "true" for row in rows
-                            ),
-                            "total_ms": _metric_summary_with_p95(
-                                row.get("trace_total_ms") for row in rows
-                            ),
-                            "cache_lookup_ms": _metric_summary_with_p95(
-                                row.get("cache_lookup_ms") for row in rows
-                            ),
-                            "upload_call_ms": _metric_summary_with_p95(
-                                row.get("upload_call_ms") for row in rows
-                            ),
-                            "cache_publish_ms": _metric_summary_with_p95(
-                                row.get("cache_publish_ms") for row in rows
-                            ),
-                        }
-                        for role in sorted({
-                            str(row.get("role"))
-                            for row in phase5_rows
-                            if row["kind"] == "texture_lookup" and row.get("role")
-                        })
-                        if (rows := [
-                            row for row in phase5_rows
-                            if row["kind"] == "texture_lookup" and row.get("role") == role
-                        ])
-                    },
-                },
-                "next_paint": {
-                    "records": sum(
-                        row["kind"] == "image_install_next_paint"
-                        for row in phase5_rows
-                    ),
-                    "install_to_next_paint_ms": _metric_summary_with_p95(
-                        row.get("install_to_next_paint_ms") for row in phase5_rows
-                        if row["kind"] == "image_install_next_paint"
-                    ),
-                    "base_mark_to_next_paint_ms": _metric_summary_with_p95(
-                        row.get("base_mark_to_next_paint_ms") for row in phase5_rows
-                        if row["kind"] == "image_install_next_paint"
-                    ),
-                    "paint_ms": _metric_summary_with_p95(
-                        row.get("paint_ms") for row in phase5_rows
-                        if row["kind"] == "image_install_next_paint"
-                    ),
-                },
-            },
-            "texture_upload": {
-                "records": sum(row["kind"] == "texture_upload" for row in phase5_rows),
-                "image_formats": {
-                    image_format: sum(
-                        row["kind"] == "texture_upload"
-                        and row.get("upload_image_format") == image_format
-                        for row in phase5_rows
-                    )
-                    for image_format in sorted({
-                        str(row.get("upload_image_format"))
-                        for row in phase5_rows
-                        if row["kind"] == "texture_upload"
-                        and row.get("upload_image_format")
-                    })
-                },
-                "bits_paths": {
-                    bits_path: sum(
-                        row["kind"] == "texture_upload"
-                        and row.get("upload_bits_path") == bits_path
-                        for row in phase5_rows
-                    )
-                    for bits_path in sorted({
-                        str(row.get("upload_bits_path"))
-                        for row in phase5_rows
-                        if row["kind"] == "texture_upload"
-                        and row.get("upload_bits_path")
-                    })
-                },
-                "by_path": {
-                    path: {
-                        "records": len(rows),
-                        "total_ms": _metric_summary(row.get("upload_cpu_total_ms") for row in rows),
-                        "image_prepare_ms": _metric_summary(row.get("image_prepare_ms") for row in rows),
-                        "bits_copy_ms": _metric_summary(row.get("bits_copy_ms") for row in rows),
-                        "texture_alloc_ms": _metric_summary(row.get("texture_alloc_ms") for row in rows),
-                        "pbo_stage_ms": _metric_summary(row.get("pbo_stage_ms") for row in rows),
-                        "texture_submit_ms": _metric_summary(row.get("texture_submit_ms") for row in rows),
-                        "end_to_end_ms": _metric_summary_with_p95(row.get("upload_end_to_end_ms") for row in rows),
-                        "resource_tracking_ms": _metric_summary_with_p95(row.get("resource_tracking_ms") for row in rows),
-                        "manager_publish_ms": _metric_summary_with_p95(row.get("manager_publish_ms") for row in rows),
-                        "unattributed_ms": _metric_summary(row.get("unattributed_ms") for row in rows),
-                    }
-                    for path in sorted({
-                        str(row.get("upload_path"))
-                        for row in phase5_rows
-                        if row["kind"] == "texture_upload" and row.get("upload_path")
-                    })
-                    if (rows := [
-                        row
-                        for row in phase5_rows
-                        if row["kind"] == "texture_upload" and row.get("upload_path") == path
-                    ])
-                },
-            },
-            "gl_retention": {
-                "records": sum(row["kind"] == "gl_retention" for row in phase5_rows),
-                "retained_cache_keys": sorted({
-                    int(row["retained_cache_key"])
-                    for row in phase5_rows
-                    if row["kind"] == "gl_retention" and row.get("retained_cache_key")
-                }),
-                "texture_uploads": _metric_summary(
-                    row.get("texture_uploads") for row in phase5_rows
-                    if row["kind"] == "gl_retention"
-                ),
-                "interval_texture_uploads": _metric_summary(
-                    row.get("interval_texture_uploads") for row in phase5_rows
-                    if row["kind"] == "gl_retention"
-                ),
-                "interval_pbo_creations": _metric_summary(
-                    row.get("interval_pbo_creations") for row in phase5_rows
-                    if row["kind"] == "gl_retention"
-                ),
-                "interval_pbo_reuses": _metric_summary(
-                    row.get("interval_pbo_reuses") for row in phase5_rows
-                    if row["kind"] == "gl_retention"
-                ),
-                "interval_upload_total_ms": _metric_summary(
-                    row.get("interval_upload_total_ms") for row in phase5_rows
-                    if row["kind"] == "gl_retention"
-                ),
-            },
-        },
-    }
-    return ArchiveAnalysis(
+    fancy_errors, fancy_card_lines, presentation_lines = _collect_fancy_main_cards(logs)
+    errors = _merge_errors(
+        analysis.errors_and_warnings,
+        fancy_errors,
+        fancy_card_lines,
+    )
+    unknown = _filter_unknown_lines(
+        analysis.unknown_lines,
+        presentation_lines,
+    )
+
+    summary = dict(analysis.summary)
+    summary["parser_version"] = PARSER_VERSION
+
+    assumptions = list(summary.get("assumptions", []))
+    assumptions.append(
+        "Polished screensaver.log presentation is normalized for severity cards; "
+        "decorative banner/card rows are excluded from unknown_lines."
+    )
+    summary["assumptions"] = assumptions
+
+    counts = dict(summary.get("counts", {}))
+    counts["deduplicated_errors_and_warnings"] = len(errors)
+    counts["unknown_lines"] = len(unknown)
+    summary["counts"] = counts
+
+    return _base.ArchiveAnalysis(
         summary=summary,
-        frame_rows=frame_rows,
-        task_rows=task_rows,
-        memory_rows=memory_rows,
-        gpu_rows=gpu_rows,
-        event_loop_rows=event_loop_rows,
-        resource_rows=resource_rows,
-        lifecycle_rows=lifecycle_rows,
-        visualizer_rows=visualizer_rows,
-        phase5_rows=phase5_rows,
+        frame_rows=analysis.frame_rows,
+        task_rows=analysis.task_rows,
+        memory_rows=analysis.memory_rows,
+        gpu_rows=analysis.gpu_rows,
+        event_loop_rows=analysis.event_loop_rows,
+        resource_rows=analysis.resource_rows,
+        lifecycle_rows=analysis.lifecycle_rows,
+        visualizer_rows=analysis.visualizer_rows,
+        phase5_rows=analysis.phase5_rows,
         errors_and_warnings=errors,
         unknown_lines=unknown,
     )
 
 
-def analyze_archive(path: Path) -> ArchiveAnalysis:
-    """Backward-compatible alias for callers that still pass legacy ZIPs."""
+def analyze_archive(path: Path):
+    """Backward-compatible alias matching the repository parser."""
     return analyze_evidence_source(path)
 
 
-def _write_csv(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
-    if not rows:
-        path.write_text("", encoding="utf-8")
-        return
-    fieldnames = list(rows[0])
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def write_analysis(analysis: ArchiveAnalysis, output_dir: Path) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "summary.json").write_text(
-        json.dumps(analysis.summary, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    _write_csv(output_dir / "frame_intervals.csv", analysis.frame_rows)
-    _write_csv(output_dir / "task_rates.csv", analysis.task_rows)
-    _write_csv(output_dir / "memory_usage.csv", analysis.memory_rows)
-    _write_csv(output_dir / "gpu_usage.csv", analysis.gpu_rows)
-    _write_csv(output_dir / "event_loop_stalls.csv", analysis.event_loop_rows)
-    _write_csv(output_dir / "resource_snapshots.csv", analysis.resource_rows)
-    _write_csv(output_dir / "lifecycle_events.csv", analysis.lifecycle_rows)
-    _write_csv(output_dir / "visualizer_gaps.csv", analysis.visualizer_rows)
-    _write_csv(output_dir / "phase5_telemetry.csv", analysis.phase5_rows)
-    (output_dir / "errors_and_warnings.txt").write_text(
-        "\n".join(analysis.errors_and_warnings) + "\n",
-        encoding="utf-8",
-    )
-    (output_dir / "unknown_lines.txt").write_text(
-        "\n".join(analysis.unknown_lines) + "\n",
-        encoding="utf-8",
-    )
+def write_analysis(analysis, output_dir: Path) -> None:
+    _base.write_analysis(analysis, output_dir)
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Parse an SRPSS live logs directory, evidence subfolder, "
-            "or legacy ZIP archive."
+            "or legacy ZIP archive (parser 1.21 fancy-main-log compatible)."
         )
     )
     source = parser.add_mutually_exclusive_group(required=True)
@@ -2297,7 +322,7 @@ def main() -> int:
         return 1
     print(
         f"Wrote recovery evidence artifacts to {args.output_dir} "
-        f"(sha256={analysis.summary['source_sha256']})"
+        f"(parser={PARSER_VERSION}, sha256={analysis.summary['source_sha256']})"
     )
     return 0
 

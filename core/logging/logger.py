@@ -837,6 +837,124 @@ class SpacedLogFormatter(logging.Formatter):
         return super().format(record) + "\n"
 
 
+class MainLogFormatter(logging.Formatter):
+    """Polished human-facing formatter for ``screensaver.log`` only.
+
+    The record's message text is never rewritten: SRPSS tags, key=value fields,
+    warnings, exception text and traceback content remain intact. The formatter
+    changes presentation only, on the writer-owned logging path.
+
+    Dedicated PERF/usage/lifecycle/cache/visualizer/etc. sidecars continue using
+    the ordinary canonical formatter and are therefore layout-compatible with
+    the existing evidence parsers.
+    """
+
+    _RULE_WIDTH = 112
+    _TIME_WIDTH = 19
+    _LEVEL_WIDTH = 8
+    _SOURCE_WIDTH = 30
+
+    @staticmethod
+    def _is_separator_message(message: str) -> bool:
+        stripped = message.strip()
+        return len(stripped) >= 20 and set(stripped) == {"="}
+
+    @staticmethod
+    def _severity_style(levelno: int) -> tuple[str, str, str, str, str]:
+        if levelno >= logging.CRITICAL:
+            return ("☠  CRITICAL", "╔", "╠", "╚", "═")
+        if levelno >= logging.ERROR:
+            return ("✖  ERROR", "╔", "╠", "╚", "═")
+        return ("⚠  WARNING", "╭", "├", "╰", "─")
+
+    def _split_canonical(self, rendered: str) -> tuple[str, str, str, str] | None:
+        pieces = rendered.split(" - ", 3)
+        if len(pieces) != 4:
+            return None
+        when, source, level, payload = pieces
+        return when.strip(), source.strip(), level.strip(), payload
+
+    @staticmethod
+    def _indent_multiline(prefix: str, payload: str, continuation_prefix: str) -> str:
+        lines = payload.splitlines() or [""]
+        if len(lines) == 1:
+            return prefix + lines[0]
+        return "\n".join(
+            [prefix + lines[0]]
+            + [continuation_prefix + line for line in lines[1:]]
+        )
+
+    def _format_normal(
+        self,
+        when: str,
+        source: str,
+        level: str,
+        payload: str,
+    ) -> str:
+        prefix = (
+            f"{when:<{self._TIME_WIDTH}}"
+            f" │ {level:<{self._LEVEL_WIDTH}}"
+            f" │ {source:<{self._SOURCE_WIDTH}}"
+            " │ "
+        )
+        continuation = (
+            f"{'':<{self._TIME_WIDTH}}"
+            f" │ {'':<{self._LEVEL_WIDTH}}"
+            f" │ {'':<{self._SOURCE_WIDTH}}"
+            " │ "
+        )
+        return self._indent_multiline(prefix, payload, continuation)
+
+    def _format_severity(
+        self,
+        record: logging.LogRecord,
+        when: str,
+        source: str,
+        payload: str,
+    ) -> str:
+        label, top_corner, middle_corner, bottom_corner, rule = self._severity_style(
+            record.levelno
+        )
+        top_label = f" {label} "
+        top_fill = max(8, self._RULE_WIDTH - len(top_label) - 1)
+        top = f"{top_corner}{rule * 3}{top_label}{rule * top_fill}"
+
+        meta = f"│  {when}   ·   {source}"
+        divider = f"{middle_corner}{rule * (self._RULE_WIDTH - 1)}"
+
+        payload_lines = payload.splitlines() or [""]
+        body = "\n".join(f"│  {line}" for line in payload_lines)
+        bottom = f"{bottom_corner}{rule * (self._RULE_WIDTH - 1)}"
+        return f"{top}\n{meta}\n{divider}\n{body}\n{bottom}"
+
+    def _format_startup_separator(self, when: str) -> str:
+        # RotatingFileHandler may format the same record once while deciding
+        # whether to roll over and again while actually writing it. Keep this
+        # presentation deliberately stateless and idempotent.
+        rule = "━"
+        title = " SRPSS MAIN LOG "
+        fill = max(8, self._RULE_WIDTH - len(title))
+        left = fill // 2
+        right = fill - left
+        return f"{rule * left}{title}{rule * right}"
+
+    def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
+        rendered = super().format(record)
+        split = self._split_canonical(rendered)
+        if split is None:
+            return rendered
+
+        when, source, level, payload = split
+
+        if self._is_separator_message(record.getMessage()):
+            return self._format_startup_separator(when)
+
+        if record.levelno >= logging.WARNING:
+            return self._format_severity(record, when, source, payload)
+
+        return self._format_normal(when, source, level, payload)
+
+
 class DeduplicatingRotatingFileHandler(RotatingFileHandler):
     """Rotating file handler that suppresses consecutive duplicate log lines.
     
@@ -1197,7 +1315,6 @@ class SettingsLogFilter(logging.Filter):
         "[SST]",
         "SettingsManager",
     )
-
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
         explicit = _explicit_log_family_match(record, LOG_FAMILY_SETTINGS)
         if explicit is not None:
@@ -1919,21 +2036,25 @@ def setup_logging(
         '%(asctime)s - %(name)-30s - %(levelname)-8s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
+    main_formatter = MainLogFormatter(
+        '%(asctime)s - %(name)-30s - %(levelname)-8s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
     spaced_formatter = SpacedLogFormatter(
         '%(asctime)s - %(name)-30s - %(levelname)-8s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     output_handlers: list[logging.Handler] = []
     
-    # File handler with rotation and deduplication (1MB cap with line-by-line
+    # File handler with rotation and deduplication (2MB cap with line-by-line
     # duplicate suppression keeps logs small and readable).
     main_handler = DeduplicatingRotatingFileHandler(
         log_file,
-        maxBytes=1 * 1024 * 1024,  # 1MB
+        maxBytes=2 * 1024 * 1024,  # 2MB
         backupCount=5,
         encoding='utf-8'
     )
-    main_handler.setFormatter(formatter)
+    main_handler.setFormatter(main_formatter)
     main_handler.setLevel(main_level)
     
     # PERF-tagged records are redirected to the dedicated PERF log, so we
@@ -1988,7 +2109,7 @@ def setup_logging(
         perf_log_file = log_dir / "screensaver_perf.log"
         perf_handler = DeduplicatingRotatingFileHandler(
             perf_log_file,
-            maxBytes=1 * 1024 * 1024,  # 1MB
+            maxBytes=2 * 1024 * 1024,  # 2MB
             backupCount=5,
             encoding='utf-8',
         )
@@ -2000,7 +2121,7 @@ def setup_logging(
         widget_perf_log_file = log_dir / "perf_widgets.log"
         widget_perf_handler = DeduplicatingRotatingFileHandler(
             widget_perf_log_file,
-            maxBytes=1 * 1024 * 1024,
+            maxBytes=2 * 1024 * 1024,
             backupCount=5,
             encoding='utf-8',
         )
@@ -2013,8 +2134,8 @@ def setup_logging(
         usage_log_file = log_dir / "screensaver_usage.log"
         usage_handler = DeduplicatingRotatingFileHandler(
             usage_log_file,
-            maxBytes=1 * 1024 * 1024,
-            backupCount=5,
+            maxBytes=2 * 1024 * 1024,
+            backupCount=11 if diagnostic_build else 5,
             encoding='utf-8',
         )
         usage_handler.setFormatter(formatter)
@@ -2026,7 +2147,7 @@ def setup_logging(
         spotify_vis_log_file = log_dir / "screensaver_spotify_vis.log"
         spotify_vis_handler = DeduplicatingRotatingFileHandler(
             spotify_vis_log_file,
-            maxBytes=1 * 1024 * 1024,  # 1MB
+            maxBytes=2 * 1024 * 1024,  # 2MB
             backupCount=5,
             encoding='utf-8',
         )
@@ -2038,7 +2159,7 @@ def setup_logging(
         spotify_vol_log_file = log_dir / "screensaver_spotify_vol.log"
         spotify_vol_handler = DeduplicatingRotatingFileHandler(
             spotify_vol_log_file,
-            maxBytes=1 * 1024 * 1024,  # 1MB
+            maxBytes=2 * 1024 * 1024,  # 2MB
             backupCount=5,
             encoding='utf-8',
         )
@@ -2051,7 +2172,7 @@ def setup_logging(
         geometry_log_file = log_dir / "screensaver_geometry.log"
         geometry_handler = DeduplicatingRotatingFileHandler(
             geometry_log_file,
-            maxBytes=1 * 1024 * 1024,
+            maxBytes=2 * 1024 * 1024,
             backupCount=5,
             encoding='utf-8',
         )
@@ -2064,7 +2185,7 @@ def setup_logging(
         settings_log_file = log_dir / "screensaver_settings.log"
         settings_handler = DeduplicatingRotatingFileHandler(
             settings_log_file,
-            maxBytes=1 * 1024 * 1024,
+            maxBytes=2 * 1024 * 1024,
             backupCount=5,
             encoding='utf-8',
         )
@@ -2077,7 +2198,7 @@ def setup_logging(
         lifecycle_log_file = log_dir / "screensaver_lifecycle.log"
         lifecycle_handler = DeduplicatingRotatingFileHandler(
             lifecycle_log_file,
-            maxBytes=1 * 1024 * 1024,
+            maxBytes=2 * 1024 * 1024,
             backupCount=5,
             encoding='utf-8',
         )
@@ -2090,7 +2211,7 @@ def setup_logging(
         cache_log_file = log_dir / "screensaver_cache.log"
         cache_handler = DeduplicatingRotatingFileHandler(
             cache_log_file,
-            maxBytes=1 * 1024 * 1024,
+            maxBytes=2 * 1024 * 1024,
             backupCount=5,
             encoding='utf-8',
         )
@@ -2103,7 +2224,7 @@ def setup_logging(
         steam_log_file = log_dir / "screensaver_steam.log"
         steam_handler = DeduplicatingRotatingFileHandler(
             steam_log_file,
-            maxBytes=1 * 1024 * 1024,
+            maxBytes=2 * 1024 * 1024,
             backupCount=5,
             encoding='utf-8',
         )
@@ -2114,7 +2235,7 @@ def setup_logging(
     
     # Verbose debug log - captures ALL DEBUG/INFO with deduplication.
     # This is the "messy" log for deep debugging when console suppression
-    # hides important details. Now with 1MB limit and deduplication.
+    # hides important details. Now with 2MB limit and deduplication.
     # Log types summary:
     #   1. screensaver.log - Main log (INFO+, no PERF, no Spotify)
     #   2. screensaver_verbose.log - Full DEBUG/INFO with deduplication
@@ -2125,7 +2246,7 @@ def setup_logging(
         verbose_log_file = log_dir / "screensaver_verbose.log"
         verbose_handler = DeduplicatingRotatingFileHandler(
             verbose_log_file,
-            maxBytes=1 * 1024 * 1024,  # 1MB with deduplication
+            maxBytes=2 * 1024 * 1024,  # 2MB with deduplication
             backupCount=3,
             encoding='utf-8',
         )
