@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field, asdict
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Optional
@@ -37,6 +38,8 @@ _PENDING_UPDATE_LOG_AFTER_MS = 250.0
 _PENDING_UPDATE_LOG_INTERVAL_MS = 1000.0
 _DEADLINE_SLEEP_CAP_S = 0.004
 _DEADLINE_YIELD_WINDOW_S = 0.00075
+_DELIVERY_SAMPLE_WINDOW = 4096
+_DELIVERY_ACTIVE_SAMPLE_INTERVAL_S = 0.100
 
 
 def _safe_attr(widget, name: str, default=None):
@@ -46,6 +49,323 @@ def _safe_attr(widget, name: str, default=None):
         return default
 
 
+def _delivery_deque(widget, name: str):
+    """Return one bounded perf-only delivery sample deque owned by the compositor."""
+    samples = _safe_attr(widget, name)
+    if not isinstance(samples, deque):
+        samples = deque(maxlen=_DELIVERY_SAMPLE_WINDOW)
+        try:
+            setattr(widget, name, samples)
+        except Exception:
+            pass
+    return samples
+
+
+def _reset_delivery_perf_window(widget) -> None:
+    """Start one transition-local passive delivery attribution window."""
+    if widget is None or not is_perf_metrics_enabled():
+        return
+    now = time.perf_counter()
+    try:
+        seq = int(_safe_attr(widget, "_srpss_delivery_window_seq", 0) or 0) + 1
+        setattr(widget, "_srpss_delivery_window_seq", seq)
+        setattr(widget, "_srpss_delivery_window_start_ts", now)
+        setattr(widget, "_srpss_delivery_wakeups", 0)
+        setattr(widget, "_srpss_delivery_deadline_wakeups", 0)
+        setattr(widget, "_srpss_delivery_immediate_requests", 0)
+        setattr(widget, "_srpss_delivery_accepted", 0)
+        setattr(widget, "_srpss_delivery_dispatch_pending_skips", 0)
+        setattr(widget, "_srpss_delivery_paint_pending_skips", 0)
+        setattr(widget, "_srpss_delivery_unknown_skips", 0)
+        setattr(widget, "_srpss_delivery_dispatch_unknown", 0)
+        setattr(widget, "_srpss_delivery_window_active_last", None)
+        setattr(widget, "_srpss_delivery_window_active_changes", 0)
+        setattr(widget, "_srpss_delivery_window_active_changed_ts", now)
+        setattr(widget, "_srpss_delivery_window_active_last_sample_ts", 0.0)
+        for name in (
+            "_srpss_delivery_wake_late_ms",
+            "_srpss_delivery_dispatch_ms",
+            "_srpss_delivery_paint_pending_ms",
+            "_srpss_delivery_dispatch_skip_age_ms",
+            "_srpss_delivery_paint_skip_age_ms",
+            "_srpss_delivery_dispatch_active_ms",
+            "_srpss_delivery_dispatch_inactive_ms",
+            "_srpss_delivery_paint_active_ms",
+            "_srpss_delivery_paint_inactive_ms",
+        ):
+            setattr(widget, name, deque(maxlen=_DELIVERY_SAMPLE_WINDOW))
+    except Exception:
+        # Diagnostics must never become a delivery failure source.
+        pass
+
+
+def _record_delivery_window_active(widget, now_ts: float) -> bool | None:
+    """Low-rate top-level Qt activation sample, only from the GUI owner thread."""
+    try:
+        owner_thread = widget.thread() if hasattr(widget, "thread") else None
+        if owner_thread is not None and QThread.currentThread() is not owner_thread:
+            return None
+        previous = _safe_attr(widget, "_srpss_delivery_window_active_last", None)
+        last_sample_ts = float(
+            _safe_attr(widget, "_srpss_delivery_window_active_last_sample_ts", 0.0) or 0.0
+        )
+        if (
+            previous is not None
+            and last_sample_ts > 0.0
+            and now_ts - last_sample_ts < _DELIVERY_ACTIVE_SAMPLE_INTERVAL_S
+        ):
+            return bool(previous)
+        window = widget.window() if hasattr(widget, "window") else None
+        if window is None or not hasattr(window, "isActiveWindow"):
+            return previous if previous is None else bool(previous)
+        active = bool(window.isActiveWindow())
+        setattr(widget, "_srpss_delivery_window_active_last_sample_ts", now_ts)
+        if previous is not None and bool(previous) != active:
+            setattr(
+                widget,
+                "_srpss_delivery_window_active_changes",
+                int(_safe_attr(widget, "_srpss_delivery_window_active_changes", 0) or 0) + 1,
+            )
+            setattr(widget, "_srpss_delivery_window_active_changed_ts", now_ts)
+        elif previous is None:
+            setattr(widget, "_srpss_delivery_window_active_changed_ts", now_ts)
+        setattr(widget, "_srpss_delivery_window_active_last", active)
+        return active
+    except Exception:
+        return None
+
+
+def _record_delivery_wake(
+    widget,
+    *,
+    deadline_ts: float | None,
+    immediate: bool,
+) -> None:
+    if widget is None or not is_perf_metrics_enabled():
+        return
+    try:
+        setattr(
+            widget,
+            "_srpss_delivery_wakeups",
+            int(_safe_attr(widget, "_srpss_delivery_wakeups", 0) or 0) + 1,
+        )
+        if immediate:
+            setattr(
+                widget,
+                "_srpss_delivery_immediate_requests",
+                int(_safe_attr(widget, "_srpss_delivery_immediate_requests", 0) or 0) + 1,
+            )
+            setattr(widget, "_srpss_timer_last_wake_late_ms", None)
+            return
+        setattr(
+            widget,
+            "_srpss_delivery_deadline_wakeups",
+            int(_safe_attr(widget, "_srpss_delivery_deadline_wakeups", 0) or 0) + 1,
+        )
+        wake_late_ms = None
+        if isinstance(deadline_ts, (int, float)) and deadline_ts > 0.0:
+            wake_late_ms = max(0.0, (time.perf_counter() - float(deadline_ts)) * 1000.0)
+            _delivery_deque(widget, "_srpss_delivery_wake_late_ms").append(wake_late_ms)
+        setattr(widget, "_srpss_timer_last_wake_late_ms", wake_late_ms)
+    except Exception:
+        pass
+
+
+def _record_delivery_result(widget, accepted_update: bool) -> None:
+    if widget is None or not is_perf_metrics_enabled():
+        return
+    try:
+        if accepted_update:
+            setattr(
+                widget,
+                "_srpss_delivery_accepted",
+                int(_safe_attr(widget, "_srpss_delivery_accepted", 0) or 0) + 1,
+            )
+            return
+        stage = str(_safe_attr(widget, "_srpss_timer_last_skip_stage", "unknown") or "unknown")
+        counter = {
+            "dispatch": "_srpss_delivery_dispatch_pending_skips",
+            "paint": "_srpss_delivery_paint_pending_skips",
+        }.get(stage, "_srpss_delivery_unknown_skips")
+        setattr(widget, counter, int(_safe_attr(widget, counter, 0) or 0) + 1)
+    except Exception:
+        pass
+
+
+def _record_delivery_paint_start(widget, paint_start_ts: float) -> None:
+    """Record exact dispatch->paint latency at the existing paint-start boundary."""
+    if widget is None or not is_perf_metrics_enabled():
+        return
+    try:
+        dispatched_ts = float(_safe_attr(widget, "_srpss_timer_update_dispatched_ts", 0.0) or 0.0)
+        pending_since = float(_safe_attr(widget, "_srpss_timer_update_pending_since", 0.0) or 0.0)
+        if pending_since <= 0.0:
+            return
+        if dispatched_ts <= 0.0:
+            setattr(
+                widget,
+                "_srpss_delivery_dispatch_unknown",
+                int(_safe_attr(widget, "_srpss_delivery_dispatch_unknown", 0) or 0) + 1,
+            )
+            return
+        paint_pending_ms = max(0.0, (float(paint_start_ts) - dispatched_ts) * 1000.0)
+        _delivery_deque(widget, "_srpss_delivery_paint_pending_ms").append(paint_pending_ms)
+        active = _safe_attr(widget, "_srpss_timer_window_active_at_dispatch", None)
+        if active is True:
+            _delivery_deque(widget, "_srpss_delivery_paint_active_ms").append(paint_pending_ms)
+        elif active is False:
+            _delivery_deque(widget, "_srpss_delivery_paint_inactive_ms").append(paint_pending_ms)
+    except Exception:
+        pass
+
+
+def _delivery_percentile(values, percentile: float) -> float:
+    samples = [float(value) for value in values if isinstance(value, (int, float))]
+    if not samples:
+        return 0.0
+    samples.sort()
+    index = min(
+        len(samples) - 1,
+        max(0, int(round((len(samples) - 1) * float(percentile)))),
+    )
+    return samples[index]
+
+
+def _delivery_stats(widget, name: str) -> tuple[int, float, float, float]:
+    values = list(_safe_attr(widget, name, ()) or ())
+    numeric = [float(value) for value in values if isinstance(value, (int, float))]
+    return (
+        len(numeric),
+        _delivery_percentile(numeric, 0.50),
+        _delivery_percentile(numeric, 0.95),
+        max(numeric, default=0.0),
+    )
+
+
+def _delivery_transition_label(widget) -> str:
+    label = str(_safe_attr(widget, "_current_transition_name", "") or "").strip()
+    if label:
+        return "_".join(label.split())
+    paint_metrics = _safe_attr(widget, "_paint_metrics")
+    label = str(_safe_attr(paint_metrics, "label", "") or "").strip()
+    return "_".join(label.split()) if label else "<none>"
+
+
+def _delivery_screen(widget):
+    try:
+        parent = widget.parent() if widget is not None else None
+    except Exception:
+        parent = None
+    value = _safe_attr(parent, "screen_index", _safe_attr(widget, "_screen_index", "?"))
+    return value
+
+
+def _log_delivery_perf_window(widget, *, outcome: str, target_fps: int) -> None:
+    """Emit two bounded summary records; never log one record per frame."""
+    if widget is None or not is_perf_metrics_enabled():
+        return
+    start_ts = float(_safe_attr(widget, "_srpss_delivery_window_start_ts", 0.0) or 0.0)
+    if start_ts <= 0.0:
+        return
+    now = time.perf_counter()
+    elapsed_ms = max(0.0, (now - start_ts) * 1000.0)
+    seq = int(_safe_attr(widget, "_srpss_delivery_window_seq", 0) or 0)
+    wakeups = int(_safe_attr(widget, "_srpss_delivery_wakeups", 0) or 0)
+    accepted = int(_safe_attr(widget, "_srpss_delivery_accepted", 0) or 0)
+    dispatch_skips = int(_safe_attr(widget, "_srpss_delivery_dispatch_pending_skips", 0) or 0)
+    paint_skips = int(_safe_attr(widget, "_srpss_delivery_paint_pending_skips", 0) or 0)
+    unknown_skips = int(_safe_attr(widget, "_srpss_delivery_unknown_skips", 0) or 0)
+    acceptance_pct = (accepted / wakeups * 100.0) if wakeups > 0 else 0.0
+    wake_n, wake_p50, wake_p95, wake_max = _delivery_stats(widget, "_srpss_delivery_wake_late_ms")
+    dispatch_n, dispatch_p50, dispatch_p95, dispatch_max = _delivery_stats(widget, "_srpss_delivery_dispatch_ms")
+    paint_n, paint_p50, paint_p95, paint_max = _delivery_stats(widget, "_srpss_delivery_paint_pending_ms")
+    dispatch_skip_n, _, dispatch_skip_p95, dispatch_skip_max = _delivery_stats(
+        widget, "_srpss_delivery_dispatch_skip_age_ms"
+    )
+    paint_skip_n, _, paint_skip_p95, paint_skip_max = _delivery_stats(
+        widget, "_srpss_delivery_paint_skip_age_ms"
+    )
+    active_dispatch_n, _, active_dispatch_p95, _ = _delivery_stats(widget, "_srpss_delivery_dispatch_active_ms")
+    inactive_dispatch_n, _, inactive_dispatch_p95, _ = _delivery_stats(widget, "_srpss_delivery_dispatch_inactive_ms")
+    active_paint_n, _, active_paint_p95, _ = _delivery_stats(widget, "_srpss_delivery_paint_active_ms")
+    inactive_paint_n, _, inactive_paint_p95, _ = _delivery_stats(widget, "_srpss_delivery_paint_inactive_ms")
+    active_last = _safe_attr(widget, "_srpss_delivery_window_active_last", None)
+    active_text = "na" if active_last is None else str(int(bool(active_last)))
+    active_changed_ts = float(_safe_attr(widget, "_srpss_delivery_window_active_changed_ts", 0.0) or 0.0)
+    active_age_ms = max(0.0, (now - active_changed_ts) * 1000.0) if active_changed_ts > 0.0 else -1.0
+    common = (
+        _delivery_screen(widget),
+        _delivery_transition_label(widget),
+        seq,
+        str(outcome or "unknown"),
+        int(target_fps or 0),
+        elapsed_ms,
+    )
+    logger.info(
+        "[PERF][DELIVERY_STAGE][CADENCE] screen=%s transition=%s window=%d outcome=%s "
+        "target_hz=%d elapsed_ms=%.1f wakeups=%d deadline_wakeups=%d immediate_requests=%d "
+        "accepted=%d acceptance_pct=%.2f dispatch_pending_skips=%d paint_pending_skips=%d "
+        "unknown_skips=%d wake_late_n=%d wake_late_p50_ms=%.3f wake_late_p95_ms=%.3f "
+        "wake_late_max_ms=%.3f dispatch_skip_n=%d dispatch_skip_age_p95_ms=%.3f "
+        "dispatch_skip_age_max_ms=%.3f paint_skip_n=%d paint_skip_age_p95_ms=%.3f "
+        "paint_skip_age_max_ms=%.3f",
+        *common,
+        wakeups,
+        int(_safe_attr(widget, "_srpss_delivery_deadline_wakeups", 0) or 0),
+        int(_safe_attr(widget, "_srpss_delivery_immediate_requests", 0) or 0),
+        accepted,
+        acceptance_pct,
+        dispatch_skips,
+        paint_skips,
+        unknown_skips,
+        wake_n,
+        wake_p50,
+        wake_p95,
+        wake_max,
+        dispatch_skip_n,
+        dispatch_skip_p95,
+        dispatch_skip_max,
+        paint_skip_n,
+        paint_skip_p95,
+        paint_skip_max,
+    )
+    logger.info(
+        "[PERF][DELIVERY_STAGE][GUI] screen=%s transition=%s window=%d outcome=%s "
+        "target_hz=%d elapsed_ms=%.1f dispatch_n=%d dispatch_p50_ms=%.3f dispatch_p95_ms=%.3f "
+        "dispatch_max_ms=%.3f paint_pending_n=%d paint_pending_p50_ms=%.3f "
+        "paint_pending_p95_ms=%.3f paint_pending_max_ms=%.3f dispatch_unknown=%d "
+        "window_active_last=%s window_active_changes=%d window_active_age_ms=%.1f "
+        "active_dispatch_n=%d active_dispatch_p95_ms=%.3f inactive_dispatch_n=%d "
+        "inactive_dispatch_p95_ms=%.3f active_paint_n=%d active_paint_p95_ms=%.3f "
+        "inactive_paint_n=%d inactive_paint_p95_ms=%.3f",
+        *common,
+        dispatch_n,
+        dispatch_p50,
+        dispatch_p95,
+        dispatch_max,
+        paint_n,
+        paint_p50,
+        paint_p95,
+        paint_max,
+        int(_safe_attr(widget, "_srpss_delivery_dispatch_unknown", 0) or 0),
+        active_text,
+        int(_safe_attr(widget, "_srpss_delivery_window_active_changes", 0) or 0),
+        active_age_ms,
+        active_dispatch_n,
+        active_dispatch_p95,
+        inactive_dispatch_n,
+        inactive_dispatch_p95,
+        active_paint_n,
+        active_paint_p95,
+        inactive_paint_n,
+        inactive_paint_p95,
+    )
+    try:
+        setattr(widget, "_srpss_delivery_window_start_ts", 0.0)
+    except Exception:
+        pass
+
+
 def _mark_widget_update_pending(widget) -> None:
     now = time.perf_counter()
     if not bool(_safe_attr(widget, "_srpss_timer_update_pending", False)):
@@ -53,6 +373,14 @@ def _mark_widget_update_pending(widget) -> None:
         setattr(widget, "_srpss_timer_update_pending_since", now)
     setattr(widget, "_srpss_timer_update_pending_last_log", 0.0)
     setattr(widget, "_srpss_timer_update_dispatch_pending", True)
+    if is_perf_metrics_enabled():
+        try:
+            setattr(widget, "_srpss_timer_update_dispatched_ts", 0.0)
+            setattr(widget, "_srpss_timer_dispatch_timing_unknown", False)
+            setattr(widget, "_srpss_timer_window_active_at_dispatch", None)
+            setattr(widget, "_srpss_timer_last_skip_stage", "none")
+        except Exception:
+            pass
 
 
 def _mark_widget_update_dispatched(widget) -> None:
@@ -60,6 +388,31 @@ def _mark_widget_update_dispatched(widget) -> None:
         return
     try:
         setattr(widget, "_srpss_timer_update_dispatch_pending", False)
+    except Exception:
+        pass
+    if not is_perf_metrics_enabled():
+        return
+    try:
+        owner_thread = widget.thread() if hasattr(widget, "thread") else None
+        if owner_thread is not None and QThread.currentThread() is not owner_thread:
+            # Generic invokeMethod("update") fallback only tells us that Qt
+            # accepted the queued method, not when the GUI actually ran it.
+            setattr(widget, "_srpss_timer_dispatch_timing_unknown", True)
+            setattr(widget, "_srpss_timer_update_dispatched_ts", 0.0)
+            return
+        now = time.perf_counter()
+        pending_since = float(_safe_attr(widget, "_srpss_timer_update_pending_since", 0.0) or 0.0)
+        if pending_since > 0.0:
+            dispatch_ms = max(0.0, (now - pending_since) * 1000.0)
+            _delivery_deque(widget, "_srpss_delivery_dispatch_ms").append(dispatch_ms)
+            active = _record_delivery_window_active(widget, now)
+            if active is True:
+                _delivery_deque(widget, "_srpss_delivery_dispatch_active_ms").append(dispatch_ms)
+            elif active is False:
+                _delivery_deque(widget, "_srpss_delivery_dispatch_inactive_ms").append(dispatch_ms)
+            setattr(widget, "_srpss_timer_window_active_at_dispatch", active)
+        setattr(widget, "_srpss_timer_dispatch_timing_unknown", False)
+        setattr(widget, "_srpss_timer_update_dispatched_ts", now)
     except Exception:
         pass
 
@@ -102,11 +455,26 @@ def _mark_widget_update_consumed(widget) -> None:
     """Release the coalescing flag once a queued update reaches paint consumption."""
     if widget is None:
         return
+    if is_perf_metrics_enabled():
+        try:
+            # paint.py records the authoritative paint-start timestamp immediately
+            # before calling this helper. Pause/teardown calls do not have an
+            # active paint timestamp, so they cannot contaminate paint latency.
+            paint_metrics = _safe_attr(widget, "_paint_metrics")
+            paint_start_ts = _safe_attr(paint_metrics, "_active_paint_start_ts")
+            if isinstance(paint_start_ts, (int, float)) and paint_start_ts > 0.0:
+                _record_delivery_paint_start(widget, float(paint_start_ts))
+        except Exception:
+            pass
     try:
         setattr(widget, "_srpss_timer_update_pending", False)
         setattr(widget, "_srpss_timer_update_pending_since", 0.0)
         setattr(widget, "_srpss_timer_update_pending_last_log", 0.0)
         setattr(widget, "_srpss_timer_update_dispatch_pending", False)
+        if is_perf_metrics_enabled():
+            setattr(widget, "_srpss_timer_update_dispatched_ts", 0.0)
+            setattr(widget, "_srpss_timer_dispatch_timing_unknown", False)
+            setattr(widget, "_srpss_timer_window_active_at_dispatch", None)
     except Exception:
         pass
 
@@ -118,9 +486,24 @@ def _queue_safe_widget_update(widget) -> bool:
 
     try:
         if bool(getattr(widget, "_srpss_timer_update_dispatch_pending", False)):
+            if is_perf_metrics_enabled():
+                setattr(widget, "_srpss_timer_last_skip_stage", "dispatch")
+                age_ms = _pending_widget_update_age_ms(widget)
+                if age_ms is not None:
+                    _delivery_deque(widget, "_srpss_delivery_dispatch_skip_age_ms").append(age_ms)
             return False
         if bool(getattr(widget, "_srpss_timer_update_pending", False)):
+            if is_perf_metrics_enabled():
+                stage = (
+                    "unknown"
+                    if bool(_safe_attr(widget, "_srpss_timer_dispatch_timing_unknown", False))
+                    else "paint"
+                )
+                setattr(widget, "_srpss_timer_last_skip_stage", stage)
             age_ms = _pending_widget_update_age_ms(widget)
+            if is_perf_metrics_enabled() and age_ms is not None:
+                if stage == "paint":
+                    _delivery_deque(widget, "_srpss_delivery_paint_skip_age_ms").append(age_ms)
             if age_ms is not None and age_ms >= _PENDING_UPDATE_LOG_AFTER_MS:
                 _maybe_log_pending_widget_update(widget)
             return False
@@ -381,6 +764,7 @@ class AdaptiveTimerStrategy:
             if current != TimerState.RUNNING:
                 self._metrics.record_state_change(current)
                 self._state.store(TimerState.RUNNING)
+                _reset_delivery_perf_window(self._compositor)
                 self._wake_event.set()
                 if is_perf_metrics_enabled():
                     logger.info("[PERF][ADAPTIVE_TIMER] wake_to_running id=%s state=%s", self._task_id, current.name)
@@ -432,6 +816,7 @@ class AdaptiveTimerStrategy:
             
             # Immediately wake to RUNNING state
             self._state.store(TimerState.RUNNING)
+            _reset_delivery_perf_window(self._compositor)
             self._wake_event.set()
             
             logger.info("[ADAPTIVE_TIMER] Started (target=%dHz, task=%s)", self._config.target_fps, self._task_id)
@@ -448,6 +833,11 @@ class AdaptiveTimerStrategy:
             self._metrics.record_state_change(current)
             self._state.store(TimerState.PAUSED)
             self._transition_ended_at = time.monotonic()
+            _log_delivery_perf_window(
+                self._compositor,
+                outcome="paused",
+                target_fps=self._config.target_fps,
+            )
             if is_perf_metrics_enabled():
                 logger.info("[PERF][ADAPTIVE_TIMER] paused id=%s", self._task_id)
             else:
@@ -459,6 +849,7 @@ class AdaptiveTimerStrategy:
         if current != TimerState.RUNNING:
             self._metrics.record_state_change(current)
             self._state.store(TimerState.RUNNING)
+            _reset_delivery_perf_window(self._compositor)
             self._wake_event.set()
             if is_perf_metrics_enabled():
                 logger.info("[PERF][ADAPTIVE_TIMER] resumed_from=%s id=%s", current.name, self._task_id)
@@ -495,6 +886,11 @@ class AdaptiveTimerStrategy:
                 # let compositor teardown destroy its context underneath it.
                 return False
             self._task_future = None
+        _log_delivery_perf_window(
+            self._compositor,
+            outcome="stopped",
+            target_fps=self._config.target_fps,
+        )
         self._task_id = None
         
         # Unregister from ResourceManager
@@ -586,7 +982,7 @@ class AdaptiveTimerStrategy:
                             has_request = True
 
                         if has_request:
-                            self._signal_frame()
+                            self._signal_frame(immediate=True)
                             continue
 
                         # Precise timing anchored to the carried deadline so callback
@@ -602,7 +998,7 @@ class AdaptiveTimerStrategy:
                             not self._stop_event.is_set()
                             and self._state.load() == TimerState.RUNNING
                         ):
-                            self._signal_frame()
+                            self._signal_frame(deadline_ts=next_tick_deadline)
                             next_tick_deadline = _normalize_next_deadline(
                                 next_tick_deadline + target_interval,
                                 time.perf_counter(),
@@ -616,14 +1012,28 @@ class AdaptiveTimerStrategy:
             self._loop_stopped_event.set()
             logger.debug("[ADAPTIVE_TIMER] Loop stopped")
     
-    def _signal_frame(self) -> None:
+    def _signal_frame(
+        self,
+        *,
+        deadline_ts: float | None = None,
+        immediate: bool = False,
+    ) -> None:
         """Signal UI thread to render."""
         if self._compositor is not None:
             try:
                 # Log occasional frame signals for debugging
                 if self._metrics.frame_count % 100 == 0:
                     logger.debug("[ADAPTIVE_TIMER] Signaling frame %d", self._metrics.frame_count)
+                perf_delivery = is_perf_metrics_enabled()
+                if perf_delivery:
+                    _record_delivery_wake(
+                        self._compositor,
+                        deadline_ts=deadline_ts,
+                        immediate=immediate,
+                    )
                 accepted_update = _queue_safe_widget_update(self._compositor)
+                if perf_delivery:
+                    _record_delivery_result(self._compositor, accepted_update)
                 if hasattr(self._compositor, "_record_render_timer_tick"):
                     self._compositor._record_render_timer_tick(accepted_update=accepted_update)
                 self._metrics.frame_count += 1
