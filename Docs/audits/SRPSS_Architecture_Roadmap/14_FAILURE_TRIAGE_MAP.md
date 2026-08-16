@@ -1,87 +1,111 @@
 # 14 — Failure Triage Map
 
-Last reconciled: 2026-08-10
+Last reconciled: 2026-08-16
 
-Use this map to find owners, not symptom patches.
+Use this map to find owners, not symptom patches. Current accepted delivery evidence:
+`Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`.
 
-## Frame gap / visualizer microgap
+## Frame gap / missed high-refresh deadlines
 
-First compare request age, event-loop lateness and paint duration. If request age dwarfs
-paint, inspect synchronous GUI commits, logging/persistence, cold cache construction,
-image warm/upload and callback bursts before touching visualizer cadence.
+First split:
 
-## `generic_pair_warm` / transition-start stall
+1. adaptive wake lateness;
+2. queued GUI dispatch wait / dispatch-pending skips;
+3. already-dispatched paint-pending wait / paint-pending skips;
+4. paint duration.
 
-Check retained-current key versus next-old lookup, `old_cached_before`, upload/allocation
-counts and context/generation/size identity. Do not raise cache budgets or retain
-historical textures to hide an identity mismatch.
+Do not treat total request age as one undifferentiated timer problem.
 
-## High GPU busy
+## Visualizer enabled: 165 Hz under-delivery and sibling-display slowdown
 
-Collect process GPU busy + sample age, transition family, non-blocking GL timer samples,
-texture uploads, visualizer overlay update/paint rates and display refresh. Split upload,
-transition shader/draw, visualizer overlay/context and presentation/overdraw. Do not cap
-visualizer logic or call `glFinish()` as the first reaction.
+Check logical publication, overlay handoff, auxiliary update requests and paint rates.
+
+If logical publications and `SpotifyBarsGLOverlay.update()` requests remain effectively
+one-for-one at ~85–95 Hz, this is **bad smell 1**. The 2026-08-16 A/B/A evidence already
+proves that stream is a shared-GUI amplifier.
+
+Fix presentation-request ownership; do not lower visualizer cadence.
+
+## Visualizer requests suppressed but no-visualizer control is still better
+
+This is **bad smell 1b**.
+
+Do not immediately blame all of `set_state()`. Split producer/state build, pure-data
+render preparation, Qt overlay commit, presentation request and paint. Move only proven
+thread-safe immutable preparation.
+
+## Visualizer disabled from startup but 165 Hz still misses deadlines
+
+This is **bad smell 2**.
+
+If dispatch-pending skips dominate paint-pending skips while wake lateness is healthy,
+inspect concrete queued GUI callbacks/commits. Do not change adaptive timer frequency or
+add repaint rescue.
 
 ## Visualizer paint/update rate exceeds display refresh
 
-Determine separately:
+Logical publication above refresh is allowed. The problem is a measured one-to-one
+presentation request stream that starves delivery.
 
-- logical source/state publication rate;
-- overlay state commit rate;
-- update request rate;
-- paint rate;
-- actual display refresh/vsync/context route;
-- source/state age at paint.
+Do not use:
 
-This may be presentation waste, but only Phase 7 may coalesce immutable render snapshots
-after stronger temporal goldens. Logical/source cadence is not reduced merely because
-the panel is 60 Hz.
+- source/event decimation;
+- display-FPS logical cap;
+- pending-until-paint admission;
+- paint acknowledgement;
+- producer elapsed-time gates.
 
-## Main log is flooded by sidecar-family INFO
+## High GPU busy / suspected visualizer shader cost
 
-Check family classification/routing before lowering log level or deleting evidence. All
-WARNING+ remain in main. Routine family INFO/DEBUG should route to sidecar when enabled.
-Known example: `[GL CACHE]` currently misses cache-family suppression because routing
-expects `[CACHE]`.
+Use sampled owner-context GPU timing. In the accepted Spectrum checkpoint, visualizer
+shader duration is tiny relative to delivery loss. Do not infer shader ownership from
+process GPU busy alone.
 
-## Settings mutation causes UI hitch
+## Separate visualizer GL surface suspected
 
-Inspect synchronous JSON serialization/temp write/replace. In-memory setting should be
-immediately authoritative; durable writes belong to ordered persistence with explicit
-flush points. Do not use unordered pool writes where an old revision can win.
+Compare a live request-suppressed state against a live hidden-surface state.
 
-## Reddit/Weather/Gmail cold or callback hitch
+Current accepted evidence shows only a modest incremental C-over-B gain. Do not begin a
+one-surface-per-display rewrite unless post-P2/P3 evidence changes that conclusion.
 
-Look for filesystem/JSON/filter/sort/cache construction inside GUI result callbacks or
-`paintEvent()`. Move preparation/I/O away from GUI; keep Qt metrics/layout/QPixmap commit
-on GUI.
+## Window activation correlation
+
+Treat activation/foreground state as a correlate unless same-process evidence proves it
+is necessary. The dual-display A/B/C evidence reproduces the important delivery problem
+without requiring the earlier single-display activation explanation.
 
 ## Bubble looks delayed/flat
 
-Check shared GUI/event-loop/source-age pressure first. Do not change physics, cadence,
-source sampling or executor ownership unless direct mode-owned evidence proves the
-problem. `666624d4` is the negative control.
+Check shared GUI delivery/source age first. Do not change Bubble physics, authored cadence,
+source sampling, one-in-flight semantics or executor ownership without direct mode-owned
+evidence. `666624d4` remains a negative control.
 
 ## Spectrum less smooth
 
-Look for a second clock, paint-local state, self-requested paints or source/presentation
-cadence divergence. `ebfec397` is the negative control.
+Check logical/presentation separation, second clocks, paint-local state and delivery
+pressure. `ebfec397` remains the negative control.
 
-## Temporary compatibility/fallback surface encountered
+## `generic_pair_warm` / transition-start stall
 
-Ask what current contract it preserves. If only tests/docs/rejected architecture depend
-on it, prove no production/dynamic/frozen consumer and delete it in a separate
-checkpoint. Do not preserve an alternate scheduler/state machine “just in case.”
+Current→old identity and ordinary redundant upload-copy defects are closed. Reopen only
+if exact cache/upload evidence contradicts the current contract.
 
-## Historical Settings/Edit deleted-wrapper/retired-owner failures
+## Settings mutation or provider callback hitch
 
-These are solved reference incidents. If the same shape reappears, consult R-53/R-56/
-R-59 and verify later-turn admission, wrapper liveness and stable weak callback ownership.
-Do not proactively reopen them during unrelated performance work.
+Follow Prepare → Commit → Persist. Move only proven I/O/pure-data preparation off GUI;
+keep required Qt commit ownership.
+
+## Temporary A/B/C diagnostic code encountered
+
+It is P0 removal debt. Do not build production behaviour on the monkeypatch, CLI gate or
+hotkey. Keep passive delivery-stage metrics.
+
+## Historical Settings/Edit deleted-wrapper failures
+
+Solved regression reference only. Consult historical records if the same shape actually
+reappears; do not reopen during delivery work.
 
 ## Memory flat but excessive
 
-Separate RSS, private commit, mappings/stacks, child process, tracked CPU/GL bytes,
-VRAM and driver state. Flat is not automatically acceptable; do not trim/recycle/GC to
-make a graph look better.
+Separate RSS/private commit, mappings/stacks, child processes, tracked CPU/GL bytes and
+VRAM. Flat is not automatically acceptable; do not trim/recycle/GC to beautify graphs.

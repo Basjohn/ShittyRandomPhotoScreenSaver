@@ -9,30 +9,34 @@ Last updated: 2026-08-16
 - Stale exported settings examples are documentation hygiene, not runtime risk; batch with a defaults/doc refresh rather than interrupting active lifecycle/perf work.
 - Compatibility-shell cleanup should remain low priority unless it causes import/runtime ambiguity.
 
-## 2026-08-16 Presentation-Demon Diagnostic Scaffolding Ledger
+## 2026-08-16 Presentation / Delivery Diagnostic Scaffolding Ledger
 
-This section is intentionally **higher urgency than the ordinary cleanup backlog**. It exists so temporary investigation code cannot quietly become permanent architecture. Production fixes still belong in `Current_Plan.md`; this section owns what must be removed, what evidence should remain, and which regression bars must exist before cleanup.
+This section is intentionally **higher urgency than the ordinary cleanup backlog**. `Current_Plan.md` owns execution order, `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` owns the accepted evidence, and this section owns temporary-code removal plus test/diagnostic debt. Do not use this file as an alternate implementation plan.
 
 ### P0 — clean before the production presentation fix
 
-- [ ] **REMOVE NOW when installing the A/B/C probe: superseded two-state helper.** Delete `core/performance/visualizer_presentation_ab.py` if it exists from the 2026-08-16 A/B experiment. The new A/B/C helper replaces it completely. The old helper and new helper must not coexist as active instrumentation.
-- [ ] **P0 REMOVE BEFORE THE PRODUCTION FIX:** `core/performance/visualizer_presentation_abc.py`, the explicit `--viz-present-abc` gate, the `Shift+/` cycle hotkey, and the tiny install hook in `core/performance/event_loop_recorder.py`. The 2026-08-16 A/B/C evidence is captured and the probe has completed its purpose. Remove the helper, hotkey, CLI gate and recorder hook together before implementing the real presentation contract so monkeypatch behaviour cannot contaminate validation. Do not ship this probe.
+- [ ] **P0 REMOVE IF PRESENT:** delete superseded `core/performance/visualizer_presentation_ab.py`. Its evidence has been superseded by the completed A/B/C run; it must not survive as dormant diagnostic architecture.
+- [ ] **P0 REMOVE BEFORE P2:** `core/performance/visualizer_presentation_abc.py`, the explicit `--viz-present-abc` gate, the `Shift+/` cycle hotkey, and the temporary install hook in `core/performance/event_loop_recorder.py`. The evidence is now durable in `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`; the monkeypatch must be gone before the production presentation implementation is measured. Do not ship this probe.
 - [ ] **KEEP until P5.2 delivery ownership is closed; likely retain as normal `--perf` evidence afterward:** the delivery-stage instrumentation in `rendering/adaptive_timer.py` that separates deadline/wakeup lateness, queued-GUI-dispatch waiting, already-dispatched paint-pending waiting, and dispatch-vs-paint pending skips. It is diagnostic evidence rather than a behaviour change. Do not remove it just because one presentation hypothesis is rejected. Add focused tests that (1) skip reasons are mutually exclusive, (2) stage timestamps/ages cannot go negative or cross ownership generations, (3) PERF-off behaviour and scheduling remain unchanged, (4) teardown/recreation cannot carry pending timestamps into a new widget generation, and (5) two displays retain independent counters.
 - [ ] **KEEP:** sampled `--gpu-timing`, the ordinary event-loop lateness recorder, existing compositor request-age/paint summaries, and visualizer logical-publication/update/paint counters. They are needed to compare A/B/C and later production fixes. Do not replace them with per-frame log spam.
-- [ ] **P0/P1 TEST DEBT CREATED BY THE PROMOTION:** add focused duration/ownership tests for the logical-to-overlay handoff before changing it: PERF-off path unchanged; one logical publication still yields the same accepted logical overlay state; supported-mode replay digests remain unchanged; any worker-prepared snapshot is immutable before GUI commit; stale generation/activation snapshots are rejected; no QWidget/QColor/QPixmap/GL mutation moves to a worker; and presentation coalescing cannot erase protected Bubble edge/event history.
+- [ ] **P1 TEST DEBT — presentation contract:** add focused ownership/fidelity tests before P2: PERF-off path unchanged; supported-mode logical replay/state digests unchanged; stale generation/activation snapshots rejected; presentation may consume fewer opportunities than logical publication; protected Bubble edge/event history remains visible; and no QWidget/QColor/QPixmap/GL mutation moves to a worker.
+- [ ] **P3 TEST DEBT — handoff extraction if promoted:** if P3 proves pure-data overlay/render-state preparation is a GUI owner, require immutable snapshot tests, worker-safe type boundaries, stale-generation rejection, GUI-only Qt/GL commit tests and exact logical-state equivalence before moving that preparation.
+- [ ] **P4 TEST DEBT — residual dispatch owner:** once the no-visualizer queued-dispatch owner is named, add a focused regression that fails on that concrete callback/owner rather than asserting a magic global FPS number.
 
-### P1 — unresolved experimental code that must not be mistaken for a fix
+### P1 — unrelated/unvalidated experiments that must not contaminate P0–P4
 
 - [ ] **Browser GSMTC experiment remains unvalidated.** The recent `core/media/provider_registry.py` / `core/media/media_controller.py` browser-AUMID changes did not restore Firefox or Edge detection in the live runtime. Do not stack another guessed identity rule on top. When media work resumes, first capture the literal sessions/source IDs seen by Windows in the failing runtime, then either supersede or revert the unproven resolver changes. Add focused tests using captured Firefox and Chromium source IDs plus false-positive cases, and retain the paused-desktop-vs-playing-browser failover test separately from identity resolution.
-- [ ] **Do not preserve temporary monkeypatch architecture as a production solution.** If the A/B/C probe proves a presentation owner, replace the experiment with an owned presentation contract in the real visualizer/compositor code; do not rename the probe and leave runtime class patching in place.
+- [ ] **Do not preserve temporary monkeypatch architecture as a production solution.** The A/B/C probe has already proved a presentation owner. P2 must implement the owner in normal production code; do not rename/repackage the probe and leave runtime class patching in place.
 
-### A/B/C + disabled control result — promoted to `Current_Plan.md`
+### Accepted result and ownership routing
 
-- **B materially improved on A and reversed on return to A.** The auxiliary visualizer one-publication → one-`QOpenGLWidget.update()` stream is now a proven shared-GUI presentation-pressure amplifier and belongs in active P5.2/P5.2B.
-- **C improved only modestly beyond B.** Hiding the still-live auxiliary GL widget does not justify Phase 8/one-surface surgery; request scheduling is the stronger proven owner.
-- **The no-visualizer-from-start control improved further**, with Media/GSMTC still active. Because it is a separate process and removes the whole visualizer family, treat this as a promotion to **measure the remaining visualizer GUI handoff/state-preparation cost**, not as proof that any single method owns it.
-- **Residual no-visualizer loss remains.** The 165 Hz display still runs about 155–159 FPS and its remaining skipped deadlines are predominantly queued-GUI-dispatch bursts. The visualizer correction must therefore be followed by a non-visualizer GUI-owner attribution pass.
-- `Current_Plan.md` was updated on 2026-08-16 with the measured A/B/C/D evidence and production guardrails. Do not duplicate the active execution checklist here.
+The exact A/B/C/D numbers, proof limits and two-bad-smell model now live in
+`Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`.
+
+- **Bad smell 1 — visualizer publication-coupled presentation:** proven material amplifier; active production correction is `Current_Plan.md` P2.
+- **Bad smell 1b — remaining visualizer-family GUI handoff/preparation:** evidenced by the no-visualizer control but not yet assigned to one method; active attribution is P3.
+- **Bad smell 2 — residual queued GUI dispatch without visualizers:** smaller but still real; active attribution/correction is P4.
+- Phase 8 one-surface-per-display work remains deferred because hiding the live auxiliary surface added only a modest gain beyond suppressing its repaint requests.
 
 ### Regression tests required for any promoted production presentation fix
 

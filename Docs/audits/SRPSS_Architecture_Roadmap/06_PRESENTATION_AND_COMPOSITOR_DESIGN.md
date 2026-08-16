@@ -1,196 +1,201 @@
 # 06 — Presentation and Compositor Design
 
-Last reconciled: 2026-08-13
+Last reconciled: 2026-08-16
 
 ## Design Objective
 
-Provide predictable display-local presentation while keeping simulation/source cadence,
-lifecycle, worker scheduling and resource policy in their correct owners.
+Provide predictable display-local presentation while preserving authoritative
+simulation/source cadence, lifecycle, worker scheduling and resource ownership.
 
-Phase 5 is still reducing proven GUI starvation and texture/GPU waste. Phase 7 owns the
-state/presentation boundary. Phase 8 may then consider one compositor surface per
-display if measured GPU/context benefit justifies it.
+The accepted causal evidence is
+`Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`.
+`Current_Plan.md` P0→P4 owns implementation order.
 
-## Current Readiness Evidence
+## Current Readiness Decision
 
-Do **not** begin the Phase 8 surface merge yet.
+**Do not begin Phase 8 one-surface-per-display work.**
 
-Current evidence says:
+The 2026-08-16 same-process A/B/C run provides a sharper result than earlier rate-only
+evidence:
 
-- request age, not paint cost, dominates frame gaps;
-- `set_processed_image()` and `generic_pair_warm` are large GUI/context transactions;
-- the retained-current/next-old DPR identity defect is closed in automation and a current live repeated-transition run (`20/20` steady old hits with one new upload);
-- process GPU busy is material but not yet split by owner;
-- visualizer screen 1 is 60 Hz while the current typical-load run measures Bubble
-  state/update/paint medians of `89.75/89.75/87.05` per second and Spectrum medians of
-  `92.7/92.7/91.15` per second, without geometry changes.
+- A normal visualizer presentation on the 165 Hz display ran about `143.4 FPS / 87.12%`
+  request acceptance;
+- B suppressing only auxiliary visualizer `update()` requests improved it to about
+  `150.2 / 91.39%`;
+- C additionally hiding the still-live visualizer GL surface improved only modestly again
+  to about `151.6 / 92.11%`;
+- restoring A in the same process dropped it back to about `141.2 / 85.85%`;
+- a separate no-visualizer-from-start control reached about `156.5 / 95.11%`.
 
-The last point motivates Phase 7 presentation separation, not a logical cadence cap.
+Therefore:
 
-The corrected-query `08_13_fa7e8196_16_33_16_37_gpu_queries_typical` run now
-attributes the visualizer surface itself. Bubble's normal overlay GPU p50/p95 is roughly
-`0.35–0.46/0.43–0.53 ms`; Spectrum is roughly `0.009–0.012/0.013 ms`. Both retain
-roughly `0.9–1.25 ms` CPU paint medians, yet the run still contains `40–130 ms`
-delivery gaps. Process GPU-busy peaks align more strongly with transition windows, so a
-matching non-blocking timer-query ring now wraps the existing shared-compositor draw and
-awaits a transition-heavy live gate.
+1. the auxiliary repaint-request stream is a **proven shared-GUI amplifier**;
+2. visible second-surface existence is a **secondary** effect in this evidence;
+3. another visualizer-family GUI handoff/preparation cost remains;
+4. a smaller non-visualizer queued-GUI-dispatch owner remains after the visualizer is absent.
 
-The `08_13_5bf68d6b_17_00_17_04_compositor_gpu_typical` run closes that live gate for
-seven exercised transition families. All `42` compositor windows are supported and
-error/drop free. Active transition p95 is roughly `0.87–1.02 ms` on screen 0 and
-`3.13–3.38 ms` on the physical-4K screen 1; whole-process GPU busy is only `4.55%`
-median and `5.1%` max. The surprising owner is sparse idle/base presentation:
-QPainter full-pixmap draws repeatedly measure `7–12 ms` and `36–41 ms` respectively.
-The current slice therefore reuses the exact retained destination texture through the
-already-compiled fullscreen program and leaves presentation cadence untouched.
+Sampled Spectrum overlay GPU work remains about `0.02 ms p50 / 0.025 ms p95`, so shader
+execution is not the primary owner.
 
-The follow-up `08_13_2cb15ae4_17_17_17_20_retained_base_typical` capture validates the
-replacement. Outside first-frame/recreation outliers, steady compositor GPU draw is
-about `0.03–0.10 ms` on both displays; ordinary transitions retain old exactly and upload
-only new, and teardown returns compositor GL ownership to zero. The remaining
-transition-boundary kick is therefore not a steady-base or transition-shader cost.
-GUI-owned image installation is normally `18–33 ms` and can be much longer during
-recreation, so Phase 7 state/presentation decoupling cannot by itself unblock the
-visualizer timer while that shared GUI transaction is running.
+## Closed Presentation/GPU Owners
 
-The next typical-load phase split shows why presentation decoupling is still not the
-first correction. Ordinary physical-4K texture submission itself is about `0.482 ms`
-median, while QPixmap image preparation plus source copying is about `11.689 ms` median.
-The upload slice removes the proven native-format conversion and Python bytes
-clone while retaining one GUI/context-owned PBO copy. It does not add another surface,
-clock, texture identity or presentation acknowledgement. Cold context/PBO staging and
-pair-warm residual remain separately attributable before any Phase 7 prototype. The
-installed `08_13_8d419765_18_08_18_14_direct_upload_typical` capture validates that
-boundary: `34/34` uploads use native `rgb32` plus the direct read-only view, upload
-median falls from `13.320 ms` to `2.982 ms`, and teardown remains clean. Tick gaps do
-not materially fall, so Phase 7 still cannot substitute for attribution of the cold
-GUI/context setup and unrelated GUI-owner stalls.
+The following are not active root-cause hypotheses unless new contradictory evidence appears:
 
-The next passive probe records the first existing compositor paint associated with each
-install ID after splitting setup and pair warm. It does not request another paint and it
-does not call that event a physical present; missing or superseded paint receipts remain
-visible in parser output.
+- retained-current → next-old texture identity;
+- steady retained-base full-surface QPainter draw;
+- redundant ordinary native RGB32/ARGB32 upload conversion/source copying;
+- ordinary transition shader duration as the owner of the large delivery tail;
+- Bubble/Spectrum worker or visualizer shader duration as the owner of the large delivery tail;
+- ordinary PERF GL-query observer overhead.
 
-## Absolute Rules
+## Bad Smell 1 — Publication-Coupled Visualizer Presentation
 
-- producers do not wait for `paintGL()`, `update()` or a presentation acknowledgement;
-- paint is not a simulation/smoothing clock;
-- compositor does not own Bubble/Spectrum source/tick cadence;
-- no catch-up replay of missed immutable render snapshots;
-- no self-requested visualizer repaint loop;
-- no worker GL/QPixmap mutation;
-- local transition continuation may request frames only for animation the compositor actually owns;
-- no hidden alternate presentation path or compatibility mega-layer.
+Current normal shape is effectively:
 
-## Phase 7 State / Presentation Boundary
+```text
+logical visualizer publication
+        ↓
+SpotifyBarsGLOverlay.set_state(...)
+        ↓
+_request_frame_update(...)
+        ↓
+QOpenGLWidget.update()
+```
 
-Target shape:
+`_request_frame_update()` currently discards its `force` argument and issues `update()`.
+When logical publication runs around 85–95 Hz, that creates an independent auxiliary Qt
+presentation-request stream even on a 60 Hz display.
+
+The A/B/A experiment proves that stream materially delays both displays on the shared GUI owner.
+
+### Required production shape
 
 ```text
 audio/events/source
-        |
-        v
-visualizer logical/model owner  -- current authoritative cadence --> immutable RenderState
-                                                               |
-                                                               v
-                                                   latest valid state slot
-                                                               |
-                                                Qt/display opportunity
-                                                               v
-                                                         paint latest
+        ↓ authored logical cadence unchanged
+logical visualizer/model owner
+        ↓
+immutable render state + generation/activation + protected edge/event identity
+        ↓
+display-local presentation-request owner
+        ↓ only when another useful request is needed
+Qt presentation opportunity
+        ↓
+paint latest valid presentation state
 ```
 
-If ten presentation opportunities are missed, logical state must evolve exactly as it
-would have otherwise. The next paint consumes the latest valid generation/activation
-state; it does not replay ten intermediate snapshots or ask the producer to catch up.
+The key distinction is **request ownership**, not a new display clock.
 
-That target is not yet sufficient for Bubble. The protected temporal trace contains a
-visible response that lasts one `100 Hz` logical publication; a phase-valid `60 Hz`
-latest-state sample can miss it completely. Phase 7 must therefore define an
-edge-preserving render-state contract, or otherwise prove equivalent authored
-visibility, before enabling coalescing for Bubble. Logical-series equality by itself is
-not acceptance.
+## Protected Edge/Event Requirement
 
-Phase 7 is an option, not a required cap. The measured overlay GPU span is already
-sub-millisecond, so the marginal saving must be re-measured after higher-value compositor
-and delivery fixes. If a later prototype is justified, it is a display-owned consumer:
-logical integration continues unchanged, producer admission never depends on paint, and
-Bubble requires bounded event identity/history (or an equivalent edge-preserving state)
-so a skipped snapshot cannot erase authored attack. Modes may remain uncoalesced when
-that proof is absent.
+A simple latest-state slot is insufficient for Bubble because an approved visible response
+may last only one logical publication. Presentation coalescing must therefore preserve
+bounded edge/event identity/history, or an explicitly approved equivalent, so skipped
+render snapshots cannot erase authored response.
+
+Logical events/steps are never dropped merely because intermediate render snapshots are.
+
+## Forbidden Admission Mechanisms
+
+Do not implement the P2 fix with:
+
+- paint completion as producer acknowledgement;
+- pending-until-paint backpressure;
+- elapsed producer timestamps as a display-rate gate;
+- a display-FPS cap on logical/source cadence;
+- source/event decimation;
+- a second visualizer clock;
+- catch-up replay of skipped render snapshots;
+- repaint retries that increase GUI pressure.
+
+The rejected ~50/40 Hz divisor-collapse experiment remains the negative control: Qt
+`paintGL()` completion is not a trustworthy physical-present clock.
+
+## Bad Smell 1b — Remaining Visualizer GUI Handoff/Preparation
+
+B/C kept logical visualizer publication and overlay handoff alive while reducing/ending
+presentation work. The separate no-visualizer control still improved further.
+
+That does not identify one method. P3 must split at least:
+
+```text
+logical producer/state build
+        ↓
+pure-data render-state preparation
+        ↓
+Qt-owned overlay state commit / geometry / QColor etc.
+        ↓
+presentation request
+        ↓
+paint
+```
+
+Only measured pure-data preparation may move off GUI. QWidget/QColor/QPixmap/GL mutation
+remains on the GUI/context owner unless the owning type is replaced with an explicitly
+thread-safe immutable representation before commit.
+
+## Bad Smell 2 — Residual Queued GUI Dispatch
+
+With no visualizer created, the 165 Hz compositor still runs roughly 155–159 FPS and
+retains more dispatch-pending than paint-pending skips.
+
+Therefore adaptive timer cadence is not “fixed” by removing the visualizer. P4 must name
+the actual GUI callback/owner creating those bursts.
+
+## GUI-Local Presentation Request Ownership
+
+A display-local owner may coalesce redundant **presentation requests** or stale
+already-integrated render snapshots.
+
+It must not:
+
+- acknowledge logical frames;
+- block the producer until paint;
+- mutate simulation state;
+- decide source/event cadence;
+- depend on the other display's refresh;
+- leave a request permanently latched because one paint was delayed.
+
+Geometry/reveal/clear/lifecycle boundaries may require an immediate presentation request;
+those exceptions must be explicit and tested.
+
+## Scene / Surface Ownership
+
+Current evidence supports retaining separate surfaces during P2/P3 while fixing request
+ownership first.
+
+Phase 8 may be reconsidered only if later evidence shows substantial residual cost from
+the second surface/context **after** request/handoff pressure is corrected.
+
+One compositor surface per display, if ever accepted, still must not absorb visualizer
+simulation/source cadence.
 
 ## Presentation-Rate Attribution
 
-For each display record together:
+Record together per display:
 
-- detected refresh/route/DPR;
-- logical visualizer state publication rate;
-- overlay `set_state` rate;
-- `update()` request rate;
-- `paintGL()` rate and intervals;
+- physical refresh/route/DPR;
+- logical visualizer publication rate;
+- overlay handoff/commit rate;
+- update-request rate;
+- paint rate;
+- adaptive wake lateness;
+- queued GUI dispatch wait;
+- paint-pending wait;
 - source/state age at paint;
-- GPU timer-query samples and process GPU busy;
-- transition state and image-upload activity.
+- transition/image-install activity;
+- sampled GPU duration and process GPU busy.
 
-A rate above physical refresh is evidence to investigate, not proof that the logical
-producer should be slowed.
-
-The rejected overlay cap was not actually display scheduled. Its elapsed-time threshold
-accepted a `100 Hz` producer every second tick (`~50 Hz` for a nominal `60 Hz` target),
-then a pending-until-paint latch made late Qt delivery an admission gate and produced the
-observed `~39–40 Hz`. `QOpenGLWidget.paintGL()` completion is neither scanout nor a
-stable physical-present opportunity. Producer-timestamp gates and paint acknowledgements
-are therefore prohibited as Phase 7 presentation clocks.
-
-The overlay now has the first passive attribution seam: CPU paint/state-to-paint
-windows plus a fixed non-blocking owner-context GPU query ring. It measures the Qt FBO
-clear/render span and does not claim SwapBuffers, composition or physical scanout.
-Unsupported, pending, dropped and discarded samples remain explicit. A current live
-capture first proved the fail-closed path instead of GPU cost: PyOpenGL 3.1.10 raised a
-wrapper-side `KeyError` while retrieving `GL_QUERY_RESULT`. The helper now supplies the
-native uint64 output buffer explicitly and a real offscreen GL-context regression proves
-submission/collection/deletion. The corrected-query typical run then collected supported
-samples in all `26` overlay windows with no errors or drops and bounded pending handles;
-the measured costs are recorded above. Logical cadence remains protected.
-
-## GUI-Local Update Coalescing
-
-A GUI/display owner may keep a single pending-update boolean/generation only for request
-deduplication. It cannot acknowledge logical frames or backpressure producers.
-
-## Scene Ownership
-
-Each display eventually owns:
-
-- one presentation surface/context if Phase 8 is accepted;
-- viewport/DPR/display identity;
-- current base/transition resources;
-- latest immutable visualizer render state;
-- overlays/widgets in explicit draw/stack order;
-- GUI-local update-coalescing state.
-
-Global controllers may publish shared logical state, not display-local geometry or
-presentation ownership.
-
-## Transition Model
-
-Transition state is local and monotonic-time based. Completion is exactly once:
-destination becomes base, obsolete source/temp resources release, transition becomes
-inactive. No image-worker/pipeline terminal acknowledgement is required.
-
-## GPU Profiling Boundary
-
-Before Phase 8, every transition family needs truthful paint/GPU timing from a shared
-compositor seam. Ordinary `--perf` must remain query-free; use the explicit heavyweight
-`--gpu-timing` profile for sampled non-blocking timer queries and delayed result
-collection. Never use `glFinish()`. Zero GPU time is meaningful only with
-support/observation/sample counts proving it was measured.
+A publication rate above physical refresh is not itself a bug. A one-to-one repaint
+request stream that measurably starves delivery is.
 
 ## Phase 8 Acceptance Prerequisites
 
-- Phase 5 external GUI starvation materially reduced;
-- texture identity/reuse corrected;
-- stronger Bubble/Spectrum temporal/paint-receipt goldens pass;
-- Phase 7 proves logical state is independent of paint opportunity;
-- GPU/context evidence shows the second visualizer surface/context is a material owner;
-- one-surface-per-display design does not absorb simulation, scheduling, lifecycle or source selection.
+All must hold:
+
+- P2 presentation-request ownership corrected;
+- P3 remaining visualizer handoff cost named/closed;
+- P4 residual non-visualizer dispatch named/closed enough to avoid false attribution;
+- stronger Bubble/Spectrum temporal/edge/paint-receipt bars pass;
+- GPU/context evidence shows second-surface existence remains a material owner after the above;
+- lifecycle/GL teardown remains strict and byte-accounted.

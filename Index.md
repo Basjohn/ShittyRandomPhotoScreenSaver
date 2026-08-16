@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-08-15
+Last updated: 2026-08-16
 
 Navigation and ownership map for SRPSS. This file is not a specification.
 
@@ -11,18 +11,39 @@ Navigation and ownership map for SRPSS. This file is not a specification.
 | Any code change | relevant `Docs/Guardrails.md` section |
 | Find owning subsystem | `Docs/Contracts.md` |
 | Stable product/architecture contract | `Spec.md` |
-| Current unfinished work | `Current_Plan.md` |
+| Current unfinished work / execution order | `Current_Plan.md` |
+| Current Phase 5 delivery evidence | `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` |
 | Architecture program/status | `Docs/audits/SRPSS_Architecture_Roadmap/README.md` |
-| Compositor/presentation/GL | `Docs/Compositor_Architecture.md` |
+| Compact audit priorities | `Docs/audits/SRPSS_Architecture_Roadmap/00_INDEX_AND_LIVE_CHECKLIST.md` |
+| Presentation/compositor design | `Docs/audits/SRPSS_Architecture_Roadmap/06_PRESENTATION_AND_COMPOSITOR_DESIGN.md` |
 | Threading/UI workload | `Docs/audits/SRPSS_Architecture_Roadmap/08_CPU_THREADING_AND_WORKLOAD_PLAN.md` |
 | Memory/GPU/cache | `Docs/audits/SRPSS_Architecture_Roadmap/09_MEMORY_GPU_RESOURCE_AND_CACHE_PLAN.md` |
 | Logging/routing/retention | `Docs/Logging_Guide.md` |
 | Evidence parsing and recurring probes | `Docs/Harness_Index.md` |
-| Tests/release gates | `Docs/TestSuite.md` |
+| Tests/release gates | `Docs/TestSuite.md` and roadmap `12_TEST_AND_BENCHMARK_PROTOCOL.md` |
+| Failure-owner triage | roadmap `14_FAILURE_TRIAGE_MAP.md` |
 | Prior fragile regression | `Docs/Historical_Bugs/README.md` |
-| Deferred cleanup | `Future_Cleanup.md` |
+| Deferred/temporary cleanup | `Future_Cleanup.md` |
 
 Do not read every document by default.
+
+## Authority Chain
+
+```text
+Current_Plan.md
+    ↓ execution order
+Spec.md / Guardrails.md
+    ↓ stable contracts
+Docs/phase_reports/
+    ↓ accepted detailed evidence
+Docs/audits/SRPSS_Architecture_Roadmap/
+    ↓ dependencies, priorities, design and validation
+Future_Cleanup.md
+    ↓ temporary-code removal / deferred cleanup / test debt
+```
+
+A phase report does not override `Current_Plan.md` task order. `Future_Cleanup.md` is not
+an alternate active plan.
 
 ## Core Documents
 
@@ -33,14 +54,14 @@ Do not read every document by default.
 | `Docs/Contracts.md` | task-to-owner routing |
 | `Spec.md` | stable behaviour/architecture contracts |
 | `Current_Plan.md` | active unfinished work only |
-| `Docs/audits/SRPSS_Architecture_Roadmap/README.md` | current architecture roadmap and phase program |
-| `Docs/Compositor_Architecture.md` | current presentation/compositor target |
-| `Docs/Logging_Guide.md` | logging architecture, routing, retention and correlation contract |
+| `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` | accepted current delivery/presentation checkpoint |
+| `Docs/audits/SRPSS_Architecture_Roadmap/README.md` | current architecture roadmap |
+| `Docs/Compositor_Architecture.md` | broader compositor architecture |
+| `Docs/Logging_Guide.md` | logging architecture/routing/retention |
 | `Docs/TestSuite.md` | test levels/release gates |
-| `Docs/Harness_Index.md` | recurring commands/probes and evidence parser usage |
+| `Docs/Harness_Index.md` | recurring commands/probes |
 | `Docs/Historical_Bugs/README.md` | historical incident index |
-| `Docs/Historical_Bugs.md` | compact historical navigation/status |
-| `Future_Cleanup.md` | deferred low-priority cleanup only |
+| `Future_Cleanup.md` | deferred cleanup and temporary-code/test debt |
 
 ## Current Runtime Owners
 
@@ -52,62 +73,47 @@ Do not read every document by default.
 | Display topology | `engine/display_manager.py` |
 | Fullscreen presenter | `rendering/display_widget.py` |
 | Widget lifecycle | `rendering/widget_manager.py` |
-| Shared overlay painted-frame cache | `widgets/base_overlay_widget.py` |
 | Thread/task ownership | `core/threading/manager.py` |
 | Settings in-memory authority | `core/settings/settings_manager.py` |
 | Settings ordered durability | `core/settings/persistence.py`, `core/settings/json_store.py` |
 | Resource accounting | `core/resources/manager.py`, `core/performance/resource_metrics.py` |
 | Whole-process usage | `core/performance/usage_sampler.py` |
 | Image pipeline | `engine/image_pipeline.py` and image/prefetch helpers |
-| Compositor/GL programs | `rendering/gl_compositor.py`, `rendering/gl_compositor_pkg/`, `rendering/gl_programs/` |
-| Explicit heavyweight owner-context GPU timing (`--gpu-timing`) | `rendering/gl_timer_queries.py` plus the owning renderer/compositor |
-| Media provider/GSMTC/progress presentation | `core/media/provider_registry.py`, `core/media/media_controller.py`, `widgets/media_widget.py`, `widgets/media/display_update.py`, `widgets/media/painting.py` |
-| Reddit provider/preparation/Qt/static commit | `core/reddit_post_provider.py`, `core/reddit_preparation.py`, `widgets/reddit_widget.py` |
-| Weather provider/preparation/Qt commit | `weather/open_meteo_provider.py`, `core/weather_preparation.py`, `widgets/weather_widget.py` |
-| Gmail cache/backend preparation and Qt commit | `core/gmail/gmail_preparation.py`, `core/gmail/gmail_bootstrap.py`, `core/gmail/gmail_backend.py`, `core/gmail/gmail_oauth.py`, `widgets/gmail_widget.py` |
-| Visualizer model/runtime | `widgets/spotify_visualizer/` and `widgets/spotify_visualizer_widget.py` |
+| Main compositor/GL | `rendering/gl_compositor.py`, `rendering/gl_compositor_pkg/`, `rendering/gl_programs/` |
+| Delivery-stage observation | `rendering/adaptive_timer.py` plus compositor metrics |
+| Visualizer logical runtime | `widgets/spotify_visualizer/`, `widgets/spotify_visualizer_widget.py` |
 | Visualizer presentation | `widgets/spotify_bars_gl_overlay.py` plus display-local Qt/GL ownership |
+| Heavyweight GPU timing | `rendering/gl_timer_queries.py` plus owning renderer/compositor |
+| Media provider/GSMTC | `core/media/provider_registry.py`, `core/media/media_controller.py`, `widgets/media_widget.py` |
 | CUSTOM layout | custom-layout manager/contract modules |
-| Logging ingress/routing/writer/rotation | `core/logging/logger.py`, `core/logging/tags.py` |
-| Diagnostic fatal/native crash breadcrumbs | `core/logging/crash_capture.py` |
-| Read-only evidence analysis | `tools/recovery_evidence_parser.py` and focused parsers under `tools/` |
+| Logging | `core/logging/logger.py`, `core/logging/tags.py` |
+| Crash breadcrumbs | `core/logging/crash_capture.py` |
+| Evidence analysis | `tools/recovery_evidence_parser.py` and focused tools |
 
 Use `Docs/Contracts.md` before assuming a nearby helper is an authority.
 
-## Architecture Evidence References
+## Current Phase 5 Route
+
+For the delivery/presentation thread:
 
 ```text
-working branch:          main
-approved visual ref:     ff93461685476bd0657aa88312fc2e35e9037880
-active evidence pointer: Current_Plan.md
-roadmap:                 Docs/audits/SRPSS_Architecture_Roadmap/
-phase reports:           Docs/phase_reports/
-historical lessons:      Docs/audits/SRPSS_Architecture_Roadmap/10_HISTORICAL_CANDIDATE_LESSONS.md
+Current_Plan P0 → P1 → P2 → P3 → P4
+        │
+        ├── evidence: Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md
+        ├── design:   roadmap/06_PRESENTATION_AND_COMPOSITOR_DESIGN.md
+        ├── tests:    roadmap/12_TEST_AND_BENCHMARK_PROTOCOL.md
+        ├── triage:   roadmap/14_FAILURE_TRIAGE_MAP.md
+        └── cleanup:  Future_Cleanup.md
 ```
-
-Do not freeze a dated "current evidence" path into this navigation file. `Current_Plan.md`
-owns the active evidence pointer and exact next gate.
-
-Historical baseline/candidate commits are opened only for a named forensic question or
-negative control. They are not current implementation seams.
 
 ## Entry Points
 
 - `main.py` — canonical runtime/performance/evidence authority.
-- `main_mc.py` — Media Center route; bounded shared smoke coverage only.
-- `main_diagnostic.py` — opt-in frozen-runtime diagnostic attribution product; not an ordinary performance target.
+- `main_mc.py` — Media Center route; bounded shared smoke coverage.
+- `main_diagnostic.py` — frozen-runtime diagnostic attribution; not ordinary performance target.
 - `tools/build_runner.py` — build owner.
-
-## Test Infrastructure
-
-- `tests/conftest.py` — shared isolation/fixtures.
-- `tests/run_chunked.py` — bounded subprocess full-suite execution.
-- `tools/visualizer_replay.py` — protected visualizer replay/negative controls.
-- `tools/recovery_evidence_parser.py` — read-only evidence parser; use only after its focused parser tests pass.
-- phase/resource/thread benchmarks and other probes — use via `Docs/Harness_Index.md`.
 
 ## Navigation Rule
 
-Add only architectural owners and critical entry points. Detailed implementation
-narratives, benchmark numbers and completed work belong in focused docs, reports or
-history.
+Add architectural owners and critical evidence routes only. Raw benchmark logs and
+completed implementation narratives belong in phase reports/history, not here.
