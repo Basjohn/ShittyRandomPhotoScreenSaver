@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-08-15
+Last updated: 2026-08-16
 Branch: `main`  
 Active phase: Phase 5 — workload, delivery, GPU attribution, resource efficiency
 
@@ -83,14 +83,25 @@ publication order and existing clocks unchanged.
 - Bubble worker/overlay GPU and ordinary transition draw durations are too small to explain the largest stalls;
 - heavy owner-context GL queries are isolated behind sampled `--gpu-timing`;
 - ordinary `--perf` performs no GL query-driver calls;
-- the ordinary-PERF control did **not** recover the remaining delivery regression.
+- the ordinary-PERF control did **not** recover the remaining delivery regression;
+- passive delivery-stage attribution now separates deadline wake lateness, queued GUI dispatch and already-dispatched paint-pending wait. In the failing mixed-refresh runs the render timer continues waking near target; rejected deadlines are downstream pending-state losses rather than a timer cadence collapse;
+- the 2026-08-16 same-process dual-display Spectrum A/B/C run proves the auxiliary visualizer presentation-request stream is a material shared-GUI amplifier. On the 165 Hz display, complete BlockSpin windows moved from median **143.4 FPS / 87.12% acceptance** in `A_NORMAL` to **150.2 / 91.39%** when only `SpotifyBarsGLOverlay.update()` requests were suppressed. Restoring normal presentation in the same process dropped the next complete window back to **141.2 / 85.85%**. The 60 Hz display moved from median **57.9 / 96.55%** to **58.9 / 98.37%** under the same suppression;
+- hiding the still-live auxiliary GL widget after suppressing requests produced only a smaller additional gain in that run: the 165 Hz display median was **151.6 FPS / 92.11% acceptance**. Therefore visible-surface participation is secondary to the request stream in this evidence; do not jump directly to one-surface-per-display surgery;
+- while normal Spectrum presentation was active, sampled visualizer shader GPU time was only about **0.02 ms p50 / 0.025 ms p95**. The proven cost is Qt/GUI presentation pressure, not expensive visualizer shader execution;
+- a separate no-visualizer-from-start control retained the Media widget/GSMTC controller but created no visualizer/overlay stream. It reached median **156.5 FPS / 95.11% acceptance** on the 165 Hz display and **59.35 / 99.09%** on the 60 Hz display. Relative to the hidden-live C state, queued-dispatch p95 fell from about **3.06 ms → 1.89 ms** and paint-pending p95 from about **2.16 ms → 0.52 ms** on the 165 Hz display;
+- the no-visualizer control is a separate process and removes the whole visualizer pipeline, so its additional improvement is evidence for **another visualizer-family GUI owner**, not proof that `SpotifyBarsGLOverlay.set_state()` alone owns it. The live hidden/suppressed run still executed roughly **88–90 `set_state()` handoffs/sec**, so that handoff/state-preparation path is the next bounded attribution target;
+- even with visualizers disabled, the 165 Hz display remains at roughly **155–159 FPS**, not 165. Residual rejected deadlines are now mostly queued-GUI-dispatch bursts (median about **51 dispatch-pending skips** versus **17 paint-pending skips** per complete no-visualizer window), so a non-visualizer GUI-dispatch owner remains after the visualizer work is corrected.
 
 ### Active next gate
 
-- [ ] Attribute **adaptive-render wakeup lateness**, **queued GUI dispatch waiting**, and **already-dispatched paint-pending waiting** as separate stages.
-- [ ] Preserve existing request/paint ownership and transition labels while adding only passive timing needed for that split.
-- [ ] Use the stage split to explain lost/delayed requests before changing coalescing, admission or scheduling.
-- [ ] Correlate large stalls against native/context/swap/event ownership or long Python GUI callbacks only after the stage boundary is known.
+- [x] Attribute **adaptive-render wakeup lateness**, **queued GUI dispatch waiting**, and **already-dispatched paint-pending waiting** as separate stages.
+- [x] Preserve existing request/paint ownership and transition labels while adding only passive timing needed for that split.
+- [x] Use the stage split to explain the major lost-request mechanism: target-rate wakeups continue, while pending GUI/paint delivery rejects later deadlines.
+- [ ] **Promoted fixable owner:** replace the one-visualizer-state-publication → one auxiliary `QOpenGLWidget.update()` contract with an owned presentation-opportunity contract. Logical source/state cadence must remain unchanged; presentation may consume the latest immutable render state without scheduling one Qt repaint per publication.
+- [ ] Before implementing that production change, add/retain fidelity bars that prove Bubble discrete event identity/edges, one-in-flight simulation semantics, Spectrum state evolution and all supported-mode logical snapshots remain unchanged when presentation consumes fewer opportunities than logical publication produces.
+- [ ] **Next attribution inside the visualizer family:** measure the GUI cost of the high-cadence logical-to-overlay handoff separately from repaint/paint. Split producer/state-build work from `SpotifyBarsGLOverlay.set_state()` preparation/commit and quantify it in the live mixed-refresh run. The no-visualizer control justifies this measurement but does not yet justify moving all `set_state()` logic off-thread.
+- [ ] If the handoff is a proven GUI owner, move only immutable/preparable render-state work off the GUI owner and leave QWidget/GL mutation on the GUI/context owner. Do not create a second visualizer clock and do not make logical state paint-driven.
+- [ ] After the visualizer presentation/handoff correction, rerun the no-visualizer-equivalent control and attribute the residual 165 Hz queued-dispatch bursts against concrete GUI callbacks/owners. Do not let the visualizer fix claim closure while the 165 Hz display still loses ~5% of deadlines with visualizers absent.
 - [ ] Change multi-display commit scheduling only if steady post-extraction evidence proves back-to-back prepared commits are a remaining owner.
 - [ ] No repaint retry, scheduler gate, display-FPS cap or visualizer cadence compensation.
 
@@ -104,12 +115,16 @@ Target contract: **Prepare → Commit → Persist**.
 
 ## P5.2B GPU / Presentation Attribution
 
-- [ ] Record per-display refresh, logical publication rate, update-request rate and paint rate together.
-- [ ] Treat the 60 Hz display receiving ~90–100 update/paint requests as a presentation-pressure question, not permission to lower authored logical cadence.
-- [ ] Re-measure residual overlay/presentation cost after delivery attribution.
-- [ ] Feed a future Phase 7 prototype only after an edge-preserving immutable render-state contract proves Bubble's protected discrete response cannot disappear.
-- [ ] Phase 7 presentation coalescing remains conditional, not inevitable.
-- [ ] Do not begin Phase 8 one-surface-per-display work until Phase 7 and GPU/context evidence justify the lifecycle risk.
+- [x] Record per-display refresh, logical publication rate, update-request rate and paint rate together.
+- [x] Prove that the 60 Hz visualizer surface receiving roughly 85–95 logical publications/update requests per second creates shared-GUI presentation pressure without requiring a Bubble-specific failure.
+- [x] Prove by same-process A/B/A that suppressing only auxiliary visualizer `update()` requests materially improves compositor acceptance/FPS on both displays while logical visualizer state continues publishing.
+- [x] Prove that hiding the still-live auxiliary GL widget adds only a smaller benefit than suppressing its repaint-request stream in the current Spectrum run; visible surface existence is not the primary owner established by this experiment.
+- [x] Re-measure overlay GPU execution with `--gpu-timing`: Spectrum overlay shader cost remains tiny (~0.02 ms p50 / ~0.025 ms p95) and does not explain the GUI-delivery loss.
+- [ ] Instrument and attribute high-cadence logical-to-overlay GUI handoff/state preparation while presentation is suppressed/hidden. Compare against the no-visualizer control without conflating a separate-process control with same-process proof.
+- [ ] Design the production presentation-opportunity contract around an immutable/latest render snapshot plus edge/event preservation. It may coalesce **presentation states**, never source/event sampling or authored logical cadence.
+- [ ] Add a mixed-refresh regression bar proving one display's visualizer cannot starve another display's compositor dispatch/paint delivery.
+- [ ] Remove the temporary `--viz-present-abc`/Shift+/ monkeypatch experiment after its evidence is captured and before treating a production fix as complete.
+- [ ] Do not begin Phase 8 one-surface-per-display work: current A/B/C evidence does not justify that lifecycle risk because C was only modestly better than B.
 
 ## P5.2C Compatibility, Fallback And Debris
 

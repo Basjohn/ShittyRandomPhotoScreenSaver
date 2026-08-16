@@ -1,6 +1,7 @@
 """Passive app-owned Qt event-loop timer-lateness measurement."""
 from __future__ import annotations
 
+import sys
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -59,6 +60,24 @@ class EventLoopStallRecorder(QObject):
     def start(self) -> None:
         if self._running:
             return
+
+        # TEMPORARY Phase 5 presentation A/B/C causal probe.
+        # Gate: --viz-present-abc
+        # Hotkey while gated: Shift+/ cycles A normal -> B suppress requests ->
+        # C hidden surface -> A normal. The CLI/hotkey/helper/hook are expected
+        # to be removed after the current presentation-owner experiment.
+        if "--viz-present-abc" in sys.argv:
+            try:
+                from core.performance.visualizer_presentation_abc import (
+                    install_visualizer_presentation_abc_if_requested,
+                )
+
+                install_visualizer_presentation_abc_if_requested()
+            except Exception:
+                logger.exception(
+                    "[PERF][VIS_PRESENT_ABC] Failed to install temporary presentation probe"
+                )
+
         now = time.perf_counter()
         self._running = True
         self._expected_at = now + self._interval_ms / 1000.0
