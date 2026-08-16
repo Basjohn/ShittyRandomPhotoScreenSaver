@@ -49,13 +49,16 @@ A checkpoint is a rollback anchor, not a pause for permission.
 - Strict GL teardown remains fail-closed and byte-accounted.
 - Keep the production CPU image-cache cap at 256 MiB until measured evidence justifies a deliberate change.
 - No sleeps, nested event pumping, production `gc.collect()`, working-set trimming, process recycling, timeout extension, ignored owners, hidden runtime fallback paths or cadence hacks.
+- Configured visualizer display ownership is sticky across transient sleep/wake/non-participation. Preserve the hard-won same-display geometry/aspect-ratio correction path; do not migrate ownership to another display merely because the configured display is temporarily not ready. Cross-display fallback requires authoritative settled-topology absence plus one intentionally coarse ~60-second confirmation opportunity. This is ownership grace, not a frame clock: no polling, dedicated thread, raw periodic timer or exact-deadline requirement. Return to the configured display is event-driven from later authoritative topology plus normal display-runtime readiness.
+- Preserve ordinary stable cold-start anti-flash behaviour. `screen.grabWindow(0)` may remain on the normal desktop→screensaver startup path; any removal/bypass is recovery/reinitialization-specific unless separately approved.
 
 # Phase 5 — Active Work
 
 ## Immediate Priority Queue
 
-This queue is the **Phase 5 execution authority** until P5.2 delivery ownership is materially
-closed. Detailed evidence belongs in
+This queue is the **Phase 5 execution authority**. P0→P4 remain the immediate performance/delivery
+sequence. P5 is the next mandatory monitor-topology/sleep-wake hardening lane and must complete
+before returning to lower-leverage Phase 5 work in P6. Detailed delivery evidence belongs in
 `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`; cleanup details belong in
 `Future_Cleanup.md`.
 
@@ -96,9 +99,69 @@ closed. Detailed evidence belongs in
 - [ ] Close the owner by extraction/narrowing only when direct evidence names it; do not tune the adaptive timer or weaken the one-request ownership contract to hide it.
 - [ ] Do not claim Phase 5 delivery closure while a no-visualizer run still loses roughly five percent of 165 Hz deadlines for an unnamed reason.
 
-### P5 — resume lower-leverage Phase 5 work
+### P5 — harden authoritative monitor topology and physical sleep/wake recovery
 
-- [ ] Return to absolute memory/commit/VRAM attribution, remaining proven GUI service/cache work, parser/logging debt and compatibility cleanup after P0–P4 reach their gates.
+This is **not deferred cleanup**. It follows the immediate P0→P4 performance sequence because the
+installed non-diagnostic runtime now has a repeatable high-severity physical-monitor recovery failure:
+when both displays are off while the screensaver runtime is active, waking them can leave one display
+visible but frozen, the other blank, all Qt input dead, and recovery possible only after
+Ctrl+Alt+Delete disturbs the Windows desktop/display state. Do not claim a root cause until evidence
+names the blocking owner. Historical R-26 remains a useful warning that D0 can reappear before D1 and
+that temporary participation is not authoritative topology; Phase 3 lifecycle evidence did not cover
+this physical-off→wake platform scenario.
+
+#### P5-A — one authoritative monitor-topology owner
+
+- [ ] Make `DisplayManager` (or one equivalently explicit engine-level owner) the sole authority that decides whether a display event is a no-op, re-anchor, or full runtime replacement.
+- [ ] Reduce `WM_DISPLAYCHANGE`, Qt `screenAdded`/`screenRemoved`, and related per-window callbacks to topology-invalidated notifications plus local bookkeeping. A `DisplayWidget` must not independently walk/reconfigure all displays while the manager can concurrently decide to retire the same runtime.
+- [ ] Preserve per-display DPR/geometry/surface ownership, but issue mutations from one authoritative topology decision against one identified runtime generation.
+- [ ] Add focused tests proving duplicate native+Qt event storms produce one authoritative decision/rebuild rather than overlapping re-anchor and teardown/recreate paths.
+
+#### P5-B — true trailing-edge topology settling
+
+- [ ] Replace the current first-event-style settle behaviour with a trailing-edge quiet-period debounce: every relevant topology event restarts the quiet timer so reconciliation occurs only after a real period of silence.
+- [ ] Add a bounded maximum settle deadline so a pathological driver/event storm cannot postpone reconciliation forever. Reaching the bound must produce one explicit best-known snapshot/decision, not retries or nested event pumping.
+- [ ] Freeze the accepted screen count/order/geometry/DPR identity into one topology snapshot/generation before any destructive replacement begins. Do not rebuild from a transient D0-only sample merely because D1 has not reappeared yet.
+- [ ] Record low-rate lifecycle breadcrumbs for topology-event receipt, debounce restart, accepted snapshot, and decision so an overnight failure can be reconstructed without per-frame logging.
+
+#### P5-C — transactional topology replacement
+
+- [ ] Make monitor replacement an explicit transaction: settle topology → freeze snapshot → stop further old-runtime topology mutation → retire the old runtime exactly once → pass the existing destruction barrier → construct/register the complete replacement against the frozen snapshot → reveal displays through the existing staged startup/readiness path.
+- [ ] Do not weaken Phase 3/R-49 strict GL teardown, restore hide/reuse, ignore failed deletion, extend destruction timeouts, or move GL teardown to a worker as a recovery shortcut.
+- [ ] Add before/after breadcrumbs around the small set of potentially blocking native boundaries used by monitor recovery/rebuild (including compositor cleanup/context acquisition, surface/compositor creation, display show/reveal, and the staggered D0/D1 callbacks). Breadcrumbs are observational only; no retry loop or behavioural timeout is introduced.
+- [ ] Preserve the existing all-displays-registered-before-staggered-show principle. The 100 ms-style reveal staggering may remain unless evidence proves it harmful; it is useful for avoiding simultaneous heavy GL startup.
+
+#### P5-D — sticky visualizer display ownership; conservative fallback and nearly-free return-home
+
+- [ ] Preserve the existing same-display visualizer geometry/aspect-ratio stabilization and correction work. Correcting a visualizer that spawned with bad geometry on its configured display is **not** permission to change which display owns it.
+- [ ] Treat a configured visualizer monitor that still exists in the authoritative settled topology but is temporarily asleep, rebuilding, missing a ready `WidgetManager`, or otherwise non-participating as **temporarily unavailable, not absent**. Hold/park/hide/defer that visualizer on its configured ownership target rather than moving it to another display. **Do not start an absence timer for mere non-participation.**
+- [ ] Retire the current ~1500 ms remote CUSTOM participation fallback as cross-display authority. Participation rechecks may still be used for same-display readiness/geometry work if independently required, but a fixed participation delay must never establish that the configured monitor disappeared.
+- [ ] Begin cross-display fallback consideration only after P5-B has accepted an authoritative settled topology snapshot in which the configured monitor is genuinely absent. At that point record one absence candidate tied to the topology/runtime generation.
+- [ ] Confirm sustained absence with **one intentionally coarse lifecycle-owned recheck at approximately 60 seconds** after the accepted absence candidate. It need not run at exactly 60.000 seconds and must not receive frame-level/raw-timer treatment. Reuse an existing owned one-shot/lifecycle scheduling seam; add **no polling loop, periodic timer, dedicated thread, worker wait, sleep, or repeated retry chain** merely to watch the monitor.
+- [ ] Any newer authoritative topology generation invalidates the old absence candidate. If the configured monitor returns before the coarse recheck, normal topology reconciliation makes the candidate stale and ownership remains with the configured target; the stale delayed callback must become a no-op through generation/token ownership.
+- [ ] If the single coarse recheck finds the configured monitor still absent from the current authoritative settled topology, one fallback ownership transfer to a participating display is permitted. This is a last-resort availability action, not normal wake recovery.
+- [ ] Make return-home **event-driven and timer-free**: when normal topology notifications later settle to a snapshot containing the configured monitor, wait only for the existing display-runtime readiness boundary needed to safely host the visualizer, then retire the fallback owner and transfer ownership back **once** to the configured display. Do not add a reverse polling timer or periodic “is D1 back?” task.
+- [ ] Preserve saved CUSTOM geometry/aspect authority across both fallback and return-home. A fallback display may need a temporary valid presentation geometry, but the configured display's saved layout remains the source of truth when ownership returns.
+- [ ] Add tests for D0-before-D1 wake order, D1-before-D0 wake order, temporary zero/partial participation, long (>60 s) real absence, actual cable/display removal, return before the grace check, return after fallback, Settings/recreation during an armed absence candidate, and stale-generation callback rejection. Temporary wake churn must never move visualizer ownership; genuine sustained absence may; stable return restores configured ownership once.
+
+#### P5-E — keep `grabWindow(0)` startup polish, remove it from recovery-critical reinit
+
+- [ ] Preserve `screen.grabWindow(0)` on the ordinary stable desktop→screensaver cold-start path because its user-visible purpose is to avoid a desktop/wallpaper→black→first-photo flash while the first SRPSS frame is prepared.
+- [ ] On monitor-topology replacement / physical wake recovery, do **not** synchronously capture the waking Windows desktop as a prerequisite to reconstructing a display. Prefer the already-retained SRPSS image/replay state as the recovery seed; if no safe retained seed exists, keep updates blocked until the first real SRPSS image is ready rather than making desktop capture recovery-critical.
+- [ ] Keep normal startup visual appearance unchanged. Add separate tests for ordinary cold startup (no new black flash) and monitor recovery (no synchronous desktop-capture dependency).
+
+#### P5-F — installed physical-off/wake and ownership-recovery gate
+
+- [ ] Add deterministic unit/integration coverage for event coalescing, trailing-edge settling, bounded maximum settle, frozen topology snapshots, one replacement transaction, stale-generation rejection, sticky visualizer ownership, the single coarse ~60-second absence candidate, event-driven return-home, and recovery-specific desktop-capture bypass.
+- [ ] Prove the fallback implementation introduces no periodic monitor polling, dedicated worker/thread, per-frame check or exact-deadline timing dependency. One owned delayed absence-confirmation callback may exist only while a genuine settled-topology absence candidate is armed.
+- [ ] Run repeated installed **ordinary non-diagnostic** cycles where both displays are turned off before/during screensaver activation, remain off long enough for the runtime to continue normally, then wake together and in opposite sequential orders. Include long-idle/overnight-equivalent duration where practical.
+- [ ] Include visualizer ownership cases where the configured display returns before the ~60-second grace check, remains genuinely absent beyond it so fallback occurs once, and later returns after fallback. Return-home must happen from normal topology/readiness events without polling and must restore the configured CUSTOM geometry once.
+- [ ] Pass only when both displays recover/reveal, clocks continue advancing, Escape/context-menu/input remain responsive, visualizer ownership does not migrate on transient participation, genuine sustained absence can recover to one fallback owner, stable return restores the configured owner once, normal desktop→screensaver startup remains flash-free, and no Ctrl+Alt+Delete escape is required.
+- [ ] If a freeze still occurs, use the last entered/not-returned native-boundary breadcrumb to narrow the next investigation. Do not compensate with sleeps, retries, forced paints, timeout extensions, relaxed GL ownership, or additional monitor-polling machinery.
+
+### P6 — resume lower-leverage Phase 5 work
+
+- [ ] Return to absolute memory/commit/VRAM attribution, remaining proven GUI service/cache work, parser/logging debt and compatibility cleanup only after P0–P5 reach their gates.
 
 
 ## P5.0 Media Provider Runtime Validation
@@ -142,11 +205,13 @@ Detailed accepted evidence:
 
 ### Active gate
 
-Execution order is the **Immediate Priority Queue P0→P4** above.
+For the delivery/performance thread, execution order remains **Immediate Priority Queue P0→P4** above.
+P5 monitor-topology/sleep-wake hardening follows immediately after those gates and before P6 lower-leverage work.
 
 - P2 owns the proven visualizer presentation-request correction.
 - P3 owns the still-unproven visualizer handoff/preparation attribution.
 - P4 owns the residual non-visualizer queued-GUI-dispatch owner.
+- P5 must preserve the P1–P4 presentation/fidelity contracts while centralizing topology and recovery ownership.
 - No repaint retry, scheduler gate, display-FPS cap, visualizer cadence compensation, paint acknowledgement or source/event decimation is permitted.
 
 ## P5.2A Remaining GUI Workload Extraction
@@ -215,6 +280,7 @@ Current logging architecture is intentionally retained:
 - [ ] Preserve visualizer temporal goldens/negative controls for visualizer-adjacent cleanup.
 - [ ] Official performance comparisons use ordinary `main.py`; name `--gpu-timing` observer differences explicitly.
 - [ ] Long soak/lifecycle captures preserve enough main + relevant sidecar rotations to cover the claimed interval.
+- [ ] P5 physical-monitor recovery validation uses ordinary installed `main.py`/screensaver behaviour as the acceptance authority; deterministic tests do not substitute for real display-off/wake cycles.
 
 ## Low-Priority Presentation Follow-Ups
 
@@ -236,3 +302,4 @@ Keep behind active delivery/resource work and do not introduce polling/repaint l
 - [ ] Promoted compatibility/fallback debris is removed or retained with a real current contract.
 - [ ] Stronger visualizer temporal/paint-receipt evidence is complete.
 - [ ] Canonical evidence parser and logging tests match the current logging format/retention contract.
+- [ ] Physical monitor-off→screensaver→wake recovery passes repeated dual-display installed cycles without frozen UI/blank sibling display, without eager visualizer ownership migration, and without weakening strict GL teardown or normal cold-start anti-flash behaviour.

@@ -5,159 +5,113 @@ Last reconciled: 2026-08-16
 ## Objective
 
 Prove improvements against current `main` under equivalent authored scenarios without
-sacrificing visualizer behaviour, first-visible response, lifecycle, image/widget quality
-or resource ownership.
+sacrificing visualizer behaviour, first-visible response, lifecycle, image/widget quality,
+monitor ownership or resource ownership.
 
-Accepted current delivery baseline:
-`Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`.
-
-## Official Run Manifest
-
-Record exact commit/dirty state, entry point, date/time/timezone, OS/Python/PySide,
-CPU/RAM/GPU/driver, display resolution/refresh/DPR/route, power profile, audio
-source/mode/preset, image/cache state, transitions/widgets, background load, diagnostic
-flags, evidence location and parser version.
+Accepted delivery baseline: `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`.
 
 Canonical `main.py` is the ordinary performance authority. Diagnostic is for frozen
-runtime/lifecycle attribution, not baseline performance.
+runtime/lifecycle attribution, not ordinary performance or installed physical-wake acceptance.
 
 ## Standard Scenarios
 
 - **S1 cold/warm static** — startup and idle baseline.
-- **S2 each visualizer steady state** — same authored source across supported modes.
-- **S3 visualizer temporal fidelity** — source→logical state→presentation state→paint receipt, generation/activation, deliberate missed presentation opportunities.
+- **S2 each visualizer steady state** — same authored source across modes.
+- **S3 visualizer temporal fidelity** — source→logical→presentation→paint, deliberate missed presentation opportunities.
 - **S4 image transitions** — fixed source/cache set and representative transition families.
 - **S5 combined normal operation** — visualizer + widgets + transitions.
-- **S6 recreation regression/stress** — Settings/Edit lifecycle/resource stress.
+- **S6 Settings/Edit recreation stress** — solved lifecycle regression coverage.
 - **S7 image/resource churn** — sizes/aspects/transitions/cache pressure.
 - **S8 quiescent runtime teardown** — tracked zero plus process/driver residuals.
-- **S9–S12 host pressure** — CPU, disk/decode, GPU and mixed load with explicit timestamps.
+- **S9–S12 host pressure** — CPU/disk/decode/GPU/mixed load.
 - **S13 long soak** — post-warmup slopes/outlier timeline.
-- **S14 topology/system lifecycle** — display route/DPR/resolution/sleep-wake where supported.
-- **S15 texture identity comparison** — retained current→old contract.
-- **S16 logging/persistence comparison** — same diagnostics/settings scenario across writer ownership.
-- **S17 mixed-refresh presentation ownership** — 165 Hz + 60 Hz, visualizer on one display, fixed authored source and transitions; compare logical publication, overlay handoff, update request, paint and compositor delivery stages.
-- **S18 visualizer-disabled residual dispatch control** — Media remains enabled; visualizer disabled from runtime creation; identify remaining queued-GUI-dispatch owner.
+- **S14 topology/system lifecycle** — display route/DPR/resolution/system changes.
+- **S15 texture identity** — retained current→old contract.
+- **S16 logging/persistence** — equivalent scenarios across writer ownership.
+- **S17 mixed-refresh presentation ownership** — 165 Hz + 60 Hz, fixed authored visualizer source/transitions.
+- **S18 visualizer-disabled residual dispatch control** — Media remains enabled; visualizer absent from construction.
+- **S19 physical monitor-off/wake recovery** — both displays physically off before/during screensaver activation, long idle, simultaneous and reversed sequential wake; ordinary installed non-diagnostic acceptance.
+- **S20 visualizer configured-monitor absence/recovery** — return before grace, genuine absence beyond ~60 s, fallback once, later configured-monitor return-home once.
 
-## Required Metrics
+## Required Delivery Metrics
 
-### Frame/UI
+Frame interval tails; adaptive wake lateness; queued GUI dispatch wait/skips; paint-pending
+wait/skips; request age; paint duration; event-loop lateness; first-visible latency.
 
-- frame interval p50/p90/p95/p99/max and >25/33/50/100 ms counts;
-- adaptive wake lateness;
-- queued GUI dispatch wait and dispatch-pending skip count;
-- paint-pending wait and paint-pending skip count;
-- request age and paint duration;
-- event-loop lateness;
-- first-visible latency.
+Visualizer: source/event identity, authored logical timing, handoff/commit, update request,
+paint, source/state age, generation/activation, protected edges/events and user visual result.
 
-### Visualizer
+Lifecycle/topology: topology-event sequence, debounce restart, accepted snapshot/generation,
+replacement decision, destruction-barrier stages, before/after native recovery boundaries,
+D0/D1 registration/reveal/readiness, visualizer configured/fallback owner and absence-candidate identity.
 
-- logical source/event integrity;
-- authored step/submission/publication timing;
-- logical publication rate;
-- overlay handoff/commit rate;
-- auxiliary update-request rate;
-- paint rate;
-- source/state age at paint;
-- generation/activation;
-- protected edge/event identity/history;
-- user visual result.
+## P1–P4 Delivery Gates
 
-### CPU/tasking
+Preserve the existing P1 fidelity gate, P2 mixed-refresh production gate, P3 handoff
+attribution gate and P4 residual-dispatch gate from `Current_Plan.md` and the Phase 5 delivery report.
 
-Main/child/system CPU, task queue age/depth, callback backlog, worker occupancy and
-measured substage durations where ownership is under investigation.
+No one exact FPS is a unit-test oracle; compare equivalent authored runs and stage distributions.
 
-### GPU
+## P5-A/B Topology Authority Gate
 
-Process GPU busy/sample age; sampled visualizer/compositor GPU query durations;
-texture upload/allocation counts. Zero samples are never interpreted as zero cost.
+Deterministic tests must prove:
 
-### Memory/lifecycle
+- duplicate `WM_DISPLAYCHANGE` + Qt screen event storms yield one topology decision;
+- every relevant event restarts the trailing-edge quiet window;
+- a bounded maximum settle prevents endless postponement;
+- accepted count/order/geometry/DPR is frozen into one snapshot/generation;
+- a transient D0-only sample does not become a destructive D1-absent decision merely because D1 is still waking.
 
-RSS/private commit, tracked CPU/GL/shared bytes, handles/threads, generation barriers and
-strict teardown zero/plateau.
+## P5-C Transaction Gate
 
-## P1 Fidelity Gate Before Presentation Correction
+Prove exactly one old-runtime retirement and one replacement construction per accepted
+transaction. Strict Phase 3 GL deletion/currentness/barrier semantics remain unchanged.
+All displays are registered before staged reveal; staggered reveal remains allowed.
 
-Before P2 is accepted:
+Low-rate breadcrumbs must bracket recovery-critical native calls without changing behaviour.
 
-- Bubble authored step/dt/source/event identity remains unchanged;
-- one-in-flight Bubble simulation semantics remain unchanged;
-- protected short-lived edges/events remain visible when intermediate render snapshots are skipped;
-- Spectrum source/state evolution remains on its authoritative logical tick;
-- supported-mode replay/state digests remain unchanged or explicitly approved;
-- generation/activation stale state is rejected;
-- presentation opportunity cannot feed back into logical admission.
+## P5-D Visualizer Ownership Gate
 
-## P2 Mixed-Refresh Production Gate
+- Existing same-display CUSTOM geometry/aspect stabilization remains intact.
+- Monitor present in authoritative topology but asleep/not-ready/not-participating never arms fallback and never moves ownership.
+- Settled authoritative absence arms one generation-owned candidate.
+- Candidate gets **one coarse recheck at approximately 60 seconds**; exact timing is not tested and late execution under GUI load is acceptable.
+- No periodic timer, polling loop, dedicated thread, worker wait or repeated retry chain exists.
+- New topology generation invalidates/stales an old candidate.
+- Return before the coarse check produces no fallback.
+- Still absent at the coarse check permits exactly one fallback owner.
+- Later configured-monitor return is detected by normal topology events; after existing runtime readiness, fallback retires and configured ownership returns once.
+- Return-home has no reverse polling timer.
+- Saved configured CUSTOM geometry remains the authority when ownership returns.
 
-The production candidate is tested without the temporary A/B/C monkeypatch.
+## P5-E Startup/Recovery Image Gate
 
-Required observations:
+Ordinary stable desktop→screensaver startup must retain anti-flash behaviour. Physical-wake
+or topology-replacement construction must not synchronously depend on `screen.grabWindow(0)`;
+use retained SRPSS replay/seed state or wait for the first real frame.
 
-- logical publication rate remains equivalent to the approved pre-fix workload;
-- auxiliary update-request rate is no longer mechanically one-for-one with logical publication when useful presentation opportunity is lower;
-- 165 Hz compositor request acceptance/FPS materially approaches the accepted no-visualizer control;
-- the 60 Hz sibling remains at/near its healthy baseline;
-- queued dispatch and paint-pending distributions improve rather than merely shifting loss;
-- no new divisor pattern (~half/third target rate) appears;
-- no source/event/cadence reduction explains the gain;
-- teardown/resource ownership remains healthy.
+## P5-F Installed Physical-Off/Wake Gate
 
-Do not encode one exact FPS as a unit-test oracle. Runtime acceptance compares equivalent
-runs and stage distributions.
+Run ordinary installed non-diagnostic screensaver cycles:
 
-## P3 Handoff Attribution Gate
+1. both monitors on → screensaver normal;
+2. both monitors physically off before/during activation;
+3. long idle/overnight-equivalent where practical;
+4. wake both together;
+5. repeat D0 then D1 and D1 then D0;
+6. repeat with configured visualizer target temporarily late but present;
+7. repeat with target genuinely absent >~60 s so fallback occurs once;
+8. return target after fallback and confirm one event-driven return-home.
 
-Instrument bounded substages without adding per-frame log spam:
+Pass only when both displays reveal, clocks continue advancing, Escape/context-menu/input
+work, no Ctrl+Alt+Delete is required, transient participation does not migrate visualizer,
+normal startup remains flash-free, and strict GL teardown/resource ownership stays healthy.
 
-```text
-producer/state build
-pure-data render preparation
-Qt overlay commit
-presentation request
-paint
-```
-
-If moving preparation off GUI:
-
-- worker output is immutable and Qt/GL-free;
-- GUI commit validates generation/activation;
-- logical replay/state is unchanged;
-- PERF-off scheduling path is unchanged;
-- no new worker wait/backpressure is introduced.
-
-## P4 Residual Dispatch Gate
-
-Run S18 after P2/P3. Correlate dispatch-pending bursts with concrete GUI callbacks using
-existing low-rate/event-owner instrumentation.
-
-Acceptance requires naming the owner/call path or explicitly classifying the residual as
-external/irreducible with evidence. “Still about 156 FPS” is not an owner.
-
-## Compatibility / Diagnostic Removal Gate
-
-For temporary A/B/C scaffolding:
-
-- remove helper module, CLI gate, hotkey and event-loop install hook together;
-- ordinary startup remains unchanged;
-- passive delivery-stage metrics remain available;
-- no tests depend on the monkeypatch as production architecture.
-
-## GPU Attribution Gate
-
-Profiling remains non-blocking and sampled. `glFinish()` invalidates the candidate.
-Shader cost may not be inferred from process GPU busy alone.
+If a freeze remains, preserve the last entered/not-returned native breadcrumb and narrow the
+next investigation. Do not add sleeps, forced paints, nested event pumping, timeout extensions,
+GL retries or monitor polling.
 
 ## Checkpoint Rule
 
-Risky slice passes focused gate → clean checkpoint → continue. Stop only on failed
-evidence, repository conflict or affected visual judgement.
-
-## Release Comparison
-
-Routine work compares current approved commits under equivalent authored workload.
-Historical commits are only named negative controls/forensic references. Preserve failed
-runs and report uncertainty.
+Risky slice passes focused gate → clean checkpoint → continue. Stop only on failed evidence,
+repository conflict or affected visual judgement.

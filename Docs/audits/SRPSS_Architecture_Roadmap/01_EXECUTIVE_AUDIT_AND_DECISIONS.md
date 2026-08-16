@@ -4,136 +4,113 @@ Last reconciled: 2026-08-16
 
 ## Scope
 
-This document states current architecture findings and decisions. `Current_Plan.md`
-owns execution order; the accepted Phase 5 delivery evidence is
+This document states current architecture findings and decisions. `Current_Plan.md` owns
+execution order. Accepted Phase 5 delivery evidence lives in
 `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`.
 
 ## Current Root Findings
 
-1. **The dominant delivery loss is downstream of timer wakeup.** Target-rate adaptive
-   wake opportunities remain available while queued GUI dispatch and paint-pending state
-   reject later deadlines.
-2. **Bad smell 1 is proven:** visualizer logical publication is coupled one-for-one to
-   an auxiliary `QOpenGLWidget.update()` request. Same-process A/B/A proves that request
-   stream materially slows both displays.
-3. **Visible second-surface existence is secondary in the current evidence.** Hiding the
-   still-live visualizer GL widget improves only modestly beyond suppressing its repaint
-   requests, so one-surface-per-display is not the current fix.
-4. **Another visualizer-family GUI owner remains.** A visualizer-disabled-from-start
-   control improves beyond the hidden-live state while Media/GSMTC stays active. This
-   proves additional family cost, but not that `set_state()` as a whole owns it.
-5. **Bad smell 2 is proven:** even with visualizers absent, the 165 Hz compositor remains
-   below target with queued-dispatch pending skips dominating paint-pending skips.
-6. **Visualizer shader cost is not the owner.** Sampled Spectrum overlay GPU duration is
-   tiny relative to the delivery loss.
-7. **Bubble/Spectrum logical timing remains protected.** The evidence argues for
-   presentation ownership and GUI availability work, not cadence/source/scheduler cuts.
-8. **Retained texture identity/base draw/upload-copy work is closed.**
-9. **Settings/Edit/Diagnostic ownership and clock shadows remain solved regression contracts.**
-10. **Absolute memory/commit/VRAM is still a separate Phase 5 efficiency problem.**
+1. **The dominant measured delivery loss is downstream of timer wakeup.** Queued GUI
+   dispatch and paint-pending state reject later deadlines.
+2. **Bad smell 1 is proven:** one logical visualizer publication currently implies one
+   auxiliary `QOpenGLWidget.update()` request; same-process A/B/A proves material shared-GUI cost.
+3. **Visible second-surface existence is secondary in current evidence.** Hiding the live
+   visualizer GL widget adds only a modest improvement beyond suppressing its update requests.
+4. **Another visualizer-family GUI owner remains.** The no-visualizer control improves
+   beyond hidden-live state but does not prove `set_state()` as a whole owns the difference.
+5. **Bad smell 2 is proven:** with visualizers absent, the 165 Hz compositor still loses
+   deadlines, predominantly as queued-GUI-dispatch pending skips.
+6. **Visualizer shader cost is not the owner.** Sampled Spectrum GPU duration is tiny.
+7. **Physical monitor sleep/wake is a separate high-severity platform failure.** The
+   ordinary installed screensaver can freeze after both monitors were physically off,
+   leaving one display frozen, its sibling blank and all normal Qt input dead until
+   Ctrl+Alt+Delete disturbs the Windows desktop/display state.
+8. **The physical-wake root call is not yet proven.** Current code nonetheless has durable
+   improvement targets: duplicate topology authority, first-event settlement, non-transactional
+   mutation/replacement overlap, eager visualizer ownership fallback, and synchronous desktop
+   capture in the recovery-critical show path.
+9. **R-26 is directly relevant precedent:** D0 can return before D1 and temporary display
+   participation is not authoritative topology.
+10. **Phase 3 lifecycle architecture remains correct but did not prove physical-off/wake.**
+    Strict owner-context GL teardown and destruction barriers must not be weakened.
+11. **Absolute memory/commit/VRAM remains separate Phase 5 efficiency work.**
 
 ## Decision Set
 
 ### ADR-A — Current `main` is implementation authority
-
-Historical commits are read only for named forensic questions or negative controls.
+Historical commits are named forensic/negative controls only.
 
 ### ADR-B — Visual behaviour authority
-
-`ff93461685476bd0657aa88312fc2e35e9037880` remains the Bubble/Spectrum visual
-reference until superseded by explicit installed approval.
+`ff93461685476bd0657aa88312fc2e35e9037880` remains the Bubble/Spectrum visual reference until explicitly superseded.
 
 ### ADR-C — One owner per mutable concern
-
-Runtime admission, logical visualizer state, presentation requests, GL deletion,
-transition completion, persistence ordering and cache eviction each require an explicit
-authority.
+Runtime admission, topology decisions, logical visualizer state, presentation requests, GL deletion, transition completion, persistence ordering and cache eviction each require one explicit authority.
 
 ### ADR-D — Prepare → Commit → Persist → Present
-
-Thread-safe pure-data work prepares immutable results away from GUI where proven.
-GUI/context owners perform minimal Qt/QPixmap/GL commits. Durable writes use ordered
-background ownership. Presentation consumes already-integrated state and cannot become a
-simulation clock.
+Pure-data work may prepare off GUI when proven; Qt/QPixmap/GL commit remains on the owning GUI/context; presentation consumes integrated state and is not a simulation clock.
 
 ### ADR-E — No catch-all background thread
-
-Different blocking/ordering/lifetime classes remain separate. Do not serialize unrelated
-work through a new miscellaneous thread.
+Do not solve independent blocking/ordering classes with one miscellaneous thread.
 
 ### ADR-F — Visualizer logical cadence is protected
+No source/event/tick/dt reduction to hide GUI pressure.
 
-Bubble/Spectrum source/event integration, authored step/dt semantics and publication
-ordering are not reduced to match display refresh or to hide GUI pressure.
+### ADR-G — Presentation is a consumer, not publication acknowledgement
+It may coalesce stale render snapshots after logical integration, never logical events/steps.
 
-### ADR-G — Presentation is a consumer, not a publication acknowledgement
-
-After logical integration, presentation may consume the latest valid immutable render
-state and may coalesce stale **render snapshots**. It may not drop logical events/steps,
-backpressure the producer or make paint completion an admission token.
-
-### ADR-H — Short-lived authored edges must survive presentation coalescing
-
-A latest-state slot alone is insufficient where a protected visible response can exist
-for only one logical publication. The presentation contract must carry bounded
-edge/event identity/history or another approved equivalent.
+### ADR-H — Short-lived authored edges survive presentation coalescing
+Latest-state-only presentation is insufficient where an approved edge can exist for one logical publication.
 
 ### ADR-I — No one-publication → one-update requirement
-
-The normal visualizer path must not require an auxiliary `QOpenGLWidget.update()` for
-every accepted logical publication when publication outruns useful presentation
-opportunity. This is now a measured production problem, not a speculative Phase 7 idea.
+The normal visualizer path must not require one auxiliary Qt update for every accepted logical publication.
 
 ### ADR-J — Paint/pending latches are not physical presentation clocks
-
-Do not use `paintGL()` completion, producer elapsed-time gates or a pending-until-paint
-boolean to create a display-rate scheduler. Previous divisor-collapse behaviour makes
-those mechanisms unsafe.
+No paint acknowledgement, pending-until-paint admission or producer elapsed-time display-rate gate.
 
 ### ADR-K — GUI handoff extraction requires measured pure-data ownership
+Only proven immutable preparation may move off GUI; QWidget/QColor/QPixmap/GL mutation remains GUI/context owned.
 
-The no-visualizer control justifies measuring logical-to-overlay preparation/commit cost.
-Only proven thread-safe immutable preparation may move off GUI. QWidget/QColor/QPixmap/GL
-mutation remains on the GUI/context owner.
-
-### ADR-L — Residual no-visualizer dispatch is an independent owner
-
-The P2 visualizer correction cannot claim delivery closure while a visualizer-disabled
-run still loses deadlines for an unnamed queued-GUI-dispatch reason.
+### ADR-L — Residual no-visualizer dispatch is independent
+P2 cannot claim delivery closure while visualizer-disabled queued-GUI-dispatch loss remains unnamed.
 
 ### ADR-M — GPU profiling remains truthful and non-blocking
+Use sampled `--gpu-timing`; ordinary `--perf` makes no GL query-driver calls; never `glFinish()` for profiling.
 
-Use explicit sampled `--gpu-timing`; ordinary `--perf` performs no GL query-driver calls.
-`glFinish()` is prohibited.
-
-### ADR-N — Compatibility/diagnostic scaffolding requires an expiry condition
-
-The completed A/B/C monkeypatch/CLI/hotkey is P0 cleanup. Passive stage metrics remain
-because they measure active P2–P4 owners.
+### ADR-N — Completed diagnostic scaffolding expires
+The A/B/C monkeypatch/CLI/hotkey is P0 removal debt; passive stage metrics remain useful.
 
 ### ADR-O — Checkpoints are rollback anchors
-
-A risky slice gets a clean reversible commit and focused gate. Passing evidence continues;
-failed evidence, dirty/conflicted state or required visual judgement stops work.
+Risky slices are independently reversible and evidence-gated.
 
 ### ADR-P — Lifecycle remains full and fail-closed
-
-Performance work does not weaken Settings/Edit teardown/recreation, generation rejection
-or GL owner deletion.
+Physical-wake work may not restore hide/reuse, ignore failed GL deletion, move GL teardown to a worker, extend destruction timeout to mask blocking, or construct replacement before retired ownership reaches zero.
 
 ### ADR-Q — Resource containment and absolute efficiency are separate
+Flat ownership does not explain excessive RSS/private commit/VRAM.
 
-Flat ownership is necessary but not sufficient. RSS/private commit/VRAM still require
-owner-level explanation after the higher-leverage delivery queue.
+### ADR-R — One authoritative monitor-topology decision owner
+`DisplayManager` or one equivalent engine-level owner decides no-op/re-anchor/full replacement. `WM_DISPLAYCHANGE`, Qt screen events and per-window callbacks are invalidation inputs/local bookkeeping, not competing global mutation authorities.
+
+### ADR-S — Monitor recovery is Notify → Settle → Snapshot → Retire → Rebuild → Reveal
+Every relevant topology event restarts a trailing-edge quiet-period settlement. A bounded maximum settle window prevents indefinite postponement. One accepted screen count/order/geometry/DPR snapshot is frozen before destructive replacement and remains the transaction input.
+
+### ADR-T — Visualizer configured-monitor ownership is sticky
+Temporary sleep/wake/non-participation is not absence. The hard-won same-display geometry/aspect correction remains intact. Cross-display fallback is permitted only when settled authoritative topology says the configured monitor is absent and a single intentionally coarse ~60-second lifecycle-owned confirmation still finds it absent. No polling, periodic timer, dedicated thread or exact timing requirement is introduced.
+
+### ADR-U — Return-home is event-driven
+If a visualizer has legitimately fallen back, later authoritative topology plus the normal configured-display runtime-readiness boundary transfers ownership home once and retires the fallback. There is no reverse polling timer.
+
+### ADR-V — Desktop capture remains startup polish, not recovery dependency
+`screen.grabWindow(0)` remains available on stable desktop→screensaver cold startup to avoid a black flash. Physical-wake/topology reinit instead reuses retained SRPSS imagery/replay state or waits for a real first frame.
 
 ## Current Success Conditions
 
-- P0 diagnostic scaffolding is removed;
-- P1 protects logical fidelity and mixed-refresh presentation ownership;
-- P2 removes the proven publication-coupled repaint amplifier;
-- P3 names/removes or closes the remaining visualizer-family handoff cost;
-- P4 names/removes the residual no-visualizer queued-GUI-dispatch owner;
-- visualizer logical behaviour remains approved;
+- P0–P4 delivery work passes without cadence hacks;
+- P5 centralizes topology authority and settlement;
+- physical dual-display wake no longer freezes the runtime;
+- temporary monitor non-participation never migrates configured visualizer ownership;
+- genuine absence beyond the coarse grace can yield exactly one fallback owner;
+- stable configured-display return restores ownership once with saved CUSTOM geometry;
+- normal cold-start anti-flash remains unchanged;
 - lifecycle/GL ownership remains deterministic and fail-closed;
-- absolute resources are later reduced or explicitly attributed;
-- canonical `main.py` evidence and installed visual review agree.
+- absolute resources are later reduced or explicitly attributed.

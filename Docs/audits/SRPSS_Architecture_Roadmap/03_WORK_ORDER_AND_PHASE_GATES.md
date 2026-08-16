@@ -14,61 +14,66 @@ attributed. `Current_Plan.md` owns exact tasks; this document owns dependencies.
 | 0 — evidence foundation | complete |
 | 1 — measurement | delivery-stage split complete; absolute resource attribution still expanding |
 | 2 — visualizer fidelity | logical protection exists; P1 edge/presentation lock active |
-| 3 — lifecycle | solved architecture/incident path; regression contract |
+| 3 — lifecycle | Settings/Edit architecture solved; physical sleep/wake never fully platform-proven |
 | 4 — resource containment | bounded foundations; major texture/base/upload owners closed |
-| 5 — workload/delivery/GPU/resource efficiency | **active: P0→P4 delivery queue** |
+| 5 — workload/delivery/topology/GPU/resource efficiency | **active: P0→P5, then P6** |
 | 6 — explicit GPU resource store | conditional |
-| 7 — generalized state/presentation boundary | broader follow-up only after Phase 5 P2/P3 |
+| 7 — generalized state/presentation boundary | broader follow-up only after P2/P3 |
 | 8 — one surface per display | deferred by current evidence |
 | 9–10 — simplification/cleanup | later |
-| 11–12 — validation/release | later |
+| 11–12 — broad validation/release | later |
 
 ## Phase 5 Ordered Program
 
 ### P0 — expire completed diagnostic architecture
+Remove A/B and A/B/C helper/CLI/hotkey installation; keep passive delivery-stage metrics.
 
-Remove the A/B and A/B/C helper/CLI/hotkey installation path before measuring production
-presentation behaviour. Keep passive delivery-stage metrics.
-
-**Gate:** clean checkpoint; ordinary runtime unchanged; no temporary monkeypatch remains.
+**Gate:** ordinary runtime unchanged; no temporary monkeypatch remains.
 
 ### P1 — lock fidelity and presentation invariants
+Protect logical cadence, Bubble edges/events, Spectrum state, generation/activation, lifecycle and mixed-refresh ownership.
 
-Add/retain tests proving logical cadence, Bubble protected edges/events, Spectrum state,
-generation/activation rejection, lifecycle and mixed-refresh cross-display ownership.
-
-**Gate:** candidate presentation coalescing can skip stale render snapshots without
-altering protected logical behaviour.
+**Gate:** stale render snapshots can be skipped without altering protected logical behaviour.
 
 ### P2 — correct bad smell 1
+Remove one-accepted-logical-state → one auxiliary `QOpenGLWidget.update()` requirement.
 
-Remove the one-accepted-logical-state → one auxiliary `QOpenGLWidget.update()` requirement.
-Presentation becomes an owned consumer of integrated state.
-
-**Gate:** same authored workload materially approaches the no-visualizer control on the
-165 Hz display; 60 Hz remains healthy; no cadence/source/event changes; no paint-ack latch
-or divisor collapse.
+**Gate:** authored workload materially approaches the no-visualizer control without cadence/source/event changes or paint-ack/divisor collapse.
 
 ### P3 — attribute remaining visualizer-family handoff/preparation
+Measure producer/state-build, pure-data render preparation, Qt state commit and repaint request separately.
 
-Measure producer/state-build, pure-data render preparation, Qt state commit and repaint
-request as separate owners after P2.
-
-**Gate:** either a specific pure-data GUI owner is extracted with fidelity tests, or the
-remaining visualizer-family delta is closed with evidence.
+**Gate:** one measured owner is extracted with fidelity tests or the remaining visualizer-family delta is closed with evidence.
 
 ### P4 — attribute residual no-visualizer queued GUI dispatch
+Repeat visualizer-disabled control with Media active and correlate dispatch-pending bursts with concrete GUI owners.
 
-Repeat a visualizer-disabled control with Media still active. Correlate dispatch-pending
-bursts with concrete GUI callbacks/owners.
+**Gate:** owner fixed/narrowed or explicitly classified with evidence; no timer cadence tuning.
 
-**Gate:** owner is fixed/narrowed or explicitly classified with accepted evidence.
-Do not tune timer cadence to hide it.
+### P5 — harden monitor topology and physical sleep/wake recovery
 
-### P5 — return to remaining Phase 5 work
+#### P5-A one authority
+DisplayManager/engine-level topology owner decides no-op/re-anchor/full replacement. Native/Qt/per-window events only invalidate/report.
 
-Resume absolute memory/commit/VRAM, proven service/cache work, canonical parser/logging
-debt and compatibility cleanup.
+#### P5-B settle and snapshot
+Use trailing-edge quiet-period debounce plus bounded maximum settle; freeze one authoritative screen count/order/geometry/DPR snapshot before replacement.
+
+#### P5-C transactional replacement
+Stop old-runtime topology mutation → retire once → pass destruction barrier → construct/register complete replacement against frozen snapshot → staged reveal. Preserve strict GL teardown and all-displays-registered-before-staggered-show.
+
+#### P5-D sticky visualizer ownership
+Temporary participation/readiness loss never changes configured display ownership. Only settled-topology absence starts one generation-owned coarse ~60-second confirmation. Still absent at that single check may fallback once. New topology invalidates the candidate. Configured-display return is topology/readiness-event driven and restores ownership once with no reverse polling timer.
+
+#### P5-E recovery-specific desktop-capture bypass
+Keep `grabWindow(0)` for normal stable cold-start anti-flash. Do not make synchronous desktop capture a prerequisite of physical-wake/topology reconstruction; use retained SRPSS image/replay or wait for real first frame.
+
+#### P5-F installed gate
+Repeated ordinary installed both-off→screensaver→wake cycles, simultaneous and reversed sequential wake, genuine absence >~60 s, return-before-grace, return-after-fallback, and overnight-equivalent idle. Both displays/input recover; no Ctrl+Alt+Delete; no eager visualizer migration; no new polling/thread/timer machinery.
+
+**Gate:** physical-wake recovery passes installed validation or the remaining blocking native boundary is named by before/after breadcrumbs.
+
+### P6 — return to remaining Phase 5 work
+Resume absolute memory/commit/VRAM, proven service/cache work, canonical parser/logging debt and compatibility cleanup.
 
 ## Phase 5 Prohibitions
 
@@ -78,72 +83,24 @@ debt and compatibility cleanup.
 - no pending-until-paint or producer-time display-rate gate;
 - no repaint retry or display-FPS cap;
 - no worker QWidget/QColor/QPixmap/GL mutation;
-- no one-surface-per-display rewrite from the current A/B/C evidence;
+- no one-surface-per-display rewrite from current A/B/C evidence;
 - no catch-all background thread;
-- no unrelated media/browser experiment mixed into P0–P4;
-- no reopening solved Settings/Edit/Diagnostic/clock work without direct contradictory evidence.
-
-## Phase 5 Pass Criteria
-
-- approved visual behaviour remains equal or better than `ff934616`;
-- visualizer presentation requests are no longer one-for-one with logical publication when
-  useful presentation opportunity is lower;
-- mixed-refresh visualizer presentation no longer materially starves the sibling display;
-- any remaining visualizer-family GUI preparation owner is named or closed;
-- no-visualizer residual queued dispatch is named or accepted as external/irreducible with evidence;
-- GPU/CPU/memory remain owner-attributed rather than guessed;
-- temporary diagnostics are removed before release.
-
-## Phase 6 — Explicit GPU Resource Store
-
-Conditional only after Phase 5. A shared store must prove lower duplication and simpler
-lifetime; it is not the default next step.
-
-## Phase 7 — Generalized Visualizer State / Presentation Boundary
-
-The minimal **proven** correction is already promoted into Phase 5 P2. Phase 7 now means
-broader/generalized architecture only if P2/P3 show that multiple consumers/surfaces need
-the same contract.
-
-Required invariant remains:
-
-```text
-logical integration at authored cadence
-        ↓
-immutable valid render state + protected edge/event identity
-        ↓
-display-owned presentation opportunity
-        ↓
-paint latest valid presentation state
-```
-
-No producer wait, catch-up replay or presentation-owned simulation.
-
-## Phase 8 — One Compositor Surface Per Display
-
-Deferred. C was only modestly better than B in the accepted A/B/C run, so current
-evidence does not justify absorbing the visualizer GL surface into the main compositor.
-
-## Phase 9–10 — Simplification / Remaining Cleanup
-
-One proven dead authority at a time after active delivery work.
-
-## Phase 11 — Full Validation
-
-Canonical `main.py`: cold/warm, all visualizer modes, transitions, combined operation,
-mixed refresh, deliberate host pressure, topology/lifecycle and long soak.
-
-## Phase 12 — Release
-
-Code, active plan, phase reports, cleanup ledger, roadmap, tests and known limitations agree.
+- no monitor polling loop or dedicated monitor-watch thread;
+- no exact/frame-timed requirement for the ~60-second absence grace;
+- no fallback from temporary non-participation while configured monitor still exists in authoritative topology;
+- no weakening strict GL teardown, hide/reuse revival, timeout extension, nested event pumping or forced paints for wake recovery;
+- no global removal of cold-start `grabWindow(0)` anti-flash behaviour;
+- no unrelated media/browser/memory experiment mixed into P0–P5.
 
 ## Dependency Rules
 
-- P0 precedes P2 so temporary monkeypatch behaviour cannot contaminate production evidence;
+- P0 precedes P2 production measurement;
 - P1 precedes P2 acceptance;
-- P2 precedes P3 attribution;
-- P2/P3 precede P4 final attribution because visualizer pressure otherwise contaminates GUI dispatch;
-- P2/P3 evidence precedes any generalized Phase 7 design;
-- current C-vs-B evidence blocks Phase 8;
-- owner attribution precedes memory/cache budget changes;
-- Phase 11 precedes release.
+- P2 precedes P3; P2/P3 precede P4 final attribution;
+- P0–P4 complete before P5 so delivery work is not confounded with topology architecture changes;
+- P5-A/B precede P5-C/D/E because fallback/rebuild decisions require one settled topology authority;
+- P5-C preserves Phase 3 lifecycle invariants;
+- P5-D uses P5-B snapshots and existing lifecycle-owned one-shot scheduling only;
+- P5-D return-home uses existing topology/readiness events, not a new timer;
+- P5-F precedes P6 lower-leverage work and release;
+- current C-vs-B evidence blocks Phase 8.
