@@ -449,3 +449,126 @@ entirely (Phase 8) — the latter still not justified by C-vs-B evidence.
 
 **Next action per `Current_Plan.md`: explicit P2 architecture review. Not another timer, latch,
 wrapper, retry, Phase-8 jump, or silent move to P3.**
+
+
+## 2026-08-17 — P2 Step 2c: shared-surface feasibility audit (read-only)
+
+Source analysis plus preserved R-62 evidence. No production change, no instrumentation added.
+This audit answers the Step 2c questions; it does not authorize wiring.
+
+### Q1 — compositor surface lifetime and steady-state draw
+
+`GLCompositorWidget(QOpenGLWidget)` is created as a single child of `DisplayWidget` covering the
+full client area, and lives for the whole display runtime. It is destroyed only in
+`display_cleanup.cleanup_runtime()`.
+
+Critically, **the surface is not transition-scoped — only its render-strategy timer is.** In the
+no-transition branch `paintGL_impl` draws `_paint_retained_base_texture()`, with a QPainter
+fallback. So a steady-state draw path already exists and the surface can host a layer for the
+full visualizer lifetime.
+
+This distinguishes the shared-surface lane from R-61/R-62, which failed by borrowing the
+transition-scoped *timer*, not the surface.
+
+### Q5 — cadence inheritance: the reject condition does NOT clearly apply
+
+This was the question most likely to kill the lane. The preserved evidence says otherwise:
+
+```text
+screen 1 (60 Hz, the visualizer's display), Blockspin:
+  frames=511  render_requests=511  avg_fps=56.2  slow_frames=0
+  dur_min=0.32 ms   dur_max=11.02 ms      <- paint COST is cheap
+  dt_min=4.41 ms    dt_max=79.63 ms       <- paint INTERVAL is irregular
+```
+
+`render_requests == frames` on both sampled transitions: the compositor drops nothing at the
+paint layer. Its ~54–56 Hz is therefore a **request rate, not a paint capacity limit**. Paint
+duration (0.32–11.02 ms) can support well above 56 Hz on a 60 Hz panel.
+
+The R-62 failure mode was Bubble **waiting for** the compositor's opportunity. In a shared-surface
+design Bubble would **drive** the surface: each publication requests the compositor to repaint, as
+it requests the overlay today. Since the compositor is currently under-requested rather than
+paint-bound, adding visualizer requests should raise its frame rate rather than lower Bubble's.
+
+**Therefore the Step 2c reject condition is not met on current evidence.** Two caveats, held
+deliberately:
+
+1. `dt_max ≈ 79.6 ms` shows real event-loop stalls. Those are shared-GUI stalls that would affect
+   Bubble on either surface; the shared design neither causes nor fixes them.
+2. Compositor paint is heavier per frame than the overlay's (~1.7 ms CPU p95). Driving it at
+   ~90 Hz on a 60 Hz panel replaces overlay overpaint with compositor overpaint. The expected win
+   is removing one independent *request owner* and one surface's dispatch demand, not cheaper
+   paint. That claim must not be conflated — see Q10.
+
+This is a *not-rejected* verdict, not a proof of benefit. It rests on `render_requests == frames`
+across two transitions; it is not an independently randomized test.
+
+### Q3/Q4 — presentation ownership and liveness
+
+The visualizer would call `compositor.update()` from its existing GUI-thread tick, exactly where
+it calls `overlay.update()` today. That requires **no new timer, thread, lane or clock**, and
+`QWidget.update()` on the same widget is merged by Qt without a manual latch.
+
+Liveness does not depend on `AdaptiveTimerStrategy`: `update()` schedules a paint whether or not
+the strategy is running, so the visualizer keeps presenting after transitions stop. This is the
+R-61 defect structurally removed rather than worked around.
+
+### Q6 — Z-order, card and stencil: the hard blocker
+
+The overlay is a **sibling** of the compositor (both children of `DisplayWidget`), deliberately
+stacked above the visualizer card. It owns a rounded-rect **stencil-mask program** for
+painted-card corner clipping (`_begin_painted_card_stencil_clip`,
+`_draw_painted_card_stencil_mask`, `_end_painted_card_stencil_clip`, plus
+`widgets/spotify_visualizer/overlay_mask.py`).
+
+Moving the draw into the compositor inverts the stacking: the compositor is the **bottom-most**
+child of `DisplayWidget`, beneath every QWidget overlay including the visualizer card itself. The
+visualizer would render *behind* its own card unless the card is also moved into the compositor
+scene or made transparent in a coordinated way.
+
+That is the crux of the blast radius, and it is not a visualizer-local change.
+
+### Q9 — blast radius
+
+```text
+widgets/spotify_bars_gl_overlay.py   2196 lines   (5 mode renderers, stencil, geometry, fade)
+rendering/gl_compositor.py           2265 lines
+```
+
+A bounded "draw the visualizer layer inside compositor paint" change would still need: mode
+renderer relocation or shared invocation, stencil/mask integration into compositor paint state,
+CUSTOM geometry/DPR translation into compositor coordinates, fade/visibility, and Z-order
+resolution against the card (Q6).
+
+**Assessment: this is not a bounded visualizer layer. It is a compositor scene-composition
+change** — precisely the "compositor rewrite" case Step 2b says to stop and report rather than
+implement.
+
+### Q2, Q7, Q8 — deferred, not answered
+
+The render-state boundary (Q2), lifecycle/generation/teardown preservation (Q7) and shader/program
+ownership transfer (Q8) are all answerable only *after* the Q6 Z-order decision, because that
+decision determines whether the visualizer draws inside the compositor scene or the card
+composition changes. Answering them now would be speculation.
+
+### Q10 — causal claim, kept separate
+
+The expected benefit is **removal of the independent auxiliary presentation-request owner** —
+one widget requesting and dispatching instead of two. It is explicitly **not** "the second surface
+is expensive": C-vs-B added only ~1.4 FPS from hiding the already request-suppressed surface, so
+surface existence is secondary. Any future measurement must attribute to request-owner removal,
+not surface count.
+
+### Verdict
+
+- The shared-surface lane is **not rejected** by the transition-cadence condition (Q5), and it
+  structurally removes the R-61 liveness defect and the R-62 pacing dependency (Q3/Q4).
+- It **is blocked** by Z-order/card composition (Q6) and blast radius (Q9): delivering it requires
+  changing how the display composes its scene, not adding a visualizer layer.
+
+Per Step 2b/2c this is a **stop-and-report**, not an implementation. The next decision is a scope
+question for the operator: whether P2 may become a bounded compositor scene-composition change
+(with the card), or whether P2 is recorded as not safely achievable on the current
+separate-surface architecture with the measured defect carried into the Phase 8 decision.
+
+No pacing or admission experiments may resume either way.
