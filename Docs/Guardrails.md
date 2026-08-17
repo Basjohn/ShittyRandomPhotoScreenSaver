@@ -68,12 +68,30 @@ Stop and reassess when:
 - live resource use cannot be explained;
 - task rate rises without measured benefit;
 - a silent fallback is required;
+- a change lands with no measurable effect and the fallback path explains it;
 - a fix needs broad dynamic forwarding or widget impersonation;
 - tests pass while the known user-visible failure remains;
 - proxy counters claim equivalence after the operator reports a visualizer regression;
 - one phase starts changing lifecycle, compositor, visualizer behaviour, memory, and threading together.
 
 Do not answer these failures with another flag or retry.
+
+### Compatibility fallbacks must fail loudly
+
+A fallback that preserves previous behaviour can make a change completely inert while every
+test stays green and the runtime looks healthy. On 2026-08-17 the Phase 5 P2 presentation
+owner shipped, registered nothing because the overlay is constructed before its render
+strategy, and silently kept the old request-per-publication contract. The measured ratio was
+unchanged at exactly `1.0000` and nothing reported a problem.
+
+Therefore, when a change introduces an ownership/registration step with a
+previous-behaviour fallback:
+
+- the activation must be observable in an ordinary run, by an explicit log line or a counter;
+- the unavailable/fallback path must record what it saw, not return silently;
+- runtime acceptance must assert the change is **active** before interpreting its effect;
+- a null result is treated as "not proven active" until activation is confirmed, never as
+  "the change did not help".
 
 ## 4. Repository and Documentation Stability
 

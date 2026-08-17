@@ -99,6 +99,7 @@ Installed dual-display acceptance remains P5-F.
 - [ ] Logical/source cadence remains unchanged; presentation may consume the latest valid immutable render state only after logical integration.
 - [ ] Preserve protected short-lived Bubble edges/events through bounded event identity/history or another approved equivalent; latest-state sampling alone is insufficient.
 - [ ] Do **not** use paint completion, a pending-until-paint latch, elapsed producer timestamps, a display-FPS cap, source/event decimation or a second visualizer clock as admission.
+- [ ] **Confirm the presentation owner is active before interpreting any run.** Require the `Overlay presentation owned by display frame opportunity` line and an `update_requests/set_state` ratio below `1.0` in the overlay records. A run without both is a non-result, not a negative result: the unowned fallback deliberately restores the previous contract.
 - [ ] Re-run the mixed-refresh production scenario with `--perf` and `--gpu-timing`; compare against the accepted report rather than the temporary monkeypatch.
 
 ### P3 — attribute the remaining visualizer-family GUI handoff cost
