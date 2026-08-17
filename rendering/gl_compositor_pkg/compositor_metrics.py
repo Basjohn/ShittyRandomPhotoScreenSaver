@@ -6,6 +6,8 @@ first argument so the main class stays lean.
 """
 from __future__ import annotations
 
+from collections import deque
+
 import gc
 import time
 from typing import Optional, Callable, TYPE_CHECKING
@@ -412,6 +414,44 @@ def record_paint_start_metrics(widget, paint_start_ts: float) -> None:
     )
 
 
+def _retain_diagnostic_paint_sample(widget) -> None:
+    """Retain one paint sample in compositor-local history that outlives transitions.
+
+    `_PaintMetrics` is transition-local and is replaced when a new transition
+    begins. Asynchronous GPU results belonging to the previous generation can
+    drain after that replacement, and would then find no paint samples to join
+    against - which is why the first association run left ~243 of 344 GPU
+    samples unmatched and produced no BlockSpin output at all.
+
+    Generation identity remains authoritative, so retaining history across
+    transitions cannot cause cross-matching between them. Gated to GPU
+    diagnostic mode so ordinary PERF runs do not pay for it.
+    """
+    timer_queries = getattr(widget, "_gpu_timer_queries", None)
+    if timer_queries is None or not getattr(timer_queries, "supported", False):
+        return
+    metrics = getattr(widget, "_paint_metrics", None)
+    if metrics is None or not metrics.samples:
+        return
+    history = getattr(widget, "_gpu_assoc_paint_history", None)
+    if history is None:
+        history = deque(maxlen=4096)
+        widget._gpu_assoc_paint_history = history
+    history.append(metrics.samples[-1])
+
+
+def reset_diagnostic_paint_history(widget) -> None:
+    """Clear cross-transition association history at compositor/runtime teardown.
+
+    Deliberately not called per transition: retention across transitions is the
+    entire point of this history.
+    """
+    try:
+        widget._gpu_assoc_paint_history = None
+    except Exception:
+        pass
+
+
 def record_paint_metrics(
     widget,
     paint_duration_ms: float,
@@ -429,6 +469,7 @@ def record_paint_metrics(
         paint_start_ts=paint_start_ts,
         paint_end_ts=paint_end_ts,
     )
+    _retain_diagnostic_paint_sample(widget)
     now = time.time()
     stall_context = _get_stall_context(widget)
     active_transition_window = _is_active_transition_paint_window(stall_context)

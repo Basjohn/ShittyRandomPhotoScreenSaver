@@ -158,3 +158,58 @@ class TestQuerySlotIdentityLifecycle:
         assert window["by_label"]["burn"]["collected"] == 1, (
             "draining correlation metadata must not consume aggregate statistics"
         )
+
+
+class TestCrossTransitionRetention:
+    """Regression bar for the observed coverage failure.
+
+    In the first association run ~243 of 344 GPU samples were unmatched and
+    BlockSpin produced no output at all despite abundant samples and 17 gaps.
+    Cause: `_PaintMetrics` is transition-local, so GPU results draining after a
+    new generation replaced it could not find their own generation's samples.
+    """
+
+    def test_late_gpu_result_still_associates_with_its_own_generation(self):
+        # Generation A paints, then generation B becomes current.
+        generation_a = [_paint(1, 5, 16.0), _paint(1, 6, 70.0)]
+        generation_b = [_paint(2, 1, 16.0), _paint(2, 2, 16.0)]
+        retained_history = generation_a + generation_b
+
+        # An asynchronous GPU result belonging to generation A drains afterwards.
+        late = [_gpu(1, 5, 31.0)]
+
+        report = associate(late, retained_history)
+
+        assert report["matched_gpu_samples"] == 1, (
+            "a late generation-A result must still associate once history is retained"
+        )
+        entry = report["by_delta"][1]["blockspin"]
+        assert entry["over_50"]["n"] == 1
+        assert entry["over_50"]["max_ms"] == pytest.approx(31.0)
+
+    def test_late_gpu_result_never_associates_with_the_newer_generation(self):
+        generation_b_only = [_paint(2, 6, 70.0)]
+        late = [_gpu(1, 5, 31.0)]
+
+        report = associate(late, generation_b_only)
+
+        assert report["matched_gpu_samples"] == 0
+        assert report["unmatched_gpu_samples"] == 1
+
+    def test_current_metrics_only_reproduces_the_original_failure(self):
+        """Demonstrates why retention was required, so it cannot regress silently."""
+        current_metrics_samples = [_paint(2, 1, 16.0)]  # generation B only
+        late = [_gpu(1, 5, 31.0)]
+
+        assert associate(late, current_metrics_samples)["unmatched_gpu_samples"] == 1
+
+    def test_matched_unmatched_are_reported_per_label(self):
+        """A line must not repeat unrelated buckets' global counts."""
+        gpu = [_gpu(1, 5, 30.0, "particle"), _gpu(9, 99, 4.0, "burn")]
+        paint = [_paint(1, 6, 70.0)]
+
+        report = associate(gpu, paint)
+
+        assert report["per_key_matched"][("particle", 1)] == 1
+        assert report["per_key_unmatched"][("burn", 9)] == 1
+        assert ("particle", 1) not in report["per_key_unmatched"]

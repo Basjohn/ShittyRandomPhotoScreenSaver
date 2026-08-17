@@ -980,8 +980,11 @@ request_age_ms    p50 33.3   max 71.3
 the most recent named UI callback identity, not because it was running. Its own duration
 (`last_ui_ms`) has a median of 0.38 ms and correlates with the gap at only **+0.110**.
 
-**Not a queued-callback backlog.** `ui_queue` is 0 in every record (p50 and max), `ui_active` 0,
-`ui_failed` 0, `ui_callbacks` p50 0 / max 2. There is no UI work waiting or running.
+**Not a queued-callback backlog** *(claim corrected 2026-08-18)*. In the dual-display run
+`ui_queue` was 0 in every record. **A later run has `ui_queue = 1` in all 32 records** with
+`ui_active = 0`, so the universal-empty-queue statement is withdrawn. This still identifies no
+Python callback owner: a queued-but-unserviced item with nothing executing is exactly what a GUI
+thread blocked elsewhere looks like. `ui_active` remains 0 and `ui_failed` 0 throughout.
 
 **Not garbage collection.** `gc_enabled=0` in every record — GC is disabled in this runtime.
 
@@ -1219,3 +1222,64 @@ stall.
 Multi-monitor contention and the visualizer overlay are both excluded as necessary conditions.
 The active P4 target is the **compositor transition / Qt-native-GL presentation path itself**.
 P2 stays open separately as a measured amplifier, not P4's owner.
+
+
+## 2026-08-18 — GPU/delivery association: first result and coverage failure
+
+### Result (preserve; not yet causal closure)
+
+Every anomalous causal `frame_delta=+1` association observed was preceded by a GPU duration far
+outside its ordinary population:
+
+```text
+Particle    ordinary p50 4.76  p95 7.66   | GPU before >33 ms gap: 30.00 ms
+BlockFlip   ordinary p50 0.30  p95 3.34   | GPU before >50 ms gap: 32.84 ms
+Burn        ordinary p50 1.31  p95 3.00   | GPU before >33 ms gap: 29.60 ms
+```
+
+3 of 3. If this repeats with adequate coverage, compositor GPU execution/backpressure becomes a
+serious P4 mechanism.
+
+### Coverage failure — why the run cannot yet be interpreted
+
+```text
+Particle  matched 56 / unmatched 200      BlockFlip 22 / 23      Burn 23 / 20
+overall ~101 matched vs ~243 unmatched
+32 FRAME_GAP_OWNER events including 17 BlockSpin, yet zero BlockSpin association output
+```
+
+Not explained by the 1/8 sampling rate. Cause found by source inspection:
+`maybe_log_gpu_timer_query_window()` drains `take_frame_samples()` on the ~10 s reporting cadence
+and joined only against the **currently active** `_PaintMetrics.samples`. `_PaintMetrics` is
+transition-local, so GPU results from generation A draining after generation B replaced it could
+never find generation A's samples.
+
+### Correction applied
+
+- compositor-local diagnostic paint history retained **across** transition metric replacements,
+  bounded at 4096 samples;
+- each entry keeps the existing `(scene_generation, frame_index)` identity plus
+  `paint_interval_ms`;
+- association joins against that history instead of only the current metrics;
+- gated to GPU diagnostic mode, so ordinary PERF runs do not pay for it;
+- generation identity remains authoritative, so transitions cannot cross-match;
+- cleared at compositor/GL teardown only — **not** on `finalize_paint_metrics()`, which runs per
+  transition and would reintroduce the bug;
+- `matched`/`unmatched` now reported per label rather than repeating global counts on every line.
+
+Regression bars reproduce the exact runtime failure: generation A paints, generation B becomes
+current, a late generation-A GPU result still associates with A and never with B — plus a bar
+that demonstrates current-metrics-only joining fails, so the retention cannot be silently removed.
+
+No change to sample stride, poll cadence, transition shaders or presentation pacing.
+
+### Decision criterion for the repeat run (unchanged)
+
+`frame_delta=+1`, single-display, no-visualizer, `--perf --gpu-timing`, enough repeated
+transitions to overcome 1/8 sampling:
+
+- severe-gap samples repeatedly ~30+ ms while the matched ordinary population stays sub-5 ms
+  p50 / low-single-digit p95 -> promote compositor GPU execution/backpressure to leading P4
+  mechanism;
+- many severe gaps preceded by ordinary GPU samples -> the three matches were selection luck and
+  P4 continues down into Qt/driver/DWM presentation.

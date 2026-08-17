@@ -1124,6 +1124,16 @@ def cleanup_gl_pipeline(widget) -> None:
             try:
                 timer_queries.poll(gl)
                 timer_queries.cleanup(gl)
+                # Association history is compositor/runtime scoped, not
+                # transition scoped; clear it only here.
+                try:
+                    from rendering.gl_compositor_pkg.compositor_metrics import (
+                        reset_diagnostic_paint_history,
+                    )
+
+                    reset_diagnostic_paint_history(widget)
+                except Exception:
+                    pass
             except Exception as exc:
                 cleanup_errors.append(
                     f"timer_queries:{type(exc).__name__}:{exc}"
