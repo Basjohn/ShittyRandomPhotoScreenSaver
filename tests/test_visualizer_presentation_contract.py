@@ -250,6 +250,178 @@ class TestPublicationAdmission:
         assert overlay._accumulated_time == pytest.approx(0.0)
 
 
+def _shared_gui_delivery(
+    *,
+    lane_capacity_hz: float,
+    display_hz: dict[str, float],
+    visualizer_request_hz: float,
+) -> dict[str, float]:
+    """Model the serial GUI dispatch lane both display compositors share.
+
+    Qt dispatches queued widget updates on one GUI thread. Each display
+    compositor needs one dispatch per frame it intends to present, and any
+    auxiliary visualizer surface that requests its own repaints adds a third
+    independent demand stream to the same lane.
+
+    Under saturation the lane is shared fairly, so every consumer meets the same
+    fraction of its deadlines: ``capacity / total_demand``. This is deliberately
+    coarse - it models contention for dispatch opportunities, not exact Qt
+    scheduling - and it is the property the P2 presentation owner must satisfy.
+    """
+    total_demand = sum(display_hz.values()) + max(0.0, float(visualizer_request_hz))
+    if total_demand <= 0.0:
+        return {name: 1.0 for name in display_hz}
+    met = min(1.0, float(lane_capacity_hz) / total_demand)
+    return {name: met for name in display_hz}
+
+
+def _coupled_request_hz(logical_hz: float, display_hz: dict[str, float]) -> float:
+    """Current baseline: one auxiliary update request per logical publication."""
+    del display_hz
+    return float(logical_hz)
+
+
+def _presentation_owned_request_hz(
+    logical_hz: float, display_hz: dict[str, float]
+) -> float:
+    """P2 target: the owning display presents the visualizer within its own frame.
+
+    The auxiliary surface stops being an independent repaint source, so it adds
+    no dispatch demand of its own no matter how fast logical state publishes.
+    """
+    del logical_hz, display_hz
+    return 0.0
+
+
+class TestMixedRefreshDeliveryBar:
+    """One display's visualizer must not starve the sibling display's delivery.
+
+    The mixed-refresh bar required by `Current_Plan.md` P1. It is expressed as a
+    property of the presentation *policy* rather than a live dual-monitor
+    measurement, so it can gate P2 deterministically. Installed dual-display
+    validation remains the acceptance authority under P5-F.
+    """
+
+    LANE_CAPACITY_HZ = 300.0
+    DISPLAY_HZ = {"display_0_165hz": 165.0, "display_1_60hz": 60.0}
+    LOGICAL_PUBLICATION_HZ = 100.0
+    REQUIRED_MET_FRACTION = 0.99
+
+    def test_publication_coupled_requests_starve_the_sibling_display(self):
+        """The rejected baseline: one update request per logical publication."""
+        delivery = _shared_gui_delivery(
+            lane_capacity_hz=self.LANE_CAPACITY_HZ,
+            display_hz=self.DISPLAY_HZ,
+            visualizer_request_hz=self.LOGICAL_PUBLICATION_HZ,
+        )
+
+        # Both displays lose deadlines, including the one with no visualizer -
+        # exactly the shared-GUI amplifier the A/B/C evidence measured.
+        assert delivery["display_1_60hz"] < self.REQUIRED_MET_FRACTION
+        assert delivery["display_0_165hz"] < self.REQUIRED_MET_FRACTION
+
+    def test_presentation_owned_requests_meet_the_mixed_refresh_bar(self):
+        """The P2 target: the owning display presents its visualizer, adding no stream."""
+        delivery = _shared_gui_delivery(
+            lane_capacity_hz=self.LANE_CAPACITY_HZ,
+            display_hz=self.DISPLAY_HZ,
+            visualizer_request_hz=0.0,
+        )
+
+        assert delivery["display_1_60hz"] >= self.REQUIRED_MET_FRACTION
+        assert delivery["display_0_165hz"] >= self.REQUIRED_MET_FRACTION
+
+    def test_bar_rejects_a_merely_rate_capped_request_stream(self):
+        """Capping the stream at display refresh is not enough to clear the bar.
+
+        This blocks the tempting shortcut of gating requests to a display-FPS
+        number, which `test_visualizer_presentation_negative_controls.py` already
+        rejects on fidelity grounds. It also fails the delivery bar.
+        """
+        delivery = _shared_gui_delivery(
+            lane_capacity_hz=self.LANE_CAPACITY_HZ,
+            display_hz=self.DISPLAY_HZ,
+            visualizer_request_hz=self.DISPLAY_HZ["display_0_165hz"],
+        )
+
+        assert delivery["display_1_60hz"] < self.REQUIRED_MET_FRACTION
+
+    @pytest.mark.parametrize("logical_hz", [60.0, 100.0, 165.0, 500.0])
+    def test_sibling_delivery_is_independent_of_logical_publication_rate(
+        self, logical_hz
+    ):
+        """A correct owner decouples sibling delivery from visualizer think-rate.
+
+        Both policies are evaluated at the same logical rate so the parameter
+        genuinely drives the comparison: the coupled policy degrades as the
+        visualizer thinks faster, the presentation-owned policy does not.
+        """
+        coupled = _shared_gui_delivery(
+            lane_capacity_hz=self.LANE_CAPACITY_HZ,
+            display_hz=self.DISPLAY_HZ,
+            visualizer_request_hz=_coupled_request_hz(logical_hz, self.DISPLAY_HZ),
+        )
+        owned = _shared_gui_delivery(
+            lane_capacity_hz=self.LANE_CAPACITY_HZ,
+            display_hz=self.DISPLAY_HZ,
+            visualizer_request_hz=_presentation_owned_request_hz(
+                logical_hz, self.DISPLAY_HZ
+            ),
+        )
+
+        assert owned["display_1_60hz"] >= self.REQUIRED_MET_FRACTION
+        assert owned["display_1_60hz"] >= coupled["display_1_60hz"]
+        if logical_hz >= 100.0:
+            # A visualizer thinking at or above 100 Hz measurably starves the
+            # sibling display under the coupled policy.
+            assert coupled["display_1_60hz"] < self.REQUIRED_MET_FRACTION
+
+
+@pytest.mark.qt
+class TestPerDisplayPresentationIndependence:
+    """Two displays own separate overlays, counters and logical state."""
+
+    def test_one_display_overlay_never_mutates_its_sibling(self, qt_app, monkeypatch):
+        clock = _FakeClock()
+        _install_fake_clock(monkeypatch, clock)
+        display_0 = SpotifyBarsGLOverlay(None)
+        display_1 = SpotifyBarsGLOverlay(None)
+        display_0.update = lambda *args, **kwargs: None
+        display_1.update = lambda *args, **kwargs: None
+
+        for bars in _bar_series(12):
+            _publish(display_0, bars)
+            clock.advance()
+
+        assert display_0._perf_set_state_total == 12
+        assert display_1._perf_set_state_total == 0
+        assert display_1._perf_update_request_total == 0
+        assert list(display_1._bars) == []
+        assert display_1._peaks is not display_0._peaks
+
+    def test_each_display_accounts_its_own_presentation_requests(
+        self, qt_app, monkeypatch
+    ):
+        clock = _FakeClock()
+        _install_fake_clock(monkeypatch, clock)
+        display_0 = SpotifyBarsGLOverlay(None)
+        display_1 = SpotifyBarsGLOverlay(None)
+        display_0.update = lambda *args, **kwargs: None
+        display_1.update = lambda *args, **kwargs: None
+
+        for bars in _bar_series(9):
+            _publish(display_0, bars)
+            clock.advance()
+        for bars in _bar_series(4):
+            _publish(display_1, bars)
+            clock.advance()
+
+        assert display_0._perf_update_request_total <= 9
+        assert display_1._perf_update_request_total <= 4
+        assert display_0._perf_set_state_total == 9
+        assert display_1._perf_set_state_total == 4
+
+
 @pytest.mark.qt
 class TestPresentationOwnership:
     """One named presentation seam owns repaint requests."""

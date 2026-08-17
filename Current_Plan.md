@@ -68,18 +68,30 @@ passive delivery-stage seam in `rendering/adaptive_timer.py` is retained under
 `tests/test_adaptive_timer.py::TestDeliveryStageInvariants`. Preserve that as a regression
 contract; do not reintroduce runtime class patching as a presentation solution.
 
-### P1 — lock the production presentation/fidelity contract in tests
+### P1 — production presentation/fidelity contract (locked; regression bar for P2)
 
-Logical-publication-vs-presentation separation is locked in
-`tests/test_visualizer_presentation_contract.py` (real `SpotifyBarsGLOverlay` on an injected
-deterministic clock): every accepted publication integrates exactly once, presentation requests
-may be fewer but never more than publications, and withholding presentation at both the paint
-and request seams leaves logical state bit-identical. Keep it passing through P2.
+P1 is closed. These are now the acceptance bars P2 must keep green; do not weaken one to make
+a presentation change pass.
 
-- [ ] Preserve Bubble authored step/dt/source/event identity, one-in-flight simulation semantics and protected edge visibility.
-- [ ] Preserve Spectrum authoritative source/state evolution and all supported-mode replay/state goldens.
-- [ ] Prove generation/activation rejection, Settings/recreate, display reassignment and strict GL teardown remain correct.
-- [ ] Add a mixed-refresh regression bar: one display's visualizer must not materially starve the other display's compositor delivery.
+- `tests/test_visualizer_presentation_contract.py` — publication/presentation separation on the
+  real `SpotifyBarsGLOverlay` with an injected deterministic clock: every accepted publication
+  integrates exactly once, presentation requests may be fewer but never more than publications,
+  and withholding presentation at both the paint seam and the request seam leaves logical state
+  bit-identical. Also owns the mixed-refresh delivery bar and per-display independence.
+- `tests/test_visualizer_presentation_negative_controls.py` — rejected admission designs
+  (target-FPS gate, pending-until-paint latch, latest-at-60 Hz edge loss).
+- `tests/test_bubble_cadence.py` — authored step/dt, one-in-flight semantics, discrete-edge
+  first-visible timing, and the temporal golden that rejects terminal batching/persistent lanes.
+- `tests/test_spectrum_presentation_smoothing.py` — authoritative tick trace against the
+  versioned golden; no independent cadence.
+- `tests/test_visualizer_replay.py` — all supported modes on the real tick/overlay path, and
+  `test_presentation_schedule_does_not_change_logical_series` across presentation rates/stalls.
+- `tests/test_phase3_runtime_lifecycle.py`, `tests/test_runtime_destruction.py`,
+  `tests/test_gl_compositor_cleanup.py`, `tests/test_spotify_visualizer_mode_transition.py` —
+  generation/activation rejection, Settings/recreate, display reassignment, strict GL teardown.
+
+The mixed-refresh bar is a deterministic policy property, not a live dual-monitor measurement.
+Installed dual-display acceptance remains P5-F.
 
 ### P2 — fix bad smell 1: publication-coupled visualizer presentation
 

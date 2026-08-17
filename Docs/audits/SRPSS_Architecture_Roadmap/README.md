@@ -1,6 +1,6 @@
 # SRPSS Architecture Roadmap
 
-Last reconciled: 2026-08-16
+Last reconciled: 2026-08-17
 
 ## Purpose
 
@@ -88,9 +88,9 @@ The compact priority ledger is `00_INDEX_AND_LIVE_CHECKLIST.md`. Exact checkboxe
 only in `Current_Plan.md`.
 
 ```text
-P0 remove completed diagnostic scaffolding
+P0 remove completed diagnostic scaffolding   [closed]
  ↓
-P1 lock fidelity/presentation tests
+P1 lock fidelity/presentation tests          [closed]
  ↓
 P2 correct publication-coupled presentation requests
  ↓
