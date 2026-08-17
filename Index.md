@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-08-16
+Last updated: 2026-08-17
 
 Navigation and ownership map for SRPSS. This file is not a specification.
 
@@ -55,6 +55,7 @@ an alternate active plan.
 | `Docs/Presentation_Change_Preflight.md` | door-map for presentation/cadence work; barred designs and required bars |
 | `Docs/Guardrails/` | focused per-domain guardrails; currently `Visualizer_Presentation.md` |
 | `Docs/Visualizer_Change_Checklist.md` | required sweep for visualizer/runtime-bridge changes |
+| `Docs/Visualizer_Reference.md` | visualizer runtime/settings behaviour reference |
 | `Docs/Contracts.md` | task-to-owner routing |
 | `Spec.md` | stable behaviour/architecture contracts |
 | `Current_Plan.md` | active unfinished work only |
