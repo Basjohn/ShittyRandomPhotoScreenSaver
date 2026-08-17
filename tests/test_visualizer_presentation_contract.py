@@ -705,3 +705,103 @@ class TestAuxiliaryPresenterRegistration:
             assert presenter.calls == 1, "a destroyed surface is dropped, not retried"
         finally:
             adaptive_timer.ThreadManager.run_on_ui_thread = original
+
+
+class TestPresentationOwnerAttachment:
+    """Ownership is claimed even though the overlay outlives strategy construction.
+
+    Regression bar for the 2026-08-17 null result: the overlay is created lazily on
+    the first visualizer push, before `_render_strategy_manager` exists, so a
+    create-time-only registration silently left the overlay unowned and the
+    publication-coupled contract in force.
+    """
+
+    def _widget(self, strategy):
+        from types import SimpleNamespace
+
+        compositor = SimpleNamespace(_render_strategy_manager=strategy)
+        return SimpleNamespace(_gl_compositor=compositor, _screen_index=0)
+
+    class _Strategy:
+        def __init__(self):
+            self.registered = None
+            self.cleared = 0
+
+        def set_auxiliary_presenter(self, presenter):
+            self.registered = presenter
+
+        def clear_auxiliary_presenter(self):
+            self.cleared += 1
+            self.registered = None
+
+    class _Overlay:
+        def __init__(self):
+            self._has_presentation_owner = False
+            self.owned_calls = []
+
+        def set_presentation_owned(self, owned):
+            self._has_presentation_owner = bool(owned)
+            self.owned_calls.append(bool(owned))
+
+    def test_attach_is_a_noop_until_the_strategy_exists(self):
+        from rendering.display_image_ops import _attach_overlay_presentation_owner
+        from types import SimpleNamespace
+
+        overlay = self._Overlay()
+        widget = SimpleNamespace(
+            _gl_compositor=SimpleNamespace(_render_strategy_manager=None),
+            _screen_index=0,
+        )
+
+        assert _attach_overlay_presentation_owner(widget, overlay) is False
+        assert overlay._has_presentation_owner is False
+
+    def test_attach_succeeds_once_the_strategy_is_available(self):
+        from rendering.display_image_ops import _attach_overlay_presentation_owner
+
+        overlay = self._Overlay()
+        strategy = self._Strategy()
+
+        assert _attach_overlay_presentation_owner(self._widget(strategy), overlay) is True
+        assert strategy.registered is overlay
+        assert overlay._has_presentation_owner is True
+
+    def test_detach_clears_both_registration_and_overlay_flag(self):
+        from rendering.display_image_ops import (
+            _attach_overlay_presentation_owner,
+            _detach_overlay_presentation_owner,
+        )
+
+        overlay = self._Overlay()
+        strategy = self._Strategy()
+        widget = self._widget(strategy)
+        _attach_overlay_presentation_owner(widget, overlay)
+
+        _detach_overlay_presentation_owner(widget, overlay)
+
+        assert strategy.cleared == 1
+        assert strategy.registered is None
+        assert overlay._has_presentation_owner is False
+
+    def test_publication_path_claims_ownership_after_late_strategy_creation(self):
+        """The real null-result shape: overlay first, strategy second."""
+        from rendering import display_image_ops
+        from types import SimpleNamespace
+
+        overlay = self._Overlay()
+        compositor = SimpleNamespace(_render_strategy_manager=None)
+        widget = SimpleNamespace(_gl_compositor=compositor, _screen_index=0)
+
+        # First push: no strategy yet, overlay stays unowned.
+        if not getattr(overlay, "_has_presentation_owner", False):
+            display_image_ops._attach_overlay_presentation_owner(widget, overlay)
+        assert overlay._has_presentation_owner is False
+
+        # Strategy comes up, next push claims ownership.
+        strategy = self._Strategy()
+        compositor._render_strategy_manager = strategy
+        if not getattr(overlay, "_has_presentation_owner", False):
+            display_image_ops._attach_overlay_presentation_owner(widget, overlay)
+
+        assert overlay._has_presentation_owner is True
+        assert strategy.registered is overlay
