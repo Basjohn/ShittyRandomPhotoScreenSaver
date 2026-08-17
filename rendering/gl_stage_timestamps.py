@@ -61,6 +61,8 @@ class StagePacket:
     results_ns: dict[str, int] = field(default_factory=dict)
     cpu_ms: dict[str, float] = field(default_factory=dict)
     hud: dict[str, Any] = field(default_factory=dict)
+    # Set post-hoc from the matching outer GL_TIME_ELAPSED sample.
+    outer_gpu_ms: float | None = None
     complete: bool = False
 
     def spans_ms(self) -> dict[str, float]:

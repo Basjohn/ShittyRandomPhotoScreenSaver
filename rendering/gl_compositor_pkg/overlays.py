@@ -195,6 +195,37 @@ def paint_spotify_visualizer(widget, painter: QPainter) -> None:
     finally:
         painter.restore()
 
+def _hud_observe(widget, image, *, rebuilt: bool, t0) -> None:
+    """PART C: record HUD outcome onto the active stage packet, passively.
+
+    Records what this function actually did - the rebuild/cache-hit outcome is
+    taken from the code path taken, never inferred later from transition labels.
+    Changes no dimension, cadence, cache policy or output.
+    """
+    ring = getattr(widget, "_gl_stage_timestamps", None)
+    packet = getattr(ring, "_active", None) if ring is not None else None
+    if packet is None:
+        return
+    try:
+        width = int(image.width()) if image is not None else 0
+        height = int(image.height()) if image is not None else 0
+        packet.hud = {
+            "hud_present": image is not None,
+            "hud_rebuilt": bool(rebuilt),
+            "hud_cache_hit": (image is not None) and not rebuilt,
+            "hud_build_cpu_ms": (
+                (time.perf_counter() - t0) * 1000.0 if t0 is not None else -1.0
+            ),
+            "hud_width": width,
+            "hud_height": height,
+            # ARGB32 => 4 bytes/pixel. This is the allocation the QPainter path
+            # composites, not an estimate of the drawn area.
+            "hud_image_bytes": width * height * 4,
+        }
+    except Exception:
+        packet.hud = {"hud_present": False, "hud_rebuilt": False}
+
+
 def render_debug_overlay_image(widget) -> Optional[QImage]:
     """Render the PERF HUD into a small offscreen image.
 
@@ -203,6 +234,7 @@ def render_debug_overlay_image(widget) -> Optional[QImage]:
     relying on GL text rendering state.
     """
 
+    _hud_t0 = time.perf_counter()
     if not is_perf_metrics_enabled():
         widget._debug_overlay_cache_key = None
         widget._debug_overlay_cache_image = None
@@ -234,6 +266,7 @@ def render_debug_overlay_image(widget) -> Optional[QImage]:
         and cached_built_at > 0.0
         and (now - cached_built_at) < _DEBUG_OVERLAY_REFRESH_INTERVAL_S
     ):
+        _hud_observe(widget, cached_image, rebuilt=False, t0=_hud_t0)
         return cached_image
 
     payload = _build_debug_overlay_payload(widget, active_transition)
@@ -259,6 +292,7 @@ def render_debug_overlay_image(widget) -> Optional[QImage]:
     widget._debug_overlay_cache_key = cache_key
     widget._debug_overlay_cache_image = image
     widget._debug_overlay_cache_built_at = now
+    _hud_observe(widget, image, rebuilt=True, t0=_hud_t0)
     return image
 
 def paint_dimming_gl(widget) -> None:

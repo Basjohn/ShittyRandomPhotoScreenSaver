@@ -348,12 +348,28 @@ def paint_retained_base_texture(comp: "GLCompositorWidget", target: QRect) -> bo
     if not texture_id:
         return False
     try:
+        import time as _stage_time
+
+        # Retained-base steady rendering has no separate prep step; T1 == T0
+        # boundary is marked here so spans stay comparable across paths.
+        _stage_mark(comp, "t1")
+        _stage_t = _stage_time.perf_counter()
         if not comp._transition_renderer.render_retained_base_texture(texture_id):
             return False
+        _stage_mark(comp, "t2")
+        _stage_cpu(comp, "core_draw_cpu_ms", _stage_t)
+
         from rendering.gl_compositor_pkg.overlays import paint_dimming_gl
 
+        _stage_t = _stage_time.perf_counter()
         paint_dimming_gl(comp)
+        _stage_mark(comp, "t3")
+        _stage_cpu(comp, "dimming_cpu_ms", _stage_t)
+
+        _stage_t = _stage_time.perf_counter()
         paint_qpainter_overlays_gl(comp)
+        _stage_mark(comp, "t4")
+        _stage_cpu(comp, "overlay_cpu_ms", _stage_t)
         return True
     except Exception:
         logger.debug(
@@ -457,6 +473,33 @@ def paint_qpainter_overlays_gl(comp: "GLCompositorWidget") -> None:
         painter.end()
 
 
+def _stage_mark(comp, marker: str) -> None:
+    """Place one GL_TIMESTAMP stage marker when --diag-p4-stages is active.
+
+    No-op otherwise. Never allocates, waits or changes rendering.
+    """
+    ring = getattr(comp, "_gl_stage_timestamps", None)
+    if ring is None or not ring.supported:
+        return
+    from rendering.gl_compositor_pkg.paint import _resolve_gl
+    gl_api = _resolve_gl()
+    if gl_api is not None:
+        ring.mark(gl_api, marker)
+
+
+def _stage_cpu(comp, key: str, start: float) -> None:
+    """Record one matched CPU stage interval for the active stage packet."""
+    ring = getattr(comp, "_gl_stage_timestamps", None)
+    if ring is None:
+        return
+    packet = getattr(ring, "_active", None)
+    if packet is None:
+        return
+    import time as _time
+
+    packet.cpu_ms[key] = (_time.perf_counter() - start) * 1000.0
+
+
 def try_shader_path(comp: "GLCompositorWidget", name: str, state, can_use_fn, paint_fn, target, prep_fn=None) -> bool:
     """Try to render a transition via shader path. Returns True if successful."""
     if state is None:
@@ -465,13 +508,35 @@ def try_shader_path(comp: "GLCompositorWidget", name: str, state, can_use_fn, pa
         _record_shader_path_failure(comp, name, "capability_unavailable")
         return False
     try:
+        import time as _stage_time
+
+        _stage_t = _stage_time.perf_counter()
         if prep_fn is not None and not prep_fn():
             _record_shader_path_failure(comp, name, "texture_prep_failed")
             return False
+        # T1: prep/texture/cache complete, before the core draw.
+        _stage_mark(comp, "t1")
+        _stage_cpu(comp, "prep_cpu_ms", _stage_t)
+
+        _stage_t = _stage_time.perf_counter()
         paint_fn(target)
+        # T2: core transition shader draw issued.
+        _stage_mark(comp, "t2")
+        _stage_cpu(comp, "core_draw_cpu_ms", _stage_t)
+
         from rendering.gl_compositor_pkg.overlays import paint_dimming_gl
+
+        _stage_t = _stage_time.perf_counter()
         paint_dimming_gl(comp)
+        # T3: common dimming complete.
+        _stage_mark(comp, "t3")
+        _stage_cpu(comp, "dimming_cpu_ms", _stage_t)
+
+        _stage_t = _stage_time.perf_counter()
         paint_qpainter_overlays_gl(comp)
+        # T4: QPainter overlays (incl. the PERF HUD under --perf) complete.
+        _stage_mark(comp, "t4")
+        _stage_cpu(comp, "overlay_cpu_ms", _stage_t)
         try:
             comp._last_shader_path_failure = ""
         except Exception:
