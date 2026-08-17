@@ -95,27 +95,129 @@ Installed dual-display acceptance remains P5-F.
 
 ### P2 — fix bad smell 1: publication-coupled visualizer presentation
 
+**Design only. Do not implement until step 1 below is complete and reviewed.**
+
 Two implementations have been rejected. The premise is unchanged and still measured; both
-failures were in the **mechanism**. See `Docs/Historical_Bugs/R-61_*` and `R-62_*`.
+failures were in the **mechanism**. See `Docs/Historical_Bugs/R-61_*` and `R-62_*`, and the
+preserved evidence at `logs/evidence_chest/08_17_8eb381fb_p2_transition_deferral_REJECTED/`.
+
+#### What the two failures established
+
+```text
+R-61  sole dependence on AdaptiveTimerStrategy   -> visualizer froze after first transition
+R-62  same source, while-active only             -> Bubble worse; state->paint p95 doubled
+```
+
+R-62 is a **valid negative result**, not an inert run: registration is logged at 16:18:40,
+16:20:22 and 16:23:14, and `u/ss` fell from `1.000` to `0.699-0.755` while deferral was active.
+The mechanism worked. Working is what broke Bubble.
+
+```text
+                    u/ss            Bubble state->paint p95
+immediate           0.971 - 1.000   4.90 ms median
+light deferral      0.949           7.04 ms
+heavy deferral      0.699 - 0.755   13.2 - 15.4 ms (peaks 52.7 - 56.5 ms)
+```
+
+Latency scaled with the amount of deferral, a dose-response relationship across 31 windows.
+Bubble logical publication held at ~99.7-100%, so the **simulation path is exonerated**; the
+damage was entirely in when integrated state reached the screen.
+
+Root cause: the borrowed compositor opportunity delivers only **~54-56 accepted, irregular Hz
+under transition load** (`511/545`, `493/543`). Pacing a ~90 Hz visualizer from a stream that is
+sick exactly when it is needed guarantees late, uneven arrival.
+
+#### Constraints now binding on any candidate
 
 - `AdaptiveTimerStrategy` / `AdaptiveRenderStrategyManager` is disqualified as a presentation
   source in **any** scope, sole or while-active-only.
-- Edge protection must be asserted against the real Bubble positional-payload edge from the v1
-  golden, on the tick where it becomes **visible**, not where the event is authored. A test that
-  only proves a bypass fired is not edge coverage.
+- **A pacing source that degrades under the load it is meant to relieve is disqualified.** A
+  candidate must show its source stays healthy under that load, or use no external source.
+- **State-to-paint latency is an acceptance metric, not a diagnostic.** A candidate that reduces
+  `u/ss` while raising Bubble state-to-paint p95 is rejected regardless of delivery counters.
+- Edge protection must be asserted against the real Bubble **positional-payload** edge in the v1
+  golden, on the tick where it becomes visible, not the tick where the event is authored, and
+  not merely that a bypass fired.
+- Every logical input is integrated before any coalescing (R-54). No producer gate, paint
+  acknowledgement, pending-until-paint admission, display-rate divisor, second clock, or requeue
+  (R-27).
 - A candidate narrower than the stated goal cannot close P2 without evidence justifying the
   narrowing.
-- Analyse the preserved failed-experiment logs before designing again:
-  `logs/evidence_chest/08_17_8eb381fb_p2_transition_deferral_REJECTED/`.
 
-- [ ] Replace the current one-accepted-state → one auxiliary `SpotifyBarsGLOverlay.update()` contract with an owned presentation-opportunity contract.
+#### Step 1 - measurement before design (no production change)
+
+- [ ] From the preserved R-62 logs, plot Bubble state-to-paint distribution against `u/ss` per
+      window and confirm the dose-response relationship holds within single transitions, not
+      only across them.
+- [ ] Establish whether the latency rise is dominated by *waiting for the next opportunity* or by
+      *opportunity irregularity* (inter-arrival jitter). These imply different fixes and the
+      distinction is currently unproven.
+- [ ] Quantify, from `logs/screensaver_perf.log`, how much of the auxiliary request stream is
+      **genuinely redundant**: a request issued while a previous request for the same surface is
+      still queued and undispatched, so Qt would have painted the newer state anyway. This is the
+      only reduction that costs zero latency by construction.
+- [ ] Record the result in the phase report. If redundant traffic is negligible, say so and
+      escalate the scope question rather than building anyway.
+
+#### Step 2 - candidate design: dispatch-window coalescing (demand-driven, no external clock)
+
+Leading candidate, subject to step 1. Coalesce a presentation request **only while a previously
+issued request for the same surface is queued and not yet dispatched by Qt**. Once dispatched,
+the next publication requests normally.
+
+```text
+publication -> integrate (always)
+            -> is a prior request still queued and undispatched?
+                 yes -> drop this request; the queued one will paint the newer state
+                 no  -> request presentation immediately
+```
+
+Why this differs from both failures:
+
+- **No external pacing source.** Nothing is borrowed; the mechanism is driven by Qt's own
+  dispatch backlog, so it cannot inherit a sick clock's irregularity (R-62's root cause).
+- **Cannot delay any state.** `paintGL()` reads current state, so an already-queued request
+  paints the *latest* integrated state when it runs. A dropped duplicate would have painted the
+  same or older state. State-to-paint latency can only stay equal or improve, which is the exact
+  metric R-62 regressed.
+- **Not paint-based admission.** It keys on *dispatch*, not paint completion. R-27 explicitly
+  separated queued-dispatch coalescing from paint-pending state and preserved the former; the
+  barred design keyed on paint.
+- **Self-regulating.** Under congestion the dispatch backlog grows and more redundancy is removed
+  exactly where the GUI is sick. When healthy, dispatch is immediate and `u/ss` stays ~1.0.
+- Symmetric with the compositor, which already uses `_srpss_timer_update_dispatch_pending` for
+  precisely this distinction.
+
+Open risk to resolve in step 1: if Qt dispatches the overlay's updates promptly even under load,
+the redundant fraction is small and this candidate is not worth the seam. That is a legitimate
+outcome and must be reported rather than engineered around.
+
+#### Step 3 - test bars, written before any wiring
+
+- [ ] Bubble **visible positional-payload edge** from the v1 golden survives presentation, on the
+      tick it becomes visible.
+- [ ] State-to-paint p95 does not rise versus the 1:1 baseline at equal publication rate. This is
+      the explicit R-62 regression bar.
+- [ ] `u/ss` stays ~1.0 when dispatch is prompt; falls only when a request is genuinely
+      superseded before dispatch.
+- [ ] Logical state bit-identical with and without coalescing.
+- [ ] Worker-thread caller and paused/idle lifecycle states modelled, not direct invocation.
+- [ ] Teardown/recreation clean: no `None`-overlay attribute writes (the R-62 lifecycle defect).
+- [ ] Both overpaint and under-delivery detectable; R-27 stutter signature absent.
+
+#### Step 4 - runtime gate
+
+- [ ] Confirm activation in `logs/screensaver_spotify_vis.log` before interpreting anything.
+- [ ] Compare Bubble state-to-paint p95 and `u/ss` against the preserved R-62 windows and the
+      approved-anchor windows.
+- [ ] Installed Bubble and Spectrum visual review is the acceptance authority. If Bubble is worse
+      in any relevant way, revert whole; do not retune in place.
+
+#### Remaining original P2 requirements
+
 - [ ] Logical/source cadence remains unchanged; presentation may consume the latest valid immutable render state only after logical integration.
 - [ ] Preserve protected short-lived Bubble edges/events through bounded event identity/history or another approved equivalent; latest-state sampling alone is insufficient.
 - [ ] Do **not** use paint completion, a pending-until-paint latch, elapsed producer timestamps, a display-FPS cap, source/event decimation or a second visualizer clock as admission.
-- [ ] **Read `Docs/Guardrails/Visualizer_Presentation.md` and `Docs/Visualizer_Change_Checklist.md` before designing.** Both already constrain this work; the first rejected attempt (R-61) violated rules stated in them.
-- [ ] **The presentation opportunity source must be live whenever the visualizer is live.** `AdaptiveTimerStrategy` is transition-scoped and is disqualified (R-61). Characterise any candidate's start/stop/pause scope before adopting it.
-- [ ] **Anything reached from a worker thread must marshal Qt work to the GUI owner.** Tests must model the real caller's thread and lifecycle state, including paused/idle, not call the seam directly.
-- [ ] **Confirm the presentation owner is active before interpreting any run**, and confirm it is still active *after* a transition completes. Require an `update_requests/set_state` ratio below `1.0` in the overlay records in `logs/screensaver_spotify_vis.log`. A run without that is a non-result, not a negative result.
 - [ ] Re-run the mixed-refresh production scenario with `--perf` and `--gpu-timing`; compare against the accepted report rather than the temporary monkeypatch.
 
 ### P3 — attribute the remaining visualizer-family GUI handoff cost

@@ -324,6 +324,19 @@ Failed-experiment logs preserved at
 `logs/evidence_chest/08_17_8eb381fb_p2_transition_deferral_REJECTED/`. Full analysis in
 `Docs/Historical_Bugs/R-62_Transition_Scoped_Presentation_Deferral_Bubble_Regression.md`.
 
+Measured (valid negative result; P2 was confirmed active):
+
+```text
+                    u/ss            Bubble state->paint p95
+immediate windows   0.971 - 1.000   4.90 ms median
+light deferral      0.949           7.04 ms
+heavy deferral      0.699 - 0.755   13.2 - 15.4 ms (peaks 52.7 - 56.5 ms)
+
+Bubble logical publication      ~99.7 - 100%  (simulation path exonerated)
+borrowed 60 Hz opportunity      ~54 - 56 accepted/sec in late transitions
+165 Hz sibling acceptance       ~84.9% mean vs A ~87.1%, B ~91.4% (not like-for-like)
+```
+
 Consequences for this report:
 
 - `AdaptiveTimerStrategy` is disqualified as a presentation source in **any** scope, not merely
@@ -333,3 +346,10 @@ Consequences for this report:
   failed at the mechanism, not at the premise.
 - Any future candidate must assert against the real Bubble positional-payload edge from the v1
   golden — on the tick where it becomes visible, not the tick where the event is authored.
+- **A presentation opportunity that is itself degraded under load is not a valid pacing source.**
+  The compositor opportunity delivers ~54–56 irregular Hz exactly when GUI delivery is sick, so
+  pacing a ~90 Hz visualizer from it guarantees late, uneven arrival. Any candidate must show
+  that its pacing source is healthy *under the load it is meant to relieve*.
+- **State→paint latency is now a required acceptance metric**, not a diagnostic. The
+  dose-response above makes it the sharpest available proxy for the fidelity loss operators
+  report.
