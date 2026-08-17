@@ -1050,6 +1050,7 @@ def _ensure_spotify_bars_overlay(widget) -> SpotifyBarsGLOverlay | None:
             overlay = SpotifyBarsGLOverlay(widget, initial_mode=initial_mode)
             overlay.setObjectName("spotify_bars_gl_overlay")
             widget._spotify_bars_overlay = overlay
+            _attach_overlay_presentation_owner(widget, overlay)
             if widget._resource_manager is not None:
                 try:
                     widget._resource_manager.register_qt(
@@ -1087,6 +1088,50 @@ def _ensure_spotify_bars_overlay(widget) -> SpotifyBarsGLOverlay | None:
         raise RuntimeError("SpotifyBarsGLOverlay missing clear_overlay_buffer; stale build detected")
 
     return overlay
+
+
+def _attach_overlay_presentation_owner(widget, overlay) -> bool:
+    """Register the overlay with the display's own compositor frame opportunity.
+
+    The `DisplayWidget` owns both the compositor and this auxiliary surface, so it is
+    the correct registrar. If no render strategy is available the overlay stays unowned
+    and keeps requesting a repaint per publication, which is the previous behaviour.
+    """
+    try:
+        compositor = getattr(widget, "_gl_compositor", None)
+        strategy = getattr(compositor, "_render_strategy_manager", None)
+        if strategy is None or not hasattr(strategy, "set_auxiliary_presenter"):
+            return False
+        strategy.set_auxiliary_presenter(overlay)
+        overlay.set_presentation_owned(True)
+        logger.info(
+            "[SPOTIFY_VIS] Overlay presentation owned by display frame opportunity screen=%s",
+            getattr(widget, "_screen_index", "<unknown>"),
+        )
+        return True
+    except Exception:
+        logger.debug(
+            "[SPOTIFY_VIS] Failed to attach overlay presentation owner", exc_info=True
+        )
+        return False
+
+
+def _detach_overlay_presentation_owner(widget, overlay) -> None:
+    """Release presentation ownership before the overlay or compositor is retired."""
+    try:
+        compositor = getattr(widget, "_gl_compositor", None)
+        strategy = getattr(compositor, "_render_strategy_manager", None)
+        if strategy is not None and hasattr(strategy, "clear_auxiliary_presenter"):
+            strategy.clear_auxiliary_presenter()
+    except Exception:
+        logger.debug(
+            "[SPOTIFY_VIS] Failed to detach overlay presentation owner", exc_info=True
+        )
+    try:
+        if overlay is not None and hasattr(overlay, "set_presentation_owned"):
+            overlay.set_presentation_owned(False)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to clear overlay ownership flag", exc_info=True)
 
 
 def _push_spotify_bars_overlay_state(

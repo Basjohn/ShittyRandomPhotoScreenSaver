@@ -731,7 +731,11 @@ class AdaptiveTimerStrategy:
         
         # Frame request queue (lock-free)
         self._frame_queue: SPSCQueue[bool] = SPSCQueue(4)
-        
+
+        # Display-owned auxiliary presentation opportunity (one per display).
+        self._auxiliary_presenter = None
+        self._auxiliary_lock = threading.Lock()
+
         # Threading
         self._task_future = None
         self._task_id: Optional[str] = None
@@ -1039,6 +1043,39 @@ class AdaptiveTimerStrategy:
                 self._metrics.frame_count += 1
             except Exception as e:
                 logger.debug("[ADAPTIVE_TIMER] Frame signal failed: %s", e)
+        self._service_auxiliary_presenter()
+
+    def set_auxiliary_presenter(self, presenter) -> None:
+        """Register the display's auxiliary surface for this owned opportunity.
+
+        One presenter per display, registered by the `DisplayWidget` that owns both
+        the compositor and the auxiliary surface. This is not a second clock: the
+        presenter is serviced from the display's existing frame opportunity and
+        never gains a timer, thread or cadence of its own.
+        """
+        with self._auxiliary_lock:
+            self._auxiliary_presenter = presenter
+
+    def clear_auxiliary_presenter(self) -> None:
+        """Detach the auxiliary presenter so a retired surface is never serviced."""
+        with self._auxiliary_lock:
+            self._auxiliary_presenter = None
+
+    def _service_auxiliary_presenter(self) -> None:
+        """Offer one presentation opportunity through a narrow explicit interface."""
+        with self._auxiliary_lock:
+            presenter = self._auxiliary_presenter
+        if presenter is None:
+            return
+        try:
+            presenter.present_if_pending()
+        except RuntimeError:
+            # The owning surface was destroyed between registration and service.
+            self.clear_auxiliary_presenter()
+        except Exception:
+            logger.debug(
+                "[ADAPTIVE_TIMER] Auxiliary presentation opportunity failed", exc_info=True
+            )
     
     def request_frame(self) -> None:
         """Queue immediate frame request."""
@@ -1080,6 +1117,8 @@ class AdaptiveRenderStrategyManager:
         self._config = AdaptiveTimerConfig()
         self._timer: Optional[AdaptiveTimerStrategy] = None
         self._lock = threading.Lock()
+        # Survives stop/start: the display owns the overlay across timer restarts.
+        self._auxiliary_presenter = None
     
     def configure(self, config: AdaptiveTimerConfig) -> None:
         """Update configuration."""
@@ -1091,6 +1130,8 @@ class AdaptiveRenderStrategyManager:
         with self._lock:
             if self._timer is None:
                 self._timer = AdaptiveTimerStrategy(self._compositor, self._config)
+                if self._auxiliary_presenter is not None:
+                    self._timer.set_auxiliary_presenter(self._auxiliary_presenter)
             result = self._timer.start()
         if is_perf_metrics_enabled():
             logger.info(
@@ -1167,12 +1208,27 @@ class AdaptiveRenderStrategyManager:
             )
         with self._lock:
             self._compositor = None
+            self._auxiliary_presenter = None
     
     def request_frame(self) -> None:
         """Request immediate frame."""
         with self._lock:
             if self._timer is not None:
                 self._timer.request_frame()
+
+    def set_auxiliary_presenter(self, presenter) -> None:
+        """Attach the display's auxiliary surface to the owned frame opportunity."""
+        with self._lock:
+            self._auxiliary_presenter = presenter
+            if self._timer is not None:
+                self._timer.set_auxiliary_presenter(presenter)
+
+    def clear_auxiliary_presenter(self) -> None:
+        """Detach the auxiliary surface before it is retired."""
+        with self._lock:
+            self._auxiliary_presenter = None
+            if self._timer is not None:
+                self._timer.clear_auxiliary_presenter()
     
     def is_running(self) -> bool:
         """Check if timer is active."""

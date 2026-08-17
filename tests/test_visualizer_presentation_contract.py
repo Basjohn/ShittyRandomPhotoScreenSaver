@@ -461,3 +461,247 @@ class TestPresentationOwnership:
 
         assert list(overlay._bars) == pytest.approx(series[-1])
         assert overlay._bar_count == len(series[-1])
+
+
+@pytest.mark.qt
+class TestDisplayOwnedPresentation:
+    """P2: the owning display's frame opportunity drives the auxiliary surface."""
+
+    def test_owned_overlay_defers_presentation_to_the_display_opportunity(
+        self, qt_app, monkeypatch
+    ):
+        clock = _FakeClock()
+        _install_fake_clock(monkeypatch, clock)
+        overlay = SpotifyBarsGLOverlay(None)
+        paints = []
+        overlay.update = lambda *a, **k: paints.append(1)
+        # A parentless test widget never reports visible, which would retrigger the
+        # became_visible immediate-request boundary on every publication.
+        overlay.isVisible = lambda: True
+        overlay.set_presentation_owned(True)
+
+        # Settle the documented immediate-request boundaries (geometry, reveal).
+        _publish(overlay, [0.1, 0.2, 0.3])
+        clock.advance()
+        overlay.present_if_pending()
+        paints.clear()
+
+        for bars in _bar_series(20):
+            _publish(overlay, bars)
+            clock.advance()
+
+        # Every publication integrated; presentation still owed to the display.
+        assert overlay._perf_set_state_total == 21
+        assert len(paints) == 0
+        assert overlay._present_revision != overlay._presented_revision
+
+        assert overlay.present_if_pending() is True
+        assert len(paints) == 1
+        # A second opportunity with no new publication issues nothing.
+        assert overlay.present_if_pending() is False
+        assert len(paints) == 1
+
+    def test_owned_presentation_collapses_many_publications_into_one_request(
+        self, qt_app, monkeypatch
+    ):
+        clock = _FakeClock()
+        _install_fake_clock(monkeypatch, clock)
+        overlay = SpotifyBarsGLOverlay(None)
+        paints = []
+        overlay.update = lambda *a, **k: paints.append(1)
+        # A parentless test widget never reports visible, which would retrigger the
+        # became_visible immediate-request boundary on every publication.
+        overlay.isVisible = lambda: True
+        overlay.set_presentation_owned(True)
+        _publish(overlay, [0.1, 0.2, 0.3])
+        clock.advance()
+        overlay.present_if_pending()
+        paints.clear()
+
+        # 90 publications against 30 display opportunities.
+        for index, bars in enumerate(_bar_series(90)):
+            _publish(overlay, bars)
+            clock.advance()
+            if index % 3 == 2:
+                overlay.present_if_pending()
+
+        assert overlay._perf_set_state_total == 91
+        assert len(paints) == 30
+        assert overlay._perf_update_request_total <= overlay._perf_set_state_total
+
+    def test_discrete_event_bypasses_the_opportunity_bound(self, qt_app, monkeypatch):
+        """A short-lived authored edge must not wait for the next display slot."""
+        clock = _FakeClock()
+        _install_fake_clock(monkeypatch, clock)
+        overlay = SpotifyBarsGLOverlay(None)
+        paints = []
+        overlay.update = lambda *a, **k: paints.append(1)
+        # A parentless test widget never reports visible, which would retrigger the
+        # became_visible immediate-request boundary on every publication.
+        overlay.isVisible = lambda: True
+        overlay.set_presentation_owned(True)
+        _publish(overlay, [0.2, 0.3, 0.4])
+        clock.advance()
+        overlay.present_if_pending()
+        paints.clear()
+
+        _publish(overlay, [0.2, 0.3, 0.4])
+        clock.advance()
+        assert len(paints) == 0, "continuous motion waits for the display"
+
+        _publish(overlay, [0.2, 0.3, 0.4], line_kick_event_strength=0.9)
+        clock.advance()
+        assert len(paints) == 1, "a rising kick edge requests immediately"
+
+        # A decayed follow-up is not a new edge.
+        _publish(overlay, [0.2, 0.3, 0.4], line_kick_event_strength=0.1)
+        clock.advance()
+        assert len(paints) == 1
+
+        _publish(overlay, [0.2, 0.3, 0.4], line_snare_event_strength=0.8)
+        clock.advance()
+        assert len(paints) == 2, "a rising snare edge requests immediately"
+
+    def test_unowned_overlay_retains_the_previous_request_contract(
+        self, qt_app, monkeypatch
+    ):
+        """No display registered means no silent loss of presentation."""
+        clock = _FakeClock()
+        _install_fake_clock(monkeypatch, clock)
+        overlay = SpotifyBarsGLOverlay(None)
+        paints = []
+        overlay.update = lambda *a, **k: paints.append(1)
+
+        for bars in _bar_series(8):
+            _publish(overlay, bars)
+            clock.advance()
+
+        assert len(paints) == 8
+
+    def test_releasing_ownership_flushes_an_unpresented_publication(
+        self, qt_app, monkeypatch
+    ):
+        clock = _FakeClock()
+        _install_fake_clock(monkeypatch, clock)
+        overlay = SpotifyBarsGLOverlay(None)
+        paints = []
+        overlay.update = lambda *a, **k: paints.append(1)
+        # A parentless test widget never reports visible, which would retrigger the
+        # became_visible immediate-request boundary on every publication.
+        overlay.isVisible = lambda: True
+        overlay.set_presentation_owned(True)
+        _publish(overlay, [0.5, 0.6, 0.7])
+        clock.advance()
+        overlay.present_if_pending()
+        paints.clear()
+
+        _publish(overlay, [0.55, 0.65, 0.75])
+        assert len(paints) == 0
+
+        overlay.set_presentation_owned(False)
+
+        assert len(paints) == 1, "retirement must not strand a published frame"
+        assert overlay._present_revision == overlay._presented_revision
+
+    def test_disabled_owned_overlay_does_not_accumulate_stale_presentation(
+        self, qt_app, monkeypatch
+    ):
+        clock = _FakeClock()
+        _install_fake_clock(monkeypatch, clock)
+        overlay = SpotifyBarsGLOverlay(None)
+        paints = []
+        overlay.update = lambda *a, **k: paints.append(1)
+        # A parentless test widget never reports visible, which would retrigger the
+        # became_visible immediate-request boundary on every publication.
+        overlay.isVisible = lambda: True
+        overlay.set_presentation_owned(True)
+
+        for bars in _bar_series(6):
+            _publish(overlay, bars)
+            clock.advance()
+        paints.clear()
+
+        # A disabled overlay owns no presentation, even with a publication owed.
+        overlay._enabled = False
+        overlay._present_revision += 1
+
+        assert overlay.present_if_pending() is False
+        assert len(paints) == 0
+        assert overlay._present_revision == overlay._presented_revision
+
+
+class TestAuxiliaryPresenterRegistration:
+    """The timer services one registered presenter from its owned opportunity."""
+
+    def _timer(self, compositor):
+        from rendering.adaptive_timer import AdaptiveTimerConfig, AdaptiveTimerStrategy
+
+        return AdaptiveTimerStrategy(compositor, AdaptiveTimerConfig())
+
+    def test_signal_frame_offers_one_opportunity_to_the_registered_presenter(self):
+        from rendering import adaptive_timer
+
+        class _Compositor:
+            def update(self):
+                pass
+
+            def parent(self):
+                return None
+
+        class _Presenter:
+            def __init__(self):
+                self.offers = 0
+
+            def present_if_pending(self):
+                self.offers += 1
+                return True
+
+        presenter = _Presenter()
+        timer = self._timer(_Compositor())
+        original = adaptive_timer.ThreadManager.run_on_ui_thread
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(
+                lambda func, *a, **k: func()
+            )
+            timer.set_auxiliary_presenter(presenter)
+            timer._signal_frame()
+            timer._signal_frame()
+            assert presenter.offers == 2
+
+            timer.clear_auxiliary_presenter()
+            timer._signal_frame()
+            assert presenter.offers == 2, "a cleared presenter is never serviced"
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original
+
+    def test_destroyed_presenter_is_dropped_rather_than_retried(self):
+        from rendering import adaptive_timer
+
+        class _Compositor:
+            def update(self):
+                pass
+
+            def parent(self):
+                return None
+
+        class _DeadPresenter:
+            def __init__(self):
+                self.calls = 0
+
+            def present_if_pending(self):
+                self.calls += 1
+                raise RuntimeError("wrapped C/C++ object has been deleted")
+
+        presenter = _DeadPresenter()
+        timer = self._timer(_Compositor())
+        original = adaptive_timer.ThreadManager.run_on_ui_thread
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(
+                lambda func, *a, **k: func()
+            )
+            timer.set_auxiliary_presenter(presenter)
+            timer._signal_frame()
+            timer._signal_frame()
+            assert presenter.calls == 1, "a destroyed surface is dropped, not retried"
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original
