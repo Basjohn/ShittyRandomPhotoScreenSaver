@@ -651,6 +651,10 @@ class TestAuxiliaryPresenterRegistration:
         class _Presenter:
             def __init__(self):
                 self.offers = 0
+                self.pending = True
+
+            def has_pending_presentation(self):
+                return self.pending
 
             def present_if_pending(self):
                 self.offers += 1
@@ -688,9 +692,12 @@ class TestAuxiliaryPresenterRegistration:
             def __init__(self):
                 self.calls = 0
 
-            def present_if_pending(self):
+            def has_pending_presentation(self):
                 self.calls += 1
                 raise RuntimeError("wrapped C/C++ object has been deleted")
+
+            def present_if_pending(self):
+                raise AssertionError("must not be reached for a destroyed surface")
 
         presenter = _DeadPresenter()
         timer = self._timer(_Compositor())
@@ -805,3 +812,121 @@ class TestPresentationOwnerAttachment:
 
         assert overlay._has_presentation_owner is True
         assert strategy.registered is overlay
+
+
+class TestPresentationRunsOnTheGuiOwner:
+    """Regression bar for the 2026-08-17 freeze.
+
+    `_signal_frame()` runs on the adaptive timer's worker thread. Calling
+    `present_if_pending()` -> `QWidget.update()` directly from it corrupted Qt
+    repaint state: presentation froze while the event loop stayed alive, so input
+    and the context menu still worked. Presentation must be marshalled to the GUI
+    owner exactly like the compositor's own update path.
+    """
+
+    def test_presentation_is_marshalled_not_called_on_the_timer_thread(self):
+        from rendering import adaptive_timer
+        from rendering.adaptive_timer import AdaptiveTimerConfig, AdaptiveTimerStrategy
+
+        class _Compositor:
+            def update(self):
+                pass
+
+            def parent(self):
+                return None
+
+        class _Presenter:
+            def __init__(self):
+                self.presented = 0
+
+            def has_pending_presentation(self):
+                return True
+
+            def present_if_pending(self):
+                self.presented += 1
+                return True
+
+        presenter = _Presenter()
+        timer = AdaptiveTimerStrategy(_Compositor(), AdaptiveTimerConfig())
+        marshalled = []
+        original = adaptive_timer.ThreadManager.run_on_ui_thread
+        try:
+            # Capture instead of executing: anything reaching the widget must arrive
+            # through the UI-thread marshaller, never by direct call.
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(
+                lambda func, *a, **k: marshalled.append(func)
+            )
+            timer.set_auxiliary_presenter(presenter)
+            timer._signal_frame()
+
+            assert presenter.presented == 0, (
+                "present_if_pending() must not run on the timer worker thread"
+            )
+            # The compositor's own update marshals through the same hook; select ours.
+            presenter_calls = [
+                func for func in marshalled if func == presenter.present_if_pending
+            ]
+            assert len(presenter_calls) == 1, "presentation must be queued to the GUI owner"
+
+            presenter_calls[0]()
+            assert presenter.presented == 1
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original
+
+    def test_no_gui_callback_is_queued_when_nothing_is_owed(self):
+        from rendering import adaptive_timer
+        from rendering.adaptive_timer import AdaptiveTimerConfig, AdaptiveTimerStrategy
+
+        class _Compositor:
+            def update(self):
+                pass
+
+            def parent(self):
+                return None
+
+        class _IdlePresenter:
+            def has_pending_presentation(self):
+                return False
+
+            def present_if_pending(self):
+                raise AssertionError("nothing was owed; no opportunity should be taken")
+
+        timer = AdaptiveTimerStrategy(_Compositor(), AdaptiveTimerConfig())
+        marshalled = []
+        original = adaptive_timer.ThreadManager.run_on_ui_thread
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(
+                lambda func, *a, **k: marshalled.append(func)
+            )
+            idle = _IdlePresenter()
+            timer.set_auxiliary_presenter(idle)
+            timer._signal_frame()
+            timer._signal_frame()
+
+            presenter_calls = [
+                func for func in marshalled if func == idle.present_if_pending
+            ]
+            assert presenter_calls == [], (
+                "an idle overlay must add no GUI dispatch demand of its own"
+            )
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original
+
+    def test_overlay_pending_probe_touches_no_qt_state(self, qt_app, monkeypatch):
+        """The off-thread probe must be a plain comparison, safe from a worker."""
+        clock = _FakeClock()
+        _install_fake_clock(monkeypatch, clock)
+        overlay = SpotifyBarsGLOverlay(None)
+        overlay.update = lambda *a, **k: None
+        overlay.isVisible = lambda: True
+        overlay.set_presentation_owned(True)
+
+        def _explode(*args, **kwargs):
+            raise AssertionError("has_pending_presentation must not touch Qt")
+
+        for name in ("repaint", "show", "setGeometry", "geometry"):
+            monkeypatch.setattr(type(overlay), name, _explode, raising=False)
+
+        assert overlay.has_pending_presentation() is False
+        overlay._present_revision += 1
+        assert overlay.has_pending_presentation() is True

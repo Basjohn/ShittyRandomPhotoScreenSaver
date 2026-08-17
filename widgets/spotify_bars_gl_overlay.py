@@ -605,8 +605,19 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             else:
                 self._presented_revision = self._present_revision
 
+    def has_pending_presentation(self) -> bool:
+        """Whether a publication is owed presentation. Safe to read off-thread.
+
+        A plain integer comparison with no Qt access, used by the display's timer
+        thread to avoid queueing a GUI callback when nothing is owed. The
+        authoritative decision is re-made in `present_if_pending()` on the GUI thread.
+        """
+        return self._present_revision != self._presented_revision
+
     def present_if_pending(self) -> bool:
         """Consume one display-owned presentation opportunity.
+
+        Must run on the GUI owner: it touches QWidget state.
 
         Called from the owning display's existing frame opportunity, never from a
         timer or clock of this widget's own. Issues at most one repaint request and
