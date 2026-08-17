@@ -1089,55 +1089,6 @@ def _ensure_spotify_bars_overlay(widget) -> SpotifyBarsGLOverlay | None:
     return overlay
 
 
-def _attach_overlay_presentation_owner(widget, overlay) -> bool:
-    """Register the overlay with the display's own compositor frame opportunity.
-
-    The `DisplayWidget` owns both the compositor and this auxiliary surface, so it
-    is the correct registrar. Deferral only takes effect while the render strategy
-    is actually running; when it pauses or stops, the manager releases deferral and
-    the overlay returns to one request per publication (R-61).
-    """
-    try:
-        compositor = getattr(widget, "_gl_compositor", None)
-        strategy = getattr(compositor, "_render_strategy_manager", None)
-        if strategy is None or not hasattr(strategy, "set_auxiliary_presenter"):
-            # The overlay is created lazily on the first visualizer push, which can
-            # precede render-strategy construction. Staying unregistered is correct;
-            # _push_spotify_bars_overlay_state retries once the strategy exists.
-            return False
-        strategy.set_auxiliary_presenter(overlay)
-        setattr(overlay, "_srpss_presentation_registered", True)
-        logger.info(
-            "[SPOTIFY_VIS] Overlay registered with display frame opportunity screen=%s",
-            getattr(widget, "_screen_index", "<unknown>"),
-        )
-        return True
-    except Exception:
-        logger.debug(
-            "[SPOTIFY_VIS] Failed to attach overlay presentation owner", exc_info=True
-        )
-        return False
-
-
-def _detach_overlay_presentation_owner(widget, overlay) -> None:
-    """Release registration before the overlay or compositor is retired."""
-    try:
-        compositor = getattr(widget, "_gl_compositor", None)
-        strategy = getattr(compositor, "_render_strategy_manager", None)
-        if strategy is not None and hasattr(strategy, "clear_auxiliary_presenter"):
-            strategy.clear_auxiliary_presenter()
-    except Exception:
-        logger.debug(
-            "[SPOTIFY_VIS] Failed to detach overlay presentation owner", exc_info=True
-        )
-    try:
-        if overlay is not None and hasattr(overlay, "set_presentation_deferred"):
-            overlay.set_presentation_deferred(False)
-        setattr(overlay, "_srpss_presentation_registered", False)
-    except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to clear overlay registration", exc_info=True)
-
-
 def _push_spotify_bars_overlay_state(
     widget,
     *,
@@ -1174,12 +1125,6 @@ def _push_spotify_bars_overlay_state(
             "vis_mode": vis_mode,
         }
         overlay_kwargs.update(extra_kwargs)
-
-        # The overlay is created before the render strategy exists, so registration
-        # is claimed on the first publication after it becomes available. Idempotent:
-        # one attribute read once registered.
-        if not getattr(overlay, "_srpss_presentation_registered", False):
-            _attach_overlay_presentation_owner(widget, overlay)
 
         try:
             vis = getattr(widget, "spotify_visualizer_widget", None)
