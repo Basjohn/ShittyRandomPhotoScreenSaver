@@ -70,7 +70,12 @@ contract; do not reintroduce runtime class patching as a presentation solution.
 
 ### P1 — lock the production presentation/fidelity contract in tests
 
-- [ ] Prove logical visualizer publication may outrun presentation opportunity without requiring one `QOpenGLWidget.update()` per publication.
+Logical-publication-vs-presentation separation is locked in
+`tests/test_visualizer_presentation_contract.py` (real `SpotifyBarsGLOverlay` on an injected
+deterministic clock): every accepted publication integrates exactly once, presentation requests
+may be fewer but never more than publications, and withholding presentation at both the paint
+and request seams leaves logical state bit-identical. Keep it passing through P2.
+
 - [ ] Preserve Bubble authored step/dt/source/event identity, one-in-flight simulation semantics and protected edge visibility.
 - [ ] Preserve Spectrum authoritative source/state evolution and all supported-mode replay/state goldens.
 - [ ] Prove generation/activation rejection, Settings/recreate, display reassignment and strict GL teardown remain correct.
