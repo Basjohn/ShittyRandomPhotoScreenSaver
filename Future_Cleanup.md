@@ -1,6 +1,6 @@
 # Future Cleanup
 
-Last updated: 2026-08-16
+Last updated: 2026-08-17
 
 ## Priority Guidance
 
@@ -13,15 +13,15 @@ Last updated: 2026-08-16
 
 This section is intentionally **higher urgency than the ordinary cleanup backlog**. `Current_Plan.md` owns execution order, `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` owns the accepted evidence, and this section owns temporary-code removal plus test/diagnostic debt. Do not use this file as an alternate implementation plan.
 
-### P0 — clean before the production presentation fix
+### Retained delivery instrumentation and presentation test debt
 
-- [ ] **KEEP until P5.2 delivery ownership is closed; likely retain as normal `--perf` evidence afterward:** the delivery-stage instrumentation in `rendering/adaptive_timer.py` that separates deadline/wakeup lateness, queued-GUI-dispatch waiting, already-dispatched paint-pending waiting, and dispatch-vs-paint pending skips. It is diagnostic evidence rather than a behaviour change. Do not remove it just because one presentation hypothesis is rejected. Add focused tests that (1) skip reasons are mutually exclusive, (2) stage timestamps/ages cannot go negative or cross ownership generations, (3) PERF-off behaviour and scheduling remain unchanged, (4) teardown/recreation cannot carry pending timestamps into a new widget generation, and (5) two displays retain independent counters.
+- [ ] **KEEP until P5.2 delivery ownership is closed; likely retain as normal `--perf` evidence afterward:** the delivery-stage instrumentation in `rendering/adaptive_timer.py` that separates deadline/wakeup lateness, queued-GUI-dispatch waiting, already-dispatched paint-pending waiting, and dispatch-vs-paint pending skips. It is diagnostic evidence rather than a behaviour change. Do not remove it just because one presentation hypothesis is rejected. Its focused invariants now live in `tests/test_adaptive_timer.py::TestDeliveryStageInvariants` (mutually exclusive skip reasons, non-negative and generation-bounded stage ages, unchanged PERF-off scheduling, no pending-timestamp inheritance across widget generations, independent per-display counters); keep them passing whenever the seam is touched.
 - [ ] **KEEP:** sampled `--gpu-timing`, the ordinary event-loop lateness recorder, existing compositor request-age/paint summaries, and visualizer logical-publication/update/paint counters. They are needed to compare A/B/C and later production fixes. Do not replace them with per-frame log spam.
 - [ ] **P1 TEST DEBT — presentation contract:** add focused ownership/fidelity tests before P2: PERF-off path unchanged; supported-mode logical replay/state digests unchanged; stale generation/activation snapshots rejected; presentation may consume fewer opportunities than logical publication; protected Bubble edge/event history remains visible; and no QWidget/QColor/QPixmap/GL mutation moves to a worker.
 - [ ] **P3 TEST DEBT — handoff extraction if promoted:** if P3 proves pure-data overlay/render-state preparation is a GUI owner, require immutable snapshot tests, worker-safe type boundaries, stale-generation rejection, GUI-only Qt/GL commit tests and exact logical-state equivalence before moving that preparation.
 - [ ] **P4 TEST DEBT — residual dispatch owner:** once the no-visualizer queued-dispatch owner is named, add a focused regression that fails on that concrete callback/owner rather than asserting a magic global FPS number.
 
-### P1 — unrelated/unvalidated experiments that must not contaminate P0–P4
+### Unrelated/unvalidated experiments that must not contaminate P1–P4
 
 - [ ] **Browser GSMTC experiment remains unvalidated.** The recent `core/media/provider_registry.py` / `core/media/media_controller.py` browser-AUMID changes did not restore Firefox or Edge detection in the live runtime. Do not stack another guessed identity rule on top. When media work resumes, first capture the literal sessions/source IDs seen by Windows in the failing runtime, then either supersede or revert the unproven resolver changes. Add focused tests using captured Firefox and Chromium source IDs plus false-positive cases, and retain the paused-desktop-vs-playing-browser failover test separately from identity resolution.
 - [ ] **Do not preserve temporary monkeypatch architecture as a production solution.** The A/B/C probe has already proved a presentation owner. P2 must implement the owner in normal production code; do not rename/repackage the probe and leave runtime class patching in place.

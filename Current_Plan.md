@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-08-16
+Last updated: 2026-08-17
 Branch: `main`  
 Active phase: Phase 5 — workload, delivery, GPU attribution, resource efficiency
 
@@ -56,15 +56,17 @@ A checkpoint is a rollback anchor, not a pause for permission.
 
 ## Immediate Priority Queue
 
-This queue is the **Phase 5 execution authority**. P0→P4 remain the immediate performance/delivery
+This queue is the **Phase 5 execution authority**. P1→P4 remain the immediate performance/delivery
 sequence. P5 is the next mandatory monitor-topology/sleep-wake hardening lane and must complete
 before returning to lower-leverage Phase 5 work in P6. Detailed delivery evidence belongs in
 `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`; cleanup details belong in
 `Future_Cleanup.md`.
 
-### P0 — remove completed diagnostic scaffolding before production presentation work
-
-- [ ] Keep the passive delivery-stage metrics in `rendering/adaptive_timer.py`; add/retain their focused invariants rather than deleting the evidence seam.
+P0 diagnostic-scaffolding removal is closed: the temporary A/B/C presentation probe, its
+`--viz-present-abc` gate, `Shift+/` hotkey and event-loop-recorder install hook are gone, and the
+passive delivery-stage seam in `rendering/adaptive_timer.py` is retained under
+`tests/test_adaptive_timer.py::TestDeliveryStageInvariants`. Preserve that as a regression
+contract; do not reintroduce runtime class patching as a presentation solution.
 
 ### P1 — lock the production presentation/fidelity contract in tests
 
@@ -98,7 +100,7 @@ before returning to lower-leverage Phase 5 work in P6. Detailed delivery evidenc
 
 ### P5 — harden authoritative monitor topology and physical sleep/wake recovery
 
-This is **not deferred cleanup**. It follows the immediate P0→P4 performance sequence because the
+This is **not deferred cleanup**. It follows the immediate P1→P4 performance sequence because the
 installed non-diagnostic runtime now has a repeatable high-severity physical-monitor recovery failure:
 when both displays are off while the screensaver runtime is active, waking them can leave one display
 visible but frozen, the other blank, all Qt input dead, and recovery possible only after
@@ -158,7 +160,7 @@ this physical-off→wake platform scenario.
 
 ### P6 — resume lower-leverage Phase 5 work
 
-- [ ] Return to absolute memory/commit/VRAM attribution, remaining proven GUI service/cache work, parser/logging debt and compatibility cleanup only after P0–P5 reach their gates.
+- [ ] Return to absolute memory/commit/VRAM attribution, remaining proven GUI service/cache work, parser/logging debt and compatibility cleanup only after P1–P5 reach their gates.
 
 
 ## P5.0 Media Provider Runtime Validation
@@ -202,7 +204,7 @@ Detailed accepted evidence:
 
 ### Active gate
 
-For the delivery/performance thread, execution order remains **Immediate Priority Queue P0→P4** above.
+For the delivery/performance thread, execution order remains **Immediate Priority Queue P1→P4** above.
 P5 monitor-topology/sleep-wake hardening follows immediately after those gates and before P6 lower-leverage work.
 
 - P2 owns the proven visualizer presentation-request correction.
