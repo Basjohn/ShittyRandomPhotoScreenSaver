@@ -66,9 +66,6 @@ from widgets.base_overlay_widget import (
 
 logger = get_logger(__name__)
 
-# Minimum rise that counts as a discrete authored event rather than drift.
-_EDGE_EVENT_RISE_EPSILON = 1e-3
-
 _ARRAY_UNIFORM_NAMES = {
     "u_bars",
     "u_peaks",
@@ -176,17 +173,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._perf_update_request_count: int = 0
         self._perf_geometry_change_count: int = 0
         self._perf_set_state_total: int = 0
-        # Display-owned presentation bookkeeping. A publication bumps the revision;
-        # a presentation opportunity (or an edge bypass) consumes it. No clock here.
-        self._present_revision: int = 0
-        self._presented_revision: int = 0
-        # False until a display registers this overlay with its owned frame
-        # opportunity. While unowned the overlay keeps the previous
-        # request-per-publication contract so no path silently stops presenting.
-        self._has_presentation_owner: bool = False
-        self._last_published_kick_event: float = 0.0
-        self._last_published_snare_event: float = 0.0
-        self._last_published_transient: float = 0.0
         self._perf_paint_total: int = 0
         self._perf_update_request_total: int = 0
         self._perf_metrics_enabled: bool = bool(is_perf_metrics_enabled())
@@ -588,93 +574,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         del force
         self._perf_update_request_count += 1
         self._perf_update_request_total += 1
-        self._presented_revision = self._present_revision
         self.update()
-
-    def set_presentation_owned(self, owned: bool) -> None:
-        """Declare whether a display's frame opportunity now drives presentation.
-
-        Set by the owning `DisplayWidget` when it registers/unregisters this overlay.
-        Clearing ownership restores the unconditional request contract and flushes any
-        publication that has not yet been presented, so retirement cannot strand a frame.
-        """
-        self._has_presentation_owner = bool(owned)
-        if not self._has_presentation_owner:
-            if self._present_revision != self._presented_revision and self._enabled:
-                self._request_frame_update()
-            else:
-                self._presented_revision = self._present_revision
-
-    def has_pending_presentation(self) -> bool:
-        """Whether a publication is owed presentation. Safe to read off-thread.
-
-        A plain integer comparison with no Qt access, used by the display's timer
-        thread to avoid queueing a GUI callback when nothing is owed. The
-        authoritative decision is re-made in `present_if_pending()` on the GUI thread.
-        """
-        return self._present_revision != self._presented_revision
-
-    def present_if_pending(self) -> bool:
-        """Consume one display-owned presentation opportunity.
-
-        Must run on the GUI owner: it touches QWidget state.
-
-        Called from the owning display's existing frame opportunity, never from a
-        timer or clock of this widget's own. Issues at most one repaint request and
-        only when an accepted publication has not yet been presented, so logical
-        publication may outrun presentation without amplifying GUI dispatch demand.
-
-        Returns whether a request was issued.
-        """
-        if self._present_revision == self._presented_revision:
-            return False
-        if not self._enabled:
-            # A disabled overlay owns no presentation; drop the pending marker so a
-            # later enable does not replay a stale revision.
-            self._presented_revision = self._present_revision
-            return False
-        self._request_frame_update()
-        return True
-
-    def _publication_carries_discrete_event(
-        self,
-        *,
-        line_kick_event_strength: float,
-        line_snare_event_strength: float,
-        transient_energy,
-    ) -> bool:
-        """Detect a short-lived authored response that must not wait for the next slot.
-
-        A protected edge may last a single publication. Presentation bounded purely by
-        the display opportunity would lower the odds that the publication carrying it is
-        the one painted, so an edge earns one immediate request. Continuous motion does
-        not. This is bounded event identity, not a second cadence authority: it never
-        defers, batches or replays a publication.
-        """
-        try:
-            kick = float(line_kick_event_strength or 0.0)
-            snare = float(line_snare_event_strength or 0.0)
-        except (TypeError, ValueError):
-            return False
-        rising = (
-            kick > self._last_published_kick_event + _EDGE_EVENT_RISE_EPSILON
-            or snare > self._last_published_snare_event + _EDGE_EVENT_RISE_EPSILON
-        )
-        self._last_published_kick_event = kick
-        self._last_published_snare_event = snare
-        if rising:
-            return True
-        try:
-            if transient_energy is not None and float(transient_energy) > (
-                self._last_published_transient + _EDGE_EVENT_RISE_EPSILON
-            ):
-                self._last_published_transient = float(transient_energy)
-                return True
-            if transient_energy is not None:
-                self._last_published_transient = float(transient_energy)
-        except (TypeError, ValueError):
-            return False
-        return False
 
     # ------------------------------------------------------------------
     # Public API
@@ -1480,21 +1380,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if self._perf_metrics_enabled:
             self._perf_last_state_commit_ts = time.perf_counter()
         _update_start = time.time()
-        # The publication is integrated; mark it pending presentation. The owning
-        # display consumes this through present_if_pending() at its own frame
-        # opportunity, so logical cadence is unchanged while the auxiliary surface
-        # stops being an independent repaint source.
-        self._present_revision += 1
-        carries_edge = self._publication_carries_discrete_event(
-            line_kick_event_strength=line_kick_event_strength,
-            line_snare_event_strength=line_snare_event_strength,
-            transient_energy=transient_energy,
-        )
-        if geometry_changed or became_visible or carries_edge or not self._has_presentation_owner:
-            # Explicit immediate-request boundaries: geometry/reveal correctness, a
-            # short-lived authored edge, and the unowned case (no display has claimed
-            # this overlay yet) which must retain the previous always-request contract.
-            self._request_frame_update(force=geometry_changed or became_visible)
+        self._request_frame_update(force=geometry_changed or became_visible)
         _update_elapsed = (time.time() - _update_start) * 1000.0
         self._maybe_log_perf_counters(reason="set_state")
         
