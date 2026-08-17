@@ -99,11 +99,12 @@ class TestP3AccountingIntegrity:
         assert int(acc.get("samples", 0)) > 0
 
         regions = (
-            "handoff_temporal",
+            "temporal",
             "static_config",
             "dynamic_payload",
-            "geometry_visibility",
-            "update_call",
+            "qt_geometry",
+            "present_request",
+            "residual",
         )
         for name in regions:
             assert acc.get(name, 0) >= 0, f"{name} must never be negative"
@@ -111,6 +112,46 @@ class TestP3AccountingIntegrity:
         # Regions are contiguous slices of the same wall interval, so their sum
         # cannot exceed the measured total.
         assert sum(acc.get(name, 0) for name in regions) <= acc["total"] + 1_000
+
+    def test_categories_are_accumulated_from_non_contiguous_slices(
+        self, qt_app, monkeypatch
+    ):
+        """Categories interleave in set_state(); each is a sum of separated slices.
+
+        Regression bar for the mislabelled first probe, whose contiguous source
+        ranges mixed static config into temporal, bubble/devcurve payload into
+        static config, and Spectrum hysteresis/peaks into dynamic payload.
+        """
+        import inspect
+
+        from widgets import spotify_bars_gl_overlay as mod
+
+        source = inspect.getsource(mod.SpotifyBarsGLOverlay.set_state)
+        for key, minimum in (
+            ("static_config", 2),
+            ("dynamic_payload", 2),
+            ("temporal", 2),
+        ):
+            found = source.count(f'_p3_slice(_p3_regions, "{key}"')
+            assert found >= minimum, (
+                f"{key} must be accumulated from at least {minimum} separated "
+                f"slices; found {found}. Contiguous slicing reintroduces the "
+                "semantic contamination this probe exists to avoid."
+            )
+
+    def test_probe_helpers_are_not_present_in_constructor(self, qt_app, monkeypatch):
+        """Slice anchors must land in set_state(), not other methods.
+
+        An earlier revision matched a comment that also appears in __init__ and
+        injected undefined probe locals into the constructor.
+        """
+        import inspect
+
+        from widgets import spotify_bars_gl_overlay as mod
+
+        init_source = inspect.getsource(mod.SpotifyBarsGLOverlay.__init__)
+        assert "_p3_slice" not in init_source
+        assert "_p3_regions" not in init_source
 
     def test_early_return_contributes_no_partial_sample(self, qt_app, monkeypatch):
         """A rejected publication must not add region time with no sample divisor.
