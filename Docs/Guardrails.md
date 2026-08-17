@@ -11,7 +11,7 @@ that domain, its focused guardrail outranks the general section here. Currently:
 
 | Domain | Focused guardrail |
 |---|---|
-| Visualizer cadence, presentation, render-state delivery, repaint behaviour | `Docs/Guardrails/Visualizer_Presentation.md` (plus `Docs/Visualizer_Change_Checklist.md`) |
+| Visualizer cadence, presentation, render-state delivery, repaint behaviour | **`Docs/Presentation_Change_Preflight.md`** — routes to `Docs/Guardrails/Visualizer_Presentation.md`, the change checklist, and the barred-design register |
 
 ## 1. Priority Order
 
