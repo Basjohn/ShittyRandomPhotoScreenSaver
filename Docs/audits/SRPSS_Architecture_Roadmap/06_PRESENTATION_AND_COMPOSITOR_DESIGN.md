@@ -1,6 +1,6 @@
 # 06 — Presentation and Compositor Design
 
-Last reconciled: 2026-08-16
+Last reconciled: 2026-08-17
 
 ## Design Objective
 
@@ -158,6 +158,59 @@ It must not:
 
 Geometry/reveal/clear/lifecycle boundaries may require an immediate presentation request;
 those exceptions must be explicit and tested.
+
+## P2 Implementation Decision (2026-08-17)
+
+Traced seam, confirmed against current `main`:
+
+```text
+visualizer tick
+  → rendering/display_image_ops.py::_push_spotify_bars_overlay_state()
+  → SpotifyBarsGLOverlay.set_state()            [logical integration]
+  → SpotifyBarsGLOverlay._request_frame_update() [unconditional]
+  → QOpenGLWidget.update()                       [independent GUI dispatch demand]
+```
+
+`set_state()` ends with an unconditional `_request_frame_update()`, so every accepted
+logical publication injects one auxiliary repaint request into the shared GUI dispatch
+lane. `AdaptiveTimerStrategy._signal_frame()` drives only `self._compositor`; the overlay
+is not part of that owned opportunity today.
+
+Chosen approach: reuse the **existing** GUI-local pending-update coalescing precedent the
+compositor already uses (`rendering/adaptive_timer.py::_queue_safe_widget_update` /
+`_mark_widget_update_consumed`), rather than introducing a new scheduler, timer or lane.
+Guardrails §6 permits a GUI-local pending `update()` flag; it is not producer
+acknowledgement, and `set_state()` must still return without waiting.
+
+Two constraints make this more than a flag, and both are mandatory:
+
+1. **Edge preservation.** Plain coalescing is insufficient for Bubble. Between two paints,
+   publications carrying a discrete edge followed by an already-decayed value would present
+   only the decayed value, which is the failure
+   `tests/test_visualizer_presentation_negative_controls.py::test_latest_at_60_hz_can_hide_the_protected_bubble_edge`
+   already models. The coalesced render state must retain bounded edge/event identity
+   across the window so a skipped snapshot cannot erase authored response. Note that
+   `_line_kick_event_strength` / `_line_snare_event_strength` are decaying envelopes and
+   Bubble edges live in the bubble payload, so this is a state-commit change, not a flag.
+2. **No permanent latch.** The outstanding-request flag must not remain set because one
+   paint was delayed, and must be cleared by teardown/geometry/reveal boundaries. Geometry
+   change, becoming visible, and buffer clear remain explicit immediate-request exceptions
+   (`set_state()` already computes `geometry_changed` / `became_visible`).
+
+Acceptance is not satisfiable from tests alone. Required before P2 is accepted:
+
+- installed mixed-refresh (165 Hz + 60 Hz) run on ordinary `main.py` with `--perf` and
+  `--gpu-timing`, compared against the accepted A-state figures in
+  `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` — not against the retired
+  monkeypatch;
+- Bubble and Spectrum manual visual review. Per Guardrails §7 an operator-reported fidelity
+  regression rejects the change regardless of green goldens or improved counters.
+
+Regression bars that must stay green: `tests/test_visualizer_presentation_contract.py`
+(publication/presentation separation, mixed-refresh delivery bar), the negative controls,
+`test_bubble_cadence.py`, `test_spectrum_presentation_smoothing.py`, `test_visualizer_replay.py`.
+
+Rollback anchor: `30e66e08` (P1 close, pre-P2).
 
 ## Scene / Surface Ownership
 
