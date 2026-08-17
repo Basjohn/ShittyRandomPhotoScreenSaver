@@ -1,7 +1,7 @@
 # Phase 5 — Presentation / Delivery Attribution
 
 Status: **accepted causal checkpoint; active implementation input**  
-Date reconciled: 2026-08-16  
+Date reconciled: 2026-08-17  
 Execution owner: `Current_Plan.md`  
 Cleanup/test-debt owner: `Future_Cleanup.md`
 
@@ -181,3 +181,70 @@ This thread is not complete merely because visualizer-on performance improves.
 - P4 names the residual no-visualizer queued-dispatch owner, or demonstrates with accepted
   evidence that the remaining delta is external/irreducible;
 - lifecycle/GL teardown remains strict and tracked resources return to their expected zero/plateau.
+
+## 2026-08-17 Installed Bubble Run — Supplementary Evidence
+
+This is a **supplementary** observation, not a replacement for the accepted 2026-08-16
+A/B/C/D interpretation above. It is not a like-for-like baseline: the accepted run used
+Spectrum, this run used **Bubble**, so the two are not directly comparable on FPS or
+acceptance. Do not restate one as a regression of the other.
+
+Source: ordinary `main.py`, dual display (2560x1439 @ 60 Hz configured visualizer display,
+1707x959 logical @ 165 Hz), `blockspin` transition, PERF delivery-stage attribution and
+sampled GPU timing active.
+
+### Direct confirmation of the P2 coupling
+
+Aggregated across 18 overlay windows / 13,978 accepted publications:
+
+```text
+update_requests / set_state = 1.0000
+paints          / set_state = 0.9669
+publication rate            = 81.1 Hz
+overlay paint rate          = 78.4 Hz
+configured display refresh  = 60 Hz
+overlay paint_cpu p95       = 1.695 ms
+sampled overlay GPU (Bubble) = 0.381 ms p50 / 0.421 ms p95
+```
+
+Two results follow.
+
+1. The one-publication → one-`update()` contract is confirmed in production at exactly
+   1.0000, over a large sample. P2's premise is measured, not inferred.
+2. The overlay paints roughly **31% more often than the 60 Hz display can present**, costing
+   about **133 ms/s of GUI thread** in overlay paint alone before any GPU cost. The waste is
+   paint work, not only dispatch demand.
+
+Result 2 refines the mechanism: because Qt already paints 96.7% of requests, a
+pending-until-painted coalescer would recover only the ~3.3% Qt collapses by itself.
+Presentation must be bounded by the owning display's presentation opportunity. See the
+corrected P2 implementation decision in
+`Docs/audits/SRPSS_Architecture_Roadmap/06_PRESENTATION_AND_COMPOSITOR_DESIGN.md`.
+
+### Skip-profile difference under Bubble
+
+Delivery-stage skip attribution inverts relative to the accepted Spectrum windows:
+
+```text
+                        165 Hz display        60 Hz display
+acceptance (mean)          73.4%                 94.6%
+dispatch_pending_skips      544                    68
+paint_pending_skips        1456                    78
+```
+
+Under Spectrum the accepted run had dispatch-pending dominating paint-pending. Under Bubble
+paint-pending dominates by roughly 2.7x on the 165 Hz display. This is consistent with
+Bubble's heavier paint (about 1.7 ms CPU p95 and roughly 19x the Spectrum GPU sample) rather
+than with a new dispatch owner.
+
+Do **not** treat this as contradicting the accepted P4 residual-dispatch finding, which was
+measured with the visualizer absent. It does mean P2's benefit should be expected in paint
+work as well as dispatch demand, and that P3/P4 attribution must record visualizer mode.
+
+### Not yet established
+
+- No same-process A/B comparison was performed in this run; the retired probe is gone and P2
+  is the production correction.
+- Bubble was not visually reviewed against `ff934616` as part of this capture.
+- `paint_fps=0.0` in the `[GL COMPOSITOR]` blockspin records is unexplained and should be
+  confirmed as an instrumentation gap rather than a real zero before being cited.
