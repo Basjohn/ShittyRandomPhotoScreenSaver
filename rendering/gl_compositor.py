@@ -13,6 +13,7 @@ compositor over time.
 from __future__ import annotations
 
 from typing import Dict, Optional, Callable
+import os
 import time
 import weakref
 
@@ -1848,7 +1849,8 @@ class GLCompositorWidget(QOpenGLWidget):
             "context_prepare_ms=%.3f context_make_current_ms=%.3f "
             "context_release_ms=%.3f manager_present_before=%s "
             "manager_ensure_ms=%.3f manager_initialize_ms=%.3f "
-            "old_present=%s old_texture_ms=%.3f new_present=%s new_texture_ms=%.3f",
+            "old_present=%s old_texture_ms=%.3f new_present=%s new_texture_ms=%.3f "
+            "diag_finish_ms=%.3f",
             install_id or "none",
             screen,
             owner,
@@ -1880,6 +1882,8 @@ class GLCompositorWidget(QOpenGLWidget):
             _float("old_texture_ms"),
             str(bool(trace.get("new_present", False))).lower(),
             _float("new_texture_ms"),
+            # -1.0 when the diagnostic candidate is off or unavailable.
+            _float("diag_finish_ms") if "diag_finish_ms" in trace else -1.0,
         )
 
     def warm_shader_textures(
@@ -1947,6 +1951,43 @@ class GLCompositorWidget(QOpenGLWidget):
                 perf_trace=perf_trace,
             )
             outcome = "completed" if warmed else "warm_failed"
+
+            # ---------------------------------------------------------------
+            # DIAGNOSTIC CANDIDATE ONLY - NOT PROPOSED PRODUCTION BEHAVIOUR.
+            #
+            # There is no explicit producer->consumer completion boundary in the
+            # hidden-shared-context pair-warm handoff: the warm uploads through
+            # the compositor's GLTextureManager, and the live transition then
+            # obtains that same texture from the cache, with no fence and no
+            # glFinish anywhere in the path. This blocks here to test whether the
+            # tens-of-ms cost currently surfacing as 30-47 ms transition GPU
+            # frames is in fact unfinished upload work being paid later.
+            #
+            # Blocking the GUI thread is exactly what production must not do. If
+            # this proves the owner, it is reverted immediately and replaced with
+            # a non-blocking correction (earlier completion or explicit
+            # cross-context synchronisation).
+            #
+            # Opt-in via SRPSS_DIAG_PAIR_WARM_FINISH=1, so ordinary PERF and
+            # --gpu-timing runs are unaffected.
+            # ---------------------------------------------------------------
+            if warmed and os.environ.get("SRPSS_DIAG_PAIR_WARM_FINISH") == "1":
+                finish_started = time.perf_counter()
+                try:
+                    # `gl` is the module-level PyOpenGL import used throughout this
+                    # class; it is None only when PyOpenGL is unavailable.
+                    if gl is not None:
+                        gl.glFinish()
+                        perf_trace["diag_finish_ms"] = (
+                            time.perf_counter() - finish_started
+                        ) * 1000.0
+                    else:
+                        perf_trace["diag_finish_ms"] = -1.0
+                except Exception as exc:
+                    perf_trace["diag_finish_ms"] = -1.0
+                    logger.debug(
+                        "[GL COMPOSITOR] Diagnostic pair-warm glFinish failed: %s", exc
+                    )
         finally:
             if release_current is not None:
                 release_started = time.perf_counter()
