@@ -416,105 +416,26 @@ explicitly rejected with evidence.
       auxiliary presentation-request amplifier** without changing authored logical behaviour,
       increasing temporal age, or moving the same pressure into another independent queue/surface.
 
-### P3 — attribute the remaining visualizer-family GUI handoff/preparation cost
+### P3 — CLOSED as measured secondary cost (no production correction justified)
 
-P3 remains a distinct defect lane. **Do not merge P2 into P3 merely because both execute on the
-GUI thread.** B/C kept logical publication and state handoff alive while suppressing presentation;
-the separate no-visualizer control improved again, proving another visualizer-family cost exists.
+Full attribution in `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`.
 
-- [ ] After the P2 architecture decision (or an explicit recorded inability to close P2 on the
-      separate-surface architecture), measure producer/state-build → pure-data preparation →
-      Qt-owned overlay/render-state commit separately from presentation request and paint.
-- [ ] **Standing confound:** P2 was deferred rather than corrected (Step 2d, Option B), so the
-      auxiliary one-publication → one-`update()` stream is live during every P3 measurement.
-      State it explicitly in attribution. Do not subtract it by assumption, and do not let its
-      cost be silently reassigned to preparation/commit.
-- [ ] The no-visualizer control proves another visualizer-family GUI cost exists, but does **not**
-      prove `SpotifyBarsGLOverlay.set_state()` alone owns it.
-- [ ] If pure-data render-state preparation is a measured owner, move only thread-safe immutable
-      preparation off GUI; QWidget/QColor/QPixmap/GL mutation stays on the GUI/context owner.
-- [ ] Do not turn logical state into paint-driven state and do not create another visualizer
-      scheduler.
+Final steady figures: Bubble ~285 us total (bar build/clamp ~27, handoff ~11, residual ~117);
+DevCurve ~277 us; Spectrum residual effectively exhausted; Sine/Oscilloscope mostly authoritative
+temporal and static work.
 
-#### P3 Step 1 — COMPLETE: source classification of `set_state()`
+No newly named owner is large enough to justify further decomposition. The suspected shared
+owner - the per-bar build/clamp loop - measures ~27 us, real but immaterial against a 285 us
+callback and negligible against 33-144 ms frame gaps.
 
-Full map in `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`. `set_state()` is
-805 lines (586-1391), classified into the four required categories:
+- Worker extraction: **rejected** (no measured owner; unjustified test debt).
+- Static-config gating: **deferred, not rejected**. Real but mode-skewed (~156 us Spectrum,
+  ~103 us Sine, ~162 us Oscilloscope; ~19 us Bubble/DevCurve). Split-writer ownership cost
+  currently outweighs the benefit; the invalidation contract is already documented for whenever
+  it is taken up.
+- The attribution probe is retained as evidence.
 
-- **Cat 1 (not movable):** accumulated time/dt, `_line_smoothed_*` asymmetric smoothing, sine peak
-  envelopes, waveform smoothing and ghost rings, kick/snare event envelopes, transient snapshot,
-  Spectrum peaks/hysteresis, Bubble temporal payload, `apply_state_handoff()` activation identity.
-- **Cat 2 (only extraction candidate):** bar clamping, 97 numeric coercions, payload list copies.
-- **Cat 3 (GUI-owned):** 28 `QColor` constructions, geometry read/set, visibility/show, shadow sync.
-- **Cat 4 (P2, kept separate):** `_request_frame_update()` → `update()`.
-
-**Primary hypothesis, unmeasured:** the dominant cat-2/cat-3 per-publication cost may be
-**re-derivation of unchanged configuration**, not preparation. The 28 `QColor` constructions and
-97 coercions are guarded only by `is not None` with no change detection — roughly 2,500 QColor
-constructions and 8,700 coercions per second at ~90 Hz, for values that change only on
-settings/preset/activation change. If confirmed, the correction is revision/identity-gated
-configuration commit, **not** worker extraction: it touches no cat-1 state, needs no thread
-boundary, and cannot be mistaken for a P2 fix.
-
-#### P3 Step 2 — COMPLETE: corrected semantic attribution (accepted run)
-
-Steady-state weighted us per accepted publication. Full record in the phase report.
-
-```text
-mode           total   temporal   static   dynamic   residual
-Bubble           329         88       19        28        175
-DevCurve         327         98       19        12        178
-Spectrum         404        211      156         3         21
-Sine             383        154      103         3        106
-Oscilloscope     923        616      162         3        121
-```
-
-- **Static config is a real but mode-skewed target:** 39% of Spectrum, 27% of Sine, 18% of
-  Oscilloscope; only ~6% of Bubble/DevCurve. It cannot be presented as closing P3.
-- **Residual dominates Bubble and DevCurve** (53%/54%) — the majority of their `set_state()`
-  self-time is not yet located. Unattributed by design, not an error.
-- **Temporal is authoritative work**, not a removal target (616/923 Oscilloscope, 211/404
-  Spectrum).
-- **Dynamic payload is negligible** (3 us for Spectrum/Sine/Oscilloscope). **Worker extraction is
-  not pursued** — no measured owner, and the test debt is unjustified.
-- P3 self-time does **not** explain the delivery defect: 165 Hz acceptance varied ~69-90% in the
-  same run without callback cost tracking it. P2/P4 remain separate live owners.
-
-#### P3 Step 3 — define the config-change boundary before gating anything
-
-Revision-gated static configuration is **not yet authorized**. Required first:
-
-- [ ] Identify the authoritative config-change boundary in source — where visualizer
-      configuration actually changes (settings apply, preset/activation payload resolution),
-      and whether an existing revision/generation already expresses it.
-- [ ] Define the invalidation contract: a new overlay starts **invalid/uncommitted** and never
-      assumes its initial revision is applied; the first accepted activation/frame performs a
-      complete commit; mode activation, engine/runtime generation replacement, Settings
-      recreation and any reset boundary invalidate the cached revision.
-- [ ] Establish an authoritative revision or value boundary. **Python object identity must not be
-      the sole invalidation contract.**
-- [ ] Confirm gating wraps only genuinely static assignments and never Cat-1 timing/state
-      evolution, preserving the protected first-frame dt/initialization behaviour.
-- [ ] Only then decide whether the Spectrum/Sine/Oscilloscope gain justifies implementation.
-      Do not call P3 closed on this one piece.
-
-#### P3 Step 4 — locate the Bubble/DevCurve residual
-
-Source inspection found ~542 of 890 body lines untimed. Three shared candidate owners were
-named and bracketed (bounded, not open-ended):
-
-- `apply_state_handoff()` activation/generation identity, run every publication -> `handoff`;
-- the DevCurve layer colour commit, ~10 further `QColor` constructions -> `static_config`;
-- the bar sequence build/resize/pad and per-bar clamp loop, shared by every mode ->
-  `dynamic_payload`.
-
-- [ ] One run to see whether the residual concentrates in one of these three.
-- [ ] **Stop rule:** if the residual fragments across small legitimate work instead of
-      concentrating, record P3 as **secondary** and proceed to P4. Do not keep decomposing
-      ~0.175 ms/publication while the runtime shows 33-144 ms frame gaps.
-
-Config gating remains a valid later optimization but is **not** being implemented: its
-split-writer ownership cost outweighs the measured mode-skewed benefit.
+P3 never explained the delivery defect and is not represented as fixing P2.
 
 ### P4 — fix/name bad smell 2: residual queued-GUI-dispatch loss without visualizers
 
