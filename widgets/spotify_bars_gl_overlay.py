@@ -75,17 +75,17 @@ logger = get_logger(__name__)
 _P3_SAMPLE_STRIDE = 16
 
 
-def _p3_slice(regions: dict, key: str, mark: int) -> int:
-    """Close one semantic slice into `key` and return the new mark.
+def _p3_add(regions: dict, key: str, start: int) -> None:
+    """Accumulate one explicitly bracketed, known-homogeneous block into `key`.
 
-    Categories interleave in `set_state()`, so a category is the sum of several
-    non-contiguous slices. Nothing is reordered to make them contiguous, and no
-    line is forced into a category to make totals reach 100% - unattributed work
-    accrues to `residual`, which is preferable to a false attribution.
+    Deliberately not a partition. Only source that is unambiguously one category
+    is bracketed; mixed or ambiguous source is left untimed and falls into
+    `residual = total - sum(measured blocks)`. A nonzero residual is expected and
+    healthy - an earlier partition-by-marker design reported residual as exactly
+    zero in every sample, which was proof it was forcing false attribution rather
+    than measuring.
     """
-    now = time.perf_counter_ns()
-    regions[key] = regions.get(key, 0) + (now - mark)
-    return now
+    regions[key] = regions.get(key, 0) + (time.perf_counter_ns() - start)
 
 
 _ARRAY_UNIFORM_NAMES = {
@@ -822,7 +822,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         _p3 = False
         _p3_t0 = 0
-        _p3_mark = 0
+        _p3_b = 0
+        _p3_present_b = 0
         _p3_acc = None
         _p3_regions = None
         _p3_is_activation = False
@@ -842,8 +843,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 self._p3_sample_counter % _P3_SAMPLE_STRIDE
             ) == 0
             if _p3:
+                # Initialize at sample start. A later initialization silently folded
+                # all preceding configuration work into the first measured category.
+                _p3_acc = self._p3_activation if _p3_is_activation else self._p3_steady
+                _p3_regions = {}
                 _p3_t0 = time.perf_counter_ns()
-                _p3_mark = _p3_t0
         was_playing = bool(getattr(self, "_playing", False))
         if not apply_state_handoff(
             self,
@@ -871,13 +875,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         except Exception:
             self._sine_displacement = 0.0
 
-        if _p3 and _p3_regions is not None:
-            _p3_mark = _p3_slice(_p3_regions, "residual", _p3_mark)
-
         # one coherent input snapshot per frame.
         if transient_energy is not None:
             self._transient_energy = transient_energy
 
+        _p3_b = time.perf_counter_ns() if _p3 else 0
         # Update accumulated time for animated modes
         dt_seconds = 0.0
         now_ts = time.time()
@@ -1009,14 +1011,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # (rejected handoff, empty clamped payload); committing per slice would add
         # partial samples whose divisor never incremented and skew every mean.
         if _p3:
-            _p3_acc = self._p3_activation if _p3_is_activation else self._p3_steady
-            _p3_regions = {}
-            _p3_mark = _p3_slice(_p3_regions, "temporal", _p3_mark)
+            _p3_add(_p3_regions, "temporal", _p3_b)
 
         # Store energy bands (all modes that need them)
         if energy_bands is not None:
             self._energy_bands = energy_bands
 
+        _p3_b = time.perf_counter_ns() if _p3 else 0
         # Oscilloscope glow settings
         self._glow_enabled = bool(glow_enabled)
         self._glow_intensity = max(0.0, float(glow_intensity))
@@ -1061,6 +1062,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         self._transient_pulse_gain = max(0.0, min(3.0, float(transient_pulse_gain)))
         self._transient_clamp = max(0.0, min(3.0, float(transient_clamp)))
+        if _p3:
+            _p3_add(_p3_regions, "static_config", _p3_b)
+
         # pockets/solvers cannot spend a frame under stale subtype authority.
         self._line_dim = bool(line_dim)
         self._line_offset_bias = max(0.0, min(1.0, float(line_offset_bias)))
@@ -1118,19 +1122,17 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         maybe_log_glow_diagnostics(self, logger)
         maybe_log_oscilloscope_diagnostics(self, logger)
 
-        if _p3 and _p3_regions is not None:
-            _p3_mark = _p3_slice(_p3_regions, "static_config", _p3_mark)
-
         # Bubble settings
         self._bubble_count = max(0, min(110, int(bubble_count)))
+        _p3_b = time.perf_counter_ns() if _p3 else 0
         self._bubble_pos_data = bubble_pos_data or []
         self._bubble_extra_data = bubble_extra_data or []
         self._bubble_trail_data = bubble_trail_data or []
+        if _p3:
+            _p3_add(_p3_regions, "dynamic_payload", _p3_b)
+
         self._bubble_trail_strength = max(0.0, min(1.5, float(bubble_trail_strength)))
         self._bubble_tail_opacity = max(0.0, min(0.85, float(bubble_tail_opacity)))
-        if _p3 and _p3_regions is not None:
-            _p3_mark = _p3_slice(_p3_regions, "dynamic_payload", _p3_mark)
-
         if bubble_outline_color is not None:
             self._bubble_outline_color = QColor(bubble_outline_color) if not isinstance(bubble_outline_color, QColor) else bubble_outline_color
         if bubble_specular_color is not None:
@@ -1169,9 +1171,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Dev Curve mode state -----------------------------------------------------
         self._devcurve_base_level = max(0.10, min(0.90, float(devcurve_base_level)))
         self._devcurve_sample_count = max(2, min(96, int(devcurve_sample_count)))
-        if _p3 and _p3_regions is not None:
-            _p3_mark = _p3_slice(_p3_regions, "static_config", _p3_mark)
-
+        _p3_b = time.perf_counter_ns() if _p3 else 0
         if devcurve_curve_bass is not None:
             self._devcurve_curve_bass = list(devcurve_curve_bass)
         if devcurve_curve_vocals is not None:
@@ -1180,8 +1180,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._devcurve_curve_mids = list(devcurve_curve_mids)
         if devcurve_curve_transients is not None:
             self._devcurve_curve_transients = list(devcurve_curve_transients)
-        if _p3 and _p3_regions is not None:
-            _p3_mark = _p3_slice(_p3_regions, "dynamic_payload", _p3_mark)
+        if _p3:
+            _p3_add(_p3_regions, "dynamic_payload", _p3_b)
 
         if devcurve_layer_bass_color is not None:
             self._devcurve_layer_bass_color = QColor(*devcurve_layer_bass_color) if not isinstance(devcurve_layer_bass_color, QColor) else QColor(devcurve_layer_bass_color)
@@ -1316,9 +1316,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         elif len(bars_seq) < count:
             bars_seq = bars_seq + [0.0] * (count - len(bars_seq))
 
-        if _p3 and _p3_regions is not None:
-            _p3_mark = _p3_slice(_p3_regions, "static_config", _p3_mark)
-
         clamped: List[float] = []
         for v in bars_seq:
             try:
@@ -1336,9 +1333,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self.clear_overlay_buffer()
             return
 
-        if _p3 and _p3_regions is not None:
-            _p3_mark = _p3_slice(_p3_regions, "dynamic_payload", _p3_mark)
-
+        _p3_b = time.perf_counter_ns() if _p3 else 0
         if self._vis_mode == 'spectrum' and self._single_piece:
             try:
                 now_ts = time.monotonic()
@@ -1354,6 +1349,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             )
         else:
             reset_overlay_spectrum_solid_hysteresis_state(self)
+
+        if _p3:
+            _p3_add(_p3_regions, "temporal", _p3_b)
 
         # Update per-bar peak state only for Spectrum. Other modes may still
         # pass bar arrays through the shared overlay, but they must not mutate
@@ -1429,10 +1427,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._enabled = True
         self._bars = clamped
         self._bar_count = len(clamped)
-        self._segments = max(1, segs)
-        if _p3 and _p3_regions is not None:
-            _p3_mark = _p3_slice(_p3_regions, "temporal", _p3_mark)
+        if _p3:
+            _p3_add(_p3_regions, "static_config", _p3_b)
 
+        self._segments = max(1, segs)
+        _p3_b = time.perf_counter_ns() if _p3 else 0
         self._fill_color = QColor(fill_color)
         self._border_color = QColor(border_color)
         try:
@@ -1443,9 +1442,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._playing = bool(playing)
         maybe_log_sine_idle_state(self, logger, dt_seconds=dt_seconds)
 
-        if _p3 and _p3_regions is not None:
-            _p3_mark = _p3_slice(_p3_regions, "static_config", _p3_mark)
-
+        _p3_b = time.perf_counter_ns() if _p3 else 0
         _geom_start = time.time()
         if not clamped:
             self.clear_overlay_buffer()
@@ -1490,9 +1487,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         if self._perf_metrics_enabled:
             self._perf_last_state_commit_ts = time.perf_counter()
-        if _p3 and _p3_regions is not None:
-            _p3_mark = _p3_slice(_p3_regions, "qt_geometry", _p3_mark)
-
+        if _p3:
+            _p3_add(_p3_regions, "qt_geometry", _p3_b)
+        _p3_present_b = time.perf_counter_ns() if _p3 else 0
         _update_start = time.time()
         self._request_frame_update(force=geometry_changed or became_visible)
         _update_elapsed = (time.time() - _update_start) * 1000.0
@@ -1502,8 +1499,24 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             # Commit the complete sample atomically; a publication that returned
             # early contributes nothing rather than a partial row.
             _p3_now = time.perf_counter_ns()
-            _p3_regions["present_request"] = _p3_now - _p3_mark
+            _p3_regions["present_request"] = _p3_now - _p3_present_b
             _p3_regions["total"] = _p3_now - _p3_t0
+            # Residual is derived, never partitioned: whatever the explicitly
+            # bracketed homogeneous blocks did not account for.
+            _p3_regions["residual"] = max(
+                0,
+                _p3_regions["total"]
+                - sum(
+                    _p3_regions.get(_k, 0)
+                    for _k in (
+                        "temporal",
+                        "static_config",
+                        "dynamic_payload",
+                        "qt_geometry",
+                        "present_request",
+                    )
+                ),
+            )
             for _p3_key, _p3_val in _p3_regions.items():
                 _p3_acc[_p3_key] = _p3_acc.get(_p3_key, 0) + _p3_val
             _p3_acc["samples"] = _p3_acc.get("samples", 0) + 1
