@@ -289,3 +289,51 @@ All must hold:
 - stronger Bubble/Spectrum temporal/edge/paint-receipt bars pass;
 - GPU/context evidence shows second-surface existence remains a material owner after the above;
 - lifecycle/GL teardown remains strict and byte-accounted.
+
+## P2 Wiring Plan (confirmed against `main`, 2026-08-17)
+
+Confirmed ownership: `GLCompositorWidget` constructs
+`AdaptiveRenderStrategyManager(self)` (`rendering/gl_compositor.py:608`) so the timer's target
+is the compositor. `DisplayWidget` separately owns `_spotify_bars_overlay`
+(`rendering/display_widget.py:273`). The compositor and the overlay are siblings under one
+`DisplayWidget`, which is therefore the correct registrar — it owns both, matching
+Guardrails §6 "each display owns its surface, viewport, DPR, scene, update state".
+
+Edge signal: the protected Bubble edge is `_bubble_pos_data[2]`, embedded in the positional
+payload (see `tests/test_bubble_cadence.py` `_EdgeSimulation` and the v1 golden). There is no
+separate edge flag to hold, and holding a stale positional snapshot would distort continuous
+motion. The discrete-event signals that *do* arrive at the overlay are
+`line_kick_event_strength`, `line_snare_event_strength` and `transient_energy`.
+
+Resolved fidelity question: painting above the display's refresh does not make a short edge
+more visible — the panel scans out at its refresh regardless, so paints beyond it are burned
+GUI thread, not extra visibility. What coalescing does change is the probability that the one
+publication carrying an edge is the one painted. Hence the edge bypass below.
+
+Ordered change set:
+
+1. `rendering/adaptive_timer.py` — `AdaptiveTimerStrategy.set_auxiliary_presenter(widget)` /
+   `clear_auxiliary_presenter()`. `_signal_frame()` services the registered presenter after
+   the compositor through one narrow explicit call, `widget.present_if_pending()`. One
+   presenter per display, never a list of arbitrary widgets, and no new timer or thread.
+2. `AdaptiveRenderStrategyManager` — pass-through registration only.
+3. `rendering/gl_compositor.py` — a pass-through so `DisplayWidget` registers without
+   reaching into `_render_strategy_manager` internals.
+4. `widgets/spotify_bars_gl_overlay.py` — `_present_revision` bumped on every accepted
+   publication; `_presented_revision` updated when a request is issued;
+   `present_if_pending()` issues `update()` only when the two differ. `set_state()` stops
+   calling `_request_frame_update()` unconditionally and instead requests immediately only
+   for: geometry change, became-visible, buffer clear (all already computed), and a
+   publication carrying a discrete event edge.
+5. `rendering/display_widget.py` — register the overlay with the compositor's strategy at
+   overlay creation; clear it at teardown, before compositor destruction, so no retired
+   overlay is serviced.
+
+Invariants to assert in tests: logical publication count unchanged; `update()` count bounded
+by presentation opportunities plus edge bypasses; every discrete event still produces a
+request; teardown clears registration; PERF-off path identical; two displays register
+independently. Existing bars in
+`tests/test_visualizer_presentation_contract.py` must stay green unmodified — in particular
+`presentation requests <= accepted publications`, which the edge bypass must not violate.
+
+Rollback anchor: `30e66e08`.
