@@ -99,7 +99,10 @@ Installed dual-display acceptance remains P5-F.
 - [ ] Logical/source cadence remains unchanged; presentation may consume the latest valid immutable render state only after logical integration.
 - [ ] Preserve protected short-lived Bubble edges/events through bounded event identity/history or another approved equivalent; latest-state sampling alone is insufficient.
 - [ ] Do **not** use paint completion, a pending-until-paint latch, elapsed producer timestamps, a display-FPS cap, source/event decimation or a second visualizer clock as admission.
-- [ ] **Confirm the presentation owner is active before interpreting any run.** Require the `Overlay presentation owned by display frame opportunity` line and an `update_requests/set_state` ratio below `1.0` in the overlay records. A run without both is a non-result, not a negative result: the unowned fallback deliberately restores the previous contract.
+- [ ] **Read `Docs/Guardrails/Visualizer_Presentation.md` and `Docs/Visualizer_Change_Checklist.md` before designing.** Both already constrain this work; the first rejected attempt (R-61) violated rules stated in them.
+- [ ] **The presentation opportunity source must be live whenever the visualizer is live.** `AdaptiveTimerStrategy` is transition-scoped and is disqualified (R-61). Characterise any candidate's start/stop/pause scope before adopting it.
+- [ ] **Anything reached from a worker thread must marshal Qt work to the GUI owner.** Tests must model the real caller's thread and lifecycle state, including paused/idle, not call the seam directly.
+- [ ] **Confirm the presentation owner is active before interpreting any run**, and confirm it is still active *after* a transition completes. Require an `update_requests/set_state` ratio below `1.0` in the overlay records in `logs/screensaver_spotify_vis.log`. A run without that is a non-result, not a negative result.
 - [ ] Re-run the mixed-refresh production scenario with `--perf` and `--gpu-timing`; compare against the accepted report rather than the temporary monkeypatch.
 
 ### P3 — attribute the remaining visualizer-family GUI handoff cost
