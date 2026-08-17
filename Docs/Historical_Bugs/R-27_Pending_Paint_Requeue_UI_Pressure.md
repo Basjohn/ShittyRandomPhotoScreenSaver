@@ -56,3 +56,56 @@
 ## Record Provenance
 
 This standalone file preserves the complete former inline `R-27` record from `Docs/Historical_Bugs.md`. The chronology and technical claims are retained from that source; only heading normalization, standalone-link retargeting, and removal of monolith-only section dividers were applied during extraction.
+
+
+## 2026-08-17 — Conclusion Superseded (mechanism blacklist retained)
+
+The sentence in this record stating that **"the correct contract is one repaint request per
+accepted visualizer payload"** is **superseded**. It was a valid inference from the July
+failure, but it over-generalised from one broken mechanism to a permanent architectural
+invariant, and stronger later evidence contradicts it.
+
+**What remains fully in force — the mechanism blacklist.** The July experiment failed for
+identifiable reasons, all still barred:
+
+- no producer-timestamp gate against a display-rate divisor (a `0.92 x 1/60 s` threshold
+  accepts a 100 Hz source every second tick → 50 Hz);
+- no pending-until-`paintGL()` admission latch (turned variable Qt delivery into producer
+  admission → 39–40 Hz collapse);
+- no `paintGL()` self-scheduling `update()`;
+- no repaint rescue/requeue timers;
+- no logical/source throttling or decimation.
+
+The observed stutter signature `set_state ≈ 90–100 Hz` with `paint/update ≈ 39–40 Hz` remains a
+required regression bar for any presentation change.
+
+**What is superseded — the "one request per payload forever" conclusion.** The accepted
+2026-08-16 same-process A→B→C→A experiment
+(`Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`) proves that the
+one-publication → one-`update()` request stream is itself a *material shared-GUI amplifier*:
+withholding only that stream, while logical publication continued, improved both displays, and
+restoring it degraded them again in the same process. That is named Bad Smell 1.
+
+`Current_Plan.md` P1 additionally requires proving that logical publication *may* outrun
+presentation without one `QOpenGLWidget.update()` per publication. Treating
+`update_requests / set_state == 1.0` as a permanent invariant is therefore the direct opposite
+of the active plan.
+
+The coherent reading of the corpus is:
+
+```text
+R-27  : do not reduce presentation requests using THESE mechanisms
+   ↓ newer accepted evidence (2026-08-16)
+P05   : one logical state -> one update request is itself measurably harmful
+   ↓
+P2    : separate logical integration from presentation requests
+        without reviving any blacklisted mechanism
+```
+
+**Do not cite this record as evidence that P2 is invalid.** Cite it for the blacklist and for
+the stutter signature that any candidate must not reproduce.
+
+Related: R-54 (a 60 Hz token clock placed *before* logical simulation dropped 2,566 offered
+steps to 1,723 submissions and let discrete edges decay before first publication). R-54 bars a
+gate ahead of integration; it does not bar coalescing *after* every input has been integrated,
+which is exactly what the guardrails permit.

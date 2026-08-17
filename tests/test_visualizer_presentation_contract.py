@@ -464,14 +464,18 @@ class TestPresentationOwnership:
 
 
 class TestPresentationOpportunitySourceEligibility:
-    """R-61 anti-regression: a presentation source must outlive transitions.
+    """R-61 anti-regression: presentation must survive a paused presentation source.
 
-    The rejected P2 implementation drove visualizer presentation from
-    `AdaptiveTimerStrategy._signal_frame()`, which is a transition-scoped render
-    strategy: it starts for a transition and pauses when the transition ends. The
-    visualizer then never received another opportunity and froze. This bar states
-    the eligibility rule in executable form so the same clock cannot be adopted
-    again without the test failing.
+    The rejected P2 implementation made the transition-scoped
+    `AdaptiveTimerStrategy` the *sole* presentation source, so the visualizer
+    froze permanently once a transition ended.
+
+    The invariant is survival, not abstinence: a display presentation opportunity
+    may legitimately drive the overlay *while it is running*, provided the overlay
+    still presents when that source is paused or absent. This bar must not forbid
+    using the opportunity - `Current_Plan.md` P1 explicitly requires proving that
+    logical publication can outrun presentation without one `update()` per
+    publication.
     """
 
     def test_adaptive_timer_is_documented_as_transition_scoped(self):
@@ -484,26 +488,35 @@ class TestPresentationOpportunitySourceEligibility:
 
         assert "during transitions" in start.lower(), (
             "render strategy start no longer documents its transition scope; "
-            "re-verify eligibility before using it as a presentation source"
+            "re-verify eligibility before relying on it as a presentation source"
         )
         assert "after transition ends" in pause.lower(), (
             "render strategy pause no longer documents its transition scope; "
-            "re-verify eligibility before using it as a presentation source"
+            "re-verify eligibility before relying on it as a presentation source"
         )
 
-    def test_overlay_presentation_is_not_driven_by_the_render_strategy(self):
-        """The overlay must not be registered with the transition-scoped timer."""
-        import inspect
+    @pytest.mark.qt
+    def test_overlay_presents_when_no_presentation_source_is_running(
+        self, qt_app, monkeypatch
+    ):
+        """With no transition active, every publication must still reach Qt.
 
-        from rendering import adaptive_timer
+        This is the executable form of R-61: whatever presentation ownership
+        exists, an idle/paused display presentation source may never leave the
+        visualizer unpresented.
+        """
+        clock = _FakeClock()
+        _install_fake_clock(monkeypatch, clock)
+        overlay = SpotifyBarsGLOverlay(None)
+        paints = []
+        overlay.update = lambda *a, **k: paints.append(1)
+        overlay.isVisible = lambda: True
 
-        source = inspect.getsource(adaptive_timer)
-        for forbidden in (
-            "auxiliary_presenter",
-            "present_if_pending",
-            "SpotifyBarsGLOverlay",
-        ):
-            assert forbidden not in source, (
-                f"adaptive_timer references {forbidden!r}: visualizer presentation is "
-                "being driven by the transition-scoped render strategy again (R-61)"
-            )
+        for bars in _bar_series(12):
+            _publish(overlay, bars)
+            clock.advance()
+
+        assert len(paints) >= 12, (
+            "with no presentation source running the overlay must keep requesting "
+            "one repaint per accepted publication (R-61)"
+        )
