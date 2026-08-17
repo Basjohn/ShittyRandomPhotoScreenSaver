@@ -275,3 +275,34 @@ presentation path this symptom is measured through:
 
 Do not tune Spectrum smoothing or cadence in response to this. The symptom is an activation
 seam, not authored behaviour.
+
+## 2026-08-17 Second Pre-Fix Baseline (P2 present but inert)
+
+This run was captured after the P2 implementation landed but **before** it was active. The
+overlay is constructed lazily on the first visualizer push, which precedes render-strategy
+construction, so registration found no strategy and the overlay kept the unowned fallback —
+deliberately the previous request-per-publication contract. Treat these numbers as a second
+pre-fix baseline, not as a P2 result.
+
+Activation evidence absent: no `Overlay presentation owned` record, and
+`update_requests / set_state` remained exactly `1.0000` in both modes.
+
+```text
+              set_state  update_requests  u/ss     publish   paint
+Bubble          15965        15965       1.0000    83.1 Hz   80.2 Hz
+Spectrum         7950         7950       1.0000    89.3 Hz   87.0 Hz
+
+              windows  acceptance mean   min      dispatch_skips  paint_skips
+165 Hz           9         74.91%      66.05%         1041           2376
+ 60 Hz           9         94.17%      90.38%          154            135
+```
+
+Operator observations for this run: Spectrum behaved very well, Bubble as usual, and
+transition-onset visualizer stutter felt perhaps 40% less prominent. **That improvement
+cannot be attributed to P2**, which was not running. It is unattributed and should not be
+counted as evidence for the presentation change.
+
+Method consequence, now recorded in `Docs/Guardrails.md` §3: a fallback that preserves
+previous behaviour can make a change completely inert while tests stay green and the runtime
+looks healthy. Runtime acceptance must confirm a change is *active* before interpreting its
+effect, and a null result is "not proven active" rather than "did not help".
