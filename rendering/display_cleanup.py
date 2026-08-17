@@ -119,6 +119,18 @@ def cleanup_runtime(widget: "DisplayWidget", *, reason: str) -> None:
         logger.debug("[DISPLAY_WIDGET] Cursor halo cleanup failed: %s", exc)
         widget._ctrl_cursor_hint = None
 
+    # Release the display-owned auxiliary presentation registration before the
+    # render strategy stops, so a retiring overlay can never be serviced by a
+    # frame opportunity belonging to a runtime that is going away.
+    try:
+        from rendering.display_image_ops import _detach_overlay_presentation_owner
+
+        _detach_overlay_presentation_owner(
+            widget, getattr(widget, "_spotify_bars_overlay", None)
+        )
+    except Exception as exc:
+        logger.debug("[DISPLAY_WIDGET] Overlay presentation detach failed: %s", exc)
+
     # GL resources must be deleted while their QOpenGLWidget/context is still
     # alive. cleanup() deliberately raises if live resources cannot acquire the
     # context; do not destroy the surface and make the leak unrecoverable.
