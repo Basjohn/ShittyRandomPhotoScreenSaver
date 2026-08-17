@@ -12,8 +12,12 @@ focused document.
 1. Identify the contract family.
 2. Read the canonical owner.
 3. Read the focused document only when listed.
-4. Read `Spec.md` only if stable architecture or product behaviour changes.
-5. Apply the relevant section of `Docs/Guardrails.md`.
+4. **Read that focused document's prohibition/forbidden list before proposing a mechanism.**
+   A general allowance in `Docs/Guardrails.md` or `Spec.md` does not override a specific
+   prohibition in the focused document. If you believe a forbidden item does not apply, quote
+   it and say why, in the same record that proposes the mechanism.
+5. Read `Spec.md` only if stable architecture or product behaviour changes.
+6. Apply the relevant section of `Docs/Guardrails.md`.
 
 ## Core Runtime Contracts
 

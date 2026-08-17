@@ -150,6 +150,16 @@ Do not create dirty/requested/acknowledged/presented generations for ordinary fr
 - A GUI-local pending `update()` flag is allowed.
 - That flag is not a producer acknowledgement.
 
+**A general allowance never licenses a mechanism a focused document forbids for a specific
+task.** The pending-`update()` allowance above covers ordinary compositor repaint coalescing.
+It does **not** authorize pending-until-paint as the admission mechanism for visualizer
+presentation, which
+`Docs/audits/SRPSS_Architecture_Roadmap/06_PRESENTATION_AND_COMPOSITOR_DESIGN.md`
+("Forbidden Admission Mechanisms") explicitly rejects. Before proposing any presentation,
+cadence, scheduling or admission mechanism, read that document's forbidden list first and
+quote the specific item you believe does not apply. A permissive clause found elsewhere is
+not a counter-argument to an explicit prohibition.
+
 Prohibited:
 
 - worker wait for `paintGL()`;

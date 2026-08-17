@@ -178,10 +178,17 @@ is not part of that owned opportunity today.
 
 ### Corrected by 2026-08-17 installed evidence — a pending flag alone is insufficient
 
-An initial reading of this seam proposed reusing only the compositor's GUI-local
-pending-update coalescing (`rendering/adaptive_timer.py::_queue_safe_widget_update` /
-`_mark_widget_update_consumed`). The 2026-08-17 installed Bubble run rejects that as
-sufficient. Measured over 13,978 publications on the configured 60 Hz display:
+**WITHDRAWN 2026-08-17 — proposed a forbidden mechanism.** An initial reading of this seam
+proposed reusing the compositor's GUI-local pending-update coalescing
+(`rendering/adaptive_timer.py::_queue_safe_widget_update` / `_mark_widget_update_consumed`),
+justified by the `Docs/Guardrails.md` §6 allowance for a GUI-local pending `update()` flag.
+That was wrong on two independent counts, and the first is the important one:
+
+1. **It is on this document's forbidden list.** "Pending-until-paint backpressure" and "paint
+   completion as producer acknowledgement" are both explicitly rejected above. The §6
+   allowance covers ordinary compositor repaint coalescing, not visualizer presentation
+   admission. A permissive general clause was used to license a specific prohibition.
+2. Installed evidence independently shows it would be a near no-op. Measured over 13,978 publications on the configured 60 Hz display:
 
 ```text
 update_requests / set_state = 1.0000    (the coupling, confirmed in production)

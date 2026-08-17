@@ -143,3 +143,22 @@ Do not rename files to repair broken links. Correct the link or update the exist
 - Stable rules are not mixed with benchmark history.
 - Existing names and paths remain stable.
 - Runtime evidence can overturn a bad implementation-specific assumption.
+
+
+## Superseding a Recorded Decision
+
+Analysis records and design decisions are corrected by **superseding**, never by silent
+overwrite. When evidence or review invalidates a recorded decision:
+
+1. leave the original claim visible and mark it withdrawn, with the date and the reason;
+2. state what replaced it and which evidence forced the change;
+3. keep both in the document that owned the original decision, so a later reader cannot
+   re-derive the withdrawn reasoning without also seeing why it failed.
+
+This applies to `Docs/phase_reports/`, the roadmap design documents, and
+`Docs/Historical_Bugs/`. It does **not** apply to `Current_Plan.md` or `Future_Cleanup.md`,
+which are live checklists and delete completed items outright.
+
+A withdrawn decision is evidence about the system's failure modes. Deleting it loses the
+reason a plausible-looking approach was rejected, which is exactly what causes the same
+wrong approach to be proposed again.
