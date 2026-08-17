@@ -1101,6 +1101,16 @@ def _attach_overlay_presentation_owner(widget, overlay) -> bool:
         compositor = getattr(widget, "_gl_compositor", None)
         strategy = getattr(compositor, "_render_strategy_manager", None)
         if strategy is None or not hasattr(strategy, "set_auxiliary_presenter"):
+            # The overlay is created lazily on the first visualizer push, which can
+            # precede render-strategy construction. Staying unowned is correct here;
+            # _push_spotify_bars_overlay_state retries once the strategy exists.
+            logger.debug(
+                "[SPOTIFY_VIS] Overlay presentation owner unavailable yet "
+                "compositor=%s strategy=%s screen=%s",
+                type(compositor).__name__ if compositor is not None else None,
+                type(strategy).__name__ if strategy is not None else None,
+                getattr(widget, "_screen_index", "<unknown>"),
+            )
             return False
         strategy.set_auxiliary_presenter(overlay)
         overlay.set_presentation_owned(True)
@@ -1170,6 +1180,12 @@ def _push_spotify_bars_overlay_state(
             "vis_mode": vis_mode,
         }
         overlay_kwargs.update(extra_kwargs)
+
+        # The overlay is created before the render strategy exists, so ownership is
+        # claimed on the first publication after the display's frame opportunity
+        # becomes available. Idempotent: one attribute read once owned.
+        if not getattr(overlay, "_has_presentation_owner", False):
+            _attach_overlay_presentation_owner(widget, overlay)
 
         try:
             vis = getattr(widget, "spotify_visualizer_widget", None)
