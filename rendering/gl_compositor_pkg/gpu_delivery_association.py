@@ -85,6 +85,9 @@ def associate(
     buckets: dict[int, dict[str, _Bucket]] = {}
     matched = 0
     unmatched = 0
+    # Per (label, generation) so a line cannot report unrelated buckets' counts.
+    per_key_matched: dict[tuple[str, int], int] = {}
+    per_key_unmatched: dict[tuple[str, int], int] = {}
 
     for gpu in gpu_samples:
         generation = int(gpu.scene_generation)
@@ -103,15 +106,20 @@ def associate(
             per_label = buckets.setdefault(delta, {})
             bucket = per_label.setdefault(label, _Bucket.empty())
             getattr(bucket, classification).append(float(gpu.elapsed_ms))
+        key = (label, generation)
         if found_any:
             matched += 1
+            per_key_matched[key] = per_key_matched.get(key, 0) + 1
         else:
             unmatched += 1
+            per_key_unmatched[key] = per_key_unmatched.get(key, 0) + 1
 
     report: dict = {
         "matched_gpu_samples": matched,
         "unmatched_gpu_samples": unmatched,
         "by_delta": {},
+        "per_key_matched": per_key_matched,
+        "per_key_unmatched": per_key_unmatched,
     }
     for delta, per_label in sorted(buckets.items()):
         label_report: dict = {}
@@ -152,8 +160,14 @@ def format_report_lines(report: dict, *, screen: object) -> list[tuple[str, tupl
                         label,
                         delta,
                         "no_same_frame" if delta == 0 else "yes",
-                        report.get("matched_gpu_samples", 0),
-                        report.get("unmatched_gpu_samples", 0),
+                        sum(
+                            v for (lab, _gen), v in report.get("per_key_matched", {}).items()
+                            if lab == label
+                        ),
+                        sum(
+                            v for (lab, _gen), v in report.get("per_key_unmatched", {}).items()
+                            if lab == label
+                        ),
                         ordinary["n"],
                         _text(ordinary["p50_ms"]),
                         _text(ordinary["p95_ms"]),

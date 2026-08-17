@@ -161,7 +161,12 @@ def maybe_log_gpu_timer_query_window(widget, *, force: bool = False) -> None:
                     format_report_lines,
                 )
 
-                report = associate(gpu_samples, list(paint_metrics.samples))
+                # Join against compositor-local history that survives transition
+                # metric replacement. Using only the current _PaintMetrics left
+                # GPU results from a previous generation permanently unmatched.
+                history = getattr(widget, "_gpu_assoc_paint_history", None)
+                paint_history = list(history) if history else list(paint_metrics.samples)
+                report = associate(gpu_samples, paint_history)
                 for message, args in format_report_lines(report, screen=screen):
                     logger.info(message, *args)
     except Exception:
