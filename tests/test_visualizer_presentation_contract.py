@@ -62,18 +62,61 @@ def _publish(overlay: SpotifyBarsGLOverlay, bars, *, vis_mode="spectrum", **kwar
 
 
 def _logical_digest(overlay: SpotifyBarsGLOverlay) -> dict:
-    """Mode-owned logical state that presentation coalescing must not disturb."""
+    """Mode-owned logical state that presentation coalescing must not disturb.
+
+    Deliberately mode-sensitive. An earlier revision covered only
+    bars/peaks/waveform/counts, which let "logical state is bit-identical" be
+    claimed while the Bubble positional payload and the discrete event envelopes
+    -- the state that actually carries the protected visible edge -- went
+    unchecked. Presentation-side coverage still does not replace the versioned
+    Bubble/Spectrum/replay goldens; see the P1 audit follow-up in Current_Plan.md.
+    """
+
+    def _seq(name):
+        return [round(float(v), 9) for v in list(getattr(overlay, name, None) or [])]
+
+    def _num(name):
+        value = getattr(overlay, name, 0.0)
+        try:
+            return round(float(value or 0.0), 9)
+        except (TypeError, ValueError):
+            return 0.0
+
     return {
+        # identity / shape
         "vis_mode": overlay._vis_mode,
         "bar_count": overlay._bar_count,
         "segments": overlay._segments,
-        "bars": [round(float(value), 9) for value in list(overlay._bars or [])],
-        "peaks": [round(float(value), 9) for value in list(overlay._peaks or [])],
-        "accumulated_time": round(float(overlay._accumulated_time), 9),
-        "waveform_count": int(overlay._waveform_count or 0),
-        "waveform": [round(float(value), 9) for value in list(overlay._waveform or [])],
-        "bubble_count": int(overlay._bubble_count or 0),
+        "accumulated_time": _num("_accumulated_time"),
         "set_state_total": int(overlay._perf_set_state_total),
+        # spectrum-family
+        "bars": _seq("_bars"),
+        "peaks": _seq("_peaks"),
+        # waveform-family
+        "waveform": _seq("_waveform"),
+        "prev_waveform": _seq("_prev_waveform"),
+        "waveform_count": int(getattr(overlay, "_waveform_count", 0) or 0),
+        # bubble payload -- carries the protected visible positional edge
+        "bubble_count": int(getattr(overlay, "_bubble_count", 0) or 0),
+        "bubble_pos_data": _seq("_bubble_pos_data"),
+        "bubble_extra_data": _seq("_bubble_extra_data"),
+        "bubble_trail_data": _seq("_bubble_trail_data"),
+        # discrete event envelopes -- short-lived authored responses
+        "kick_event_strength": _num("_line_kick_event_strength"),
+        "snare_event_strength": _num("_line_snare_event_strength"),
+        "kick_event_envelope": _num("_line_kick_event_envelope"),
+        "snare_event_envelope": _num("_line_snare_event_envelope"),
+        "transient_energy": _num("_transient_energy"),
+        # line/sine smoothed band state
+        "line_smoothed_bass": _num("_line_smoothed_bass"),
+        "line_smoothed_mid": _num("_line_smoothed_mid"),
+        "line_smoothed_high": _num("_line_smoothed_high"),
+        # devcurve payload
+        "devcurve_sample_count": int(getattr(overlay, "_devcurve_sample_count", 0) or 0),
+        "devcurve_curve_bass": _seq("_devcurve_curve_bass"),
+        "devcurve_curve_vocals": _seq("_devcurve_curve_vocals"),
+        "devcurve_curve_mids": _seq("_devcurve_curve_mids"),
+        "devcurve_curve_transients": _seq("_devcurve_curve_transients"),
     }
 
 
@@ -113,7 +156,13 @@ class TestPublicationVersusPresentation:
     def test_presentation_requests_may_not_exceed_accepted_publications(
         self, qt_app, monkeypatch
     ):
-        """Presentation may coalesce; it must never amplify into extra repaints."""
+        """Anti-amplification guard only.
+
+        Necessary but **not sufficient**. A candidate can satisfy this while
+        presenting stale state, raising state-to-paint age, or erasing a
+        protected edge. Never cite it as evidence of correct presentation or
+        preserved fidelity (P1 audit follow-up, Current_Plan.md).
+        """
         clock = _FakeClock()
         _install_fake_clock(monkeypatch, clock)
         overlay = SpotifyBarsGLOverlay(None)
@@ -293,14 +342,24 @@ def _presentation_owned_request_hz(
     return 0.0
 
 
-class TestMixedRefreshDeliveryBar:
-    """One display's visualizer must not starve the sibling display's delivery.
+class TestMixedRefreshDeliveryPolicyModel:
+    """HAZARD LIGHT ONLY -- an architectural policy model, not a delivery oracle.
 
-    The mixed-refresh bar required by `Current_Plan.md` P1. It is expressed as a
-    property of the presentation *policy* rather than a live dual-monitor
-    measurement, so it can gate P2 deterministically. Installed dual-display
-    validation remains the acceptance authority under P5-F.
+    This class evaluates closed-form arithmetic over a fixed notional lane
+    capacity. It does **not** execute Qt's dispatch, invalidation or composition
+    path, and its target case models the visualizer contributing *zero*
+    independent GUI dispatch demand -- a state no candidate that still owns a
+    separate `QOpenGLWidget` can reach.
+
+    Therefore it may **not** be cited as evidence that a production P2
+    implementation fixes mixed-refresh delivery, and it cannot close P2.
+    Equivalent installed dual-display evidence remains the authority (P5-F).
+
+    It is retained because it still fails loudly if someone proposes a policy
+    that provably starves a sibling display.
     """
+
+    HAZARD_LIGHT_ONLY = True
 
     LANE_CAPACITY_HZ = 300.0
     DISPLAY_HZ = {"display_0_165hz": 165.0, "display_1_60hz": 60.0}
@@ -445,10 +504,16 @@ class TestPresentationOwnership:
         assert len(direct_updates) <= after_requests - before_requests
         assert after_requests - before_requests <= 1
 
-    def test_paint_consumes_the_latest_integrated_state_not_a_queued_backlog(
+    def test_stored_overlay_state_is_the_latest_publication_not_a_backlog(
         self, qt_app, monkeypatch
     ):
-        """Coalescing presents the newest state; it never replays stale snapshots."""
+        """The overlay stores the newest publication rather than a queued backlog.
+
+        Scope limit, stated deliberately: `update()` is stubbed here, so this
+        proves only what the overlay *holds*. It does **not** prove a paint
+        consumed it. Real paint-receipt coverage is owed by the P2 test bars in
+        `Current_Plan.md` Step 3 and does not exist yet.
+        """
         clock = _FakeClock()
         _install_fake_clock(monkeypatch, clock)
         overlay = SpotifyBarsGLOverlay(None)
@@ -463,22 +528,26 @@ class TestPresentationOwnership:
         assert overlay._bar_count == len(series[-1])
 
 
-class TestPresentationOpportunitySourceEligibility:
-    """R-61 anti-regression: presentation must survive a paused presentation source.
+class TestPresentationSourceLiveness:
+    """A presentation source must be live whenever the visualizer is live.
 
-    The rejected P2 implementation made the transition-scoped
-    `AdaptiveTimerStrategy` the *sole* presentation source, so the visualizer
-    froze permanently once a transition ended.
+    Replaces the earlier `TestPresentationOpportunitySourceEligibility`, which
+    was wrong twice: it read R-61 as barring only *sole* dependence on
+    `AdaptiveTimerStrategy` (R-62 disqualified it in **any** scope), and it
+    asserted an idle overlay must keep one repaint request per publication --
+    the very 1:1 coupling P2 exists to remove.
 
-    The invariant is survival, not abstinence: a display presentation opportunity
-    may legitimately drive the overlay *while it is running*, provided the overlay
-    still presents when that source is paused or absent. This bar must not forbid
-    using the opportunity - `Current_Plan.md` P1 explicitly requires proving that
-    logical publication can outrun presentation without one `update()` per
-    publication.
+    These assertions are source-independent. They constrain liveness and
+    survival; they prescribe no request ratio.
     """
 
-    def test_adaptive_timer_is_documented_as_transition_scoped(self):
+    def test_adaptive_timer_is_transition_scoped_and_therefore_ineligible(self):
+        """R-61/R-62: the render strategy starts for a transition and pauses after.
+
+        Documentation bar. If these docstrings change, the disqualification in
+        `Current_Plan.md` and `Docs/Guardrails/Visualizer_Presentation.md` must be
+        re-verified against the new lifecycle before anything relies on it.
+        """
         import inspect
 
         from rendering.gl_compositor import GLCompositorWidget
@@ -486,24 +555,36 @@ class TestPresentationOpportunitySourceEligibility:
         start = inspect.getsource(GLCompositorWidget._start_render_timer)
         pause = inspect.getsource(GLCompositorWidget._pause_render_strategy)
 
-        assert "during transitions" in start.lower(), (
-            "render strategy start no longer documents its transition scope; "
-            "re-verify eligibility before relying on it as a presentation source"
-        )
-        assert "after transition ends" in pause.lower(), (
-            "render strategy pause no longer documents its transition scope; "
-            "re-verify eligibility before relying on it as a presentation source"
-        )
+        assert "during transitions" in start.lower()
+        assert "after transition ends" in pause.lower()
+
+    def test_no_visualizer_presentation_is_wired_to_the_render_strategy(self):
+        """The disqualified source must not become the visualizer's presenter.
+
+        Structural bar against reintroducing R-61/R-62. It permits any other
+        presentation ownership design, including ones that reduce request count.
+        """
+        import inspect
+
+        from rendering import adaptive_timer
+
+        source = inspect.getsource(adaptive_timer)
+        for forbidden in ("SpotifyBarsGLOverlay", "spotify_bars"):
+            assert forbidden not in source, (
+                f"adaptive_timer references {forbidden!r}: the transition-scoped "
+                "render strategy is disqualified as a visualizer presentation "
+                "source in any scope (R-61, R-62)"
+            )
 
     @pytest.mark.qt
-    def test_overlay_presents_when_no_presentation_source_is_running(
+    def test_publications_keep_reaching_qt_with_no_presentation_source_running(
         self, qt_app, monkeypatch
     ):
-        """With no transition active, every publication must still reach Qt.
+        """Liveness, not abstinence: state must keep reaching Qt when nothing paces it.
 
-        This is the executable form of R-61: whatever presentation ownership
-        exists, an idle/paused display presentation source may never leave the
-        visualizer unpresented.
+        Asserts only that presentation does not stop. It deliberately sets no
+        upper or lower bound tied to the publication count, so a future design
+        may legitimately present fewer times than it publishes.
         """
         clock = _FakeClock()
         _install_fake_clock(monkeypatch, clock)
@@ -516,7 +597,110 @@ class TestPresentationOpportunitySourceEligibility:
             _publish(overlay, bars)
             clock.advance()
 
-        assert len(paints) >= 12, (
-            "with no presentation source running the overlay must keep requesting "
-            "one repaint per accepted publication (R-61)"
+        assert paints, (
+            "with no presentation source running the overlay stopped presenting "
+            "entirely; a paused or absent source must never strand the visualizer "
+            "(R-61)"
         )
+        assert list(overlay._bars) == pytest.approx(_bar_series(12)[-1]), (
+            "the latest publication must still be the state available to paint"
+        )
+
+
+@pytest.mark.qt
+class TestModeSensitiveSuppressionEquivalence:
+    """The suppression oracle must actually exercise mode-owned payload.
+
+    P1 audit follow-up: the Spectrum-only suppression test leaves every Bubble
+    and event field in `_logical_digest()` empty, so a strengthened digest proves
+    nothing there. These cases publish real Bubble positional/extra/trail payload
+    and discrete event envelopes so the added fields carry signal.
+
+    This is presentation-side equivalence only. It does not replace the versioned
+    Bubble/Spectrum/replay goldens.
+    """
+
+    def _bubble_publish(self, overlay, index, *, edge=False):
+        """Publish a Bubble frame; `edge` injects a one-tick positional response."""
+        base = ((index * 7) % 11) / 10.0
+        overlay.set_state(
+            rect=QRect(0, 0, 320, 180),
+            bars=[base, base + 0.1, base],
+            bar_count=3,
+            segments=4,
+            fill_color=QColor(255, 255, 255),
+            border_color=QColor(255, 255, 255),
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode="bubble",
+            bubble_count=2,
+            bubble_pos_data=[
+                0.1 * index, 0.2, 1.0 if edge else 0.0, 1.0,
+                0.3, 0.4 * index, 0.0, 1.0,
+            ],
+            bubble_extra_data=[0.5, 0.6, 0.7, 0.8, 0.1, 0.2, 0.3, 0.4],
+            bubble_trail_data=[0.05 * index, 0.06, 0.07, 0.08],
+            line_kick_event_strength=0.9 if edge else 0.0,
+            transient_energy=0.8 if edge else 0.1,
+        )
+
+    def _run(self, monkeypatch, *, suppress):
+        """Return (overlay, trajectory) -- a digest captured after every publication.
+
+        Endpoint-only comparison cannot detect a transient divergence: a protected
+        one-tick edge injected at publication 7 is already gone from final state by
+        publication 19. The trajectory is what makes this oracle able to fail.
+        """
+        clock = _FakeClock()
+        _install_fake_clock(monkeypatch, clock)
+        overlay = SpotifyBarsGLOverlay(None)
+        overlay.isVisible = lambda: True
+        if suppress:
+            overlay._request_frame_update = lambda **kwargs: None
+        else:
+            overlay.update = lambda *a, **k: None
+        trajectory = []
+        for index in range(20):
+            self._bubble_publish(overlay, index, edge=(index == 7))
+            trajectory.append(_logical_digest(overlay))
+            clock.advance()
+        return overlay, trajectory
+
+    def test_bubble_payload_is_populated_so_the_digest_carries_signal(
+        self, qt_app, monkeypatch
+    ):
+        """Guard the guard: an empty payload would make the oracle vacuous."""
+        overlay, trajectory = self._run(monkeypatch, suppress=False)
+        digest = _logical_digest(overlay)
+
+        assert digest["vis_mode"] == "bubble"
+        assert digest["bubble_count"] == 2
+        assert digest["bubble_pos_data"], "bubble positional payload must be populated"
+        assert digest["bubble_extra_data"], "bubble extra payload must be populated"
+        assert digest["bubble_trail_data"], "bubble trail payload must be populated"
+        # The injected one-tick edge must be visible somewhere in the trajectory,
+        # otherwise the equivalence test below cannot detect its erasure.
+        assert any(
+            step["bubble_pos_data"] and step["bubble_pos_data"][2] > 0.5
+            for step in trajectory
+        ), "the protected one-tick edge never appeared in the trajectory"
+        assert trajectory[-1]["bubble_pos_data"][2] == pytest.approx(0.0), (
+            "the edge must be transient, so endpoint comparison alone cannot see it"
+        )
+
+    def test_bubble_logical_trajectory_identical_with_presentation_suppressed(
+        self, qt_app, monkeypatch
+    ):
+        """Per-publication equivalence, not endpoint equivalence.
+
+        Compares the full state trajectory so a transient divergence -- such as a
+        protected one-tick Bubble edge being erased when presentation is
+        requested -- fails the test. An endpoint-only oracle passes that mutation.
+        """
+        _, presented = self._run(monkeypatch, suppress=False)
+        _, suppressed = self._run(monkeypatch, suppress=True)
+
+        assert len(suppressed) == len(presented) == 20
+        for index, (want, got) in enumerate(zip(presented, suppressed)):
+            assert got == want, f"logical state diverged at publication {index}"
