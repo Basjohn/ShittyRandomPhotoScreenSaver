@@ -689,3 +689,94 @@ Because P2 was deferred rather than corrected, the auxiliary one-publication →
 stream remains live during all P3 measurement. It is a known confound, must be stated in P3
 attribution rather than assumed away, and its cost must not be silently reassigned to
 preparation/commit.
+
+
+## 2026-08-17 — P3 work classification of `SpotifyBarsGLOverlay.set_state()` (source only)
+
+Read-only classification into the four required categories, ahead of any measurement. No
+production change. `set_state()` spans lines 586-1391 (805 lines).
+
+**Standing confound:** P2 was deferred, not corrected, so the auxiliary one-publication →
+one-`update()` stream is live throughout. Category 4 consequences are kept strictly separate
+below and must not be attributed to categories 1-3.
+
+### Category 1 — authoritative temporal/logical state evolution (NOT a P3 extraction candidate)
+
+Preserve cadence, order and owner. Not movable merely for containing no Qt calls.
+
+- `now_ts = time.time()`, `dt` sanity clamp, `self._accumulated_time += dt` — wall-clock read and
+  authored time accumulation, with the deliberate Spectrum no-paused-drift exception;
+- `_line_smoothed_bass/_mid/_high` — dt-dependent asymmetric exponential smoothing
+  (`dt/0.06` rising, `dt/0.12` falling);
+- `_sine_peak_bass/_mid/_high` and `_sine_peak_hold_remaining` — peak-tracked band envelopes;
+- waveform temporal smoothing via `line_speed`, `_prev_waveform`, `_ghost_waveform_ring`,
+  `_ghost_ring_idx` — history rings;
+- `_line_kick_event_envelope` / `_line_snare_event_envelope` and their `_strength` outputs —
+  discrete event envelopes, including the pause/resume boundary reset;
+- `_transient_energy` per-frame snapshot;
+- Spectrum `_peaks` / `_last_peak_ts` and solid-bar hysteresis;
+- Bubble temporal payload handling;
+- `apply_state_handoff()` — activation/generation identity and `reset_mode_state()` clears.
+
+### Category 2 — pure immutable render-state preparation (the only extraction candidate)
+
+Derived from already-evolved state; no Qt types, no temporal ownership.
+
+- bar clamping to `clamped` → `_bars`, `_bar_count`;
+- numeric coercion/clamping of mode configuration — 97 `float()`/`int()` sites;
+- list copies of devcurve curves and bubble positional/extra/trail payload.
+
+### Category 3 — Qt-owned commit / geometry / visibility
+
+Stays on the GUI/context owner by contract.
+
+- **28 `QColor(...)` constructions** — glow, line1-6 and their glow colours, spectrum glow,
+  bubble outline/specular/gradient-light/gradient-dark/pop, four devcurve layer colours;
+- `self.geometry()` / `self.setGeometry(rect)` and the `geometry_changed` flag;
+- `self.isVisible()` / `self.show()` and `became_visible`;
+- painted-frame shadow sync.
+
+### Category 4 — presentation request (kept separate; P2 territory)
+
+- `_request_frame_update()` → `QWidget.update()`.
+
+Its downstream cost belongs to Bad Smell 1 and must not be attributed to categories 1-3.
+
+### Primary P3 hypothesis (unmeasured)
+
+The dominant per-publication cost in categories 2 and 3 may not be *preparation* at all, but
+**re-derivation of unchanged configuration**.
+
+The 28 `QColor` constructions and 97 numeric coercions are guarded only by `is not None` — there
+is no change detection. At ~90 Hz publication that is roughly **2,500 QColor constructions and
+8,700 coercions per second**, re-deriving values that change only on a settings/preset/activation
+change.
+
+If confirmed, the correction is **not** moving work off the GUI thread. It is applying
+configuration on change rather than per publication — revision- or identity-gated commit. That:
+
+- touches no category 1 state, so no cadence, smoothing, envelope or event ownership moves;
+- requires no worker, thread or immutable-snapshot boundary, so it avoids the P3 test debt that
+  worker extraction would incur;
+- leaves category 4 untouched, so it cannot be mistaken for a P2 fix.
+
+This is a hypothesis from source inspection only. It must be measured before any change.
+
+### Required measurement design
+
+- Use **in-callback self-time boundaries** inside `set_state()`, not overall FPS or end-to-end
+  callback latency, and not paint duration.
+- Emit four separate accumulations — category 1, 2, 3, 4 — so no category can absorb another's
+  cost.
+- Sample rather than timestamp every publication, consistent with existing PERF practice, so the
+  probe does not become the load it measures.
+- Record with visualizer mode as a covariate, never as an explanation.
+- Do not add a queued hop, timer or event interception; observational only.
+
+### Explicitly not concluded
+
+- That category 2 should move off GUI. That requires a measured owner, and current evidence names
+  none.
+- That the no-visualizer control's improvement is owned by preparation. It proves another
+  visualizer-family cost exists; it does not locate it.
+- Anything about P2. The request stream remains live and unattributed here.
