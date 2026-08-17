@@ -461,3 +461,49 @@ class TestPresentationOwnership:
 
         assert list(overlay._bars) == pytest.approx(series[-1])
         assert overlay._bar_count == len(series[-1])
+
+
+class TestPresentationOpportunitySourceEligibility:
+    """R-61 anti-regression: a presentation source must outlive transitions.
+
+    The rejected P2 implementation drove visualizer presentation from
+    `AdaptiveTimerStrategy._signal_frame()`, which is a transition-scoped render
+    strategy: it starts for a transition and pauses when the transition ends. The
+    visualizer then never received another opportunity and froze. This bar states
+    the eligibility rule in executable form so the same clock cannot be adopted
+    again without the test failing.
+    """
+
+    def test_adaptive_timer_is_documented_as_transition_scoped(self):
+        import inspect
+
+        from rendering.gl_compositor import GLCompositorWidget
+
+        start = inspect.getsource(GLCompositorWidget._start_render_timer)
+        pause = inspect.getsource(GLCompositorWidget._pause_render_strategy)
+
+        assert "during transitions" in start.lower(), (
+            "render strategy start no longer documents its transition scope; "
+            "re-verify eligibility before using it as a presentation source"
+        )
+        assert "after transition ends" in pause.lower(), (
+            "render strategy pause no longer documents its transition scope; "
+            "re-verify eligibility before using it as a presentation source"
+        )
+
+    def test_overlay_presentation_is_not_driven_by_the_render_strategy(self):
+        """The overlay must not be registered with the transition-scoped timer."""
+        import inspect
+
+        from rendering import adaptive_timer
+
+        source = inspect.getsource(adaptive_timer)
+        for forbidden in (
+            "auxiliary_presenter",
+            "present_if_pending",
+            "SpotifyBarsGLOverlay",
+        ):
+            assert forbidden not in source, (
+                f"adaptive_timer references {forbidden!r}: visualizer presentation is "
+                "being driven by the transition-scoped render strategy again (R-61)"
+            )

@@ -53,6 +53,24 @@ compare disabled/default/stronger settings against `ff934616`. If the operator s
 delay, flattened transients, pumping, extra churn, or worse Bubble/Spectrum behaviour,
 restore checkpoint `3b6082dd` and record the candidate as rejected.
 
+## Presentation Opportunity Sources
+
+A visualizer presentation opportunity must come from a source that is **live whenever the
+visualizer is live**. Before adopting any existing mechanism as a presentation opportunity,
+establish its start/stop/pause scope, not merely what it does when it runs.
+
+`AdaptiveTimerStrategy` / `AdaptiveRenderStrategyManager` is **not** eligible: it is a
+transition-scoped render strategy that starts for a transition and pauses when the transition
+ends. Binding visualizer presentation to it freezes the visualizer after the first transition
+(R-61). The visualizer's own dedicated recurring tick remains the cadence authority.
+
+Anything invoked from `AdaptiveTimerStrategy._signal_frame()` additionally runs on a **worker
+thread** and must marshal Qt work to the GUI owner.
+
+Tests for a presentation-ownership change must model the real caller — its thread and its
+lifecycle state, including paused/idle — rather than calling the seam directly. A suite that
+only exercises the active state cannot detect a clock that stops.
+
 ## Required Validation
 
 Before shared-source/cadence work or approval of a presentation candidate:

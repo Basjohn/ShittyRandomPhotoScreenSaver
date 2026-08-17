@@ -6,6 +6,13 @@ Durable cross-cutting rules for SRPSS.
 
 This is a gatekeeper, not a specification. Read Sections 1–3 for every task, then only the relevant domain section.
 
+**Focused guardrails live in `Docs/Guardrails/` and are not optional.** When the task touches
+that domain, its focused guardrail outranks the general section here. Currently:
+
+| Domain | Focused guardrail |
+|---|---|
+| Visualizer cadence, presentation, render-state delivery, repaint behaviour | `Docs/Guardrails/Visualizer_Presentation.md` (plus `Docs/Visualizer_Change_Checklist.md`) |
+
 ## 1. Priority Order
 
 When goals conflict:
