@@ -25,8 +25,14 @@ from rendering.adaptive_timer import (
     TimerState,
     AtomicTimerState,
     _mark_widget_update_consumed,
+    _mark_widget_update_dispatched,
+    _mark_widget_update_pending,
     _queue_safe_widget_update,
     _normalize_next_deadline,
+    _record_delivery_paint_start,
+    _record_delivery_result,
+    _record_delivery_wake,
+    _reset_delivery_perf_window,
     _wait_until_deadline_without_gil_spin,
 )
 
@@ -644,6 +650,285 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             adaptive_timer.Shiboken = original_shiboken
             adaptive_timer.QThread.currentThread = original_current_thread
             adaptive_timer.QMetaObject.invokeMethod = original_invoke
+
+
+class _DeliveryWidget:
+    """Plain compositor stand-in that can host the passive delivery attributes."""
+
+    def __init__(self, screen_index: int = 0):
+        self.update_count = 0
+        self._screen_index = screen_index
+        self._render_timer_fps = 165
+
+    def update(self):
+        self.update_count += 1
+
+
+class TestDeliveryStageInvariants(unittest.TestCase):
+    """Invariants for the passive Phase 5 delivery-stage attribution seam.
+
+    These metrics are evidence, not behaviour. They must never invent a skip
+    reason, report a negative stage age, survive a widget generation boundary,
+    change PERF-off scheduling, or share state between displays.
+    """
+
+    _SKIP_COUNTERS = (
+        "_srpss_delivery_dispatch_pending_skips",
+        "_srpss_delivery_paint_pending_skips",
+        "_srpss_delivery_unknown_skips",
+    )
+
+    def setUp(self):
+        from rendering import adaptive_timer
+
+        self._adaptive_timer = adaptive_timer
+        self._original_perf_enabled = adaptive_timer.is_perf_metrics_enabled
+        self._original_run = adaptive_timer.ThreadManager.run_on_ui_thread
+        self._original_shiboken = adaptive_timer.Shiboken
+        self.queued: list = []
+        adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(
+            lambda func, *args, **kwargs: self.queued.append(func)
+        )
+        adaptive_timer.Shiboken = None
+        self._set_perf(True)
+
+    def tearDown(self):
+        self._adaptive_timer.is_perf_metrics_enabled = self._original_perf_enabled
+        self._adaptive_timer.ThreadManager.run_on_ui_thread = self._original_run
+        self._adaptive_timer.Shiboken = self._original_shiboken
+
+    def _set_perf(self, enabled: bool) -> None:
+        self._adaptive_timer.is_perf_metrics_enabled = lambda: enabled
+
+    def _skip_totals(self, widget) -> tuple[int, ...]:
+        return tuple(int(getattr(widget, name, 0) or 0) for name in self._SKIP_COUNTERS)
+
+    # --- Invariant 1: skip reasons are mutually exclusive ------------------
+
+    def test_each_skipped_result_increments_exactly_one_skip_counter(self):
+        """A rejected delivery has one reason; it never double-counts or vanishes."""
+        for stage, expected_index in (
+            ("dispatch", 0),
+            ("paint", 1),
+            ("unknown", 2),
+            ("none", 2),
+            ("some_future_stage", 2),
+        ):
+            with self.subTest(stage=stage):
+                widget = _DeliveryWidget()
+                widget._srpss_timer_last_skip_stage = stage
+
+                _record_delivery_result(widget, False)
+
+                totals = self._skip_totals(widget)
+                self.assertEqual(sum(totals), 1, f"stage={stage} totals={totals}")
+                self.assertEqual(totals[expected_index], 1, f"stage={stage} totals={totals}")
+                self.assertEqual(int(getattr(widget, "_srpss_delivery_accepted", 0) or 0), 0)
+
+    def test_accepted_result_never_increments_a_skip_counter(self):
+        widget = _DeliveryWidget()
+        widget._srpss_timer_last_skip_stage = "dispatch"
+
+        _record_delivery_result(widget, True)
+
+        self.assertEqual(int(getattr(widget, "_srpss_delivery_accepted", 0) or 0), 1)
+        self.assertEqual(self._skip_totals(widget), (0, 0, 0))
+
+    def test_real_queue_path_attributes_dispatch_and_paint_stages_separately(self):
+        """The stage label must come from the actual coalescing branch taken."""
+        widget = _DeliveryWidget()
+
+        # First call accepts and marks pending+dispatch-pending.
+        self.assertTrue(_queue_safe_widget_update(widget))
+        # Second call is rejected while the queued update has not run yet.
+        self.assertFalse(_queue_safe_widget_update(widget))
+        self.assertEqual(getattr(widget, "_srpss_timer_last_skip_stage"), "dispatch")
+        _record_delivery_result(widget, False)
+        self.assertEqual(self._skip_totals(widget), (1, 0, 0))
+
+        # Run the queued update: dispatch completes, paint has not consumed yet.
+        self.queued[0]()
+        self.assertFalse(_queue_safe_widget_update(widget))
+        self.assertEqual(getattr(widget, "_srpss_timer_last_skip_stage"), "paint")
+        _record_delivery_result(widget, False)
+        self.assertEqual(self._skip_totals(widget), (1, 1, 0))
+
+    # --- Invariant 2: stage ages are non-negative and generation-bounded ---
+
+    def test_stage_ages_clamp_to_zero_instead_of_reporting_negative_time(self):
+        widget = _DeliveryWidget()
+        far_future = time.perf_counter() + 3600.0
+
+        _record_delivery_wake(widget, deadline_ts=far_future, immediate=False)
+        wake_samples = list(getattr(widget, "_srpss_delivery_wake_late_ms", []))
+        self.assertEqual(wake_samples, [0.0])
+
+        widget._srpss_timer_update_pending_since = far_future
+        _mark_widget_update_dispatched(widget)
+        dispatch_samples = list(getattr(widget, "_srpss_delivery_dispatch_ms", []))
+        self.assertEqual(dispatch_samples, [0.0])
+
+        widget._srpss_timer_update_pending_since = 100.0
+        widget._srpss_timer_update_dispatched_ts = 100.0
+        _record_delivery_paint_start(widget, 90.0)
+        paint_samples = list(getattr(widget, "_srpss_delivery_paint_pending_ms", []))
+        self.assertEqual(paint_samples, [0.0])
+
+        self.assertTrue(all(value >= 0.0 for value in wake_samples + dispatch_samples + paint_samples))
+
+    def test_paint_latency_is_not_recorded_without_a_live_pending_generation(self):
+        """A consumed/torn-down pending state cannot back-date a later paint."""
+        widget = _DeliveryWidget()
+        widget._srpss_timer_update_pending_since = 0.0
+        widget._srpss_timer_update_dispatched_ts = 100.0
+
+        _record_delivery_paint_start(widget, 200.0)
+
+        self.assertEqual(list(getattr(widget, "_srpss_delivery_paint_pending_ms", [])), [])
+        self.assertEqual(int(getattr(widget, "_srpss_delivery_dispatch_unknown", 0) or 0), 0)
+
+    def test_missing_dispatch_timestamp_is_counted_rather_than_guessed(self):
+        widget = _DeliveryWidget()
+        widget._srpss_timer_update_pending_since = 100.0
+        widget._srpss_timer_update_dispatched_ts = 0.0
+
+        _record_delivery_paint_start(widget, 200.0)
+
+        self.assertEqual(list(getattr(widget, "_srpss_delivery_paint_pending_ms", [])), [])
+        self.assertEqual(int(getattr(widget, "_srpss_delivery_dispatch_unknown", 0) or 0), 1)
+
+    # --- Invariant 3: PERF-off changes nothing but the evidence -----------
+
+    def test_perf_off_produces_identical_scheduling_decisions(self):
+        """Diagnostics observe delivery; they must never decide it."""
+        def drive(widget) -> list[bool]:
+            outcomes = [_queue_safe_widget_update(widget)]
+            outcomes.append(_queue_safe_widget_update(widget))
+            self.queued[-1]()
+            outcomes.append(_queue_safe_widget_update(widget))
+            _mark_widget_update_consumed(widget)
+            outcomes.append(_queue_safe_widget_update(widget))
+            return outcomes
+
+        self._set_perf(True)
+        perf_on_widget = _DeliveryWidget()
+        perf_on_outcomes = drive(perf_on_widget)
+        perf_on_queued = len(self.queued)
+
+        self.queued.clear()
+        self._set_perf(False)
+        perf_off_widget = _DeliveryWidget()
+        perf_off_outcomes = drive(perf_off_widget)
+        perf_off_queued = len(self.queued)
+
+        self.assertEqual(perf_on_outcomes, perf_off_outcomes)
+        self.assertEqual(perf_on_queued, perf_off_queued)
+        self.assertEqual(perf_on_widget.update_count, perf_off_widget.update_count)
+
+    def test_perf_off_creates_no_delivery_attribution_state(self):
+        widget = _DeliveryWidget()
+        self._set_perf(False)
+
+        _reset_delivery_perf_window(widget)
+        _record_delivery_wake(widget, deadline_ts=time.perf_counter() - 1.0, immediate=False)
+        widget._srpss_timer_last_skip_stage = "dispatch"
+        _record_delivery_result(widget, False)
+        widget._srpss_timer_update_pending_since = 1.0
+        widget._srpss_timer_update_dispatched_ts = 2.0
+        _record_delivery_paint_start(widget, 3.0)
+
+        leaked = [name for name in vars(widget) if name.startswith("_srpss_delivery_")]
+        self.assertEqual(leaked, [])
+
+    # --- Invariant 4: generations do not inherit pending timestamps -------
+
+    def test_window_reset_clears_counters_and_samples_and_advances_sequence(self):
+        widget = _DeliveryWidget()
+        widget._srpss_timer_last_skip_stage = "paint"
+        _record_delivery_result(widget, False)
+        _record_delivery_result(widget, True)
+        _record_delivery_wake(widget, deadline_ts=time.perf_counter() - 1.0, immediate=False)
+
+        first_seq = int(getattr(widget, "_srpss_delivery_window_seq", 0) or 0)
+        _reset_delivery_perf_window(widget)
+
+        self.assertEqual(
+            int(getattr(widget, "_srpss_delivery_window_seq", 0) or 0), first_seq + 1
+        )
+        self.assertEqual(self._skip_totals(widget), (0, 0, 0))
+        self.assertEqual(int(getattr(widget, "_srpss_delivery_accepted", 0) or 0), 0)
+        self.assertEqual(list(getattr(widget, "_srpss_delivery_wake_late_ms", [])), [])
+        self.assertIsNone(getattr(widget, "_srpss_delivery_window_active_last"))
+
+    def test_consumed_update_clears_dispatch_timestamps_for_the_next_generation(self):
+        widget = _DeliveryWidget()
+        _mark_widget_update_pending(widget)
+        _mark_widget_update_dispatched(widget)
+        self.assertGreater(float(getattr(widget, "_srpss_timer_update_dispatched_ts", 0.0)), 0.0)
+
+        _mark_widget_update_consumed(widget)
+
+        self.assertEqual(float(getattr(widget, "_srpss_timer_update_pending_since", -1.0)), 0.0)
+        self.assertEqual(float(getattr(widget, "_srpss_timer_update_dispatched_ts", -1.0)), 0.0)
+        self.assertIsNone(getattr(widget, "_srpss_timer_window_active_at_dispatch"))
+        self.assertFalse(getattr(widget, "_srpss_timer_dispatch_timing_unknown"))
+
+        # A paint arriving after consumption cannot attribute to the retired state.
+        _record_delivery_paint_start(widget, time.perf_counter())
+        self.assertEqual(list(getattr(widget, "_srpss_delivery_paint_pending_ms", [])), [])
+
+    def test_a_replacement_widget_starts_with_no_inherited_delivery_state(self):
+        retiring = _DeliveryWidget()
+        _mark_widget_update_pending(retiring)
+        retiring._srpss_timer_last_skip_stage = "dispatch"
+        _record_delivery_result(retiring, False)
+
+        replacement = _DeliveryWidget()
+
+        inherited = [name for name in vars(replacement) if name.startswith("_srpss_")]
+        self.assertEqual(inherited, [])
+        self.assertEqual(self._skip_totals(replacement), (0, 0, 0))
+
+    # --- Invariant 5: displays own their counters independently -----------
+
+    def test_two_displays_retain_independent_delivery_counters(self):
+        display_0 = _DeliveryWidget(screen_index=0)
+        display_1 = _DeliveryWidget(screen_index=1)
+
+        display_0._srpss_timer_last_skip_stage = "dispatch"
+        _record_delivery_result(display_0, False)
+        _record_delivery_result(display_0, False)
+        _record_delivery_wake(display_0, deadline_ts=time.perf_counter() - 0.5, immediate=False)
+
+        display_1._srpss_timer_last_skip_stage = "paint"
+        _record_delivery_result(display_1, False)
+        _record_delivery_result(display_1, True)
+        _record_delivery_wake(display_1, deadline_ts=None, immediate=True)
+
+        self.assertEqual(self._skip_totals(display_0), (2, 0, 0))
+        self.assertEqual(self._skip_totals(display_1), (0, 1, 0))
+        self.assertEqual(int(getattr(display_0, "_srpss_delivery_accepted", 0) or 0), 0)
+        self.assertEqual(int(getattr(display_1, "_srpss_delivery_accepted", 0) or 0), 1)
+        self.assertEqual(int(getattr(display_0, "_srpss_delivery_deadline_wakeups", 0) or 0), 1)
+        self.assertEqual(int(getattr(display_1, "_srpss_delivery_deadline_wakeups", 0) or 0), 0)
+        self.assertEqual(int(getattr(display_1, "_srpss_delivery_immediate_requests", 0) or 0), 1)
+
+        self.assertIsNot(
+            getattr(display_0, "_srpss_delivery_wake_late_ms"),
+            getattr(display_1, "_srpss_delivery_wake_late_ms", None),
+        )
+
+    def test_resetting_one_display_window_leaves_the_other_intact(self):
+        display_0 = _DeliveryWidget(screen_index=0)
+        display_1 = _DeliveryWidget(screen_index=1)
+        for widget in (display_0, display_1):
+            widget._srpss_timer_last_skip_stage = "dispatch"
+            _record_delivery_result(widget, False)
+
+        _reset_delivery_perf_window(display_0)
+
+        self.assertEqual(self._skip_totals(display_0), (0, 0, 0))
+        self.assertEqual(self._skip_totals(display_1), (1, 0, 0))
 
 
 class TestAdaptiveTimerAutoIdle(unittest.TestCase):
