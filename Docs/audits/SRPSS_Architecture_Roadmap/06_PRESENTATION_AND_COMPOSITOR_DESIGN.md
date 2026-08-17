@@ -95,6 +95,11 @@ render snapshots cannot erase authored response.
 
 Logical events/steps are never dropped merely because intermediate render snapshots are.
 
+The authored event and the visible response are on **different ticks**. Protection keyed on the
+authored event can fire one publication before the response becomes visible in the Bubble
+positional payload, leaving the real edge coalescable (R-62). Assert protection against the
+visible edge in the versioned golden, not against the trigger.
+
 ## Forbidden Admission Mechanisms
 
 Do not implement the P2 fix with:
@@ -159,95 +164,38 @@ It must not:
 Geometry/reveal/clear/lifecycle boundaries may require an immediate presentation request;
 those exceptions must be explicit and tested.
 
-## P2 Implementation Decision (2026-08-17)
+## P2 Attempt History (both rejected)
 
-Traced seam, confirmed against current `main`:
+Two implementations have been rejected. Their shared error was adopting
+`AdaptiveTimerStrategy` as a presentation source.
 
-```text
-visualizer tick
-  → rendering/display_image_ops.py::_push_spotify_bars_overlay_state()
-  → SpotifyBarsGLOverlay.set_state()            [logical integration]
-  → SpotifyBarsGLOverlay._request_frame_update() [unconditional]
-  → QOpenGLWidget.update()                       [independent GUI dispatch demand]
-```
+**Attempt 1 (R-61) — sole dependence.** Drove overlay presentation from
+`AdaptiveTimerStrategy._signal_frame()`. That strategy is transition-scoped: it starts for a
+transition and pauses when one ends. The visualizer received no opportunities afterwards and
+froze permanently. A second defect called `QWidget.update()` from the timer worker thread.
 
-`set_state()` ends with an unconditional `_request_frame_update()`, so every accepted
-logical publication injects one auxiliary repaint request into the shared GUI dispatch
-lane. `AdaptiveTimerStrategy._signal_frame()` drives only `self._compositor`; the overlay
-is not part of that owned opportunity today.
+**Attempt 2 (R-62) — while-active-only.** Deferred presentation only while the strategy ran,
+restoring one-request-per-publication when it paused. Installed review rejected it: Bubble worse
+in every relevant way. Suspected cause is that the edge bypass keyed on rising kick/snare
+strength, while the protected Bubble response becomes visible in the positional payload on the
+*following* tick, so the bypass could fire one publication early and leave the real edge
+coalescable.
 
-### Corrected by 2026-08-17 installed evidence — a pending flag alone is insufficient
+**`AdaptiveTimerStrategy` is disqualified as a presentation source in any scope.** A source must
+be live whenever the visualizer is live — `Current_Plan.md` and
+`Docs/Guardrails/Visualizer_Presentation.md` are the authority on this.
 
-**WITHDRAWN 2026-08-17 — proposed a forbidden mechanism.** An initial reading of this seam
-proposed reusing the compositor's GUI-local pending-update coalescing
-(`rendering/adaptive_timer.py::_queue_safe_widget_update` / `_mark_widget_update_consumed`),
-justified by the `Docs/Guardrails.md` §6 allowance for a GUI-local pending `update()` flag.
-That was wrong on two independent counts, and the first is the important one:
+**Withdrawn inference.** Earlier revisions of this document argued that because Qt painted
+about 96.7% of requested frames, only ~3.3% of the request stream could usefully be removed.
+That is invalid: `paint / update_request` is not a measure of useful physical presentation.
+R-27 recorded ~275 paints/s against a 60 Hz owner, and R-55 recorded ~142–154 paints/s against
+~100 Hz `set_state` while the visualizer was *worse*. Do not use that ratio to bound available
+headroom.
 
-1. **It is on this document's forbidden list.** "Pending-until-paint backpressure" and "paint
-   completion as producer acknowledgement" are both explicitly rejected above. The §6
-   allowance covers ordinary compositor repaint coalescing, not visualizer presentation
-   admission. A permissive general clause was used to license a specific prohibition.
-2. Installed evidence independently shows it would be a near no-op. Measured over 13,978 publications on the configured 60 Hz display:
-
-```text
-update_requests / set_state = 1.0000    (the coupling, confirmed in production)
-paints          / set_state = 0.9669
-publication rate            = 81.1 Hz
-overlay paint rate          = 78.4 Hz   (~31% above what a 60 Hz display can present)
-overlay paint_cpu p95       = 1.695 ms  → ~133 ms/s of GUI thread on overlay paint alone
-```
-
-Qt is already painting 96.7% of requests, so a pending-until-painted flag would remove only
-the ~3.3% Qt collapses on its own. It is close to a no-op here and would not be worth the
-fidelity risk.
-
-A follow-up mixed run measured the identical `1.0000` ratio under Spectrum (86.4 Hz publish,
-83.7 Hz paint) as under Bubble (62.2 Hz, 58.2 Hz), at comparable paint CPU. The defect is
-system-wide presentation ownership, not a mode characteristic. Bubble remains the most
-sensitive detector of a regression here and is the required visual-review subject, which is
-not the same as being the cause.
-
-The request rate must instead be bounded by the **owning display's real presentation
-opportunity** — the per-display owned frame boundary that already drives that display's
-compositor — not by whether a paint is outstanding, and not by a synthetic FPS divisor.
-That is the distinction that keeps this legal: the forbidden mechanism is a display-FPS cap
-on *logical/source cadence*; bounding *presentation* to the display's own owned opportunity
-is precisely the "display-local presentation-request owner" this document already requires.
-Logical publication stays at 81 Hz; only the auxiliary repaint request is owned.
-
-`set_state()` must still return without waiting; Guardrails §6 permits a GUI-local pending
-`update()` flag, and it remains useful as a secondary guard, but it is not the mechanism.
-
-Two constraints make this more than a flag, and both are mandatory:
-
-1. **Edge preservation.** Plain coalescing is insufficient for Bubble. Between two paints,
-   publications carrying a discrete edge followed by an already-decayed value would present
-   only the decayed value, which is the failure
-   `tests/test_visualizer_presentation_negative_controls.py::test_latest_at_60_hz_can_hide_the_protected_bubble_edge`
-   already models. The coalesced render state must retain bounded edge/event identity
-   across the window so a skipped snapshot cannot erase authored response. Note that
-   `_line_kick_event_strength` / `_line_snare_event_strength` are decaying envelopes and
-   Bubble edges live in the bubble payload, so this is a state-commit change, not a flag.
-2. **No permanent latch.** The outstanding-request flag must not remain set because one
-   paint was delayed, and must be cleared by teardown/geometry/reveal boundaries. Geometry
-   change, becoming visible, and buffer clear remain explicit immediate-request exceptions
-   (`set_state()` already computes `geometry_changed` / `became_visible`).
-
-Acceptance is not satisfiable from tests alone. Required before P2 is accepted:
-
-- installed mixed-refresh (165 Hz + 60 Hz) run on ordinary `main.py` with `--perf` and
-  `--gpu-timing`, compared against the accepted A-state figures in
-  `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` — not against the retired
-  monkeypatch;
-- Bubble and Spectrum manual visual review. Per Guardrails §7 an operator-reported fidelity
-  regression rejects the change regardless of green goldens or improved counters.
-
-Regression bars that must stay green: `tests/test_visualizer_presentation_contract.py`
-(publication/presentation separation, mixed-refresh delivery bar), the negative controls,
-`test_bubble_cadence.py`, `test_spectrum_presentation_smoothing.py`, `test_visualizer_replay.py`.
-
-Rollback anchor: `30e66e08` (P1 close, pre-P2).
+**Still true and unchanged:** the measured coupling is `update_requests / set_state == 1.0000`
+across both Bubble and Spectrum, the overlay paints roughly 31% more often than the 60 Hz
+display can present, and overlay paint costs about 1.7 ms CPU p95. Those measurements stand;
+only the inference drawn from the paint ratio is withdrawn.
 
 ## Scene / Surface Ownership
 

@@ -215,10 +215,16 @@ Two results follow.
    about **133 ms/s of GUI thread** in overlay paint alone before any GPU cost. The waste is
    paint work, not only dispatch demand.
 
-Result 2 refines the mechanism: because Qt already paints 96.7% of requests, a
-pending-until-painted coalescer would recover only the ~3.3% Qt collapses by itself. The
-follow-up mixed run reproduces the same 1.0000 ratio under Spectrum, so this is a
-system-wide presentation-ownership defect.
+Result 2 refines the mechanism: the waste is paint work, not only dispatch demand. The
+follow-up mixed run reproduces the same `1.0000` ratio under Spectrum, so this is a system-wide
+presentation-ownership defect.
+
+**Withdrawn inference (2026-08-17).** An earlier revision argued that because Qt paints 96.7% of
+requests, only ~3.3% of the request stream could usefully be removed. That is invalid and is no
+longer accepted: `paint / update_request` is not a measure of useful physical presentation.
+R-27 recorded ~275 paints/s against a 60 Hz owner, and R-55 recorded ~142–154 paints/s against
+~100 Hz `set_state` while the visualizer was *worse*. The measurements above stand; only that
+inference is withdrawn.
 Presentation must be bounded by the owning display's presentation opportunity. See the
 corrected P2 implementation decision in
 `Docs/audits/SRPSS_Architecture_Roadmap/06_PRESENTATION_AND_COMPOSITOR_DESIGN.md`.
@@ -306,3 +312,24 @@ Method consequence, now recorded in `Docs/Guardrails.md` §3: a fallback that pr
 previous behaviour can make a change completely inert while tests stay green and the runtime
 looks healthy. Runtime acceptance must confirm a change is *active* before interpreting its
 effect, and a null result is "not proven active" rather than "did not help".
+
+
+## 2026-08-17 — P2 Attempt 2 Rejected (transition-scoped deferral)
+
+A second P2 candidate (`8eb381fb`) deferred auxiliary presentation only while the transition
+render strategy was running. Installed manual review rejected it: **Bubble worse in every
+relevant way**. Reverted in `b6e3e051`; production restored to the approved anchor `30e66e08`.
+
+Failed-experiment logs preserved at
+`logs/evidence_chest/08_17_8eb381fb_p2_transition_deferral_REJECTED/`. Full analysis in
+`Docs/Historical_Bugs/R-62_Transition_Scoped_Presentation_Deferral_Bubble_Regression.md`.
+
+Consequences for this report:
+
+- `AdaptiveTimerStrategy` is disqualified as a presentation source in **any** scope, not merely
+  as a sole source.
+- The A/B/C evidence above remains valid. It shows the auxiliary request stream is a material
+  amplifier; it does **not** name an eligible mechanism for removing it. Two attempts have now
+  failed at the mechanism, not at the premise.
+- Any future candidate must assert against the real Bubble positional-payload edge from the v1
+  golden — on the tick where it becomes visible, not the tick where the event is authored.

@@ -74,6 +74,17 @@ Tests for a presentation-ownership change must model the real caller — its thr
 lifecycle state, including paused/idle — rather than calling the seam directly. A suite that
 only exercises the active state cannot detect a clock that stops.
 
+## Edge Protection Must Be Asserted On The Visible Edge
+
+The protected Bubble response is authored on one tick and becomes visible in the **Bubble
+positional payload on the following tick** (`kick_authored` tick 3, `visible_edge` tick 4 in the
+v1 golden). Any protection keyed on the authored event can therefore act one publication early
+and still leave the visible edge unprotected — this is the suspected cause of R-62.
+
+A test asserting that a protection *fired* is **not** edge coverage. It must assert that the
+real positional-payload edge from the versioned golden **survived presentation**, on the tick
+where it becomes visible.
+
 ## Required Validation
 
 Before shared-source/cadence work or approval of a presentation candidate:

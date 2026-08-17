@@ -95,6 +95,19 @@ Installed dual-display acceptance remains P5-F.
 
 ### P2 — fix bad smell 1: publication-coupled visualizer presentation
 
+Two implementations have been rejected. The premise is unchanged and still measured; both
+failures were in the **mechanism**. See `Docs/Historical_Bugs/R-61_*` and `R-62_*`.
+
+- `AdaptiveTimerStrategy` / `AdaptiveRenderStrategyManager` is disqualified as a presentation
+  source in **any** scope, sole or while-active-only.
+- Edge protection must be asserted against the real Bubble positional-payload edge from the v1
+  golden, on the tick where it becomes **visible**, not where the event is authored. A test that
+  only proves a bypass fired is not edge coverage.
+- A candidate narrower than the stated goal cannot close P2 without evidence justifying the
+  narrowing.
+- Analyse the preserved failed-experiment logs before designing again:
+  `logs/evidence_chest/08_17_8eb381fb_p2_transition_deferral_REJECTED/`.
+
 - [ ] Replace the current one-accepted-state → one auxiliary `SpotifyBarsGLOverlay.update()` contract with an owned presentation-opportunity contract.
 - [ ] Logical/source cadence remains unchanged; presentation may consume the latest valid immutable render state only after logical integration.
 - [ ] Preserve protected short-lived Bubble edges/events through bounded event identity/history or another approved equivalent; latest-state sampling alone is insufficient.
@@ -116,7 +129,7 @@ Installed dual-display acceptance remains P5-F.
 
 - [ ] After P2/P3, repeat a visualizer-disabled control with Media still enabled.
 - [ ] Attribute the remaining 165 Hz dispatch-pending bursts to concrete GUI callbacks/owners.
-- [ ] Close the owner by extraction/narrowing only when direct evidence names it; do not tune the adaptive timer or weaken the one-request ownership contract to hide it.
+- [ ] Close the owner by extraction/narrowing only when direct evidence names it; do not tune the adaptive timer, and do not hide the owner by changing how compositor update requests are coalesced. (This constrains the **compositor's** request ownership only. It is not a requirement that the visualizer keep one auxiliary `update()` per publication — P2 exists to remove exactly that.)
 - [ ] Do not claim Phase 5 delivery closure while a no-visualizer run still loses roughly five percent of 165 Hz deadlines for an unnamed reason.
 
 ### P5 — harden authoritative monitor topology and physical sleep/wake recovery

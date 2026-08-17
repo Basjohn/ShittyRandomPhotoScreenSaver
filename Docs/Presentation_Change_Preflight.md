@@ -24,7 +24,7 @@ Barred are **mechanisms**, established by dated failures. Not outcomes, and not 
 | Pending-paint requeue / rescue timers | R-27 | 134 rescues; `--perf` materially worse; delivery unfixed |
 | Any cadence gate placed *before* logical integration | R-54 | 2,566 offered steps → 1,723 submissions; edges decayed before first publication |
 | Latest-state sampling at display rate without edge identity | Bubble v1 golden | A one-tick authored edge is missed entirely |
-| Visualizer presentation driven *solely* by `AdaptiveTimerStrategy` | R-61 | Transition-scoped source; visualizer froze permanently after the first transition |
+| Visualizer presentation driven by `AdaptiveTimerStrategy`, in any scope | R-61, R-62 | Transition-scoped source. Sole use froze the visualizer after the first transition (R-61); while-active-only use degraded Bubble fidelity (R-62) |
 | Visualizer ticks on a transition `AnimationManager` | R-27 | Visualizer cost became part of transition progress cadence |
 
 **Required regression bar for any candidate:** it must not reproduce
@@ -44,8 +44,13 @@ Barred are **mechanisms**, established by dated failures. Not outcomes, and not 
   reserve presentation timing to the producer.
 - **Coalescing after integration.** Permitted once every logical input has been integrated and
   the mode's visible publication semantics remain intact.
-- **Using a transition-scoped presentation source while it is running**, provided the overlay
-  still presents when that source is paused or absent. R-61 bars *sole* dependence, not use.
+**Note on transition-scoped sources — claim withdrawn 2026-08-17.** An earlier revision of this
+file asserted that a transition-scoped source such as `AdaptiveTimerStrategy` could be used
+while running provided the overlay still presented when it paused. That contradicted both
+`Current_Plan.md` and `Docs/Guardrails/Visualizer_Presentation.md`, which disqualify it outright,
+and the implementation built on that reading was rejected on Bubble fidelity (R-62). **The
+disqualification stands: `AdaptiveTimerStrategy` is not an eligible presentation source, in any
+scope.** This register does not grant eligibility; the plan and the focused guardrail decide it.
 
 ## 3. Corpus reading order
 
@@ -63,7 +68,8 @@ Historical records are evidence about mechanisms. They are not a veto over curre
 
 ## 4. Eligibility rules for a presentation opportunity source
 
-- The overlay must still present when the source is **paused or absent** (R-61).
+- `AdaptiveTimerStrategy` / `AdaptiveRenderStrategyManager` is **not eligible in any scope**
+  (R-61, R-62). A source must be live whenever the visualizer is live.
 - Anything reached from `AdaptiveTimerStrategy._signal_frame()` runs on a **worker thread** and
   must marshal Qt work to the GUI owner (R-61).
 - It must not derive admission from paint acknowledgement, producer timestamps, or a
