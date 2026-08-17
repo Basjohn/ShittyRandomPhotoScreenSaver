@@ -146,6 +146,27 @@ def maybe_log_gpu_timer_query_window(widget, *, force: bool = False) -> None:
             _perf_metric_text(metrics["p95_ms"]),
             _perf_metric_text(metrics["max_ms"]),
         )
+    # Post-hoc GPU/delivery association. Observational only: it drains a bounded
+    # metadata queue and joins it against the paint samples the compositor already
+    # retains. It does not consume or alter the aggregate GPU statistics above,
+    # and never waits on a GPU result.
+    try:
+        take_samples = getattr(timer_queries, "take_frame_samples", None)
+        paint_metrics = getattr(widget, "_paint_metrics", None)
+        if callable(take_samples) and paint_metrics is not None:
+            gpu_samples = take_samples()
+            if gpu_samples:
+                from rendering.gl_compositor_pkg.gpu_delivery_association import (
+                    associate,
+                    format_report_lines,
+                )
+
+                report = associate(gpu_samples, list(paint_metrics.samples))
+                for message, args in format_report_lines(report, screen=screen):
+                    logger.info(message, *args)
+    except Exception:
+        logger.debug("[GL COMPOSITOR] GPU delivery association failed", exc_info=True)
+
     widget._gpu_timer_query_last_log_ts = now
 
 
@@ -287,6 +308,22 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
         and gl is not None
         and widget._gl_state.is_ready()
     ):
+        # Declare which frame the next sampled query belongs to, so its
+        # asynchronous result can be joined post-hoc against retained paint
+        # samples. Two integers; no scheduling or GL behaviour changes.
+        declare_identity = getattr(timer_queries, "set_pending_frame_identity", None)
+        if callable(declare_identity):
+            paint_metrics = getattr(widget, "_paint_metrics", None)
+            if paint_metrics is not None:
+                declare_identity(
+                    scene_generation=int(
+                        getattr(paint_metrics, "_active_scene_generation", -1) or -1
+                    ),
+                    frame_index=int(
+                        getattr(paint_metrics, "_active_presented_frame_index", -1) or -1
+                    ),
+                )
+
         query_started = bool(
             timer_queries.begin_sampled(
                 gl,

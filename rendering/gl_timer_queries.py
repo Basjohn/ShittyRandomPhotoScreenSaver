@@ -7,7 +7,7 @@ render span, and delete the handles on that same context during strict teardown.
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 import ctypes
 from dataclasses import dataclass
 import math
@@ -34,6 +34,28 @@ class _QuerySlot:
     resource_id: str | None = None
     label: str = ""
     pending: bool = False
+    # Correlation identity captured at submission. Frame index alone is
+    # insufficient: it is transition-local and restarts when a new paint-metrics
+    # window is created, while queries stay pending asynchronously across those
+    # boundaries. Generation + frame index is the same identity contract the
+    # retained paint samples already use.
+    scene_generation: int = -1
+    frame_index: int = -1
+
+
+@dataclass(frozen=True)
+class GPUFrameSample:
+    """One collected sampled GPU result with its owning frame identity.
+
+    Every collected sample is retained, not only outliers: comparing GPU duration
+    before gap frames against GPU duration before ordinary frames requires a
+    denominator. A threshold-only record yields coincidences without one.
+    """
+
+    scene_generation: int
+    frame_index: int
+    label: str
+    elapsed_ms: float
 
 
 def _scalar_int(value: Any) -> int:
@@ -86,6 +108,12 @@ class GLTimerQueryRing:
         self._ring_size = max(2, int(ring_size))
         self._sample_stride = max(1, int(sample_stride))
         self._resource_group = str(resource_group)
+        # Correlation state. Bounded metadata queue holding every collected
+        # sampled result with its frame identity, for post-hoc joining against
+        # retained paint samples. Separate from the aggregate window statistics.
+        self._frame_samples: deque[GPUFrameSample] = deque(maxlen=256)
+        self._pending_scene_generation: int = -1
+        self._pending_frame_index: int = -1
         self._resource_manager = resource_manager
 
         self._probed = False
@@ -104,6 +132,16 @@ class GLTimerQueryRing:
         self._window_discarded: Counter[str] = Counter()
         self._window_samples_ms: dict[str, list[float]] = defaultdict(list)
         self._window_errors = 0
+
+    def take_frame_samples(self) -> list["GPUFrameSample"]:
+        """Drain collected sampled GPU results with identity, for post-hoc joining.
+
+        Does not touch the aggregate window statistics, which remain the
+        authoritative GPU summary. This is a separate bounded metadata queue.
+        """
+        drained = list(self._frame_samples)
+        self._frame_samples.clear()
+        return drained
 
     @property
     def supported(self) -> bool:
@@ -239,6 +277,10 @@ class GLTimerQueryRing:
                 self._window_discarded[slot.label or "<unknown>"] += 1
             slot.pending = False
             slot.label = ""
+            slot.scene_generation = -1
+            slot.frame_index = -1
+        self._pending_scene_generation = -1
+        self._pending_frame_index = -1
 
     def _disable_runtime(self, reason: str) -> None:
         self._window_errors += 1
@@ -284,10 +326,23 @@ class GLTimerQueryRing:
                 self._disable_runtime(f"result_error:{type(exc).__name__}")
                 return
             label = slot.label or "<unknown>"
+            elapsed_ms = max(0.0, elapsed_ns / 1_000_000.0)
             self._window_collected[label] += 1
-            self._window_samples_ms[label].append(max(0.0, elapsed_ns / 1_000_000.0))
+            self._window_samples_ms[label].append(elapsed_ms)
+            if slot.scene_generation >= 0 and slot.frame_index >= 0:
+                self._frame_samples.append(
+                    GPUFrameSample(
+                        scene_generation=slot.scene_generation,
+                        frame_index=slot.frame_index,
+                        label=label,
+                        elapsed_ms=elapsed_ms,
+                    )
+                )
             slot.pending = False
             slot.label = ""
+            # A reused slot must never carry stale ownership.
+            slot.scene_generation = -1
+            slot.frame_index = -1
 
     def begin(self, gl_api: Any, *, label: str) -> bool:
         """Begin one query if a slot is free; otherwise drop the sample."""
@@ -308,8 +363,20 @@ class GLTimerQueryRing:
             self._disable_runtime(f"begin_error:{type(exc).__name__}")
             return False
         slot.label = normalized_label
+        slot.scene_generation = int(self._pending_scene_generation)
+        slot.frame_index = int(self._pending_frame_index)
         self._active_slot = slot
         return True
+
+    def set_pending_frame_identity(self, *, scene_generation: int, frame_index: int) -> None:
+        """Declare the frame identity that the next begun query belongs to.
+
+        Called by the context owner immediately before a sampled begin. Purely
+        observational: it stores two integers and never affects sampling,
+        scheduling or GL behaviour.
+        """
+        self._pending_scene_generation = int(scene_generation)
+        self._pending_frame_index = int(frame_index)
 
     def begin_sampled(self, gl_api: Any, *, label: str) -> bool:
         """Poll and begin only on the owner's fixed paint-count sample stride.
