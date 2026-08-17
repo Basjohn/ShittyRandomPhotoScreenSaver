@@ -68,16 +68,20 @@ passive delivery-stage seam in `rendering/adaptive_timer.py` is retained under
 `tests/test_adaptive_timer.py::TestDeliveryStageInvariants`. Preserve that as a regression
 contract; do not reintroduce runtime class patching as a presentation solution.
 
-### P1 — production presentation/fidelity contract (locked; regression bar for P2)
+### P1 — production presentation/fidelity contract (locked; audit corrections required before P2 wiring)
 
-P1 is closed. These are now the acceptance bars P2 must keep green; do not weaken one to make
-a presentation change pass.
+P1's original landing is closed and made **no production runtime changes**: it added tests and
+documentation only. The logical/publication bars remain useful. A post-P1 audit found several
+test-semantics problems that can mislead P2 even though they do not alter production behaviour.
+Correct these before implementing another P2 candidate; do not weaken the real fidelity bars.
+
+Current useful bars:
 
 - `tests/test_visualizer_presentation_contract.py` — publication/presentation separation on the
   real `SpotifyBarsGLOverlay` with an injected deterministic clock: every accepted publication
   integrates exactly once, presentation requests may be fewer but never more than publications,
-  and withholding presentation at both the paint seam and the request seam leaves logical state
-  bit-identical. Also owns the mixed-refresh delivery bar and per-display independence.
+  and withholding presentation at both the paint seam and the request seam leaves the covered
+  logical state unchanged.
 - `tests/test_visualizer_presentation_negative_controls.py` — rejected admission designs
   (target-FPS gate, pending-until-paint latch, latest-at-60 Hz edge loss).
 - `tests/test_bubble_cadence.py` — authored step/dt, one-in-flight semantics, discrete-edge
@@ -90,12 +94,38 @@ a presentation change pass.
   `tests/test_gl_compositor_cleanup.py`, `tests/test_spotify_visualizer_mode_transition.py` —
   generation/activation rejection, Settings/recreate, display reassignment, strict GL teardown.
 
-The mixed-refresh bar is a deterministic policy property, not a live dual-monitor measurement.
-Installed dual-display acceptance remains P5-F.
+#### P1 audit follow-up — test semantics only; complete before P2 production wiring
+
+- [ ] **Remove the stale R-61 test contract that requires one repaint per accepted publication
+      whenever no presentation source is running.** `TestPresentationOpportunitySourceEligibility`
+      currently says "survival, not abstinence", allows `AdaptiveTimerStrategy` while active, and
+      asserts the idle overlay keeps one request per publication. R-62 disqualifies
+      `AdaptiveTimerStrategy` in any scope, and P2 explicitly exists to remove the permanent 1:1
+      request requirement. Replace this with source-independent survival/liveness assertions that
+      do not prescribe 1:1 repaint behaviour.
+- [ ] **Downgrade `TestMixedRefreshDeliveryBar` to a policy-model/hazard-light classification.**
+      Its fixed `LANE_CAPACITY_HZ` arithmetic and target `visualizer_request_hz=0` model an
+      architectural property; they do not execute Qt's real dispatch/composition path and may not
+      be cited as proof that a production P2 implementation fixes mixed-refresh delivery.
+      Installed equivalent dual-display evidence remains the authority.
+- [ ] **Strengthen the logical-equivalence oracle used for presentation suppression.** The current
+      `_logical_digest()` is intentionally shallow and omits Bubble positional/extra/trail payload,
+      transient/event envelopes and substantial mode-owned state. Either extend mode-sensitive
+      coverage or explicitly bind the suppression test to the existing Bubble/Spectrum/replay
+      goldens so "bit-identical" cannot be overclaimed from bars/peaks/waveform/count alone.
+- [ ] Rename/reword `test_paint_consumes_the_latest_integrated_state_not_a_queued_backlog` or add
+      real paint-receipt coverage. It currently stubs `update()` and proves latest stored overlay
+      state, not that a paint actually consumed it.
+- [ ] Keep `presentation_requests <= accepted_publications` as an anti-amplification guard only.
+      It is necessary but not sufficient evidence of correct presentation or preserved fidelity.
+
+The P1 mixed-refresh model remains useful as a **hazard light**, not a live dual-monitor
+regression oracle. No P1 unit test may close P2 or overrule installed visual review.
 
 ### P2 — fix bad smell 1: publication-coupled visualizer presentation
 
-**Design only. Do not implement until step 1 below is complete and reviewed.**
+**Design only. Do not implement another production candidate until the P1 audit follow-up and
+Step 1 below are complete and reviewed.**
 
 Two implementations have been rejected. The premise is unchanged and still measured; both
 failures were in the **mechanism**. See `Docs/Historical_Bugs/R-61_*` and `R-62_*`, and the
@@ -105,12 +135,12 @@ preserved evidence at `logs/evidence_chest/08_17_8eb381fb_p2_transition_deferral
 
 ```text
 R-61  sole dependence on AdaptiveTimerStrategy   -> visualizer froze after first transition
-R-62  same source, while-active only             -> Bubble worse; state->paint p95 doubled
+R-62  same source, while-active only             -> Bubble worse; state->paint p95 roughly doubled
 ```
 
 R-62 is a **valid negative result**, not an inert run: registration is logged at 16:18:40,
 16:20:22 and 16:23:14, and `u/ss` fell from `1.000` to `0.699-0.755` while deferral was active.
-The mechanism worked. Working is what broke Bubble.
+The mechanism operated and installed review rejected the resulting Bubble behaviour.
 
 ```text
                     u/ss            Bubble state->paint p95
@@ -119,22 +149,25 @@ light deferral      0.949           7.04 ms
 heavy deferral      0.699 - 0.755   13.2 - 15.4 ms (peaks 52.7 - 56.5 ms)
 ```
 
-Latency scaled with the amount of deferral, a dose-response relationship across 31 windows.
-Bubble logical publication held at ~99.7-100%, so the **simulation path is exonerated**; the
-damage was entirely in when integrated state reached the screen.
+The windows show a strong dose-response association between more deferral and older Bubble state
+at paint. Treat that as strong mechanistic evidence, not as an independently randomized dose:
+the borrowed opportunity's own sickness can simultaneously increase deferral and latency.
+Bubble logical publication remained ~99.7-100% and the rejected candidate did not alter the
+simulation path, strongly localizing the regression to presentation/delivery.
 
-Root cause: the borrowed compositor opportunity delivers only **~54-56 accepted, irregular Hz
-under transition load** (`511/545`, `493/543`). Pacing a ~90 Hz visualizer from a stream that is
-sick exactly when it is needed guarantees late, uneven arrival.
+The borrowed compositor opportunity delivered only **~54-56 accepted, irregular Hz under
+transition load** (`511/545`, `493/543`). Pacing a ~90 Hz visualizer from that degraded stream
+was therefore rejected.
 
 #### Constraints now binding on any candidate
 
-- `AdaptiveTimerStrategy` / `AdaptiveRenderStrategyManager` is disqualified as a presentation
-  source in **any** scope, sole or while-active-only.
+- `AdaptiveTimerStrategy` / `AdaptiveRenderStrategyManager` is disqualified as a visualizer
+  presentation source in **any** scope, sole or while-active-only.
 - **A pacing source that degrades under the load it is meant to relieve is disqualified.** A
-  candidate must show its source stays healthy under that load, or use no external source.
+  candidate must show its source stays healthy under that load, or use no external pacing source.
 - **State-to-paint latency is an acceptance metric, not a diagnostic.** A candidate that reduces
-  `u/ss` while raising Bubble state-to-paint p95 is rejected regardless of delivery counters.
+  `u/ss` while materially raising Bubble state-to-paint p95 is rejected regardless of delivery
+  counters.
 - Edge protection must be asserted against the real Bubble **positional-payload** edge in the v1
   golden, on the tick where it becomes visible, not the tick where the event is authored, and
   not merely that a bypass fired.
@@ -143,75 +176,141 @@ sick exactly when it is needed guarantees late, uneven arrival.
   (R-27).
 - A candidate narrower than the stated goal cannot close P2 without evidence justifying the
   narrowing.
+- `u/ss < 1.0` proves only that request coupling changed. It is **not** a success metric by itself.
 
-#### Step 1 - measurement before design (no production change)
+#### Step 1 — characterize the exact request/dispatch layers before choosing a mechanism
 
-- [ ] From the preserved R-62 logs, plot Bubble state-to-paint distribution against `u/ss` per
-      window and confirm the dose-response relationship holds within single transitions, not
-      only across them.
-- [ ] Establish whether the latency rise is dominated by *waiting for the next opportunity* or by
-      *opportunity irregularity* (inter-arrival jitter). These imply different fixes and the
-      distinction is currently unproven.
-- [ ] Quantify, from `logs/screensaver_perf.log`, how much of the auxiliary request stream is
-      **genuinely redundant**: a request issued while a previous request for the same surface is
-      still queued and undispatched, so Qt would have painted the newer state anyway. This is the
-      only reduction that costs zero latency by construction.
-- [ ] Record the result in the phase report. If redundant traffic is negligible, say so and
-      escalate the scope question rather than building anyway.
+Do not begin with a coalescer. First establish what "pending" actually means on the visualizer
+path.
 
-#### Step 2 - candidate design: dispatch-window coalescing (demand-driven, no external clock)
+- [ ] From the preserved R-62 logs, stratify Bubble state-to-paint distribution against `u/ss`
+      within the same transition/session where sample density permits, to reduce load/transition
+      confounding. Do **not** force a within-transition confirmation if the existing timestamps
+      cannot support it; record the limitation.
+- [ ] Determine whether the existing evidence can distinguish waiting for a presentation
+      opportunity from opportunity inter-arrival jitter. If the timestamps cannot separate them,
+      record that as unknown rather than adding behavioural instrumentation to manufacture the
+      answer.
+- [ ] Trace the current exact thread/call path for
+      `display_image_ops._push_spotify_bars_overlay_state()` →
+      `SpotifyBarsGLOverlay.set_state()` → `_request_frame_update()` → `QWidget.update()`.
+      Record whether `set_state()` and the direct `update()` call execute on the GUI thread in
+      production.
+- [ ] Explicitly separate these three states in the design/evidence:
+      1. **pre-GUI runnable pending** — a worker/caller has queued a callback that has not yet
+         executed on the GUI thread;
+      2. **Qt update pending** — `QWidget.update()` has already returned and Qt has scheduled/
+         merged asynchronous paint work;
+      3. **paint pending/in progress** — the update has reached paint delivery.
+      Never use one layer's flag as evidence for another.
+- [ ] Audit `rendering/adaptive_timer.py::_srpss_timer_update_dispatch_pending` before citing it
+      as precedent. In current compositor code that flag brackets the **cross-thread queued GUI
+      callback before `_apply_update()` calls `widget.update()`**; `_mark_widget_update_dispatched`
+      clears it after the direct `update()` call. It is not a generic flag for Qt's internal
+      widget-update event after `update()` has returned.
+- [ ] Quantify whether the visualizer path has any **already-existing, observable pre-GUI
+      dispatch window** in which a newer publication genuinely supersedes a queued callback.
+      If `set_state()` already reaches `update()` directly on the GUI thread, there may be no such
+      Python dispatch window to coalesce.
+- [ ] Account for Qt's own update semantics: `QWidget.update()` is asynchronous and repeated
+      calls are normally merged into fewer paint events. The A/B evidence nevertheless proves
+      suppressing the auxiliary `update()` call stream helps, so do not assume the entire cost is
+      duplicate paints. Measure/attribute call/invalidation/composition scheduling pressure as
+      distinct from final paint count.
+- [ ] Use observational instrumentation only. Do not insert a new queued GUI hop, timer, worker,
+      event-loop delay or repaint path merely so a "pending" window becomes measurable. Do not
+      accept/suppress/consume Qt update or paint events as a probe.
+- [ ] Record the result in the phase report. If the relevant safe redundancy is negligible or
+      does not exist at an already-owned layer, explicitly kill this candidate and revisit P2
+      architecture rather than manufacturing a new scheduling layer.
 
-Leading candidate, subject to step 1. Coalesce a presentation request **only while a previously
-issued request for the same surface is queued and not yet dispatched by Qt**. Once dispatched,
-the next publication requests normally.
+#### Step 2 — dispatch-window coalescing is a conditional hypothesis, not an approved design
+
+The current code review does **not** justify calling this the leading candidate yet.
+
+It becomes eligible for a test-only prototype only if Step 1 proves that the visualizer already
+has a real pre-GUI queued-dispatch layer whose pending identity can be observed without changing
+the path. The intended hypothesis would then be:
 
 ```text
-publication -> integrate (always)
-            -> is a prior request still queued and undispatched?
-                 yes -> drop this request; the queued one will paint the newer state
-                 no  -> request presentation immediately
+publication -> integrate every input
+            -> an existing same-surface GUI callback is still queued and has not run?
+                 yes -> do not enqueue a second equivalent callback
+                 no  -> use the existing immediate presentation-request path
 ```
 
-Why this differs from both failures:
+Binding prohibitions:
 
-- **No external pacing source.** Nothing is borrowed; the mechanism is driven by Qt's own
-  dispatch backlog, so it cannot inherit a sick clock's irregularity (R-62's root cause).
-- **Cannot delay any state.** `paintGL()` reads current state, so an already-queued request
-  paints the *latest* integrated state when it runs. A dropped duplicate would have painted the
-  same or older state. State-to-paint latency can only stay equal or improve, which is the exact
-  metric R-62 regressed.
-- **Not paint-based admission.** It keys on *dispatch*, not paint completion. R-27 explicitly
-  separated queued-dispatch coalescing from paint-pending state and preserved the former; the
-  barred design keyed on paint.
-- **Self-regulating.** Under congestion the dispatch backlog grows and more redundancy is removed
-  exactly where the GUI is sick. When healthy, dispatch is immediate and `u/ss` stays ~1.0.
-- Symmetric with the compositor, which already uses `_srpss_timer_update_dispatch_pending` for
-  precisely this distinction.
+- **Do not copy `_srpss_timer_update_dispatch_pending` onto the overlay merely because the
+  compositor has one.** The flag is legal only if the overlay has the same proven cross-thread
+  boundary and lifetime semantics.
+- **Do not create a queued callback solely to create something to coalesce.** No new
+  `ThreadManager.run_on_ui_thread`, `QMetaObject.invokeMethod(...QueuedConnection)`,
+  `QTimer.singleShot`, worker, timer, queue, lane or thread may be inserted around the direct
+  overlay `update()` call for this purpose.
+- **Do not reinterpret Qt's internal pending update/paint event as "dispatch pending".** If the
+  only observable pending state begins after `QWidget.update()` returns and clears at
+  `paintEvent()`/`paintGL()`, using it as admission is the barred pending-until-paint family
+  regardless of variable name.
+- **Do not claim zero latency "by construction".** A queued paint that reads latest mutable state
+  can still present an older/newer publication at a different time, and a one-publication Bubble
+  edge can be overwritten before that paint. No latency/fidelity conclusion is valid until the
+  real temporal test proves it.
+- **Do not duplicate Qt's own coalescing and call it P2.** If repeated `update()` calls are already
+  merged at the same layer being proposed, a second manual flag is a no-op/complexity increase.
+- **Do not use an event filter, `event()` override, UpdateRequest interception or paint callback
+  to suppress/release presentation without a separately reviewed design proving that it does
+  not consume/reorder Qt delivery and does not become paint acknowledgement.**
+- **Latest-state-only is not edge preservation.** If publication N contains the protected Bubble
+  positional edge and publication N+1 removes it before the queued paint, painting "latest" can
+  erase the approved response. Before any coalescing implementation, define and test bounded
+  presentation-side edge/event identity/history (or an explicitly approved equivalent) that
+  preserves the actual visible edge without blocking/acknowledging the producer.
+- A rising kick/snare trigger or "edge bypass fired" assertion is **not** a substitute for the
+  real Bubble visible positional edge; R-62 already demonstrated why.
+- Do not add request bypasses that simply re-inflate GUI pressure for every transient. Any
+  exceptional immediate request must be tied to a proved presentation semantic and remain
+  bounded.
 
-Open risk to resolve in step 1: if Qt dispatches the overlay's updates promptly even under load,
-the redundant fraction is small and this candidate is not worth the seam. That is a legitimate
-outcome and must be reported rather than engineered around.
+If Step 1 cannot establish a safe existing pre-GUI redundancy seam **and** an edge-preserving
+presentation-state contract, stop. The next action is an explicit P2 architecture review, not
+another timer, latch, wrapper, retry, Phase-8 jump, or silent move to P3.
 
-#### Step 3 - test bars, written before any wiring
+#### Step 3 — test bars, written before any production wiring
 
-- [ ] Bubble **visible positional-payload edge** from the v1 golden survives presentation, on the
-      tick it becomes visible.
-- [ ] State-to-paint p95 does not rise versus the 1:1 baseline at equal publication rate. This is
-      the explicit R-62 regression bar.
-- [ ] `u/ss` stays ~1.0 when dispatch is prompt; falls only when a request is genuinely
-      superseded before dispatch.
-- [ ] Logical state bit-identical with and without coalescing.
-- [ ] Worker-thread caller and paused/idle lifecycle states modelled, not direct invocation.
-- [ ] Teardown/recreation clean: no `None`-overlay attribute writes (the R-62 lifecycle defect).
-- [ ] Both overpaint and under-delivery detectable; R-27 stutter signature absent.
+- [ ] Bubble **visible positional-payload edge** from the v1 golden survives actual presentation
+      receipt, on the tick where it becomes visible.
+- [ ] Add a phase-offset/GUI-stall matrix so the protected edge survives whether a publication
+      lands just before, during or just after the candidate's coalescing window.
+- [ ] State-to-paint p50/p95/max does not materially worsen versus the equivalent 1:1 approved
+      baseline at equal publication/load. A better `u/ss` cannot compensate for worse age.
+- [ ] First-visible attack/edge latency does not worsen for Bubble; Spectrum authoritative
+      smoothing/tick trace remains unchanged.
+- [ ] Logical state and mode-owned payload evolution are equivalent with and without presentation
+      suppression, using stronger mode-sensitive coverage than the shallow P1 digest alone.
+- [ ] Any "dispatch pending" unit test models the **real production caller/thread and exact
+      boundary**. No test may call a synthetic seam directly and then claim production ownership.
+- [ ] Healthy/prompt dispatch does not acquire an artificial delay or queue.
+- [ ] Teardown/recreation/generation invalidation clears only state actually owned by the
+      candidate; no stale callbacks and no `None`-overlay attribute writes.
+- [ ] Both overpaint and under-delivery remain detectable; R-27's
+      `set_state≈90-100` / `paint-update≈39-40` stutter signature is absent.
+- [ ] The synthetic P1 mixed-refresh model remains green as a hazard light, but cannot be cited as
+      runtime acceptance.
 
-#### Step 4 - runtime gate
+#### Step 4 — runtime gate
 
-- [ ] Confirm activation in `logs/screensaver_spotify_vis.log` before interpreting anything.
-- [ ] Compare Bubble state-to-paint p95 and `u/ss` against the preserved R-62 windows and the
-      approved-anchor windows.
-- [ ] Installed Bubble and Spectrum visual review is the acceptance authority. If Bubble is worse
-      in any relevant way, revert whole; do not retune in place.
+- [ ] Confirm the candidate is active in the owning sidecar before interpreting anything.
+- [ ] Use an equivalent ordinary `main.py` dual-display run with `--perf` and `--gpu-timing`;
+      compare stage distributions against the accepted report and exact approved-anchor scenario.
+- [ ] Record `set_state`, request, paint, state-to-paint p50/p95/max, protected-edge receipt,
+      165/60 delivery acceptance and transition/non-transition windows together.
+- [ ] Installed Bubble and Spectrum visual review is the acceptance authority. If Bubble or
+      Spectrum is worse in any relevant way, revert the whole isolated candidate immediately;
+      do not tune it in place.
+- [ ] A candidate may close P2 only if it materially addresses the measured shared-GUI request
+      amplifier without changing authored logical behaviour, increasing temporal age, or merely
+      moving the cost to another queue/surface.
 
 #### Remaining original P2 requirements
 

@@ -176,14 +176,16 @@ froze permanently. A second defect called `QWidget.update()` from the timer work
 
 **Attempt 2 (R-62) — while-active-only.** Deferred presentation only while the strategy ran,
 restoring one-request-per-publication when it paused. Installed review rejected it: Bubble worse
-in every relevant way. Suspected cause is that the edge bypass keyed on rising kick/snare
-strength, while the protected Bubble response becomes visible in the positional payload on the
-*following* tick, so the bypass could fire one publication early and leave the real edge
-coalescable.
+in every relevant way. The candidate also attempted to protect a rising kick/snare trigger rather
+than proving receipt of the actual Bubble positional-payload edge that becomes visible on the
+following logical tick.
 
-**`AdaptiveTimerStrategy` is disqualified as a presentation source in any scope.** A source must
-be live whenever the visualizer is live — `Current_Plan.md` and
-`Docs/Guardrails/Visualizer_Presentation.md` are the authority on this.
+**`AdaptiveTimerStrategy` / `AdaptiveRenderStrategyManager` is disqualified as a visualizer
+presentation source in any scope.**
+
+The R-62 logs add a second durable rule: a presentation/pacing source that degrades under the
+same load the change is intended to relieve is not an eligible P2 source. State-to-paint age is
+now an acceptance metric, not an incidental diagnostic.
 
 **Withdrawn inference.** Earlier revisions of this document argued that because Qt painted
 about 96.7% of requested frames, only ~3.3% of the request stream could usefully be removed.
@@ -196,6 +198,76 @@ headroom.
 across both Bubble and Spectrum, the overlay paints roughly 31% more often than the 60 Hz
 display can present, and overlay paint costs about 1.7 ms CPU p95. Those measurements stand;
 only the inference drawn from the paint ratio is withdrawn.
+
+## P2 Current Design Status — dispatch-layer characterization before implementation
+
+There is **no approved P2 wiring plan at present**. `Current_Plan.md` owns the active design work.
+
+A proposed third direction — "dispatch-window coalescing" — must not be implemented merely by
+copying the compositor's update-pending machinery. Source inspection shows an important layer
+difference:
+
+```text
+compositor timer worker
+    -> queued GUI callback is pending
+    -> GUI callback executes
+    -> QWidget.update()
+    -> Qt asynchronous update/paint machinery
+```
+
+The compositor's `_srpss_timer_update_dispatch_pending` flag covers the **queued GUI callback
+before `QWidget.update()` is called**. It is cleared once that callback reaches the GUI thread and
+issues `update()`.
+
+The current visualizer overlay path is structurally different:
+
+```text
+display_image_ops._push_spotify_bars_overlay_state()
+    -> SpotifyBarsGLOverlay.set_state()
+    -> _request_frame_update()
+    -> QWidget.update()
+```
+
+Before using "dispatch pending" as a P2 admission concept, the exact production thread and
+boundary of that direct path must be characterized. Do not assume the compositor's flag is a
+generic Qt-widget "update pending" flag.
+
+Qt's widget update machinery is itself asynchronous and normally merges repeated `update()`
+requests before painting. That does **not** invalidate the A/B result — suppressing the calls
+still measurably helps — but it means a second manual coalescer at the same layer can be redundant
+while leaving the actual call/invalidation/composition pressure untouched.
+
+### Binding design prohibitions for attempt 3
+
+- Do not add a new queued GUI hop merely to create a coalescible "dispatch window".
+- Do not wrap overlay updates in a new timer, worker, thread, lane, `singleShot`,
+  queued `invokeMethod`, or `run_on_ui_thread` solely for P2 admission.
+- Do not copy `_srpss_timer_update_dispatch_pending` unless the overlay is proven to have the
+  same existing cross-thread boundary and lifetime semantics.
+- Do not call Qt's post-`update()` event state "dispatch pending". If the state begins after
+  `update()` and clears at paint delivery, it is the pending-until-paint family regardless of
+  its variable name.
+- Do not intercept/suppress `UpdateRequest`, paint, or other Qt events to manufacture admission
+  without a separately reviewed design.
+- Do not claim a dropped request is latency-neutral by construction. Equivalent-run
+  state-to-paint and first-visible evidence must prove it.
+- Do not use a latest-state-only slot as Bubble edge protection. A newer publication may erase the
+  one-tick positional edge before a queued paint reads the state.
+- Do not substitute a rising kick/snare bypass for receipt of the actual protected Bubble edge.
+- Do not add broad immediate-request bypasses that recreate the GUI pressure P2 is trying to
+  remove.
+- Do not move to Phase 8 merely because this candidate is disproved.
+
+### Required decision before production wiring
+
+`Current_Plan.md` Step 1 must establish whether there is an **already-existing, safely observable
+pre-GUI redundant dispatch layer** on the visualizer path. If there is not, the dispatch-window
+candidate is rejected before implementation.
+
+Any subsequent coalescing design must also define a bounded presentation-side edge/event
+identity/history contract (or explicitly approved equivalent) that preserves Bubble's real
+visible one-tick response without turning paint into producer acknowledgement or changing logical
+simulation/cadence.
 
 ## Scene / Surface Ownership
 
@@ -237,51 +309,3 @@ All must hold:
 - stronger Bubble/Spectrum temporal/edge/paint-receipt bars pass;
 - GPU/context evidence shows second-surface existence remains a material owner after the above;
 - lifecycle/GL teardown remains strict and byte-accounted.
-
-## P2 Wiring Plan (confirmed against `main`, 2026-08-17)
-
-Confirmed ownership: `GLCompositorWidget` constructs
-`AdaptiveRenderStrategyManager(self)` (`rendering/gl_compositor.py:608`) so the timer's target
-is the compositor. `DisplayWidget` separately owns `_spotify_bars_overlay`
-(`rendering/display_widget.py:273`). The compositor and the overlay are siblings under one
-`DisplayWidget`, which is therefore the correct registrar — it owns both, matching
-Guardrails §6 "each display owns its surface, viewport, DPR, scene, update state".
-
-Edge signal: the protected Bubble edge is `_bubble_pos_data[2]`, embedded in the positional
-payload (see `tests/test_bubble_cadence.py` `_EdgeSimulation` and the v1 golden). There is no
-separate edge flag to hold, and holding a stale positional snapshot would distort continuous
-motion. The discrete-event signals that *do* arrive at the overlay are
-`line_kick_event_strength`, `line_snare_event_strength` and `transient_energy`.
-
-Resolved fidelity question: painting above the display's refresh does not make a short edge
-more visible — the panel scans out at its refresh regardless, so paints beyond it are burned
-GUI thread, not extra visibility. What coalescing does change is the probability that the one
-publication carrying an edge is the one painted. Hence the edge bypass below.
-
-Ordered change set:
-
-1. `rendering/adaptive_timer.py` — `AdaptiveTimerStrategy.set_auxiliary_presenter(widget)` /
-   `clear_auxiliary_presenter()`. `_signal_frame()` services the registered presenter after
-   the compositor through one narrow explicit call, `widget.present_if_pending()`. One
-   presenter per display, never a list of arbitrary widgets, and no new timer or thread.
-2. `AdaptiveRenderStrategyManager` — pass-through registration only.
-3. `rendering/gl_compositor.py` — a pass-through so `DisplayWidget` registers without
-   reaching into `_render_strategy_manager` internals.
-4. `widgets/spotify_bars_gl_overlay.py` — `_present_revision` bumped on every accepted
-   publication; `_presented_revision` updated when a request is issued;
-   `present_if_pending()` issues `update()` only when the two differ. `set_state()` stops
-   calling `_request_frame_update()` unconditionally and instead requests immediately only
-   for: geometry change, became-visible, buffer clear (all already computed), and a
-   publication carrying a discrete event edge.
-5. `rendering/display_widget.py` — register the overlay with the compositor's strategy at
-   overlay creation; clear it at teardown, before compositor destruction, so no retired
-   overlay is serviced.
-
-Invariants to assert in tests: logical publication count unchanged; `update()` count bounded
-by presentation opportunities plus edge bypasses; every discrete event still produces a
-request; teardown clears registration; PERF-off path identical; two displays register
-independently. Existing bars in
-`tests/test_visualizer_presentation_contract.py` must stay green unmodified — in particular
-`presentation requests <= accepted publications`, which the edge bypass must not violate.
-
-Rollback anchor: `30e66e08`.
