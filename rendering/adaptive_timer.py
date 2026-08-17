@@ -1062,13 +1062,26 @@ class AdaptiveTimerStrategy:
             self._auxiliary_presenter = None
 
     def _service_auxiliary_presenter(self) -> None:
-        """Offer one presentation opportunity through a narrow explicit interface."""
+        """Offer one presentation opportunity through a narrow explicit interface.
+
+        This runs on the timer worker thread. `present_if_pending()` touches QWidget
+        state, so it must execute on the GUI owner exactly like the compositor's own
+        update path; calling it here directly corrupts Qt repaint state and freezes
+        presentation while the event loop stays alive.
+
+        The pending check is a plain integer comparison performed off-thread purely to
+        avoid queueing a GUI callback when nothing is owed. A stale read costs at most
+        one deferred opportunity and can never present un-integrated state, because the
+        authoritative re-check happens on the GUI thread.
+        """
         with self._auxiliary_lock:
             presenter = self._auxiliary_presenter
         if presenter is None:
             return
         try:
-            presenter.present_if_pending()
+            if not presenter.has_pending_presentation():
+                return
+            ThreadManager.run_on_ui_thread(presenter.present_if_pending)
         except RuntimeError:
             # The owning surface was destroyed between registration and service.
             self.clear_auxiliary_presenter()
