@@ -66,9 +66,6 @@ from widgets.base_overlay_widget import (
 
 logger = get_logger(__name__)
 
-# Minimum rise that counts as a discrete authored event rather than drift.
-_EDGE_EVENT_RISE_EPSILON = 1e-3
-
 _ARRAY_UNIFORM_NAMES = {
     "u_bars",
     "u_peaks",
@@ -176,15 +173,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._perf_update_request_count: int = 0
         self._perf_geometry_change_count: int = 0
         self._perf_set_state_total: int = 0
-        # Presentation bookkeeping. A publication bumps the revision; a display
-        # presentation opportunity (or an edge bypass) consumes it. Deferral is off
-        # by default, so the overlay keeps one-request-per-publication unless a
-        # display opportunity is actively running (R-61).
-        self._present_revision: int = 0
-        self._presented_revision: int = 0
-        self._presentation_deferred: bool = False
-        self._last_published_kick_event: float = 0.0
-        self._last_published_snare_event: float = 0.0
         self._perf_paint_total: int = 0
         self._perf_update_request_total: int = 0
         self._perf_metrics_enabled: bool = bool(is_perf_metrics_enabled())
@@ -586,72 +574,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         del force
         self._perf_update_request_count += 1
         self._perf_update_request_total += 1
-        self._presented_revision = self._present_revision
         self.update()
-
-    def set_presentation_deferred(self, deferred: bool) -> None:
-        """Enable or disable display-opportunity-driven presentation.
-
-        Enabled by the owning display only while its presentation opportunity is
-        actually running. Disabling flushes any publication still owed and restores
-        one-request-per-publication, so a paused or absent opportunity can never
-        leave the visualizer unpresented (R-61).
-        """
-        deferred = bool(deferred)
-        if deferred == self._presentation_deferred:
-            return
-        self._presentation_deferred = deferred
-        if not deferred and self.has_pending_presentation():
-            self._request_frame_update()
-
-    def has_pending_presentation(self) -> bool:
-        """Whether a publication is owed presentation. Safe to read off-thread.
-
-        A plain integer comparison with no Qt access. Used by the display's timer
-        thread to avoid queueing a GUI callback when nothing is owed; the
-        authoritative decision is re-made in ``present_if_pending()`` on the GUI
-        thread.
-        """
-        return self._present_revision != self._presented_revision
-
-    def present_if_pending(self) -> bool:
-        """Consume one display-owned presentation opportunity.
-
-        Must run on the GUI owner: it touches QWidget state. Issues at most one
-        repaint request, and only when an accepted publication has not yet been
-        presented.
-        """
-        if not self.has_pending_presentation():
-            return False
-        self._request_frame_update()
-        return True
-
-    def _publication_carries_discrete_event(
-        self,
-        *,
-        line_kick_event_strength: float,
-        line_snare_event_strength: float,
-    ) -> bool:
-        """Detect a short-lived authored response that must not wait for a slot.
-
-        A protected edge may last a single publication, so deferring it could lower
-        the odds that the publication carrying it is the one presented. An edge earns
-        one immediate request; continuous motion does not. This is bounded event
-        identity, not a cadence authority: it never defers, batches or replays a
-        publication, and every publication is integrated either way.
-        """
-        try:
-            kick = float(line_kick_event_strength or 0.0)
-            snare = float(line_snare_event_strength or 0.0)
-        except (TypeError, ValueError):
-            return False
-        rising = (
-            kick > self._last_published_kick_event + _EDGE_EVENT_RISE_EPSILON
-            or snare > self._last_published_snare_event + _EDGE_EVENT_RISE_EPSILON
-        )
-        self._last_published_kick_event = kick
-        self._last_published_snare_event = snare
-        return rising
 
     # ------------------------------------------------------------------
     # Public API
@@ -1457,21 +1380,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if self._perf_metrics_enabled:
             self._perf_last_state_commit_ts = time.perf_counter()
         _update_start = time.time()
-        # The publication is integrated. Mark it owed, then decide who presents it.
-        self._present_revision += 1
-        carries_edge = self._publication_carries_discrete_event(
-            line_kick_event_strength=line_kick_event_strength,
-            line_snare_event_strength=line_snare_event_strength,
-        )
-        if (
-            not self._presentation_deferred
-            or geometry_changed
-            or became_visible
-            or carries_edge
-        ):
-            # Immediate: no display opportunity is running, or this publication
-            # crosses an explicit boundary (geometry, reveal, authored edge).
-            self._request_frame_update(force=geometry_changed or became_visible)
+        self._request_frame_update(force=geometry_changed or became_visible)
         _update_elapsed = (time.time() - _update_start) * 1000.0
         self._maybe_log_perf_counters(reason="set_state")
         
