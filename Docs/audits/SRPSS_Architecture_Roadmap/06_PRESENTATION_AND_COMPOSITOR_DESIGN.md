@@ -176,11 +176,35 @@ logical publication injects one auxiliary repaint request into the shared GUI di
 lane. `AdaptiveTimerStrategy._signal_frame()` drives only `self._compositor`; the overlay
 is not part of that owned opportunity today.
 
-Chosen approach: reuse the **existing** GUI-local pending-update coalescing precedent the
-compositor already uses (`rendering/adaptive_timer.py::_queue_safe_widget_update` /
-`_mark_widget_update_consumed`), rather than introducing a new scheduler, timer or lane.
-Guardrails §6 permits a GUI-local pending `update()` flag; it is not producer
-acknowledgement, and `set_state()` must still return without waiting.
+### Corrected by 2026-08-17 Bubble evidence — a pending flag alone is insufficient
+
+An initial reading of this seam proposed reusing only the compositor's GUI-local
+pending-update coalescing (`rendering/adaptive_timer.py::_queue_safe_widget_update` /
+`_mark_widget_update_consumed`). The 2026-08-17 installed Bubble run rejects that as
+sufficient. Measured over 13,978 publications on the configured 60 Hz display:
+
+```text
+update_requests / set_state = 1.0000    (the coupling, confirmed in production)
+paints          / set_state = 0.9669
+publication rate            = 81.1 Hz
+overlay paint rate          = 78.4 Hz   (~31% above what a 60 Hz display can present)
+overlay paint_cpu p95       = 1.695 ms  → ~133 ms/s of GUI thread on overlay paint alone
+```
+
+Qt is already painting 96.7% of requests, so a pending-until-painted flag would remove only
+the ~3.3% Qt collapses on its own. It is close to a no-op here and would not be worth the
+fidelity risk.
+
+The request rate must instead be bounded by the **owning display's real presentation
+opportunity** — the per-display owned frame boundary that already drives that display's
+compositor — not by whether a paint is outstanding, and not by a synthetic FPS divisor.
+That is the distinction that keeps this legal: the forbidden mechanism is a display-FPS cap
+on *logical/source cadence*; bounding *presentation* to the display's own owned opportunity
+is precisely the "display-local presentation-request owner" this document already requires.
+Logical publication stays at 81 Hz; only the auxiliary repaint request is owned.
+
+`set_state()` must still return without waiting; Guardrails §6 permits a GUI-local pending
+`update()` flag, and it remains useful as a secondary guard, but it is not the mechanism.
 
 Two constraints make this more than a flag, and both are mandatory:
 
