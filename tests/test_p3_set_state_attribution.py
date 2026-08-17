@@ -113,31 +113,63 @@ class TestP3AccountingIntegrity:
         # cannot exceed the measured total.
         assert sum(acc.get(name, 0) for name in regions) <= acc["total"] + 1_000
 
-    def test_categories_are_accumulated_from_non_contiguous_slices(
+    def test_measurement_is_bracketed_blocks_not_a_partition(
         self, qt_app, monkeypatch
     ):
-        """Categories interleave in set_state(); each is a sum of separated slices.
+        """Only known-homogeneous blocks are timed; mixed source stays untimed.
 
-        Regression bar for the mislabelled first probe, whose contiguous source
-        ranges mixed static config into temporal, bubble/devcurve payload into
-        static config, and Spectrum hysteresis/peaks into dynamic payload.
+        Regression bar for two earlier designs. The first timed contiguous source
+        ranges, mixing static config into temporal and payload into static config.
+        The second partitioned by time-since-previous-marker, which forced 100%
+        attribution and reported residual as exactly zero in every runtime sample.
         """
         import inspect
 
         from widgets import spotify_bars_gl_overlay as mod
 
         source = inspect.getsource(mod.SpotifyBarsGLOverlay.set_state)
+        assert "_p3_slice" not in source, (
+            "partition-by-marker reintroduced; it cannot leave source untimed"
+        )
         for key, minimum in (
             ("static_config", 2),
             ("dynamic_payload", 2),
             ("temporal", 2),
         ):
-            found = source.count(f'_p3_slice(_p3_regions, "{key}"')
+            found = source.count(f'_p3_add(_p3_regions, "{key}"')
             assert found >= minimum, (
                 f"{key} must be accumulated from at least {minimum} separated "
-                f"slices; found {found}. Contiguous slicing reintroduces the "
-                "semantic contamination this probe exists to avoid."
+                f"bracketed blocks; found {found}"
             )
+
+    def test_residual_is_derived_and_can_be_nonzero(self, qt_app, monkeypatch):
+        """Residual must be total minus measured blocks, not a partition remainder.
+
+        A residual that is structurally always zero means the probe is forcing
+        false attribution rather than measuring.
+        """
+        overlay = _overlay(monkeypatch, perf=True)
+        for index in range(_P3_SAMPLE_STRIDE * 6):
+            _publish(overlay, [0.1 * (index % 5), 0.2, 0.3])
+
+        acc = overlay._p3_steady if overlay._p3_steady.get("samples") else overlay._p3_activation
+        assert int(acc.get("samples", 0)) > 0
+        assert "residual" in acc
+        measured = sum(
+            acc.get(k, 0)
+            for k in (
+                "temporal",
+                "static_config",
+                "dynamic_payload",
+                "qt_geometry",
+                "present_request",
+            )
+        )
+        assert measured < acc["total"], (
+            "explicitly bracketed blocks must not account for the whole callback; "
+            "mixed source is deliberately left untimed"
+        )
+        assert acc["residual"] > 0, "residual must be able to be nonzero"
 
     def test_probe_helpers_are_not_present_in_constructor(self, qt_app, monkeypatch):
         """Slice anchors must land in set_state(), not other methods.
@@ -149,9 +181,19 @@ class TestP3AccountingIntegrity:
 
         from widgets import spotify_bars_gl_overlay as mod
 
+        # Anchors used to place brackets also occur in other methods; a mismatched
+        # pair both breaks construction and measures a garbage interval.
         init_source = inspect.getsource(mod.SpotifyBarsGLOverlay.__init__)
-        assert "_p3_slice" not in init_source
-        assert "_p3_regions" not in init_source
+        for symbol in ("_p3_slice", "_p3_regions", "_p3_add", "_p3_b = time"):
+            assert symbol not in init_source, f"{symbol} leaked into __init__"
+
+        set_state_source = inspect.getsource(mod.SpotifyBarsGLOverlay.set_state)
+        opens = set_state_source.count("_p3_b = time.perf_counter_ns() if _p3 else 0")
+        closes = set_state_source.count("_p3_add(_p3_regions,")
+        assert opens == closes, (
+            f"unbalanced probe brackets inside set_state: {opens} opens, "
+            f"{closes} closes. A stranded close measures from a stale mark."
+        )
 
     def test_early_return_contributes_no_partial_sample(self, qt_app, monkeypatch):
         """A rejected publication must not add region time with no sample divisor.
