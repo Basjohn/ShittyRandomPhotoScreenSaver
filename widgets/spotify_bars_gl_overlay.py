@@ -66,6 +66,15 @@ from widgets.base_overlay_widget import (
 
 logger = get_logger(__name__)
 
+# P3 attribution probe. Sampled in-callback self-time inside set_state(), split by
+# the four required work categories. Diagnostic only: every region is guarded by the
+# existing PERF gate, adds no queue/timer/callback/Qt event work, and does not
+# reorder or refactor set_state(). Cat 4 measures only the direct update() call --
+# its downstream delivery consequences remain Bad Smell 1 / P2 and are not charged
+# to P3. Sampling keeps observer cost bounded rather than timing every publication.
+_P3_SAMPLE_STRIDE = 16
+
+
 _ARRAY_UNIFORM_NAMES = {
     "u_bars",
     "u_peaks",
@@ -173,6 +182,16 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._perf_update_request_count: int = 0
         self._perf_geometry_change_count: int = 0
         self._perf_set_state_total: int = 0
+        # P3 probe accumulators. Steady-state and activation/first-frame samples are
+        # kept apart so initialization spikes cannot distort the per-publication
+        # steady-state conclusion.
+        self._p3_sample_counter: int = 0
+        # Force-sample the first frames after construction/activation. Strided
+        # sampling alone would almost never land on them, leaving the activation
+        # bucket empty and the separation requirement unmet.
+        self._p3_activation_frames: int = 4
+        self._p3_steady: dict = {}
+        self._p3_activation: dict = {}
         self._perf_paint_total: int = 0
         self._perf_update_request_total: int = 0
         self._perf_metrics_enabled: bool = bool(is_perf_metrics_enabled())
@@ -562,6 +581,28 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 _perf_metric_text(metrics["p95_ms"]),
                 _perf_metric_text(metrics["max_ms"]),
             )
+        for _p3_label, _p3_acc_map in (("steady", self._p3_steady), ("activation", self._p3_activation)):
+            _p3_n = int(_p3_acc_map.get("samples", 0) or 0)
+            if _p3_n <= 0:
+                continue
+            logger.info(
+                "[PERF][SPOTIFY_VIS][P3_SET_STATE] phase=%s mode=%s screen=%s samples=%d stride=%d "
+                "total_us=%.2f handoff_temporal_us=%.2f static_config_us=%.2f "
+                "dynamic_payload_us=%.2f geometry_visibility_us=%.2f update_call_us=%.2f",
+                _p3_label,
+                getattr(self, "_vis_mode", "?"),
+                screen if screen is not None else "<unknown>",
+                _p3_n,
+                _P3_SAMPLE_STRIDE,
+                _p3_acc_map.get("total", 0) / 1000.0 / _p3_n,
+                _p3_acc_map.get("handoff_temporal", 0) / 1000.0 / _p3_n,
+                _p3_acc_map.get("static_config", 0) / 1000.0 / _p3_n,
+                _p3_acc_map.get("dynamic_payload", 0) / 1000.0 / _p3_n,
+                _p3_acc_map.get("geometry_visibility", 0) / 1000.0 / _p3_n,
+                _p3_acc_map.get("update_call", 0) / 1000.0 / _p3_n,
+            )
+            _p3_acc_map.clear()
+
         self._perf_set_state_count = 0
         self._perf_paint_count = 0
         self._perf_update_request_count = 0
@@ -764,10 +805,30 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         ``SpotifyVisualizerWidget``.
         """
 
+        _p3 = False
+        _p3_t0 = 0
+        _p3_mark = 0
+        _p3_acc = None
+        _p3_regions = None
+        _p3_is_activation = False
+
         if self._perf_metrics_enabled:
             requested_mode = coerce_visualizer_mode_id(vis_mode)
             if requested_mode != self._vis_mode:
                 self._maybe_log_perf_counters(reason="mode_change", force=True)
+                # Re-arm the activation window so a mode switch is sampled.
+                self._p3_activation_frames = 4
+
+            # P3 probe: sample selection only. PERF-off short-circuits on the
+            # existing flag, so no timestamp is taken and scheduling is unchanged.
+            self._p3_sample_counter += 1
+            _p3_is_activation = self._p3_activation_frames > 0
+            _p3 = _p3_is_activation or (
+                self._p3_sample_counter % _P3_SAMPLE_STRIDE
+            ) == 0
+            if _p3:
+                _p3_t0 = time.perf_counter_ns()
+                _p3_mark = _p3_t0
         was_playing = bool(getattr(self, "_playing", False))
         if not apply_state_handoff(
             self,
@@ -925,6 +986,16 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._line_snare_event_envelope = line_snare_raw
         self._line_kick_event_strength = self._line_kick_event_envelope
         self._line_snare_event_strength = self._line_snare_event_envelope
+
+        if _p3:
+            # Cat 1: activation/handoff plus authoritative temporal evolution.
+            _p3_now = time.perf_counter_ns()
+            _p3_acc = self._p3_activation if _p3_is_activation else self._p3_steady
+            # Region times land in a local first. set_state() has early-return paths
+            # (rejected handoff, empty clamped payload); committing per region would
+            # add partial samples whose divisor never incremented and skew every mean.
+            _p3_regions = {"handoff_temporal": _p3_now - _p3_mark}
+            _p3_mark = _p3_now
 
         # Store energy bands (all modes that need them)
         if energy_bands is not None:
@@ -1217,6 +1288,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         elif len(bars_seq) < count:
             bars_seq = bars_seq + [0.0] * (count - len(bars_seq))
 
+        if _p3 and _p3_regions is not None:
+            # Cat 3 (static): configuration assignment/conversion incl. QColor work.
+            _p3_now = time.perf_counter_ns()
+            _p3_regions["static_config"] = _p3_now - _p3_mark
+            _p3_mark = _p3_now
+
         clamped: List[float] = []
         for v in bars_seq:
             try:
@@ -1335,6 +1412,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._playing = bool(playing)
         maybe_log_sine_idle_state(self, logger, dt_seconds=dt_seconds)
 
+        if _p3 and _p3_regions is not None:
+            # Cat 2: dynamic payload normalization/copies derived per publication.
+            _p3_now = time.perf_counter_ns()
+            _p3_regions["dynamic_payload"] = _p3_now - _p3_mark
+            _p3_mark = _p3_now
+
         _geom_start = time.time()
         if not clamped:
             self.clear_overlay_buffer()
@@ -1379,9 +1462,29 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         if self._perf_metrics_enabled:
             self._perf_last_state_commit_ts = time.perf_counter()
+        if _p3 and _p3_regions is not None:
+            # Cat 3 (Qt): geometry read/set and visibility/show work.
+            _p3_now = time.perf_counter_ns()
+            _p3_regions["geometry_visibility"] = _p3_now - _p3_mark
+            _p3_mark = _p3_now
+
         _update_start = time.time()
         self._request_frame_update(force=geometry_changed or became_visible)
         _update_elapsed = (time.time() - _update_start) * 1000.0
+        if _p3 and _p3_regions is not None and _p3_acc is not None:
+            # Cat 4: the direct update() call only. Downstream delivery cost is
+            # Bad Smell 1 / P2 and is deliberately not attributed here.
+            # Commit the complete sample atomically; a publication that returned
+            # early contributes nothing rather than a partial row.
+            _p3_now = time.perf_counter_ns()
+            _p3_regions["update_call"] = _p3_now - _p3_mark
+            _p3_regions["total"] = _p3_now - _p3_t0
+            for _p3_key, _p3_val in _p3_regions.items():
+                _p3_acc[_p3_key] = _p3_acc.get(_p3_key, 0) + _p3_val
+            _p3_acc["samples"] = _p3_acc.get("samples", 0) + 1
+            if _p3_is_activation and self._p3_activation_frames > 0:
+                self._p3_activation_frames -= 1
+
         self._maybe_log_perf_counters(reason="set_state")
         
         if is_perf_metrics_enabled() and (_geom_elapsed > 5.0 or _show_elapsed > 5.0 or _update_elapsed > 5.0):
