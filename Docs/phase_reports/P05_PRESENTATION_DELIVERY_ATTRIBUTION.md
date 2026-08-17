@@ -1029,3 +1029,96 @@ Distinguishing candidates 1 and 2 requires a timestamp between the accepted requ
 entry — where the wall time actually goes. That is new instrumentation and must be designed
 against the same observational constraints as the P3 probe: no queued hop, no timer, no event
 interception, PERF-gated, sampled.
+
+## 2026-08-17 — P4: single-display control, and what `request_age_ms` actually spans
+
+### Single-display control (main_mc.py) — multi-monitor excluded
+
+One active SRPSS display (`show_on_monitors=[2]`, screen 0 skipped, screen 1 active at 60 Hz)
+reproduces the same pathology:
+
+```text
+48 qualifying gaps
+gap_ms p50 ~48.2  max ~94.4      paint_ms p50 ~0.96
+request_age_ms p50 ~33.4
+corr(gap_ms, request_age_ms)   ~+0.858
+corr(gap_ms, skipped_requests) ~+0.844
+ui_queue = 0 and ui_active = 0 in all 48
+transition_active = 1 in all 48
+```
+
+`record_paint_metrics()` emits FRAME_GAP_OWNER whenever `gap_ms > 33`, independently of
+transition state — `active_transition_window` is recorded but does not gate emission. So
+48/48 here and 125/125 on dual-display is **genuine transition specificity, not telemetry
+selection**.
+
+**Active multi-monitor rendering / mixed-refresh interaction is excluded as root cause.**
+
+This does not disprove the two-surface hypothesis: the single active display still owns both the
+GL compositor surface and the `SpotifyBarsGLOverlay` `QOpenGLWidget`. The surviving candidate is
+therefore **intra-display cross-surface presentation/compositing serialization during
+transitions**, not multi-monitor serialization.
+
+### What `request_age_ms` spans (documented before adding any timestamp)
+
+```text
+adaptive_timer._signal_frame()            [TIMER WORKER THREAD]
+  -> _queue_safe_widget_update(compositor)
+  -> _record_render_timer_tick()
+       -> metrics.record_render_request()  <-- _pending_request_ts = perf_counter()
+  ... cross-thread marshalling, GUI callback runs, widget.update() called ...
+  ... Qt schedules and delivers the paint event ...
+paintGL -> _record_paint_start_metrics(_paint_start)
+       -> metrics.record_paint_start()     <-- request_age_ms = paint_start - request_ts
+```
+
+So `request_age_ms` is measured **from the timer worker thread**, and conflates two very
+different intervals: the cross-thread queued-dispatch hop, and Qt's internal update→paint
+delivery. On its own it cannot separate them.
+
+### The P0 delivery-stage seam already splits exactly this boundary
+
+No new compositor-side timestamp is required. The instrumentation retained in P0 already reports
+both halves, and this run contains it:
+
+```text
+window 7: dispatch p50 0.542  p95 4.142  max 45.188 | paint_pending p50 0.291 p95 2.476 max 18.284
+window 8: dispatch p50 0.370  p95 4.344  max 44.798 | paint_pending p50 0.265 p95 3.192 max 77.636
+```
+
+- `dispatch_ms` = worker queued the update → GUI callback ran `widget.update()`
+- `paint_pending_ms` = `update()` returned → `paintGL` entry
+
+**Tens-of-millisecond outliers appear in both stages** (dispatch max ~45 ms, paint_pending max
+~77.6 ms) while both medians are sub-millisecond. A ~45 ms dispatch max means the GUI event loop
+did not run an already-queued callback for 45 ms — with `ui_queue = 0`, no Python callback was
+waiting to run and none was executing.
+
+### Interpretation against the stated bar
+
+Neither GL surface is inside Python paint for tens of milliseconds: compositor `paint_ms` p50
+0.74-0.96 ms, overlay `paint_cpu` p95 ~1.7 ms. The stall is therefore **below both paint
+callbacks**, in Qt/native/driver/composition — the second stated candidate.
+
+Crucially this does **not** eliminate the first candidate; it locates its mechanism. If the
+auxiliary overlay's buffer swap or composition blocks the GUI thread, it would delay the
+compositor's queued dispatch *and* its paint event, while the compositor's own `paint_ms` stayed
+small — which is precisely the observed shape. Intra-display cross-surface serialization and
+below-Python blocking are then the same finding at two levels of description, not competing
+explanations.
+
+**P2/P4 shared-owner hypothesis is strengthened, not by correlation of counters, but because the
+only structure that explains blocking with an empty UI queue and sub-millisecond paints is
+presentation-level serialization between the two surfaces this display owns.**
+
+### Consequence for the planned probe
+
+The compositor-side half of the proposed probe is redundant — P0's seam already provides it. What
+is genuinely missing is the **visualizer side**: the overlay records `set_state`, update requests,
+paints and `state_to_paint`, but its samples cannot currently be aligned in time with a specific
+compositor gap.
+
+Before building that, note the cheaper discriminator: if the overlay is disabled, the P0 seam
+alone will show whether `dispatch_max` / `paint_pending_max` outliers persist. That is the
+existing no-visualizer control, needs no new code, and would separate the two candidates
+directly.
