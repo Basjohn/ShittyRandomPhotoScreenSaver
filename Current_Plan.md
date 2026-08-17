@@ -94,30 +94,33 @@ Current useful bars:
   `tests/test_gl_compositor_cleanup.py`, `tests/test_spotify_visualizer_mode_transition.py` —
   generation/activation rejection, Settings/recreate, display reassignment, strict GL teardown.
 
-#### P1 audit follow-up — test semantics only; complete before P2 production wiring
+#### P1 audit follow-up — complete (test semantics only)
 
-- [ ] **Remove the stale R-61 test contract that requires one repaint per accepted publication
-      whenever no presentation source is running.** `TestPresentationOpportunitySourceEligibility`
-      currently says "survival, not abstinence", allows `AdaptiveTimerStrategy` while active, and
-      asserts the idle overlay keeps one request per publication. R-62 disqualifies
-      `AdaptiveTimerStrategy` in any scope, and P2 explicitly exists to remove the permanent 1:1
-      request requirement. Replace this with source-independent survival/liveness assertions that
-      do not prescribe 1:1 repaint behaviour.
-- [ ] **Downgrade `TestMixedRefreshDeliveryBar` to a policy-model/hazard-light classification.**
-      Its fixed `LANE_CAPACITY_HZ` arithmetic and target `visualizer_request_hz=0` model an
-      architectural property; they do not execute Qt's real dispatch/composition path and may not
-      be cited as proof that a production P2 implementation fixes mixed-refresh delivery.
-      Installed equivalent dual-display evidence remains the authority.
-- [ ] **Strengthen the logical-equivalence oracle used for presentation suppression.** The current
-      `_logical_digest()` is intentionally shallow and omits Bubble positional/extra/trail payload,
-      transient/event envelopes and substantial mode-owned state. Either extend mode-sensitive
-      coverage or explicitly bind the suppression test to the existing Bubble/Spectrum/replay
-      goldens so "bit-identical" cannot be overclaimed from bars/peaks/waveform/count alone.
-- [ ] Rename/reword `test_paint_consumes_the_latest_integrated_state_not_a_queued_backlog` or add
-      real paint-receipt coverage. It currently stubs `update()` and proves latest stored overlay
-      state, not that a paint actually consumed it.
-- [ ] Keep `presentation_requests <= accepted_publications` as an anti-amplification guard only.
-      It is necessary but not sufficient evidence of correct presentation or preserved fidelity.
+All five items are done; production code is untouched and remains byte-identical to the approved
+anchor `30e66e08`.
+
+- Stale R-61 eligibility contract removed. `TestPresentationSourceLiveness` replaces it with
+  source-independent liveness assertions: it disqualifies `AdaptiveTimerStrategy` in **any**
+  scope, asserts no visualizer presentation is wired to it, and asserts only that publications
+  keep reaching Qt when nothing paces them. It prescribes **no** request ratio, so it cannot
+  block a candidate that presents fewer times than it publishes.
+- `TestMixedRefreshDeliveryBar` renamed `TestMixedRefreshDeliveryPolicyModel`, carrying
+  `HAZARD_LIGHT_ONLY = True` and a docstring stating it evaluates closed-form arithmetic, does
+  not execute Qt's dispatch/composition path, models a zero-dispatch-demand target no
+  separate-`QOpenGLWidget` candidate can reach, and may not be cited as runtime acceptance.
+- `_logical_digest()` extended to Bubble positional/extra/trail payload, kick/snare strengths and
+  envelopes, transient energy, smoothed band state and devcurve payload — and, critically, the
+  suppression oracle is now **trajectory-based**, capturing a digest after every publication.
+  Mutation-verified: erasing the protected one-tick Bubble edge on presentation is **not**
+  detected by endpoint comparison and **is** detected by the trajectory comparison.
+  `TestModeSensitiveSuppressionEquivalence` publishes real Bubble payload so those fields carry
+  signal, and asserts the injected edge is genuinely transient so the oracle cannot go vacuous.
+- `test_paint_consumes_the_latest_integrated_state_not_a_queued_backlog` renamed
+  `test_stored_overlay_state_is_the_latest_publication_not_a_backlog`, with its scope limit
+  stated in the docstring: `update()` is stubbed, so it proves stored state only, not paint
+  receipt. Real paint-receipt coverage remains owed by P2 Step 3.
+- `presentation_requests <= accepted_publications` documented in-test as an anti-amplification
+  guard that is necessary but not sufficient, and never evidence of fidelity.
 
 The P1 mixed-refresh model remains useful as a **hazard light**, not a live dual-monitor
 regression oracle. No P1 unit test may close P2 or overrule installed visual review.
