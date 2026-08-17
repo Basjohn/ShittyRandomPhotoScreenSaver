@@ -9,7 +9,7 @@ Navigation and ownership map for SRPSS. This file is not a specification.
 | Task | Read |
 |---|---|
 | Any code change | relevant `Docs/Guardrails.md` section |
-| Visualizer cadence/presentation/repaint change | `Docs/Guardrails/Visualizer_Presentation.md` **and** `Docs/Visualizer_Change_Checklist.md` |
+| Visualizer cadence/presentation/repaint change | **`Docs/Presentation_Change_Preflight.md` first**, then its listed documents |
 | Find owning subsystem | `Docs/Contracts.md` |
 | Stable product/architecture contract | `Spec.md` |
 | Current unfinished work / execution order | `Current_Plan.md` |
@@ -52,6 +52,7 @@ an alternate active plan.
 |---|---|
 | `Docs/00_PROJECT_OVERVIEW.md` | project/document orientation |
 | `Docs/Guardrails.md` | cross-cutting safety/stop rules |
+| `Docs/Presentation_Change_Preflight.md` | door-map for presentation/cadence work; barred designs and required bars |
 | `Docs/Guardrails/` | focused per-domain guardrails; currently `Visualizer_Presentation.md` |
 | `Docs/Visualizer_Change_Checklist.md` | required sweep for visualizer/runtime-bridge changes |
 | `Docs/Contracts.md` | task-to-owner routing |

@@ -2,6 +2,9 @@
 
 Last updated: 2026-08-08
 
+Start from `Docs/Presentation_Change_Preflight.md`, which routes here and lists the designs
+already barred by `Docs/Historical_Bugs/R-27_Pending_Paint_Requeue_UI_Pressure.md`.
+
 Read this focused guardrail only when changing visualizer cadence, presentation smoothing, render-state delivery, repaint behaviour, or mode-specific animation timing. The full incident history is in `Docs/Historical_Bugs/R-55_Spectrum_Presentation_Smoothing.md`.
 
 ## Accepted Behavioural Baseline
