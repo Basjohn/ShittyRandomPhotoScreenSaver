@@ -176,7 +176,7 @@ logical publication injects one auxiliary repaint request into the shared GUI di
 lane. `AdaptiveTimerStrategy._signal_frame()` drives only `self._compositor`; the overlay
 is not part of that owned opportunity today.
 
-### Corrected by 2026-08-17 Bubble evidence — a pending flag alone is insufficient
+### Corrected by 2026-08-17 installed evidence — a pending flag alone is insufficient
 
 An initial reading of this seam proposed reusing only the compositor's GUI-local
 pending-update coalescing (`rendering/adaptive_timer.py::_queue_safe_widget_update` /
@@ -194,6 +194,12 @@ overlay paint_cpu p95       = 1.695 ms  → ~133 ms/s of GUI thread on overlay p
 Qt is already painting 96.7% of requests, so a pending-until-painted flag would remove only
 the ~3.3% Qt collapses on its own. It is close to a no-op here and would not be worth the
 fidelity risk.
+
+A follow-up mixed run measured the identical `1.0000` ratio under Spectrum (86.4 Hz publish,
+83.7 Hz paint) as under Bubble (62.2 Hz, 58.2 Hz), at comparable paint CPU. The defect is
+system-wide presentation ownership, not a mode characteristic. Bubble remains the most
+sensitive detector of a regression here and is the required visual-review subject, which is
+not the same as being the cause.
 
 The request rate must instead be bounded by the **owning display's real presentation
 opportunity** — the per-display owned frame boundary that already drives that display's
