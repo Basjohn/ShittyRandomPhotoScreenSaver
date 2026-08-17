@@ -64,10 +64,7 @@ before returning to lower-leverage Phase 5 work in P6. Detailed delivery evidenc
 
 ### P0 — remove completed diagnostic scaffolding before production presentation work
 
-- [ ] Remove the superseded `core/performance/visualizer_presentation_ab.py` if it still exists.
-- [ ] Remove `core/performance/visualizer_presentation_abc.py`, the `--viz-present-abc`/`Shift+/` experiment, and its temporary install hook in `core/performance/event_loop_recorder.py`.
 - [ ] Keep the passive delivery-stage metrics in `rendering/adaptive_timer.py`; add/retain their focused invariants rather than deleting the evidence seam.
-- [ ] Commit this as a cleanup-only rollback anchor. No presentation behaviour change belongs in P0.
 
 ### P1 — lock the production presentation/fidelity contract in tests
 
