@@ -13,7 +13,7 @@ compositor over time.
 from __future__ import annotations
 
 from typing import Dict, Optional, Callable
-import os
+import sys
 import time
 import weakref
 
@@ -1968,10 +1968,11 @@ class GLCompositorWidget(QOpenGLWidget):
             # a non-blocking correction (earlier completion or explicit
             # cross-context synchronisation).
             #
-            # Opt-in via SRPSS_DIAG_PAIR_WARM_FINISH=1, so ordinary PERF and
-            # --gpu-timing runs are unaffected.
+            # CLI-gated via --diag-pair-warm-finish, consistent with the
+            # diagnostic CLI family. Diagnostics are CLI-first (Spec 11.2,
+            # Guardrails 9); there is deliberately no environment-variable path.
             # ---------------------------------------------------------------
-            if warmed and os.environ.get("SRPSS_DIAG_PAIR_WARM_FINISH") == "1":
+            if warmed and "--diag-pair-warm-finish" in sys.argv:
                 finish_started = time.perf_counter()
                 try:
                     # `gl` is the module-level PyOpenGL import used throughout this
