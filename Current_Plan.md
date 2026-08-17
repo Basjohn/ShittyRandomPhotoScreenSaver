@@ -314,6 +314,22 @@ change, not a bounded visualizer layer** — the stop-and-report case in Step 2b
 Q2/Q7/Q8 (render-state boundary, lifecycle/teardown, shader ownership) are deferred: they are
 only answerable after the Q6 Z-order decision and would otherwise be speculation.
 
+**Legacy compositor seam excluded (audited 2026-08-17).** The existing compositor
+`_spotify_vis_*` / `set_spotify_visualizer_state()` / `paint_spotify_visualizer()` path is dead
+debris from the original Spectrum-only implementation: no production caller, `_spotify_vis_enabled`
+set `True` only inside the unreachable implementation and one test, every paint consumer
+early-returns, and the routine is `QPainter` bars with zero mode awareness, no stencil/card masking
+and no CUSTOM geometry. No modern lifecycle/geometry/state ownership reuses it. It is **not**
+evidence that modern modes can move into the compositor cheaply, is excluded from this decision,
+and must not be revived or extended. Logged in `Future_Cleanup.md`. The Q6/Q9 blockers stand
+unchanged.
+
+**Q5 wording, conservative.** `render_requests == frames` proves only that there was no obvious
+loss **at the observed ~54-56 Hz request rate**. It does not prove the compositor will cleanly
+deliver ~90 Hz once the visualizer drives `compositor.update()`, under a different request pattern
+and with visualizer draw work added to each paint. That remains unproven and would need
+measurement.
+
 #### Step 2d — OPERATOR SCOPE DECISION REQUIRED (no implementation authorized)
 
 - [ ] **Option A — authorize a bounded compositor scene-composition change**, explicitly
