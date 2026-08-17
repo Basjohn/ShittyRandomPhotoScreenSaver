@@ -436,6 +436,36 @@ the separate no-visualizer control improved again, proving another visualizer-fa
 - [ ] Do not turn logical state into paint-driven state and do not create another visualizer
       scheduler.
 
+#### P3 Step 1 — COMPLETE: source classification of `set_state()`
+
+Full map in `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`. `set_state()` is
+805 lines (586-1391), classified into the four required categories:
+
+- **Cat 1 (not movable):** accumulated time/dt, `_line_smoothed_*` asymmetric smoothing, sine peak
+  envelopes, waveform smoothing and ghost rings, kick/snare event envelopes, transient snapshot,
+  Spectrum peaks/hysteresis, Bubble temporal payload, `apply_state_handoff()` activation identity.
+- **Cat 2 (only extraction candidate):** bar clamping, 97 numeric coercions, payload list copies.
+- **Cat 3 (GUI-owned):** 28 `QColor` constructions, geometry read/set, visibility/show, shadow sync.
+- **Cat 4 (P2, kept separate):** `_request_frame_update()` → `update()`.
+
+**Primary hypothesis, unmeasured:** the dominant cat-2/cat-3 per-publication cost may be
+**re-derivation of unchanged configuration**, not preparation. The 28 `QColor` constructions and
+97 coercions are guarded only by `is not None` with no change detection — roughly 2,500 QColor
+constructions and 8,700 coercions per second at ~90 Hz, for values that change only on
+settings/preset/activation change. If confirmed, the correction is revision/identity-gated
+configuration commit, **not** worker extraction: it touches no cat-1 state, needs no thread
+boundary, and cannot be mistaken for a P2 fix.
+
+#### P3 Step 2 — measurement design (no production change yet)
+
+- [ ] Add sampled **in-callback self-time** accumulation for categories 1-4 separately inside
+      `set_state()`. Not FPS, not end-to-end callback latency, not paint duration.
+- [ ] Keep category 4 strictly separate; its downstream cost is Bad Smell 1 and must not be
+      attributed to categories 1-3.
+- [ ] Record visualizer mode as a covariate, never as an explanation.
+- [ ] Observational only — no queued hop, timer, or event interception.
+- [ ] Confirm or reject the unchanged-configuration hypothesis before proposing any change.
+
 ### P4 — fix/name bad smell 2: residual queued-GUI-dispatch loss without visualizers
 
 - [ ] After P2/P3, repeat a visualizer-disabled control with Media still enabled.
