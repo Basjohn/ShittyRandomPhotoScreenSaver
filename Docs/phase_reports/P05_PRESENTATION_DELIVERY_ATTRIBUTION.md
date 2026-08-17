@@ -653,3 +653,39 @@ The Step 2c Q6/Q9 blockers stand unchanged — the legacy seam does nothing to r
 Cleanup candidate, not P2 work. It should be removed with the usual production-caller and
 frozen-build proof, and its one test either retired or repointed, at a time that does not
 interleave with the active delivery lane. Recorded in `Future_Cleanup.md`.
+
+
+## 2026-08-17 — P2 scope decision: Option B (deferred, explicitly not closed)
+
+Bad Smell 1 is recorded as a **measured unresolved presentation defect** that is not safely
+correctable on the current separate-surface architecture with any presently identified
+request-layer mechanism. It is **not** solved, abandoned, impossible or permanently closed.
+
+The A/B evidence and all P2 acceptance bars are preserved unchanged. **P3/P4 success must not be
+represented as fixing P2** — they are separate measured owners (Bad Smell 1b, Bad Smell 2).
+
+Order of work: P3, then P4, then re-measure the equivalent 165 Hz + 60 Hz scenario and reassess
+the remaining deficit; only then decide whether the residual P2 cost justifies a Phase-8-class
+shared-surface/card change. P3/P4 are taken first because they are independently measured owners
+with substantially smaller architectural risk.
+
+The shared-surface/card design is described as **the only currently identified direct architecture
+for removing the independent presentation owner** — not the only conceivable one.
+
+The proposed ~90 Hz compositor-driving measurement is **deliberately not run now**: it would
+characterize a hypothetical architecture against a baseline P3/P4 are about to change.
+
+### Regression clue retained
+
+Substantially better 165 Hz behaviour existed historically. If P3/P4 do not recover enough
+delivery headroom, historical architecture comparison is a legitimate next investigation before
+concluding that the modern multi-mode GL visualizer fundamentally cannot reach the target. The
+current deficit must not be treated as an inherent property of the modern architecture until that
+comparison is made or explicitly rejected with evidence.
+
+### Standing confound for P3
+
+Because P2 was deferred rather than corrected, the auxiliary one-publication → one-`update()`
+stream remains live during all P3 measurement. It is a known confound, must be stated in P3
+attribution rather than assumed away, and its cost must not be silently reassigned to
+preparation/commit.

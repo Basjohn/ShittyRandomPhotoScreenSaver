@@ -330,17 +330,52 @@ deliver ~90 Hz once the visualizer drives `compositor.update()`, under a differe
 and with visualizer draw work added to each paint. That remains unproven and would need
 measurement.
 
-#### Step 2d — OPERATOR SCOPE DECISION REQUIRED (no implementation authorized)
+#### Step 2d — DECIDED 2026-08-17: Option B (deferred, not closed)
 
-- [ ] **Option A — authorize a bounded compositor scene-composition change**, explicitly
-      including the visualizer card, scoped and reviewed before any wiring. This is the only path
-      that closes Bad Smell 1 by removing the independent presentation-request owner.
-- [ ] **Option B — record P2 as not safely achievable on the current separate-surface
-      architecture.** Carry the measured defect into the Phase 8 decision, let P3 proceed as its
-      own Bad Smell 1b lane, and do not represent P3 success as fixing the A/B request amplifier.
+**P2 is not solved, not abandoned, not impossible and not permanently closed.**
 
-Neither option authorizes resuming pacing or admission experiments. Do not begin implementation
-from this section.
+Recorded status of Bad Smell 1: a **measured unresolved presentation defect** that is **not
+safely correctable on the current separate-surface architecture with any presently identified
+request-layer mechanism**. The causal premise stands and the evidence is retained.
+
+What remains in force and must not be weakened:
+
+- the accepted A→B→C→A result — suppressing only the auxiliary `update()` request stream improved
+  both compositors, restoring it degraded them again in the same process;
+- the measured coupling `update_requests / set_state == 1.0000` across both modes, with the
+  overlay painting ~31% above what the 60 Hz display can present at ~1.7 ms CPU p95 per paint;
+- every P2 acceptance bar in Step 3 below, for any future candidate.
+
+**P3 and P4 success must never be represented as fixing P2.** They are separate measured owners
+(Bad Smell 1b and Bad Smell 2). Closing them does not close Bad Smell 1.
+
+Sequence now in force:
+
+1. **P3** — attribute the remaining visualizer-family GUI handoff/preparation cost.
+2. **P4** — name and fix the residual non-visualizer queued-GUI-dispatch owner.
+3. **Re-measure** the equivalent 165 Hz + 60 Hz scenario on ordinary `main.py` with `--perf` and
+   `--gpu-timing`; reassess the remaining delivery deficit against the accepted report.
+4. **Only then** decide whether the residual P2 cost justifies promoting shared-surface/card work
+   into a deliberate Phase-8-class architecture change.
+
+P3 and P4 are taken first because they are independently measured owners carrying substantially
+smaller architectural risk than compositor/card scene composition.
+
+Deferred deliberately, not forgotten:
+
+- The shared-surface/card design remains **the only currently identified direct architecture for
+  removing the independent presentation owner.** It is not claimed to be the only conceivable one.
+- **Do not run the ~90 Hz compositor-driving measurement now.** It would characterize a
+  hypothetical architecture against a baseline P3/P4 are about to change. Revisit after P3/P4 if
+  the shared-surface question is reopened, or earlier only if an independent question requires it.
+- The dead legacy compositor Spectrum seam stays excluded from P2 and queued for cleanup only.
+
+**Regression clue to preserve.** Substantially better 165 Hz behaviour existed historically. That
+is retained as evidence: if P3/P4 do not recover enough delivery headroom, a historical
+architecture comparison is a legitimate next investigation **before** concluding that the modern
+multi-mode GL visualizer fundamentally cannot reach the target. Do not treat the current deficit
+as an inherent property of the modern architecture until that comparison has been made or
+explicitly rejected with evidence.
 
 #### Step 3 — test bars required before any selected P2 production implementation
 
@@ -390,6 +425,10 @@ the separate no-visualizer control improved again, proving another visualizer-fa
 - [ ] After the P2 architecture decision (or an explicit recorded inability to close P2 on the
       separate-surface architecture), measure producer/state-build → pure-data preparation →
       Qt-owned overlay/render-state commit separately from presentation request and paint.
+- [ ] **Standing confound:** P2 was deferred rather than corrected (Step 2d, Option B), so the
+      auxiliary one-publication → one-`update()` stream is live during every P3 measurement.
+      State it explicitly in attribution. Do not subtract it by assumption, and do not let its
+      cost be silently reassigned to preparation/commit.
 - [ ] The no-visualizer control proves another visualizer-family GUI cost exists, but does **not**
       prove `SpotifyBarsGLOverlay.set_state()` alone owns it.
 - [ ] If pure-data render-state preparation is a measured owner, move only thread-safe immutable
