@@ -961,3 +961,71 @@ correction currently justified.** Specifically:
 
 P3 does not explain the delivery defect and was never claimed to. P2 remains an open measured
 presentation defect. **P4 is now the active lane.**
+
+## 2026-08-17 — P4 first attribution pass over FRAME_GAP_OWNER (125 records)
+
+Analysis of the existing telemetry. No production change, no new instrumentation.
+
+```text
+gap_ms            p50 46.0   max 77.0
+paint_ms          p50  0.74  max  9.31
+request_age_ms    p50 33.3   max 71.3
+```
+
+### What is ruled out by this evidence
+
+**`last_ui` is not causal — confirmed with evidence, not assumed.** Median `last_ui_age_ms` is
+**698 ms** (max 2433 ms). The most recent UI callback completed roughly seven-tenths of a second
+*before* the gap. `MediaWidget._refresh_async` appears in 80 of 125 records purely because it is
+the most recent named UI callback identity, not because it was running. Its own duration
+(`last_ui_ms`) has a median of 0.38 ms and correlates with the gap at only **+0.110**.
+
+**Not a queued-callback backlog.** `ui_queue` is 0 in every record (p50 and max), `ui_active` 0,
+`ui_failed` 0, `ui_callbacks` p50 0 / max 2. There is no UI work waiting or running.
+
+**Not garbage collection.** `gc_enabled=0` in every record — GC is disabled in this runtime.
+
+**Not worker queue contention, on this evidence.** `io_queue` and `compute_queue` are 0;
+`io_queue_wait_ms` p50 0.00; `compute_queue_wait_ms` p50 1.00. Worker *execution* is nonzero
+(`io_exec_ms` p50 12.07, max 38.01; `compute_active` p50 2), but correlation with the gap is
+**+0.055 / +0.039** — effectively none. GIL contention from workers is therefore not supported as
+the primary owner, though it is not positively excluded by correlation alone.
+
+**Not paint cost.** `paint_ms` p50 0.74 ms against a 46 ms gap; correlation +0.186.
+
+### What the evidence points to
+
+```text
+corr(gap_ms, request_age_ms)   = +0.880
+corr(gap_ms, skipped_requests) = +0.649
+gap minus every named GUI-thread cost: p50 40.9 ms (min 27.9)
+  -> ~89% of the median gap is unexplained by any recorded GUI-thread callback
+```
+
+The gap is almost entirely **request-to-paint latency on an otherwise idle GUI thread**. Roughly
+89% of it is not accounted for by any callback, queue, paint or worker cost the telemetry records.
+
+**Every one of the 125 records has `transition_active=1`.** Not a majority — all of them.
+
+### Candidate owners now, in order
+
+1. **Presentation/compositing serialization while two GL surfaces are live during a transition.**
+   Fits the total transition correlation, sub-millisecond paint, empty UI queue, and time
+   disappearing between request and paint. Note the overlap with P2: the second surface is
+   Bad Smell 1 territory, and the two lanes may share one mechanism.
+2. **Blocking outside Python** — swap/vblank serialization, driver or compositor stall. Consistent
+   with an idle GUI thread and unexplained wall time, and not currently instrumented.
+3. **GIL contention from worker execution.** Weakly supported: execution time exists but does not
+   correlate. Retained but ranked below the first two.
+
+### Explicitly not concluded
+
+That `MediaWidget` is the owner. It is the last-entered/not-returned identity, ~700 ms stale, and
+this analysis actively contradicts a causal reading.
+
+### Next step
+
+Distinguishing candidates 1 and 2 requires a timestamp between the accepted request and paint
+entry — where the wall time actually goes. That is new instrumentation and must be designed
+against the same observational constraints as the P3 probe: no queued hop, no timer, no event
+interception, PERF-gated, sampled.
