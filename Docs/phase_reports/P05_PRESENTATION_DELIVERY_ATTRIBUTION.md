@@ -353,3 +353,99 @@ Consequences for this report:
 - **State→paint latency is now a required acceptance metric**, not a diagnostic. The
   dose-response above makes it the sharpest available proxy for the fidelity loss operators
   report.
+
+
+## 2026-08-17 — P2 Step 1: dispatch-layer characterization (source analysis)
+
+Static source analysis, no production change and no added instrumentation.
+
+### The visualizer presentation path is synchronous on the GUI thread
+
+```text
+ThreadManager.schedule_recurring(16, widget._on_tick)
+    -> QTimer(parent) on the GUI thread, timeout.connect(_invoke), direct connection
+    -> SpotifyVisualizerWidget._on_tick()                        [GUI thread]
+    -> tick_pipeline ... push_gpu_frame()                        [GUI thread]
+    -> display_image_ops.push_gpu_frame()                        [GUI thread]
+    -> display_image_ops._push_spotify_bars_overlay_state()      [GUI thread]
+    -> SpotifyBarsGLOverlay.set_state()                          [GUI thread]
+    -> _request_frame_update()                                   [GUI thread]
+    -> QWidget.update()                                          [GUI thread]
+```
+
+`core/threading/manager.py::schedule_recurring` documents "Schedule a recurring task on the UI
+thread" and implements it as `QTimer(timer_parent)` + `timeout.connect(_invoke)` + `start()` — a
+plain GUI-thread timer with a direct connection.
+
+`rendering/display_image_ops.py` and `widgets/spotify_bars_gl_overlay.py` contain **zero**
+occurrences of `run_on_ui_thread`, `QMetaObject.invokeMethod`, `QueuedConnection`,
+`QTimer.singleShot` or `submit_task`. Nothing on this path crosses a thread or enters a queue.
+
+### Consequence: there is no pre-GUI dispatch window on this path
+
+The three layers the plan requires to be kept distinct resolve as:
+
+| Layer | Compositor | Visualizer overlay |
+|---|---|---|
+| 1. pre-GUI runnable pending (queued callback not yet executed) | **exists** — timer worker thread → `run_on_ui_thread` → `_apply_update()` | **does not exist** — no queued hop |
+| 2. Qt update pending (after `update()` returns) | Qt-internal | Qt-internal |
+| 3. paint pending / in progress | at `paintGL()` | at `paintGL()` |
+
+`_srpss_timer_update_dispatch_pending` brackets layer 1 **for the compositor only**. It is set
+when the cross-thread callback is queued and cleared by `_mark_widget_update_dispatched` once
+that callback reaches the GUI thread and calls `update()`. The overlay has no equivalent
+boundary, because `set_state()` already runs on the GUI thread and calls `update()` directly.
+
+### Candidate killed: dispatch-window coalescing
+
+The attempt-3 hypothesis required an existing observable pre-GUI queued-dispatch window in which
+a newer publication supersedes a queued callback. **That window does not exist on the visualizer
+path.**
+
+Implementing it would require either:
+
+- copying `_srpss_timer_update_dispatch_pending` onto the overlay, where it would necessarily
+  bracket the post-`update()` Qt state instead — the barred pending-until-paint family under a
+  different variable name; or
+- inserting a new queued GUI hop purely to create something to coalesce — explicitly prohibited.
+
+Both are barred. The candidate is dead on source inspection, before any implementation, which is
+the outcome Step 1 exists to produce. My earlier claim that it would be "latency-neutral by
+construction" was also unfounded and is withdrawn.
+
+### What the preserved R-62 evidence cannot answer
+
+- **Within-transition stratification is not possible.** Overlay records carry
+  `set_state`/`update_requests`/`paint`/`state_to_paint`/`mode`/`screen` but **no transition
+  label**, and arrive as variable 1–10 s windows. They cannot be aligned to individual
+  transitions from the `[DELIVERY_STAGE]` records without new instrumentation. Recorded as a
+  limitation rather than forced.
+- **Waiting-for-opportunity cannot be separated from opportunity inter-arrival jitter.** No
+  inter-arrival, gap or jitter field exists in the overlay records. This remains **unknown**, and
+  per the plan no behavioural instrumentation was added to manufacture the answer.
+
+Both limits are properties of the existing evidence, not of the candidate.
+
+### What this leaves for P2
+
+The measured defect is unchanged: `update_requests / set_state == 1.0000` across both modes, the
+overlay painting ~31% above what a 60 Hz display can present, ~1.7 ms CPU p95 per overlay paint,
+and the accepted A/B/C result that suppressing only the auxiliary request stream materially
+improves both compositors.
+
+What is now eliminated is every mechanism that tries to reduce that stream **at the request
+layer**:
+
+- external pacing sources — degraded under the load they must relieve (R-62);
+- transition-scoped sources — ineligible in any scope (R-61, R-62);
+- pre-GUI dispatch coalescing — the layer does not exist here (this analysis);
+- paint-derived admission, producer gates, divisors, second clocks (R-27, R-54).
+
+Since `set_state()` and `update()` are the same synchronous GUI-thread call, the auxiliary
+request stream is not a schedulable queue that can be thinned; it is a direct function-call
+stream. That points the remaining design space away from admission control and toward either
+reducing per-publication GUI cost (P3's preparation/commit split) or removing the second surface
+entirely (Phase 8) — the latter still not justified by C-vs-B evidence.
+
+**Next action per `Current_Plan.md`: explicit P2 architecture review. Not another timer, latch,
+wrapper, retry, Phase-8 jump, or silent move to P3.**

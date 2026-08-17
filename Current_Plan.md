@@ -181,103 +181,65 @@ was therefore rejected.
   narrowing.
 - `u/ss < 1.0` proves only that request coupling changed. It is **not** a success metric by itself.
 
-#### Step 1 — characterize the exact request/dispatch layers before choosing a mechanism
+#### Step 1 — COMPLETE: dispatch-layer characterization (source analysis, no runtime change)
 
-Do not begin with a coalescer. First establish what "pending" actually means on the visualizer
-path.
+Full findings in `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`.
 
-- [ ] From the preserved R-62 logs, stratify Bubble state-to-paint distribution against `u/ss`
-      within the same transition/session where sample density permits, to reduce load/transition
-      confounding. Do **not** force a within-transition confirmation if the existing timestamps
-      cannot support it; record the limitation.
-- [ ] Determine whether the existing evidence can distinguish waiting for a presentation
-      opportunity from opportunity inter-arrival jitter. If the timestamps cannot separate them,
-      record that as unknown rather than adding behavioural instrumentation to manufacture the
-      answer.
-- [ ] Trace the current exact thread/call path for
-      `display_image_ops._push_spotify_bars_overlay_state()` →
-      `SpotifyBarsGLOverlay.set_state()` → `_request_frame_update()` → `QWidget.update()`.
-      Record whether `set_state()` and the direct `update()` call execute on the GUI thread in
-      production.
-- [ ] Explicitly separate these three states in the design/evidence:
-      1. **pre-GUI runnable pending** — a worker/caller has queued a callback that has not yet
-         executed on the GUI thread;
-      2. **Qt update pending** — `QWidget.update()` has already returned and Qt has scheduled/
-         merged asynchronous paint work;
-      3. **paint pending/in progress** — the update has reached paint delivery.
-      Never use one layer's flag as evidence for another.
-- [ ] Audit `rendering/adaptive_timer.py::_srpss_timer_update_dispatch_pending` before citing it
-      as precedent. In current compositor code that flag brackets the **cross-thread queued GUI
-      callback before `_apply_update()` calls `widget.update()`**; `_mark_widget_update_dispatched`
-      clears it after the direct `update()` call. It is not a generic flag for Qt's internal
-      widget-update event after `update()` has returned.
-- [ ] Quantify whether the visualizer path has any **already-existing, observable pre-GUI
-      dispatch window** in which a newer publication genuinely supersedes a queued callback.
-      If `set_state()` already reaches `update()` directly on the GUI thread, there may be no such
-      Python dispatch window to coalesce.
-- [ ] Account for Qt's own update semantics: `QWidget.update()` is asynchronous and repeated
-      calls are normally merged into fewer paint events. The A/B evidence nevertheless proves
-      suppressing the auxiliary `update()` call stream helps, so do not assume the entire cost is
-      duplicate paints. Measure/attribute call/invalidation/composition scheduling pressure as
-      distinct from final paint count.
-- [ ] Use observational instrumentation only. Do not insert a new queued GUI hop, timer, worker,
-      event-loop delay or repaint path merely so a "pending" window becomes measurable. Do not
-      accept/suppress/consume Qt update or paint events as a probe.
-- [ ] Record the result in the phase report. If the relevant safe redundancy is negligible or
-      does not exist at an already-owned layer, explicitly kill this candidate and revisit P2
-      architecture rather than manufacturing a new scheduling layer.
-
-#### Step 2 — dispatch-window coalescing is a conditional hypothesis, not an approved design
-
-The current code review does **not** justify calling this the leading candidate yet.
-
-It becomes eligible for a test-only prototype only if Step 1 proves that the visualizer already
-has a real pre-GUI queued-dispatch layer whose pending identity can be observed without changing
-the path. The intended hypothesis would then be:
+The visualizer presentation path is **synchronous on the GUI thread end to end**:
 
 ```text
-publication -> integrate every input
-            -> an existing same-surface GUI callback is still queued and has not run?
-                 yes -> do not enqueue a second equivalent callback
-                 no  -> use the existing immediate presentation-request path
+schedule_recurring(16, _on_tick) -> QTimer on GUI thread, direct connection
+    -> _on_tick -> tick_pipeline.push_gpu_frame
+    -> display_image_ops.push_gpu_frame -> _push_spotify_bars_overlay_state
+    -> SpotifyBarsGLOverlay.set_state() -> _request_frame_update() -> QWidget.update()
 ```
 
-Binding prohibitions:
+`display_image_ops.py` and `spotify_bars_gl_overlay.py` contain zero occurrences of
+`run_on_ui_thread`, `invokeMethod`, `QueuedConnection`, `singleShot` or `submit_task`.
 
-- **Do not copy `_srpss_timer_update_dispatch_pending` onto the overlay merely because the
-  compositor has one.** The flag is legal only if the overlay has the same proven cross-thread
-  boundary and lifetime semantics.
-- **Do not create a queued callback solely to create something to coalesce.** No new
-  `ThreadManager.run_on_ui_thread`, `QMetaObject.invokeMethod(...QueuedConnection)`,
-  `QTimer.singleShot`, worker, timer, queue, lane or thread may be inserted around the direct
-  overlay `update()` call for this purpose.
-- **Do not reinterpret Qt's internal pending update/paint event as "dispatch pending".** If the
-  only observable pending state begins after `QWidget.update()` returns and clears at
-  `paintEvent()`/`paintGL()`, using it as admission is the barred pending-until-paint family
-  regardless of variable name.
-- **Do not claim zero latency "by construction".** A queued paint that reads latest mutable state
-  can still present an older/newer publication at a different time, and a one-publication Bubble
-  edge can be overwritten before that paint. No latency/fidelity conclusion is valid until the
-  real temporal test proves it.
-- **Do not duplicate Qt's own coalescing and call it P2.** If repeated `update()` calls are already
-  merged at the same layer being proposed, a second manual flag is a no-op/complexity increase.
-- **Do not use an event filter, `event()` override, UpdateRequest interception or paint callback
-  to suppress/release presentation without a separately reviewed design proving that it does
-  not consume/reorder Qt delivery and does not become paint acknowledgement.**
-- **Latest-state-only is not edge preservation.** If publication N contains the protected Bubble
-  positional edge and publication N+1 removes it before the queued paint, painting "latest" can
-  erase the approved response. Before any coalescing implementation, define and test bounded
-  presentation-side edge/event identity/history (or an explicitly approved equivalent) that
-  preserves the actual visible edge without blocking/acknowledging the producer.
-- A rising kick/snare trigger or "edge bypass fired" assertion is **not** a substitute for the
-  real Bubble visible positional edge; R-62 already demonstrated why.
-- Do not add request bypasses that simply re-inflate GUI pressure for every transient. Any
-  exceptional immediate request must be tied to a proved presentation semantic and remain
-  bounded.
+**There is no pre-GUI queued-dispatch window on this path.** The compositor's
+`_srpss_timer_update_dispatch_pending` brackets its cross-thread queued callback before
+`update()`; the overlay has no such hop because `set_state()` already runs on the GUI thread.
 
-If Step 1 cannot establish a safe existing pre-GUI redundancy seam **and** an edge-preserving
-presentation-state contract, stop. The next action is an explicit P2 architecture review, not
-another timer, latch, wrapper, retry, Phase-8 jump, or silent move to P3.
+Evidence limits, recorded rather than forced:
+
+- within-transition stratification is impossible — overlay records carry no transition label and
+  arrive as variable 1-10 s windows;
+- waiting-for-opportunity cannot be separated from inter-arrival jitter — no such field exists.
+  **Unknown.** No behavioural instrumentation was added to manufacture an answer.
+
+#### Step 2 — KILLED: dispatch-window coalescing
+
+The hypothesis required an existing observable pre-GUI dispatch window. That window does not
+exist here. Implementing it would require either bracketing the post-`update()` Qt state — the
+barred pending-until-paint family under a new name — or inserting a queued GUI hop purely to
+create something to coalesce, which is explicitly prohibited. The earlier "latency-neutral by
+construction" claim is withdrawn as unfounded.
+
+#### Step 2b — REQUIRED NEXT: explicit P2 architecture review
+
+Every request-layer mechanism is now eliminated: external pacing sources (degraded under load,
+R-62), transition-scoped sources (ineligible in any scope, R-61/R-62), pre-GUI dispatch
+coalescing (layer absent), and paint-derived/producer-gate/divisor/second-clock admission
+(R-27, R-54).
+
+Because `set_state()` and `update()` are one synchronous GUI-thread call, the auxiliary request
+stream is **not a schedulable queue that can be thinned** — it is a direct function-call stream.
+Admission control is therefore the wrong lane.
+
+The review must decide between, and must not silently drift into any of them:
+
+- [ ] **Reduce per-publication GUI cost** rather than request count. Overlapping P3; requires
+      deciding whether P2 and P3 remain separate lanes or merge, with evidence for the choice.
+- [ ] **Remove the second surface** (Phase 8 one-surface-per-display). Still **not** justified by
+      the accepted evidence: C-vs-B gained only ~1.4 FPS, so suppressing requests dominated
+      hiding the surface. Reopening requires new evidence, not this analysis.
+- [ ] **Re-scope P2** to something the architecture can actually deliver, with the narrowing
+      justified in writing, since a candidate narrower than the stated goal cannot close P2.
+- [ ] **Accept and record that P2 as stated is not achievable at the request layer**, and move
+      the measured defect into the P3/Phase-8 decision rather than leaving it open indefinitely.
+
+Do not begin implementation from this section. It selects a lane; it does not authorize wiring.
 
 #### Step 3 — test bars, written before any production wiring
 
