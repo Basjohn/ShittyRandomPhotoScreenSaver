@@ -216,30 +216,38 @@ Two results follow.
    paint work, not only dispatch demand.
 
 Result 2 refines the mechanism: because Qt already paints 96.7% of requests, a
-pending-until-painted coalescer would recover only the ~3.3% Qt collapses by itself.
+pending-until-painted coalescer would recover only the ~3.3% Qt collapses by itself. The
+follow-up mixed run reproduces the same 1.0000 ratio under Spectrum, so this is a
+system-wide presentation-ownership defect.
 Presentation must be bounded by the owning display's presentation opportunity. See the
 corrected P2 implementation decision in
 `Docs/audits/SRPSS_Architecture_Roadmap/06_PRESENTATION_AND_COMPOSITOR_DESIGN.md`.
 
-### Skip-profile difference under Bubble
+### Skip-profile difference — NOT mode-owned
 
-Delivery-stage skip attribution inverts relative to the accepted Spectrum windows:
+An earlier reading of this run attributed a delivery skip-profile inversion to "Bubble's
+heavier paint". **That attribution was wrong and is withdrawn.** A follow-up mixed
+Bubble + Spectrum + teardown run on 2026-08-17 measured, per mode:
 
 ```text
-                        165 Hz display        60 Hz display
-acceptance (mean)          73.4%                 94.6%
-dispatch_pending_skips      544                    68
-paint_pending_skips        1456                    78
+              windows  set_state  update_requests  u/ss     publish   paint    paint_cpu p95
+Bubble          10       6159         6159        1.0000    62.2 Hz   58.2 Hz     ~1.7 ms
+Spectrum        10       8238         8238        1.0000    86.4 Hz   83.7 Hz     ~1.5 ms
 ```
 
-Under Spectrum the accepted run had dispatch-pending dominating paint-pending. Under Bubble
-paint-pending dominates by roughly 2.7x on the 165 Hz display. This is consistent with
-Bubble's heavier paint (about 1.7 ms CPU p95 and roughly 19x the Spectrum GPU sample) rather
-than with a new dispatch owner.
+The coupling is exactly 1.0000 in **both** modes, and Spectrum carries the *heavier*
+presentation load — it publishes and paints faster than Bubble at comparable paint CPU. The
+publication-coupled presentation owner is therefore system-wide, not a property of any mode.
 
-Do **not** treat this as contradicting the accepted P4 residual-dispatch finding, which was
-measured with the visualizer absent. It does mean P2's benefit should be expected in paint
-work as well as dispatch demand, and that P3/P4 attribution must record visualizer mode.
+Standing rule for this project, repeatedly confirmed in `Docs/Historical_Bugs/`: do not
+attribute a performance result to a visualizer mode or a transition type. Blockspin is used
+in these captures precisely because it is reasonably heavy; it is a load condition, not a
+cause. Modes and transitions expose system-level owners at different rates. Bubble is the
+most sensitive seam and therefore the best detector of a bad change — which is not the same
+as being its cause.
+
+P3/P4 attribution should still record the active mode, as a covariate for interpreting
+rates, never as an explanation.
 
 ### Not yet established
 
@@ -248,3 +256,22 @@ work as well as dispatch demand, and that P3/P4 attribution must record visualiz
 - Bubble was not visually reviewed against `ff934616` as part of this capture.
 - `paint_fps=0.0` in the `[GL COMPOSITOR]` blockspin records is unexplained and should be
   confirmed as an instrumentation gap rather than a real zero before being cited.
+
+### Open lead — Spectrum hotswap versus Spectrum from init
+
+Operator observation, 2026-08-17: Spectrum behaves worse when hot-swapped to at runtime than
+when active from initialization. Supporting signal in the same capture is elevated
+state-to-paint latency in mode-change windows (`mode_change` Spectrum window
+`state_to_paint_p95 = 7.073 ms` against `2.337–3.979 ms` in steady windows; the Bubble
+`mode_change` window shows the same shape at `9.201 ms`).
+
+This is not yet attributed. Candidate owners to check **after** P2, since P2 changes the
+presentation path this symptom is measured through:
+
+- activation not consuming one fully resolved mode/preset payload (`Spec.md` §5);
+- mode-owned arrays/history surviving activation where `reset_mode_state()` is expected to
+  clear them;
+- first-frame/reveal staging differing between cold init and runtime hotswap.
+
+Do not tune Spectrum smoothing or cadence in response to this. The symptom is an activation
+seam, not authored behaviour.
