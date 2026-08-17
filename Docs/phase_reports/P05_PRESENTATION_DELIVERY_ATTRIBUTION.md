@@ -932,3 +932,32 @@ does not warrant further archaeology while the runtime shows 33-144 ms frame gap
 
 Config gating stays a valid later optimization; its split-writer ownership cost currently
 outweighs its measured mode-skewed benefit, and it is not being implemented now.
+
+
+## 2026-08-17 — P3 CLOSED as measured secondary cost
+
+Final steady attribution after the bounded residual audit:
+
+```text
+Bubble        ~285 us total; dynamic bar build/clamp ~27, handoff ~11, residual ~117
+DevCurve      ~277 us total; added static colour commit explains part of the old residual
+Spectrum      residual effectively exhausted
+Sine / Osc    remain mostly authoritative temporal + static work
+```
+
+**No newly named P3 owner is large enough to justify further decomposition or worker
+extraction.** The bar build/clamp loop, suspected as a shared owner, measures ~27 us on Bubble —
+real but not material against a 285 us callback, and negligible against 33-144 ms frame gaps.
+
+Recorded status: **P3 is a measured secondary cost with no safe, high-value production
+correction currently justified.** Specifically:
+
+- worker extraction is rejected — no measured owner, and unjustified test debt;
+- static-config gating is **deferred, not rejected**: a real but mode-skewed prize
+  (~156 us Spectrum, ~103 us Sine, ~162 us Oscilloscope; ~19 us Bubble/DevCurve) whose
+  split-writer ownership cost currently outweighs the benefit. Preserved as a later optimization
+  with its invalidation contract already documented;
+- the attribution probe is retained as evidence.
+
+P3 does not explain the delivery defect and was never claimed to. P2 remains an open measured
+presentation defect. **P4 is now the active lane.**
