@@ -265,6 +265,22 @@ class GLCompositorWidget(QOpenGLWidget):
             if is_gpu_timing_enabled()
             else None
         )
+        # PART A/F: stage-timestamp ring. Allocated only when --diag-p4-stages
+        # is present; CLI-only, no environment-variable path.
+        from rendering.gl_stage_timestamps import GLStageTimestampRing, cli_enabled
+
+        self._gl_stage_timestamps = (
+            GLStageTimestampRing(
+                owner=f"{type(self).__name__}:{id(self)}",
+                generation=id(self),
+                capacity=4,
+            )
+            if cli_enabled(sys.argv)
+            else None
+        )
+        # PART D: Qt composition observer, installed once under the same gate.
+        self._qt_composition_observer = None
+        self._qt_composition_connected = False
         self._gpu_timer_query_last_log_ts: float = time.monotonic()
         self._perf_pending_image_install: Optional[dict[str, object]] = None
 

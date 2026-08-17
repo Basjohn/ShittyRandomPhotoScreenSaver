@@ -1048,6 +1048,9 @@ def gl_pipeline_has_live_resources(widget) -> bool:
     timer_queries = getattr(widget, "_gpu_timer_queries", None)
     if timer_queries is not None and timer_queries.has_live_queries():
         return True
+    stage_ring = getattr(widget, "_gl_stage_timestamps", None)
+    if stage_ring is not None and stage_ring.has_live_queries():
+        return True
 
     manager = getattr(widget, "_texture_manager", None)
     if manager is not None:
@@ -1124,6 +1127,11 @@ def cleanup_gl_pipeline(widget) -> None:
             try:
                 timer_queries.poll(gl)
                 timer_queries.cleanup(gl)
+                # Stage-timestamp queries are compositor-context owned; strict
+                # deletion, and failed deletion must remain a hard failure.
+                stage_ring = getattr(widget, "_gl_stage_timestamps", None)
+                if stage_ring is not None and stage_ring.has_live_queries():
+                    stage_ring.cleanup(gl)
                 # Association history is compositor/runtime scoped, not
                 # transition scoped; clear it only here.
                 try:

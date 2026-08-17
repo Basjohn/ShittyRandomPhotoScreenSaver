@@ -188,3 +188,270 @@ def format_report_lines(report: dict, *, screen: object) -> list[tuple[str, tupl
 
 def _text(value: float | None) -> str:
     return "na" if value is None else f"{value:.2f}"
+
+
+# ---------------------------------------------------------------------------
+# PART D: Qt top-level composition / swap boundary observation.
+#
+# QOpenGLWidget renders into an internal FBO; Qt later composes and swaps on the
+# GUI thread, after paintGL and therefore outside the existing GL_TIME_ELAPSED
+# scope. aboutToCompose and frameSwapped bracket that stage.
+#
+# Direct GUI-thread handling only: no timer, thread, queued callback,
+# invokeMethod, singleShot, update() or repaint(). No one-paint : one-compose :
+# one-swap relationship is assumed - the counters record what Qt actually does.
+# ---------------------------------------------------------------------------
+
+
+class QtCompositionObserver:
+    """Bounded record of paint -> compose -> swap timing on the GUI thread."""
+
+    def __init__(self, *, capacity: int = 256) -> None:
+        from collections import deque
+
+        self._paints = deque(maxlen=capacity)
+        self._records = deque(maxlen=capacity)
+        self._active = None
+        self.paints_without_compose = 0
+        self.compose_without_paint = 0
+        self.multiple_paints_before_compose = 0
+        self.swap_without_compose = 0
+        self.compose_replaced = 0
+        self._pending_paints_since_compose = 0
+
+    def record_paint_end(self, *, scene_generation, frame_index, transition, paint_end_ts):
+        if self._pending_paints_since_compose >= 1:
+            self.multiple_paints_before_compose += 1
+        self._pending_paints_since_compose += 1
+        self._paints.append(
+            {
+                "scene_generation": int(scene_generation),
+                "frame_index": int(frame_index),
+                "transition": str(transition),
+                "paint_end_ts": float(paint_end_ts),
+            }
+        )
+
+    def on_about_to_compose(self, now_ts: float) -> None:
+        if self._active is not None:
+            self.compose_replaced += 1
+        if not self._paints:
+            self.compose_without_paint += 1
+            self._active = None
+            return
+        paint = self._paints[-1]
+        skipped = self._pending_paints_since_compose - 1
+        if skipped > 0:
+            self.paints_without_compose += skipped
+        self._pending_paints_since_compose = 0
+        self._active = {"paint": paint, "compose_ts": float(now_ts)}
+
+    def on_frame_swapped(self, now_ts: float) -> None:
+        active = self._active
+        self._active = None
+        if active is None:
+            self.swap_without_compose += 1
+            return
+        paint = active["paint"]
+        compose_ts = active["compose_ts"]
+        paint_end = paint["paint_end_ts"]
+        self._records.append(
+            {
+                "scene_generation": paint["scene_generation"],
+                "frame_index": paint["frame_index"],
+                "transition": paint["transition"],
+                "paint_end_to_compose_ms": max(0.0, (compose_ts - paint_end) * 1000.0),
+                "compose_to_swap_ms": max(0.0, (now_ts - compose_ts) * 1000.0),
+                "paint_end_to_swap_ms": max(0.0, (now_ts - paint_end) * 1000.0),
+            }
+        )
+
+    def take_records(self) -> list[dict]:
+        drained = list(self._records)
+        self._records.clear()
+        return drained
+
+    def counters(self) -> dict:
+        return {
+            "paints_without_compose": self.paints_without_compose,
+            "compose_without_paint": self.compose_without_paint,
+            "multiple_paints_before_compose": self.multiple_paints_before_compose,
+            "swap_without_compose": self.swap_without_compose,
+            "compose_replaced": self.compose_replaced,
+        }
+
+
+# ---------------------------------------------------------------------------
+# PART E: unified stage association report.
+# ---------------------------------------------------------------------------
+
+_STAGE_FIELDS = (
+    "outer_gpu_ms",
+    "prep_gpu_ms",
+    "core_draw_gpu_ms",
+    "dimming_gpu_ms",
+    "overlay_gpu_ms",
+    "unpartitioned_gpu_ms",
+    "prep_cpu_ms",
+    "core_draw_cpu_ms",
+    "dimming_cpu_ms",
+    "overlay_cpu_ms",
+    "hud_build_cpu_ms",
+    "paint_end_to_compose_ms",
+    "compose_to_swap_ms",
+    "paint_end_to_swap_ms",
+)
+
+
+def associate_stages(stage_packets, paint_samples, composition_records=()):
+    """Join stage/HUD/composition data to the gap entering the successor frame.
+
+    Same causal convention as `associate()`: data for frame N is compared
+    against the delivery gap entering frame N+1. Deltas are not pooled.
+    """
+    by_identity = {}
+    for sample in paint_samples:
+        by_identity[(int(sample.scene_generation), int(sample.frame_index))] = sample
+
+    compose_by_identity = {}
+    for record in composition_records:
+        compose_by_identity[
+            (int(record["scene_generation"]), int(record["frame_index"]))
+        ] = record
+
+    buckets = {}
+    matched = {field: 0 for field in _STAGE_FIELDS}
+    unmatched = {field: 0 for field in _STAGE_FIELDS}
+    delta = 1  # primary causal comparison only
+
+    for packet in stage_packets:
+        generation = int(packet.scene_generation)
+        frame = int(packet.frame_index)
+        successor = by_identity.get((generation, frame + delta))
+        if successor is None:
+            for field in _STAGE_FIELDS:
+                unmatched[field] += 1
+            continue
+        gap = getattr(successor, "paint_interval_ms", None)
+        classification = _classify(None if gap is None else float(gap))
+        if classification is None:
+            continue
+
+        values = dict(packet.spans_ms())
+        values.update(
+            {k: v for k, v in packet.cpu_ms.items() if str(k).endswith("_cpu_ms")}
+        )
+        hud = getattr(packet, "hud", {}) or {}
+        if "hud_build_cpu_ms" in hud:
+            values["hud_build_cpu_ms"] = hud["hud_build_cpu_ms"]
+        outer = getattr(packet, "outer_gpu_ms", None)
+        if outer is not None:
+            values["outer_gpu_ms"] = float(outer)
+            marked = values.get("marked_gpu_ms")
+            if marked is not None:
+                # Not assumed zero: query command overhead and boundary
+                # placement both exist.
+                values["unpartitioned_gpu_ms"] = float(outer) - float(marked)
+        compose = compose_by_identity.get((generation, frame))
+        if compose is not None:
+            for key in (
+                "paint_end_to_compose_ms",
+                "compose_to_swap_ms",
+                "paint_end_to_swap_ms",
+            ):
+                values[key] = compose[key]
+
+        per_label = buckets.setdefault(str(packet.transition), {})
+        per_class = per_label.setdefault(classification, {})
+        for field in _STAGE_FIELDS:
+            if field in values:
+                per_class.setdefault(field, []).append(float(values[field]))
+                matched[field] += 1
+            else:
+                unmatched[field] += 1
+
+    report = {
+        "frame_delta": delta,
+        "matched": matched,
+        "unmatched": unmatched,
+        "by_label": {},
+    }
+    for label, per_class in buckets.items():
+        out_class = {}
+        for classification, fields in per_class.items():
+            out_fields = {}
+            for field, values_list in fields.items():
+                out_fields[field] = {
+                    "n": len(values_list),
+                    "p50": _percentile(values_list, 0.50),
+                    "p95": _percentile(values_list, 0.95),
+                    "max": max(values_list) if values_list else None,
+                }
+            out_class[classification] = out_fields
+        report["by_label"][label] = out_class
+    return report
+
+
+def format_stage_report_lines(
+    report: dict, *, screen: object, counters: dict, dropped: int
+) -> list[tuple[str, tuple]]:
+    """Render the unified stage attribution as compact records.
+
+    One line per transition label and successor class. Matched/unmatched are
+    reported per field so a missing Qt signal or dropped timestamp packet
+    cannot silently bias the result.
+    """
+    lines: list[tuple[str, tuple]] = []
+    matched = report.get("matched", {})
+    unmatched = report.get("unmatched", {})
+    for label, per_class in sorted(report.get("by_label", {}).items()):
+        for classification, fields in sorted(per_class.items()):
+            parts = []
+            args: list = [
+                screen if screen is not None else "<unknown>",
+                label,
+                report.get("frame_delta", 1),
+                classification,
+            ]
+            for name in _STAGE_FIELDS:
+                entry = fields.get(name)
+                parts.append(f"{name}_n=%d {name}_p50=%s {name}_p95=%s {name}_max=%s")
+                if entry is None:
+                    args.extend([0, "na", "na", "na"])
+                else:
+                    args.extend(
+                        [
+                            entry["n"],
+                            _text(entry["p50"]),
+                            _text(entry["p95"]),
+                            _text(entry["max"]),
+                        ]
+                    )
+            parts.append("matched=%s unmatched=%s dropped_packets=%d")
+            args.extend(
+                [
+                    ",".join(f"{k}:{v}" for k, v in sorted(matched.items()) if v),
+                    ",".join(f"{k}:{v}" for k, v in sorted(unmatched.items()) if v),
+                    int(dropped),
+                ]
+            )
+            parts.append(
+                "qt_paints_no_compose=%d qt_compose_no_paint=%d "
+                "qt_multi_paint_before_compose=%d qt_swap_no_compose=%d "
+                "qt_compose_replaced=%d"
+            )
+            args.extend(
+                [
+                    int(counters.get("paints_without_compose", 0)),
+                    int(counters.get("compose_without_paint", 0)),
+                    int(counters.get("multiple_paints_before_compose", 0)),
+                    int(counters.get("swap_without_compose", 0)),
+                    int(counters.get("compose_replaced", 0)),
+                ]
+            )
+            message = (
+                "[PERF][P4_STAGES] screen=%s transition=%s frame_delta=+%d successor=%s "
+                + " ".join(parts)
+            )
+            lines.append((message, tuple(args)))
+    return lines

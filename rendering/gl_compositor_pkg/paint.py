@@ -103,6 +103,59 @@ def _gpu_timer_query_screen(widget) -> int | None:
         return None
 
 
+def _ensure_qt_composition_observer(widget) -> None:
+    """PART D: connect aboutToCompose/frameSwapped once, GUI-thread direct.
+
+    Introduces no timer, thread, queued callback, invokeMethod, singleShot,
+    update() or repaint(). The handlers only record timestamps.
+    """
+    if getattr(widget, "_gl_stage_timestamps", None) is None:
+        return
+    if getattr(widget, "_qt_composition_connected", False):
+        return
+    try:
+        from rendering.gl_compositor_pkg.gpu_delivery_association import (
+            QtCompositionObserver,
+        )
+
+        observer = QtCompositionObserver()
+        widget._qt_composition_observer = observer
+
+        def _on_about_to_compose():
+            observer.on_about_to_compose(time.perf_counter())
+
+        def _on_frame_swapped():
+            observer.on_frame_swapped(time.perf_counter())
+
+        widget.aboutToCompose.connect(_on_about_to_compose)
+        widget.frameSwapped.connect(_on_frame_swapped)
+        widget._qt_composition_connected = True
+    except Exception:
+        logger.debug("[GL COMPOSITOR] Qt composition observer unavailable", exc_info=True)
+
+
+def _stage_render_path(widget) -> str:
+    """Label the active render path so fallback cannot claim shader ownership."""
+    try:
+        if getattr(widget, "_gl_disabled_for_session", False):
+            return "qpainter_fallback"
+        if not getattr(widget, "_use_shaders", True):
+            return "qpainter_fallback"
+    except Exception:
+        return "unknown"
+    return "shader"
+
+
+def _resolve_gl():
+    """Return the module-level PyOpenGL API, or None when unavailable."""
+    try:
+        from OpenGL import GL as _gl  # type: ignore[import]
+
+        return _gl
+    except Exception:
+        return None
+
+
 def maybe_log_gpu_timer_query_window(widget, *, force: bool = False) -> None:
     """Log bounded compositor GPU windows without influencing paint delivery."""
 
@@ -169,6 +222,41 @@ def maybe_log_gpu_timer_query_window(widget, *, force: bool = False) -> None:
                 report = associate(gpu_samples, paint_history)
                 for message, args in format_report_lines(report, screen=screen):
                     logger.info(message, *args)
+
+            # PART E: unified stage attribution report.
+            stage_ring = getattr(widget, "_gl_stage_timestamps", None)
+            if stage_ring is not None and stage_ring.supported:
+                packets = stage_ring.take_completed()
+                if packets:
+                    from rendering.gl_compositor_pkg.gpu_delivery_association import (
+                        associate_stages,
+                        format_stage_report_lines,
+                    )
+
+                    # Attach the matching outer elapsed sample by identity so
+                    # unpartitioned_gpu_ms is derivable. Not assumed zero.
+                    outer_by_identity = {
+                        (int(g.scene_generation), int(g.frame_index)): float(g.elapsed_ms)
+                        for g in gpu_samples
+                    }
+                    for packet in packets:
+                        outer = outer_by_identity.get(
+                            (int(packet.scene_generation), int(packet.frame_index))
+                        )
+                        if outer is not None:
+                            packet.outer_gpu_ms = outer
+
+                    observer = getattr(widget, "_qt_composition_observer", None)
+                    compose_records = observer.take_records() if observer else []
+                    counters = observer.counters() if observer else {}
+                    stage_report = associate_stages(
+                        packets, paint_history, compose_records
+                    )
+                    for message, args in format_stage_report_lines(
+                        stage_report, screen=screen, counters=counters,
+                        dropped=stage_ring.dropped_no_capacity,
+                    ):
+                        logger.info(message, *args)
     except Exception:
         logger.debug("[GL COMPOSITOR] GPU delivery association failed", exc_info=True)
 
@@ -336,11 +424,45 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
             )
         )
 
+        _ensure_qt_composition_observer(widget)
+
+        # Stage attribution rides the *same* sampled frames as the outer query,
+        # so the two can be joined by identity. Drops rather than waits.
+        stage_ring = getattr(widget, "_gl_stage_timestamps", None)
+        if query_started and stage_ring is not None and stage_ring.supported:
+            paint_metrics = getattr(widget, "_paint_metrics", None)
+            if paint_metrics is not None and stage_ring.begin_frame(
+                scene_generation=int(
+                    getattr(paint_metrics, "_active_scene_generation", -1) or -1
+                ),
+                frame_index=int(
+                    getattr(paint_metrics, "_active_presented_frame_index", -1) or -1
+                ),
+                transition=_gpu_timer_query_label(widget),
+                render_path=_stage_render_path(widget),
+            ):
+                # T0: before render preparation, inside the outer elapsed scope.
+                stage_ring.mark(gl, "t0")
+
     try:
         paintGL_impl(widget, )
     finally:
         if query_started and timer_queries is not None and gl is not None:
             timer_queries.end(gl)
+        stage_ring = getattr(widget, "_gl_stage_timestamps", None)
+        if stage_ring is not None and stage_ring.supported and gl is not None:
+            active = getattr(stage_ring, "_active", None)
+            observer = getattr(widget, "_qt_composition_observer", None)
+            if active is not None and observer is not None:
+                observer.record_paint_end(
+                    scene_generation=active.scene_generation,
+                    frame_index=active.frame_index,
+                    transition=active.transition,
+                    paint_end_ts=time.perf_counter(),
+                )
+            stage_ring.end_frame()
+            # Availability-checked; never blocks.
+            stage_ring.poll(gl)
         if timer_queries is not None:
             maybe_log_gpu_timer_query_window(widget)
         _paint_end = time.perf_counter()
