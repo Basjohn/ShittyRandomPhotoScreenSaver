@@ -1122,3 +1122,100 @@ Before building that, note the cheaper discriminator: if the overlay is disabled
 alone will show whether `dispatch_max` / `paint_pending_max` outliers persist. That is the
 existing no-visualizer control, needs no new code, and would separate the two candidates
 directly.
+
+## 2026-08-17 — P4: no-visualizer single-display control, and GPU-identity audit
+
+### Control result — the overlay is not necessary for the severe stall
+
+Single active 60 Hz display, visualizer disabled entirely. Absence confirmed:
+`screensaver_spotify_vis.log` empty, and FRAME_GAP_OWNER records carry
+`overlay_set=0 overlay_repaints=0 overlay_paints=0`.
+
+The severe transition-stall signature nonetheless survives:
+
+```text
+26 FRAME_GAP_OWNER events over ~55.1 s of measured transition windows
+gap_ms p50 ~56.2  max ~79.7      17/26 gaps > 50 ms
+transition_active = 1 in all 26
+dispatch_max still ~69 ms        paint_pending_max still ~42 ms
+transition compositor dt_max ~61-73 ms across Blockspin/Burn/Diffuse/BlockFlip
+```
+
+**The auxiliary `SpotifyBarsGLOverlay` / second GL surface is not necessary for the P4 severe
+transition stalls and is not their primary root cause.** The intra-display cross-surface
+serialization hypothesis is therefore rejected as the owner of P4.
+
+**P2 and P4 must not be merged into one overlay-owned defect.** My previous note suggesting they
+might be one owner is withdrawn — this control contradicts it.
+
+### P2 remains a real amplifier, separately
+
+Against the preceding single-display visualizer-enabled control:
+
+```text
+mean delivery acceptance     ~97.6%  ->  ~98.5%
+median per-window dispatch p95      ~4.17 ms  ->  ~0.85 ms
+median per-window paint-pending p95 ~3.14 ms  ->  ~0.79 ms
+>33 ms gap frequency         ~0.67/s ->  ~0.47/s
+```
+
+So P2 adds presentation pressure and worsens ordinary and tail delivery, while P4's severe
+transition stall exists independently of it. Both stay open, separately owned.
+
+### Shape: tail stall, not sustained workload
+
+With no visualizer, dispatch and paint-pending medians and p95s are excellent while isolated
+tens-of-ms maxima persist. This is a tail-stall mechanism, not sustained Python/GUI workload.
+
+### Compositor GPU clue (not yet causal)
+
+Sampled transition GPU maxima in the same no-visualizer run:
+
+```text
+Blockspin  ~44.6 ms, ~36.6 ms      Burn      ~32.5-39.3 ms
+Diffuse    ~46.7 ms                BlockFlip ~38.4 ms
+GPU p95 generally only ~3-4.5 ms
+```
+
+Tens-of-ms GPU outliers now exist in the compositor **with the overlay absent**. This is not yet
+a causal claim: timer-query GPU duration and CPU/event-loop blocking are different quantities.
+
+### Audit: GPU samples do NOT retain alignable identity
+
+`rendering/gl_timer_queries.py::_QuerySlot` carries only `handle`, `resource_id`, `label` and
+`pending`. On completion `poll()` appends `elapsed_ns/1e6` into `_window_samples_ms[label]` — a
+plain per-label list — and clears the slot. `consume_window()` then aggregates over the window.
+
+**No frame index, request identity or timestamp is retained.** A GPU outlier therefore cannot
+currently be aligned with a specific FRAME_GAP_OWNER or P0 delivery-stage outlier. The identity
+does not exist and must be added to answer the question.
+
+### Minimum association to add (design only; not implemented)
+
+Answer required: *when a 40-80 ms transition delivery gap occurs, was that frame — or an
+immediately preceding compositor transition frame — also a tens-of-ms GPU sample?*
+
+Minimum sufficient design:
+
+- `metrics` already maintains `presented_frame_index` / `_active_presented_frame_index`. Capture
+  that value into `_QuerySlot` at `begin_sampled()` — one integer, no new call.
+- On completion in `poll()`, if `elapsed_ms` exceeds a threshold, push
+  `(frame_index, elapsed_ms)` into a small bounded ring (e.g. 8 entries).
+- FRAME_GAP_OWNER already runs at gap emission: report whether the ring holds an outlier within
+  the last K frames of the gap frame, plus its elapsed value and frame delta.
+
+Constraints unchanged: PERF-gated, sampled, no new timer, queued hop, event interception,
+admission gate, paint acknowledgement or scheduling change. GPU diagnostics must never become
+presentation control flow.
+
+### Alternative kept alive
+
+Blocking may occur in Qt/native/DWM/driver presentation **independently of measured shader GPU
+execution**. A negative correlation from the association above would support that, not refute the
+stall.
+
+### Active target
+
+Multi-monitor contention and the visualizer overlay are both excluded as necessary conditions.
+The active P4 target is the **compositor transition / Qt-native-GL presentation path itself**.
+P2 stays open separately as a measured amplifier, not P4's owner.
