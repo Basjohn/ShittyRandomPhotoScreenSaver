@@ -780,3 +780,133 @@ This is a hypothesis from source inspection only. It must be measured before any
 - That the no-visualizer control's improvement is owned by preparation. It proves another
   visualizer-family cost exists; it does not locate it.
 - Anything about P2. The request stream remains live and unattributed here.
+
+
+## 2026-08-17 — P3 corrected semantic attribution of `set_state()` (accepted run)
+
+Steady-state, weighted, microseconds per accepted publication. Probe: explicitly bracketed
+known-homogeneous blocks; mixed source deliberately untimed; residual derived as
+`total - sum(measured)`.
+
+```text
+mode           total   temporal   static   dynamic   residual
+Bubble           329         88       19        28        175
+DevCurve         327         98       19        12        178
+Spectrum         404        211      156         3         21
+Sine             383        154      103         3        106
+Oscilloscope     923        616      162         3        121
+```
+
+### What this establishes
+
+**Static configuration is a real target for Spectrum, Sine and Oscilloscope, and not a general
+P3 explanation.** Static is 39% of Spectrum, 27% of Sine and 18% of Oscilloscope, but only ~6%
+of Bubble and DevCurve. Revision-gated configuration would therefore be a genuine but
+**mode-skewed** optimization. It cannot be presented as closing P3.
+
+**Residual dominates Bubble and DevCurve** — 53% and 54% respectively, the largest single
+category for both. That is unattributed by design, not an error: the probe leaves mixed and
+ambiguous source untimed. For those two modes the honest statement is that the majority of
+`set_state()` self-time is **not yet located**.
+
+**Temporal is authoritative work and is not a removal target.** It dominates Oscilloscope (616
+of 923) and Spectrum (211 of 404). Cadence, smoothing, envelopes and event ownership stay where
+they are.
+
+**Dynamic payload is negligible everywhere** — 3 us for Spectrum, Sine and Oscilloscope, 12-28 us
+for DevCurve and Bubble. **Worker extraction is not pursued**: there is no measured owner to
+extract, and the P3 test debt it would incur is unjustified by these figures.
+
+### What this does not establish
+
+P3 self-time does not explain the delivery defect. In the same run 165 Hz transition acceptance
+varied ~69-90% while callback cost did not track that variation. Total `set_state()` self-time of
+0.33-0.92 ms per publication is real work, but it is not the mechanism behind the acceptance
+swing. P2 and P4 remain separate live owners.
+
+### Next step before any implementation
+
+Revision-gated static configuration is **not yet authorized**. First define the authoritative
+config-change boundary and the invalidation contract:
+
+- a newly created overlay must begin with config state invalid/uncommitted, never assuming its
+  initial revision is already applied;
+- the first accepted activation/frame must perform a complete configuration commit;
+- mode activation, engine/runtime generation replacement, Settings recreation and any reset
+  boundary that can invalidate config must invalidate the cached revision;
+- gating must wrap only genuinely static assignments, never Cat-1 timing/state evolution;
+- Python object identity must not be the sole invalidation contract; the boundary must be an
+  authoritative revision or value comparison.
+
+### Warning telemetry — retained for P4, not acted on
+
+The run contains ~119 `FRAME_GAP_OWNER` warnings with ~33-144 ms gaps plus frequent visualizer
+tick-dt spikes. This is **diagnostic evidence for P4 attribution, not a runtime failure**.
+
+- Do not infer that the `last_ui` field is causal merely because a callback name appears in it.
+- Do not rate-limit or remove this telemetry during active attribution. Logging is already
+  writer-thread queued, so warning volume is not currently the leading stall hypothesis.
+- Revisit aggregation/rate limiting only for final acceptance runs.
+
+## 2026-08-17 — P3 Step 3: config-change boundary inspection (read-only)
+
+Prerequisite analysis before any revision-gated configuration. Source only, no change.
+
+### Where the static configuration actually lives
+
+The values re-derived per publication do **not** originate on the overlay. They are attributes of
+`SpotifyVisualizerWidget`, passed as kwargs each tick:
+
+```text
+SpotifyVisualizerSettings / activation payload
+    -> config_applier.apply_vis_mode_kwargs(widget, kwargs)   [writes widget._* config]
+    -> tick_pipeline: parent.push_spotify_visualizer_frame(fill_color=widget._bar_fill_color,
+           segments=widget._dynamic_bar_segments(), border_radius=widget._spectrum_border_radius,
+           **build_gpu_push_extra_kwargs(widget))
+    -> display_image_ops assembles overlay_kwargs
+    -> SpotifyBarsGLOverlay.set_state(**overlay_kwargs)       [re-derives, coerces, QColors]
+```
+
+So a gate belongs at the overlay's *commit* of these values, keyed to a revision owned upstream
+by the widget.
+
+### Blocker: the config-change boundary is not currently single-writer
+
+`config_applier.apply_vis_mode_kwargs()` is the main writer and is reached from
+`mode_transition.py`, `spotify_visualizer_widget.py` (two sites), and
+`spotify_widget_creators.py`. But it is **not the only writer**:
+
+- `widgets/spotify_visualizer_widget.py:107` — constructor default for `_bar_fill_color`;
+- `widgets/spotify_visualizer_widget.py:1551` — `set_bar_colors()`, a public API that writes
+  `_bar_fill_color` / `_bar_border_color` directly and calls `update()`.
+
+A revision bumped only inside `apply_vis_mode_kwargs()` would therefore miss `set_bar_colors()`
+and silently present stale colours. **Establishing the authoritative boundary is real work, not a
+counter.** It requires either routing every config write through one applier, or defining the
+revision at a level that provably covers all writers.
+
+This is exactly the failure mode the invalidation contract warns about, and it is why Python
+object identity cannot be the invalidation contract — `QColor` instances are replaced wholesale
+by both writers, so identity would appear to change on every publication while value-equality
+would not.
+
+### Contract that any implementation must satisfy
+
+- new overlay starts **invalid/uncommitted**; it never assumes its initial revision is applied;
+- first accepted activation/frame performs a **complete** configuration commit;
+- mode activation, engine/runtime generation replacement, Settings recreation and every reset
+  boundary invalidate the cached revision;
+- gating wraps only genuinely static assignments — never Cat-1 timing/state evolution, and never
+  the protected first-frame dt/initialization behaviour;
+- the boundary is an authoritative revision or value comparison, never object identity.
+
+### Recommendation
+
+The measured prize is real but bounded and mode-skewed: ~156 us/publication Spectrum, ~103 us
+Sine, ~162 us Oscilloscope; ~19 us Bubble/DevCurve. Against totals of 329-923 us, and against a
+delivery defect that P3 self-time demonstrably does not explain, this does not justify
+restructuring config ownership as an urgent step.
+
+Sequencing suggestion, for decision: locate the Bubble/DevCurve residual first (53%/54% of their
+callback, currently unattributed), since it is larger than the static-config prize and may reveal
+a cost shared across modes. Then decide whether config gating is worth its ownership work.

@@ -456,15 +456,52 @@ settings/preset/activation change. If confirmed, the correction is revision/iden
 configuration commit, **not** worker extraction: it touches no cat-1 state, needs no thread
 boundary, and cannot be mistaken for a P2 fix.
 
-#### P3 Step 2 — measurement design (no production change yet)
+#### P3 Step 2 — COMPLETE: corrected semantic attribution (accepted run)
 
-- [ ] Add sampled **in-callback self-time** accumulation for categories 1-4 separately inside
-      `set_state()`. Not FPS, not end-to-end callback latency, not paint duration.
-- [ ] Keep category 4 strictly separate; its downstream cost is Bad Smell 1 and must not be
-      attributed to categories 1-3.
-- [ ] Record visualizer mode as a covariate, never as an explanation.
-- [ ] Observational only — no queued hop, timer, or event interception.
-- [ ] Confirm or reject the unchanged-configuration hypothesis before proposing any change.
+Steady-state weighted us per accepted publication. Full record in the phase report.
+
+```text
+mode           total   temporal   static   dynamic   residual
+Bubble           329         88       19        28        175
+DevCurve         327         98       19        12        178
+Spectrum         404        211      156         3         21
+Sine             383        154      103         3        106
+Oscilloscope     923        616      162         3        121
+```
+
+- **Static config is a real but mode-skewed target:** 39% of Spectrum, 27% of Sine, 18% of
+  Oscilloscope; only ~6% of Bubble/DevCurve. It cannot be presented as closing P3.
+- **Residual dominates Bubble and DevCurve** (53%/54%) — the majority of their `set_state()`
+  self-time is not yet located. Unattributed by design, not an error.
+- **Temporal is authoritative work**, not a removal target (616/923 Oscilloscope, 211/404
+  Spectrum).
+- **Dynamic payload is negligible** (3 us for Spectrum/Sine/Oscilloscope). **Worker extraction is
+  not pursued** — no measured owner, and the test debt is unjustified.
+- P3 self-time does **not** explain the delivery defect: 165 Hz acceptance varied ~69-90% in the
+  same run without callback cost tracking it. P2/P4 remain separate live owners.
+
+#### P3 Step 3 — define the config-change boundary before gating anything
+
+Revision-gated static configuration is **not yet authorized**. Required first:
+
+- [ ] Identify the authoritative config-change boundary in source — where visualizer
+      configuration actually changes (settings apply, preset/activation payload resolution),
+      and whether an existing revision/generation already expresses it.
+- [ ] Define the invalidation contract: a new overlay starts **invalid/uncommitted** and never
+      assumes its initial revision is applied; the first accepted activation/frame performs a
+      complete commit; mode activation, engine/runtime generation replacement, Settings
+      recreation and any reset boundary invalidate the cached revision.
+- [ ] Establish an authoritative revision or value boundary. **Python object identity must not be
+      the sole invalidation contract.**
+- [ ] Confirm gating wraps only genuinely static assignments and never Cat-1 timing/state
+      evolution, preserving the protected first-frame dt/initialization behaviour.
+- [ ] Only then decide whether the Spectrum/Sine/Oscilloscope gain justifies implementation.
+      Do not call P3 closed on this one piece.
+
+#### P3 Step 4 — locate the Bubble/DevCurve residual
+
+- [ ] The largest single cost for those modes is unattributed. Extend bracketing to further
+      known-homogeneous blocks, or record explicitly which source remains ambiguous and why.
 
 ### P4 — fix/name bad smell 2: residual queued-GUI-dispatch loss without visualizers
 
