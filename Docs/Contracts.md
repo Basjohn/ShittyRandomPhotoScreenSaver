@@ -48,7 +48,7 @@ focused document.
 | Startup overlay reveal and optional GL warmup | `rendering/fade_coordinator.py`, `rendering/widget_manager.py`, `rendering/gl_compositor_pkg/gl_lifecycle.py` | `Docs/Compositor_Architecture.md` | Critical named holds; real fade completion; one deferred item per idle slice |
 | Visualizer simulation | visualizer controller/model | `Docs/Visualizer_Reference.md` | Independent logical cadence and mode behaviour |
 | Visualizer changes | visualizer subsystem | `Docs/Visualizer_Change_Checklist.md` | Fidelity contract and complete change sweep |
-| Visualizer cadence/presentation/repaint | visualizer tick owner plus display presentation | `Docs/Presentation_Change_Preflight.md` | One cadence authority; one repaint request per accepted payload (R-27); presentation source must be live whenever the visualizer is |
+| Visualizer cadence/presentation/repaint | visualizer tick owner plus display presentation | `Docs/Presentation_Change_Preflight.md` | Logical integration always first; presentation may coalesce after it; overlay must still present when a presentation source is paused |
 | Visualizer renderer integration | narrow renderer interface | `Docs/Compositor_Architecture.md` | No widget impersonation or paint acknowledgement |
 | Passive GL timing attribution | context-owning renderer plus `rendering/gl_timer_queries.py` | `Docs/Harness_Index.md` | Fixed non-blocking query ring; explicit support/sample state; exact owner-context deletion; never cadence |
 | CPU image pipeline/cache | image pipeline/cache owner plus transfer-scoped ImageWorker shared memory | `Docs/Compositor_Architecture.md` | Immutable worker result, one Qt-owned copy, byte-bounded storage, no retained transport mapping |

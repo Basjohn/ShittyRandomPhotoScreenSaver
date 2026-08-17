@@ -11,7 +11,7 @@ that domain, its focused guardrail outranks the general section here. Currently:
 
 | Domain | Focused guardrail |
 |---|---|
-| Visualizer cadence, presentation, render-state delivery, repaint behaviour | **`Docs/Presentation_Change_Preflight.md`** — routes to `Docs/Guardrails/Visualizer_Presentation.md`, the change checklist, and the barred-design register |
+| Visualizer cadence, presentation, render-state delivery, repaint behaviour | `Docs/Guardrails/Visualizer_Presentation.md`; consult `Docs/Presentation_Change_Preflight.md` for the rejected-mechanism register. Neither outranks `Current_Plan.md`. |
 
 ## 1. Priority Order
 
@@ -192,12 +192,19 @@ Prohibited:
 - producer pause until paint;
 - scheduler release by accepted paint;
 - catch-up repaint bursts;
-- compositor-owned visualizer cadence;
+- compositor-owned visualizer **logical/simulation** cadence;
 - distributed terminal-frame transactions.
 
 `paintGL()` may draw, calculate local transition progress, record passive metrics, and request another frame while local animation remains active.
 
 `paintGL()` may not simulate visualizers, decode/convert images, hash whole buffers, wait for workers/fences, run lifecycle, or emit per-frame INFO logs.
+
+**"Compositor-owned visualizer cadence" means logical/simulation cadence only.** The prohibition
+protects source sampling, integration, dt, event consumption and publication order — none of
+which may be decided by the compositor. It does **not** forbid a display presentation owner from
+deciding *when already-integrated immutable render state receives a presentation opportunity*.
+Coalescing is permitted once every logical input has been integrated and the mode's visible
+publication semantics remain intact (R-54). See `Docs/Presentation_Change_Preflight.md`.
 
 Transition completion is local: destination becomes base, old/temporary resources release, transition becomes inactive.
 
@@ -451,7 +458,7 @@ Do not preserve or reintroduce:
 - adaptive timer/presentation worker;
 - worker-to-`paintGL()` acknowledgement;
 - dirty/requested/acknowledged frame generations;
-- compositor-owned visualizer cadence;
+- compositor-owned visualizer **logical/simulation** cadence;
 - distributed terminal transactions;
 - partial Settings/Edit GL reinitialization;
 - visualizer compatibility mega-layer;
