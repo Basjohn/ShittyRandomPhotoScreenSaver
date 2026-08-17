@@ -38,6 +38,64 @@ could not strand the overlay (the R-61 defect).
 
 It was still wrong.
 
+## Measured Result — a valid negative result, not an inert run
+
+P2 **was active**: `Overlay registered with display frame opportunity` at 16:18:40, 16:20:22
+and 16:23:14. The mechanism operated as designed and the result is therefore causal evidence.
+
+The mechanism worked, and that is exactly what broke Bubble:
+
+```text
+                    u/ss            Bubble state->paint p95
+immediate windows   0.971 - 1.000   4.90 ms median (max p95 8.65)
+light deferral      0.949           7.04 ms
+heavy deferral      0.699 - 0.755   13.2 - 15.4 ms  (peaks 52.7 - 56.5 ms)
+```
+
+**Latency scales with the amount of deferral.** That dose-response relationship across 31
+ten-second windows is the causal finding: the more presentation was coalesced, the later Bubble
+state reached the screen.
+
+Bubble's logical publication remained at ~99.7-100% throughout, which **exonerates the
+simulation path entirely**. Nothing was dropped, decimated or throttled upstream. The damage was
+purely in when integrated state reached the screen.
+
+The borrowed opportunity was itself unhealthy. In the last two 60 Hz Blockspin transitions the
+compositor accepted only `511/545 = 93.76%` (~56.2/sec) and `493/543 = 90.79%` (~54.2/sec).
+
+The 165 Hz sibling showed no convincing win either: ~84.9% mean request acceptance across ten
+transition windows, against a historical A baseline of ~87.1% and B suppression of ~91.4%. Not
+like-for-like runs, so not a quantified regression — but no evidence the expected shared-GUI
+benefit materialised.
+
+### The mechanism in one line
+
+```text
+Bubble publishes at ~90 Hz
+    -> P2 coalesces during transition
+    -> visualizer presentation follows the compositor opportunity
+    -> but that opportunity under load delivers only ~54-56 clean Hz, irregularly
+    -> Bubble arrives late, flatter, less elastic
+```
+
+The candidate made Bubble's presentation depend on the delivery stream **precisely during the
+window when that stream is sick**. Borrowing a degraded, irregular pacing source is worse than
+no coalescing at all.
+
+## Lifecycle Defect (recorded, not fixed — the candidate was reverted whole)
+
+Cleanup repeatedly logged, caught at DEBUG:
+
+```text
+Failed to clear overlay registration
+AttributeError: 'NoneType' object has no attribute '_srpss_presentation_registered'
+```
+
+`_detach_overlay_presentation_owner()` called `setattr` on a `None` overlay across runtime
+recreation/cleanup. Not the visible failure, but the candidate was not lifecycle-clean either.
+Recorded as failure evidence; deliberately not repaired in place, since the whole candidate was
+reverted rather than retuned.
+
 ## Cause
 
 ### 1. The presentation source was disqualified to begin with
