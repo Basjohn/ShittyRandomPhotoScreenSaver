@@ -481,14 +481,19 @@ screen 1 (60 Hz, the visualizer's display), Blockspin:
   dt_min=4.41 ms    dt_max=79.63 ms       <- paint INTERVAL is irregular
 ```
 
-`render_requests == frames` on both sampled transitions: the compositor drops nothing at the
-paint layer. Its ~54–56 Hz is therefore a **request rate, not a paint capacity limit**. Paint
-duration (0.32–11.02 ms) can support well above 56 Hz on a 60 Hz panel.
+`render_requests == frames` on both sampled transitions. Stated conservatively: this proves only
+that **at the observed request rate of ~54–56 Hz there was no obvious loss at the paint layer**.
+It does **not** prove the compositor will cleanly deliver ~90 Hz once the visualizer begins
+driving `compositor.update()`. Paint duration of 0.32–11.02 ms is consistent with headroom above
+56 Hz but does not establish delivery at triple that request rate, under a different request
+pattern, with visualizer draw work added to each paint.
 
 The R-62 failure mode was Bubble **waiting for** the compositor's opportunity. In a shared-surface
 design Bubble would **drive** the surface: each publication requests the compositor to repaint, as
-it requests the overlay today. Since the compositor is currently under-requested rather than
-paint-bound, adding visualizer requests should raise its frame rate rather than lower Bubble's.
+it requests the overlay today. The compositor appears under-requested rather than paint-bound at
+the observed rate, so adding visualizer requests plausibly raises its frame rate rather than
+lowering Bubble's — but that is an inference from a ~56 Hz observation, not a measurement at
+~90 Hz. Delivery at the higher rate remains **unproven** and would have to be measured.
 
 **Therefore the Step 2c reject condition is not met on current evidence.** Two caveats, held
 deliberately:
@@ -572,3 +577,79 @@ question for the operator: whether P2 may become a bounded compositor scene-comp
 separate-surface architecture with the measured defect carried into the Phase 8 decision.
 
 No pacing or admission experiments may resume either way.
+
+
+## 2026-08-17 — Legacy compositor visualizer seam: dependency/debris audit
+
+Narrow audit requested to prevent the historical compositor visualizer path being mistaken for
+evidence that modern modes can move into the compositor cheaply. Read-only.
+
+### Scope of the seam
+
+```text
+rendering/gl_compositor.py:280-287             _spotify_vis_{enabled,rect,bars,bar_count,
+                                                segments,fill_color,border_color,fade}
+rendering/gl_compositor.py:724-738             set_spotify_visualizer_state()  -> delegation
+rendering/gl_compositor.py:2205-2208           _paint_spotify_visualizer(painter)
+rendering/gl_compositor.py:2246-2248           _paint_spotify_visualizer_gl()
+gl_compositor_pkg/transition_lifecycle.py:176  set_spotify_visualizer_state() implementation
+gl_compositor_pkg/overlays.py:106-175          paint_spotify_visualizer() — QPainter bars
+gl_compositor_pkg/shader_dispatch.py:419-453   paint_spotify_visualizer_gl() + 2 call sites
+gl_compositor_pkg/paint.py:24, 411             import + call of paint_spotify_visualizer
+```
+
+### Q1 — is any current production visualizer mode calling or depending on it?
+
+**No.** `set_spotify_visualizer_state()` has **no production caller**. The only occurrences are
+its definition on `GLCompositorWidget` and that method's delegation to the
+`transition_lifecycle` implementation. Nothing in the runtime invokes it.
+
+`widget._spotify_vis_enabled = True` occurs in exactly two places: inside that unreachable
+implementation, and in `tests/test_gl_compositor_overlays.py:154`, which sets it directly.
+
+Consequently `_spotify_vis_enabled` remains `False` from construction in production, and every
+consumer — `paint_spotify_visualizer`, `paint_spotify_visualizer_gl`, and the `paint.py:411`
+call site — early-returns on its first guard. **The seam is unreachable in production and is kept
+alive only by one test that sets the flag by hand.**
+
+### Q2 — is any lifecycle/geometry/state ownership reused by modern code?
+
+**No.** Other `_spotify_vis*` matches in the repository are unrelated code sharing a name prefix:
+
+- `rendering/spotify_widget_creators.py::apply_spotify_vis_model_config` — modern settings
+  application to the visualizer **widget**, used by `activation_runtime` and `replay_runtime`;
+- `rendering/widget_descriptors.py:2212-2213` and `ui/tabs/*` — `_spotify_vis_fill_color` /
+  `_spotify_vis_border_color` on the **settings tab** object;
+- `ui/widget_stack_predictor.py::estimate_spotify_vis_size` — layout estimation.
+
+None of these read or write the compositor's `_spotify_vis_*` attributes. There is no shared
+lifecycle, geometry or state ownership between the legacy seam and the modern overlay.
+
+### Q3 — is it dead compatibility debris?
+
+**Yes.** It is the original Spectrum-only implementation, and it is `QPainter` bar drawing:
+`setBrush`/`setPen`, a segment loop over `bar_x`/`seg_y`, alpha-scaled fill and border. It has
+**zero** references to `vis_mode`, `bubble`, `oscilloscope`, `sine_wave` or `devcurve`.
+
+It therefore cannot render any modern mode, has no stencil/card masking, no CUSTOM geometry
+handling, and no GL renderer integration. It belongs in cleanup, not in the P2 decision.
+
+### Q4 — does it constrain or confuse the shared-surface design?
+
+It confuses it, in one specific and dangerous way: its existence makes the compositor **look** as
+though it already knows how to draw the visualizer, which would suggest the shared-surface lane is
+cheap. It is not. What exists is a single-mode QPainter bar routine from the pre-GL era.
+
+**It is therefore excluded from the P2 architectural decision.** It must not be revived or
+extended merely because it is already there, and its presence is not evidence for Option A. The
+real architecture P2 would have to replace or absorb remains the modern `SpotifyBarsGLOverlay`:
+five GL mode renderers (`bubble`, `spectrum`, `oscilloscope`, `sine_wave`, `devcurve`), the
+rounded-rect stencil/card masking, CUSTOM geometry/DPR handling, fade/visibility and GL lifecycle.
+
+The Step 2c Q6/Q9 blockers stand unchanged — the legacy seam does nothing to reduce them.
+
+### Disposition
+
+Cleanup candidate, not P2 work. It should be removed with the usual production-caller and
+frozen-build proof, and its one test either retired or repointed, at a time that does not
+interleave with the active delivery lane. Recorded in `Future_Cleanup.md`.
