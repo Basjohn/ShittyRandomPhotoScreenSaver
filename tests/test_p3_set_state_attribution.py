@@ -102,6 +102,7 @@ class TestP3AccountingIntegrity:
             "temporal",
             "static_config",
             "dynamic_payload",
+            "handoff",
             "qt_geometry",
             "present_request",
             "residual",
@@ -161,6 +162,7 @@ class TestP3AccountingIntegrity:
                 "temporal",
                 "static_config",
                 "dynamic_payload",
+                "handoff",
                 "qt_geometry",
                 "present_request",
             )

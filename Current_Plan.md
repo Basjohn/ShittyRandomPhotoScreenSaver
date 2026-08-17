@@ -500,8 +500,21 @@ Revision-gated static configuration is **not yet authorized**. Required first:
 
 #### P3 Step 4 — locate the Bubble/DevCurve residual
 
-- [ ] The largest single cost for those modes is unattributed. Extend bracketing to further
-      known-homogeneous blocks, or record explicitly which source remains ambiguous and why.
+Source inspection found ~542 of 890 body lines untimed. Three shared candidate owners were
+named and bracketed (bounded, not open-ended):
+
+- `apply_state_handoff()` activation/generation identity, run every publication -> `handoff`;
+- the DevCurve layer colour commit, ~10 further `QColor` constructions -> `static_config`;
+- the bar sequence build/resize/pad and per-bar clamp loop, shared by every mode ->
+  `dynamic_payload`.
+
+- [ ] One run to see whether the residual concentrates in one of these three.
+- [ ] **Stop rule:** if the residual fragments across small legitimate work instead of
+      concentrating, record P3 as **secondary** and proceed to P4. Do not keep decomposing
+      ~0.175 ms/publication while the runtime shows 33-144 ms frame gaps.
+
+Config gating remains a valid later optimization but is **not** being implemented: its
+split-writer ownership cost outweighs the measured mode-skewed benefit.
 
 ### P4 — fix/name bad smell 2: residual queued-GUI-dispatch loss without visualizers
 

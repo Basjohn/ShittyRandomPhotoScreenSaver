@@ -910,3 +910,25 @@ restructuring config ownership as an urgent step.
 Sequencing suggestion, for decision: locate the Bubble/DevCurve residual first (53%/54% of their
 callback, currently unattributed), since it is larger than the static-config prize and may reveal
 a cost shared across modes. Then decide whether config gating is worth its ownership work.
+
+## 2026-08-17 — P3 Step 4: bounded residual audit (three added brackets)
+
+Source inspection of the untimed regions found ~542 of 890 `set_state()` body lines untimed,
+concentrated in four blocks. Inspection named three candidate owners, all previously untimed and
+all shared across modes rather than mode-specific:
+
+1. **`apply_state_handoff()`** — activation/generation identity and mode-reset bookkeeping, run on
+   every publication. Now bracketed as `handoff`.
+2. **DevCurve layer colour commit** — a further ~10 `QColor` constructions with `setAlpha` calls,
+   beyond the previously measured static block. Now bracketed as `static_config`.
+3. **Bar sequence build, resize/pad and per-bar clamp loop** — `list(bars)`, length reconciliation
+   and an interpreted per-bar loop appending to `clamped`. Shared by every mode and the strongest
+   candidate for a cost that appears in all residuals. Now bracketed as `dynamic_payload`.
+
+Three brackets added, deliberately bounded. This is not open-ended decomposition: if the next run
+shows the residual fragmenting across small legitimate work rather than concentrating in one of
+these, **P3 is recorded as secondary and work proceeds to P4**. A ~0.175 ms/publication residual
+does not warrant further archaeology while the runtime shows 33-144 ms frame gaps.
+
+Config gating stays a valid later optimization; its split-writer ownership cost currently
+outweighs its measured mode-skewed benefit, and it is not being implemented now.

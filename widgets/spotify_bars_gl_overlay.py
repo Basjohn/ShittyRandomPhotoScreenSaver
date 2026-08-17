@@ -601,8 +601,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             logger.info(
                 "[PERF][SPOTIFY_VIS][P3_SET_STATE] phase=%s mode=%s screen=%s samples=%d stride=%d "
                 "total_us=%.2f temporal_us=%.2f static_config_us=%.2f "
-                "dynamic_payload_us=%.2f qt_geometry_us=%.2f present_request_us=%.2f "
-                "residual_us=%.2f",
+                "dynamic_payload_us=%.2f handoff_us=%.2f qt_geometry_us=%.2f "
+                "present_request_us=%.2f residual_us=%.2f",
                 _p3_label,
                 getattr(self, "_vis_mode", "?"),
                 screen if screen is not None else "<unknown>",
@@ -612,6 +612,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 _p3_acc_map.get("temporal", 0) / 1000.0 / _p3_n,
                 _p3_acc_map.get("static_config", 0) / 1000.0 / _p3_n,
                 _p3_acc_map.get("dynamic_payload", 0) / 1000.0 / _p3_n,
+                _p3_acc_map.get("handoff", 0) / 1000.0 / _p3_n,
                 _p3_acc_map.get("qt_geometry", 0) / 1000.0 / _p3_n,
                 _p3_acc_map.get("present_request", 0) / 1000.0 / _p3_n,
                 _p3_acc_map.get("residual", 0) / 1000.0 / _p3_n,
@@ -849,6 +850,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 _p3_regions = {}
                 _p3_t0 = time.perf_counter_ns()
         was_playing = bool(getattr(self, "_playing", False))
+        _p3_b = time.perf_counter_ns() if _p3 else 0
         if not apply_state_handoff(
             self,
             visible=visible,
@@ -861,6 +863,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             border_width_px=border_width_px,
         ):
             return
+        if _p3:
+            _p3_add(_p3_regions, "handoff", _p3_b)
+
         self._perf_set_state_count += 1
         self._perf_set_state_total += 1
         osc_entering_idle = self._vis_mode == "oscilloscope" and was_playing and not bool(playing)
@@ -1183,6 +1188,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if _p3:
             _p3_add(_p3_regions, "dynamic_payload", _p3_b)
 
+        _p3_b = time.perf_counter_ns() if _p3 else 0
         if devcurve_layer_bass_color is not None:
             self._devcurve_layer_bass_color = QColor(*devcurve_layer_bass_color) if not isinstance(devcurve_layer_bass_color, QColor) else QColor(devcurve_layer_bass_color)
         if devcurve_layer_vocals_color is not None:
@@ -1232,6 +1238,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         _slot0 = devcurve_specular_slot0 if isinstance(devcurve_specular_slot0, (list, tuple)) else (0.0, 0.0, 0.0)
         _slot1 = devcurve_specular_slot1 if isinstance(devcurve_specular_slot1, (list, tuple)) else (0.0, 0.0, 0.0)
         _slot2 = devcurve_specular_slot2 if isinstance(devcurve_specular_slot2, (list, tuple)) else (0.0, 0.0, 0.0)
+        if _p3:
+            _p3_add(_p3_regions, "static_config", _p3_b)
+
         self._devcurve_specular_slot0 = [
             max(-1.5, min(2.5, float(_slot0[0] if len(_slot0) > 0 else 0.0))),
             max(0.0, min(1.0, float(_slot0[1] if len(_slot0) > 1 else 0.0))),
@@ -1300,6 +1309,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self.clear_overlay_buffer()
             return
 
+        _p3_b = time.perf_counter_ns() if _p3 else 0
         try:
             bars_seq = list(bars)
         except Exception as e:
@@ -1328,6 +1338,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             if f > 1.0:
                 f = 1.0
             clamped.append(f)
+
+        if _p3:
+            _p3_add(_p3_regions, "dynamic_payload", _p3_b)
 
         if not clamped:
             self.clear_overlay_buffer()
@@ -1512,6 +1525,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         "temporal",
                         "static_config",
                         "dynamic_payload",
+                        "handoff",
                         "qt_geometry",
                         "present_request",
                     )
