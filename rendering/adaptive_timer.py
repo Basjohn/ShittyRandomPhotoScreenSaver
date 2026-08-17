@@ -731,7 +731,11 @@ class AdaptiveTimerStrategy:
         
         # Frame request queue (lock-free)
         self._frame_queue: SPSCQueue[bool] = SPSCQueue(4)
-        
+
+        # Display-owned auxiliary presentation opportunity (one per display).
+        self._auxiliary_presenter = None
+        self._auxiliary_lock = threading.Lock()
+
         # Threading
         self._task_future = None
         self._task_id: Optional[str] = None
@@ -1039,6 +1043,64 @@ class AdaptiveTimerStrategy:
                 self._metrics.frame_count += 1
             except Exception as e:
                 logger.debug("[ADAPTIVE_TIMER] Frame signal failed: %s", e)
+        self._service_auxiliary_presenter()
+
+    def set_auxiliary_presenter(self, presenter) -> None:
+        """Register the display's auxiliary surface with this frame opportunity.
+
+        One presenter per display, registered by the owning `DisplayWidget`. This is
+        not a second clock: the presenter is serviced from the display's existing
+        frame opportunity and never gains a timer, thread or cadence of its own.
+        Registration enables presentation deferral on the presenter; clearing it
+        releases deferral so a paused opportunity cannot strand the surface (R-61).
+        """
+        with self._auxiliary_lock:
+            self._auxiliary_presenter = presenter
+        if presenter is not None:
+            try:
+                presenter.set_presentation_deferred(True)
+            except Exception:
+                logger.debug("[ADAPTIVE_TIMER] Failed to enable deferral", exc_info=True)
+
+    def clear_auxiliary_presenter(self) -> None:
+        """Detach the auxiliary presenter and restore its immediate presentation."""
+        with self._auxiliary_lock:
+            presenter = self._auxiliary_presenter
+            self._auxiliary_presenter = None
+        if presenter is not None:
+            try:
+                presenter.set_presentation_deferred(False)
+            except Exception:
+                logger.debug("[ADAPTIVE_TIMER] Failed to release deferral", exc_info=True)
+
+    def _service_auxiliary_presenter(self) -> None:
+        """Offer one presentation opportunity through a narrow explicit interface.
+
+        This runs on the timer worker thread. `present_if_pending()` touches QWidget
+        state, so it must execute on the GUI owner exactly like the compositor's own
+        update path; calling it directly here corrupts Qt repaint state and freezes
+        presentation while the event loop stays alive (R-61).
+
+        The pending check is a plain integer comparison performed off-thread purely
+        to avoid queueing a GUI callback when nothing is owed. A stale read costs at
+        most one deferred opportunity and can never present un-integrated state,
+        because the authoritative re-check happens on the GUI thread.
+        """
+        with self._auxiliary_lock:
+            presenter = self._auxiliary_presenter
+        if presenter is None:
+            return
+        try:
+            if not presenter.has_pending_presentation():
+                return
+            ThreadManager.run_on_ui_thread(presenter.present_if_pending)
+        except RuntimeError:
+            # The owning surface was destroyed between registration and service.
+            self.clear_auxiliary_presenter()
+        except Exception:
+            logger.debug(
+                "[ADAPTIVE_TIMER] Auxiliary presentation opportunity failed", exc_info=True
+            )
     
     def request_frame(self) -> None:
         """Queue immediate frame request."""
@@ -1080,6 +1142,9 @@ class AdaptiveRenderStrategyManager:
         self._config = AdaptiveTimerConfig()
         self._timer: Optional[AdaptiveTimerStrategy] = None
         self._lock = threading.Lock()
+        # Survives stop/start: the display owns the overlay across restarts.
+        # Deferral is applied only while the timer is actually running (R-61).
+        self._auxiliary_presenter = None
     
     def configure(self, config: AdaptiveTimerConfig) -> None:
         """Update configuration."""
@@ -1091,6 +1156,9 @@ class AdaptiveRenderStrategyManager:
         with self._lock:
             if self._timer is None:
                 self._timer = AdaptiveTimerStrategy(self._compositor, self._config)
+            presenter = self._auxiliary_presenter
+            if presenter is not None:
+                self._timer.set_auxiliary_presenter(presenter)
             result = self._timer.start()
         if is_perf_metrics_enabled():
             logger.info(
@@ -1108,6 +1176,9 @@ class AdaptiveRenderStrategyManager:
         with self._lock:
             if self._timer is not None:
                 before_state = self._timer.get_state().name
+                # A paused opportunity offers no presentation; release deferral so
+                # the overlay returns to one-request-per-publication (R-61).
+                self._timer.clear_auxiliary_presenter()
                 self._timer.pause()
                 after_state = self._timer.get_state().name
         if is_perf_metrics_enabled():
@@ -1129,6 +1200,8 @@ class AdaptiveRenderStrategyManager:
             if self._timer is not None:
                 before_state = self._timer.get_state().name
                 self._timer.resume()
+                if self._auxiliary_presenter is not None:
+                    self._timer.set_auxiliary_presenter(self._auxiliary_presenter)
                 after_state = self._timer.get_state().name
         if is_perf_metrics_enabled():
             event = "manager_resumed" if after_state == "RUNNING" and before_state != "RUNNING" else "manager_resume_noop"
@@ -1146,6 +1219,7 @@ class AdaptiveRenderStrategyManager:
         stopped = True
         with self._lock:
             if self._timer is not None:
+                self._timer.clear_auxiliary_presenter()
                 stopped = bool(self._timer.stop())
                 if stopped:
                     self._timer = None
@@ -1167,12 +1241,36 @@ class AdaptiveRenderStrategyManager:
             )
         with self._lock:
             self._compositor = None
+            self._auxiliary_presenter = None
     
     def request_frame(self) -> None:
         """Request immediate frame."""
         with self._lock:
             if self._timer is not None:
                 self._timer.request_frame()
+
+    def set_auxiliary_presenter(self, presenter) -> None:
+        """Register the display's auxiliary surface for the frame opportunity.
+
+        Deferral is applied only when the timer is actually running; registering
+        while stopped or paused records the presenter without deferring, so the
+        overlay keeps presenting normally until an opportunity exists (R-61).
+        """
+        with self._lock:
+            self._auxiliary_presenter = presenter
+            timer = self._timer
+            running = timer is not None and timer.is_active()
+        if timer is not None and running:
+            timer.set_auxiliary_presenter(presenter)
+
+    def clear_auxiliary_presenter(self) -> None:
+        """Detach the auxiliary surface and restore its immediate presentation."""
+        with self._lock:
+            self._auxiliary_presenter = None
+            timer = self._timer
+        if timer is not None:
+            timer.clear_auxiliary_presenter()
+        return None
     
     def is_running(self) -> bool:
         """Check if timer is active."""

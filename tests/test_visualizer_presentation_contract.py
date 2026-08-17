@@ -520,3 +520,367 @@ class TestPresentationOpportunitySourceEligibility:
             "with no presentation source running the overlay must keep requesting "
             "one repaint per accepted publication (R-61)"
         )
+
+
+@pytest.mark.qt
+class TestTransitionScopedPresentationDeferral:
+    """P2: defer auxiliary presentation only while a display opportunity is running.
+
+    Scope, per the approved candidate:
+
+        no transition / source paused -> unchanged behaviour, one request per
+                                          accepted publication
+        transition active             -> integrate every publication, mark the
+                                          latest render state dirty, and present
+                                          when the display's existing presentation
+                                          opportunity arrives
+
+    This targets the measured shared-GUI pressure window without introducing a
+    timer, thread, producer gate, paint latch or source throttle, and without
+    depending solely on a transition-scoped source (R-61).
+    """
+
+    def _overlay(self, monkeypatch):
+        clock = _FakeClock()
+        _install_fake_clock(monkeypatch, clock)
+        overlay = SpotifyBarsGLOverlay(None)
+        paints = []
+        overlay.update = lambda *a, **k: paints.append(1)
+        overlay.isVisible = lambda: True
+        # Settle the geometry/reveal immediate-request boundaries.
+        _publish(overlay, [0.1, 0.2, 0.3])
+        clock.advance()
+        paints.clear()
+        return overlay, paints, clock
+
+    def test_default_behaviour_is_one_request_per_publication(self, qt_app, monkeypatch):
+        """With no presentation opportunity running, nothing changes (R-61)."""
+        overlay, paints, clock = self._overlay(monkeypatch)
+
+        for bars in _bar_series(10):
+            _publish(overlay, bars)
+            clock.advance()
+
+        assert len(paints) == 10
+
+    def test_active_opportunity_defers_publications(self, qt_app, monkeypatch):
+        overlay, paints, clock = self._overlay(monkeypatch)
+        overlay.set_presentation_deferred(True)
+
+        for bars in _bar_series(10):
+            _publish(overlay, bars)
+            clock.advance()
+
+        assert overlay._perf_set_state_total == 11, "every publication still integrates"
+        assert len(paints) == 0, "presentation is owed to the display opportunity"
+        assert overlay.has_pending_presentation() is True
+
+        assert overlay.present_if_pending() is True
+        assert len(paints) == 1
+        assert overlay.present_if_pending() is False, "no new publication, no request"
+
+    def test_ending_deferral_flushes_and_restores_immediate_requests(
+        self, qt_app, monkeypatch
+    ):
+        """R-61: a paused source must never strand the visualizer."""
+        overlay, paints, clock = self._overlay(monkeypatch)
+        overlay.set_presentation_deferred(True)
+
+        _publish(overlay, [0.4, 0.5, 0.6])
+        clock.advance()
+        assert len(paints) == 0
+
+        overlay.set_presentation_deferred(False)
+        assert len(paints) == 1, "the owed publication is flushed on release"
+
+        for bars in _bar_series(6):
+            _publish(overlay, bars)
+            clock.advance()
+        assert len(paints) == 7, "immediate requests resume once deferral ends"
+
+    def test_discrete_event_bypasses_deferral(self, qt_app, monkeypatch):
+        """A one-publication authored edge must not wait for the next slot."""
+        overlay, paints, clock = self._overlay(monkeypatch)
+        overlay.set_presentation_deferred(True)
+
+        _publish(overlay, [0.2, 0.3, 0.4])
+        clock.advance()
+        assert len(paints) == 0, "continuous motion defers"
+
+        _publish(overlay, [0.2, 0.3, 0.4], line_kick_event_strength=0.9)
+        clock.advance()
+        assert len(paints) == 1, "a rising kick edge presents immediately"
+
+        _publish(overlay, [0.2, 0.3, 0.4], line_kick_event_strength=0.1)
+        clock.advance()
+        assert len(paints) == 1, "a decayed follow-up is not a new edge"
+
+    def test_deferral_never_reproduces_the_r27_stutter_signature(
+        self, qt_app, monkeypatch
+    ):
+        """R-27 bar: set_state ~90-100 Hz must not collapse paint to ~39-40 Hz.
+
+        The rejected July mechanism throttled the producer. Here the producer is
+        untouched and presentation is driven by the display opportunity, so at a
+        60 Hz opportunity rate the presented rate must track the opportunity, not
+        halve to a divisor.
+        """
+        overlay, paints, clock = self._overlay(monkeypatch)
+        overlay.set_presentation_deferred(True)
+
+        publications = 0
+        opportunities = 0
+        # 96 publications at ~96 Hz against a 60 Hz opportunity stream.
+        for index, bars in enumerate(_bar_series(96)):
+            _publish(overlay, bars)
+            publications += 1
+            clock.advance()
+            if index % 8 in (0, 2, 4, 6, 7):  # 5 opportunities per 8 publications
+                overlay.present_if_pending()
+                opportunities += 1
+
+        assert overlay._perf_set_state_total == publications + 1
+        # Presentation must track the opportunity stream, not collapse below it.
+        assert len(paints) == opportunities, (
+            f"presented {len(paints)} of {opportunities} opportunities; "
+            "a divisor collapse is the R-27 failure signature"
+        )
+        assert len(paints) / publications > 0.5, "presented rate collapsed below half"
+
+    def test_logical_state_is_identical_with_and_without_deferral(
+        self, qt_app, monkeypatch
+    ):
+        """Deferral is presentation-only: logical integration must be bit-identical."""
+        series = _bar_series(24)
+
+        clock_a = _FakeClock()
+        _install_fake_clock(monkeypatch, clock_a)
+        immediate = SpotifyBarsGLOverlay(None)
+        immediate.update = lambda *a, **k: None
+        immediate.isVisible = lambda: True
+        for bars in series:
+            _publish(immediate, bars)
+            clock_a.advance()
+
+        clock_b = _FakeClock()
+        _install_fake_clock(monkeypatch, clock_b)
+        deferred = SpotifyBarsGLOverlay(None)
+        deferred.update = lambda *a, **k: None
+        deferred.isVisible = lambda: True
+        deferred.set_presentation_deferred(True)
+        for bars in series:
+            _publish(deferred, bars)
+            clock_b.advance()
+
+        assert _logical_digest(deferred) == _logical_digest(immediate)
+
+
+class TestDisplayOpportunityWiring:
+    """The display drives deferral only while its opportunity actually runs."""
+
+    def _timer(self, presenter=None):
+        from rendering.adaptive_timer import AdaptiveTimerConfig, AdaptiveTimerStrategy
+
+        class _Compositor:
+            def update(self):
+                pass
+
+            def parent(self):
+                return None
+
+        timer = AdaptiveTimerStrategy(_Compositor(), AdaptiveTimerConfig())
+        if presenter is not None:
+            timer.set_auxiliary_presenter(presenter)
+        return timer
+
+    class _Presenter:
+        def __init__(self, pending=True):
+            self.pending = pending
+            self.presented = 0
+            self.deferred = None
+
+        def has_pending_presentation(self):
+            return self.pending
+
+        def present_if_pending(self):
+            self.presented += 1
+            return True
+
+        def set_presentation_deferred(self, value):
+            self.deferred = bool(value)
+
+    def test_presentation_is_marshalled_never_called_on_the_timer_thread(self):
+        """R-61 defect 1: QWidget work must not run on the timer worker thread."""
+        from rendering import adaptive_timer
+
+        presenter = self._Presenter()
+        timer = self._timer(presenter)
+        marshalled = []
+        original = adaptive_timer.ThreadManager.run_on_ui_thread
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(
+                lambda func, *a, **k: marshalled.append(func)
+            )
+            timer._signal_frame()
+
+            assert presenter.presented == 0, (
+                "present_if_pending() must not run on the timer worker thread"
+            )
+            ours = [f for f in marshalled if f == presenter.present_if_pending]
+            assert len(ours) == 1, "presentation must be queued to the GUI owner"
+            ours[0]()
+            assert presenter.presented == 1
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original
+
+    def test_idle_presenter_queues_no_gui_callback(self):
+        from rendering import adaptive_timer
+
+        presenter = self._Presenter(pending=False)
+        timer = self._timer(presenter)
+        marshalled = []
+        original = adaptive_timer.ThreadManager.run_on_ui_thread
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(
+                lambda func, *a, **k: marshalled.append(func)
+            )
+            timer._signal_frame()
+            timer._signal_frame()
+            ours = [f for f in marshalled if f == presenter.present_if_pending]
+            assert ours == [], "an idle overlay must add no GUI dispatch demand"
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original
+
+    def test_registration_enables_deferral_and_clearing_releases_it(self):
+        """R-61: releasing the source must restore immediate presentation."""
+        presenter = self._Presenter()
+        timer = self._timer()
+
+        timer.set_auxiliary_presenter(presenter)
+        assert presenter.deferred is True
+
+        timer.clear_auxiliary_presenter()
+        assert presenter.deferred is False
+
+    def test_destroyed_presenter_is_dropped_before_any_gui_work(self):
+        from rendering import adaptive_timer
+
+        class _Dead:
+            def __init__(self):
+                self.calls = 0
+
+            def has_pending_presentation(self):
+                self.calls += 1
+                raise RuntimeError("wrapped C/C++ object has been deleted")
+
+            def present_if_pending(self):
+                raise AssertionError("must not be reached for a destroyed surface")
+
+            def set_presentation_deferred(self, value):
+                pass
+
+        presenter = _Dead()
+        timer = self._timer(presenter)
+        original = adaptive_timer.ThreadManager.run_on_ui_thread
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(
+                lambda func, *a, **k: func()
+            )
+            timer._signal_frame()
+            timer._signal_frame()
+            assert presenter.calls == 1, "a destroyed surface is dropped, not retried"
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original
+
+
+class TestDeferralFollowsStrategyLifecycle:
+    """R-61 core guarantee: deferral is on only while the opportunity runs.
+
+    `AdaptiveRenderStrategyManager` starts for a transition and pauses when it
+    ends. Deferral must track that exactly, so once the opportunity stops the
+    overlay returns to one-request-per-publication instead of freezing.
+    """
+
+    class _Presenter:
+        def __init__(self):
+            self.deferred = None
+            self.history = []
+
+        def has_pending_presentation(self):
+            return False
+
+        def present_if_pending(self):
+            return False
+
+        def set_presentation_deferred(self, value):
+            self.deferred = bool(value)
+            self.history.append(bool(value))
+
+    def _manager(self):
+        from rendering.adaptive_timer import AdaptiveRenderStrategyManager
+
+        class _Compositor:
+            def update(self):
+                pass
+
+            def parent(self):
+                return None
+
+        return AdaptiveRenderStrategyManager(_Compositor())
+
+    def test_pause_releases_deferral_and_resume_restores_it(self):
+        from rendering import adaptive_timer
+
+        presenter = self._Presenter()
+        manager = self._manager()
+        original = adaptive_timer.ThreadManager.run_on_ui_thread
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(
+                lambda func, *a, **k: None
+            )
+            manager.set_auxiliary_presenter(presenter)
+            manager.start()
+            assert presenter.deferred is True, "a running opportunity defers"
+
+            manager.pause()
+            assert presenter.deferred is False, (
+                "a paused opportunity must restore immediate presentation (R-61)"
+            )
+
+            manager.resume()
+            assert presenter.deferred is True
+        finally:
+            try:
+                manager.stop()
+            except Exception:
+                pass
+            adaptive_timer.ThreadManager.run_on_ui_thread = original
+
+    def test_stop_releases_deferral(self):
+        from rendering import adaptive_timer
+
+        presenter = self._Presenter()
+        manager = self._manager()
+        original = adaptive_timer.ThreadManager.run_on_ui_thread
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(
+                lambda func, *a, **k: None
+            )
+            manager.set_auxiliary_presenter(presenter)
+            manager.start()
+            manager.stop()
+            assert presenter.deferred is False, (
+                "a stopped opportunity must restore immediate presentation (R-61)"
+            )
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original
+
+    def test_registering_before_start_does_not_defer_until_running(self):
+        presenter = self._Presenter()
+        manager = self._manager()
+
+        manager.set_auxiliary_presenter(presenter)
+
+        assert presenter.deferred is not True, (
+            "registration alone must not defer; no opportunity is running yet"
+        )
