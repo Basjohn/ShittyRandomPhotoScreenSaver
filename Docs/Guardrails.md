@@ -351,6 +351,12 @@ Measure GUI timer lateness, callback duration, paint duration, scene age, signal
 
 Diagnostics are CLI-gated, sampled, fixed-memory, aggregated, non-overlapping, and lazily formatted.
 
+**CLI-gated means CLI. There is no environment-variable path for diagnostics**, including
+temporary ones. New diagnostic switches join the existing CLI family in
+`core/logging/logger.py` and the known-flag list in `main.py`; they are not read from
+`os.environ`. An environment variable is invisible to the flag inventory, does not appear in the
+launch command that produced a log, and cannot be reproduced from the evidence alone.
+
 Valid explicit `srpss_log_families` metadata is the routing authority and may contain
 multiple families. Visible tags remain human/parser text; name/tag heuristics are a
 compatibility fallback for unmigrated and third-party records. Every WARNING+ remains
