@@ -439,6 +439,73 @@ P3 never explained the delivery defect and is not represented as fixing P2.
 
 ### P4 — fix/name bad smell 2: residual queued-GUI-dispatch loss without visualizers
 
+#### Accepted negative result: pair-warm completion is not the major owner
+
+The `--diag-pair-warm-finish` diagnostic engaged correctly - 12/12 `PAIR_WARM` records populated
+`diag_finish_ms`, median ~1.90 ms, max 4.927 ms. Across 44 gaps >33 ms (22 of them >50 ms, max
+111.10 ms) with 491 matched causal predecessors and 0 unmatched, seven of eight sampled >50 ms
+successors still followed 32-44 ms predecessor GPU intervals (Wipe 32.39, Burn 44.14, Warp 41.84,
+Crumble 33.20, Particle 34.17, RainDrops 39.00, BlockSpin 34.50); one followed ~0.13 ms.
+
+**Hidden shared-context pair-warm completion is rejected as the major P4 owner.**
+`--diag-pair-warm-finish` is **retained** as an optional default-off negative-control diagnostic;
+it must not ship as production behaviour.
+
+Do not pursue transition-specific optimization: the pathology crosses unrelated transition
+implementations, and a 30.611 ms sampled *steady* GPU frame also exists.
+
+#### Audit correction that constrains interpretation
+
+The existing outer `GL_TIME_ELAPSED` query wraps `paintGL_impl()`, **not** merely the transition
+shader. The common path inside it is:
+
+```text
+texture/cache preparation -> core transition/retained-base GL draw
+    -> paint_dimming_gl() -> paint_qpainter_overlays_gl() -> outer elapsed end
+```
+
+Under `--perf`, and with Spotify disabled, `paint_qpainter_overlays_gl()` still renders the PERF
+HUD. `render_debug_overlay_image()` creates a full compositor-sized ARGB32 QImage, clears it
+transparent, paints the small HUD into it, and composites it via QPainter. At 3840x2158 that is
+33,146,880 bytes (~31.6 MiB), with a 0.12 s cache refresh interval. `--gpu-timing` implies
+`--perf`, so **the diagnostic HUD is inside the measured scope**.
+
+Consequences:
+
+- existing data does **not** support per-transition shader optimization;
+- current 30-44 ms GPU samples are **not** clean proof that ordinary no-PERF production shows the
+  same GPU spike;
+- the outer query also **excludes** Qt top-level composition/swap after `paintGL`, which
+  `QOpenGLWidget` exposes via `aboutToCompose` / `frameSwapped`.
+
+Do not disable or resize the HUD in this lane: diagnostic cost must be measured before
+attribution is weakened.
+
+#### Next gate: `--diag-p4-stages`
+
+One bounded CLI-only diagnostic partitioning the entire remaining common path in a single run,
+rather than testing one hypothesised owner at a time. Run as:
+
+```text
+main.py --perf --gpu-timing --diag-p4-stages
+```
+
+- [ ] Part A - GPU stage timestamps via `glQueryCounter(GL_TIMESTAMP)` on the same 1/8 sampled
+      frames, inside the existing outer elapsed scope; no nested elapsed queries, no
+      finish/flush/fence/wait, availability-checked collection only.
+- [ ] Part B - matched `perf_counter` CPU intervals for the same stages on the same frames.
+- [ ] Part C - passive PERF HUD metadata (present/rebuilt/cache-hit/build ms/dimensions/bytes)
+      without changing HUD dimensions, cadence, cache policy or output.
+- [ ] Part D - Qt composition/swap boundary via `aboutToCompose`/`frameSwapped`, direct GUI-thread
+      handling only, with bounded counters for the non-one-to-one cases Qt actually produces.
+- [ ] Part E - one post-hoc causal report keyed by `(scene_generation, frame_index)`, preserving
+      frame N -> gap entering N+1, with +1/+2/+3 unpooled and matched/unmatched per stage.
+- [ ] Part F - compositor-context-owned fixed-size query storage under the existing
+      `GLTimerQueryRing` ownership model, allocated only when enabled, with strict deletion and
+      failed-deletion remaining a hard cleanup/accounting failure.
+
+Remaining original P4 items:
+
 - [ ] After P2/P3, repeat a visualizer-disabled control with Media still enabled.
 - [ ] Attribute the remaining 165 Hz dispatch-pending bursts to concrete GUI callbacks/owners.
 - [ ] Close the owner by extraction/narrowing only when direct evidence names it; do not tune the adaptive timer, and do not hide the owner by changing how compositor update requests are coalesced. (This constrains the **compositor's** request ownership only. It is not a requirement that the visualizer keep one auxiliary `update()` per publication — P2 exists to remove exactly that.)
