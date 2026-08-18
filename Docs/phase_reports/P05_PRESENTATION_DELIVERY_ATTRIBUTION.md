@@ -2044,3 +2044,76 @@ compositor was drawing.
 
 This belonged inside P2 single-surface closure rather than deferred cleanup: it
 is not cosmetic debt, it is edit mode pointing at an owner that no longer exists.
+
+---
+
+## P2 Regression Round — Two Production Defects The Suite Could Not See
+
+Dated evidence for the installed run against `090bbe4a`, which is **not** a
+performance acceptance: the live audio path was dead, so FPS, latency, usage and
+CUSTOM results from it are uninterpretable.
+
+### Defect 1 — the capture callback raised before publishing every frame
+
+`widgets/spotify_visualizer/audio_worker.py` stamped capture provenance with
+`time.time()` but never imported `time`. Every real capture callback raised
+`NameError`, the broad handler swallowed it at DEBUG, and no `_AudioFrame` was
+ever published. The worker still reported itself started, so the visualizer
+animated idly and never reacted to music. The installed log recorded tens of
+thousands of suppressed failures in a short run.
+
+Introduced by the capture-timestamp change in `P2-ANALYSIS-FRESHNESS`.
+
+Repaired by importing `time` and by making the failure visible: ERROR on the
+first failure, sampled after that, never per-frame, and re-armed by a successful
+publication. No retry or restart loop was added — a broken callback must be
+fixed, not bounced.
+
+### Defect 2 — one cross-mode activation still advanced the engine twice
+
+```text
+generation=1 activation=1        before Bubble -> Spectrum
+mode_switch:activation_payload   -> generation=2 activation=2
+smoothing_reset                  -> generation=3 activation=3
+```
+
+Mode teardown then reached its 1.51-second timeout fallback waiting for a target
+generation that had already been superseded.
+
+`activate_visualization_mode()` assigned `widget._vis_mode = mode` before calling
+the activation apply, so `apply_resolved_activation_payload()` computed
+`mode_changed == False` for a genuine cross-mode switch and never ran the target
+reset inside its transaction. The reset therefore ran afterwards — from
+`activate_visualization_mode()` on the direct/Settings path and from
+`on_mode_fade_out_complete()` on the crossfade path — committing a second
+generation outside the transaction.
+
+The `P2-ACTIVATION-FINAL` transaction was correct; its ownership boundary was
+placed one call too late.
+
+Repaired by making the resolved activation payload the authority that commits
+`_vis_mode`, and by having both duplicate reset sites skip the reset when the
+activation transaction already performed it. The duplicate reset work is gone,
+not merely a duplicate counter.
+
+### Why the suite passed a dead runtime
+
+Every bar started one step downstream of the seam that failed:
+
+- the freshness bars constructed `_AudioFrame` directly, so a callback that
+  raised before publishing looked healthy;
+- the activation bars called `apply_resolved_activation_payload()` directly, so a
+  premature `_vis_mode` assignment upstream of it was invisible;
+- the reveal bars stubbed the engine, so a fresh-frame gate that could never
+  clear looked fine.
+
+Three production-shaped files now cover those seams: the callback the worker
+actually registers, the real mode-transition entry points with the real
+`_SpotifyBeatEngine`, and the end-to-end chain from capture callback to reveal
+gate. Each defect was reintroduced and proven to fail its new bar — 15 of 16
+callback bars for the missing import, 5 and 2 activation bars for the two
+ownership faults, and 10 and 4 end-to-end bars respectively.
+
+The fresh-frame contract was not weakened to make any of this pass: bars prove
+the gate stays closed when no source frames arrive, when the callback is broken,
+and when only a pre-replacement frame exists.
