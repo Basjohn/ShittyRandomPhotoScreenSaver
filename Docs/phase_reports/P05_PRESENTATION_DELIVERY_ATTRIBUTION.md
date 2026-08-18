@@ -1792,3 +1792,95 @@ uniform, subtracts it, and has no unadjusted `gl_FragCoord` derivation) plus an
 origin-independence render comparison. Its lit-pixel confirmation belongs to the
 operator visual sanity run.
 
+
+---
+
+# P2 performance round — mode activation, warmup, card texture, GPU timing
+
+## P2-SINGLE-B — performance NOT ACCEPTED (2026-08-18)
+
+Geometry/placement is **visually accepted** by the operator after `ccc2543`. The
+`--perf --gpu-timing` run taken alongside it establishes that delivery is not.
+
+~206 s, single 60 Hz display, DPR 1.5, all modes cycled, BlockSpin transitions:
+
+```text
+FRAME_GAP_OWNER   >33 ms = 39   >50 ms = 25   median ~52.30 ms   max ~68.59 ms
+```
+
+Every recorded gap occurred during `GLCompositorBlockSpinTransition`. Not yet
+comparable to the accepted QRhi/no-visualizer baseline (9 / 0 / worst ~42.1 ms).
+
+More telling, visualizer-only windows with **no** active image transition were
+themselves below the clean 60 Hz baseline:
+
+```text
+window 1   3505 / 3768 accepted   93.02%   ~55.7 FPS
+window 2   2367 / 2456            96.38%   ~57.7 FPS
+window 3   2095 / 2185            95.88%   ~57.5 FPS
+window 4    708 /  769            92.07%   ~55.2 FPS
+final                                      ~56.7 FPS
+```
+
+The single-surface architecture is retained; P2-SINGLE-B stays OPEN.
+
+The visualizer shader is **not** the steady bottleneck: visualizer CPU paint p50
+is roughly 0.5-0.7 ms and sampled GPU work is generally sub-ms, with transition
+GPU work only a few ms. Visualizer fidelity and shader complexity are therefore
+not to be reduced.
+
+### What this round changed
+
+**P2-MODE-ACTIVATION** — every mode switch performed three complete runtime
+configuration passes (`mode_switch`, `mode_fade_out_complete`,
+`mode_prepare_reset`) plus duplicate engine-generation churn: OSCILLOSCOPE ->
+SINE_WAVE advanced generation 7 then 8, SINE_WAVE -> BUBBLE 9 then 10, with only
+the last authoritative, alongside a repeated bar-count reconfigure and a second
+audio block-size restart.
+
+The three apply sites are **not** deleted. Each is the only apply for some entry
+shape: a real mode change, a same-mode preset cycle (where
+`activate_visualization_mode` returns early), and a plain engine reset or
+settings apply. They are guarded by a single-use transaction stamp instead, so
+exactly one runs per mode switch while every other entry point is unchanged.
+Cross-mode bleed prevention is preserved.
+
+Activation resolution is deliberately **not** memoised. A per-mode cache was
+tried and reverted: a preset cycle changes the resolved configuration for the
+same mode through inputs not all visible in the widgets config mapping, so
+caching by mode served a stale preset and broke first-visible-frame equivalence.
+The saving comes from applying once instead of three times.
+
+**P2-VIS-WARMUP** — initialization compiled only the active program and left four
+to a post-reveal GUI timer queue linking one every 140 ms, producing startup
+Bubble tick spikes around 49-68 ms and a shader compile on the first switch to
+each mode. All five runtime programs are now compiled during the hidden startup
+stage as one visualizer-GL readiness contract, active mode first. The warm queue,
+its timer state and the QTimer import are retired. Failure stays loud; there is
+no CPU renderer substitute.
+
+**P2-CARD-GL** — the layer drew the card through `gl_target_painter()` on every
+presented frame, so a steady ~60 Hz visualizer crossed
+`raw GL -> QOpenGLPaintDevice -> QPainter -> drawPixmap -> end -> raw GL` for an
+image that had not changed. The authored `QPixmap` remains the source, now
+uploaded to a compositor-owned GL texture when its revision changes and drawn as
+a textured quad. Revision covers size, DPR, background colour/opacity, border
+colour/width and background enablement, and excludes fade, which is a GL alpha
+multiplier. Ownership follows the borrowed-context contract with ResourceManager
+accounting and fail-closed deletion.
+
+**PERF correctness** — `--gpu-timing` degraded to
+`gpu_supported=False gpu_reason=begin_error:GLError`. GL_TIME_ELAPSED cannot nest
+on one context, and the visualizer now renders inside the compositor on the same
+context. The compositor outer query stays the owner; the visualizer skips its own
+sampling while an outer query is open and records
+`shared_context_outer_query`. CPU paint and state-to-paint metrics are untouched.
+
+### Logical cadence deliberately unchanged
+
+Visualizer logical publication remains ~85-100 Hz. The compositor is the sole
+physical presentation owner at 60 Hz and many publications collapse into the
+latest state consumed by one display frame. No update admission gate, producer
+cap, pending-until-paint latch, paint acknowledgement, second presentation clock
+or source decimation was added.
+
