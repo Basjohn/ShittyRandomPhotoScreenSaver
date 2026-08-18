@@ -1,124 +1,97 @@
 # Index
 
-Last updated: 2026-08-17
+Last updated: 2026-08-18
 
-Navigation and ownership map for SRPSS. This file is not a specification.
+Navigation and current ownership map. This file is not a benchmark report.
+
+## Authority Chain
+
+```text
+current user instruction + exact current main
+        ↓
+Current_Plan.md                         active execution order
+        ↓
+Spec.md + Docs/Guardrails.md + focused current docs
+                                        durable architecture/safety contracts
+        ↓
+Docs/phase_reports/                     checkpoint evidence, scoped to named source/commit
+        ↓
+Future_Cleanup.md                       deferred cleanup/debt
+        ↓
+Docs/Historical_Bugs/                   incident evidence/negative controls
+```
+
+`Docs/audits/SRPSS_Architecture_Roadmap/` now contains supplemental specialized references only. It
+is not an authority layer or second task list.
 
 ## Start Here
 
 | Task | Read |
 |---|---|
-| Any code change | relevant `Docs/Guardrails.md` section |
-| Visualizer cadence/presentation/repaint change | `Docs/Presentation_Change_Preflight.md` (rejected-mechanism register), then `Docs/Guardrails/Visualizer_Presentation.md` |
-| Find owning subsystem | `Docs/Contracts.md` |
-| Stable product/architecture contract | `Spec.md` |
-| Current unfinished work / execution order | `Current_Plan.md` |
-| Current Phase 5 delivery evidence | `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` |
-| Architecture program/status | `Docs/audits/SRPSS_Architecture_Roadmap/README.md` |
-| Compact audit priorities | `Docs/audits/SRPSS_Architecture_Roadmap/00_INDEX_AND_LIVE_CHECKLIST.md` |
-| Presentation/compositor design | `Docs/audits/SRPSS_Architecture_Roadmap/06_PRESENTATION_AND_COMPOSITOR_DESIGN.md` |
-| Threading/UI workload | `Docs/audits/SRPSS_Architecture_Roadmap/08_CPU_THREADING_AND_WORKLOAD_PLAN.md` |
-| Memory/GPU/cache | `Docs/audits/SRPSS_Architecture_Roadmap/09_MEMORY_GPU_RESOURCE_AND_CACHE_PLAN.md` |
-| Logging/routing/retention | `Docs/Logging_Guide.md` |
-| Evidence parsing and recurring probes | `Docs/Harness_Index.md` |
-| Tests/release gates | `Docs/TestSuite.md` and roadmap `12_TEST_AND_BENCHMARK_PROTOCOL.md` |
-| Failure-owner triage | roadmap `14_FAILURE_TRIAGE_MAP.md` |
-| Prior fragile regression | `Docs/Historical_Bugs/README.md` |
-| Deferred/temporary cleanup | `Future_Cleanup.md` |
+| Active work | `Current_Plan.md` first |
+| Find the current owner | `Docs/Contracts.md` |
+| Cross-cutting safety | `Docs/Guardrails.md` |
+| Stable architecture | `Spec.md` |
+| Compositor/QRhi/single-surface work | `Docs/Compositor_Architecture.md` |
+| Visualizer presentation/cadence | `Docs/Presentation_Change_Preflight.md`, then `Docs/Guardrails/Visualizer_Presentation.md` |
+| Visualizer subsystem | `Docs/Visualizer_Reference.md`, `Docs/Visualizer_Change_Checklist.md` |
+| Current delivery evidence | `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` while P2/P4 remains active |
+| Monitor lifecycle / wake | `Current_Plan.md` P5; optional specialized audit references only after it |
+| Tests | `Docs/TestSuite.md` |
+| Recurring harnesses | `Docs/Harness_Index.md` |
+| Prior regression | `Docs/Historical_Bugs/README.md` |
+| Deferred cleanup | `Future_Cleanup.md` |
 
 Do not read every document by default.
 
-## Authority Chain
-
-```text
-Current_Plan.md
-    ↓ execution order
-Spec.md / Guardrails.md
-    ↓ stable contracts
-Docs/phase_reports/
-    ↓ accepted detailed evidence
-Docs/audits/SRPSS_Architecture_Roadmap/
-    ↓ dependencies, priorities, design and validation
-Future_Cleanup.md
-    ↓ temporary-code removal / deferred cleanup / test debt
-```
-
-A phase report does not override `Current_Plan.md` task order. `Future_Cleanup.md` is not
-an alternate active plan.
-
-## Core Documents
-
-| File | Purpose |
-|---|---|
-| `Docs/00_PROJECT_OVERVIEW.md` | project/document orientation |
-| `Docs/Guardrails.md` | cross-cutting safety/stop rules |
-| `Docs/Presentation_Change_Preflight.md` | rejected-mechanism register for presentation/cadence work; not an authority over `Current_Plan.md` |
-| `Docs/Guardrails/` | focused per-domain guardrails; currently `Visualizer_Presentation.md` |
-| `Docs/Visualizer_Change_Checklist.md` | required sweep for visualizer/runtime-bridge changes |
-| `Docs/Visualizer_Reference.md` | visualizer runtime/settings behaviour reference |
-| `Docs/Contracts.md` | task-to-owner routing |
-| `Spec.md` | stable behaviour/architecture contracts |
-| `Current_Plan.md` | active unfinished work only |
-| `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` | accepted current delivery/presentation checkpoint |
-| `Docs/audits/SRPSS_Architecture_Roadmap/README.md` | current architecture roadmap |
-| `Docs/Compositor_Architecture.md` | broader compositor architecture |
-| `Docs/Logging_Guide.md` | logging architecture/routing/retention |
-| `Docs/TestSuite.md` | test levels/release gates |
-| `Docs/Harness_Index.md` | recurring commands/probes |
-| `Docs/Historical_Bugs/README.md` | historical incident index |
-| `Future_Cleanup.md` | deferred cleanup and temporary-code/test debt |
-
 ## Current Runtime Owners
 
-| Domain | Primary owner/location |
+| Domain | Current owner/location |
 |---|---|
 | Runtime sequencing | `engine/screensaver_engine.py` |
-| Full runtime teardown | `engine/engine_lifecycle.py::teardown_display_runtime` |
-| Retired-generation barrier | `engine/runtime_destruction.py` |
+| Full runtime teardown | `engine/engine_lifecycle.py`, `engine/runtime_destruction.py` |
 | Display topology | `engine/display_manager.py` |
-| Fullscreen presenter | `rendering/display_widget.py` |
+| Fullscreen host | `rendering/display_widget.py` |
+| Accelerated presentation surface | `rendering/gl_compositor.py`, `rendering/gl_rhi_surface.py` |
+| QRhi/OpenGL lifecycle | `rendering/gl_compositor_pkg/gl_lifecycle.py`, `rendering/gl_rhi_surface.py` |
+| Physical presentation cadence | display compositor `AdaptiveRenderStrategyManager`; presentation only, never visualizer simulation |
+| Image transition scene | `rendering/gl_compositor_pkg/`, transition modules |
+| Visualizer logical/runtime state | `widgets/spotify_visualizer_widget.py`, `widgets/spotify_visualizer/`, `widgets/spotify_bars_gl_overlay.py` |
+| Visualizer presentation layer | `rendering/gl_compositor_pkg/visualizer_layer.py` inside the display compositor |
+| Visualizer card pixels | compositor card-texture path; QWidget remains logical/layout/edit anchor where required |
+| Visualizer audio analysis | `widgets/spotify_visualizer/beat_engine.py`, audio worker/backend, analysis helpers |
 | Widget lifecycle | `rendering/widget_manager.py` |
+| CUSTOM layout | `rendering/custom_layout_manager.py` and descriptor/layout owners |
 | Thread/task ownership | `core/threading/manager.py` |
-| Settings in-memory authority | `core/settings/settings_manager.py` |
-| Settings ordered durability | `core/settings/persistence.py`, `core/settings/json_store.py` |
-| Resource accounting | `core/resources/manager.py`, `core/performance/resource_metrics.py` |
-| Whole-process usage | `core/performance/usage_sampler.py` |
-| Image pipeline | `engine/image_pipeline.py` and image/prefetch helpers |
-| Main compositor/GL | `rendering/gl_compositor.py`, `rendering/gl_compositor_pkg/`, `rendering/gl_programs/` |
-| Delivery-stage observation | `rendering/adaptive_timer.py` plus compositor metrics |
-| Visualizer logical runtime | `widgets/spotify_visualizer/`, `widgets/spotify_visualizer_widget.py` |
-| Visualizer presentation | `widgets/spotify_bars_gl_overlay.py` plus display-local Qt/GL ownership |
-| Heavyweight GPU timing | `rendering/gl_timer_queries.py` plus owning renderer/compositor |
-| Media provider/GSMTC | `core/media/provider_registry.py`, `core/media/media_controller.py`, `widgets/media_widget.py` |
-| CUSTOM layout | custom-layout manager/contract modules |
+| Resource accounting | `core/resources/manager.py` |
+| Settings | `core/settings/settings_manager.py` plus persistence/store owners |
 | Logging | `core/logging/logger.py`, `core/logging/tags.py` |
-| Crash breadcrumbs | `core/logging/crash_capture.py` |
-| Evidence analysis | `tools/recovery_evidence_parser.py` and focused tools |
+| Evidence analysis | focused tools under `tools/` |
 
-Use `Docs/Contracts.md` before assuming a nearby helper is an authority.
+### Important visualizer naming rule
 
-## Current Phase 5 Route
+`SpotifyBarsGLOverlay` is retained as a class/path for logical state, geometry and visualizer GL
+resources. Its name is historical. It is **not** a separately presented GL overlay anymore.
 
-For the delivery/presentation thread:
+## Current Presentation Route
 
 ```text
-Current_Plan P0 → P1 → P2 → P3 → P4
-        │
-        ├── evidence: Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md
-        ├── design:   roadmap/06_PRESENTATION_AND_COMPOSITOR_DESIGN.md
-        ├── tests:    roadmap/12_TEST_AND_BENCHMARK_PROTOCOL.md
-        ├── triage:   roadmap/14_FAILURE_TRIAGE_MAP.md
-        └── cleanup:  Future_Cleanup.md
+visualizer audio/events
+      ↓ authored logical cadence
+visualizer logical owner / immutable current render state
+      ↓
+DisplayWidget's single GLCompositorWidget (QRhi/OpenGL)
+      ├── base/transition
+      ├── cached visualizer card texture
+      └── visualizer shader layer
+      ↓
+Qt physical presentation opportunity
 ```
 
-## Entry Points
+There is no ordinary producer acknowledgement from paint.
 
-- `main.py` — canonical runtime/performance/evidence authority.
-- `main_mc.py` — Media Center route; bounded shared smoke coverage.
-- `main_diagnostic.py` — frozen-runtime diagnostic attribution; not ordinary performance target.
-- `tools/build_runner.py` — build owner.
+## Historical Navigation Rule
 
-## Navigation Rule
-
-Add architectural owners and critical evidence routes only. Raw benchmark logs and
-completed implementation narratives belong in phase reports/history, not here.
+Older phase reports and incident records intentionally contain old QOpenGLWidget/separate-overlay
+owner maps. Use those names only for the checkpoint they describe. Current owner discovery comes
+from this index, `Docs/Contracts.md`, current focused docs and exact source.
