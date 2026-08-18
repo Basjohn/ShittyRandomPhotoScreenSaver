@@ -446,11 +446,16 @@ def test_strict_visualizer_overlay_cleanup_retains_failed_program_owner(monkeypa
         _gl_vao=None,
         _gl_vao_rid=None,
         _gl_state=state,
-        isValid=lambda: True,
-        makeCurrent=lambda: None,
-        doneCurrent=lambda: None,
-        context=lambda: context,
+        _rhi_gl=SimpleNamespace(
+            is_attached=lambda: True,
+            make_current=lambda: True,
+            context=context,
+            generation=1,
+        ),
         _release_resource_tracking=lambda rid: released.append(rid),
+    )
+    overlay._has_live_gl_resources = (
+        lambda: overlay_module.SpotifyBarsGLOverlay._has_live_gl_resources(overlay)
     )
     fake_gl = _SelectiveGL()
     monkeypatch.setattr(overlay_module, "gl", fake_gl)
@@ -512,11 +517,16 @@ def test_strict_visualizer_overlay_cleanup_retains_failed_timer_query_owner(monk
         _gl_vao_rid=None,
         _gpu_timer_queries=timer_queries,
         _gl_state=state,
-        isValid=lambda: True,
-        makeCurrent=lambda: None,
-        doneCurrent=lambda: None,
-        context=lambda: context,
+        _rhi_gl=SimpleNamespace(
+            is_attached=lambda: True,
+            make_current=lambda: True,
+            context=context,
+            generation=1,
+        ),
         _release_resource_tracking=lambda _rid: None,
+    )
+    overlay._has_live_gl_resources = (
+        lambda: overlay_module.SpotifyBarsGLOverlay._has_live_gl_resources(overlay)
     )
     monkeypatch.setattr(overlay_module, "gl", object())
     monkeypatch.setattr(

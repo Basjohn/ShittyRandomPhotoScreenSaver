@@ -136,10 +136,11 @@ P0  diagnostic-scaffolding cleanup                         CLOSED
 P1  production presentation/fidelity contract              CLOSED / LOCKED
 P3  visualizer-family handoff/preparation attribution      CLOSED as secondary
 
-P4-RHI-A  main compositor QOpenGLWidget -> QRhiWidget      LANDED (automated bars green)
-P4-RHI-B  installed no-visualizer acceptance               ACTIVE
-P2-RHI-A  SpotifyBarsGLOverlay -> QRhiWidget               CONDITIONAL NEXT if P4-RHI accepted
-P2-RHI-B  remeasure auxiliary presentation amplifier       CONDITIONAL NEXT
+P4-RHI-A  main compositor QOpenGLWidget -> QRhiWidget      LANDED
+P4-RHI-B  installed no-visualizer acceptance               ACCEPTED
+P4-RHI-C  compositor fallback state made explicit          LANDED
+P2-RHI-A  SpotifyBarsGLOverlay -> QRhiWidget               LANDED (automated bars green)
+P2-RHI-B  installed visualizer-on acceptance               ACTIVE
 REMEASURE equivalent ordinary 165 Hz + 60 Hz scenario
 P5  monitor-topology / sleep-wake hardening                MANDATORY NEXT
 P6  lower-leverage Phase 5 work                            AFTER P5
@@ -236,35 +237,41 @@ before creating the compositor, so a naive inheritance swap would have produced 
 displays. `rendering/display_setup.py` now creates the compositor before `show()`; the remaining
 lazy path logs an error instead of failing silently. Both are covered by tests.
 
-## P4-RHI-B — installed acceptance gate
+## P4-RHI-B — ACCEPTED installed acceptance gate
 
-First installed test: single display, no visualizer, broad transition set.
+Accepted on 2026-08-18. Evidence preserved at
+`logs/evidence_chest/08_18_qrhibaselinenoviz_10_26` — do not overwrite, rename, move or clean it.
 
-Use ordinary `main.py` runtime. `--perf --gpu-timing` may be used for comparison, but the result
-must not depend on `--diag-p4-stages` or any active intervention. Visual transition smoothness is
-part of acceptance.
+Single 60 Hz display, QRhi main compositor, no visualizer, ordinary runtime:
 
-Pass bars:
+```text
+                         >33 ms gaps   >50 ms gaps   worst
+P4 pathology (pre-QRhi)      29            28        ~80.7 ms   (median ~58.5 ms)
+QRhi compositor               9             0        ~42.1 ms
+```
 
-- [ ] no transition fidelity regression, corruption, stale frame, black frame, upside-down frame, alpha/DPR error or startup flash regression;
-- [ ] no GL cleanup/recreation regression;
-- [ ] severe recurring 48-80+ ms transition delivery stalls materially collapse compared with the accepted P4 evidence;
-- [ ] request-age / queued-dispatch tails materially improve rather than merely moving into a different stage;
-- [ ] 60 Hz delivery is effectively refresh-limited rather than repeatedly missing 3-4 presentation intervals;
-- [ ] ordinary steady-image rendering remains healthy;
-- [ ] no new CPU/GPU owner of comparable size appears.
+The recurring severe `>50 ms` class collapsed to zero and normal transition delivery is
+approximately refresh-limited. **P4-RHI-A is retained.**
 
-If `--perf` HUD overhead makes the comparison ambiguous, **one** existing
-`--diag-p4-no-perf-hud` control is allowed. Do not add another diagnostic family.
+Known co-change, recorded so no one invents a split later: effective interval-0 enforcement moved
+onto the real presenting context at the same time as the child-context handoff was removed. Both
+plausibly contribute; no percentage attribution between them is claimed. Detail lives in the P05
+phase report.
 
-### P4-RHI decision
+No further P4 stage/DWM/no-HUD attribution work precedes P2.
 
-- **Accepted:** retain the QRhi compositor and proceed to P2-RHI.
-- **No material delivery improvement, or lifecycle/fidelity regression:** revert the P4-RHI commit. Do not return to microscopic P4 stage instrumentation. Promote the full per-display Qt Quick/QQuickWindow scene migration decision instead, because the bounded QRhi bridge failed to remove the architecture owner.
+## P4-RHI-C — LANDED compositor fallback visibility
 
-# P2-RHI — Conditional Spotify visualizer surface migration
+Steady retained-base rendering could drop to the QPainter base-image path with no record while
+active-transition failure was already loud. It is now a bounded STATE-CHANGE record: ordinary
+startup states stay silent, an established compositor entering fallback emits one error naming the
+reason, repeated frames never spam, and recovery emits one info record and clears the latch.
+Rendering behaviour, cadence, dispatch, scheduling and GL ownership are unchanged; no CLI flag and
+no timing measurement were added.
 
-**Do not start until P4-RHI is accepted in installed runtime.**
+# P2-RHI — Spotify visualizer surface migration
+
+P4-RHI is accepted in installed runtime, so this lane is authorized and P2-RHI-A has landed.
 
 P2 remains a distinct measured owner. The QRhi compositor does not automatically close it.
 
@@ -285,41 +292,105 @@ stencil and fade while removing **its own QOpenGLWidget child rendering context*
 tests whether the expensive auxiliary update stream was expensive primarily because each update
 forced another QOpenGLWidget shared-context handoff.
 
-## P2-RHI-A — overlay backend migration
+## P2-RHI-A — LANDED overlay backend migration
 
-- [ ] Reuse the proven P4 external-OpenGL QRhi substrate; do not create a second competing RHI wrapper.
-- [ ] Change `SpotifyBarsGLOverlay` from QOpenGLWidget to QRhiWidget/OpenGL only.
-- [ ] Preserve `set_state()` logical/state handoff exactly.
-- [ ] Preserve one `update()` call per accepted publication **for the first QRhi overlay experiment**. Do not mix backend migration with request coalescing; the point is to isolate backend/handoff cost.
-- [ ] Preserve Bubble/Spectrum/Sine/Oscilloscope/DevCurve shader behaviour, uniforms, transient state, smoothing, ghost/history state and mode switching.
-- [ ] Preserve transparent background/alpha composition, painted-card rounded stencil, shadow/card alignment, `WA_AlwaysStackOnTop`, CUSTOM geometry/DPR/aspect correction, fade/show/hide and configured-display ownership.
-- [ ] Preserve startup hidden state and no-media/disabled behaviour.
-- [ ] Preserve strict query/program/VAO/VBO teardown and Settings/display recreation.
-- [ ] No new timer, worker, queue, display-rate gate, paint acknowledgement or manual pending-until-paint latch.
+`SpotifyBarsGLOverlay` now subclasses the shared `ExternalOpenGLRhiWidget` on the OpenGL QRhi
+backend, keeping its existing sibling position above the `SpotifyVisualizerWidget` card. No scene
+composition change, no card move into the compositor, no logical timing change.
 
-## P2-RHI-B — acceptance
+Detailed binding/lifecycle evidence lives in
+`Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` under "P2-RHI-A".
 
-Automated:
+**This checkpoint does not close P2.** Installed acceptance is P2-RHI-B.
 
-- [ ] all P1 logical/temporal goldens remain unchanged;
-- [ ] protected Bubble visible positional edge survives actual presentation receipt;
-- [ ] state-to-paint latency does not materially worsen;
-- [ ] transparent/stencil/card geometry is pixel/behaviour equivalent at supported DPRs;
-- [ ] transition-active and steady-image liveness work without `AdaptiveTimerStrategy` becoming visualizer authority;
-- [ ] Settings recreate, display reassignment and final teardown return owned GL resources to baseline;
-- [ ] same top-level window uses one QRhi backend/API; no incompatible RHI backend is requested by siblings.
+### Accepted pre-migration baseline
 
-Installed:
+Same QRhi compositor, visualizer ON, latest ordinary raw logs before this migration:
 
-- [ ] repeat the accepted A/B-style question on the QRhi overlay: does suppressing only the auxiliary visualizer update stream still produce a material compositor-delivery win?
-- [ ] compare Bubble state-to-paint p50/p95/max and visible attack/edge latency against the approved behaviour reference;
-- [ ] run equivalent dual-display 165 Hz + 60 Hz broad transitions with Bubble and Spectrum separately;
-- [ ] verify visualizer publication remains authored-rate and presentation remains smooth/reactive.
+```text
+>33 ms gaps   >50 ms gaps   median      max
+    23             4        ~45.23 ms   151.27 ms
+```
+
+with roughly one auxiliary surface update per publication (Bubble ~889-971 set_state/update
+requests per 10 s; Spectrum ~913-920) on a 60 Hz display. That stream is unchanged by this
+checkpoint, by design.
+
+### What landed
+
+- Overlay reuses the shared substrate; no second QRhi wrapper was created.
+- `ExternalOpenGLRhiWidget` gained a per-**class** `RHI_CLEAR_COLOR`: compositor stays opaque black,
+  visualizer clears fully transparent. One surface cannot mutate the other's policy, and the
+  render-pass implementation is not duplicated.
+- `initializeGL` -> `gl_initialize(generation_changed)`, `paintGL` -> `gl_render`, plus `gl_release`.
+- All QOpenGLWidget ownership calls removed from the overlay: no `context()`, `makeCurrent()`,
+  `doneCurrent()` or `isValid()`. GPU timer queries take the borrowed QRhi context.
+- `clear_overlay_buffer()` no longer mutates a raw GL framebuffer; the next `gl_render()` clears its
+  own transparent target inside the render pass.
+- Deferred shader warmup borrows the context through the QRhi seam and is generation-fenced.
+- `prewarm_context()` no longer forces `grabFramebuffer()`; `show()` plus one ordinary `update()`
+  initializes the surface once on the real top-level QRhi.
+- `cleanup_gl()` is the single deletion owner and Qt's `releaseResources()` delegates to it.
+- A QRhi replacement on a still-live overlay installs a fresh `GLStateManager` for the new
+  generation, so `DESTROYED` stays terminal per generation without stranding a reusable overlay.
+
+### Construction ordering resolved by proof, not assumption
+
+A second `QRhiWidget(Api.OpenGL)` created **after** the top-level is shown joins the **same**
+top-level QRhi that the main compositor established before `show()`: identical QRhi pointer, one
+`initialize()`, zero `releaseResources()`, normal rendering, and a real depth/stencil target for the
+rounded-card stencil mask. The P4-RHI-A late-creation hazard therefore does not apply to the
+overlay, and production's existing lazy creation path needed no change. Test-locked.
+
+### Presentation contract deliberately unchanged
+
+One accepted publication still produces exactly one `_request_frame_update()` and one
+`QWidget.update()`. No coalescing, timestamp gate, refresh divisor, pending-until-paint latch, paint
+acknowledgement, second timer, worker queue or source decimation. The point of P2-RHI-A is to
+isolate surface/context architecture from request-admission policy.
+
+### Automated bars passed
+
+`tests/test_p2_rhi_visualizer_surface.py` (30 bars) plus the migrated owning suites: shared
+substrate reuse, OpenGL API, transparent-vs-opaque clear separation, stencil/depth capability,
+post-show top-level QRhi sharing, no QOpenGLWidget fallback reachable, `clear_overlay_buffer`
+performing no raw GL, generation-fenced warmup, no temporary-QRhi grab cycle, resize not rebuilding
+immutable resources, generation-replacement reporting, fail-closed cleanup, release delegation,
+recoverable state machine, and the unchanged one-update-per-publication request stream.
+
+Gate result: 298 passed / 16 skipped across the P2, P4, compositor, visualizer, stencil, lifecycle
+and destruction suites. Every changed file compile-checked.
+
+## P2-RHI-B — ACTIVE installed acceptance gate
+
+One installed run, ordinary runtime, single 60 Hz display, visualizer ON, Bubble and Spectrum,
+broad transitions:
+
+```bash
+python main.py --perf --gpu-timing
+```
+
+No `--diag-p4-stages`, no `--diag-pair-warm-finish`, no DWM campaign, no new switches, no A/B
+monkeypatch, no HUD experiments.
+
+Compare against:
+
+1. `logs/evidence_chest/08_18_qrhibaselinenoviz_10_26` (accepted no-visualizer QRhi baseline);
+2. the pre-P2 visualizer-on baseline recorded above.
+
+Pass bars:
+
+- [ ] the added severe/request-age tail over the no-visualizer baseline materially collapses;
+- [ ] Bubble and Spectrum fidelity, attack/edge timing and state-to-paint remain healthy;
+- [ ] transparent card composition, rounded-card stencil, CUSTOM geometry, DPR and fade unchanged;
+- [ ] no visualizer GL cleanup/recreation regression across Settings and display reassignment.
 
 ### P2-RHI decision
 
-- **If the old A/B amplifier materially collapses while fidelity remains equal/better:** P2 may close as an architecture correction. The update stream still exists, but it is no longer a material shared-GUI amplifier.
-- **If the auxiliary request stream remains materially harmful:** do not return to admission/pacing experiments. Promote the previously deferred one-surface visualizer/card scene-composition change as the next deliberate architecture step.
+- **Amplifier materially collapses with fidelity equal or better:** accept/close the P2 architecture
+  correction and proceed directly to the equivalent 165 Hz + 60 Hz combined remeasurement.
+- **Still a material amplifier:** do **not** return to pacing/admission experiments. Promote the
+  deliberate one-surface visualizer/card scene-composition architecture.
 
 # Equivalent dual-display remeasurement after P4/P2-RHI
 

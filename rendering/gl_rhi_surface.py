@@ -52,6 +52,9 @@ logger = get_logger(__name__)
 # The compositor is opaque: the QRhi pass clears to opaque black exactly like
 # the previous QOpenGLWidget surface did before its first draw.
 OPAQUE_CLEAR_COLOR = QColor(0, 0, 0, 255)
+# Overlay surfaces composited above a QWidget card must clear fully
+# transparent, or the pass would paint an opaque rectangle over the card.
+TRANSPARENT_CLEAR_COLOR = QColor(0, 0, 0, 0)
 DEFAULT_DEPTH_STENCIL_CLEAR = QRhiDepthStencilClearValue(1.0, 0)
 
 
@@ -279,6 +282,15 @@ class ExternalOpenGLRhiWidget(QRhiWidget):
     # Rendering failures must stay visible without becoming a per-frame log.
     _RHI_FAILURE_LOG_INTERVAL = 300
 
+    # Render-pass clear colour for this surface.
+    #
+    # This is a per-CLASS policy, deliberately not per-instance state: the
+    # full-screen compositor is opaque, while an overlay composited above a
+    # QWidget card must clear fully transparent or it would paint an opaque
+    # rectangle over the widgets beneath it. Because each subclass carries its
+    # own value, one surface's clear policy cannot mutate another's.
+    RHI_CLEAR_COLOR: QColor = OPAQUE_CLEAR_COLOR
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         # Must precede realization: the top-level QRhi backend is resolved from
@@ -361,7 +373,10 @@ class ExternalOpenGLRhiWidget(QRhiWidget):
             return
         try:
             with external_gl_render_pass(
-                cb, render_target, state=self._rhi_pass_state
+                cb,
+                render_target,
+                clear_color=self.RHI_CLEAR_COLOR,
+                state=self._rhi_pass_state,
             ):
                 self.gl_render()
         except Exception:
