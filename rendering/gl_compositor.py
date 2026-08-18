@@ -1,13 +1,14 @@
 """Single OpenGL compositor widget for DisplayWidget.
 
-This module introduces a single per-display GL compositor that is responsible
-for drawing the base image and GL-backed transitions. The intent is to replace
-per-transition QOpenGLWidget overlays with a single GL surface that owns the
-composition, reducing DWM/stacking complexity and flicker on Windows.
+This module owns the single per-display GL compositor that draws the base
+image and GL-backed transitions.
 
-Initial implementation focuses on a GPU-backed Crossfade equivalent. Other
-transitions (Slide, Wipe, Block Puzzle Flip, Blinds) can be ported onto this
-compositor over time.
+The surface is a ``QRhiWidget`` on the OpenGL QRhi backend: it renders through
+the top-level window's QRhi rather than creating its own child
+``QOpenGLContext`` and offscreen FBO. The existing PyOpenGL transition
+renderers are reused unchanged inside a QRhi ``ExternalContent`` render pass.
+See ``rendering/gl_rhi_surface.py`` for the borrowed-context and render-pass
+ownership contract.
 """
 
 from __future__ import annotations
@@ -33,8 +34,7 @@ from rendering.adaptive_timer import (
 )
 
 from PySide6.QtCore import Qt, QPoint, QRect, Slot
-from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage, QColor, QOpenGLContext
-from PySide6.QtOpenGLWidgets import QOpenGLWidget
+from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage, QColor
 
 from core.logging.logger import (
     get_logger,
@@ -44,7 +44,7 @@ from core.logging.logger import (
 from core.animation.types import EasingCurve
 from core.animation.animator import AnimationManager
 from core.animation.frame_interpolator import FrameState
-from rendering.gl_format import apply_widget_surface_format
+from rendering.gl_rhi_surface import ExternalOpenGLRhiWidget
 from rendering.gl_profiler import TransitionProfiler
 from rendering.gl_timer_queries import GLTimerQueryRing
 from transitions.base_transition import WipeDirection, SlideDirection
@@ -115,7 +115,7 @@ def _blockspin_spin_from_progress(p: float) -> float:
 # _PaintMetrics, _RenderTimerMetrics) are imported from rendering.gl_compositor.metrics
 
 
-class GLCompositorWidget(QOpenGLWidget):
+class GLCompositorWidget(ExternalOpenGLRhiWidget):
     """Single GL compositor that renders the base image and transitions.
 
     This widget is intended to be created as a single child of DisplayWidget,
@@ -126,10 +126,13 @@ class GLCompositorWidget(QOpenGLWidget):
 
     def __init__(self, parent) -> None:
         super().__init__(parent)
-        prefs = apply_widget_surface_format(self, reason="gl_compositor")
-        self._surface_prefs = prefs
+        # NOTE: the per-child setFormat()/setUpdateBehavior() calls that the old
+        # QOpenGLWidget surface used are deliberately gone: QRhiWidget takes its
+        # format from the top-level window and has no partial-update mode. The
+        # global pre-QApplication QSurfaceFormat interval-0 policy in main.py is
+        # what drives Qt's top-level NoVSync swapchain request and still stands.
 
-        # Avoid system background clears and rely entirely on our paintGL.
+        # Avoid system background clears and rely entirely on our own rendering.
         try:
             self.setAutoFillBackground(False)
             self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
@@ -137,11 +140,6 @@ class GLCompositorWidget(QOpenGLWidget):
             self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-        try:
-            self.setUpdateBehavior(QOpenGLWidget.UpdateBehavior.NoPartialUpdate)
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-
         self._base_pixmap: Optional[QPixmap] = None
         self._crossfade: Optional[CrossfadeState] = None
         self._slide: Optional[SlideState] = None
@@ -1041,20 +1039,20 @@ class GLCompositorWidget(QOpenGLWidget):
                 perf_trace["pipeline_outcome"] = "ready"
             return True
 
+        # The pipeline owns VAOs, which are NOT shareable across contexts, so
+        # this work must run on the borrowed QRhi context itself rather than on
+        # the hidden shared warmup context used for textures/programs.
         make_current_started = time.perf_counter() if trace_enabled else 0.0
-        try:
-            self.makeCurrent()
+        acquired = self._rhi_gl.make_current()
+        if trace_enabled:
+            perf_trace["pipeline_make_current_ms"] = (
+                time.perf_counter() - make_current_started
+            ) * 1000.0
+        if not acquired:
             if trace_enabled:
-                perf_trace["pipeline_make_current_ms"] = (
-                    time.perf_counter() - make_current_started
-                ) * 1000.0
-        except Exception as e:
-            if trace_enabled:
-                perf_trace["pipeline_make_current_ms"] = (
-                    time.perf_counter() - make_current_started
-                ) * 1000.0
                 perf_trace["pipeline_outcome"] = "make_current_failed"
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+            # No QRhi yet: the surface has not been initialized, so the pipeline
+            # is established by gl_initialize() instead. Warmup is optional.
             return False
 
         initialize_started = time.perf_counter() if trace_enabled else 0.0
@@ -1080,15 +1078,10 @@ class GLCompositorWidget(QOpenGLWidget):
             logger.debug("[GL COMPOSITOR] Failed to initialise GL pipeline", exc_info=True)
             return False
         finally:
-            release_started = time.perf_counter() if trace_enabled else 0.0
-            try:
-                self.doneCurrent()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+            # The QRhi OpenGL context belongs to Qt. SRPSS borrows currentness
+            # through the QRhi seam and must never doneCurrent() it.
             if trace_enabled:
-                perf_trace["pipeline_release_ms"] = (
-                    time.perf_counter() - release_started
-                ) * 1000.0
+                perf_trace["pipeline_release_ms"] = 0.0
 
     def _ensure_transition_program_ready(self, identity: object) -> bool:
         """Delegate program binding to the shared GL lifecycle seam."""
@@ -1115,31 +1108,6 @@ class GLCompositorWidget(QOpenGLWidget):
         cols = max(min_cols, int(round(width / 320.0)))
         rows = max(2, int(round(cols * (height / float(max(1, width))))))
         return cols, rows
-
-    def _warm_transition_state(
-        self,
-        transition_name: str,
-        old_pixmap: Optional[QPixmap],
-        new_pixmap: QPixmap,
-    ) -> bool:
-        """Prime transition-specific state so heavy prep work is done before first run."""
-        try:
-            self.makeCurrent()
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            return False
-
-        try:
-            return self._warm_transition_state_in_current_context(
-                transition_name,
-                old_pixmap,
-                new_pixmap,
-            )
-        finally:
-            try:
-                self.doneCurrent()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
     def _warm_transition_state_in_current_context(
         self,
@@ -1258,26 +1226,6 @@ class GLCompositorWidget(QOpenGLWidget):
         if self._texture_manager is None:
             self._texture_manager = GLTextureManager()
         return self._texture_manager
-
-    def _warm_pixmap_textures(
-        self,
-        old_pixmap: Optional[QPixmap],
-        new_pixmap: Optional[QPixmap],
-    ) -> bool:
-        """Upload/cache the provided pixmaps so textures are ready when needed."""
-        try:
-            self.makeCurrent()
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            return False
-
-        try:
-            return self._warm_pixmap_textures_in_current_context(old_pixmap, new_pixmap)
-        finally:
-            try:
-                self.doneCurrent()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
     def _warm_pixmap_textures_in_current_context(
         self,
@@ -1663,10 +1611,15 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.transition_lifecycle import cancel_current_transition
         return cancel_current_transition(self, snap_to_new)
 
-    def initializeGL(self) -> None:  # type: ignore[override]
-        """Delegates to rendering.gl_compositor_pkg.gl_lifecycle."""
-        from rendering.gl_compositor_pkg.gl_lifecycle import handle_initializeGL
-        return handle_initializeGL(self)
+    def gl_initialize(self, generation_changed: bool) -> None:  # type: ignore[override]
+        """Establish GL resources for the borrowed QRhi OpenGL context.
+
+        Qt re-invokes this whenever the render target is rebuilt, including a
+        plain resize. Only a genuine QRhi/context replacement invalidates
+        SRPSS-owned GL ids, so a resize must not rebuild immutable resources.
+        """
+        from rendering.gl_compositor_pkg.gl_lifecycle import handle_rhi_initialize
+        return handle_rhi_initialize(self, generation_changed)
 
     def _init_gl_pipeline(self) -> None:
         """Delegates to rendering.gl_compositor_pkg.gl_lifecycle."""
@@ -2108,21 +2061,12 @@ class GLCompositorWidget(QOpenGLWidget):
         retain_active: Optional[str] = None,
     ) -> None:
         from rendering.gl_compositor_pkg.shader_dispatch import release_transition_textures
-        made_current = False
-        if retain_active is not None:
-            owner_context = self.context()
-            if owner_context is None:
+        if retain_active is not None and not self._rhi_gl.is_current():
+            if not self._rhi_gl.make_current():
                 raise RuntimeError(
-                    "Cannot retire terminal textures without compositor context"
+                    "Cannot retire terminal textures without the QRhi OpenGL context"
                 )
-            if QOpenGLContext.currentContext() is not owner_context:
-                self.makeCurrent()
-                made_current = True
-        try:
-            release_transition_textures(self, retain_active=retain_active)
-        finally:
-            if made_current:
-                self.doneCurrent()
+        release_transition_textures(self, retain_active=retain_active)
 
     def _prepare_pair_textures(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
         from rendering.gl_compositor_pkg.shader_dispatch import prepare_pair_textures
@@ -2270,14 +2214,21 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.overlays import render_debug_overlay_image
         return render_debug_overlay_image(self)
 
-    def _paint_debug_overlay_gl(self) -> None:
-        from rendering.gl_compositor_pkg.shader_dispatch import paint_debug_overlay_gl
-        paint_debug_overlay_gl(self)
+    def gl_render(self) -> None:  # type: ignore[override]
+        """Draw one compositor frame into the bound QRhi target."""
+        from rendering.gl_compositor_pkg.paint import handle_rhi_render
+        return handle_rhi_render(self)
 
-    def paintGL(self) -> None:  # type: ignore[override]
-        """Delegates to rendering.gl_compositor_pkg.paint."""
-        from rendering.gl_compositor_pkg.paint import handle_paintGL
-        return handle_paintGL(self)
+    def gl_release(self) -> None:  # type: ignore[override]
+        """Qt-initiated release of SRPSS GL resources.
+
+        Qt calls this when the QRhi is about to change or go away. SRPSS's own
+        strict teardown is ``cleanup()``; this path must not raise into the Qt
+        virtual override, so a failed deletion keeps ownership and is reported
+        rather than propagated.
+        """
+        from rendering.gl_compositor_pkg.gl_lifecycle import handle_rhi_release
+        return handle_rhi_release(self)
 
     @Slot()
     def _srpss_apply_timer_update(self) -> None:
@@ -2300,10 +2251,6 @@ class GLCompositorWidget(QOpenGLWidget):
         """Delegates to rendering.gl_compositor_pkg.paint."""
         from rendering.gl_compositor_pkg.paint import paintGL_impl
         return paintGL_impl(self)
-
-    def _paint_spotify_visualizer_gl(self) -> None:
-        from rendering.gl_compositor_pkg.shader_dispatch import paint_spotify_visualizer_gl
-        paint_spotify_visualizer_gl(self)
 
     def _paint_dimming(self, painter: QPainter) -> None:
         """Paint the dimming overlay if enabled (QPainter fallback path)."""

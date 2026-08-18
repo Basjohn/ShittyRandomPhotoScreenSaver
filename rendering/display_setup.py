@@ -151,6 +151,18 @@ def show_on_screen(widget) -> None:
     if not hw_accel and GL is None:
         widget._mark_all_overlays_ready(GL_OVERLAY_KEYS, stage="software_prewarm")
 
+    # The GL compositor MUST exist before this window is first shown.
+    # QRhiWidget renders through the top-level window's QRhi, and Qt derives
+    # that backing-store QRhi configuration when the window is created. A
+    # texture-backed child added to an already-created window never receives a
+    # QRhi and therefore never renders at all - a silent black display.
+    try:
+        widget._ensure_gl_compositor()
+    except Exception:
+        logger.debug(
+            "[GL COMPOSITOR] Failed to ensure compositor before show", exc_info=True
+        )
+
     # Show as borderless fullscreen instead of exclusive fullscreen.
     widget.show()
     try:
@@ -200,7 +212,8 @@ def show_on_screen(widget) -> None:
     except Exception as e:
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
-    # Ensure shared GL compositor and reuse any persistent overlays
+    # Compositor was created before show(); this refreshes its geometry and
+    # covers configurations where it could not be created earlier.
     try:
         widget._ensure_gl_compositor()
     except Exception:

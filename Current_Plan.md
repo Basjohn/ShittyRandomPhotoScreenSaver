@@ -1,17 +1,13 @@
 # Current Plan
 
-Last updated: 2026-08-17
+Last updated: 2026-08-18  
 Branch: `main`  
-Active phase: Phase 5 — workload, delivery, GPU attribution, resource efficiency
+Active phase: Phase 5 — presentation architecture correction, delivery recovery, and monitor hardening
 
-This file contains **unfinished active work only**. Stable architecture belongs in
-`Spec.md`; detailed design/evidence belongs in the roadmap/phase reports; solved failures
-belong in `Docs/Historical_Bugs/`.
-
-Settings/Edit compiled ownership, Diagnostic ownership attribution, retained-current
-texture identity, steady retained-base draw, direct upload-copy removal, and clock-shadow
-work are closed. Preserve them as regression contracts; do not reopen them without new
-contradictory evidence.
+This file contains **unfinished active work and the minimum accepted evidence needed to execute it**.
+Stable architecture belongs in `Spec.md`; detailed evidence belongs in phase reports/audits; solved
+failures belong in `Docs/Historical_Bugs/`; temporary diagnostic retirement and unrelated debt belong
+in `Future_Cleanup.md`.
 
 ## Current Authority And Evidence
 
@@ -19,1012 +15,453 @@ contradictory evidence.
 - Historical commits are negative controls/forensic references only.
 - Preserve `ff93461685476bd0657aa88312fc2e35e9037880` as the user-approved Bubble/Spectrum behavioural reference until a later exact commit receives explicit approval.
 - `main.py` is the ordinary performance/hostile/soak/evidence authority.
-- Diagnostic is a frozen-runtime/lifecycle attribution product, not a performance baseline.
+- Diagnostic builds are lifecycle/attribution products, not performance baselines.
 - Media Center receives bounded shared route/build coverage.
 - `Current_Plan.md` owns active execution order.
-- `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` owns the accepted 2026-08-16 delivery/presentation evidence and the exact A/B/C/D interpretation.
-- `Future_Cleanup.md` owns temporary diagnostic removal and test debt; it is not an alternate active plan.
+- `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` owns the accepted 2026-08-16 through 2026-08-18 delivery evidence and should retain the detailed A/B/C/D history.
+- `Future_Cleanup.md` owns temporary diagnostic retirement and deferred/test debt; it is not an alternate active plan.
 - Do not freeze raw log/ZIP paths into `Index.md` or roadmap navigation.
+
+### Accepted 2026-08-18 Qt architecture audit
+
+This audit **changes the active implementation direction**. It does not declare P2 or P4 solved.
+
+The current per-display compositor and Spotify visualizer surface are both `QOpenGLWidget` based.
+Qt 6.9.1 does not present a `QOpenGLWidget` directly. It renders the widget into an offscreen FBO
+using the widget's own `QOpenGLContext`, then the top-level QWidget backing-store/QRhi compositor
+consumes that texture and presents the complete top-level window. Before composition,
+`QOpenGLWidgetPrivate::beginCompose()` makes the child context current and calls
+`flushShared()`; on NVIDIA Qt uses `glFlush()` for that shared-context visibility boundary.
+
+The valid P4 stage run localized the severe sampled stalls **after SRPSS compositor paint**:
+
+```text
+              outer  core  overlay | paint->compose  compose->swap  paint->swap
+Crumble        3.26  0.29     2.94 |        36.04          14.18        50.22
+Warp           9.56  6.10     3.44 |        38.08          12.12        50.20
+Wipe           3.77  0.12     3.62 |        36.61          13.16        49.77
+Slide          3.95  0.07     3.85 |        35.69          12.81        48.50
+```
+
+Ordinary sampled end-to-swap values were about `0.4-0.46 ms`. The Python
+`aboutToCompose`/`frameSwapped` observer has a GIL-entry caveat, so the table is **not** proof that
+Qt itself spends exactly 36-38 ms in one internal call. It is, however, consistent with the
+source-audited `QOpenGLWidget` cross-context handoff located in that exact boundary.
+
+Qt 6.9.1 also provides `QRhiWidget`. A `QRhiWidget` uses the **top-level window's QRhi** rather than
+creating the additional `QOpenGLWidget` child rendering context. It supports foreign/raw OpenGL
+inside a render pass via `QRhiCommandBuffer.beginExternal()` / `endExternal()`. SRPSS is pinned to
+PySide6 6.9.1, where the required QRhi family is expected to be available; implementation must
+verify the actual Python bindings before mutation.
+
+SRPSS's VSync policy remains intentional and is **not the active defect hypothesis**:
+
+- global `QSurfaceFormat` is configured with `swapInterval(0)` before `QApplication` creation;
+- Qt's top-level RHI backing-store swapchain requests `NoVSync` when the top-level window format has interval 0;
+- SRPSS remains timer/refresh-cap driven rather than VSync-driven;
+- a driver/DWM can still impose presentation behaviour externally, but no current source evidence shows SRPSS accidentally requesting VSync=1.
+
+### Causal status after the audit
+
+**Proven:**
+
+- P2: the auxiliary visualizer publication -> `SpotifyBarsGLOverlay.update()` stream is a material shared-GUI amplifier under the current `QOpenGLWidget` implementation.
+- P3: remaining visualizer-family state/handoff preparation cost is real but too small to explain the large delivery defect; P3 is closed.
+- P4: severe no-visualizer stalls can occur with only a few milliseconds of SRPSS compositor GPU work and are localized after compositor paint.
+- The current compositor and visualizer surfaces both pay Qt's `QOpenGLWidget` render-to-texture/shared-context composition architecture.
+
+**Strong candidate, not yet proven by production A/B:**
+
+- the `QOpenGLWidget` child-context -> top-level QRhi shared-context handoff is the major P4 architecture owner and may also be the mechanism that makes the P2 auxiliary update stream unusually expensive.
+
+**Decision:**
+
+Stop expanding P4 instrumentation. Test the architecture directly with a bounded
+`QOpenGLWidget -> QRhiWidget(OpenGL)` migration, first on the main compositor and, only after that
+checkpoint is accepted, on the Spotify visualizer GL surface.
 
 ## Checkpoint Policy
 
 A checkpoint is a rollback anchor, not a pause for permission.
 
-- Make a clean narrow commit after an independently risky architectural slice.
+- Make a clean narrow commit after each independently risky architecture slice.
 - Run the owning focused tests and smallest useful runtime/evidence gate.
 - If the gate passes, keep the checkpoint and continue.
 - Stop on failed evidence, contradicted causal model, dirty/conflicted repository state, or an affected visual result requiring operator judgement.
 - Never carry a failed experiment forward through compensating flags, retries or hidden alternate paths.
+- **Do not combine the main-compositor QRhi migration and the Spotify-overlay QRhi migration in one commit.** Their causal owners are different (P4 vs P2), even though they share a substrate.
 
 ## Non-Negotiable Guardrails
+
+### Existing fidelity and ownership bars
 
 - Keep `versioning.py` user-owned unless a version change is explicitly requested.
 - Preserve Bubble authored-step cadence, dt, source/event sampling, one-in-flight semantics, simulation and ordinary COMPUTE ownership.
 - Preserve Spectrum authoritative source/state evolution on the existing visualizer tick.
-- No second visualizer clock, paint-local state mutation, source decimation or cadence cap.
+- No second visualizer clock, paint-local logical-state mutation, source decimation or cadence cap.
 - Logical/state-evolution cadence is distinct from presentation opportunity.
-- Attack GUI/request delivery starvation before moving Bubble/Spectrum timing.
+- Attack GUI/presentation ownership before moving Bubble/Spectrum timing.
 - Do not create one catch-all "third thread".
 - Qt/QWidget/QPixmap/GL mutation stays on the correct GUI/context owner.
 - Strict GL teardown remains fail-closed and byte-accounted.
 - Keep the production CPU image-cache cap at 256 MiB until measured evidence justifies a deliberate change.
 - No sleeps, nested event pumping, production `gc.collect()`, working-set trimming, process recycling, timeout extension, ignored owners, hidden runtime fallback paths or cadence hacks.
-- Configured visualizer display ownership is sticky across transient sleep/wake/non-participation. Preserve the hard-won same-display geometry/aspect-ratio correction path; do not migrate ownership to another display merely because the configured display is temporarily not ready. Cross-display fallback requires authoritative settled-topology absence plus one intentionally coarse ~60-second confirmation opportunity. This is ownership grace, not a frame clock: no polling, dedicated thread, raw periodic timer or exact-deadline requirement. Return to the configured display is event-driven from later authoritative topology plus normal display-runtime readiness.
-- Preserve ordinary stable cold-start anti-flash behaviour. `screen.grabWindow(0)` may remain on the normal desktop→screensaver startup path; any removal/bypass is recovery/reinitialization-specific unless separately approved.
+- Configured visualizer display ownership remains sticky across transient sleep/wake/non-participation.
+- Preserve ordinary stable cold-start anti-flash behaviour. `screen.grabWindow(0)` may remain on normal desktop -> screensaver startup; any bypass remains recovery-specific unless separately approved.
+
+### QRhi migration bars
+
+- Force the QRhiWidget backend to **OpenGL**. This checkpoint reuses the existing PyOpenGL renderer; it is not a Direct3D/Vulkan rewrite.
+- Do not rewrite transition shaders into QRhi pipelines in this checkpoint.
+- Do not start a Qt Quick/QML migration in this checkpoint.
+- Do not add `DwmFlush`, `glFinish`, fence waits, swap waits, sleeps, polling, or event pumping as a "fix".
+- Do not change authored transition duration, display refresh caps, visualizer publication cadence, image quality, shader quality, overlay fidelity, CUSTOM geometry, or display support to improve timing.
+- Do not add a silent runtime fallback from QRhiWidget back to QOpenGLWidget. The old commit is the rollback anchor. If QRhi cannot satisfy the contract, fail the checkpoint rather than hiding the failure.
+- The top-level `QSurfaceFormat` interval-0 policy remains. Removing `apply_widget_surface_format()` from a QRhiWidget child must **not** remove or weaken the global pre-`QApplication` format configuration that drives Qt's top-level `NoVSync` swapchain request.
+- Treat the top-level QRhi/OpenGL context as **borrowed Qt ownership**. SRPSS may use it only through the QRhi lifecycle/foreign-rendering contract; it must not destroy it or casually `doneCurrent()` a context Qt owns.
+- `QRhiWidget.rhi()` is lifecycle-scoped. Do not depend on calling it from arbitrary callbacks merely because a pointer happened to work once.
+- Preserve the current raw-GL program/texture/geometry ownership model unless a specific object must change owner. One numeric GL resource must still have one deletion owner.
+- Preserve the current hidden shared warmup semantics unless an equivalent same-context mechanism is implemented and tested. Do not trade steady delivery for first-use shader/texture stalls.
+- Preserve real QPainter-owned fallback/HUD behaviour. If `QPainter(widget)` is not valid inside the QRhi external pass, use an explicitly proven OpenGL paint-device path (for example `QOpenGLPaintDevice`) or another equivalent that renders into the active QRhi target. Do not simply delete the fallback or PERF HUD to make the migration easier.
+- Do not manufacture a replacement for `aboutToCompose`/`frameSwapped` merely to keep old P4 diagnostic fields alive. Production architecture outranks obsolete instrumentation.
 
 # Phase 5 — Active Work
 
 ## Immediate Priority Queue
 
-This queue is the **Phase 5 execution authority**. P1 is closed; P2→P4 remain the immediate performance/delivery
-sequence. P5 is the next mandatory monitor-topology/sleep-wake hardening lane and must complete
-before returning to lower-leverage Phase 5 work in P6. Detailed delivery evidence belongs in
-`Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`; cleanup details belong in
-`Future_Cleanup.md`.
-
-P0 diagnostic-scaffolding removal is closed: the temporary A/B/C presentation probe, its
-`--viz-present-abc` gate, `Shift+/` hotkey and event-loop-recorder install hook are gone, and the
-passive delivery-stage seam in `rendering/adaptive_timer.py` is retained under
-`tests/test_adaptive_timer.py::TestDeliveryStageInvariants`. Preserve that as a regression
-contract; do not reintroduce runtime class patching as a presentation solution.
-
-### P1 — production presentation/fidelity contract (locked; audit corrections complete)
-
-P1's original landing is closed and made **no production runtime changes**: it added tests and
-documentation only. The logical/publication bars remain useful. A post-P1 audit found several
-test-semantics problems that could mislead P2; those test-semantics corrections are now complete
-and production remains byte-identical to the approved pre-P2 anchor `30e66e08`.
-
-Current useful bars:
-
-- `tests/test_visualizer_presentation_contract.py` — publication/presentation separation on the
-  real `SpotifyBarsGLOverlay` with an injected deterministic clock: every accepted publication
-  integrates exactly once, presentation requests may be fewer but never more than publications,
-  and withholding presentation at both the paint seam and the request seam leaves the covered
-  logical state unchanged.
-- `tests/test_visualizer_presentation_negative_controls.py` — rejected admission designs
-  (target-FPS gate, pending-until-paint latch, latest-at-60 Hz edge loss).
-- `tests/test_bubble_cadence.py` — authored step/dt, one-in-flight semantics, discrete-edge
-  first-visible timing, and the temporal golden that rejects terminal batching/persistent lanes.
-- `tests/test_spectrum_presentation_smoothing.py` — authoritative tick trace against the
-  versioned golden; no independent cadence.
-- `tests/test_visualizer_replay.py` — all supported modes on the real tick/overlay path, and
-  `test_presentation_schedule_does_not_change_logical_series` across presentation rates/stalls.
-- `tests/test_phase3_runtime_lifecycle.py`, `tests/test_runtime_destruction.py`,
-  `tests/test_gl_compositor_cleanup.py`, `tests/test_spotify_visualizer_mode_transition.py` —
-  generation/activation rejection, Settings/recreate, display reassignment, strict GL teardown.
-
-#### P1 audit follow-up — complete (test semantics only)
-
-All five audit items are done:
-
-- Stale R-61 eligibility contract removed. `TestPresentationSourceLiveness` now disqualifies
-  `AdaptiveTimerStrategy` in **any** scope, asserts no visualizer presentation is wired to it,
-  and prescribes no publication/request ratio.
-- `TestMixedRefreshDeliveryPolicyModel` is explicitly a `HAZARD_LIGHT_ONLY` closed-form model;
-  it does not execute Qt's real dispatch/composition path and may not be cited as runtime
-  acceptance.
-- `_logical_digest()` now includes Bubble positional/extra/trail payload, kick/snare strengths and
-  envelopes, transient energy, smoothed band state and devcurve payload. The suppression oracle
-  is trajectory-based rather than endpoint-only, so a transient Bubble divergence cannot hide by
-  returning to the same terminal state.
-- `test_stored_overlay_state_is_the_latest_publication_not_a_backlog` now says what it actually
-  proves: latest stored state only. `update()` is stubbed, so it does **not** prove paint receipt.
-- `presentation_requests <= accepted_publications` is documented as an anti-amplification guard
-  only, never as sufficient evidence of fidelity.
-
-The P1 mixed-refresh model remains useful as a **hazard light**, not a live dual-monitor
-regression oracle. No P1 unit test may close P2 or overrule installed visual review.
-
-### P2 — fix bad smell 1: publication-coupled visualizer presentation
-
-**Architecture review only. No further production wiring is authorized until Step 2b/2c below is
-resolved and the matching Step 3 bars are written against the selected architecture.**
-
-Two production attempts and one source-analysis candidate are closed negative controls. The
-premise remains measured: the auxiliary visualizer one-publication → one-`QOpenGLWidget.update()`
-stream is a shared-GUI amplifier. The failures were in attempted admission/pacing mechanisms,
-not in that causal premise.
-
-See `Docs/Historical_Bugs/R-61_*`, `R-62_*`,
-`Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`, and the preserved R-62 evidence.
-
-#### What the failed attempts established
+This queue is the **execution authority**:
 
 ```text
-R-61  sole dependence on AdaptiveTimerStrategy   -> visualizer froze after first transition
-R-62  same source, while-active only             -> Bubble worse; state->paint p95 roughly doubled
-P2-3  pre-GUI dispatch-window coalescing         -> killed before implementation; no such layer exists
+P0  diagnostic-scaffolding cleanup                         CLOSED
+P1  production presentation/fidelity contract              CLOSED / LOCKED
+P3  visualizer-family handoff/preparation attribution      CLOSED as secondary
+
+P4-RHI-A  main compositor QOpenGLWidget -> QRhiWidget      LANDED (automated bars green)
+P4-RHI-B  installed no-visualizer acceptance               ACTIVE
+P2-RHI-A  SpotifyBarsGLOverlay -> QRhiWidget               CONDITIONAL NEXT if P4-RHI accepted
+P2-RHI-B  remeasure auxiliary presentation amplifier       CONDITIONAL NEXT
+REMEASURE equivalent ordinary 165 Hz + 60 Hz scenario
+P5  monitor-topology / sleep-wake hardening                MANDATORY NEXT
+P6  lower-leverage Phase 5 work                            AFTER P5
 ```
 
-R-62 was a **valid active negative result**, not an inert run:
+The old order P2 -> P3 -> P4 is superseded because the Qt-source audit identified a **shared surface
+backend mechanism** beneath both P2 and P4. This does not merge their acceptance criteria.
+
+## P1 — CLOSED / LOCKED production presentation and fidelity contract
+
+Keep the existing P1 tests and versioned goldens as architecture-neutral acceptance bars.
+In particular:
+
+- every accepted visualizer publication integrates exactly once;
+- presentation may consume fewer opportunities but cannot alter logical state evolution;
+- Bubble positional/extra/trail payload, transient energy, band state and protected visible edge remain covered;
+- Spectrum smoothing/source evolution remains authoritative on the existing tick;
+- stale generation/activation snapshots are rejected;
+- no visualizer presentation authority moves to `AdaptiveTimerStrategy`;
+- the mixed-refresh closed-form model remains a hazard light only, never installed acceptance.
+
+Do not weaken these tests to accommodate QRhi.
+
+## P3 — CLOSED as measured secondary cost
+
+Retain the accepted finding:
+
+- Bubble total callback roughly `285 us`;
+- DevCurve roughly `277 us`;
+- bar build/clamp roughly `27 us`;
+- remaining static/config work is real but not the 33-144 ms delivery owner.
+
+Do not reopen P3 extraction before P4/P2 surface work unless new direct evidence contradicts this.
+
+# P4-RHI — Main compositor surface migration
+
+## P4-RHI-A — LANDED implementation checkpoint
+
+The per-display `GLCompositorWidget` is now a `QRhiWidget` on the OpenGL QRhi backend, rendering
+the existing PyOpenGL transition renderers inside an `ExternalContent` render pass. The Spotify
+visualizer overlay is untouched and remains P2-RHI-A.
+
+Detailed binding/lifecycle evidence lives in
+`Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` under "P4-RHI-A".
+
+**This checkpoint does not close P4.** No installed runtime evidence exists yet.
+
+### What landed
+
+- `rendering/gl_rhi_surface.py`: narrow external-OpenGL QRhi substrate — generation-fenced
+  borrowed-context handle, exception-safe `ExternalContent` pass/`beginExternal` bracketing, a
+  `QOpenGLPaintDevice` painter for the QRhi target, and the `Api.OpenGL`-selecting base widget.
+  Reusable by P2-RHI-A; deliberately not a rendering framework.
+- Compositor lifecycle translated: `initializeGL`->`gl_initialize`, `paintGL`->`gl_render`, plus a
+  real `releaseResources` path. Child-only `setFormat()`/`setUpdateBehavior()` are gone; the global
+  pre-`QApplication` interval-0 `QSurfaceFormat` policy is untouched and covered by a test.
+- Context ownership: SRPSS borrows the Qt-owned QRhi OpenGL context and never destroys or
+  `doneCurrent()`s it. Hidden shared warmup context is created from it and generation-fenced.
+- QPainter fallback and PERF HUD now render into the QRhi target via `QOpenGLPaintDevice`; neither
+  was deleted or resized.
+- Dead `makeCurrent`-only warmup wrappers and dead `QPainter(widget)` overlay wrappers removed.
+
+### Automated bars passed
+
+`tests/test_p4_rhi_compositor_surface.py` (32 bars) plus the migrated owning suites:
+
+- OpenGL API selected in the constructor and never silently Direct3D (structural + runtime);
+- render pass declares `ExternalContent` and brackets raw GL exactly once;
+- body / `beginExternal` / `beginPass` failures never strand an open external block or pass, and a
+  render exception never propagates into the Qt virtual override;
+- borrowed context exposes no release/destroy API and is never `doneCurrent()`-ed;
+- generation changes only on real QRhi replacement, not on resize;
+- resize re-initialize does not rebuild immutable resources;
+- strict cleanup fails closed with no usable context and retains ownership;
+- hidden warmup context retired on share-group death;
+- fallback/HUD paint into the QRhi target in one painter session;
+- no application-side `swapBuffers`; transition dispatch table and `update()` ownership unchanged;
+- raw WGL probe refuses to run without a live borrowed drawable.
+
+Gate result: 264 passed / 25 skipped across the compositor, transition, stage and P4 suites;
+`test_frame_timing_workload` shows dt_max parity with the QOpenGLWidget baseline
+(16.97 vs 17.11 ms). Every changed file compile-checked.
+
+Pre-existing failures confirmed identical on a clean stash of `main` and therefore not caused by
+this checkpoint: `test_slide_transition::test_slide_position_calculation`,
+`test_slide_jitter` (2), `test_block_puzzle_flip::test_block_puzzle_set_flip_duration`, and the
+known native test-process exit in the combined lifecycle run.
+
+### Construction ordering is now a production contract
+
+Qt derives the top-level backing-store QRhi configuration at window creation. A `QRhiWidget` added
+to an already-created window **never renders**. Production previously showed the DisplayWidget
+before creating the compositor, so a naive inheritance swap would have produced silently black
+displays. `rendering/display_setup.py` now creates the compositor before `show()`; the remaining
+lazy path logs an error instead of failing silently. Both are covered by tests.
+
+## P4-RHI-B — installed acceptance gate
+
+First installed test: single display, no visualizer, broad transition set.
+
+Use ordinary `main.py` runtime. `--perf --gpu-timing` may be used for comparison, but the result
+must not depend on `--diag-p4-stages` or any active intervention. Visual transition smoothness is
+part of acceptance.
+
+Pass bars:
+
+- [ ] no transition fidelity regression, corruption, stale frame, black frame, upside-down frame, alpha/DPR error or startup flash regression;
+- [ ] no GL cleanup/recreation regression;
+- [ ] severe recurring 48-80+ ms transition delivery stalls materially collapse compared with the accepted P4 evidence;
+- [ ] request-age / queued-dispatch tails materially improve rather than merely moving into a different stage;
+- [ ] 60 Hz delivery is effectively refresh-limited rather than repeatedly missing 3-4 presentation intervals;
+- [ ] ordinary steady-image rendering remains healthy;
+- [ ] no new CPU/GPU owner of comparable size appears.
+
+If `--perf` HUD overhead makes the comparison ambiguous, **one** existing
+`--diag-p4-no-perf-hud` control is allowed. Do not add another diagnostic family.
+
+### P4-RHI decision
+
+- **Accepted:** retain the QRhi compositor and proceed to P2-RHI.
+- **No material delivery improvement, or lifecycle/fidelity regression:** revert the P4-RHI commit. Do not return to microscopic P4 stage instrumentation. Promote the full per-display Qt Quick/QQuickWindow scene migration decision instead, because the bounded QRhi bridge failed to remove the architecture owner.
+
+# P2-RHI — Conditional Spotify visualizer surface migration
+
+**Do not start until P4-RHI is accepted in installed runtime.**
+
+P2 remains a distinct measured owner. The QRhi compositor does not automatically close it.
+
+## Why this is now a bounded candidate
+
+The old shared-surface audit was blocked because drawing the visualizer inside the bottom-most main
+compositor would put it behind its QWidget card. QRhi changes the available experiment:
 
 ```text
-                    u/ss            Bubble state->paint p95
-immediate           0.971 - 1.000   4.90 ms median
-light deferral      0.949           7.04 ms
-heavy deferral      0.699 - 0.755   13.2 - 15.4 ms (peaks 52.7 - 56.5 ms)
+DisplayWidget top-level QRhi
+  -> main compositor QRhiWidget         (bottom-most, same role as today)
+  -> Spotify visualizer card QWidget    (unchanged)
+  -> SpotifyBarsGLOverlay QRhiWidget    (unchanged sibling/Z-order role)
 ```
 
-The windows show a strong dose-response association between more deferral and older Bubble state
-at paint. Treat that as strong mechanistic evidence, not as an independently randomized dose:
-the borrowed opportunity's own sickness can simultaneously increase deferral and latency.
-Bubble logical publication remained ~99.7-100%, strongly localizing the installed regression to
-presentation/delivery rather than simulation.
+The visualizer can therefore keep its existing sibling position, CUSTOM geometry, rounded-card
+stencil and fade while removing **its own QOpenGLWidget child rendering context**. This directly
+tests whether the expensive auxiliary update stream was expensive primarily because each update
+forced another QOpenGLWidget shared-context handoff.
 
-The borrowed compositor opportunity delivered only **~54-56 accepted, irregular Hz under
-transition load** (`511/545`, `493/543`). Pacing a ~90 Hz visualizer from that degraded stream
-was therefore rejected.
+## P2-RHI-A — overlay backend migration
 
-#### Constraints now binding on every P2 candidate
+- [ ] Reuse the proven P4 external-OpenGL QRhi substrate; do not create a second competing RHI wrapper.
+- [ ] Change `SpotifyBarsGLOverlay` from QOpenGLWidget to QRhiWidget/OpenGL only.
+- [ ] Preserve `set_state()` logical/state handoff exactly.
+- [ ] Preserve one `update()` call per accepted publication **for the first QRhi overlay experiment**. Do not mix backend migration with request coalescing; the point is to isolate backend/handoff cost.
+- [ ] Preserve Bubble/Spectrum/Sine/Oscilloscope/DevCurve shader behaviour, uniforms, transient state, smoothing, ghost/history state and mode switching.
+- [ ] Preserve transparent background/alpha composition, painted-card rounded stencil, shadow/card alignment, `WA_AlwaysStackOnTop`, CUSTOM geometry/DPR/aspect correction, fade/show/hide and configured-display ownership.
+- [ ] Preserve startup hidden state and no-media/disabled behaviour.
+- [ ] Preserve strict query/program/VAO/VBO teardown and Settings/display recreation.
+- [ ] No new timer, worker, queue, display-rate gate, paint acknowledgement or manual pending-until-paint latch.
 
-- `AdaptiveTimerStrategy` / `AdaptiveRenderStrategyManager` is disqualified as a visualizer
-  presentation source in **any** scope, sole or while-active-only.
-- **A pacing source that degrades under the load it is meant to relieve is disqualified.**
-- **State-to-paint latency is an acceptance metric, not a diagnostic.** A lower request ratio
-  cannot compensate for materially older Bubble state at paint.
-- Edge protection must be asserted against the real Bubble **positional-payload** edge in the v1
-  golden, on the tick where it becomes visible, not the tick where the event is authored.
-- Every logical input is integrated before any presentation coalescing (R-54).
-- No producer timestamp gate, display-rate divisor, paint acknowledgement, pending-until-paint
-  admission, second visualizer clock, source/event decimation, catch-up replay or repaint requeue
-  (R-27/R-54).
-- `u/ss < 1.0` proves only that request coupling changed. It is **not** success by itself.
-- A narrower candidate cannot silently close P2. Any scope change must be justified in writing
-  against the accepted A/B evidence.
+## P2-RHI-B — acceptance
 
-#### Step 1 — COMPLETE: dispatch-layer characterization (source analysis, no runtime change)
+Automated:
 
-The current production path is synchronous on the GUI thread end to end:
+- [ ] all P1 logical/temporal goldens remain unchanged;
+- [ ] protected Bubble visible positional edge survives actual presentation receipt;
+- [ ] state-to-paint latency does not materially worsen;
+- [ ] transparent/stencil/card geometry is pixel/behaviour equivalent at supported DPRs;
+- [ ] transition-active and steady-image liveness work without `AdaptiveTimerStrategy` becoming visualizer authority;
+- [ ] Settings recreate, display reassignment and final teardown return owned GL resources to baseline;
+- [ ] same top-level window uses one QRhi backend/API; no incompatible RHI backend is requested by siblings.
+
+Installed:
+
+- [ ] repeat the accepted A/B-style question on the QRhi overlay: does suppressing only the auxiliary visualizer update stream still produce a material compositor-delivery win?
+- [ ] compare Bubble state-to-paint p50/p95/max and visible attack/edge latency against the approved behaviour reference;
+- [ ] run equivalent dual-display 165 Hz + 60 Hz broad transitions with Bubble and Spectrum separately;
+- [ ] verify visualizer publication remains authored-rate and presentation remains smooth/reactive.
+
+### P2-RHI decision
+
+- **If the old A/B amplifier materially collapses while fidelity remains equal/better:** P2 may close as an architecture correction. The update stream still exists, but it is no longer a material shared-GUI amplifier.
+- **If the auxiliary request stream remains materially harmful:** do not return to admission/pacing experiments. Promote the previously deferred one-surface visualizer/card scene-composition change as the next deliberate architecture step.
+
+# Equivalent dual-display remeasurement after P4/P2-RHI
+
+After the accepted QRhi checkpoints, repeat the ordinary production scenario equivalent to the
+2026-08-16 baseline:
+
+- 165 Hz + 60 Hz;
+- broad transitions;
+- Bubble and Spectrum separately;
+- no visualizer control;
+- Media/GSMTC still enabled where it was enabled in the accepted control;
+- ordinary `main.py` is the authority.
+
+Record:
+
+- compositor delivered/target FPS per display;
+- visualizer logical publication, state handoff, update request and paint rates;
+- Bubble state-to-paint p50/p95/max and protected-edge receipt;
+- transition vs steady windows;
+- severe frame-gap and request-age tails;
+- GPU timing only as supporting attribution, not as the success metric.
+
+Do not claim P2/P4 closure from tests alone.
+
+# P5 — Mandatory monitor-topology and physical sleep/wake hardening
+
+P5 remains mandatory immediately after the presentation architecture gates. The QRhi migration
+must not be used to erase or defer the installed wake failure.
+
+## Accepted wake signature
 
 ```text
-schedule_recurring(16, _on_tick) -> GUI-thread QTimer/direct callback
-    -> _on_tick -> tick_pipeline.push_gpu_frame
-    -> display_image_ops.push_gpu_frame -> _push_spotify_bars_overlay_state
-    -> SpotifyBarsGLOverlay.set_state() -> _request_frame_update() -> QWidget.update()
+~19:58:51  topology churn: MSI present, LG temporarily absent
+            reconcile already pending and not re-armed
+            transient one-display snapshot accepted
+            full teardown/rebuild begins
+
+~19:58:55  LG returns
+            second two-display snapshot accepted
+            second full teardown/rebuild begins
 ```
 
-`rendering/display_image_ops.py` and `widgets/spotify_bars_gl_overlay.py` do not contain an
-existing `run_on_ui_thread`, queued `invokeMethod`, `QueuedConnection`, `singleShot` or worker
-handoff in this presentation path.
+Observed consequences included stale/deleted display events, temporary visualizer ownership
+fallback, two serial full-runtime replacements, and a final last-entered/not-returned boundary in
+D1 CUSTOM Media replay. GL teardown itself completed far enough in that capture to be demoted as
+the leading terminal owner for that incident, not globally exonerated.
 
-**There is no existing pre-GUI queued-dispatch window to coalesce.** The compositor's
-`_srpss_timer_update_dispatch_pending` covers a different layer: a cross-thread callback queued
-*before* `widget.update()`. Copying that concept onto the overlay would either manufacture a new
-queue or rename post-`update()`/paint-pending state, both barred.
+## P5-A — one authoritative monitor-topology owner
 
-Evidence limits remain explicit:
+- [ ] Make one engine-level manager the sole authority that decides no-op, re-anchor or full runtime replacement.
+- [ ] Reduce native/Qt per-window display callbacks to topology-invalidated notifications plus local bookkeeping.
+- [ ] One accepted topology generation drives one replacement decision.
+- [ ] Duplicate native + Qt storms must not race stale-widget mutation against engine replacement.
 
-- existing overlay windows cannot reliably stratify within one transition because they carry no
-  transition label and use variable aggregation windows;
-- existing fields cannot separate wait-for-opportunity from opportunity inter-arrival jitter.
+## P5-B — true trailing-edge topology settling
 
-Those remain unknown; do not add behavioural machinery merely to force an answer.
+- [ ] Every relevant topology event restarts the quiet-period timer.
+- [ ] Add a bounded maximum settle deadline; reaching it yields one explicit best-known snapshot, not retries/event pumping.
+- [ ] Freeze count/order/identity/geometry/DPR into one immutable accepted snapshot/generation before destructive replacement.
+- [ ] Newer topology invalidates/queues a later transaction rather than mutating the one already rebuilding.
+- [ ] Deterministically reproduce the captured temporary-one-display -> final-two-display churn and prove one final rebuild.
 
-#### Step 2 — KILLED: request admission / dispatch-window coalescing
-
-Do not revive this family under different names.
-
-- No new queued GUI hop may be inserted merely to create something to coalesce.
-- No `QTimer.singleShot`, `run_on_ui_thread`, queued `invokeMethod`, worker, thread, queue or lane
-  may be introduced solely as visualizer request admission.
-- Qt post-`update()` pending state may not be used as an admission latch; if it clears at
-  `paintEvent()`/`paintGL()`, it is pending-until-paint regardless of variable name.
-- Do not intercept/suppress `UpdateRequest`, paint, or other Qt events to manufacture admission
-  without a separately approved architecture proving no acknowledgement/backpressure semantics.
-
-#### Step 2b — DECISION: do not merge P2 into P3; audit shared-surface presentation feasibility
-
-Claude's four-lane review correctly identified that request-admission mechanisms are exhausted,
-but **"reduce per-publication GUI cost" is not a P2 solution**. The accepted A/B intervention
-kept logical publication and the overlay `set_state()` handoff alive while suppressing only the
-auxiliary `update()` request. The large A→B improvement therefore isolates consequences of the
-independent presentation-request stream. Optimizing state preparation may help Bad Smell 1b/P3,
-but it cannot by itself close Bad Smell 1.
-
-Likewise, do **not** conclude that P2 is impossible merely because the current separate overlay
-has no safe request-admission seam. That proves admission control is the wrong mechanism, not that
-the independent presentation owner must exist forever.
-
-The next P2 action is a **read-only/source-level feasibility audit** of a bounded shared-surface
-visualizer presentation design:
+## P5-C1 — transactional replacement and explicit readiness commit
 
 ```text
-existing authored visualizer tick
-        -> integrate every logical input exactly as today
-        -> publish immutable visualizer render state / protected edge identity
-        -> one existing per-display GL compositor surface owns drawing
-        -> no separate SpotifyBarsGLOverlay presentation surface/request stream
+settle topology
+  -> freeze snapshot/generation
+  -> stop old-runtime topology mutation
+  -> retire old runtime once
+  -> pass destruction barrier
+  -> construct/register complete replacement
+  -> stage per-display reveal/widget readiness
+  -> commit only at the defined all-displays-ready boundary
 ```
 
-This is a narrow Phase-8-prerequisite audit, **not authorization to implement full Phase 8** and
-not authorization to merge all QWidget overlays into the compositor.
-
-Why this lane is now eligible for analysis despite the old C-vs-B result:
-
-- B proved suppressing the auxiliary overlay request stream was the dominant measured win.
-- C added only ~1.4 FPS by hiding the already request-suppressed surface, proving that mere
-  second-surface existence is secondary.
-- C did **not** test whether drawing the visualizer on the already-owned display compositor can
-  retain visual output while eliminating the independent auxiliary request owner. Therefore
-  C-vs-B does not disqualify this architecture question.
-
-`Current_Plan.md` temporarily supersedes any roadmap wording that requires P2 to be already
-closed before a **read-only** shared-surface feasibility audit. It does not authorize Phase 8
-production work.
-
-#### Step 2c — required shared-surface feasibility questions; no wiring until answered
-
-- [ ] Map the exact compositor draw/lifecycle path in steady-image and active-transition states.
-      Determine whether the compositor surface exists and can safely draw a visualizer layer for
-      the full visualizer lifetime without becoming transition-owned.
-- [ ] Determine the smallest render-state boundary that lets the existing visualizer tick publish
-      immutable Bubble/Spectrum/etc. state without moving simulation, smoothing, event identity,
-      source sampling or authored dt into paint/compositor code.
-- [ ] Determine whether ordinary visualizer publications can target the **same compositor
-      `QOpenGLWidget`** without creating another timer/clock. Outside transitions, publication may
-      request that existing surface to repaint; during transitions, duplicate requests to the
-      same widget may be left to Qt's normal same-widget update merging. Do **not** add a manual
-      pending latch to force this result.
-- [ ] Prove that the design does not depend on `AdaptiveTimerStrategy` for visualizer liveness.
-      The visualizer must continue presenting after transitions stop.
-- [ ] Analyze the transition-active cadence risk explicitly. If sharing the compositor would make
-      Bubble inherit the same ~54-56 Hz irregular opportunity that failed R-62, the design is
-      rejected before implementation unless the architecture itself removes that under-delivery.
-- [ ] Map Z-order/card/stencil implications. The current GL visualizer sits above/within a normal
-      visualizer card while other widgets remain QWidget-owned; shared-surface rendering must not
-      disappear behind the card, bleed outside CUSTOM geometry, or require merging unrelated
-      widgets.
-- [ ] Preserve CUSTOM geometry/aspect correction, configured-display ownership, fade/visibility,
-      startup/recreation generation fencing, and strict GL teardown.
-- [ ] Reuse or explicitly transfer shader/program/geometry ownership without duplicate GL deletion
-      or hidden shared-context lifetime.
-- [ ] Estimate code/lifecycle blast radius before implementation. If this requires a broad Phase 8
-      rewrite rather than a bounded visualizer layer, stop and return to an explicit scope
-      decision; do not let a P2 fix silently become a compositor rewrite.
-- [ ] Record whether the expected benefit is removal of the **independent auxiliary presentation
-      owner**, not "the second surface is expensive." Keep those causal claims separate.
-
-If this audit fails, P2 must be explicitly re-scoped or recorded as not safely achievable on the
-current separate-surface architecture. Do not return to pacing/admission experiments. P3 may then
-proceed as its own Bad Smell 1b lane, but P3 success must not be used to pretend the A/B request
-amplifier was fixed.
-
-#### Step 2c — COMPLETE: shared-surface feasibility audit (read-only)
-
-Full findings in `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`.
-
-**Not rejected on cadence (Q5).** The compositor surface is *not* transition-scoped — only its
-render-strategy timer is — and it already has a steady-state retained-base draw path. Preserved
-evidence shows `render_requests == frames` (511/511, 493/493) with `dur_min=0.32 ms`,
-`dur_max=11.02 ms`, so its ~54–56 Hz is a **request rate, not a paint capacity limit**. R-62
-failed because Bubble *waited for* that opportunity; a shared surface has Bubble *drive* it from
-the existing GUI-thread tick via `compositor.update()`. No new timer, thread or clock, and Qt
-merges same-widget updates without a manual latch. Liveness no longer depends on
-`AdaptiveTimerStrategy` (Q3/Q4).
-
-**Blocked on scene composition (Q6, Q9).** The overlay is a *sibling* of the compositor, stacked
-above the visualizer card, and owns a rounded-rect stencil-mask program for card-corner clipping.
-The compositor is the bottom-most child of `DisplayWidget`, beneath every QWidget overlay
-including the card. Drawing the visualizer inside compositor paint would render it *behind* its
-own card unless the card composition also changes. With ~2.2k lines each side plus mode
-renderers, stencil, CUSTOM geometry/DPR and fade, this is a **compositor scene-composition
-change, not a bounded visualizer layer** — the stop-and-report case in Step 2b.
-
-Q2/Q7/Q8 (render-state boundary, lifecycle/teardown, shader ownership) are deferred: they are
-only answerable after the Q6 Z-order decision and would otherwise be speculation.
-
-**Legacy compositor seam excluded (audited 2026-08-17).** The existing compositor
-`_spotify_vis_*` / `set_spotify_visualizer_state()` / `paint_spotify_visualizer()` path is dead
-debris from the original Spectrum-only implementation: no production caller, `_spotify_vis_enabled`
-set `True` only inside the unreachable implementation and one test, every paint consumer
-early-returns, and the routine is `QPainter` bars with zero mode awareness, no stencil/card masking
-and no CUSTOM geometry. No modern lifecycle/geometry/state ownership reuses it. It is **not**
-evidence that modern modes can move into the compositor cheaply, is excluded from this decision,
-and must not be revived or extended. Logged in `Future_Cleanup.md`. The Q6/Q9 blockers stand
-unchanged.
-
-**Q5 wording, conservative.** `render_requests == frames` proves only that there was no obvious
-loss **at the observed ~54-56 Hz request rate**. It does not prove the compositor will cleanly
-deliver ~90 Hz once the visualizer drives `compositor.update()`, under a different request pattern
-and with visualizer draw work added to each paint. That remains unproven and would need
-measurement.
-
-#### Step 2d — DECIDED 2026-08-17: Option B (deferred, not closed)
-
-**P2 is not solved, not abandoned, not impossible and not permanently closed.**
-
-Recorded status of Bad Smell 1: a **measured unresolved presentation defect** that is **not
-safely correctable on the current separate-surface architecture with any presently identified
-request-layer mechanism**. The causal premise stands and the evidence is retained.
-
-What remains in force and must not be weakened:
-
-- the accepted A→B→C→A result — suppressing only the auxiliary `update()` request stream improved
-  both compositors, restoring it degraded them again in the same process;
-- the measured coupling `update_requests / set_state == 1.0000` across both modes, with the
-  overlay painting ~31% above what the 60 Hz display can present at ~1.7 ms CPU p95 per paint;
-- every P2 acceptance bar in Step 3 below, for any future candidate.
-
-**P3 and P4 success must never be represented as fixing P2.** They are separate measured owners
-(Bad Smell 1b and Bad Smell 2). Closing them does not close Bad Smell 1.
-
-Sequence now in force:
-
-1. **P3** — attribute the remaining visualizer-family GUI handoff/preparation cost.
-2. **P4** — name and fix the residual non-visualizer queued-GUI-dispatch owner.
-3. **Re-measure** the equivalent 165 Hz + 60 Hz scenario on ordinary `main.py` with `--perf` and
-   `--gpu-timing`; reassess the remaining delivery deficit against the accepted report.
-4. **Only then** decide whether the residual P2 cost justifies promoting shared-surface/card work
-   into a deliberate Phase-8-class architecture change.
-
-P3 and P4 are taken first because they are independently measured owners carrying substantially
-smaller architectural risk than compositor/card scene composition.
-
-Deferred deliberately, not forgotten:
-
-- The shared-surface/card design remains **the only currently identified direct architecture for
-  removing the independent presentation owner.** It is not claimed to be the only conceivable one.
-- **Do not run the ~90 Hz compositor-driving measurement now.** It would characterize a
-  hypothetical architecture against a baseline P3/P4 are about to change. Revisit after P3/P4 if
-  the shared-surface question is reopened, or earlier only if an independent question requires it.
-- The dead legacy compositor Spectrum seam stays excluded from P2 and queued for cleanup only.
-
-**Regression clue to preserve.** Substantially better 165 Hz behaviour existed historically. That
-is retained as evidence: if P3/P4 do not recover enough delivery headroom, a historical
-architecture comparison is a legitimate next investigation **before** concluding that the modern
-multi-mode GL visualizer fundamentally cannot reach the target. Do not treat the current deficit
-as an inherent property of the modern architecture until that comparison has been made or
-explicitly rejected with evidence.
-
-#### Step 3 — test bars required before any selected P2 production implementation
-
-- [ ] Bubble **visible positional-payload edge** from the v1 golden survives actual presentation
-      receipt on the tick where it becomes visible.
-- [ ] Add a phase-offset/GUI-stall matrix so the protected edge survives whether publication lands
-      just before, during or just after the selected presentation path's natural coalescing.
-- [ ] State-to-paint p50/p95/max does not materially worsen versus an equivalent approved 1:1
-      baseline at equal publication/load. Better FPS/request counters cannot compensate for older
-      state.
-- [ ] First-visible Bubble attack/edge latency does not worsen; Spectrum authoritative smoothing
-      and tick trace remain unchanged.
-- [ ] Logical/mode-owned state evolution remains equivalent with and without presentation
-      suppression using the strengthened P1 trajectory oracle plus the existing versioned goldens.
-- [ ] If shared-surface is selected, test steady-state visualizer liveness with no transition,
-      active-transition liveness, transition start/finish, resize/CUSTOM geometry, display
-      reassignment, Settings recreation and strict GL teardown.
-- [ ] If shared-surface is selected, prove it introduces **no new visualizer timer, worker,
-      display-rate gate, paint acknowledgement or manual pending-until-paint latch**.
-- [ ] Teardown/recreation/generation invalidation rejects stale visualizer state and leaves no
-      duplicate shader/program/context ownership.
-- [ ] Both overpaint and under-delivery remain detectable; R-27's
-      `set_state≈90-100` / `paint-update≈39-40` stutter signature is absent.
-- [ ] The synthetic P1 mixed-refresh model remains green only as a hazard light; it cannot be
-      cited as runtime acceptance.
-
-#### Step 4 — runtime gate
-
-- [ ] Confirm the selected candidate is active in the owning sidecar before interpreting results.
-- [ ] Use an equivalent ordinary `main.py` dual-display run with `--perf` and `--gpu-timing`;
-      compare against the accepted A/B/C/D baseline and approved behavioural reference.
-- [ ] Record logical publication, state handoff, presentation requests per target surface, paints,
-      state-to-paint p50/p95/max, protected-edge receipt, 165/60 delivery acceptance, and
-      transition/non-transition windows together.
-- [ ] Installed Bubble and Spectrum visual review is the acceptance authority. If either is worse
-      in any relevant way, revert the isolated candidate immediately; do not tune it in place.
-- [ ] A candidate may close P2 only if it materially addresses the measured **independent
-      auxiliary presentation-request amplifier** without changing authored logical behaviour,
-      increasing temporal age, or moving the same pressure into another independent queue/surface.
-
-### P3 — CLOSED as measured secondary cost (no production correction justified)
-
-Full attribution in `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`.
-
-Final steady figures: Bubble ~285 us total (bar build/clamp ~27, handoff ~11, residual ~117);
-DevCurve ~277 us; Spectrum residual effectively exhausted; Sine/Oscilloscope mostly authoritative
-temporal and static work.
-
-No newly named owner is large enough to justify further decomposition. The suspected shared
-owner - the per-bar build/clamp loop - measures ~27 us, real but immaterial against a 285 us
-callback and negligible against 33-144 ms frame gaps.
-
-- Worker extraction: **rejected** (no measured owner; unjustified test debt).
-- Static-config gating: **deferred, not rejected**. Real but mode-skewed (~156 us Spectrum,
-  ~103 us Sine, ~162 us Oscilloscope; ~19 us Bubble/DevCurve). Split-writer ownership cost
-  currently outweighs the benefit; the invalidation contract is already documented for whenever
-  it is taken up.
-- The attribution probe is retained as evidence.
-
-P3 never explained the delivery defect and is not represented as fixing P2.
-
-### P4 — fix/name bad smell 2: residual queued-GUI-dispatch loss without visualizers
-
-#### Accepted negative result: pair-warm completion is not the major owner
-
-The `--diag-pair-warm-finish` diagnostic engaged correctly - 12/12 `PAIR_WARM` records populated
-`diag_finish_ms`, median ~1.90 ms, max 4.927 ms. Across 44 gaps >33 ms (22 of them >50 ms, max
-111.10 ms) with 491 matched causal predecessors and 0 unmatched, seven of eight sampled >50 ms
-successors still followed 32-44 ms predecessor GPU intervals (Wipe 32.39, Burn 44.14, Warp 41.84,
-Crumble 33.20, Particle 34.17, RainDrops 39.00, BlockSpin 34.50); one followed ~0.13 ms.
-
-**Hidden shared-context pair-warm completion is rejected as the major P4 owner.**
-`--diag-pair-warm-finish` is **retained** as an optional default-off negative-control diagnostic;
-it must not ship as production behaviour.
-
-Do not pursue transition-specific optimization: the pathology crosses unrelated transition
-implementations, and a 30.611 ms sampled *steady* GPU frame also exists.
-
-#### Audit correction that constrains interpretation
-
-The existing outer `GL_TIME_ELAPSED` query wraps `paintGL_impl()`, **not** merely the transition
-shader. The common path inside it is:
-
-```text
-texture/cache preparation -> core transition/retained-base GL draw
-    -> paint_dimming_gl() -> paint_qpainter_overlays_gl() -> outer elapsed end
-```
-
-Under `--perf`, and with Spotify disabled, `paint_qpainter_overlays_gl()` still renders the PERF
-HUD. `render_debug_overlay_image()` creates a full compositor-sized ARGB32 QImage, clears it
-transparent, paints the small HUD into it, and composites it via QPainter. At 3840x2158 that is
-33,146,880 bytes (~31.6 MiB), with a 0.12 s cache refresh interval. `--gpu-timing` implies
-`--perf`, so **the diagnostic HUD is inside the measured scope**.
-
-Consequences:
-
-- existing data does **not** support per-transition shader optimization;
-- current 30-44 ms GPU samples are **not** clean proof that ordinary no-PERF production shows the
-  same GPU spike;
-- the outer query also **excludes** Qt top-level composition/swap after `paintGL`, which
-  `QOpenGLWidget` exposes via `aboutToCompose` / `frameSwapped`.
-
-Do not disable or resize the HUD in this lane: diagnostic cost must be measured before
-attribution is weakened.
-
-#### First `--diag-p4-stages` runtime was INVALID — probe never armed
-
-The stage probe produced **zero** `[PERF][P4_STAGES]` records. The ring was constructed under the
-CLI gate but `initialize()` was never called at the compositor-context seam, so it was never
-supported. The ResourceManager snapshot confirms it exactly: only the four existing
-`GL_TIME_ELAPSED` handles were present, where a capacity-4 x five-marker ring would add twenty.
-
-**Record no core/HUD/Qt causal conclusion from that run.** Integration defects found and fixed:
-missing `initialize()` call; invented `register_gl_resource`/`release_gl_resource` API instead of
-`register_gl_handle`/`release_tracking`; unsafe `glGenQueries(1)[0]` normalization; Qt observer
-re-attaching a consumed sampled paint to later unsampled compositions; prep/core-draw boundary
-false for transitions whose prep runs inside their paint helper; `render_path` derived from the
-stale `_use_shaders` field; and stage cleanup nested inside the timer-query branch.
-
-Ordinary-runtime observations from that run remain valid and are preserved:
-
-```text
-27 gaps >33 ms, 21 >50 ms; gap p50 ~57.19 ms, max ~71.74 ms
-gap-frame paint p50 ~1.46 ms, max ~14.26 ms
-request_age p50 ~42.76 ms; corr(gap, request_age) ~+0.807; corr(gap, paint) ~-0.09
-391 causal GPU N->N+1 matched, 0 unmatched; 9 sampled >50 ms successors
-  seven with predecessor outer-GPU ~35.47-50.13 ms
-  two with ordinary predecessor GPU ~0.09 / 0.15 ms
-```
-
-The two-class result stands: a large-GPU severe class and an ordinary-GPU severe residual class.
-
-#### VALID stage run — severe stalls are located AFTER compositor paint
-
-The repaired diagnostic armed correctly: `INIT supported=1`, `timestamp_queries=20`,
-`dropped_packets=0`, and actual shader render paths reported.
-
-```text
-29 FRAME_GAP_OWNER records, 28 of them >50 ms
-gap p50 ~58.48 ms   max ~80.69 ms   paint p50 ~1.92 ms
-
-four sampled >50 ms N+1 successors:
-              outer  core  overlay | paint->compose  compose->swap  paint->swap
-  Crumble      3.26  0.29     2.94 |        36.04          14.18        50.22
-  Warp         9.56  6.10     3.44 |        38.08          12.12        50.20
-  Wipe         3.77  0.12     3.62 |        36.61          13.16        49.77
-  Slide        3.95  0.07     3.85 |        35.69          12.81        48.50
-
-ordinary sampled post-paint medians: ~0.4-0.46 ms end-to-swap
-```
-
-Consequences:
-
-- **transition-specific shader optimisation is no longer a P4 lane** — core GPU draw is
-  0.07-6.10 ms in every severe sample;
-- **a 30-50 ms in-paint GPU frame is NOT necessary for severe P4.** The earlier statement that
-  rare 30-47 ms compositor GPU frames were the major mechanism is **demoted**: they occurred in
-  earlier diagnostics, but this valid stage run proves they are not required for a severe stall;
-- the severe sampled class instead places **~48.5-50.2 ms between compositor paint completion and
-  the observed top-level swap boundary**, subject to a known Python/GIL observer caveat on the Qt
-  signal timestamps.
-
-**P4 is not solved.** The missing interval is strongly localized after compositor paint, and its
-owner is not yet named.
-
-#### Known measurement caveat on the Qt signal timestamps
-
-`aboutToCompose`/`frameSwapped` are connected to Python closures, so those direct GUI-thread
-callbacks require PySide to enter Python and acquire the GIL. `paint_end_to_compose` and
-`compose_to_swap` may therefore include GIL-entry delay, and the callback itself can delay Qt
-composition. **Do not yet claim Qt spends 36-38 ms before composition.** The observer is retained
-as supporting evidence; its wall-clock fields are secondary, not clean native timing.
-
-#### Next gate: native validation plus the clean no-HUD control
-
-- [x] DWM composition-timing snapshots at the existing sampled paint boundaries
-      (`DwmGetCompositionTimingInfo(NULL, ...)`, never `DwmFlush`), reporting N→N+1 deltas for
-      refresh/frame/submitted/confirmed/displayed/late/dropped/missed counters plus QPC compose and
-      vblank deltas. Answers whether a severe gap spans ~2-4 real refresh intervals while an
-      ordinary gap spans ~1.
-- [x] One-time `[PERF][P4_PRESENT_CONTEXT]` state probe at the first `aboutToCompose`, capturing
-      the context actually performing top-level composition, its `swapInterval()`, the WGL context
-      and `wglGetSwapIntervalEXT()`. State only, never a duration, and it changes nothing.
-- [x] `--diag-p4-no-perf-hud` CLI control suppressing **only** the HUD build/draw while retaining
-      `--perf`, `--gpu-timing`, `--diag-p4-stages` and every counter, report and history. Justified
-      by the measured HUD cost in the valid run (severe sampled overlay CPU ~7.5-8.6 ms, HUD build
-      ~2.7-3.9 ms, overlay GPU ~2.9-3.9 ms). Flag state is recorded in the `P4_STAGES INIT` record.
-
-Next installed capture — a single run, single display, no visualizer:
-
-```text
-main.py --perf --gpu-timing --diag-p4-stages --diag-p4-no-perf-hud
-```
-
-Do **not** add `--diag-pair-warm-finish`; it stays in the code as the established negative-control
-intervention, and ordinary `PAIR_WARM` telemetry remains active with its forced `glFinish` off.
-
-#### Interpretation bars for that run
-
-- **A — severe gaps collapse materially:** the PERF HUD is a major diagnostic observer/amplifier.
-  Do **not** claim it explains production P4; use the no-HUD stage/DWM data as the first clean
-  approximation of ordinary runtime.
-- **B — severe gaps survive and DWM deltas show ~3 refresh intervals:** P4 is strongly located in
-  Qt/top-level/DWM presentation pacing.
-- **C — severe gaps survive but DWM counters advance normally:** re-open GIL / Python callback /
-  event-dispatch ownership, now without the HUD confound.
-- **D — top-level composition context reports swap interval 1 while the child context is 0:** treat
-  as a concrete architecture defect candidate. Do not change it in the same checkpoint; design the
-  smallest isolated correction next.
-
-#### Next gate: `--diag-p4-stages`
-
-One bounded CLI-only diagnostic partitioning the entire remaining common path in a single run,
-rather than testing one hypothesised owner at a time. Run as:
-
-```text
-main.py --perf --gpu-timing --diag-p4-stages
-```
-
-- [ ] Part A - GPU stage timestamps via `glQueryCounter(GL_TIMESTAMP)` on the same 1/8 sampled
-      frames, inside the existing outer elapsed scope; no nested elapsed queries, no
-      finish/flush/fence/wait, availability-checked collection only.
-- [ ] Part B - matched `perf_counter` CPU intervals for the same stages on the same frames.
-- [ ] Part C - passive PERF HUD metadata (present/rebuilt/cache-hit/build ms/dimensions/bytes)
-      without changing HUD dimensions, cadence, cache policy or output.
-- [ ] Part D - Qt composition/swap boundary via `aboutToCompose`/`frameSwapped`, direct GUI-thread
-      handling only, with bounded counters for the non-one-to-one cases Qt actually produces.
-- [ ] Part E - one post-hoc causal report keyed by `(scene_generation, frame_index)`, preserving
-      frame N -> gap entering N+1, with +1/+2/+3 unpooled and matched/unmatched per stage.
-- [ ] Part F - compositor-context-owned fixed-size query storage under the existing
-      `GLTimerQueryRing` ownership model, allocated only when enabled, with strict deletion and
-      failed-deletion remaining a hard cleanup/accounting failure.
-
-Remaining original P4 items:
-
-- [ ] After P2/P3, repeat a visualizer-disabled control with Media still enabled.
-- [ ] Attribute the remaining 165 Hz dispatch-pending bursts to concrete GUI callbacks/owners.
-- [ ] Close the owner by extraction/narrowing only when direct evidence names it; do not tune the adaptive timer, and do not hide the owner by changing how compositor update requests are coalesced. (This constrains the **compositor's** request ownership only. It is not a requirement that the visualizer keep one auxiliary `update()` per publication — P2 exists to remove exactly that.)
-- [ ] Do not claim Phase 5 delivery closure while a no-visualizer run still loses roughly five percent of 165 Hz deadlines for an unnamed reason.
-
-### P5 — harden authoritative monitor topology and physical sleep/wake recovery
-
-This is **not deferred cleanup**. It follows P2→P4 because the installed non-diagnostic runtime
-has a repeatable high-severity physical-monitor recovery failure: when both displays are off while
-the screensaver runtime is active, waking them can leave one display visible but frozen, the other
-blank, all Qt input dead, and recovery possible only after Ctrl+Alt+Delete disturbs the Windows
-desktop/display state.
-
-A 2026-08-17 Diagnostic failure finally captured enough wake/rebuild breadcrumbs to **reorder and
-strengthen the existing targets without deleting any of them**. It did not produce a Python
-traceback or a clean orderly-exit record, so the exact terminal native operation remains unproven.
-Do not claim more than the evidence shows.
-
-#### New accepted diagnostic checkpoint — target priority, not root-cause declaration
-
-The failing wake sequence showed:
-
-```text
-~19:58:51  WM_DISPLAYCHANGE / Qt topology churn
-            MSI G321Q appears; LG TV disappears
-            monitor reconcile is already pending and is not re-armed
-            transient topology is accepted as one MSI display
-            full runtime teardown/rebuild begins
-
-~19:58:55  LG TV appears again
-            second topology change is accepted as MSI + LG
-            second full teardown/rebuild begins only seconds after the first
-```
-
-Additional evidence from the same run:
-
-- `[SCREEN] Ignoring screen change for deleted display widget` occurred during churn. The guard
-  rejected the stale target, but the event proves old per-window/native mutation can overlap an
-  engine-level replacement generation.
-- The temporary one-display reconstruction logged a Spotify visualizer CUSTOM fallback to the
-  participating display while the configured display was only temporarily missing. P5-D is now
-  directly evidenced by the failing wake trace, not only by historical R-26.
-- Both observed destruction barriers completed promptly (about **94 ms** and **172 ms**) and the
-  run progressed through GL cleanup/reconstruction far beyond the earlier `makeCurrent()`
-  suspicion. Therefore GL teardown/context acquisition remains instrumented but is **lower
-  priority for this incident**, not removed as a target.
-- The second two-display rebuild completed D0 and progressed deep into D1 construction. The last
-  narrow replay sequence was:
-
-  ```text
-  clock replay_start
-  clock replay_after_payload
-  clock replay_after_update_position
-  clock replay_final
-
-  media replay_start
-  media replay_after_payload
-  [SPOTIFY_VOL] Positioned volume widget ...
-  <logging ends before media replay_after_update_position>
-  ```
-
-  A later successful Diagnostic launch with the same layout crossed
-  `media replay_after_update_position` and continued to both displays ready. This does **not**
-  prove `MediaWidget` is the root cause; it identifies a much narrower last-entered/not-returned
-  boundary inside D1 CUSTOM-layout replay during a poisoned double-rebuild topology sequence.
-- The replacement generation can be reported/started as RUNNING while staged display readiness is
-  still incomplete. The exact safety of that boundary is now an explicit audit target.
-
-#### P5 evidence-prioritized execution order
-
-Keep **all** previously listed suspects/breadcrumb targets. Reorder work as follows:
-
-```text
-1. P5-A + P5-B  stop overlapping topology authorities and transient-snapshot rebuilds
-2. P5-C1        make replacement one transaction with an explicit all-display readiness boundary
-3. P5-C2        instrument/narrow D1 per-widget CUSTOM replay, especially Media update_position
-4. P5-D         stop eager visualizer ownership migration during transient participation
-5. P5-E         remove grabWindow(0) only from recovery-critical reinit; preserve cold-start polish
-6. P5-F         installed physical-off/wake acceptance and residual native-boundary attribution
-```
-
-The older GL cleanup/context, surface creation, show/reveal and `grabWindow(0)` suspects remain in
-the breadcrumb set because a different wake failure may stop there. This run **demotes** them as
-the terminal boundary for this incident; it does not exonerate them globally.
-
-#### P5-A — one authoritative monitor-topology owner
-
-- [ ] Make `DisplayManager` (or one equivalently explicit engine-level owner) the sole authority
-      that decides whether a display event is a no-op, re-anchor or full runtime replacement.
-- [ ] Reduce `WM_DISPLAYCHANGE`, Qt `screenAdded`/`screenRemoved`, and related per-window callbacks
-      to topology-invalidated notifications plus strictly local bookkeeping. A `DisplayWidget`
-      must not walk/reconfigure all displays while the manager can retire the same runtime.
-- [ ] Preserve per-display DPR/geometry/surface ownership, but issue mutations from one accepted
-      topology decision against one identified runtime generation.
-- [ ] Treat the observed "screen change for deleted display widget" as regression evidence:
-      duplicate native+Qt event storms must produce one authority/decision, not stale-widget
-      re-anchor attempts racing a replacement.
-- [ ] Add focused tests proving duplicate native+Qt event storms produce one authoritative
-      decision/rebuild rather than overlapping re-anchor and teardown/recreate paths.
-
-#### P5-B — true trailing-edge topology settling
-
-The captured failure directly exercises this defect: the first event armed reconciliation and
-later churn encountered an already-pending reconcile rather than extending the quiet period,
-allowing a temporary one-display topology to be accepted and rebuilt before the second display
-returned.
-
-- [ ] Replace first-event-style settling with a **true trailing-edge quiet-period debounce**:
-      every relevant topology event restarts the quiet timer.
-- [ ] Add a bounded maximum settle deadline so pathological driver/event storms cannot postpone
-      reconciliation forever. Reaching the bound yields one explicit best-known snapshot/decision,
-      not retries or nested event pumping.
-- [ ] Freeze accepted screen count/order/identity/geometry/DPR into one topology snapshot/generation
-      before destructive replacement. Do not rebuild from a temporary D0-only/MSI-only view merely
-      because the sibling display has not returned yet.
-- [ ] A topology snapshot accepted for replacement must remain immutable for that transaction; a
-      newer topology generation invalidates/queues a later transaction rather than mutating the
-      one already retiring/rebuilding.
-- [ ] Record low-rate breadcrumbs for event receipt, debounce restart, maximum-settle arm/hit,
-      accepted snapshot/generation and decision.
-- [ ] Add a deterministic reproduction of the captured pattern: add/remove churn inside the quiet
-      window must extend settlement and collapse to one final two-display decision rather than
-      two full rebuilds seconds apart.
-
-#### P5-C1 — transactional replacement and explicit readiness commit
-
-- [ ] Make monitor replacement an explicit transaction:
-
-  ```text
-  settle topology
-      -> freeze snapshot/generation
-      -> stop further old-runtime topology mutation
-      -> retire old runtime exactly once
-      -> pass existing destruction barrier
-      -> construct/register complete replacement against frozen snapshot
-      -> stage per-display reveal/widget readiness
-      -> commit replacement only at the defined all-display-ready boundary
-  ```
-
-- [ ] Preserve the existing all-displays-registered-before-staggered-show principle. The current
-      reveal staggering may remain unless evidence proves it harmful.
-- [ ] Audit the current `RUNNING` transition/readiness relationship. A topology replacement must
-      **not be treated as fully committed merely because DisplayWidget objects exist**. Either:
-      - delay normal RUNNING/replay/provider activity until every display in the frozen snapshot
-        reaches the authoritative ready boundary; or
-      - prove, owner by owner, that every activity permitted before `ready=N/N` cannot touch or
-        publish into an incomplete display generation.
-      Prefer one explicit commit boundary over a collection of exceptions.
-- [ ] Generation-fence every delayed D0/D1 reveal/readiness callback so a newer topology event or
-      terminal shutdown cannot complete the wrong transaction.
-- [ ] Do not weaken Phase 3/R-49 strict GL teardown, restore hide/reuse, ignore failed deletion,
-      extend destruction timeouts or move GL teardown to a worker as a recovery shortcut.
-
-#### P5-C2 — new narrow failure target: per-widget CUSTOM replay during D1 rebuild
-
-This is **additional**, not a replacement for topology fixes. The double-rebuild/topology poison
-must be fixed first; then this seam becomes the next last-entered/not-returned boundary if the
-failure survives.
-
-- [ ] Add low-frequency, flush-safe before/after breadcrumbs around
-      `CustomLayoutManager._apply_entry_to_widget()` for each widget during monitor recovery,
-      including widget id, screen index, topology generation and runtime generation.
-- [ ] Split the existing replay stages so a future hang can distinguish:
-      - replay entry/begin;
-      - size-payload apply begin/end;
-      - stack-offset reset begin/end;
-      - widget `update_position()` begin/end;
-      - committed `setGeometry()` reassert begin/end;
-      - replay final/end.
-- [ ] Start with `media` because the captured run ended after `media replay_after_payload` and
-      before `media replay_after_update_position`; do **not** hard-code a "MediaWidget caused it"
-      conclusion. Instrument the generic owner so another widget can implicate itself.
-- [ ] Trace synchronous side effects of `MediaWidget`/`BaseOverlayWidget.update_position()` under
-      CUSTOM geometry: stacking, geometry change callbacks, visualizer/volume neighbour positioning,
-      resize/layout invalidation, QWidget native geometry work and any cross-widget manager calls.
-- [ ] Record the exact screen/runtime identity used by every geometry calculation so D1 cannot
-      accidentally consult stale D0/retired-generation state during replay.
-- [ ] Do not add retries, sleeps, event pumping or timeout-based recovery around
-      `update_position()`/`setGeometry()`. First pass is attribution only.
-- [ ] Add deterministic replay/recreation tests for two displays where D1 replays Media + Spotify
-      volume/visualizer CUSTOM layout after a topology generation replacement.
-
-#### P5-C3 — retain older native/GL blocking targets, but investigate after C2 for this signature
-
-Do **not** delete any of the earlier breadcrumbs. Keep before/after attribution around:
-
-- native `WM_DISPLAYCHANGE` enter/exit per display;
-- monitor reconcile begin/accepted snapshot/emit;
-- engine monitor-change stop/rebuild boundaries;
-- display cleanup begin/end;
-- GL compositor cleanup and `makeCurrent()` begin/end;
-- strict GL cleanup sub-sections where needed;
-- offscreen warmup surface/context `makeCurrent()`/`doneCurrent()`/destroy;
-- destruction barrier arm/complete;
-- rebuild begin/end;
-- D0/D1 show callback begin/end;
-- recovery `grabWindow(0)` call/skip begin/end;
-- widget `show()` begin/end;
-- `_handle_screen_change()` begin/end;
-- `_ensure_gl_compositor()` begin/end.
-
-The captured run crossed enough of these boundaries that they are **not the leading terminal
-owner for this incident**, but retaining them is cheap and protects against a different physical
-wake ordering failing earlier.
-
-#### P5-D — sticky visualizer display ownership; conservative fallback and nearly-free return-home
-
-The diagnostic run directly observed eager CUSTOM visualizer fallback during a temporary
-one-display wake topology. That is now a real failure signature, not merely an architectural
-preference.
-
-- [ ] Preserve the existing same-display visualizer geometry/aspect-ratio stabilization and
-      correction work. Geometry correction is **not** permission to change ownership.
-- [ ] Treat a configured visualizer monitor that still exists in authoritative settled topology
-      but is asleep, rebuilding, lacks a ready `WidgetManager`, or is temporarily non-participating
-      as **temporarily unavailable, not absent**. Hold/park/hide/defer on the configured target.
-      **Do not start an absence timer for mere non-participation.**
-- [ ] Retire the current ~1500 ms remote CUSTOM participation fallback as cross-display authority.
-      Same-display readiness/geometry rechecks may remain only if independently required.
-- [ ] Begin cross-display fallback consideration only after P5-B accepts an authoritative settled
-      topology snapshot in which the configured monitor is genuinely absent. Record one absence
-      candidate tied to topology/runtime generation.
-- [ ] Confirm sustained absence with **one intentionally coarse lifecycle-owned recheck at
-      approximately 60 seconds**. No polling loop, periodic timer, dedicated thread, worker wait,
-      sleep or repeated retry chain.
-- [ ] Any newer authoritative topology generation invalidates the old absence candidate. Return
-      before the coarse recheck makes the stale callback a generation/token-owned no-op.
-- [ ] If the single coarse recheck still finds genuine absence, one fallback transfer is allowed.
-- [ ] Return-home is **event-driven and timer-free**: later settled topology contains the configured
-      display -> normal display-runtime readiness -> retire fallback owner once -> restore configured
-      owner once. No reverse polling timer.
-- [ ] Preserve saved CUSTOM geometry/aspect authority across fallback and return-home.
-- [ ] Test D0-before-D1, D1-before-D0, temporary zero/partial participation, >60 s true absence,
-      physical removal, return before grace, return after fallback, Settings/recreation while armed,
-      and stale-generation callback rejection.
-
-#### P5-E — keep `grabWindow(0)` startup polish; remove it from recovery-critical reinit only
-
-This target remains. The captured run progressed beyond the earlier screenshot/show/context
-suspects, so it is lower-priority for this specific signature, **not cancelled**.
-
-- [ ] Preserve `screen.grabWindow(0)` on ordinary stable desktop→screensaver cold startup because
-      it avoids desktop/wallpaper→black→first-photo flash.
-- [ ] On monitor-topology replacement / physical wake recovery, do **not** synchronously require a
-      waking-desktop screenshot before reconstructing the display. Prefer retained SRPSS image/
-      replay state; if none is safe, keep updates blocked until the first real SRPSS image.
-- [ ] Keep ordinary startup appearance unchanged. Test normal cold start separately from recovery.
-
-#### P5-F — installed physical-off/wake and ownership-recovery gate
-
-- [ ] Add deterministic coverage for topology-event coalescing, true trailing-edge settling,
-      bounded maximum settle, frozen snapshots, one replacement transaction, explicit all-display
-      readiness commit, stale-generation rejection, generic per-widget CUSTOM replay boundaries,
-      sticky visualizer ownership, one coarse ~60 s absence candidate, event-driven return-home,
-      and recovery-specific desktop-capture bypass.
-- [ ] Prove monitor fallback introduces no periodic polling, dedicated worker/thread, per-frame
-      check or exact-deadline dependency.
-- [ ] Run repeated installed **ordinary non-diagnostic** cycles where both displays are physically
-      off before/during screensaver activation, remain off for a meaningful/overnight-equivalent
-      period where practical, then wake together and in opposite sequential orders.
-- [ ] Include the exact captured churn class: one monitor temporarily returns/disappears before
-      the sibling stabilizes. One wake episode must not cause serial full-runtime rebuilds from
-      transient snapshots.
-- [ ] Include visualizer ownership cases: target returns before grace; target remains truly absent
-      beyond grace and falls back once; target later returns and restores home once.
-- [ ] Pass only when both displays recover/reveal, clocks advance, Escape/context menu/input remain
-      responsive, topology replacement commits once per settled generation, visualizer ownership
-      does not migrate on transient participation, genuine absence fallback/return works, normal
-      cold-start remains flash-free, and Ctrl+Alt+Delete is never required.
-- [ ] If a freeze remains, use the **last entered/not-returned breadcrumb** to reprioritize the
-      retained target list. Do not compensate with sleeps, retries, forced paints, timeout
-      extensions, relaxed GL ownership or additional monitor-polling machinery.
-
-### P6 — resume lower-leverage Phase 5 work
-
-- [ ] Return to absolute memory/commit/VRAM attribution, remaining proven GUI service/cache work, parser/logging debt and compatibility cleanup only after P1–P5 reach their gates.
-
-
-## P5.0 Media Provider Runtime Validation
-
-- [ ] Validate Spotify Browser in ordinary `main.py` against Firefox first and at least one Chromium browser.
-- [ ] Confirm metadata/control selection, desktop-Spotify-first volume and exact selected-browser whole-session fallback.
-- [ ] Repair the real `MediaWidget` missing-session hide contract; tests may not invent production lifecycle API.
-
-## P5.0A Immediate Installed Validation
-
-- [ ] Validate compact day/date grouping and Digital → Analogue → Digital authored scale in Normal and MC builds, including Settings apply/restart and CUSTOM persistence.
-- [ ] Validate the optional media progress pill with playing, paused, seek and unknown-duration sessions; confirm no independent polling/cadence and bounded repaint/layout work.
-
-## P5.1 Visualizer Fidelity And Stronger Goldens
-
-- [ ] Capture approved numerical source features/playback offsets and source-to-state/source-to-visible timing for Bubble and Spectrum.
-- [ ] Use current Preset 1 as a capture anchor across every supported mode while retaining per-mode acceptance.
-- [ ] Add installed Spectrum state-publication → overlay-state → paint receipt with bounded distributions and display refresh identity.
-- [ ] Exercise attack, drop, rapid alternation, pause/resume, transition overlap, mode switches and deliberate GUI stalls without changing authored cadence.
-- [ ] Visually validate Sine Waves, Oscilloscope and Dev Curve against the current shared source.
-- [ ] Complete scheduler-ownership negative controls before any Phase 7 presentation decoupling.
-
-Protected Phase 5 visualizer work is cadence-neutral only: cache immutable configuration
-or lookup data where safe, but keep live source consumption, simulation, event identity,
-publication order and existing clocks unchanged.
-
-## P5.2 UI Delivery And Transition Root Cause
-
-Detailed accepted evidence:
-`Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md`.
-
-### Accepted attribution checkpoint
-
-- adaptive-render deadline wakeup is no longer the dominant suspect; failing runs retain near-target wake opportunity while later GUI/presentation stages reject deadlines;
-- retained-current texture identity, steady retained-base draw and redundant ordinary upload copies are closed owners;
-- the 2026-08-16 same-process A→B→C→A test proves the auxiliary visualizer one-publication → one-`QOpenGLWidget.update()` stream is a **material shared-GUI amplifier**;
-- hiding the still-live visualizer GL surface adds only a smaller benefit beyond suppressing its update-request stream, so Phase 8 surface consolidation is not justified by this evidence;
-- visualizer shader GPU execution remains tiny; the proven loss is Qt/GUI delivery pressure rather than shader cost;
-- the separate no-visualizer-from-start control improves again while Media/GSMTC remains active, proving another visualizer-family GUI owner remains to be measured;
-- even with visualizers absent, the 165 Hz display still loses a smaller but repeatable fraction of deadlines, now dominated by queued-GUI-dispatch skips. This is a second independent bad smell and remains open.
-
-### Active gate
-
-For the delivery/performance thread, P1 is closed and execution continues through **Immediate Priority Queue P2→P4** above.
-P5 monitor-topology/sleep-wake hardening follows immediately after those gates and before P6 lower-leverage work.
-
-- P2 owns the proven visualizer presentation-request correction.
-- P3 owns the still-unproven visualizer handoff/preparation attribution.
-- P4 owns the residual non-visualizer queued-GUI-dispatch owner.
-- P5 must preserve the P1–P4 presentation/fidelity contracts while centralizing topology and recovery ownership.
-- No repaint retry, scheduler gate, display-FPS cap, visualizer cadence compensation, paint acknowledgement or source/event decimation is permitted.
-
-## P5.2A Remaining GUI Workload Extraction
-
-Target contract: **Prepare → Commit → Persist**.
-
-- [ ] Audit remaining provider/widget callbacks for filesystem/JSON/filter/sort/credential work only where source inspection proves it.
-- [ ] Keep Gmail user-triggered backend-mode write, IMAP credential save/delete, OAuth local-token deletion/revoke and expired-token refresh as explicit candidates rather than reopening closed cold-construction work.
-- [ ] Revisit worker width or a dedicated presentation timing service only if later evidence shows queue/execution contention. Current evidence does not justify widening pools or moving visualizer scheduling.
-
-## P5.2B GPU / Presentation Attribution
-
-- [x] Record refresh, logical publication, overlay-state, update-request and paint rates per display.
-- [x] Prove by same-process A/B/A that suppressing only auxiliary visualizer update requests materially improves compositor delivery on both displays while logical visualizer state continues publishing.
-- [x] Prove hiding the still-live visualizer GL surface is a secondary effect in the accepted Spectrum run.
-- [x] Prove sampled visualizer shader GPU cost is far too small to explain the delivery loss.
-- [ ] P2: complete the shared-surface visualizer feasibility audit and either select a bounded architecture that removes the independent auxiliary presentation owner or explicitly record why P2 cannot be safely closed on the current surface model.
-- [ ] P3: split and measure logical render-state preparation / overlay commit cost from presentation request and paint; P3 may not be used as a substitute for the isolated A/B request-stream defect.
-- [ ] Preserve Bubble edge/event visibility and all supported-mode logical goldens under whatever presentation architecture is selected.
-- [ ] Do not begin broad Phase 8 production work from C-vs-B. A read-only/bounded shared-surface feasibility audit is allowed because request-admission mechanisms are exhausted; C-vs-B only showed that mere second-surface existence is secondary.
-
-## P5.2C Compatibility, Fallback And Debris
-
-Delete one proven authority at a time; do not combine cleanup with behaviour changes.
-
-- [ ] Remove the temporary Bubble compatibility façade only after direct-path/call-graph proof, preserving exact cadence, snapshots, one-in-flight semantics, task category, callback ordering and generation identity.
-- [ ] Audit `core/threading/compute_lanes.py` and lane APIs after façade removal; remove only after production/dynamic/test/frozen-use proof.
-- [ ] Audit `rendering/render_strategy.py`, `widgets/dimming_overlay.py`, `sources/rss_source.py`, and `transitions/overlay_manager.py::_raise_halo_topmost` for proven dead compatibility use.
-- [ ] Keep each deletion reversible and independently tested.
-
-## P5.3 Absolute Memory, Commit, VRAM And Cache Efficiency
-
-Containment/lifecycle plateaus are healthy; absolute process cost remains open.
-
-- [ ] Capture cold, warm, active-transition, steady-image, quiescent-runtime and post-churn snapshots under one controlled scenario.
-- [ ] Reconcile whole/main/child RSS, private commit, USS, worker mappings, thread stacks, Qt/native heaps, driver mappings and tracked application bytes.
-- [ ] Separate one-time high-water retention from live ownership and repeated-cycle growth.
-- [ ] Audit exact-transform per-display image duplication without collapsing different DPR/transform outputs.
-- [ ] Audit raw/scaled/display co-retention, unused prefetch results, future-byte pressure and eviction churn using actual hit/miss/fallback cost.
-- [ ] Treat GPU memory and GPU busy as separate metrics.
-- [ ] If tracked ownership reaches expected zero/plateau while process memory still rises, open an evidence-led retention incident before changing budgets/lifecycle policy.
-
-## P5.4 Logging And Evidence Quality
-
-Current logging architecture is intentionally retained:
-
-- bounded process-owned writer;
-- persistent main/sidecars before optional fancy console;
-- canonical machine sidecars;
-- human-readable main/WARNING+ fan-in;
-- 2 MiB rotations with longer bounded Diagnostic main/usage/lifecycle retention;
-- queue, file-commit and console timing in final `[LOG_QUEUE]`;
-- direct independent Diagnostic crash breadcrumbs.
-
-- [ ] **Repair the canonical evidence parser before treating parser 1.21 as authoritative.** Commit `264ac5a` replaced `tools/recovery_evidence_parser.py` with the 1.21 compatibility front-end while that front-end imports `recovery_evidence_parser` as its `_base`. In the canonical filename this resolves back to itself/circularly and no longer contains the 1.20 parsing engine it claims to wrap. Restore a real base implementation or fold 1.21 compatibility into the canonical parser, then run focused parser tests.
-- [ ] Update parser/harness wording to 1.21 only after the canonical tool passes old-format, fancy-main, sidecar, rotation and exact-source tests.
-- [ ] Update logging configuration tests for the intentional 2 MiB and Diagnostic retention profiles; do not weaken all handlers to one generic ceiling.
-- [ ] Late Phase 7: inventory high-volume families, move routine records to existing sidecars, and simplify token fallback only after structured family metadata coverage is complete.
-- [ ] Never "improve" performance by deleting evidence needed to understand it.
-
-## P5.5 Verification
-
-- [ ] Treat `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` as the accepted pre-fix delivery baseline for P2–P4.
-- [ ] Run focused owning-subsystem tests after every change; do not default to monolithic `pytest -q`.
-- [ ] Use `tests/run_chunked.py` only when a broader release gate is useful.
-- [ ] Preserve visualizer temporal goldens/negative controls for visualizer-adjacent cleanup.
-- [ ] Official performance comparisons use ordinary `main.py`; name `--gpu-timing` observer differences explicitly.
-- [ ] Long soak/lifecycle captures preserve enough main + relevant sidecar rotations to cover the claimed interval.
-- [ ] P5 physical-monitor recovery validation uses ordinary installed `main.py`/screensaver behaviour as the acceptance authority; deterministic tests do not substitute for real display-off/wake cycles.
-
-## Low-Priority Presentation Follow-Ups
-
-Keep behind active delivery/resource work and do not introduce polling/repaint loops.
-
-- [ ] Media progress click-to-seek through the accepted GSMTC session/controller authority.
-- [ ] Replace progress outline-like glow with a cached/style-invalidated soft halo.
-- [ ] Extend clock separator configuration to Analogue while preserving cadence, geometry and settings round-trip.
-
-## Phase 5 Exit Gate
+- [ ] Generation-fence delayed reveal/readiness callbacks.
+- [ ] Do not report/act fully RUNNING merely because DisplayWidget objects exist unless every pre-ready owner is proven safe.
+- [ ] Do not weaken strict GL/QRhi resource teardown or extend destruction timeouts as a shortcut.
+
+## P5-C2 — generic per-widget CUSTOM replay boundary
+
+- [ ] Retain low-frequency before/after breadcrumbs around generic CUSTOM replay stages.
+- [ ] Split payload, offset reset, `update_position()`, committed `setGeometry()` and final boundaries.
+- [ ] Start analysis with Media because the captured run ended there, but do not hard-code Media as root cause.
+- [ ] Keep screen/runtime/topology generation identity explicit in each calculation.
+- [ ] No retries, sleeps, event pumping or timeout recovery around geometry calls.
+
+## P5-D — sticky visualizer display ownership
+
+- [ ] Temporary asleep/rebuilding/non-participating configured monitor != absent monitor.
+- [ ] No eager cross-display transfer during transient wake topology.
+- [ ] Cross-display fallback begins only after an authoritative settled topology proves genuine absence, followed by one intentionally coarse approximately 60-second confirmation opportunity.
+- [ ] Any newer topology generation invalidates the absence candidate.
+- [ ] Return-home is event-driven and timer-free when configured display returns and becomes ready.
+- [ ] Preserve CUSTOM geometry/aspect authority across fallback/return.
+
+## P5-E — recovery-specific desktop capture bypass
+
+- [ ] Keep `screen.grabWindow(0)` on ordinary stable cold startup for anti-flash polish.
+- [ ] Do not synchronously require a waking-desktop screenshot during topology replacement/recovery.
+- [ ] Prefer retained SRPSS state or wait for first real SRPSS image without event pumping.
+
+## P5-F — installed physical-off/wake acceptance
+
+- [ ] repeated ordinary installed cycles with both displays physically off before/during saver activation;
+- [ ] meaningful long-idle/overnight-equivalent where practical;
+- [ ] simultaneous and opposite sequential wake orders;
+- [ ] temporary one-monitor churn before sibling stabilizes;
+- [ ] configured visualizer target returns before grace, remains truly absent beyond grace, and later returns after fallback;
+- [ ] both displays recover/reveal, clocks advance, Escape/context menu/input remain responsive;
+- [ ] one settled topology generation causes one replacement transaction;
+- [ ] Ctrl+Alt+Delete is never required.
+
+# P6 — Lower-leverage Phase 5 work after P5
+
+Resume only after P4/P2-RHI and P5 gates:
+
+- media-provider runtime validation (Firefox first, then Chromium);
+- compact clock/date and media-progress installed validation;
+- stronger visualizer source-to-state/source-to-visible goldens;
+- remaining proven GUI service/cache extraction;
+- canonical evidence-parser repair;
+- absolute RAM/private-commit/VRAM/cache attribution;
+- compatibility/fallback debris removal;
+- low-priority presentation polish.
+
+## Canonical parser debt that remains active in P6
+
+`tools/recovery_evidence_parser.py` 1.21 currently claims to wrap a base parser while importing its
+own canonical module name, creating a circular/self-import seam. Repair the canonical parser before
+treating 1.21 as authoritative. Preserve old-format, fancy-main, sidecar, rotation and exact-source
+coverage.
+
+# Phase 5 Exit Gate
 
 - [ ] Bubble and Spectrum are separately approved equal or better than `ff934616`; other modes retain current behaviour.
-- [x] Retained-current texture identity and steady old/new upload ownership are corrected.
-- [x] Routine logging and ordered settings persistence no longer perform ordinary file work on the GUI caller.
-- [ ] Proven remaining service/cache preparation no longer performs avoidable synchronous GUI work.
-- [ ] Host-pressure request-age/tick tails materially improve or remaining stage/owners are named without cadence hacks.
-- [ ] GPU busy is attributed enough to distinguish upload/transition/visualizer/presentation cost.
+- [ ] Main compositor presentation no longer has the recurring severe P4 tail, or the surviving owner is explicitly named after the bounded QRhi candidate failed and a deliberate replacement architecture is selected.
+- [ ] P2 auxiliary visualizer presentation is no longer a material shared-GUI amplifier, or the one-surface visualizer/card architecture is explicitly promoted with retained evidence.
+- [ ] No cadence, source, fidelity, display-support or quality degradation was used to obtain the improvement.
+- [ ] QRhi/GL resource ownership is strict through Settings recreation, display replacement and final shutdown.
+- [ ] Equivalent 165 Hz + 60 Hz ordinary production delivery is remeasured after the architecture correction.
+- [ ] Physical monitor-off -> screensaver -> wake recovery passes repeated dual-display installed cycles without frozen UI/blank sibling display, eager visualizer migration, weakened teardown, or cold-start anti-flash regression.
+- [ ] Proven remaining GUI service/cache work is either corrected or explicitly attributed.
 - [ ] Absolute RAM/private-commit/VRAM excess is reduced or explicitly attributed in an approved decision record.
-- [ ] Promoted compatibility/fallback debris is removed or retained with a real current contract.
-- [ ] Stronger visualizer temporal/paint-receipt evidence is complete.
-- [ ] Canonical evidence parser and logging tests match the current logging format/retention contract.
-- [ ] Physical monitor-off→screensaver→wake recovery passes repeated dual-display installed cycles without frozen UI/blank sibling display, without eager visualizer ownership migration, and without weakening strict GL teardown or normal cold-start anti-flash behaviour.
+- [ ] Canonical evidence parser/logging tests match current format/retention contracts.

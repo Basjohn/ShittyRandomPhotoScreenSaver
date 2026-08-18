@@ -102,7 +102,7 @@ def test_complete_transition_finalizes_paint_metrics():
     assert stub._base_pixmap == "new-pixmap"
 
 
-def test_handle_paintgl_consumes_pending_timer_update(monkeypatch):
+def test_handle_rhi_render_consumes_pending_timer_update(monkeypatch):
     calls: list[str] = []
 
     class _Widget:
@@ -130,7 +130,7 @@ def test_handle_paintgl_consumes_pending_timer_update(monkeypatch):
         assert getattr(widget, "_srpss_timer_update_pending") is True
 
         monkeypatch.setattr(paint_module, "paintGL_impl", lambda _widget: calls.append("paint"))
-        paint_module.handle_paintGL(widget)
+        paint_module.handle_rhi_render(widget)
 
         assert calls[:2] == ["update", "paint"]
         assert getattr(widget, "_srpss_timer_update_pending") is False

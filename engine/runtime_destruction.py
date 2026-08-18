@@ -161,12 +161,10 @@ def collect_runtime_roots(manager: object) -> tuple[list[QObject], list[object]]
             strategy_manager = getattr(compositor, "_render_strategy_manager", None)
             if strategy_manager is not None:
                 _append_unique(python_owners, getattr(strategy_manager, "_timer", None))
-            try:
-                context = compositor.context()
-            except (AttributeError, RuntimeError):
-                context = None
-            if isinstance(context, QObject):
-                _append_unique(qobjects, context)
+            # The compositor's OpenGL context is the top-level window's
+            # Qt-owned QRhi context, not a per-display child context. It
+            # outlives the display and must not be awaited as a retiring root.
+            # The SRPSS-owned hidden warmup context above is still watched.
 
     return qobjects, python_owners
 

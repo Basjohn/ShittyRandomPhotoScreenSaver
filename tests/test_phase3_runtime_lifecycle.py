@@ -301,18 +301,26 @@ def test_deferred_gl_warmup_rejects_stopped_generation(monkeypatch) -> None:
 
 def test_live_gl_resources_require_valid_context(monkeypatch) -> None:
     pipeline = SimpleNamespace(initialized=True)
+    # No QRhi attached is the QRhiWidget equivalent of the retired
+    # QOpenGLWidget "context is invalid" state: live SRPSS GL resources cannot
+    # be deleted, so teardown must fail closed and retain ownership.
     widget = SimpleNamespace(
         _gl_pipeline=pipeline,
         _texture_manager=None,
         _startup_transition_warm_queue=[],
         _startup_transition_resource_warm_queue=[],
         _startup_transition_resource_warm_types=set(),
-        isValid=lambda: False,
+        _rhi_gl=SimpleNamespace(
+            is_attached=lambda: False,
+            make_current=lambda: False,
+            context=None,
+            generation=0,
+        ),
         _reset_pipeline_state=lambda: None,
     )
     monkeypatch.setattr(gl_lifecycle, "gl", object())
 
-    with pytest.raises(RuntimeError, match="context is invalid"):
+    with pytest.raises(RuntimeError, match="no QRhi OpenGL context is attached"):
         gl_lifecycle.cleanup_gl_pipeline(widget)
 
     assert pipeline.initialized is True

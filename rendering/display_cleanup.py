@@ -119,9 +119,10 @@ def cleanup_runtime(widget: "DisplayWidget", *, reason: str) -> None:
         logger.debug("[DISPLAY_WIDGET] Cursor halo cleanup failed: %s", exc)
         widget._ctrl_cursor_hint = None
 
-    # GL resources must be deleted while their QOpenGLWidget/context is still
-    # alive. cleanup() deliberately raises if live resources cannot acquire the
-    # context; do not destroy the surface and make the leak unrecoverable.
+    # GL resources must be deleted while the borrowed QRhi OpenGL context is
+    # still alive. cleanup() deliberately raises if live resources cannot
+    # acquire the context; do not destroy the surface and make the leak
+    # unrecoverable.
     compositor = getattr(widget, "_gl_compositor", None)
     if compositor is not None:
         compositor.cleanup()
