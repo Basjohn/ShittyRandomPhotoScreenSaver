@@ -2022,7 +2022,7 @@ void main() {
 
             uniforms = {}
             for uname in (
-                "u_resolution", "u_dpr", "u_fade", "u_time",
+                "u_resolution", "u_dpr", "u_viewport_origin_px", "u_fade", "u_time",
                 "u_border_width",
                 "u_bar_count", "u_segments", "u_bar_height_scale", "u_single_piece",
                 "u_bars", "u_peaks",

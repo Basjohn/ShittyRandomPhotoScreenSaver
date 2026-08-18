@@ -43,6 +43,69 @@ except ImportError:  # pragma: no cover
 logger = get_logger(__name__)
 
 
+class PresentationGeometry:
+    """The single authoritative presentation geometry for one visualizer frame.
+
+    Every consumer - card visual, viewport, scissor, shader resolution, shader
+    fragment origin, stencil mask and border geometry - derives from this one
+    value. The initial single-surface landing had two size authorities (the
+    published card rect for the bars, the live QWidget size for the card
+    pixmap) and two DPR authorities (the compositor for the viewport, the
+    hidden visualizer widget for ``u_dpr``); that produced a shader confined to
+    a narrow hard-edged region inside a much larger painted card.
+
+    The live card QWidget stays layout/edit authority, but its momentarily
+    stale physical geometry must never redefine presentation geometry behind
+    the published state.
+    """
+
+    __slots__ = (
+        "logical_rect",
+        "dpr",
+        "framebuffer_origin_px",
+        "framebuffer_size_px",
+    )
+
+    def __init__(self, logical_rect: QRect, dpr: float, surface_height_px: int) -> None:
+        self.logical_rect = QRect(logical_rect)
+        self.dpr = max(1e-6, float(dpr))
+
+        x_px = int(round(logical_rect.x() * self.dpr))
+        w_px = max(1, int(round(logical_rect.width() * self.dpr)))
+        h_px = max(1, int(round(logical_rect.height() * self.dpr)))
+        top_px = int(round(logical_rect.y() * self.dpr))
+        # Qt widget coordinates are top-left origin; GL viewport/scissor and
+        # gl_FragCoord are bottom-left origin.
+        y_px = max(0, int(surface_height_px) - top_px - h_px)
+
+        self.framebuffer_origin_px = (x_px, y_px)
+        self.framebuffer_size_px = (w_px, h_px)
+
+    @property
+    def viewport(self) -> tuple[int, int, int, int]:
+        return (*self.framebuffer_origin_px, *self.framebuffer_size_px)
+
+    def local_rect(self) -> QRect:
+        """Card-local rect: shaders stay card-sized so authored geometry holds."""
+        return QRect(0, 0, self.logical_rect.width(), self.logical_rect.height())
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, PresentationGeometry):
+            return NotImplemented
+        return (
+            self.logical_rect == other.logical_rect
+            and abs(self.dpr - other.dpr) < 1e-9
+            and self.framebuffer_origin_px == other.framebuffer_origin_px
+            and self.framebuffer_size_px == other.framebuffer_size_px
+        )
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return (
+            f"PresentationGeometry(logical={self.logical_rect}, dpr={self.dpr}, "
+            f"origin_px={self.framebuffer_origin_px}, size_px={self.framebuffer_size_px})"
+        )
+
+
 class VisualizerRenderState:
     """Latest published visualizer render state for one display.
 
@@ -147,6 +210,9 @@ class CompositorVisualizerLayer:
 
         Must be called inside the compositor's external GL section, after the
         base/transition layers. Returns True when the layer actually drew.
+
+        ``dpr`` is the compositor's device pixel ratio and is the ONLY DPR this
+        path consumes; the hidden logical visualizer is not consulted.
         """
         if gl is None:
             return False
@@ -159,18 +225,16 @@ class CompositorVisualizerLayer:
         if not self.ensure_initialized(borrowed.context if borrowed else None):
             return False
 
-        rect = state.card_rect
-        # Card rect in framebuffer pixels. Qt widget coordinates are top-left
-        # origin; OpenGL viewport/scissor are bottom-left origin.
-        x_px = int(round(rect.x() * dpr))
-        w_px = max(1, int(round(rect.width() * dpr)))
-        h_px = max(1, int(round(rect.height() * dpr)))
-        top_px = int(round(rect.y() * dpr))
-        y_px = max(0, int(surface_height_px) - top_px - h_px)
+        # ONE authoritative geometry for card visual, viewport, scissor, shader
+        # resolution, fragment origin, stencil mask and border.
+        geometry = PresentationGeometry(state.card_rect, dpr, surface_height_px)
+        x_px, y_px = geometry.framebuffer_origin_px
+        w_px, h_px = geometry.framebuffer_size_px
 
         # The mask shader reads gl_FragCoord (window space), so it needs the
         # card origin in framebuffer pixels rather than a viewport-local rect.
         owner._compositor_mask_origin_px = (float(x_px), float(y_px))
+        owner._presentation_geometry = geometry
 
         try:
             from widgets.spotify_visualizer.overlay_frame_shell import (
@@ -185,7 +249,7 @@ class CompositorVisualizerLayer:
             # The card QWidget is a sibling ABOVE this surface, so if it kept
             # painting its own background it would simply cover the bars now
             # that they are drawn here.
-            self._render_card_visual(rect)
+            self._render_card_visual(geometry)
 
             gl.glViewport(x_px, y_px, w_px, h_px)
             # Scissor bounds every write this layer makes - including the
@@ -196,21 +260,96 @@ class CompositorVisualizerLayer:
             gl.glEnable(gl.GL_BLEND)
             gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
             try:
-                # Card-local rect: the shaders size themselves from this, and it
-                # must stay card-sized so authored geometry is unchanged.
-                local_rect = QRect(0, 0, rect.width(), rect.height())
-                owner.paint_layer(local_rect, fade)
+                owner.paint_layer(geometry.local_rect(), fade)
             finally:
-                gl.glDisable(gl.GL_SCISSOR_TEST)
-                gl.glUseProgram(0)
-                gl.glBindVertexArray(0)
+                self._restore_gl_state()
             self._last_failure_signature = None
             return True
         except Exception:
             self._record_failure("render_exception")
+            # Exception paths must leave the compositor in the same documented
+            # state as success, or the next owner inherits a broken pipeline.
+            self._restore_gl_state()
             return False
         finally:
             owner._compositor_mask_origin_px = None
+            owner._presentation_geometry = None
+
+    def _restore_gl_state(self) -> None:
+        """Return the documented post-layer GL state for the next owner.
+
+        Explicit restoration of exactly what this layer changes - no per-frame
+        glGet* interrogation. The stencil path is included because the card mask
+        enables stencil test, writes the mask and narrows the colour mask.
+        """
+        if gl is None:
+            return
+        try:
+            gl.glDisable(gl.GL_SCISSOR_TEST)
+            gl.glDisable(gl.GL_STENCIL_TEST)
+            gl.glStencilMask(0x00)
+            gl.glColorMask(True, True, True, True)
+            gl.glDisable(gl.GL_BLEND)
+            gl.glUseProgram(0)
+            gl.glBindVertexArray(0)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS][LAYER] GL state restore failed", exc_info=True)
+
+    def _card_widget(self):
+        """The visualizer card whose visual this layer now owns."""
+        state = self._state
+        if state is None or state.owner is None:
+            return None
+        try:
+            parent = state.owner.parentWidget()
+        except Exception:
+            return None
+        return getattr(parent, "spotify_visualizer_widget", None) if parent else None
+
+    def _render_card_visual(self, geometry: "PresentationGeometry") -> None:
+        """Draw the card background/border/shadow beneath the shader layer.
+
+        Reuses the card's own painting code rather than reimplementing the
+        authored appearance in GL, so border width, radius, shadow and fade stay
+        exactly what the card already produced - but rendered for the
+        authoritative presentation geometry rather than the live widget size.
+        """
+        card = self._card_widget()
+        if card is None:
+            return
+        try:
+            # Claim the visual exactly once; the card keeps everything else.
+            claim = getattr(card, "set_compositor_owns_card_visual", None)
+            if callable(claim):
+                claim(True)
+            if not bool(getattr(card, "_show_background", False)):
+                return  # No background: nothing to occlude, nothing to draw.
+            from widgets.spotify_visualizer.card_paint import (
+                ensure_painted_frame_shadow_pixmap,
+            )
+
+            if not card.uses_painted_frame_shadow():
+                return
+            # Rendered FOR the authoritative presentation size and DPR, never
+            # taken from the live QWidget geometry and never rescaled after the
+            # fact, which would change border/radius/shadow thickness.
+            pixmap = ensure_painted_frame_shadow_pixmap(
+                card,
+                logical_size=geometry.logical_rect.size(),
+                dpr=geometry.dpr,
+            )
+            if pixmap is None or pixmap.isNull():
+                return
+            painter_ctx = getattr(self._compositor, "gl_target_painter", None)
+            if not callable(painter_ctx):
+                return
+            rect = geometry.logical_rect
+            with painter_ctx() as painter:
+                if painter is None:
+                    return
+                painter.drawPixmap(rect.x(), rect.y(), pixmap)
+        except Exception:
+            self._record_failure("card_visual_exception")
 
     # -- lifecycle --------------------------------------------------------
 
@@ -249,56 +388,6 @@ class CompositorVisualizerLayer:
         cleanup_gl = getattr(owner, "cleanup_gl", None)
         if callable(cleanup_gl):
             cleanup_gl()
-
-
-    def _card_widget(self):
-        """The visualizer card whose visual this layer now owns."""
-        state = self._state
-        if state is None or state.owner is None:
-            return None
-        try:
-            parent = state.owner.parentWidget()
-        except Exception:
-            return None
-        return getattr(parent, "spotify_visualizer_widget", None) if parent else None
-
-    def _render_card_visual(self, rect: QRect) -> None:
-        """Draw the card background/border/shadow beneath the shader layer.
-
-        Reuses the card's own cached pixmap rather than reimplementing the
-        authored appearance in GL, so border width, radius, shadow and fade stay
-        exactly what the card already produced.
-        """
-        card = self._card_widget()
-        if card is None:
-            return
-        try:
-            # Claim the visual exactly once; the card keeps everything else.
-            claim = getattr(card, "set_compositor_owns_card_visual", None)
-            if callable(claim):
-                claim(True)
-            if not bool(getattr(card, "_show_background", False)):
-                return  # No background: nothing to occlude, nothing to draw.
-            from widgets.spotify_visualizer.card_paint import (
-                ensure_painted_frame_shadow_pixmap,
-            )
-
-            pixmap = (
-                ensure_painted_frame_shadow_pixmap(card)
-                if card.uses_painted_frame_shadow()
-                else None
-            )
-            if pixmap is None or pixmap.isNull():
-                return
-            painter_ctx = getattr(self._compositor, "gl_target_painter", None)
-            if not callable(painter_ctx):
-                return
-            with painter_ctx() as painter:
-                if painter is None:
-                    return
-                painter.drawPixmap(rect.x(), rect.y(), pixmap)
-        except Exception:
-            self._record_failure("card_visual_exception")
 
     def _record_failure(self, signature: str) -> None:
         """Report visualizer layer failure loudly but boundedly.

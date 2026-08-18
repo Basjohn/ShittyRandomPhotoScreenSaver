@@ -6,6 +6,12 @@ out vec4 fragColor;
 // --- Card / overlay ---
 uniform vec2 u_resolution;
 uniform float u_dpr;
+// Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is
+// WINDOW space, so when the compositor draws the visualizer into the
+// whole-display framebuffer at a non-zero viewport origin the raw value is
+// not card-local. Subtracting this origin restores card-local pixels.
+// A card-sized, origin-zero target simply passes (0, 0).
+uniform vec2 u_viewport_origin_px;
 uniform float u_border_width;
 uniform float u_fade;
 uniform float u_time;
@@ -90,7 +96,8 @@ void main() {
     // Map v_uv (0..1 over full overlay) to pixel coords, then to inner UV
     float dpr = max(u_dpr, 1.0);
     float fb_h = height * dpr;
-    vec2 fc = vec2(gl_FragCoord.x / dpr, (fb_h - gl_FragCoord.y) / dpr);
+    vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
+    vec2 fc = vec2(localFrag.x / dpr, (fb_h - localFrag.y) / dpr);
 
     // Discard outside inner content rect (rectangular pre-check)
     if (fc.x < border_w || fc.x > width - border_w ||

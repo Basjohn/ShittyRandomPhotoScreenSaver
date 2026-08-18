@@ -4,6 +4,12 @@ out vec4 fragColor;
 
 uniform vec2 u_resolution;   // logical size in QWidget coordinates
 uniform float u_dpr;         // device pixel ratio of the backing FBO
+// Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is
+// WINDOW space, so when the compositor draws the visualizer into the
+// whole-display framebuffer at a non-zero viewport origin the raw value is
+// not card-local. Subtracting this origin restores card-local pixels.
+// A card-sized, origin-zero target simply passes (0, 0).
+uniform vec2 u_viewport_origin_px;
 uniform int u_bar_count;
 uniform int u_segments;
 uniform float u_bars[64];
@@ -114,7 +120,8 @@ void main() {
     // current device pixel ratio.
     float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;
     float fb_height = height * dpr;
-    vec2 fragCoord = vec2(gl_FragCoord.x / dpr, (fb_height - gl_FragCoord.y) / dpr);
+    vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
+    vec2 fragCoord = vec2(localFrag.x / dpr, (fb_height - localFrag.y) / dpr);
 
     // ========== SPECTRUM MODE ==========
     float margin_y = 6.0;

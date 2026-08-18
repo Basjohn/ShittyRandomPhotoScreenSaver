@@ -141,7 +141,7 @@ P4-RHI-B  installed no-visualizer acceptance               ACCEPTED
 P4-RHI-C  compositor fallback state made explicit          LANDED
 P2-RHI-A  SpotifyBarsGLOverlay -> QRhiWidget               LANDED then ROLLED BACK
 P2-RHI-B  installed visualizer-on acceptance               REJECTED (5.7x severe-gap regression)
-P2-SINGLE-SURFACE  one surface per display                 LANDED (automated bars green)
+P2-SINGLE-SURFACE  one surface per display                 LANDED + coordinate correction
 P2-SINGLE-B  installed visualizer-on acceptance            ACTIVE
 REMEASURE equivalent ordinary 165 Hz + 60 Hz scenario
 P5  monitor-topology / sleep-wake hardening                MANDATORY NEXT
@@ -448,6 +448,107 @@ architecture. Their logical-equality assertions are unchanged.
 Two real-GL compositor cleanup tests that had silently skipped since P4-RHI-A
 (they called the retired `makeCurrent()`) now borrow the QRhi context and
 exercise strict cleanup again.
+
+## Coordinate-authority correction (2026-08-18)
+
+The first single-surface landing was **visually invalid**: the shader was
+confined to a narrow hard-edged region while the painted card occupied a much
+larger rect. Three concrete defects, all coordinate-authority rather than a
+generic DPR problem.
+
+### Defect 1 — mode shaders still read window-space `gl_FragCoord`
+
+The landing assumed `glViewport(card_rect)` would make `gl_FragCoord` card-local.
+It does not: `gl_FragCoord` stays framebuffer/window space. Every mode derived
+card-local pixels as, in effect:
+
+```text
+fc.x = gl_FragCoord.x / dpr
+fc.y = (card_height * dpr - gl_FragCoord.y) / dpr
+```
+
+which was correct only while the visualizer owned a card-sized framebuffer whose
+origin really was `(0, 0)`. All five modes shared that assumption: Bubble,
+Spectrum, Sine Wave, Oscilloscope, DevCurve.
+
+Fixed with **one shared contract**, not five independent fixes. Every mode now
+declares `uniform vec2 u_viewport_origin_px` and derives:
+
+```glsl
+vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
+```
+
+uploaded through the common uniform path. The compositor passes its
+framebuffer-pixel origin; a card-sized origin-zero target passes `(0, 0)`. The
+stencil mask keeps its own explicit window-space rect and the origin is not
+double-applied.
+
+### Defect 2 — card and shader had two size authorities
+
+The layer used the published `card_rect` for viewport, scissor and shader rect,
+while the card pixmap was built from the **live** `SpotifyVisualizerWidget`
+width/height and then drawn at `card_rect.x/y` without its size being required to
+match. The runtime intentionally allows the committed rect to be authoritative
+while live QWidget geometry is briefly stale; the old overlay tolerated that, the
+compositor cannot.
+
+Introduced `PresentationGeometry`, one authoritative per-frame value carrying
+`logical_rect`, `dpr`, `framebuffer_origin_px` and `framebuffer_size_px`, all
+derived together. It now feeds the card visual, viewport, scissor, shader
+resolution, fragment origin, stencil mask and border geometry.
+
+`ensure_painted_frame_shadow_pixmap()` and `painted_frame_shadow_card_rect()`
+take an explicit `logical_size` and `dpr`, both included in the cache key, so the
+authored card visual is **rendered for** the target dimensions rather than a
+stale pixmap being rescaled afterwards — rescaling would have changed border,
+radius and shadow thickness.
+
+### Defect 3 — DPR had two authorities
+
+Viewport and scissor used `compositor.devicePixelRatioF()` while `u_dpr` came
+from `SpotifyBarsGLOverlay._get_dpr()`. The hidden, non-presented logical widget
+is no longer a presentation-DPR authority: the compositor-derived DPR in the
+per-frame geometry is the only DPR consumed by presentation. This matters for
+later mixed-DPI multi-display acceptance.
+
+### GL state boundary
+
+The layer explicitly restores the documented post-layer state on success **and**
+exception paths: full compositor viewport, scissor disabled, stencil test
+disabled and stencil mask cleared, colour mask restored to all-true, blend
+disabled, program 0, VAO 0. No per-frame `glGet*` interrogation was added.
+
+### The tests that lied, and what replaced them
+
+The original non-zero-offset bars mocked `glViewport`/`glScissor` and replaced
+`paint_layer` with a lambda. They proved only that Python computed a viewport
+tuple; they never exercised fragment-coordinate mapping, which is why a visually
+invalid build passed them.
+
+`tests/test_p2_single_surface_gl_render.py` renders the real compositor
+visualizer layer into a real 800x600 offscreen FBO with the card at
+`QRect(300, 120, 400, 200)` and inspects pixels: full card-width coverage, the
+right-hand half not clipped at `x != 0`, no output escaping the card, correct
+non-zero Y, card-local output identical at origin `(0,0)` and at an offset,
+DPR > 1, the stale-live-geometry regression, rounded stencil clipping, and GL
+state restoration.
+
+**Validated by reintroducing the defect**: with the origin subtraction removed,
+10 of these bars fail. They catch the reported screenshot.
+
+### Known coverage gap — Bubble lit pixels
+
+Bubble is excluded from the lit-pixel parametrisation. Its renderer returns
+before uniform dispatch unless real runtime state is present, so a synthetic
+published state produces an empty card — verified to behave **identically at
+origin (0,0)**, i.e. under the old card-sized geometry, so this is a fixture
+limitation and not a coordinate regression. Making Bubble draw here would have
+required changing authored behaviour, which is out of scope.
+
+Bubble is instead covered by the shared-origin contract bars (it declares the
+uniform, subtracts it, and has no unadjusted `gl_FragCoord` derivation) plus an
+origin-independence render comparison. Its lit-pixel confirmation belongs to the
+operator visual sanity run.
 
 ## P2-SINGLE-B — ACTIVE installed acceptance
 

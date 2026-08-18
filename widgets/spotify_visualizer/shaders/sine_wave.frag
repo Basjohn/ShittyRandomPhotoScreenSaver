@@ -4,6 +4,12 @@ out vec4 fragColor;
 
 uniform vec2 u_resolution;
 uniform float u_dpr;
+// Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is
+// WINDOW space, so when the compositor draws the visualizer into the
+// whole-display framebuffer at a non-zero viewport origin the raw value is
+// not card-local. Subtracting this origin restores card-local pixels.
+// A card-sized, origin-zero target simply passes (0, 0).
+uniform vec2 u_viewport_origin_px;
 uniform float u_fade;
 uniform float u_time;
 
@@ -280,7 +286,8 @@ void main() {
 
     float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;
     float fb_height = height * dpr;
-    vec2 fc = vec2(gl_FragCoord.x / dpr, (fb_height - gl_FragCoord.y) / dpr);
+    vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
+    vec2 fc = vec2(localFrag.x / dpr, (fb_height - localFrag.y) / dpr);
 
     // Keep a slightly larger safety margin so glow/line never overlaps the card border
     float margin_x = 5.0;

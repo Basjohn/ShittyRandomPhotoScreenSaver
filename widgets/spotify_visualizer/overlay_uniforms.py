@@ -23,9 +23,23 @@ def upload_common_uniforms(gl, u: dict, overlay, mode: str, width: int, height: 
     if loc >= 0:
         gl.glUniform2f(loc, float(width), float(height))
 
+    # Presentation DPR and fragment origin come from the compositor's
+    # authoritative per-frame geometry when it owns presentation. The hidden
+    # logical visualizer widget is not a presentation-DPR authority: querying it
+    # independently is what allowed viewport and shader to disagree.
+    geometry = getattr(overlay, "_presentation_geometry", None)
+
     loc = u.get("u_dpr", -1)
     if loc >= 0:
-        gl.glUniform1f(loc, overlay._get_dpr())
+        dpr = float(geometry.dpr) if geometry is not None else overlay._get_dpr()
+        gl.glUniform1f(loc, dpr)
+
+    loc = u.get("u_viewport_origin_px", -1)
+    if loc >= 0:
+        origin = (
+            geometry.framebuffer_origin_px if geometry is not None else (0, 0)
+        )
+        gl.glUniform2f(loc, float(origin[0]), float(origin[1]))
 
     loc = u.get("u_fade", -1)
     if loc >= 0:
