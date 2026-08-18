@@ -903,9 +903,13 @@ def push_gpu_frame(
     # curve or a QWidget opacity side-channel.
     scene_fade = widget._get_scene_fade_factor(now_ts)
     bars_fade = widget._get_gpu_fade_factor(now_ts)
-    # Apply mode-transition crossfade (1.0 when idle, 0→1 during switch)
+    # Apply mode-transition crossfade (1.0 when idle, 0→1 during switch).
+    #
+    # It multiplies the SHADER only. The authored card has always faded on
+    # its own reveal curve alone - that is what the QWidget opacity effect
+    # used to do - and stacking the crossfade on top of it made a mode
+    # switch look dead for most of the transition.
     transition_fade = widget._mode_transition_fade_factor(now_ts)
-    scene_fade *= transition_fade
     bars_fade *= transition_fade
     fade = scene_fade
     prev_fade = widget._last_gpu_fade_sent

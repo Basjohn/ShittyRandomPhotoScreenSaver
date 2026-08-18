@@ -331,6 +331,38 @@ def handle_media_update(
         )
 
 
+def _scene_needs_reveal(widget: Any) -> bool:
+    """Whether an anchor sync should start a reveal.
+
+    A mode transition owns its own fade-out/fade-in sequence, so an ordinary
+    media update in the middle of one must not restart the reveal underneath it.
+    """
+    from widgets.spotify_visualizer.startup_staging import scene_needs_reveal
+
+    try:
+        if int(getattr(widget, "_mode_transition_phase", 0) or 0) != 0:
+            return False
+        if str(getattr(widget, "_mode_teardown_state", "idle") or "idle") != "idle":
+            return False
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Mode transition state unavailable", exc_info=True)
+
+    # Narrow on purpose: this path only rescues the case the single-surface
+    # migration created - a scene that WAS revealed and has since faded to zero
+    # while its logical widget stayed shown. A visualizer that has never been
+    # revealed is the staged startup owner's business, not an anchor sync's.
+    from widgets.spotify_visualizer.presentation_fade import ensure_presentation_fade
+
+    try:
+        fade = ensure_presentation_fade(widget)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Scene fade unavailable", exc_info=True)
+        return False
+    if not fade.has_started():
+        return False
+    return scene_needs_reveal(widget)
+
+
 def _fade_out_for_absent_anchor(widget: Any) -> None:
     """Fade the visualizer out through the one compositor fade authority.
 
@@ -385,7 +417,7 @@ def sync_visibility_with_anchor(widget: Any) -> None:
                 return
             if widget._startup_reveal_pending:
                 return
-            if widget._enabled and not widget.isVisible():
+            if widget._enabled and (not widget.isVisible() or _scene_needs_reveal(widget)):
                 widget._start_widget_fade_in()
         elif widget.isVisible():
             _fade_out_for_absent_anchor(widget)

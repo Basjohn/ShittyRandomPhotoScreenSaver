@@ -2069,8 +2069,29 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Card visual ownership repaint failed", exc_info=True)
 
-    def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
+    def _compositor_owns_visualizer_pixels(self) -> bool:
+        """Whether this display's compositor is the visualizer pixel owner.
+
+        ``_compositor_owns_card_visual`` is per-frame bookkeeping: the layer
+        releases it every time its published state is cleared, which happens
+        on mode resets, anchor hides and teardown. Painting ourselves in that
+        window put one full-opacity frame on screen before the fade started.
+
+        The architectural truth is simpler: if the display has a compositor
+        visualizer layer, that layer owns these pixels and this QWidget never
+        paints them.
+        """
         if self._compositor_owns_card_visual:
+            return True
+        try:
+            parent = self.parentWidget()
+        except Exception:
+            return False
+        compositor = getattr(parent, "_gl_compositor", None) if parent else None
+        return getattr(compositor, "_visualizer_layer", None) is not None
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
+        if self._compositor_owns_visualizer_pixels():
             # Geometry, layout, CUSTOM movement, fade authority and edit
             # interaction all stay here; only the pixels move to the compositor.
             return

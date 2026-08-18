@@ -227,6 +227,11 @@ class CompositorVisualizerLayer:
     # without becoming a per-frame log.
     _FAILURE_LOG_INTERVAL = 300
 
+    # Preparation attempts allowed before the reveal proceeds without readiness.
+    # Roughly two seconds of display-refresh presentation; it exists purely so no
+    # unforeseen readiness condition can hide the visualizer permanently.
+    _PREPARE_ATTEMPT_BUDGET = 120
+
     def __init__(self, compositor: Any) -> None:
         from rendering.gl_compositor_pkg.card_texture import CompositorCardTexture
 
@@ -257,6 +262,13 @@ class CompositorVisualizerLayer:
         # its own to grab.
         self._capture_requested = False
         self._captured_scene_image = None
+        # Set when the authored card image genuinely could not be produced
+        # or uploaded. Readiness stays truthful, but the reveal gate must not
+        # wait forever for something that cannot arrive.
+        self._card_preparation_failed = False
+        # Bounded preparation attempts for this compositor generation. Counted on
+        # a real event - each render-pass preparation - not on a clock.
+        self._prepare_attempts = 0
 
     # -- publication ------------------------------------------------------
 
@@ -286,6 +298,8 @@ class CompositorVisualizerLayer:
         self._prepared_notified = False
         self._capture_requested = False
         self._captured_scene_image = None
+        self._card_preparation_failed = False
+        self._prepare_attempts = 0
 
     def _release_card_visual(self) -> None:
         card = self._card_widget()
@@ -516,11 +530,15 @@ class CompositorVisualizerLayer:
                     dpr=geometry.dpr,
                 )
                 if pixmap is None or pixmap.isNull():
+                    self._card_preparation_failed = True
                     return False
                 if not self._card_texture.ensure_uploaded(pixmap, revision):
+                    self._card_preparation_failed = True
                     return False
+            self._card_preparation_failed = False
             return True
         except Exception:
+            self._card_preparation_failed = True
             self._record_failure("card_visual_exception")
             return False
 
@@ -722,6 +740,8 @@ class CompositorVisualizerLayer:
         if rect.width() <= 0 or rect.height() <= 0:
             return False
 
+        self._prepare_attempts += 1
+
         borrowed = getattr(self._compositor, "_rhi_gl", None)
         if not self.ensure_initialized(borrowed.context if borrowed else None):
             return False
@@ -823,6 +843,39 @@ class CompositorVisualizerLayer:
 
     def is_presentation_ready(self) -> bool:
         return self.readiness().is_ready
+
+    def can_reveal(self) -> bool:
+        """Whether the visible fade may begin.
+
+        Normally this is readiness. It also becomes true once preparation has
+        genuinely been attempted for this compositor generation and cannot
+        complete - a failed GL initialization, or an authored card image that
+        cannot be produced or uploaded.
+
+        A readiness gate is allowed to DELAY the reveal. It is not allowed to
+        hide the visualizer forever: a permanently invisible visualizer is a
+        far worse failure than one that reveals without a perfect card.
+        """
+        readiness = self.readiness()
+        if readiness.is_ready:
+            return True
+        if readiness.gl_generation <= 0:
+            return False
+        blocked = readiness.gl_failed or (
+            readiness.geometry_committed and self._card_preparation_failed
+        )
+        if not blocked and self._prepare_attempts >= self._PREPARE_ATTEMPT_BUDGET:
+            # Preparation has had a real, bounded number of render-pass attempts
+            # for this generation and is still not ready. Whatever it is waiting
+            # for is not arriving, and an invisible visualizer is not an
+            # acceptable resting state.
+            blocked = True
+        if not blocked:
+            return False
+        self._record_failure(
+            "reveal_without_readiness:" + ",".join(readiness.missing())
+        )
+        return True
 
     # -- lifecycle --------------------------------------------------------
 

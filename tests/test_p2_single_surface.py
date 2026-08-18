@@ -569,12 +569,34 @@ class TestCardVisualOwnership:
         from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 
         source = inspect.getsource(SpotifyVisualizerWidget.paintEvent)
-        assert "_compositor_owns_card_visual" in source
+        assert "_compositor_owns_visualizer_pixels" in source
         tree = ast.parse(textwrap.dedent(source)).body[0]
         first = tree.body[0] if not isinstance(tree.body[0], ast.Expr) else tree.body[1]
         assert isinstance(first, ast.If), (
             "the compositor-ownership check must gate painting, not follow it"
         )
+
+    def test_the_card_never_self_paints_while_a_compositor_layer_exists(self):
+        """Per-frame ownership bookkeeping is not the truth about who paints.
+
+        The layer releases the card visual every time its published state is
+        cleared - mode reset, anchor hide, teardown. With no QGraphicsOpacityEffect
+        left to hold the widget at zero, self-painting in that window put one
+        full-opacity frame on screen before the fade started.
+        """
+        from types import SimpleNamespace
+
+        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+
+        probe = SpotifyVisualizerWidget.__new__(SpotifyVisualizerWidget)
+        probe._compositor_owns_card_visual = False
+        compositor = SimpleNamespace(_visualizer_layer=object())
+        probe.parentWidget = lambda: SimpleNamespace(_gl_compositor=compositor)
+
+        assert probe._compositor_owns_visualizer_pixels() is True
+
+        probe.parentWidget = lambda: SimpleNamespace(_gl_compositor=None)
+        assert probe._compositor_owns_visualizer_pixels() is False
 
     def test_card_visual_is_drawn_before_the_shader_layer(self):
         source = inspect.getsource(CompositorVisualizerLayer.render)

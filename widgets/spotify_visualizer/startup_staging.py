@@ -126,6 +126,23 @@ def prewarm_parent_overlay(widget: Any) -> None:
         logger.debug("[SPOTIFY_VIS] Failed to prewarm parent GL overlay", exc_info=True)
 
 
+def scene_needs_reveal(widget: Any) -> bool:
+    """Whether the compositor-owned scene is still invisible.
+
+    ``isVisible()`` is not the answer any more: the logical QWidget stays shown
+    across a fade-out because the compositor owns the pixels. A reveal gated on
+    visibility alone therefore did nothing after any fade-out, leaving the
+    visualizer permanently invisible.
+    """
+    try:
+        from widgets.spotify_visualizer.presentation_fade import ensure_presentation_fade
+
+        return bool(ensure_presentation_fade(widget).needs_reveal())
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Scene reveal state unavailable", exc_info=True)
+        return False
+
+
 def _owning_compositor(widget: Any):
     """Return the display compositor that owns this visualizer's pixels."""
     try:
@@ -146,7 +163,9 @@ def is_renderer_presentation_ready(widget: Any) -> bool:
     compositor = _owning_compositor(widget)
     if compositor is None:
         return True
-    probe = getattr(compositor, "is_visualizer_presentation_ready", None)
+    probe = getattr(compositor, "visualizer_can_reveal", None)
+    if not callable(probe):
+        probe = getattr(compositor, "is_visualizer_presentation_ready", None)
     if not callable(probe):
         return True
     try:
@@ -199,9 +218,16 @@ def finish_staged_startup_reveal(
     if widget._waiting_for_fresh_frame:
         return
     if not is_renderer_presentation_ready(widget):
-        # Readiness drives reveal. Nothing is scheduled here: the compositor
-        # notifies once its fade-zero preparation completes, which re-enters
-        # this function with reason="renderer_ready".
+        # Readiness drives reveal. The compositor notifies once its fade-zero
+        # preparation completes, which re-enters this function with
+        # reason="renderer_ready".
+        #
+        # No re-attempt is scheduled here on purpose. The layer resets that
+        # notification whenever it is cleared, so a clear/re-prepare cycle
+        # notifies again, and every other reveal precondition - fresh frame,
+        # play state, anchor visibility - re-enters this function on its own
+        # event. Polling would add a second driver for a state machine that
+        # already has one.
         log_renderer_readiness_gap(widget)
         return
     try:
@@ -222,7 +248,7 @@ def finish_staged_startup_reveal(
 
     cancel_pending_startup_reveal(widget)
     try:
-        if not widget.isVisible():
+        if not widget.isVisible() or scene_needs_reveal(widget):
             widget._start_widget_fade_in()
         logger.debug("[SPOTIFY_VIS] Completed staged startup reveal (reason=%s)", reason)
     except Exception:

@@ -160,6 +160,22 @@ class VisualizerPresentationFade:
         except Exception:
             return False
 
+    def needs_reveal(self) -> bool:
+        """Whether the scene is invisible or on its way out.
+
+        Reveal decisions must ask this rather than ``QWidget.isVisible()``. The
+        logical widget stays shown across a fade-out now - the compositor owns
+        the pixels, so hiding it achieves nothing - which means visibility no
+        longer says anything about whether the scene is on screen.
+        """
+        if not self._started:
+            return True
+        if self.is_running():
+            # Something is already animating the scene - a reveal in progress, or
+            # a hide that must be allowed to finish rather than be interrupted.
+            return False
+        return self._progress <= 0.0
+
     def is_fading_out(self) -> bool:
         """Whether a hide animation is currently running."""
         return self._target <= 0.0 and self.is_running()
