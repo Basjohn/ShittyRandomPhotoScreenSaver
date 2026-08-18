@@ -330,27 +330,40 @@ def paint_crossfade_shader(comp: "GLCompositorWidget", target: QRect) -> None:
     )
 
 
+def _retained_base_unavailable(comp: "GLCompositorWidget", reason: str) -> bool:
+    """Record why steady retained-base shader drawing could not run.
+
+    The reason is recorded, not logged, here: whether it deserves a loud record
+    depends on whether the compositor was in a state where retained-base shader
+    drawing was actually expected. That decision belongs to the render caller.
+    """
+    comp._retained_base_fallback_reason = reason
+    return False
+
+
 def paint_retained_base_texture(comp: "GLCompositorWidget", target: QRect) -> bool:
     """Draw the terminally retained current texture on the idle compositor path."""
 
     del target
-    if gl is None or comp._gl_disabled_for_session:
-        return False
+    if gl is None:
+        return _retained_base_unavailable(comp, "gl_unavailable")
+    if comp._gl_disabled_for_session:
+        return _retained_base_unavailable(comp, "gl_disabled_for_session")
     pipeline = comp._gl_pipeline
     texture_manager = comp._texture_manager
     pixmap = comp._base_pixmap
-    if (
-        pipeline is None
-        or not pipeline.initialized
-        or not getattr(pipeline, "crossfade_program", 0)
-        or texture_manager is None
-        or pixmap is None
-        or pixmap.isNull()
-    ):
-        return False
+    if pixmap is None or pixmap.isNull():
+        # Legitimate pre-image state, not a fallback worth reporting.
+        return _retained_base_unavailable(comp, "no_base_image")
+    if pipeline is None or not pipeline.initialized:
+        return _retained_base_unavailable(comp, "pipeline_unavailable")
+    if not getattr(pipeline, "crossfade_program", 0):
+        return _retained_base_unavailable(comp, "program_missing")
+    if texture_manager is None:
+        return _retained_base_unavailable(comp, "texture_manager_missing")
     texture_id = texture_manager.get_cached_texture_id(pixmap)
     if not texture_id:
-        return False
+        return _retained_base_unavailable(comp, "texture_cache_miss")
     try:
         import time as _stage_time
 
@@ -359,7 +372,7 @@ def paint_retained_base_texture(comp: "GLCompositorWidget", target: QRect) -> bo
         _stage_mark(comp, "t1")
         _stage_t = _stage_time.perf_counter()
         if not comp._transition_renderer.render_retained_base_texture(texture_id):
-            return False
+            return _retained_base_unavailable(comp, "draw_rejected")
         _stage_mark(comp, "t2")
         _stage_cpu(comp, "core_draw_cpu_ms", _stage_t)
 
@@ -381,7 +394,7 @@ def paint_retained_base_texture(comp: "GLCompositorWidget", target: QRect) -> bo
             "[GL SHADER] Retained base-texture draw failed; using QPainter fallback",
             exc_info=True,
         )
-        return False
+        return _retained_base_unavailable(comp, "draw_exception")
 
 def paint_diffuse_shader(comp: "GLCompositorWidget", target: QRect) -> None:
     render_simple_shader(
