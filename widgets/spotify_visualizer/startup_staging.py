@@ -510,6 +510,182 @@ def cleanup_impl(widget: Any) -> None:
     logger.debug("[LIFECYCLE] SpotifyVisualizerWidget cleaned up")
 
 
+# ------------------------------------------------------------------
+# Edit-session suspend / resume
+# ------------------------------------------------------------------
+
+
+def is_edit_suspended(widget: Any) -> bool:
+    return bool(getattr(widget, "_edit_suspended", False))
+
+
+def suspend_for_edit(widget: Any, *, reason: str) -> bool:
+    """Suspend a LIVE visualizer runtime for a CUSTOM edit session.
+
+    An edit session is not a runtime lifecycle boundary, so it must not use
+    ``stop_legacy()``/``start_legacy()``. Those are STARTUP entry points:
+    ``start_legacy()`` re-arms staged startup, and mid-runtime that defers to
+    the Spotify secondary stage - a one-shot event that has already fired. The
+    installed ``--geo`` run recorded exactly that on Cancel:
+
+        Seeded playback state from anchor (start ... state=playing)
+        Deferred hot start to Spotify secondary stage
+
+    and no later ``Audio worker started``.
+
+    Suspension keeps the runtime generation, the committed mode/config, the
+    engine identity and every GL resource. It only stops the work an edit
+    session must not be doing, and records enough to resume directly.
+    """
+    if is_edit_suspended(widget):
+        return False
+    if not getattr(widget, "_enabled", False):
+        return False
+
+    from widgets.spotify_visualizer.media_bridge import clear_pending_playback_pause
+
+    try:
+        was_visible = bool(widget.isVisible())
+    except Exception:
+        was_visible = True
+
+    widget._edit_suspended = True
+    widget._edit_suspend_reason = str(reason)
+    widget._edit_suspend_was_visible = was_visible
+    # The tick, publication and media paths all gate on this, so clearing it
+    # stops logical admission without discarding any staged-startup state.
+    widget._enabled = False
+
+    try:
+        clear_pending_playback_pause(widget)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to clear pending playback pause for edit", exc_info=True)
+
+    try:
+        widget.detach_from_animation_manager()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to detach animation ticks for edit", exc_info=True)
+    try:
+        if widget._bars_timer is not None:
+            widget._bars_timer.stop()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to stop logical tick for edit", exc_info=True)
+    widget._bars_timer = None
+    widget._using_animation_ticks = False
+
+    # Release the engine REFERENCE only. The engine object, its generation and
+    # its configuration survive; capture follows the authored warm-grace policy.
+    engine = getattr(widget, "_engine", None)
+    if engine is not None:
+        try:
+            engine.release()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to release engine for edit", exc_info=True)
+
+    try:
+        widget.hide()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to hide visualizer for edit", exc_info=True)
+
+    logger.info(
+        "[SPOTIFY_VIS] Visualizer suspended for edit session (reason=%s was_visible=%s)",
+        reason,
+        was_visible,
+    )
+    return True
+
+
+def _arm_edit_resume_reveal(widget: Any) -> None:
+    """Arm ONLY the reveal gate, not staged startup.
+
+    Resume still reveals through the current fade/readiness owner: the layer
+    was cleared on suspend, so the compositor has to prepare the renderer at
+    fade zero again before the visible fade may begin. Going straight to
+    ``_start_widget_fade_in()`` would reintroduce a part-way first frame.
+    """
+    widget._startup_reveal_pending = True
+    widget._startup_reveal_token = int(getattr(widget, "_startup_reveal_token", 0)) + 1
+    widget._startup_reveal_ready_token = -1
+    widget._startup_reveal_not_before_ts = 0.0
+    # None of these are startup conditions for a runtime that is already up.
+    widget._startup_require_playing_before_reveal = False
+    widget._startup_idle_reveal_requires_authoritative_media = False
+    widget._startup_has_authoritative_media_update = True
+
+
+def resume_after_edit(widget: Any, *, reason: str) -> bool:
+    """Resume the existing visualizer runtime after an edit session.
+
+    Deliberately not ``start_legacy()``: no staged startup, no secondary-stage
+    event, no engine reset and therefore no new engine generation. The runtime
+    that was suspended is the runtime that resumes.
+    """
+    if not is_edit_suspended(widget):
+        return False
+
+    from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
+
+    was_visible = bool(getattr(widget, "_edit_suspend_was_visible", True))
+    widget._edit_suspended = False
+    widget._edit_suspend_reason = ""
+    widget._enabled = True
+
+    seed = getattr(widget, "_seed_playback_state_from_anchor", None)
+    if callable(seed):
+        try:
+            seed(reason=reason, request_refresh_if_missing=False)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to reseed playback state after edit", exc_info=True)
+
+    engine = getattr(widget, "_engine", None)
+    if engine is None:
+        try:
+            engine = get_shared_spotify_beat_engine(widget._bar_count)
+            widget._engine = engine
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to resolve engine after edit", exc_info=True)
+            engine = None
+    if engine is not None:
+        try:
+            if widget._thread_manager is not None:
+                engine.set_thread_manager(widget._thread_manager)
+            set_generation = getattr(engine, "set_runtime_generation", None)
+            if callable(set_generation):
+                set_generation(getattr(widget, "_runtime_generation", None))
+            # Re-acquire the reference released by suspend. No reset, so no
+            # activation/generation boundary is crossed by cancelling an edit.
+            engine.acquire()
+            engine.set_playback_state(bool(getattr(widget, "_spotify_playing", False)))
+            should_capture = getattr(widget, "_should_capture_audio_now", None)
+            if callable(should_capture) and should_capture():
+                engine.ensure_started()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to reacquire engine after edit", exc_info=True)
+
+    if widget._thread_manager is not None and widget._bars_timer is None:
+        try:
+            interval = max(1, int(getattr(widget, "_current_timer_interval_ms", 16) or 16))
+            widget._bars_timer = widget._thread_manager.schedule_recurring(
+                interval, widget._on_tick
+            )
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to restart logical tick after edit", exc_info=True)
+            widget._bars_timer = None
+    elif widget._animation_manager is not None and widget._anim_listener_id is not None:
+        widget._using_animation_ticks = True
+
+    if was_visible:
+        _arm_edit_resume_reveal(widget)
+        finish_staged_startup_reveal(widget, reason="edit_resume")
+
+    logger.info(
+        "[SPOTIFY_VIS] Visualizer resumed after edit session (reason=%s was_visible=%s)",
+        reason,
+        was_visible,
+    )
+    return True
+
+
 def start_legacy(widget: Any) -> None:
     """Legacy start method."""
     if widget._enabled:
