@@ -955,12 +955,19 @@ def handle_initializeGL(widget) -> None:  # type: ignore[override]
                 )
             else:
                 record = logger.info if supported else logger.error
+                import sys as _sys
+
+                no_hud = any(
+                    str(v).strip().lower() == "--diag-p4-no-perf-hud"
+                    for v in _sys.argv
+                )
                 record(
                     "[PERF][P4_STAGES][INIT] requested=1 supported=%d reason=%s "
-                    "timestamp_queries=%d",
+                    "timestamp_queries=%d no_perf_hud=%d",
                     int(supported),
                     stage_ring.support_reason,
                     len(getattr(stage_ring, "_handles", ()) or ()),
+                    int(no_hud),
                 )
             if not supported:
                 logger.warning(

@@ -195,6 +195,15 @@ def paint_spotify_visualizer(widget, painter: QPainter) -> None:
     finally:
         painter.restore()
 
+def _no_perf_hud_requested() -> bool:
+    """CLI-only control gate. No environment-variable path."""
+    import sys
+
+    return any(
+        str(value).strip().lower() == "--diag-p4-no-perf-hud" for value in sys.argv
+    )
+
+
 def _hud_observe(widget, image, *, rebuilt: bool, t0) -> None:
     """PART C: record HUD outcome onto the active stage packet, passively.
 
@@ -235,6 +244,12 @@ def render_debug_overlay_image(widget) -> Optional[QImage]:
     """
 
     _hud_t0 = time.perf_counter()
+    # PART 3: --diag-p4-no-perf-hud suppresses ONLY the HUD build/draw. All PERF
+    # telemetry, counters, reports and history remain fully enabled; this is the
+    # clean production-like control for the measured HUD observer cost.
+    if _no_perf_hud_requested():
+        _hud_observe(widget, None, rebuilt=False, t0=_hud_t0)
+        return None
     if not is_perf_metrics_enabled():
         widget._debug_overlay_cache_key = None
         widget._debug_overlay_cache_image = None
