@@ -367,11 +367,18 @@ def _log_delivery_perf_window(widget, *, outcome: str, target_fps: int) -> None:
 
 
 def _mark_widget_update_pending(widget) -> None:
+    """Record one admitted presentation request.
+
+    ``_srpss_timer_update_pending``/``_pending_since`` are PASSIVE diagnostics
+    describing the oldest request that has not yet reached paint. They do not
+    gate admission. ``_srpss_timer_update_dispatch_pending`` is the one real
+    guard and covers only the queued GUI callback.
+    """
     now = time.perf_counter()
     if not bool(_safe_attr(widget, "_srpss_timer_update_pending", False)):
         setattr(widget, "_srpss_timer_update_pending", True)
         setattr(widget, "_srpss_timer_update_pending_since", now)
-    setattr(widget, "_srpss_timer_update_pending_last_log", 0.0)
+        setattr(widget, "_srpss_timer_update_pending_last_log", 0.0)
     setattr(widget, "_srpss_timer_update_dispatch_pending", True)
     if is_perf_metrics_enabled():
         try:
@@ -452,7 +459,14 @@ def _maybe_log_pending_widget_update(widget) -> None:
 
 
 def _mark_widget_update_consumed(widget) -> None:
-    """Release the coalescing flag once a queued update reaches paint consumption."""
+    """Close passive paint timing for the requests that reached paint.
+
+    This is NOT a producer/presentation gate release. Admission is owned
+    solely by the queued-GUI-dispatch guard, which was already released when
+    the GUI callback called ``QWidget.update()``. Clearing the dispatch flag
+    here as well is harmless - it is already false on the normal path - and
+    keeps the teardown/stale paths failing safely.
+    """
     if widget is None:
         return
     if is_perf_metrics_enabled():
@@ -485,6 +499,15 @@ def _queue_safe_widget_update(widget) -> bool:
         return False
 
     try:
+        # The ONLY admission guard: never let a second queued Python/Qt GUI
+        # callback wait behind one that has not yet run. It is released the
+        # moment that callback actually calls QWidget.update().
+        #
+        # Paint is deliberately NOT an admission authority. Rejecting a display
+        # deadline because the previous update() had not reached paint made
+        # physical presentation wait for paint acknowledgement, which the
+        # presentation contract forbids, and cost roughly 6.6-6.8% of requests
+        # on a 165 Hz target. Qt already coalesces repeated update() calls.
         if bool(getattr(widget, "_srpss_timer_update_dispatch_pending", False)):
             if is_perf_metrics_enabled():
                 setattr(widget, "_srpss_timer_last_skip_stage", "dispatch")
@@ -492,23 +515,10 @@ def _queue_safe_widget_update(widget) -> bool:
                 if age_ms is not None:
                     _delivery_deque(widget, "_srpss_delivery_dispatch_skip_age_ms").append(age_ms)
             return False
-        if bool(getattr(widget, "_srpss_timer_update_pending", False)):
-            if is_perf_metrics_enabled():
-                stage = (
-                    "unknown"
-                    if bool(_safe_attr(widget, "_srpss_timer_dispatch_timing_unknown", False))
-                    else "paint"
-                )
-                setattr(widget, "_srpss_timer_last_skip_stage", stage)
-            age_ms = _pending_widget_update_age_ms(widget)
-            if is_perf_metrics_enabled() and age_ms is not None:
-                if stage == "paint":
-                    _delivery_deque(widget, "_srpss_delivery_paint_skip_age_ms").append(age_ms)
-            if age_ms is not None and age_ms >= _PENDING_UPDATE_LOG_AFTER_MS:
-                _maybe_log_pending_widget_update(widget)
-            return False
-        else:
-            _mark_widget_update_pending(widget)
+        # Passive only: a long-unpainted request is still worth reporting, but
+        # it cannot change what happens next.
+        _maybe_log_pending_widget_update(widget)
+        _mark_widget_update_pending(widget)
     except Exception:
         # If the widget cannot host the flag, fall back to the old behavior.
         pass

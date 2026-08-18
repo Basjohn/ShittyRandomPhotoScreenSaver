@@ -337,7 +337,13 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             adaptive_timer.Shiboken = original_shiboken
 
     def test_safe_widget_update_coalesces_pending_dispatches(self):
-        """Timer-driven repaints should not flood the UI queue with duplicate updates."""
+        """Duplicate GUI callbacks coalesce only until the callback runs.
+
+        The guard exists to stop a second queued Python callback waiting
+        behind one that has not executed. Once the callback has called
+        QWidget.update(), a later display deadline is admitted even though
+        Qt has not painted yet - Qt coalesces the update events itself.
+        """
         class _Widget:
             def __init__(self):
                 self.update_count = 0
@@ -366,23 +372,35 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             queued[0]()
 
             self.assertEqual(widget.update_count, 1)
+            # Paint has NOT happened: the passive paint-pending diagnostic
+            # is still set, and the dispatch guard is already released.
             self.assertTrue(getattr(widget, "_srpss_timer_update_pending"))
             self.assertFalse(getattr(widget, "_srpss_timer_update_dispatch_pending"))
 
-            _queue_safe_widget_update(widget)
-            self.assertEqual(len(queued), 1)
+            # The next display deadline is admitted before paint.
+            self.assertTrue(_queue_safe_widget_update(widget))
+            self.assertEqual(len(queued), 2)
+            queued[1]()
+            self.assertEqual(widget.update_count, 2)
 
+            # Paint consumption only closes the passive diagnostic.
             _mark_widget_update_consumed(widget)
             self.assertFalse(getattr(widget, "_srpss_timer_update_pending"))
 
-            _queue_safe_widget_update(widget)
-            self.assertEqual(len(queued), 2)
+            self.assertTrue(_queue_safe_widget_update(widget))
+            self.assertEqual(len(queued), 3)
         finally:
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken
 
-    def test_safe_widget_update_keeps_idle_coalescing_even_when_pending_is_old(self):
-        """Idle widgets must not repaint repeatedly just because a flag is old."""
+    def test_safe_widget_update_admits_a_deadline_when_paint_is_still_pending(self):
+        """An unpainted earlier request may not reject a later deadline.
+
+        This was the pending-until-paint admission latch: it rejected a
+        display deadline whenever the previous update() had not yet reached
+        paint, which is producer/presentation waiting for paint
+        acknowledgement.
+        """
         class _Widget:
             def __init__(self):
                 self.update_count = 0
@@ -405,17 +423,21 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(lambda func, *args, **kwargs: queued.append(func))
             adaptive_timer.Shiboken = None
 
-            _queue_safe_widget_update(widget)
+            self.assertTrue(_queue_safe_widget_update(widget))
 
-            self.assertEqual(queued, [])
-            self.assertTrue(getattr(widget, "_srpss_timer_update_pending"))
-            self.assertEqual(widget.update_count, 0)
+            self.assertEqual(len(queued), 1)
+            queued[0]()
+            self.assertEqual(widget.update_count, 1)
         finally:
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken
 
     def test_safe_widget_update_logs_stale_pending_without_requeueing(self):
-        """Stale pending paint diagnostics must not become another UI-pressure loop."""
+        """Starvation reporting stays passive and never requeues.
+
+        The report is still worth emitting, but observing it may not change
+        whether the deadline is admitted and may not schedule extra work.
+        """
         class _Widget:
             def __init__(self):
                 self.update_count = 0
@@ -441,10 +463,10 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             adaptive_timer.is_perf_metrics_enabled = lambda: True
 
             with self.assertLogs(adaptive_timer.logger.name, level="WARNING") as logs:
-                _queue_safe_widget_update(widget)
+                self.assertTrue(_queue_safe_widget_update(widget))
 
-            self.assertEqual(queued, [])
-            self.assertEqual(widget.update_count, 0)
+            # Exactly one queued GUI callback, and no self-requeue.
+            self.assertEqual(len(queued), 1)
             self.assertTrue(getattr(widget, "_srpss_timer_update_pending"))
             self.assertTrue(any("no_requeue=True" in message for message in logs.output))
         finally:
@@ -466,8 +488,12 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
         self.assertEqual(getattr(widget, "_srpss_timer_update_pending_since"), 0.0)
         self.assertEqual(getattr(widget, "_srpss_timer_update_pending_last_log"), 0.0)
 
-    def test_safe_widget_update_does_not_requeue_stale_transition_pending_dispatch(self):
-        """Transition repaint coalescing must not become a UI-thread requeue loop."""
+    def test_transition_pending_paint_does_not_block_the_next_deadline(self):
+        """Transition repaints get the same admission rule as everything else.
+
+        Exactly one queued GUI callback, and no self-requeue loop - but an
+        unpainted previous request does not reject the next deadline.
+        """
         class _FrameState:
             started = True
             completed = False
@@ -494,18 +520,28 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(lambda func, *args, **kwargs: queued.append(func))
             adaptive_timer.Shiboken = None
 
-            _queue_safe_widget_update(widget)
+            self.assertTrue(_queue_safe_widget_update(widget))
 
-            self.assertEqual(queued, [])
+            self.assertEqual(len(queued), 1)
             self.assertTrue(getattr(widget, "_srpss_timer_update_pending"))
+            # The oldest unpainted request keeps owning the diagnostic origin.
             self.assertEqual(getattr(widget, "_srpss_timer_update_pending_since"), 1.0)
-            self.assertEqual(widget.update_count, 0)
+            queued[0]()
+            self.assertEqual(widget.update_count, 1)
+            # One outstanding callback at a time, no requeue loop.
+            self.assertEqual(len(queued), 1)
         finally:
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken
 
-    def test_safe_widget_update_coalesces_fresh_pending_until_paint_consumes_it(self):
-        """One accepted Qt update owns delivery even at high refresh."""
+    def test_high_refresh_deadline_is_admitted_while_paint_is_outstanding(self):
+        """The 165 Hz case: paint latency must not throttle request admission.
+
+        At a 165 Hz target the installed run accepted only ~93.2-93.4% of
+        requests, which corresponds to roughly 153.8 Hz - the measured
+        ceiling. Requests rejected for an outstanding paint were the known
+        policy loss.
+        """
         class _FrameState:
             started = True
             completed = False
@@ -534,10 +570,10 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
 
             accepted = _queue_safe_widget_update(widget)
 
-            self.assertFalse(accepted)
-            self.assertEqual(len(queued), 0)
-            self.assertTrue(getattr(widget, "_srpss_timer_update_pending"))
-            self.assertEqual(widget.update_count, 0)
+            self.assertTrue(accepted)
+            self.assertEqual(len(queued), 1)
+            queued[0]()
+            self.assertEqual(widget.update_count, 1)
         finally:
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken
@@ -579,12 +615,17 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken
 
-    def test_signal_frame_records_pending_skip_without_fake_render_tick(self):
-        """Pending coalesced updates must not masquerade as delivered render cadence."""
+    def test_signal_frame_records_dispatch_skip_without_fake_render_tick(self):
+        """A coalesced GUI dispatch must not masquerade as delivered cadence.
+
+        The skip that still exists is the queued-callback one. An
+        outstanding PAINT is not a skip reason any more.
+        """
         class _Widget:
             def __init__(self):
                 self.accepted_ticks = 0
                 self.skipped_ticks = 0
+                self._srpss_timer_update_dispatch_pending = True
                 self._srpss_timer_update_pending = True
                 self._srpss_timer_update_pending_since = time.perf_counter() - 1.0
 
@@ -595,7 +636,7 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
                     self.skipped_ticks += 1
 
             def update(self):
-                raise AssertionError("pending update should suppress another update")
+                raise AssertionError("a queued callback is still outstanding")
 
         widget = _Widget()
         timer = AdaptiveTimerStrategy(widget, self.config)
@@ -603,6 +644,32 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
 
         self.assertEqual(widget.accepted_ticks, 0)
         self.assertEqual(widget.skipped_ticks, 1)
+
+    def test_signal_frame_accepts_while_only_paint_is_outstanding(self):
+        """The same widget, minus the queued callback, is admitted."""
+        class _Widget:
+            def __init__(self):
+                self.accepted_ticks = 0
+                self.skipped_ticks = 0
+                self.update_count = 0
+                self._srpss_timer_update_pending = True
+                self._srpss_timer_update_pending_since = time.perf_counter() - 1.0
+
+            def _record_render_timer_tick(self, *, accepted_update=True):
+                if accepted_update:
+                    self.accepted_ticks += 1
+                else:
+                    self.skipped_ticks += 1
+
+            def update(self):
+                self.update_count += 1
+
+        widget = _Widget()
+        timer = AdaptiveTimerStrategy(widget, self.config)
+        timer._signal_frame()
+
+        self.assertEqual(widget.accepted_ticks, 1)
+        self.assertEqual(widget.skipped_ticks, 0)
 
     def test_safe_widget_update_prefers_qt_queued_invoke_for_qobject_widgets(self):
         """Real QObject-owned compositor widgets should bypass the generic UI invoker hot path."""
@@ -734,24 +801,30 @@ class TestDeliveryStageInvariants(unittest.TestCase):
         self.assertEqual(int(getattr(widget, "_srpss_delivery_accepted", 0) or 0), 1)
         self.assertEqual(self._skip_totals(widget), (0, 0, 0))
 
-    def test_real_queue_path_attributes_dispatch_and_paint_stages_separately(self):
-        """The stage label must come from the actual coalescing branch taken."""
+    def test_real_queue_path_only_ever_skips_for_queued_dispatch(self):
+        """Dispatch is the only real skip reason left.
+
+        The paint skip counter is retained so historical evidence stays
+        comparable, but nothing may increment it: paint is no longer an
+        admission authority.
+        """
         widget = _DeliveryWidget()
 
         # First call accepts and marks pending+dispatch-pending.
         self.assertTrue(_queue_safe_widget_update(widget))
-        # Second call is rejected while the queued update has not run yet.
+        # Second call is rejected while the queued callback has not run yet.
         self.assertFalse(_queue_safe_widget_update(widget))
         self.assertEqual(getattr(widget, "_srpss_timer_last_skip_stage"), "dispatch")
         _record_delivery_result(widget, False)
         self.assertEqual(self._skip_totals(widget), (1, 0, 0))
 
-        # Run the queued update: dispatch completes, paint has not consumed yet.
+        # Run the queued update: dispatch completes, paint has not consumed
+        # yet, and the next deadline is admitted anyway.
         self.queued[0]()
-        self.assertFalse(_queue_safe_widget_update(widget))
-        self.assertEqual(getattr(widget, "_srpss_timer_last_skip_stage"), "paint")
-        _record_delivery_result(widget, False)
-        self.assertEqual(self._skip_totals(widget), (1, 1, 0))
+        self.assertTrue(_queue_safe_widget_update(widget))
+        _record_delivery_result(widget, True)
+        self.assertEqual(self._skip_totals(widget), (1, 0, 0))
+        self.assertEqual(int(getattr(widget, "_srpss_delivery_accepted", 0) or 0), 1)
 
     # --- Invariant 2: stage ages are non-negative and generation-bounded ---
 
