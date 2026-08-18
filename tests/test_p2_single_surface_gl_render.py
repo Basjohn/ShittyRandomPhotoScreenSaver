@@ -21,7 +21,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from PySide6.QtCore import QRect, QSize
-from PySide6.QtGui import QColor, QSurfaceFormat
+from PySide6.QtGui import QColor, QImage, QSurfaceFormat
 
 gl = pytest.importorskip("OpenGL.GL")
 
@@ -505,3 +505,282 @@ class TestSharedFragmentOriginContract:
             "origin is not card-local"
         )
 
+
+# ---------------------------------------------------------------------------
+# Card visual: cached GL texture, not a per-frame QPainter bridge
+# ---------------------------------------------------------------------------
+
+
+class _CardStub:
+    """Minimal stand-in for the visualizer card's authored visual state."""
+
+    def __init__(self, *, width=400, height=200):
+        self._show_background = True
+        self._bg_color = QColor(20, 30, 40)
+        self._bg_opacity = 0.9
+        self._card_border_color = QColor(255, 255, 255, 255)
+        self._border_width = 2
+        self._painted_frame_shadow_enabled = True
+        self._painted_frame_shadow_pixmap = None
+        self._painted_frame_shadow_cache_key = None
+        self._w = width
+        self._h = height
+        self.owned = None
+
+    def uses_painted_frame_shadow(self):
+        return bool(self._painted_frame_shadow_enabled and self._show_background)
+
+    def width(self):
+        return self._w
+
+    def height(self):
+        return self._h
+
+    def devicePixelRatioF(self):
+        return 1.0
+
+    def set_compositor_owns_card_visual(self, owned):
+        self.owned = owned
+
+
+def _layer_with_card(ctx, card, overlay, card_rect=CARD):
+    from types import SimpleNamespace
+
+    comp = _FakeCompositor(ctx)
+    layer = CompositorVisualizerLayer(comp)
+    overlay.parentWidget = lambda: SimpleNamespace(spotify_visualizer_widget=card)
+    layer.publish(VisualizerRenderState(overlay, card_rect))
+    return layer
+
+
+class TestCardTextureUploadContract:
+    def test_unchanged_card_uploads_once_across_many_paints(self, gl_context, qapp):
+        """Ordinary visualizer publications must not re-upload the card."""
+        card = _CardStub()
+        overlay = _overlay_for("spectrum")
+        layer = _layer_with_card(gl_context, card, overlay)
+        target = _GLTarget(SURFACE)
+        try:
+            uploads = {"n": 0}
+            original = layer._card_texture.ensure_uploaded
+
+            def counting(pixmap, revision):
+                if layer._card_texture.revision != revision:
+                    uploads["n"] += 1
+                return original(pixmap, revision)
+
+            layer._card_texture.ensure_uploaded = counting
+
+            target.clear()
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+            for _ in range(30):
+                layer.render(SURFACE.height(), 1.0)
+
+            assert uploads["n"] == 1, (
+                "card uploaded %d times for an unchanged card" % uploads["n"]
+            )
+            assert layer._card_texture.has_texture()
+        finally:
+            try:
+                layer._card_texture.cleanup()
+                overlay.cleanup_gl()
+            except Exception:
+                pass
+            target.destroy()
+
+    def test_geometry_change_triggers_a_replacement_upload(self, gl_context, qapp):
+        card = _CardStub()
+        overlay = _overlay_for("spectrum")
+        layer = _layer_with_card(gl_context, card, overlay)
+        target = _GLTarget(SURFACE)
+        try:
+            target.clear()
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+            for _ in range(5):
+                layer.render(SURFACE.height(), 1.0)
+            first = layer._card_texture.revision
+
+            layer.publish(VisualizerRenderState(overlay, QRect(300, 120, 360, 180)))
+            for _ in range(5):
+                layer.render(SURFACE.height(), 1.0)
+            second = layer._card_texture.revision
+
+            assert first is not None and second is not None
+            assert first != second, "a geometry change must replace the texture"
+        finally:
+            try:
+                layer._card_texture.cleanup()
+                overlay.cleanup_gl()
+            except Exception:
+                pass
+            target.destroy()
+
+    def test_dpr_change_triggers_a_replacement_upload(self, gl_context, qapp):
+        card = _CardStub()
+        overlay = _overlay_for("spectrum")
+        layer = _layer_with_card(gl_context, card, overlay)
+        target = _GLTarget(QSize(1200, 900))
+        try:
+            target.clear()
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+            layer.render(900, 1.0)
+            first = layer._card_texture.revision
+            layer.render(900, 1.5)
+            second = layer._card_texture.revision
+            assert first != second, "DPR is part of the card revision"
+        finally:
+            try:
+                layer._card_texture.cleanup()
+                overlay.cleanup_gl()
+            except Exception:
+                pass
+            target.destroy()
+
+    def test_style_change_triggers_a_replacement_upload(self, gl_context, qapp):
+        card = _CardStub()
+        overlay = _overlay_for("spectrum")
+        layer = _layer_with_card(gl_context, card, overlay)
+        target = _GLTarget(SURFACE)
+        try:
+            target.clear()
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+            layer.render(SURFACE.height(), 1.0)
+            first = layer._card_texture.revision
+
+            card._border_width = 6
+            card._bg_color = QColor(90, 10, 10)
+            layer.render(SURFACE.height(), 1.0)
+            assert layer._card_texture.revision != first
+        finally:
+            try:
+                layer._card_texture.cleanup()
+                overlay.cleanup_gl()
+            except Exception:
+                pass
+            target.destroy()
+
+    def test_fade_does_not_re_upload_the_texture(self, gl_context, qapp):
+        """Fade is a GL alpha multiplier, not a texture property."""
+        card = _CardStub()
+        overlay = _overlay_for("spectrum")
+        layer = _layer_with_card(gl_context, card, overlay)
+        target = _GLTarget(SURFACE)
+        try:
+            target.clear()
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+            layer.render(SURFACE.height(), 1.0)
+            revision = layer._card_texture.revision
+            for fade in (0.1, 0.4, 0.75, 1.0):
+                overlay._fade = fade
+                layer.render(SURFACE.height(), 1.0)
+            assert layer._card_texture.revision == revision, (
+                "a fade animation must not re-upload the card texture"
+            )
+        finally:
+            try:
+                layer._card_texture.cleanup()
+                overlay.cleanup_gl()
+            except Exception:
+                pass
+            target.destroy()
+
+    def test_card_texture_is_deleted_once_at_teardown(self, gl_context, qapp):
+        card = _CardStub()
+        overlay = _overlay_for("spectrum")
+        layer = _layer_with_card(gl_context, card, overlay)
+        target = _GLTarget(SURFACE)
+        try:
+            target.clear()
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+            layer.render(SURFACE.height(), 1.0)
+            assert layer._card_texture.has_texture()
+
+            layer._card_texture.cleanup()
+            assert not layer._card_texture.has_texture()
+            layer._card_texture.cleanup()
+        finally:
+            try:
+                overlay.cleanup_gl()
+            except Exception:
+                pass
+            target.destroy()
+
+
+class TestCardTexturePixelsMatchTheAuthoredPixmap:
+    def test_drawn_card_matches_the_authored_qpixmap(self, gl_context, qapp):
+        """The GL path must reproduce the authored QPainter output."""
+        from widgets.spotify_visualizer.card_paint import (
+            ensure_painted_frame_shadow_pixmap,
+        )
+
+        card = _CardStub()
+        overlay = _overlay_for("spectrum")
+        layer = _layer_with_card(gl_context, card, overlay)
+        target = _GLTarget(SURFACE)
+        try:
+            target.clear(rgba=(0.0, 0.0, 0.0, 1.0))
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+            geometry = PresentationGeometry(CARD, 1.0, SURFACE.height())
+            gl.glViewport(*geometry.viewport)
+            gl.glEnable(gl.GL_BLEND)
+            gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
+            layer._render_card_visual(geometry, 1.0)
+            gl.glDisable(gl.GL_BLEND)
+            pixels = target.read()
+
+            reference = ensure_painted_frame_shadow_pixmap(
+                card, logical_size=CARD.size(), dpr=1.0
+            ).toImage().convertToFormat(QImage.Format.Format_RGBA8888)
+
+            drawn = _card_slice(pixels)
+            h, w = drawn.shape[0], drawn.shape[1]
+            mismatches = 0
+            samples = 0
+            for y in range(h // 4, 3 * h // 4, max(1, h // 12)):
+                for x in range(w // 4, 3 * w // 4, max(1, w // 12)):
+                    samples += 1
+                    ref = reference.pixelColor(x, y)
+                    got = drawn[y, x]
+                    a = ref.alpha() / 255.0
+                    expected = [
+                        int(round(ref.red() * a)),
+                        int(round(ref.green() * a)),
+                        int(round(ref.blue() * a)),
+                    ]
+                    if max(abs(int(got[i]) - expected[i]) for i in range(3)) > 6:
+                        mismatches += 1
+            assert samples > 0
+            assert mismatches == 0, (
+                "%d/%d card interior samples differ from the authored QPixmap"
+                % (mismatches, samples)
+            )
+        finally:
+            try:
+                layer._card_texture.cleanup()
+                overlay.cleanup_gl()
+            except Exception:
+                pass
+            target.destroy()
+
+
+class TestNoPerFrameQPainterBridge:
+    def test_layer_never_opens_a_painter_in_steady_render(self):
+        import ast
+        import inspect
+        import textwrap
+
+        source = inspect.getsource(CompositorVisualizerLayer)
+        tree = ast.parse(textwrap.dedent(source))
+        called = {
+            node.func.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        } | {
+            node.func.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        for forbidden in ("gl_target_painter", "QPainter", "QOpenGLPaintDevice"):
+            assert forbidden not in called, (
+                "steady visualizer render must not construct %s" % forbidden
+            )
