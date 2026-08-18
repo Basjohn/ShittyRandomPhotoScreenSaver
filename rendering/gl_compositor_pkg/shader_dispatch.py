@@ -388,6 +388,10 @@ def paint_retained_base_texture(comp: "GLCompositorWidget", target: QRect) -> bo
         _stage_mark(comp, "t4")
         _stage_cpu(comp, "overlay_cpu_ms", _stage_t)
         _stage_path(comp, "retained_base_shader")
+        # One successful retained-base shader frame in this GL generation makes
+        # a later texture_cache_miss a genuine fallback rather than first-frame
+        # cache establishment.
+        comp._retained_base_shader_drawn = True
         return True
     except Exception:
         logger.debug(

@@ -450,6 +450,11 @@ def _sync_transition_progress_from_frame_state(widget) -> None:
 # a compositor health problem, and must not produce a warning.
 _RETAINED_BASE_EXPECTED_STATES = frozenset({"no_base_image", "gl_unavailable"})
 
+# A cache miss is ordinary first-frame cache establishment until the compositor
+# has actually drawn one retained-base shader frame in the current GL
+# generation. After that it is a real fallback and stays loud.
+_RETAINED_BASE_STARTUP_ONLY_STATES = frozenset({"texture_cache_miss"})
+
 
 def _note_retained_base_fallback(widget) -> None:
     """Record one loud entry when a healthy compositor drops to QPainter.
@@ -462,6 +467,11 @@ def _note_retained_base_fallback(widget) -> None:
     """
     reason = str(getattr(widget, "_retained_base_fallback_reason", "") or "unknown")
     if reason in _RETAINED_BASE_EXPECTED_STATES:
+        return
+    if reason in _RETAINED_BASE_STARTUP_ONLY_STATES and not getattr(
+        widget, "_retained_base_shader_drawn", False
+    ):
+        # First-frame texture cache establishment in this GL generation.
         return
     try:
         if not widget._gl_state.is_ready():
