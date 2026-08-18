@@ -160,6 +160,10 @@ class VisualizerPresentationFade:
         except Exception:
             return False
 
+    def is_fading_out(self) -> bool:
+        """Whether a hide animation is currently running."""
+        return self._target <= 0.0 and self.is_running()
+
     def is_complete(self) -> bool:
         """Whether the last requested fade has fully arrived at its target."""
         if not self._started:

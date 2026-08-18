@@ -331,6 +331,44 @@ def handle_media_update(
         )
 
 
+def _fade_out_for_absent_anchor(widget: Any) -> None:
+    """Fade the visualizer out through the one compositor fade authority.
+
+    The compositor owns the card and shader pixels now, so hiding the logical
+    QWidget removes nothing and dropping the published state would make the card
+    disappear in a single frame. The scene fades to zero first, and only then is
+    the published state released.
+
+    GL resources are deliberately NOT destroyed: an anchor that comes back must
+    not pay for a cold shader/card rebuild.
+    """
+    from widgets.spotify_visualizer.presentation_fade import ensure_presentation_fade
+
+    fade = ensure_presentation_fade(widget)
+    if fade.is_fading_out():
+        return
+
+    def _release() -> None:
+        try:
+            widget.hide()
+            widget._clear_gl_overlay()
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] Failed to release visualizer after anchor fade-out",
+                exc_info=True,
+            )
+
+    if fade.progress <= 0.0:
+        _release()
+        return
+
+    try:
+        widget._start_widget_fade_out(on_complete=_release)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Anchor fade-out failed; hiding directly", exc_info=True)
+        _release()
+
+
 def sync_visibility_with_anchor(widget: Any) -> None:
     """Show/hide based on anchor media widget visibility."""
     parent = widget.parentWidget() if hasattr(widget, "parentWidget") else None
@@ -350,8 +388,7 @@ def sync_visibility_with_anchor(widget: Any) -> None:
             if widget._enabled and not widget.isVisible():
                 widget._start_widget_fade_in()
         elif widget.isVisible():
-            widget.hide()
-            widget._clear_gl_overlay()
+            _fade_out_for_absent_anchor(widget)
     except Exception as e:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
