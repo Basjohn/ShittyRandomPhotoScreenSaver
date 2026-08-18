@@ -108,6 +108,18 @@ class _SpotifyBeatEngine(QObject):
         self._bars_result_buffer: TripleBuffer[List[float]] = TripleBuffer()
         self._compute_task_active: bool = False
         self._compute_gate_token: int = 0
+        # Latest-state freshness under a one-in-flight compute contract.
+        #
+        # A tick that consumed the newest audio frame while a compute was
+        # already running used to simply drop it, so the next analysis could
+        # only start from whatever a LATER tick happened to consume. That is
+        # the upstream source age the operator perceives as lateness.
+        #
+        # At most one source frame may wait, and a newer frame REPLACES it.
+        # This is not a queue: intermediate frames are never replayed.
+        self._pending_analysis_samples: object = None
+        self._pending_analysis_activation: int = -1
+        self._pending_analysis_capture_ts: float = 0.0
         self._thread_manager: Optional[ThreadManager] = None
         self._ref_count: int = 0
         self._latest_bars: Optional[List[float]] = None
@@ -292,6 +304,8 @@ class _SpotifyBeatEngine(QObject):
         """Invalidate outstanding compute callbacks before restarting."""
         self._compute_gate_token += 1
         self._compute_task_active = False
+        # A pending source frame belongs to the activation that consumed it.
+        self._discard_pending_analysis_frame()
 
     def set_smoothing(self, tau: float) -> None:
         """Set the base smoothing time constant."""
@@ -494,7 +508,63 @@ class _SpotifyBeatEngine(QObject):
         logger.debug("[SPOTIFY_VIS] Warm capture grace expired; stopping audio worker")
         self._stop_worker()
 
-    def _schedule_compute_bars_task(self, samples: object) -> None:
+    def _replace_pending_analysis_frame(
+        self, samples: object, *, capture_ts: float
+    ) -> None:
+        """Keep only the NEWEST source frame while a compute is in flight.
+
+        Replacement, never append. A backlog would make the visualizer render
+        progressively older audio, and catch-up replay of the intermediate
+        frames is explicitly forbidden.
+        """
+        self._pending_analysis_samples = samples
+        self._pending_analysis_activation = self._activation_id
+        self._pending_analysis_capture_ts = float(capture_ts or 0.0)
+
+    def _discard_pending_analysis_frame(self) -> None:
+        self._pending_analysis_samples = None
+        self._pending_analysis_activation = -1
+        self._pending_analysis_capture_ts = 0.0
+
+    def has_pending_analysis_frame(self) -> bool:
+        return self._pending_analysis_samples is not None
+
+    def _launch_pending_analysis_frame(self) -> None:
+        """Start the single newest still-valid pending frame, if any.
+
+        Called once a compute result has finished committing its DSP/worker
+        state, so the next analysis continues from correct state rather than
+        from a snapshot taken before the previous result landed.
+
+        A pending frame from a superseded activation is discarded, not run:
+        generation/activation replacement fences the input as well as the
+        output.
+        """
+        samples = self._pending_analysis_samples
+        if samples is None:
+            return
+        activation = self._pending_analysis_activation
+        capture_ts = self._pending_analysis_capture_ts
+        self._discard_pending_analysis_frame()
+        if activation != self._activation_id:
+            logger.debug(
+                "[SPOTIFY_VIS] Dropped pending analysis frame activation=%s current=%s",
+                activation,
+                self._activation_id,
+            )
+            return
+        if self._compute_task_active:
+            # Something already claimed the single in-flight slot; put the
+            # frame back rather than running two computes.
+            self._replace_pending_analysis_frame(samples, capture_ts=capture_ts)
+            return
+        if self._thread_manager is None:
+            return
+        self._schedule_compute_bars_task(samples, capture_ts=capture_ts)
+
+    def _schedule_compute_bars_task(
+        self, samples: object, *, capture_ts: float = 0.0
+    ) -> None:
         tm = self._thread_manager
         if tm is None:
             return
@@ -502,6 +572,7 @@ class _SpotifyBeatEngine(QObject):
         self._compute_task_active = True
         token = self._compute_gate_token
         activation_id = self._activation_id
+        source_capture_ts = float(capture_ts or 0.0)
         
         smoothed_copy = list(self._smoothed_bars)
         last_smooth_ts = self._last_smooth_ts
@@ -542,27 +613,37 @@ class _SpotifyBeatEngine(QObject):
                 'energy': energy,
                 'worker_state': worker_state,
                 'activation_id': activation_id,
+                'capture_ts': source_capture_ts,
             }
 
         def _on_result(result) -> None:
             try:
                 if token != self._compute_gate_token or activation_id != self._activation_id:
+                    # Superseded generation/activation: the in-flight slot and
+                    # any pending source belong to the current owner now.
                     return
                 self._compute_task_active = False
-                success = getattr(result, "success", True)
-                data = getattr(result, "result", None)
-                if not success or data is None:
-                    return
-                if data.get('activation_id') != self._activation_id:
-                    return
-                self._commit_analysis_frame(
-                    raw_bars=data.get('raw'),
-                    smoothed_bars=data.get('smoothed'),
-                    timestamp=data.get('ts', time.time()),
-                    activation_id=data.get('activation_id'),
-                    worker_state=data.get('worker_state'),
-                    energy=data.get('energy'),
-                )
+                try:
+                    success = getattr(result, "success", True)
+                    data = getattr(result, "result", None)
+                    if not success or data is None:
+                        return
+                    if data.get('activation_id') != self._activation_id:
+                        return
+                    self._commit_analysis_frame(
+                        raw_bars=data.get('raw'),
+                        smoothed_bars=data.get('smoothed'),
+                        timestamp=data.get('ts', time.time()),
+                        activation_id=data.get('activation_id'),
+                        worker_state=data.get('worker_state'),
+                        energy=data.get('energy'),
+                    )
+                finally:
+                    # The required DSP/worker state has committed (or this
+                    # result failed and committed nothing). Either way the
+                    # slot is free, so the newest pending source frame starts
+                    # immediately instead of waiting for the next tick.
+                    self._launch_pending_analysis_frame()
             except Exception:
                 logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
 
@@ -778,9 +859,17 @@ class _SpotifyBeatEngine(QObject):
 
         if frame is not None:
             samples = getattr(frame, "samples", None)
+            try:
+                frame_capture_ts = float(getattr(frame, "capture_ts", 0.0) or 0.0)
+            except Exception:
+                frame_capture_ts = 0.0
+            if frame_capture_ts <= 0.0:
+                frame_capture_ts = now_ts
             if samples is not None:
                 try:
-                    self._last_audio_ts = now_ts
+                    # Age is measured from capture, not from the tick that
+                    # happened to consume the frame.
+                    self._last_audio_ts = frame_capture_ts
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
@@ -808,7 +897,16 @@ class _SpotifyBeatEngine(QObject):
                 
                 if tm is not None:
                     if not self._compute_task_active:
-                        self._schedule_compute_bars_task(samples)
+                        self._schedule_compute_bars_task(
+                            samples, capture_ts=frame_capture_ts
+                        )
+                    else:
+                        # One compute in flight, one newest source frame
+                        # waiting. Replacing rather than dropping is what
+                        # keeps the next analysis on the freshest audio.
+                        self._replace_pending_analysis_frame(
+                            samples, capture_ts=frame_capture_ts
+                        )
                 else:
                     worker_state = self._audio_worker.make_compute_snapshot()
                     from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples

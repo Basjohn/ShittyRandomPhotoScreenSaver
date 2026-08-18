@@ -148,6 +148,10 @@ class VisualizerMode(Enum):
 class _AudioFrame:
     samples: object
     activation_id: Optional[int] = None
+    # Wall-clock time at capture publication. Analysis age must be measured
+    # from when the audio actually arrived, not from the tick that happened
+    # to consume it.
+    capture_ts: float = 0.0
 
 
 class SpotifyVisualizerAudioWorker(QObject):
@@ -594,6 +598,7 @@ class SpotifyVisualizerAudioWorker(QObject):
                 self._buffer.publish(_AudioFrame(
                     samples=mono.copy(),
                     activation_id=getattr(self, "_activation_id", None),
+                    capture_ts=time.time(),
                 ))
                 
                 if is_verbose_logging():
