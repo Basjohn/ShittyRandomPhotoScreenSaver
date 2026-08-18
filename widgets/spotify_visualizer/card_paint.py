@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
 
 from core.logging.logger import get_logger
@@ -55,35 +55,64 @@ def update_card_style(widget: Any) -> None:
         )
 
 
-def painted_frame_shadow_card_rect(widget: Any) -> QRectF:
-    """Return the card rectangle used for painted-frame-shadow rendering."""
+def painted_frame_shadow_card_rect(
+    widget: Any,
+    *,
+    logical_size: Optional[QSize] = None,
+) -> QRectF:
+    """Return the card rectangle used for painted-frame-shadow rendering.
+
+    ``logical_size`` overrides the live widget geometry. The compositor passes
+    the authoritative published presentation size so a momentarily stale live
+    QWidget rect cannot give the card a different size from the bars.
+    """
     from widgets.base_overlay_widget import PAINTED_FRAME_SHADOW_TUNING
 
     tuning = PAINTED_FRAME_SHADOW_TUNING
+    width = widget.width() if logical_size is None else logical_size.width()
+    height = widget.height() if logical_size is None else logical_size.height()
     return QRectF(
         0.0,
         0.0,
-        max(1.0, float(widget.width() - int(tuning["card_shrink_right"]))),
-        max(1.0, float(widget.height() - int(tuning["card_shrink_bottom"]))),
+        max(1.0, float(width - int(tuning["card_shrink_right"]))),
+        max(1.0, float(height - int(tuning["card_shrink_bottom"]))),
     )
 
 
-def ensure_painted_frame_shadow_pixmap(widget: Any) -> Optional[QPixmap]:
-    """Build (or return cached) painted-frame-shadow pixmap."""
+def ensure_painted_frame_shadow_pixmap(
+    widget: Any,
+    *,
+    logical_size: Optional[QSize] = None,
+    dpr: Optional[float] = None,
+) -> Optional[QPixmap]:
+    """Build (or return cached) painted-frame-shadow pixmap.
+
+    ``logical_size`` and ``dpr`` let the compositor render the authored card
+    visual **for the target dimensions** rather than scaling a stale pixmap
+    afterwards, which would change border, radius and shadow thickness. Both
+    participate in the cache key, so a geometry or DPR change rebuilds rather
+    than reusing a mismatched card.
+    """
     from widgets.base_overlay_widget import PAINTED_FRAME_SHADOW_TUNING
 
-    if not widget.uses_painted_frame_shadow() or widget.width() <= 0 or widget.height() <= 0:
+    if not widget.uses_painted_frame_shadow():
         return None
-    try:
-        dpr = max(1.0, float(widget.devicePixelRatioF()))
-    except Exception:
-        dpr = 1.0
+    width = widget.width() if logical_size is None else int(logical_size.width())
+    height = widget.height() if logical_size is None else int(logical_size.height())
+    if width <= 0 or height <= 0:
+        return None
+    if dpr is None:
+        try:
+            dpr = max(1.0, float(widget.devicePixelRatioF()))
+        except Exception:
+            dpr = 1.0
+    dpr = max(1.0, float(dpr))
     bg = QColor(widget._bg_color)
     bg.setAlpha(int(255 * max(0.0, min(1.0, widget._bg_opacity))))
     tuning = PAINTED_FRAME_SHADOW_TUNING
     key = (
-        widget.width(),
-        widget.height(),
+        width,
+        height,
         round(dpr, 3),
         bg.getRgb(),
         widget._card_border_color.getRgb(),
@@ -97,13 +126,15 @@ def ensure_painted_frame_shadow_pixmap(widget: Any) -> Optional[QPixmap]:
     ):
         return widget._painted_frame_shadow_pixmap
 
-    pixmap = QPixmap(max(1, int(widget.width() * dpr)), max(1, int(widget.height() * dpr)))
+    pixmap = QPixmap(max(1, int(width * dpr)), max(1, int(height * dpr)))
     pixmap.setDevicePixelRatio(dpr)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     try:
-        card_rect = painted_frame_shadow_card_rect(widget).adjusted(1.0, 1.0, -1.0, -1.0)
+        card_rect = painted_frame_shadow_card_rect(
+            widget, logical_size=QSize(width, height)
+        ).adjusted(1.0, 1.0, -1.0, -1.0)
         radius = max(0.0, float(8 + int(tuning["radius_extra"])))
         offset_x = float(tuning["offset_x"])
         offset_y = float(tuning["offset_y"])

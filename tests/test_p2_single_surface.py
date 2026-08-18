@@ -39,6 +39,7 @@ class _RecordingGL:
     """Captures the GL state the layer sets, without a real context."""
 
     GL_SCISSOR_TEST = "scissor"
+    GL_STENCIL_TEST = "stencil"
     GL_BLEND = "blend"
     GL_SRC_ALPHA = "src_alpha"
     GL_ONE_MINUS_SRC_ALPHA = "inv_src_alpha"
@@ -49,6 +50,14 @@ class _RecordingGL:
         self.enabled: list[str] = []
         self.disabled: list[str] = []
         self.cleared_color = False
+        self.color_mask = None
+        self.stencil_mask = None
+
+    def glColorMask(self, r, g, b, a):
+        self.color_mask = (r, g, b, a)
+
+    def glStencilMask(self, mask):
+        self.stencil_mask = mask
 
     def glViewport(self, x, y, w, h):
         self.viewport = (x, y, w, h)
@@ -81,10 +90,12 @@ def _owner(*, enabled=True, fade=1.0):
         _enabled=enabled,
         _fade=fade,
         _compositor_mask_origin_px=None,
+        _presentation_geometry=None,
         painted=painted,
         initialize_layer_gl=lambda ctx: True,
     )
     owner.paint_layer = lambda rect, f: painted.append((QRect(rect), f))
+    owner.parentWidget = lambda: None
     return owner
 
 
