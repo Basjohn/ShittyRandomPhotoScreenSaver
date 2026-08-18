@@ -151,7 +151,10 @@ class CompositorVisualizerLayer:
     _FAILURE_LOG_INTERVAL = 300
 
     def __init__(self, compositor: Any) -> None:
+        from rendering.gl_compositor_pkg.card_texture import CompositorCardTexture
+
         self._compositor = compositor
+        self._card_texture = CompositorCardTexture()
         self._state: Optional[VisualizerRenderState] = None
         self._failures = 0
         self._last_failure_signature: Optional[str] = None
@@ -249,7 +252,7 @@ class CompositorVisualizerLayer:
             # The card QWidget is a sibling ABOVE this surface, so if it kept
             # painting its own background it would simply cover the bars now
             # that they are drawn here.
-            self._render_card_visual(geometry)
+            self._render_card_visual(geometry, fade)
 
             gl.glViewport(x_px, y_px, w_px, h_px)
             # Scissor bounds every write this layer makes - including the
@@ -306,13 +309,43 @@ class CompositorVisualizerLayer:
             return None
         return getattr(parent, "spotify_visualizer_widget", None) if parent else None
 
-    def _render_card_visual(self, geometry: "PresentationGeometry") -> None:
+    def _card_revision(self, card, geometry: "PresentationGeometry") -> tuple:
+        """Identity of the authored card image for the target geometry.
+
+        Everything that changes the card's pixels belongs here: geometry, DPR,
+        background/border style and border width. Ordinary visualizer state
+        publications change none of it, so they never trigger a re-upload.
+        Fade is deliberately absent - it is applied as a GL alpha multiplier.
+        """
+        rect = geometry.logical_rect
+        try:
+            bg = card._bg_color.getRgb()
+            border = card._card_border_color.getRgb()
+            opacity = round(float(card._bg_opacity), 4)
+            border_width = int(card._border_width)
+        except Exception:
+            bg = border = None
+            opacity = 0.0
+            border_width = 0
+        return (
+            rect.width(),
+            rect.height(),
+            round(geometry.dpr, 4),
+            bg,
+            border,
+            opacity,
+            border_width,
+            bool(getattr(card, "_show_background", False)),
+        )
+
+    def _render_card_visual(self, geometry: "PresentationGeometry", fade: float) -> None:
         """Draw the card background/border/shadow beneath the shader layer.
 
-        Reuses the card's own painting code rather than reimplementing the
-        authored appearance in GL, so border width, radius, shadow and fade stay
-        exactly what the card already produced - but rendered for the
-        authoritative presentation geometry rather than the live widget size.
+        The authored appearance still comes from the card's own QPainter output;
+        it is uploaded to a GL texture when its revision changes and drawn as a
+        textured quad thereafter. Drawing the cached pixmap through
+        QOpenGLPaintDevice/QPainter on every presented frame was pure
+        steady-state work for an image that had not changed.
         """
         card = self._card_widget()
         if card is None:
@@ -324,30 +357,29 @@ class CompositorVisualizerLayer:
                 claim(True)
             if not bool(getattr(card, "_show_background", False)):
                 return  # No background: nothing to occlude, nothing to draw.
-            from widgets.spotify_visualizer.card_paint import (
-                ensure_painted_frame_shadow_pixmap,
-            )
-
             if not card.uses_painted_frame_shadow():
                 return
-            # Rendered FOR the authoritative presentation size and DPR, never
-            # taken from the live QWidget geometry and never rescaled after the
-            # fact, which would change border/radius/shadow thickness.
-            pixmap = ensure_painted_frame_shadow_pixmap(
-                card,
-                logical_size=geometry.logical_rect.size(),
-                dpr=geometry.dpr,
-            )
-            if pixmap is None or pixmap.isNull():
-                return
-            painter_ctx = getattr(self._compositor, "gl_target_painter", None)
-            if not callable(painter_ctx):
-                return
-            rect = geometry.logical_rect
-            with painter_ctx() as painter:
-                if painter is None:
+
+            revision = self._card_revision(card, geometry)
+            if self._card_texture.revision != revision:
+                from widgets.spotify_visualizer.card_paint import (
+                    ensure_painted_frame_shadow_pixmap,
+                )
+
+                # Rendered FOR the authoritative presentation size and DPR,
+                # never taken from the live QWidget geometry and never rescaled
+                # after the fact, which would change border/radius/shadow.
+                pixmap = ensure_painted_frame_shadow_pixmap(
+                    card,
+                    logical_size=geometry.logical_rect.size(),
+                    dpr=geometry.dpr,
+                )
+                if pixmap is None or pixmap.isNull():
                     return
-                painter.drawPixmap(rect.x(), rect.y(), pixmap)
+                if not self._card_texture.ensure_uploaded(pixmap, revision):
+                    return
+
+            self._card_texture.draw(fade)
         except Exception:
             self._record_failure("card_visual_exception")
 
@@ -385,6 +417,7 @@ class CompositorVisualizerLayer:
         self._state = None
         if owner is None:
             return
+        self._card_texture.cleanup()
         cleanup_gl = getattr(owner, "cleanup_gl", None)
         if callable(cleanup_gl):
             cleanup_gl()
