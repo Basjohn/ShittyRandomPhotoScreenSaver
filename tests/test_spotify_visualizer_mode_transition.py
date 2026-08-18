@@ -46,7 +46,7 @@ def test_begin_mode_transition_request_reuses_same_contract_for_cycle_and_switch
     assert switch_widget._mode_transition_ts == pytest.approx(456.0)
 
 
-def test_activate_pending_mode_after_fade_out_applies_runtime_config_without_runtime_reset():
+def test_activate_pending_mode_after_fade_out_applies_target_config_exactly_once():
     """Fade-out completion must activate through the no-reset path and keep target config replay explicit."""
     from widgets.spotify_visualizer import mode_transition
     from widgets.spotify_visualizer.audio_worker import VisualizerMode
@@ -88,10 +88,11 @@ def test_activate_pending_mode_after_fade_out_applies_runtime_config_without_run
     assert widget._mode_transition_pending is None
     assert widget._mode_transition_resume_ts == pytest.approx(321.5)
     assert widget._vis_mode is VisualizerMode.BUBBLE
-    assert calls == [
-        ("apply_full", VisualizerMode.BUBBLE, "mode_switch"),
-        ("apply_full", VisualizerMode.BUBBLE, "mode_fade_out_complete"),
-    ]
+    # ONE target activation transaction. The old contract applied the full
+    # runtime config again at fade-out completion, and a third time in the
+    # engine-reset phase, producing three complete configuration passes and
+    # duplicate engine-generation churn for a single mode switch.
+    assert calls == [("apply_full", VisualizerMode.BUBBLE, "mode_switch")]
 
 
 def test_activate_visualization_mode_runs_cold_reset_sequence_only_when_requested():
@@ -403,3 +404,42 @@ def test_stale_activation_frame_cannot_commit_display_bars_after_mode_reset():
     assert widget._display_bars == pytest.approx([0.9, 0.8, 0.7, 0.6])
     assert widget._display_bars_source_generation == 5
     assert widget._display_bars_source_activation == 3
+
+def test_same_mode_transition_still_applies_config_once():
+    """A preset cycle is a same-mode transition and must still be applied.
+
+    activate_visualization_mode() returns early when the target equals the
+    current mode, so the fade-out apply is the ONLY apply in that shape. It is
+    load-bearing and must not be collapsed away with the mode-change duplicates.
+    """
+    from widgets.spotify_visualizer.audio_worker import VisualizerMode
+    from widgets.spotify_visualizer import mode_transition
+
+    calls = []
+
+    class FakeWidget:
+        _vis_mode = VisualizerMode.BUBBLE
+        _vis_mode_str = "bubble"
+        _mode_transition_pending = VisualizerMode.BUBBLE  # same mode
+        _mode_transition_resume_ts = 0.0
+        _last_gpu_geom = None
+        _last_gpu_fade_sent = -1.0
+        _has_pushed_first_frame = True
+        _waiting_for_fresh_engine_frame = False
+        _waiting_for_fresh_frame = False
+
+        def _apply_full_runtime_config_for_mode(self, mode, reason):
+            calls.append(("apply_full", mode, reason))
+
+        def _request_overlay_mode_reset(self, mode, reason):
+            pass
+
+    widget = FakeWidget()
+    original_prepare = mode_transition.prepare_engine_for_mode_reset
+    try:
+        mode_transition.prepare_engine_for_mode_reset = lambda w: None
+        mode_transition._activate_pending_mode_after_fade_out(widget, resume_ts=1.0)
+    finally:
+        mode_transition.prepare_engine_for_mode_reset = original_prepare
+
+    assert calls == [("apply_full", VisualizerMode.BUBBLE, "mode_fade_out_complete")]
