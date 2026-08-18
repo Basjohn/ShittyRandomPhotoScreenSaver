@@ -483,46 +483,35 @@ def reset_mode_owned_runtime_state(widget: Any, *, reason: str = "mode_activatio
 # ------------------------------------------------------------------
 
 def start_widget_fade_in(widget: Any, duration_ms: Optional[int] = None) -> None:
-    """Fade the visualizer card in via ShadowFadeProfile."""
-    from widgets.shadow_utils import ShadowFadeProfile
+    """Begin the one compositor-owned visualizer fade.
+
+    The card and the visualizer shader are both drawn by the display
+    compositor, so a ``QGraphicsOpacityEffect`` on this QWidget cannot fade
+    those pixels; relying on it produced a fade whose first half had no pixel
+    owner and whose remainder slammed in. The fade authority is now explicit
+    and is the sole input to both compositor layers.
+
+    Showing the widget is safe here because compositor card-visual ownership
+    was claimed during fade-zero readiness preparation, so ``paintEvent``
+    already returns early and the card cannot flash at full opacity.
+    """
+    from widgets.spotify_visualizer.presentation_fade import ensure_presentation_fade
 
     if duration_ms is None:
         duration_ms = resolve_shared_widget_fade_in_duration_ms()
 
-    if duration_ms <= 0:
-        try:
-            widget.show()
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        try:
-            ShadowFadeProfile.attach_shadow(
-                widget,
-                widget._shadow_config,
-                has_background_frame=widget._show_background,
-            )
-        except Exception:
-            logger.debug(
-                "[SPOTIFY_VIS] Failed to attach shadow in no-fade path",
-                exc_info=True,
-            )
-        return
+    fade = ensure_presentation_fade(widget)
 
     try:
-        ShadowFadeProfile.start_fade_in(
-            widget,
-            widget._shadow_config,
-            duration_ms=duration_ms,
-            has_background_frame=widget._show_background,
-        )
-    except Exception:
-        logger.warning(
-            "[SPOTIFY_VIS][FALLBACK] Fade-in failed; using direct show",
-            exc_info=True,
-        )
-        try:
-            widget.show()
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+        widget.show()
+    except Exception as e:
+        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+
+    if duration_ms <= 0:
+        fade.jump_to(1.0)
+        return
+
+    fade.begin_fade_in(duration_ms=duration_ms)
 
 
 def start_widget_fade_out(
@@ -530,17 +519,25 @@ def start_widget_fade_out(
     duration_ms: int = 1200,
     on_complete: Optional[Callable[[], None]] = None,
 ) -> None:
-    """Fade the visualizer card out via ShadowFadeProfile."""
-    from widgets.shadow_utils import ShadowFadeProfile
+    """Fade the compositor-owned visualizer scene out through the same authority.
 
+    Hiding does NOT destroy the visualizer GL resources: the card texture,
+    programs and VAO/VBO belong to the compositor generation, and an ordinary
+    hide/pause must leave them intact.
+    """
+    from widgets.spotify_visualizer.presentation_fade import ensure_presentation_fade
+
+    fade = ensure_presentation_fade(widget)
     try:
-        ShadowFadeProfile.start_fade_out(
-            widget,
-            duration_ms=duration_ms,
-            on_complete=on_complete,
-        )
+        fade.begin_fade_out(duration_ms=duration_ms, on_finished=on_complete)
     except Exception:
-        logger.warning("[SPOTIFY_VIS][FALLBACK] Fade-out failed; using direct hide", exc_info=True)
+        logger.warning(
+            "[SPOTIFY_VIS][FALLBACK] Fade-out failed; using direct hide", exc_info=True
+        )
+        try:
+            fade.jump_to(0.0)
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         try:
             widget.hide()
         except Exception as e:
@@ -861,42 +858,41 @@ def on_first_frame_after_cold_start(widget: Any) -> None:
         logger.debug("[SPOTIFY_VIS] Failed staged startup reveal after fresh frame", exc_info=True)
 
 
-def get_gpu_fade_factor(widget: Any, now_ts: float) -> float:
-    """Return fade factor for GPU bars based on ShadowFadeProfile.
+def get_scene_fade_factor(widget: Any, now_ts: float) -> float:
+    """Return the ONE authoritative visualizer scene fade progress.
 
-    We prefer the shared ShadowFadeProfile progress when available so that
-    the GL overlay tracks the exact same curve. When no progress is
-    present we fall back to 1.0 while the widget is visible.
+    This is the authored 1800 ms InOutCubic reveal progress owned by
+    ``VisualizerPresentationFade``. The authored card/background/border/shadow
+    pixels use it directly - which is what the QWidget opacity effect used to
+    provide before the compositor owned those pixels.
+
+    It deliberately does NOT consult ``_shadowfade_progress``,
+    ``_shadowfade_completed`` or widget visibility. Those made fade progress
+    reachable by a second owner, so the fade could jump to full opacity simply
+    because a QGraphicsOpacityEffect had been torn down.
     """
+    del now_ts  # progress is animation-driven, not sampled from a clock here
+    from widgets.spotify_visualizer.presentation_fade import ensure_presentation_fade
+
     try:
-        prog = getattr(widget, "_shadowfade_progress", None)
-    except Exception as e:
-        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        prog = None
+        return ensure_presentation_fade(widget).card_fade()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Scene fade unavailable", exc_info=True)
+        return 0.0
 
-    if isinstance(prog, (float, int)):
-        p = float(prog)
-        if p <= 0.0:
-            return 0.0
-        if p >= 1.0:
-            return 1.0
 
-        # Clamp first, then apply a stronger delay so bars fade in well
-        # after the card/shadow begin fading.
-        p = max(0.0, min(1.0, p))
-        delay = 0.65
-        if p <= delay:
-            return 0.0
-        t = (p - delay) / (1.0 - delay)
-        # Slower cubic ease-in
-        t = t * t * t
-        return max(0.0, min(1.0, t))
+def get_gpu_fade_factor(widget: Any, now_ts: float) -> float:
+    """Return the visualizer shader fade for the current scene fade progress.
 
-    # Fallback: when ShadowFadeProfile progress is unavailable
+    The authored stagger - bars arrive after the card/shadow are established -
+    is preserved, but it is now a pure function of the same single fade
+    progress rather than a separate curve reading a widget side-channel.
+    """
+    del now_ts
+    from widgets.spotify_visualizer.presentation_fade import ensure_presentation_fade
+
     try:
-        completed = getattr(widget, "_shadowfade_completed", False)
-        if completed and widget.isVisible():
-            return 1.0
-    except Exception as e:
-        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-    return 0.0
+        return ensure_presentation_fade(widget).bars_fade()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Bars fade unavailable", exc_info=True)
+        return 0.0

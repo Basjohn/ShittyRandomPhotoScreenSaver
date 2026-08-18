@@ -23,6 +23,22 @@ def resolve_frame_fade(overlay, logger):
     return fade
 
 
+def resolve_bars_fade(overlay, scene_fade: float) -> float:
+    """Return the shader fade published alongside ``scene_fade``.
+
+    The authored stagger is resolved once, by the logical owner, and travels
+    with the state. Re-deriving it here would silently apply the startup
+    stagger to a mode crossfade as well, which is not the authored behaviour.
+    """
+    value = getattr(overlay, "_bars_fade", None)
+    if value is None:
+        return float(scene_fade)
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except Exception:
+        return float(scene_fade)
+
+
 def render_overlay_frame(overlay, rect, fade: float, render_fn) -> None:
     stencil_active = overlay._begin_painted_card_stencil_clip(rect)
     try:

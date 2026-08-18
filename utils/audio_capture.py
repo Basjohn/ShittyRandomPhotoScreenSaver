@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from enum import Enum
 from typing import Callable, Optional, Any
 import os
 import platform
@@ -26,6 +27,27 @@ class AudioDeviceInfo:
     channels: int
     sample_rate: int
     is_loopback: bool = False
+
+
+class CaptureState(Enum):
+    """Explicit capture lifecycle state.
+
+    ``STARTING`` exists because a stream that has just been opened has not
+    necessarily delivered its first callback yet. Classifying that window as
+    unhealthy caused an immediate self-restart at startup.
+    """
+
+    STOPPED = "stopped"
+    STARTING = "starting"
+    HEALTHY = "healthy"
+    STALE = "stale"
+    FAILED = "failed"
+
+
+# Allowance for the first callback after a stream reports a successful start.
+CAPTURE_FIRST_CALLBACK_GRACE_S = 1.0
+# Existing health threshold, applied only once callbacks have actually been seen.
+CAPTURE_STALE_AFTER_S = 0.5
 
 
 @dataclass
@@ -74,14 +96,71 @@ class AudioCaptureBackend(ABC):
         """Get the number of channels being captured."""
         pass
 
-    @abstractmethod
-    def is_healthy(self) -> bool:
-        """Check if capture is receiving audio data (callback firing).
+    # ------------------------------------------------------------------
+    # Capture health lifecycle (shared by every backend)
+    # ------------------------------------------------------------------
+    # These are class-level defaults so a backend that has never started still
+    # answers the state query safely.
+    _capture_state: CaptureState = CaptureState.STOPPED
+    _capture_started_ts: float = 0.0
+    _last_callback_ts: float = 0.0
 
-        Returns:
-            True if receiving callbacks within last 500ms while running
+    def _note_capture_starting(self) -> None:
+        """Record a stream that opened successfully but has no callback yet."""
+        self._capture_started_ts = time.monotonic()
+        self._last_callback_ts = 0.0
+        self._capture_state = CaptureState.STARTING
+
+    def _note_capture_callback(self) -> None:
+        """Record one delivered audio callback (audio thread)."""
+        self._last_callback_ts = time.monotonic()
+        if self._capture_state is not CaptureState.HEALTHY:
+            self._capture_state = CaptureState.HEALTHY
+
+    def _note_capture_stopped(self) -> None:
+        self._capture_state = CaptureState.STOPPED
+        self._capture_started_ts = 0.0
+        self._last_callback_ts = 0.0
+
+    def _note_capture_failed(self) -> None:
+        self._capture_state = CaptureState.FAILED
+        self._capture_started_ts = 0.0
+        self._last_callback_ts = 0.0
+
+    def capture_state(self) -> CaptureState:
+        """Return the current derived capture state.
+
+        Pure observation: it never mutates state, so a late first callback can
+        still promote a ``STARTING`` stream to ``HEALTHY``.
         """
-        pass
+        state = self._capture_state
+        if state is CaptureState.STARTING:
+            started = float(self._capture_started_ts or 0.0)
+            if started > 0.0 and (time.monotonic() - started) >= CAPTURE_FIRST_CALLBACK_GRACE_S:
+                return CaptureState.STALE
+            return CaptureState.STARTING
+        if state is CaptureState.HEALTHY:
+            last = float(self._last_callback_ts or 0.0)
+            if last <= 0.0 or (time.monotonic() - last) >= CAPTURE_STALE_AFTER_S:
+                return CaptureState.STALE
+            return CaptureState.HEALTHY
+        return state
+
+    def is_healthy(self) -> bool:
+        """True only while callbacks are actually flowing."""
+        return self.capture_state() is CaptureState.HEALTHY
+
+    def is_capture_starting(self) -> bool:
+        """True while a successfully started stream still awaits its first callback."""
+        return self.capture_state() is CaptureState.STARTING
+
+    def is_capture_stale(self) -> bool:
+        """True only for a stream that ran (or should have) and then went quiet.
+
+        This is the sole restart authority. A just-started capture is never
+        stale, so an immediate wake cannot bounce it.
+        """
+        return self.capture_state() is CaptureState.STALE
 
     @abstractmethod
     def restart(self) -> bool:
@@ -163,7 +242,12 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
     def start(self, callback: Callable[[Any], None]) -> bool:
         if self._running:
             return True
-            
+        started = self._start_stream(callback)
+        if not started:
+            self._note_capture_failed()
+        return started
+
+    def _start_stream(self, callback: Callable[[Any], None]) -> bool:
         # Check platform
         if not platform.system().lower().startswith("win"):
             logger.debug("[AUDIO] PyAudioWPatch only available on Windows")
@@ -226,7 +310,7 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
         
         def stream_callback(in_data, frame_count, time_info, status):
             try:
-                self._last_callback_ts = time.time()
+                self._note_capture_callback()
                 samples = self._np.frombuffer(in_data, dtype=self._np.float32)
                 try:
                     ch = int(self._channels) if self._channels else 1
@@ -262,6 +346,7 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
                 )
                 self._stream.start_stream()
                 self._running = True
+                self._note_capture_starting()
                 self._negotiated_block_size = int(block_size)
                 logger.info(
                     "[AUDIO] PyAudioWPatch stream running (device=%s, negotiated_block=%d, preferred=%d)",
@@ -284,12 +369,6 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
         self._cleanup_pa()
         return False
     
-    def is_healthy(self) -> bool:
-        """Check if capture is receiving audio data (callback firing)."""
-        if not self._running:
-            return False
-        return (time.time() - self._last_callback_ts) < 0.5
-
     def restart(self) -> bool:
         """Restart the capture stream."""
         self.stop()
@@ -308,6 +387,7 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
     
     def stop(self) -> None:
         self._running = False
+        self._note_capture_stopped()
         if self._stream:
             try:
                 self._stream.stop_stream()
@@ -415,7 +495,12 @@ class SounddeviceBackend(AudioCaptureBackend):
     def start(self, callback: Callable[[Any], None]) -> bool:
         if self._running:
             return True
-        
+        started = self._start_stream(callback)
+        if not started:
+            self._note_capture_failed()
+        return started
+
+    def _start_stream(self, callback: Callable[[Any], None]) -> bool:
         # Import numpy
         try:
             import numpy as np
@@ -455,7 +540,7 @@ class SounddeviceBackend(AudioCaptureBackend):
 
         def stream_callback(indata, frames, time_info, status):
             try:
-                self._last_callback_ts = time.time()
+                self._note_capture_callback()
                 # Mix to mono if stereo
                 if indata.shape[1] > 1:
                     samples = indata.mean(axis=1).astype(self._np.float32)
@@ -478,6 +563,7 @@ class SounddeviceBackend(AudioCaptureBackend):
             )
             self._stream.start()
             self._running = True
+            self._note_capture_starting()
             self._negotiated_block_size = int(self._config.block_size or 0)
             logger.info(
                 "[AUDIO] sounddevice started (device=%s, negotiated_block=%d, preferred=%d, rate=%dHz, channels=%d)",
@@ -494,6 +580,7 @@ class SounddeviceBackend(AudioCaptureBackend):
     
     def stop(self) -> None:
         self._running = False
+        self._note_capture_stopped()
         if self._stream:
             try:
                 self._stream.stop()
@@ -513,12 +600,6 @@ class SounddeviceBackend(AudioCaptureBackend):
     @property
     def channels(self) -> int:
         return self._channels
-
-    def is_healthy(self) -> bool:
-        """Check if capture is receiving audio data (callback firing)."""
-        if not self._running:
-            return False
-        return (time.time() - self._last_callback_ts) < 0.5
 
     def restart(self) -> bool:
         """Restart the capture stream."""

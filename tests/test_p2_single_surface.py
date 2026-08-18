@@ -207,6 +207,7 @@ class TestPublicationContract:
         comp = SimpleNamespace(
             _visualizer_layer=CompositorVisualizerLayer(SimpleNamespace()),
             PRESENTATION_VISUALIZER_ACTIVE=GLCompositorWidget.PRESENTATION_VISUALIZER_ACTIVE,
+            PRESENTATION_VISUALIZER_PREPARING=GLCompositorWidget.PRESENTATION_VISUALIZER_PREPARING,
             parentWidget=lambda: SimpleNamespace(_runtime_generation=7),
             acquire_presentation_reason=acquired.append,
             release_presentation_reason=lambda r: None,
@@ -224,6 +225,7 @@ class TestPublicationContract:
         comp = SimpleNamespace(
             _visualizer_layer=layer,
             PRESENTATION_VISUALIZER_ACTIVE=GLCompositorWidget.PRESENTATION_VISUALIZER_ACTIVE,
+            PRESENTATION_VISUALIZER_PREPARING=GLCompositorWidget.PRESENTATION_VISUALIZER_PREPARING,
             parentWidget=lambda: SimpleNamespace(_runtime_generation=1),
             acquire_presentation_reason=lambda r: None,
             release_presentation_reason=released.append,
@@ -232,7 +234,40 @@ class TestPublicationContract:
             comp, object(), QRect(0, 0, 10, 10), runtime_generation=1, visible=False
         )
         assert layer.state is None
-        assert released == [GLCompositorWidget.PRESENTATION_VISUALIZER_ACTIVE]
+        assert released == [
+            GLCompositorWidget.PRESENTATION_VISUALIZER_ACTIVE,
+            GLCompositorWidget.PRESENTATION_VISUALIZER_PREPARING,
+        ]
+
+    def test_preparing_publication_keeps_state_without_visible_liveness(self):
+        """Fade zero is PREPARING, not absent.
+
+        Clearing the layer while the visualizer was logically enabled but not
+        yet faded in meant the renderer/card texture were only built AFTER the
+        visible fade had already started.
+        """
+        acquired: list[str] = []
+        released: list[str] = []
+        layer = CompositorVisualizerLayer(SimpleNamespace())
+        comp = SimpleNamespace(
+            _visualizer_layer=layer,
+            PRESENTATION_VISUALIZER_ACTIVE=GLCompositorWidget.PRESENTATION_VISUALIZER_ACTIVE,
+            PRESENTATION_VISUALIZER_PREPARING=GLCompositorWidget.PRESENTATION_VISUALIZER_PREPARING,
+            parentWidget=lambda: SimpleNamespace(_runtime_generation=1),
+            acquire_presentation_reason=acquired.append,
+            release_presentation_reason=released.append,
+        )
+        GLCompositorWidget.publish_visualizer_state(
+            comp,
+            object(),
+            QRect(0, 0, 10, 10),
+            runtime_generation=1,
+            visible=False,
+            preparing=True,
+        )
+        assert layer.state is not None, "preparation needs published state"
+        assert acquired == [GLCompositorWidget.PRESENTATION_VISUALIZER_PREPARING]
+        assert GLCompositorWidget.PRESENTATION_VISUALIZER_ACTIVE in released
 
     def test_no_admission_pacing_or_acknowledgement_was_introduced(self):
         """AST, not text: prose about the contract must not trip the bar."""
@@ -556,8 +591,19 @@ class TestCardVisualOwnership:
 
     def test_card_layer_reuses_the_existing_cached_pixmap(self):
         """Authored border/radius/shadow must not be reimplemented in GL."""
-        source = inspect.getsource(CompositorVisualizerLayer._render_card_visual)
+        source = inspect.getsource(CompositorVisualizerLayer._ensure_card_visual)
         assert "ensure_painted_frame_shadow_pixmap" in source
+
+    def test_card_ownership_is_claimed_before_the_fade_leaves_zero(self):
+        """Otherwise the card QWidget paints itself at full opacity first."""
+        source = inspect.getsource(CompositorVisualizerLayer.prepare)
+        assert "_ensure_card_visual" in source, (
+            "preparation must claim card ownership and upload its texture"
+        )
+        draw = inspect.getsource(CompositorVisualizerLayer._ensure_card_visual)
+        assert "self._card_texture.draw" not in draw, (
+            "the fade-zero preparation path must not draw"
+        )
 
     def test_card_keeps_geometry_and_interaction_ownership(self):
         from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget

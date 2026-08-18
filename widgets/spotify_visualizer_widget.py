@@ -523,6 +523,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._current_timer_interval_ms: int = 16
         self._spectrum_gpu_push_extras: Dict[str, Any] = {}
         self._last_gpu_fade_sent: float = -1.0
+        self._last_gpu_bars_fade_sent: float = -1.0
         self._last_gpu_geom: Optional[QRect] = None
         # Reset/fresh-frame handoff tracking must exist from construction so
         # the recurring UI tick cannot crash before any mode-reset helpers run.
@@ -767,6 +768,7 @@ class SpotifyVisualizerWidget(QWidget):
         # round-trip path and direct switch path from diverging.
         self._last_gpu_geom = None
         self._last_gpu_fade_sent = -1.0
+        self._last_gpu_bars_fade_sent = -1.0
         self._has_pushed_first_frame = False
         self._mode_transition_apply_height_on_resume = True
 
@@ -1939,6 +1941,33 @@ class SpotifyVisualizerWidget(QWidget):
         """Delegates to widgets.spotify_visualizer.mode_transition."""
         from widgets.spotify_visualizer.mode_transition import get_gpu_fade_factor
         return get_gpu_fade_factor(self, now_ts)
+
+    def _get_scene_fade_factor(self, now_ts: float) -> float:
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import get_scene_fade_factor
+        return get_scene_fade_factor(self, now_ts)
+
+    def presentation_fade(self):
+        """The single compositor-owned fade authority for this visualizer."""
+        from widgets.spotify_visualizer.presentation_fade import ensure_presentation_fade
+        return ensure_presentation_fade(self)
+
+    def on_visualizer_presentation_ready(self) -> None:
+        """Compositor renderer/card readiness arrived for this generation.
+
+        Reveal is state-driven: the staged startup gate rejected itself while the
+        renderer was still being prepared at fade zero, and this is the event
+        that lets it re-evaluate. Every other reveal precondition is re-checked
+        by the reveal owner, so this is not a reveal authority of its own.
+        """
+        from widgets.spotify_visualizer.startup_staging import finish_staged_startup_reveal
+
+        try:
+            finish_staged_startup_reveal(self, reason="renderer_ready")
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] Renderer-ready reveal attempt failed", exc_info=True
+            )
 
     def _dynamic_bar_segments(self) -> int:
         """Compute segment count based on current widget height.

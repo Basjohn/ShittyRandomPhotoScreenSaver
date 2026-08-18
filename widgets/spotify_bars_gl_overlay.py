@@ -201,6 +201,7 @@ class SpotifyBarsGLOverlay(QWidget):
         self._fill_color: QColor = QColor(200, 200, 200, 230)
         self._border_color: QColor = QColor(255, 255, 255, 255)
         self._fade: float = 0.0
+        self._bars_fade: float = 0.0
         self._playing: bool = False
         self._perf_set_state_count: int = 0
         self._perf_paint_count: int = 0
@@ -666,13 +667,33 @@ class SpotifyBarsGLOverlay(QWidget):
             return
 
         parent = self.parentWidget()
+        visible = bool(self._enabled and self._fade > 0.0)
+        # A logically enabled visualizer whose fade is still zero is PREPARING,
+        # not absent. Clearing the layer in that window meant the compositor
+        # never initialized the renderer or uploaded the card texture until
+        # after the visible fade had already started - the readiness-order
+        # inversion behind the startup flash.
+        preparing = bool(self._enabled and not visible)
         try:
             publish(
                 self,
                 self.geometry(),
                 runtime_generation=getattr(parent, "_runtime_generation", None),
                 activation_id=getattr(self, "_activation_id", None),
-                visible=bool(self._enabled and self._fade > 0.0),
+                visible=visible,
+                preparing=preparing,
+            )
+        except TypeError as exc:
+            if "preparing" not in str(exc):
+                logger.debug("[SPOTIFY_VIS] Visualizer publication failed", exc_info=True)
+                return
+            # Compositor without the preparing seam (harness/legacy double).
+            publish(
+                self,
+                self.geometry(),
+                runtime_generation=getattr(parent, "_runtime_generation", None),
+                activation_id=getattr(self, "_activation_id", None),
+                visible=visible,
             )
         except Exception:
             logger.debug("[SPOTIFY_VIS] Visualizer publication failed", exc_info=True)
@@ -695,6 +716,7 @@ class SpotifyBarsGLOverlay(QWidget):
         fade: float,
         playing: bool,
         visible: bool,
+        bars_fade: Optional[float] = None,
         ghosting_enabled: bool = True,
         ghost_alpha: float = 0.4,
         ghost_decay: float = -1.0,
@@ -1496,6 +1518,18 @@ class SpotifyBarsGLOverlay(QWidget):
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._fade = 1.0
+        # ``fade`` is the ONE authoritative scene fade progress and owns the
+        # authored card pixels. ``bars_fade`` is the authored shader stagger of
+        # that same progress, published together with it so the two layers can
+        # never be driven by two different clocks. Callers that do not supply it
+        # (harnesses, legacy pushes) get the scene fade for both.
+        if bars_fade is None:
+            self._bars_fade = self._fade
+        else:
+            try:
+                self._bars_fade = max(0.0, min(1.0, float(bars_fade)))
+            except Exception:
+                self._bars_fade = self._fade
         self._playing = bool(playing)
         maybe_log_sine_idle_state(self, logger, dt_seconds=dt_seconds)
 
@@ -1602,6 +1636,7 @@ class SpotifyBarsGLOverlay(QWidget):
 
         self._enabled = False
         self._fade = 0.0
+        self._bars_fade = 0.0
 
     def clear_overlay_buffer(self) -> None:
         """Reset overlay state and clear the GL backing buffer."""
@@ -1613,6 +1648,7 @@ class SpotifyBarsGLOverlay(QWidget):
         self._peaks = []
         self._last_peak_ts = 0.0
         self._fade = 0.0
+        self._bars_fade = 0.0
         self._waveform = []
         self._prev_waveform = []
         self._waveform_count = 0
@@ -1676,6 +1712,63 @@ class SpotifyBarsGLOverlay(QWidget):
             logger.debug("[SPOTIFY_VIS] Failed to initialise GL pipeline for SpotifyBarsGLOverlay", exc_info=True)
             self._gl_state.transition(GLContextState.ERROR, str(e))
             return False
+
+    def layer_gl_resources_ready(self) -> bool:
+        """Whether every GL resource the compositor layer needs already exists.
+
+        Explicit readiness seam rather than the layer reaching into private
+        pipeline attributes. The rounded-card mask program is deliberately NOT
+        required: its compile failure is a bounded warning with a guarded draw
+        path, so requiring it would let one optional shader block the reveal
+        forever.
+        """
+        try:
+            if self._gl_disabled:
+                return False
+            if not self._gl_state.is_ready():
+                return False
+            return bool(
+                self._gl_programs
+                and self._gl_vao is not None
+                and self._gl_vbo is not None
+            )
+        except Exception:
+            return False
+
+    def notify_presentation_ready(self) -> None:
+        """Forward compositor renderer readiness to the reveal owner.
+
+        The compositor layer prepared this visualizer at fade zero; the staged
+        reveal can now start the one compositor-owned fade. This object holds no
+        reveal policy of its own - it only routes the event.
+        """
+        try:
+            parent = self.parentWidget()
+        except Exception:
+            return
+        card = getattr(parent, "spotify_visualizer_widget", None) if parent else None
+        handler = getattr(card, "on_visualizer_presentation_ready", None)
+        if callable(handler):
+            try:
+                handler()
+            except Exception:
+                logger.debug(
+                    "[SPOTIFY_VIS] Presentation readiness handler failed", exc_info=True
+                )
+
+    def layer_gl_failed(self) -> bool:
+        """Whether GL initialization has failed for this context generation."""
+        try:
+            return bool(self._gl_disabled or self._gl_state.is_error())
+        except Exception:
+            return True
+
+    def layer_gl_program_count(self) -> int:
+        """Number of compiled mode programs, for readiness evidence."""
+        try:
+            return len(self._gl_programs)
+        except Exception:
+            return 0
 
     def _compositor_gpu_query_active(self) -> bool:
         """Whether the owning compositor already has an outer GPU query open."""
