@@ -1257,13 +1257,25 @@ class CustomLayoutManager:
         except Exception:
             overlay = None
         was_visible = bool(getattr(vis, "isVisible", lambda: False)())
-        self._paused_visualizer = (vis, was_visible, overlay, False)
-        try:
-            if was_visible and hasattr(vis, "stop"):
-                vis.stop()
-            vis.hide()
-        except Exception:
-            logger.debug("[CUSTOM_LAYOUT] Failed to pause visualizer for edit mode", exc_info=True)
+        suspended = False
+        suspend = getattr(vis, "suspend_for_edit", None)
+        if callable(suspend):
+            try:
+                # The explicit edit seam. vis.stop() is a STARTUP lifecycle exit
+                # whose partner vis.start() re-arms staged startup and, mid-
+                # runtime, defers forever to an already-consumed one-shot
+                # secondary stage - the proven Cancel failure.
+                suspended = bool(suspend(reason="custom_edit"))
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to suspend visualizer for edit mode", exc_info=True)
+        self._paused_visualizer = (vis, was_visible, overlay, suspended)
+        if not suspended:
+            try:
+                if was_visible and hasattr(vis, "stop"):
+                    vis.stop()
+                vis.hide()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to pause visualizer for edit mode", exc_info=True)
         self._suspend_compositor_visualizer_presentation()
 
     def _suspend_compositor_visualizer_presentation(self) -> None:
@@ -1291,15 +1303,17 @@ class CustomLayoutManager:
         self._special_hidden.clear()
 
         if self._paused_visualizer is not None:
-            vis, was_visible, _overlay, _unused = self._paused_visualizer
+            vis, was_visible, _overlay, suspended = self._paused_visualizer
             # Cleared first so a second restore cannot resume twice.
             self._paused_visualizer = None
             try:
-                if was_visible and hasattr(vis, "start"):
-                    # start() re-arms staged startup, which now prepares the
-                    # compositor renderer at fade zero and reveals only once it
-                    # is ready. Showing the overlay QWidget would prove nothing:
-                    # it is not the presentation surface.
+                if suspended:
+                    # Resume the SAME runtime: no staged startup, no
+                    # secondary-stage event, no engine generation change.
+                    # Presentation returns through the current fade/readiness
+                    # owner.
+                    vis.resume_after_edit(reason="custom_edit_restore")
+                elif was_visible and hasattr(vis, "start"):
                     vis.start()
             except Exception:
                 logger.debug("[CUSTOM_LAYOUT] Failed to resume visualizer after edit mode", exc_info=True)

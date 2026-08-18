@@ -1651,6 +1651,28 @@ class SpotifyVisualizerWidget(QWidget):
         from widgets.spotify_visualizer.engine_lifecycle import clear_gl_overlay
         clear_gl_overlay(self)
 
+    # ------------------------------------------------------------------
+    # CUSTOM edit-session suspend / resume
+    # ------------------------------------------------------------------
+
+    def suspend_for_edit(self, *, reason: str = "custom_edit") -> bool:
+        """Suspend this live runtime for an edit session.
+
+        Distinct from stop(): an edit session is not a lifecycle boundary, and
+        the startup entry points must not be re-entered mid-runtime.
+        """
+        from widgets.spotify_visualizer.startup_staging import suspend_for_edit
+        return suspend_for_edit(self, reason=reason)
+
+    def resume_after_edit(self, *, reason: str = "custom_edit") -> bool:
+        """Resume this runtime after an edit session, without cold staging."""
+        from widgets.spotify_visualizer.startup_staging import resume_after_edit
+        return resume_after_edit(self, reason=reason)
+
+    def is_edit_suspended(self) -> bool:
+        from widgets.spotify_visualizer.startup_staging import is_edit_suspended
+        return is_edit_suspended(self)
+
     def _is_media_state_stale(self) -> bool:
         from widgets.spotify_visualizer.engine_lifecycle import is_media_state_stale
         return is_media_state_stale(self)

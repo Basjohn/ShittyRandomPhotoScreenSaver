@@ -221,29 +221,11 @@ class TestRestoreHappensOnce:
         manager._special_hidden = []
         return manager
 
-    def test_restore_resumes_the_visualizer_exactly_once(self):
-        starts: list[int] = []
-
-        vis = SimpleNamespace(start=lambda: starts.append(1))
-        manager = self._manager()
-        manager._paused_visualizer = (vis, True, None, False)
-
-        clm.CustomLayoutManager._restore_special_widgets(manager)
-        clm.CustomLayoutManager._restore_special_widgets(manager)
-
-        assert starts == [1], "a second restore resumed the visualizer twice"
-        assert manager._paused_visualizer is None
-
-    def test_a_visualizer_that_was_not_visible_is_not_started(self):
-        starts: list[int] = []
-        vis = SimpleNamespace(start=lambda: starts.append(1))
-        manager = self._manager()
-        manager._paused_visualizer = (vis, False, None, False)
-
-        clm.CustomLayoutManager._restore_special_widgets(manager)
-
-        assert starts == []
-        assert manager._paused_visualizer is None
+    # Mid-runtime Cancel resume is owned by
+    # tests/test_p2_custom_cancel_resume.py, which drives the real startup/edit
+    # state machine. The stub-only bars that used to live here could only prove
+    # a SimpleNamespace counter incremented, which is exactly why they passed
+    # while the installed Cancel left the visualizer without audio.
 
     def test_pause_is_idempotent_within_one_session(self):
         suspends: list[int] = []
