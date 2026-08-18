@@ -1884,3 +1884,163 @@ latest state consumed by one display frame. No update admission gate, producer
 cap, pending-until-paint latch, paint acknowledgement, second presentation clock
 or source decimation was added.
 
+
+---
+
+## P2 Single-Surface Round — Accepted Installed Result And The Defects It Exposed
+
+Dated evidence for the run immediately after
+`b5ff451efd452780dc4b87dbc1f64d539ff4e6d3`, plus the causal findings that round
+produced. Frozen checkpoint evidence; not a current owner map.
+
+### Accepted measurement
+
+Single display, `main_mc`:
+
+```text
+FRAME_GAP_OWNER
+  >33 ms : 35
+  >50 ms : 4
+  median : ~43.53 ms
+  max    : ~55.16 ms
+```
+
+Materially better than the previous single-surface run, which had 25 gaps
+>50 ms.
+
+Dual display, `main`:
+
+```text
+screen 0 / 165-Hz target
+  BlockSpin          : ~153.3-153.7 FPS
+  request acceptance : ~93.18-93.44%
+  gaps >33 ms        : 14
+  gaps >50 ms        : 3
+  median / max       : ~43.45 ms / ~53.80 ms
+
+screen 1 / 60-Hz target
+  BlockSpin          : ~59.3-59.4 FPS
+  request acceptance : ~98.91%
+  gaps >33 ms        : 12
+  gaps >50 ms        : 0
+  median / max       : ~44.54 ms / ~48.81 ms
+```
+
+A large gain over the historical visualizer-on 165-Hz result around 141-143 FPS.
+
+Both runs returned tracked GL accounting to zero after display cleanup:
+
+```text
+gl_resources=0 gl_texture_resources=0 gl_texture_bytes=0 gl_known_bytes=0
+```
+
+**P2-SINGLE-SURFACE is retained on this evidence.** The architecture was not
+reopened because 165 Hz had not been reached.
+
+### Finding 1 — AdaptiveTimer still contained paint-acknowledged admission
+
+`_queue_safe_widget_update()` rejected a request whenever
+`_srpss_timer_update_pending` was set, and that flag was cleared only by
+`_mark_widget_update_consumed()` at paint consumption. A physical presentation
+deadline was therefore waiting for paint acknowledgement.
+
+The arithmetic matches the ceiling directly: 165 Hz x ~0.932 acceptance is
+~153.8 Hz against ~153.3-153.7 FPS measured. This was removed rather than
+instrumented further; only the pre-GUI dispatch-pending callback guard remains,
+released the moment the queued callback calls `QWidget.update()`. Paint-pending
+timestamps survive as passive diagnostics and the paint skip counter is retained
+for evidence continuity, but nothing increments it.
+
+Removing a known policy defect does not promise 165. If delivery still sits near
+~153 afterwards, the remaining scheduler/Qt/DWM loss becomes the next bounded
+question — not before.
+
+### Finding 2 — staged reveal preceded single-surface GL/card readiness
+
+Installed dual-run ordering:
+
+```text
+18:11:42  engine generation 1 / activation 1, audio worker started, first frame
+18:11:44  "Completed staged startup reveal"  -> visible fade authority begins
+18:11:45  visualizer GL handles registered, all five programs ready,
+          compositor 60-Hz presentation starts, tick dt spike ~68 ms,
+          latency warning ~95.6 ms
+```
+
+The visible fade began roughly a second before the renderer that owns those
+pixels existed, so the first frame the compositor ever drew sampled an animation
+already part-way through. That is the flash/slam.
+
+The `1d5b0eb` intent (compile every program while hidden) was correct but its
+tests only proved `_init_gl_pipeline` compiles five programs; they never proved
+the real compositor initializes that pipeline before reveal. The cause was
+upstream of the pipeline: a fade-zero publication *cleared* the compositor layer,
+so nothing was prepared until the fade had already started.
+
+### Finding 3 — a just-started capture was classified unhealthy and restarted
+
+```text
+PyAudio stream starts -> audio worker reports started
+immediate deferred wake -> BeatEngine.wake() -> is_capture_healthy() == False
+                        -> capture restarted
+```
+
+`PyAudioWPatchBackend._last_callback_ts` starts at 0 and `is_healthy()` required
+a callback within 500 ms, so a successfully started stream was unhealthy until
+its first callback arrived. Corrected with explicit
+`STOPPED / STARTING / HEALTHY / STALE / FAILED` capture states shared by both
+backends; only a STALE capture may be restarted by `wake()`.
+
+### Finding 4 — reactivity is an upstream problem, not a shader one
+
+```text
+compositor state_to_paint : p50 ~3.4-5.9 ms, p95 ~7-10 ms
+upstream analysis age     : ~85.0 / 118.6 / 89.8 / 88.6 / 101.0 ms (main_mc)
+                            ~95.6 / 86.1 / 88.1 / 113.0 ms (dual)
+                            median around 90 ms
+```
+
+Presentation is roughly an order of magnitude fresher than the source, so tuning
+shaders or smoothing for "reactivity" would have been the wrong correction.
+
+`BeatEngine.tick` consumed the newest audio frame and then dropped it whenever a
+compute was already active, with no pending slot, so the next analysis could only
+begin from whatever a later tick happened to consume. Ownership changed to one
+compute in flight plus one newest pending source frame — replacement, never a
+queue, and no catch-up replay of intermediate frames.
+
+### Finding 5 — BUBBLE -> DEVCURVE still advanced the generation twice
+
+```text
+starting                        generation=1 activation=1
+bar-count reconfigure 48 -> 35  generation=2 activation=2
+smoothing reset                 generation=3 activation=3
+fresh frame accepted from       generation=3 activation=3
+also logged: reason=bar_buffer_resize, reason=mode_switch:activation_payload
+after the fresh frame:          reason=settings_refresh:activation_payload
+```
+
+The prior transaction stamp reduced duplicate config application but did not
+merge the generation boundaries, because `reconfigure_bar_count` and
+`reset_smoothing_state` each bump independently. The earlier unit bar could not
+catch it: its fake `reset_smoothing_state()` incremented nothing, so it could not
+reproduce the production boundary it claimed to assert.
+
+Corrected with an engine activation transaction that defers every preparation
+step's bump to one final commit, and with activation-payload identity so an
+identical post-activation `settings_refresh` is a no-op while genuine preset,
+settings and mode changes still apply. The rejected global per-mode cache was not
+revived: identity is canonicalized from resolved authored values, so a same-mode
+preset cycle still differs.
+
+### Finding 6 — CUSTOM edit still targeted the retired presentation surface
+
+The edit preview was assembled from `overlay.grabFramebuffer()` plus a grab of
+the card QWidget. `SpotifyBarsGLOverlay` owns no framebuffer any more and the
+card QWidget paints nothing while the compositor owns its visual, so both halves
+produced blank pixels. Edit entry also used overlay `show()`/`hide()`/
+`isVisible()` as presentation truth and therefore suspended nothing the
+compositor was drawing.
+
+This belonged inside P2 single-surface closure rather than deferred cleanup: it
+is not cosmetic debt, it is edit mode pointing at an owner that no longer exists.
