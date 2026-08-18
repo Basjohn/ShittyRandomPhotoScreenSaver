@@ -79,6 +79,45 @@ def painted_frame_shadow_card_rect(
     )
 
 
+def painted_frame_shadow_cache_key(
+    widget: Any,
+    *,
+    logical_size: Optional[QSize] = None,
+    dpr: Optional[float] = None,
+) -> tuple:
+    """Canonical identity of the authored card pixels.
+
+    This is the ONE definition of "these card pixels changed". Both the QPixmap
+    rebuild and the compositor GL texture re-upload derive from it, so the two
+    can never disagree - a second hand-maintained revision would eventually let
+    the pixmap invalidate correctly while the GL texture stayed stale.
+
+    Cheap enough to call per frame; only a changed key does real work.
+    """
+    from widgets.base_overlay_widget import PAINTED_FRAME_SHADOW_TUNING
+
+    width = widget.width() if logical_size is None else int(logical_size.width())
+    height = widget.height() if logical_size is None else int(logical_size.height())
+    if dpr is None:
+        try:
+            dpr = max(1.0, float(widget.devicePixelRatioF()))
+        except Exception:
+            dpr = 1.0
+    dpr = max(1.0, float(dpr))
+
+    bg = QColor(widget._bg_color)
+    bg.setAlpha(int(255 * max(0.0, min(1.0, widget._bg_opacity))))
+    return (
+        width,
+        height,
+        round(dpr, 3),
+        bg.getRgb(),
+        widget._card_border_color.getRgb(),
+        int(widget._border_width),
+        tuple(sorted(PAINTED_FRAME_SHADOW_TUNING.items())),
+    )
+
+
 def ensure_painted_frame_shadow_pixmap(
     widget: Any,
     *,
@@ -110,14 +149,8 @@ def ensure_painted_frame_shadow_pixmap(
     bg = QColor(widget._bg_color)
     bg.setAlpha(int(255 * max(0.0, min(1.0, widget._bg_opacity))))
     tuning = PAINTED_FRAME_SHADOW_TUNING
-    key = (
-        width,
-        height,
-        round(dpr, 3),
-        bg.getRgb(),
-        widget._card_border_color.getRgb(),
-        int(widget._border_width),
-        tuple(sorted(tuning.items())),
+    key = painted_frame_shadow_cache_key(
+        widget, logical_size=QSize(width, height), dpr=dpr
     )
     if (
         widget._painted_frame_shadow_pixmap is not None

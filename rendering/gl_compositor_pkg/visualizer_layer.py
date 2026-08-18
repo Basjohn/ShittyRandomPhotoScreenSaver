@@ -155,7 +155,15 @@ class CompositorVisualizerLayer:
 
         self._compositor = compositor
         self._card_texture = CompositorCardTexture()
+        # Latest visible presentation state; may be None while hidden.
         self._state: Optional[VisualizerRenderState] = None
+        # Persistent GL resource owner for this compositor generation. Retained
+        # until a successful compositor-generation cleanup, INDEPENDENTLY of
+        # visibility: using the transient presentation state as the destruction
+        # owner meant a hidden/cleared visualizer at teardown leaked its GL
+        # resources - exactly the card texture that survived to application exit
+        # in the installed accounting.
+        self._resource_owner: Any = None
         self._failures = 0
         self._last_failure_signature: Optional[str] = None
 
@@ -164,12 +172,20 @@ class CompositorVisualizerLayer:
     def publish(self, state: Optional[VisualizerRenderState]) -> None:
         """Accept the latest render state, replacing any previous one."""
         self._state = state
+        if state is not None and state.owner is not None:
+            # Establish destruction authority deliberately; it outlives
+            # visibility and is released only by a successful cleanup.
+            self._resource_owner = state.owner
 
     def clear(self) -> None:
         """Drop the published state; the layer draws nothing until republished.
 
         Card visual ownership is handed back, otherwise the card would stop
         painting itself while nothing else painted it either.
+
+        Destruction authority is deliberately NOT dropped here: hiding the
+        visualizer must not lose the reference needed to free its GL resources
+        at compositor teardown.
         """
         self._release_card_visual()
         self._state = None
@@ -248,12 +264,15 @@ class CompositorVisualizerLayer:
             if fade is None:
                 return False
 
-            # The card visual must be drawn by the compositor, beneath the bars.
-            # The card QWidget is a sibling ABOVE this surface, so if it kept
-            # painting its own background it would simply cover the bars now
-            # that they are drawn here.
-            self._render_card_visual(geometry, fade)
-
+            # ONE card-region GL state boundary, established BEFORE both the
+            # card texture and the visualizer shader.
+            #
+            # The card texture is a full-NDC quad, so it covers whatever
+            # viewport is active. Drawing it before this boundary meant it
+            # covered the WHOLE DISPLAY - the previous compositor owner's
+            # viewport was still active - and it was drawn without the layer's
+            # intended alpha blending, so its transparent shadow pixels did not
+            # composite. Both draws now share this state and this geometry.
             gl.glViewport(x_px, y_px, w_px, h_px)
             # Scissor bounds every write this layer makes - including the
             # stencil clear inside the mask path - to the card rect, so the
@@ -263,6 +282,8 @@ class CompositorVisualizerLayer:
             gl.glEnable(gl.GL_BLEND)
             gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
             try:
+                # Card beneath, bars above; no viewport restore between them.
+                self._render_card_visual(geometry, fade)
                 owner.paint_layer(geometry.local_rect(), fade)
             finally:
                 self._restore_gl_state()
@@ -312,30 +333,22 @@ class CompositorVisualizerLayer:
     def _card_revision(self, card, geometry: "PresentationGeometry") -> tuple:
         """Identity of the authored card image for the target geometry.
 
-        Everything that changes the card's pixels belongs here: geometry, DPR,
-        background/border style and border width. Ordinary visualizer state
-        publications change none of it, so they never trigger a re-upload.
-        Fade is deliberately absent - it is applied as a GL alpha multiplier.
+        Derived from the card's OWN canonical pixmap cache key, so the QPixmap
+        rebuild and this GL re-upload can never disagree. A second, manually
+        parallel definition would eventually let the pixmap invalidate correctly
+        while the texture stayed stale.
+
+        Fade is deliberately absent - it is a GL alpha multiplier, so a fade
+        animation never re-uploads.
         """
-        rect = geometry.logical_rect
-        try:
-            bg = card._bg_color.getRgb()
-            border = card._card_border_color.getRgb()
-            opacity = round(float(card._bg_opacity), 4)
-            border_width = int(card._border_width)
-        except Exception:
-            bg = border = None
-            opacity = 0.0
-            border_width = 0
-        return (
-            rect.width(),
-            rect.height(),
-            round(geometry.dpr, 4),
-            bg,
-            border,
-            opacity,
-            border_width,
-            bool(getattr(card, "_show_background", False)),
+        from widgets.spotify_visualizer.card_paint import (
+            painted_frame_shadow_cache_key,
+        )
+
+        return painted_frame_shadow_cache_key(
+            card,
+            logical_size=geometry.logical_rect.size(),
+            dpr=geometry.dpr,
         )
 
     def _render_card_visual(self, geometry: "PresentationGeometry", fade: float) -> None:
@@ -405,22 +418,41 @@ class CompositorVisualizerLayer:
             return False
 
     def cleanup(self) -> None:
-        """Delete visualizer GL resources through their existing strict owner.
+        """Free everything this compositor generation owns.
 
-        The visualizer object keeps one deletion owner per numeric handle and
-        stays fail-closed; this only drives it from compositor teardown, while
-        the borrowed context is still current.
+        Runs unconditionally on compositor teardown, regardless of whether any
+        state is currently published. Card texture ownership must never depend
+        on the visualizer being visible at the moment teardown happens.
+
+        Order: release the card QWidget visual, delete the card
+        texture/program/VAO/VBO, then the visualizer GL resources through their
+        persistent owner. Fail-closed semantics hold - a failed deletion raises
+        and retains ownership, and a second cleanup after success is a no-op.
         """
-        state = self._state
-        owner = state.owner if state is not None else None
         self._release_card_visual()
         self._state = None
-        if owner is None:
-            return
-        self._card_texture.cleanup()
-        cleanup_gl = getattr(owner, "cleanup_gl", None)
-        if callable(cleanup_gl):
-            cleanup_gl()
+
+        errors: list[str] = []
+        try:
+            self._card_texture.cleanup()
+        except Exception as exc:
+            errors.append("card_texture:%s:%s" % (type(exc).__name__, exc))
+
+        owner = self._resource_owner
+        if owner is not None:
+            cleanup_gl = getattr(owner, "cleanup_gl", None)
+            if callable(cleanup_gl):
+                try:
+                    cleanup_gl()
+                except Exception as exc:
+                    errors.append("visualizer_gl:%s:%s" % (type(exc).__name__, exc))
+            if not errors:
+                self._resource_owner = None
+
+        if errors:
+            raise RuntimeError(
+                "Visualizer layer cleanup incomplete: " + " | ".join(errors)
+            )
 
     def _record_failure(self, signature: str) -> None:
         """Report visualizer layer failure loudly but boundedly.

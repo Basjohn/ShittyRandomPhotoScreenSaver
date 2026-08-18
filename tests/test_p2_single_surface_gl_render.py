@@ -784,3 +784,333 @@ class TestNoPerFrameQPainterBridge:
             assert forbidden not in called, (
                 "steady visualizer render must not construct %s" % forbidden
             )
+
+
+# ---------------------------------------------------------------------------
+# INTEGRATED layer bounds with the card visual ENABLED
+# ---------------------------------------------------------------------------
+#
+# The existing mode bars set `_painted_frame_shadow_enabled = False`, so they
+# bypass the card-texture draw entirely. That is why they kept passing while the
+# installed build painted the card across almost the whole display: the bubbles
+# were correctly bounded, the card was not.
+#
+# These bars render the REAL layer with the card enabled and assert the whole
+# framebuffer, not just the card interior.
+
+
+def _distinct_background(target):
+    """Fill the target with a pattern nothing in the card region produces."""
+    gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+    gl.glViewport(0, 0, target.size.width(), target.size.height())
+    gl.glDisable(gl.GL_SCISSOR_TEST)
+    gl.glClearColor(0.0, 1.0, 0.0, 1.0)  # pure green
+    gl.glClearStencil(0)
+    gl.glClear(
+        gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT | gl.GL_STENCIL_BUFFER_BIT
+    )
+
+
+def _render_with_card(ctx, overlay, card, *, card_rect, dpr, surface):
+    from types import SimpleNamespace
+
+    target = _GLTarget(surface)
+    try:
+        _distinct_background(target)
+        comp = _FakeCompositor(ctx)
+        layer = CompositorVisualizerLayer(comp)
+        overlay.parentWidget = lambda: SimpleNamespace(spotify_visualizer_widget=card)
+        layer.publish(VisualizerRenderState(overlay, card_rect))
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+        drew = layer.render(surface.height(), dpr)
+        pixels = target.read()
+        return drew, pixels, layer
+    finally:
+        target.destroy()
+
+
+def _outside_card_mask(pixels, card_rect, dpr):
+    x0 = int(round(card_rect.x() * dpr))
+    y0 = int(round(card_rect.y() * dpr))
+    w = int(round(card_rect.width() * dpr))
+    h = int(round(card_rect.height() * dpr))
+    mask = np.ones(pixels.shape[:2], dtype=bool)
+    mask[y0:y0 + h, x0:x0 + w] = False
+    return mask
+
+
+class TestIntegratedLayerBoundsWithCardEnabled:
+    """The regression the installed screenshot showed."""
+
+    def _case(self, gl_context, *, card_rect, dpr, surface):
+        overlay = _overlay_for("spectrum")
+        overlay._painted_frame_shadow_enabled = True  # deliberately ENABLED
+        card = _CardStub(width=card_rect.width(), height=card_rect.height())
+        drew, pixels, layer = _render_with_card(
+            gl_context, overlay, card,
+            card_rect=card_rect, dpr=dpr, surface=surface,
+        )
+        try:
+            assert drew, "the layer must draw with the card enabled"
+        finally:
+            try:
+                layer._card_texture.cleanup()
+                overlay.cleanup_gl()
+            except Exception:
+                pass
+        return pixels
+
+    def test_card_does_not_stain_the_whole_display(self, gl_context, qapp):
+        pixels = self._case(
+            gl_context, card_rect=CARD, dpr=1.0, surface=SURFACE
+        )
+        outside = _outside_card_mask(pixels, CARD, 1.0)
+        rgb = pixels[..., :3]
+
+        # Outside the card the deliberately distinct green background must be
+        # exactly intact. A full-NDC card quad drawn under the previous owner's
+        # whole-display viewport is what covered the entire framebuffer.
+        outside_pixels = rgb[outside]
+        stained = np.any(outside_pixels != np.array([0, 255, 0], dtype=np.uint8), axis=-1)
+        assert not stained.any(), (
+            f"{int(stained.sum())} pixels outside the card were modified; the "
+            f"card texture escaped its viewport/scissor region"
+        )
+
+    def test_card_pixels_appear_inside_the_card_rect(self, gl_context, qapp):
+        pixels = self._case(
+            gl_context, card_rect=CARD, dpr=1.0, surface=SURFACE
+        )
+        card_region = _card_slice(pixels, CARD, 1.0)[..., :3]
+        # The card interior must no longer be the background colour.
+        differs = np.any(
+            card_region != np.array([0, 255, 0], dtype=np.uint8), axis=-1
+        )
+        assert differs.any(), "no card/visualizer pixels were drawn in the card rect"
+        assert differs.mean() > 0.5, (
+            "the card should cover most of its own rect"
+        )
+
+    def test_non_zero_offset_and_dpr_stay_bounded(self, gl_context, qapp):
+        surface = QSize(1200, 900)
+        rect = QRect(200, 100, 400, 200)
+        pixels = self._case(gl_context, card_rect=rect, dpr=1.5, surface=surface)
+        outside = _outside_card_mask(pixels, rect, 1.5)
+        rgb = pixels[..., :3]
+        stained = np.any(
+            rgb[outside] != np.array([0, 255, 0], dtype=np.uint8), axis=-1
+        )
+        assert not stained.any(), (
+            f"{int(stained.sum())} pixels outside the card were modified at DPR 1.5"
+        )
+
+    def test_custom_non_square_geometry_stays_bounded(self, gl_context, qapp):
+        """The installed CUSTOM card was 958x638 logical at DPR 1.5."""
+        surface = QSize(1600, 1100)
+        rect = QRect(120, 90, 958, 638)
+        pixels = self._case(gl_context, card_rect=rect, dpr=1.5, surface=surface)
+        outside = _outside_card_mask(pixels, rect, 1.5)
+        rgb = pixels[..., :3]
+        stained = np.any(
+            rgb[outside] != np.array([0, 255, 0], dtype=np.uint8), axis=-1
+        )
+        assert not stained.any(), (
+            f"{int(stained.sum())} pixels outside a 958x638 CUSTOM card were modified"
+        )
+
+    def test_transparent_card_pixels_composite_over_the_background(self, gl_context, qapp):
+        """Shadow/transparent card pixels must blend, not replace."""
+        pixels = self._case(
+            gl_context, card_rect=CARD, dpr=1.0, surface=SURFACE
+        )
+        card_region = _card_slice(pixels, CARD, 1.0)[..., :3].astype(int)
+        # The card's outermost ring is shadow/transparent, so the green
+        # background must still show through there rather than being replaced
+        # by opaque black.
+        edge = np.concatenate([
+            card_region[0, :, :], card_region[-1, :, :],
+            card_region[:, 0, :], card_region[:, -1, :],
+        ])
+        assert edge[:, 1].max() > 40, (
+            "the card edge fully replaced the background instead of "
+            "alpha-compositing over it"
+        )
+
+    def test_card_and_shader_share_one_state_boundary(self):
+        """Ordering bar: the state boundary must dominate BOTH draws."""
+        import inspect
+
+        source = inspect.getsource(CompositorVisualizerLayer.render)
+        viewport = source.index("glViewport(x_px, y_px, w_px, h_px)")
+        scissor = source.index("glScissor(x_px, y_px, w_px, h_px)")
+        blend = source.index("glBlendFunc(")
+        card = source.index("_render_card_visual(")
+        shader = source.index("paint_layer(")
+
+        assert viewport < card, (
+            "the card texture is a full-NDC quad; drawing it before the card "
+            "viewport covers the whole display"
+        )
+        assert scissor < card, "scissor must bound the card draw"
+        assert blend < card, (
+            "the card carries transparent shadow pixels and must be drawn with "
+            "the layer's alpha blending active"
+        )
+        assert card < shader, "the card belongs beneath the bars"
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle: the card texture must not leak when hidden at teardown
+# ---------------------------------------------------------------------------
+
+
+class TestCardTextureLifecycleAcrossVisibility:
+    """The installed leak: gl_texture_bytes=5500836 survived to exit.
+
+    1437 * 957 * 4 == 5,500,836, i.e. a 958x638 logical card at DPR 1.5 - the
+    card texture exactly. cleanup() returned early when no state was published,
+    so a hidden/cleared visualizer at teardown never freed it.
+    """
+
+    def _prepared(self, ctx):
+        from types import SimpleNamespace
+
+        overlay = _overlay_for("spectrum")
+        overlay._painted_frame_shadow_enabled = True
+        card = _CardStub()
+        comp = _FakeCompositor(ctx)
+        layer = CompositorVisualizerLayer(comp)
+        # The parent exposes both the card widget and the compositor, so the
+        # visualizer's own strict cleanup can reach the borrowed context just
+        # as it does in production.
+        overlay.parentWidget = lambda: SimpleNamespace(
+            spotify_visualizer_widget=card, _gl_compositor=comp
+        )
+        layer.publish(VisualizerRenderState(overlay, CARD))
+        target = _GLTarget(SURFACE)
+        target.clear()
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+        layer.render(SURFACE.height(), 1.0)
+        return overlay, layer, target
+
+    def _assert_fully_released(self, layer):
+        tex = layer._card_texture
+        assert tex.texture_id == 0, "card texture leaked"
+        assert tex._program == 0, "card program leaked"
+        assert tex._vao == 0, "card VAO leaked"
+        assert tex._vbo == 0, "card VBO leaked"
+        assert tex.tracked_bytes == 0, "card GL bytes did not return to baseline"
+        assert tex._resource_id is None, "ResourceManager tracking not released"
+
+    def test_visible_then_cleanup_releases_everything(self, gl_context, qapp):
+        overlay, layer, target = self._prepared(gl_context)
+        try:
+            assert layer._card_texture.has_texture()
+            layer.cleanup()
+            self._assert_fully_released(layer)
+        finally:
+            target.destroy()
+
+    def test_hidden_then_cleanup_still_releases_everything(self, gl_context, qapp):
+        """THE regression: cleared presentation state at teardown."""
+        overlay, layer, target = self._prepared(gl_context)
+        try:
+            assert layer._card_texture.has_texture()
+            layer.clear()
+            assert layer.state is None, "presentation state must be cleared"
+
+            layer.cleanup()
+            self._assert_fully_released(layer)
+        finally:
+            target.destroy()
+
+    def test_clear_then_republish_then_cleanup_releases_everything(self, gl_context, qapp):
+        from types import SimpleNamespace
+
+        overlay, layer, target = self._prepared(gl_context)
+        try:
+            layer.clear()
+            card = _CardStub()
+            overlay.parentWidget = lambda: SimpleNamespace(
+                spotify_visualizer_widget=card, _gl_compositor=layer._compositor
+            )
+            layer.publish(VisualizerRenderState(overlay, CARD))
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+            layer.render(SURFACE.height(), 1.0)
+
+            layer.cleanup()
+            self._assert_fully_released(layer)
+        finally:
+            target.destroy()
+
+    def test_repeated_cleanup_after_success_is_a_no_op(self, gl_context, qapp):
+        overlay, layer, target = self._prepared(gl_context)
+        try:
+            layer.cleanup()
+            layer.cleanup()
+            layer.cleanup()
+            self._assert_fully_released(layer)
+        finally:
+            target.destroy()
+
+    def test_destruction_authority_survives_hiding(self, gl_context, qapp):
+        """Hiding must not drop the reference needed to free GL resources."""
+        overlay, layer, target = self._prepared(gl_context)
+        try:
+            layer.clear()
+            assert layer._resource_owner is not None, (
+                "a hidden visualizer still owns GL resources that must be freed"
+            )
+            layer.cleanup()
+            assert layer._resource_owner is None, (
+                "destruction authority is released only after successful cleanup"
+            )
+        finally:
+            target.destroy()
+
+    def test_failed_deletion_retains_ownership(self, gl_context, qapp):
+        overlay, layer, target = self._prepared(gl_context)
+        try:
+            def _boom():
+                raise RuntimeError("driver refused visualizer delete")
+
+            overlay.cleanup_gl = _boom
+            with pytest.raises(RuntimeError, match="cleanup incomplete"):
+                layer.cleanup()
+            assert layer._resource_owner is not None, (
+                "a failed deletion must retain ownership, not silently drop it"
+            )
+        finally:
+            try:
+                layer._card_texture.cleanup()
+            except Exception:
+                pass
+            target.destroy()
+
+
+class TestCardRevisionHasOneAuthority:
+    def test_revision_derives_from_the_canonical_card_cache_key(self):
+        """Two parallel definitions would eventually disagree."""
+        import inspect
+
+        source = inspect.getsource(CompositorVisualizerLayer._card_revision)
+        assert "painted_frame_shadow_cache_key" in source, (
+            "the GL texture revision must derive from the authored card cache key"
+        )
+
+    def test_pixmap_and_texture_share_the_key_resolver(self, qapp):
+        from widgets.spotify_visualizer.card_paint import (
+            ensure_painted_frame_shadow_pixmap,
+            painted_frame_shadow_cache_key,
+        )
+
+        card = _CardStub()
+        key = painted_frame_shadow_cache_key(
+            card, logical_size=CARD.size(), dpr=1.0
+        )
+        ensure_painted_frame_shadow_pixmap(
+            card, logical_size=CARD.size(), dpr=1.0
+        )
+        assert card._painted_frame_shadow_cache_key == key, (
+            "the pixmap cache and the shared resolver must agree exactly"
+        )
