@@ -430,6 +430,12 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
     # Presentation liveness reasons.
     PRESENTATION_TRANSITION_ACTIVE = "TRANSITION_ACTIVE"
     PRESENTATION_VISUALIZER_ACTIVE = "VISUALIZER_ACTIVE"
+    # Transient: the visualizer is logically enabled but still at fade zero, so
+    # the display must keep presenting long enough for the compositor to build
+    # the visualizer renderer and card texture. Released the moment preparation
+    # completes or the visualizer stops preparing; it is the same render
+    # strategy and adds no timer of its own.
+    PRESENTATION_VISUALIZER_PREPARING = "VISUALIZER_PREPARING"
 
     def publish_visualizer_state(
         self,
@@ -439,6 +445,7 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
         runtime_generation=None,
         activation_id=None,
         visible: bool = True,
+        preparing: bool = False,
     ) -> None:
         """Accept the latest visualizer render state for this display.
 
@@ -467,9 +474,10 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
             )
             return
 
-        if not visible:
+        if not visible and not preparing:
             self._visualizer_layer.clear()
             self.release_presentation_reason(self.PRESENTATION_VISUALIZER_ACTIVE)
+            self.release_presentation_reason(self.PRESENTATION_VISUALIZER_PREPARING)
             return
 
         self._visualizer_layer.publish(
@@ -480,12 +488,39 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
                 activation_id=activation_id,
             )
         )
-        self.acquire_presentation_reason(self.PRESENTATION_VISUALIZER_ACTIVE)
+        if visible:
+            # Visible presentation supersedes preparation.
+            self.release_presentation_reason(self.PRESENTATION_VISUALIZER_PREPARING)
+            self.acquire_presentation_reason(self.PRESENTATION_VISUALIZER_ACTIVE)
+            return
+
+        # Fade-zero preparation: keep presenting so the render pass can build
+        # the renderer/card texture, but do not claim visible liveness.
+        self.release_presentation_reason(self.PRESENTATION_VISUALIZER_ACTIVE)
+        if self._visualizer_layer.is_presentation_ready():
+            # Already prepared - do not hold a presentation reason for work that
+            # is finished.
+            self.release_presentation_reason(self.PRESENTATION_VISUALIZER_PREPARING)
+        else:
+            self.acquire_presentation_reason(self.PRESENTATION_VISUALIZER_PREPARING)
 
     def clear_visualizer_state(self) -> None:
-        """Drop published visualizer state and release its liveness reason."""
+        """Drop published visualizer state and release its liveness reasons."""
         self._visualizer_layer.clear()
         self.release_presentation_reason(self.PRESENTATION_VISUALIZER_ACTIVE)
+        self.release_presentation_reason(self.PRESENTATION_VISUALIZER_PREPARING)
+
+    def visualizer_presentation_readiness(self):
+        """Readiness of the compositor-owned visualizer for THIS generation.
+
+        The visible fade may only begin once this reports ready: the compositor
+        owns the visualizer/card pixels for the whole animation, so starting the
+        fade before the renderer exists produces a part-way first frame.
+        """
+        return self._visualizer_layer.readiness()
+
+    def is_visualizer_presentation_ready(self) -> bool:
+        return self._visualizer_layer.is_presentation_ready()
 
     def acquire_presentation_reason(self, reason: str) -> None:
         """Keep this display presenting while ``reason`` holds.

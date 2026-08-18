@@ -1153,11 +1153,18 @@ class _SpotifyBeatEngine(QObject):
         return None
 
     def wake(self) -> None:
-        """Force wake after pause detection - restart audio capture if unhealthy."""
+        """Force wake after pause detection - restart audio capture only if stale."""
         logger.debug("[SPOTIFY_VIS] Beat engine wake triggered")
         try:
-            # Check audio capture health via audio worker
-            if hasattr(self._audio_worker, 'is_capture_healthy'):
+            # Only a capture that ran (or exceeded its first-callback allowance)
+            # and then went quiet may be restarted. A stream that was just
+            # started has no callback yet and must not be bounced by an
+            # immediate wake.
+            if hasattr(self._audio_worker, 'is_capture_stale'):
+                if self._audio_worker.is_capture_stale():
+                    logger.info("[SPOTIFY_VIS] Audio capture stale, restarting...")
+                    self._audio_worker.restart_capture()
+            elif hasattr(self._audio_worker, 'is_capture_healthy'):
                 if not self._audio_worker.is_capture_healthy():
                     logger.info("[SPOTIFY_VIS] Audio capture unhealthy, restarting...")
                     self._audio_worker.restart_capture()

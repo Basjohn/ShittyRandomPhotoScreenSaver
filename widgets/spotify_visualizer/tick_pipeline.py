@@ -896,13 +896,30 @@ def push_gpu_frame(
     last_geom = widget._last_gpu_geom
     geom_changed = last_geom is None or (current_geom is not None and current_geom != last_geom)
 
-    fade = widget._get_gpu_fade_factor(now_ts)
+    # ONE fade authority, TWO published consumers of the same progress:
+    # the authored card pixels use the progress directly, the visualizer
+    # shader applies the authored stagger to that same progress. They are
+    # resolved and published together so no layer can drift onto a second
+    # curve or a QWidget opacity side-channel.
+    scene_fade = widget._get_scene_fade_factor(now_ts)
+    bars_fade = widget._get_gpu_fade_factor(now_ts)
     # Apply mode-transition crossfade (1.0 when idle, 0→1 during switch)
     transition_fade = widget._mode_transition_fade_factor(now_ts)
-    fade *= transition_fade
+    scene_fade *= transition_fade
+    bars_fade *= transition_fade
+    fade = scene_fade
     prev_fade = widget._last_gpu_fade_sent
-    widget._last_gpu_fade_sent = fade
-    fade_changed = prev_fade < 0.0 or abs(fade - prev_fade) >= 0.01
+    prev_bars_fade = float(getattr(widget, "_last_gpu_bars_fade_sent", -1.0))
+    widget._last_gpu_fade_sent = scene_fade
+    widget._last_gpu_bars_fade_sent = bars_fade
+    # The bars curve moves faster than the scene curve inside its window, so
+    # a bars-only delta must still count as a change worth publishing.
+    fade_changed = (
+        prev_fade < 0.0
+        or abs(scene_fade - prev_fade) >= 0.01
+        or prev_bars_fade < 0.0
+        or abs(bars_fade - prev_bars_fade) >= 0.01
+    )
     need_card_update = fade_changed
 
     transitioning = widget._mode_transition_phase != 0
@@ -969,7 +986,8 @@ def push_gpu_frame(
 
     border_width_px = float(widget._border_width)
 
-    effective_fade = 0.0 if primer_problems else fade
+    effective_fade = 0.0 if primer_problems else scene_fade
+    effective_bars_fade = 0.0 if primer_problems else bars_fade
 
     used_gpu = parent.push_spotify_visualizer_frame(
         bars=presentation_bars,
@@ -978,6 +996,7 @@ def push_gpu_frame(
         fill_color=widget._bar_fill_color,
         border_color=widget._bar_border_color,
         fade=effective_fade,
+        bars_fade=effective_bars_fade,
         playing=widget._spotify_playing,
         ghosting_enabled=widget._ghosting_enabled,
         ghost_alpha=widget._ghost_alpha,

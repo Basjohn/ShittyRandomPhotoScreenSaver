@@ -136,6 +136,83 @@ class VisualizerRenderState:
         self.activation_id = activation_id
 
 
+class VisualizerPresentationReadiness:
+    """Whether this compositor generation can actually draw the visualizer.
+
+    Startup used to begin the visible fade before the single-surface renderer
+    that owns the visualizer's pixels existed: the staged reveal completed, the
+    fade animation started, and only about a second later did the visualizer GL
+    programs register and the compositor begin presenting. The first drawn frame
+    therefore sampled an animation that was already part-way through, which is
+    the flash/slam the operator saw.
+
+    This is runtime lifecycle state for one compositor QRhi generation - not a
+    timer, not a probe and not a fixed sleep. Every field is a fact the layer
+    already knows at the moment it is asked.
+    """
+
+    __slots__ = (
+        "gl_generation",
+        "gl_resources_ready",
+        "gl_failed",
+        "geometry_committed",
+        "card_visual_owned",
+        "card_texture_ready",
+    )
+
+    def __init__(
+        self,
+        *,
+        gl_generation: int = -1,
+        gl_resources_ready: bool = False,
+        gl_failed: bool = False,
+        geometry_committed: bool = False,
+        card_visual_owned: bool = False,
+        card_texture_ready: bool = False,
+    ) -> None:
+        self.gl_generation = int(gl_generation)
+        self.gl_resources_ready = bool(gl_resources_ready)
+        self.gl_failed = bool(gl_failed)
+        self.geometry_committed = bool(geometry_committed)
+        self.card_visual_owned = bool(card_visual_owned)
+        self.card_texture_ready = bool(card_texture_ready)
+
+    @property
+    def is_ready(self) -> bool:
+        """True only when every pixel owner needed for fade 0 -> 1 exists."""
+        return (
+            self.gl_generation > 0
+            and self.gl_resources_ready
+            and not self.gl_failed
+            and self.geometry_committed
+            and self.card_visual_owned
+            and self.card_texture_ready
+        )
+
+    def missing(self) -> tuple[str, ...]:
+        """The unmet requirements, for one bounded readiness log."""
+        gaps: list[str] = []
+        if self.gl_generation <= 0:
+            gaps.append("gl_generation")
+        if not self.gl_resources_ready:
+            gaps.append("gl_resources")
+        if self.gl_failed:
+            gaps.append("gl_failed")
+        if not self.geometry_committed:
+            gaps.append("geometry")
+        if not self.card_visual_owned:
+            gaps.append("card_visual")
+        if not self.card_texture_ready:
+            gaps.append("card_texture")
+        return tuple(gaps)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return (
+            "VisualizerPresentationReadiness(ready=%s generation=%d missing=%s)"
+            % (self.is_ready, self.gl_generation, ",".join(self.missing()) or "none")
+        )
+
+
 class CompositorVisualizerLayer:
     """Draws the visualizer inside the display compositor's render pass.
 
@@ -166,6 +243,15 @@ class CompositorVisualizerLayer:
         self._resource_owner: Any = None
         self._failures = 0
         self._last_failure_signature: Optional[str] = None
+        # Authoritative presentation geometry committed by the last prepare or
+        # render pass, with the compositor GL generation it was committed under.
+        # Readiness is per generation, so a QRhi generation replacement cannot
+        # leave a stale "ready" answer behind.
+        self._committed_geometry: Optional[PresentationGeometry] = None
+        self._committed_generation: int = -1
+        # One readiness notification per preparation, so the reveal gate is
+        # event-driven instead of polled.
+        self._prepared_notified = False
 
     # -- publication ------------------------------------------------------
 
@@ -189,6 +275,10 @@ class CompositorVisualizerLayer:
         """
         self._release_card_visual()
         self._state = None
+        # Readiness must not survive the state it described.
+        self._committed_geometry = None
+        self._committed_generation = -1
+        self._prepared_notified = False
 
     def _release_card_visual(self) -> None:
         card = self._card_widget()
@@ -237,6 +327,10 @@ class CompositorVisualizerLayer:
             return False
         state = self._state
         if not self.has_visible_state():
+            # Not visible yet: this is the readiness/prewarm pass. It runs on
+            # the same compositor render strategy inside the same external GL
+            # section - no second timer, no second surface - and draws nothing.
+            self.prepare(surface_height_px, dpr)
             return False
         owner = state.owner
 
@@ -247,6 +341,7 @@ class CompositorVisualizerLayer:
         # ONE authoritative geometry for card visual, viewport, scissor, shader
         # resolution, fragment origin, stencil mask and border.
         geometry = PresentationGeometry(state.card_rect, dpr, surface_height_px)
+        self._commit_geometry(geometry, borrowed)
         x_px, y_px = geometry.framebuffer_origin_px
         w_px, h_px = geometry.framebuffer_size_px
 
@@ -257,12 +352,17 @@ class CompositorVisualizerLayer:
 
         try:
             from widgets.spotify_visualizer.overlay_frame_shell import (
+                resolve_bars_fade,
                 resolve_frame_fade,
             )
 
+            # ONE fade authority. ``fade`` is the authoritative scene fade
+            # progress and owns the authored card pixels; ``bars_fade`` is the
+            # authored shader stagger of that same progress, published with it.
             fade = resolve_frame_fade(owner, logger)
             if fade is None:
                 return False
+            bars_fade = resolve_bars_fade(owner, fade)
 
             # ONE card-region GL state boundary, established BEFORE both the
             # card texture and the visualizer shader.
@@ -284,7 +384,7 @@ class CompositorVisualizerLayer:
             try:
                 # Card beneath, bars above; no viewport restore between them.
                 self._render_card_visual(geometry, fade)
-                owner.paint_layer(geometry.local_rect(), fade)
+                owner.paint_layer(geometry.local_rect(), bars_fade)
             finally:
                 self._restore_gl_state()
             self._last_failure_signature = None
@@ -360,18 +460,34 @@ class CompositorVisualizerLayer:
         QOpenGLPaintDevice/QPainter on every presented frame was pure
         steady-state work for an image that had not changed.
         """
+        if not self._ensure_card_visual(geometry):
+            return
+        try:
+            self._card_texture.draw(fade)
+        except Exception:
+            self._record_failure("card_visual_exception")
+
+    def _ensure_card_visual(self, geometry: "PresentationGeometry") -> bool:
+        """Claim card-visual ownership and upload its texture; draw nothing.
+
+        Split out of the draw path so the identical work can run during the
+        fade-zero readiness pass. Ownership must be claimed BEFORE the visible
+        fade leaves zero, otherwise the card QWidget paints itself at full
+        opacity until the compositor takes over - a mid-animation owner handoff.
+
+        Returns True when there is a card texture ready to draw.
+        """
         card = self._card_widget()
         if card is None:
-            return
+            return False
         try:
             # Claim the visual exactly once; the card keeps everything else.
             claim = getattr(card, "set_compositor_owns_card_visual", None)
             if callable(claim):
                 claim(True)
-            if not bool(getattr(card, "_show_background", False)):
-                return  # No background: nothing to occlude, nothing to draw.
-            if not card.uses_painted_frame_shadow():
-                return
+            if not self._card_texture_required(card):
+                # No background: nothing to occlude, nothing to draw.
+                return False
 
             revision = self._card_revision(card, geometry)
             if self._card_texture.revision != revision:
@@ -388,13 +504,168 @@ class CompositorVisualizerLayer:
                     dpr=geometry.dpr,
                 )
                 if pixmap is None or pixmap.isNull():
-                    return
+                    return False
                 if not self._card_texture.ensure_uploaded(pixmap, revision):
-                    return
-
-            self._card_texture.draw(fade)
+                    return False
+            return True
         except Exception:
             self._record_failure("card_visual_exception")
+            return False
+
+    @staticmethod
+    def _card_texture_required(card) -> bool:
+        """Whether this card has authored pixels that need a GL texture.
+
+        A card with no background frame legitimately has nothing to upload, so
+        readiness must not wait for a texture that will never exist.
+        """
+        try:
+            if not bool(getattr(card, "_show_background", False)):
+                return False
+            return bool(card.uses_painted_frame_shadow())
+        except Exception:
+            return False
+
+    # -- readiness / preparation -----------------------------------------
+
+    def _commit_geometry(
+        self, geometry: "PresentationGeometry", borrowed
+    ) -> None:
+        self._committed_geometry = geometry
+        try:
+            self._committed_generation = int(getattr(borrowed, "generation", -1))
+        except Exception:
+            self._committed_generation = -1
+
+    def _current_gl_generation(self) -> int:
+        borrowed = getattr(self._compositor, "_rhi_gl", None)
+        try:
+            return int(getattr(borrowed, "generation", -1))
+        except Exception:
+            return -1
+
+    def prepare(self, surface_height_px: int, dpr: float) -> bool:
+        """Establish everything needed to draw the visualizer, at fade zero.
+
+        Runs inside the compositor's external GL section exactly like
+        ``render()``, so the borrowed QRhi OpenGL context is current and no raw
+        GL is touched from an arbitrary widget callback. It compiles the mode
+        programs, creates the shared VAO/VBO/mask, commits the authoritative
+        presentation geometry, claims card-visual ownership and uploads the card
+        texture - and draws nothing.
+
+        Returns True once this compositor generation is ready to present.
+        """
+        if gl is None:
+            return False
+        state = self._state
+        if state is None or state.owner is None:
+            return False
+        rect = state.card_rect
+        if rect.width() <= 0 or rect.height() <= 0:
+            return False
+
+        borrowed = getattr(self._compositor, "_rhi_gl", None)
+        if not self.ensure_initialized(borrowed.context if borrowed else None):
+            return False
+
+        geometry = PresentationGeometry(rect, dpr, surface_height_px)
+        self._commit_geometry(geometry, borrowed)
+        try:
+            self._ensure_card_visual(geometry)
+        except Exception:
+            self._record_failure("prepare_card_exception")
+            return False
+
+        ready = self.readiness().is_ready
+        if ready and not self._prepared_notified:
+            self._prepared_notified = True
+            self._notify_prepared(state.owner)
+        return ready
+
+    def _notify_prepared(self, owner: Any) -> None:
+        """Tell the visualizer, once, that its pixels can now be drawn.
+
+        Deferred onto the GUI event loop rather than called from inside the
+        render pass: the reveal path starts an animation and touches widget
+        state, which must not run re-entrantly inside a paint. This is one
+        queued callback per preparation, not a timer.
+        """
+        notify = getattr(owner, "notify_presentation_ready", None)
+        if not callable(notify):
+            return
+        try:
+            from core.threading.manager import ThreadManager
+
+            ThreadManager.single_shot(0, notify)
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS][LAYER] Failed to dispatch readiness notification",
+                exc_info=True,
+            )
+
+    def readiness(self) -> VisualizerPresentationReadiness:
+        """Report presentation readiness for the CURRENT compositor generation."""
+        generation = self._current_gl_generation()
+        state = self._state
+        owner = state.owner if state is not None else None
+        if owner is None:
+            owner = self._resource_owner
+
+        gl_ready = False
+        gl_failed = False
+        if owner is not None:
+            probe = getattr(owner, "layer_gl_resources_ready", None)
+            if callable(probe):
+                try:
+                    gl_ready = bool(probe())
+                except Exception:
+                    gl_ready = False
+            failed = getattr(owner, "layer_gl_failed", None)
+            if callable(failed):
+                try:
+                    gl_failed = bool(failed())
+                except Exception:
+                    gl_failed = False
+
+        geometry_committed = (
+            self._committed_geometry is not None
+            and generation > 0
+            and self._committed_generation == generation
+        )
+
+        card = self._card_widget()
+        card_visual_owned = False
+        card_texture_ready = False
+        if card is not None:
+            try:
+                card_visual_owned = bool(
+                    getattr(card, "_compositor_owns_card_visual", False)
+                )
+            except Exception:
+                card_visual_owned = False
+            if not self._card_texture_required(card):
+                # Nothing authored to upload for this card configuration.
+                card_texture_ready = True
+            elif geometry_committed and self._committed_geometry is not None:
+                try:
+                    card_texture_ready = self._card_texture.revision == self._card_revision(
+                        card, self._committed_geometry
+                    )
+                except Exception:
+                    card_texture_ready = False
+
+        return VisualizerPresentationReadiness(
+            gl_generation=generation,
+            gl_resources_ready=gl_ready,
+            gl_failed=gl_failed,
+            geometry_committed=geometry_committed,
+            card_visual_owned=card_visual_owned,
+            card_texture_ready=card_texture_ready,
+        )
+
+    def is_presentation_ready(self) -> bool:
+        return self.readiness().is_ready
 
     # -- lifecycle --------------------------------------------------------
 
@@ -431,6 +702,9 @@ class CompositorVisualizerLayer:
         """
         self._release_card_visual()
         self._state = None
+        self._committed_geometry = None
+        self._committed_generation = -1
+        self._prepared_notified = False
 
         errors: list[str] = []
         try:

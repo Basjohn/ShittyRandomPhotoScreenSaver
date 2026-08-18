@@ -126,6 +126,59 @@ def prewarm_parent_overlay(widget: Any) -> None:
         logger.debug("[SPOTIFY_VIS] Failed to prewarm parent GL overlay", exc_info=True)
 
 
+def _owning_compositor(widget: Any):
+    """Return the display compositor that owns this visualizer's pixels."""
+    try:
+        parent = widget.parent()
+    except Exception:
+        return None
+    return getattr(parent, "_gl_compositor", None) if parent is not None else None
+
+
+def is_renderer_presentation_ready(widget: Any) -> bool:
+    """Whether the single-surface renderer can actually draw the visualizer.
+
+    The visible fade may not begin before the compositor owns the visualizer and
+    card pixels for the current QRhi generation. A compositor without the
+    readiness seam (harness/test double) is treated as ready so this gate can
+    never deadlock a runtime that has no such owner.
+    """
+    compositor = _owning_compositor(widget)
+    if compositor is None:
+        return True
+    probe = getattr(compositor, "is_visualizer_presentation_ready", None)
+    if not callable(probe):
+        return True
+    try:
+        return bool(probe())
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Renderer readiness probe failed", exc_info=True)
+        return True
+
+
+def log_renderer_readiness_gap(widget: Any) -> None:
+    """One bounded report of what renderer readiness is still waiting for."""
+    compositor = _owning_compositor(widget)
+    probe = getattr(compositor, "visualizer_presentation_readiness", None)
+    if not callable(probe):
+        return
+    try:
+        readiness = probe()
+        missing = ",".join(readiness.missing()) or "none"
+    except Exception:
+        return
+    if getattr(widget, "_startup_renderer_readiness_gap", None) == missing:
+        return
+    try:
+        widget._startup_renderer_readiness_gap = missing
+    except Exception:
+        pass
+    logger.debug(
+        "[SPOTIFY_VIS][STARTUP] Reveal waiting on renderer readiness missing=%s",
+        missing,
+    )
+
+
 def finish_staged_startup_reveal(
     widget: Any,
     *,
@@ -144,6 +197,12 @@ def finish_staged_startup_reveal(
     ):
         return
     if widget._waiting_for_fresh_frame:
+        return
+    if not is_renderer_presentation_ready(widget):
+        # Readiness drives reveal. Nothing is scheduled here: the compositor
+        # notifies once its fade-zero preparation completes, which re-enters
+        # this function with reason="renderer_ready".
+        log_renderer_readiness_gap(widget)
         return
     try:
         not_before_ts = float(getattr(widget, "_startup_reveal_not_before_ts", 0.0) or 0.0)
@@ -237,6 +296,20 @@ def arm_staged_startup(widget: Any, *, reason: str) -> None:
         widget.hide()
     except Exception as e:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+
+    # The scene fade must be genuinely at zero before preparation begins, so a
+    # re-arm can never inherit a part-way (or completed) fade from the previous
+    # staging attempt and reveal mid-curve.
+    try:
+        from widgets.spotify_visualizer.presentation_fade import ensure_presentation_fade
+
+        ensure_presentation_fade(widget).reset()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to reset presentation fade", exc_info=True)
+    try:
+        widget._startup_renderer_readiness_gap = None
+    except Exception:
+        pass
 
     ensure_spotify_secondary_stage_registration(widget)
     cancel_pending_startup_reveal(widget)

@@ -644,6 +644,28 @@ class SpotifyVisualizerAudioWorker(QObject):
         except Exception:
             return False
 
+    def is_capture_starting(self) -> bool:
+        """True while a started stream is still waiting for its first callback."""
+        if self._backend is None:
+            return False
+        try:
+            return bool(self._backend.is_capture_starting())
+        except Exception:
+            return False
+
+    def is_capture_stale(self) -> bool:
+        """True only for a capture that ran (or should have) and then went quiet.
+
+        This is the only condition that authorizes a wake-driven restart; a
+        just-started capture is deliberately not stale.
+        """
+        if self._backend is None:
+            return False
+        try:
+            return bool(self._backend.is_capture_stale())
+        except Exception:
+            return False
+
     def restart_capture(self) -> bool:
         """Restart the audio capture stream."""
         if self._backend is None:

@@ -134,24 +134,25 @@ def test_persist_vis_mode_updates_only_visualizer_mode_key():
 
 
 @pytest.mark.qt
-def test_visualizer_mode_transition_fade_forwards_duration_override(qt_app, monkeypatch):
+def test_visualizer_mode_transition_fade_forwards_duration_override(qt_app):
+    """The duration override must reach the ONE compositor fade authority.
+
+    The visualizer card and shader are drawn by the compositor, so the fade
+    may not be delegated back to a QWidget opacity effect.
+    """
     widget = SpotifyVisualizerWidget(parent=None, bar_count=10)
     widget._shadow_config = {"enabled": False}
     widget._show_background = True
 
-    calls: list[int | None] = []
-
-    def _fake_start_fade_in(target, config, *, duration_ms=None, has_background_frame):
-        calls.append(duration_ms)
-
-    monkeypatch.setattr(
-        "widgets.shadow_utils.ShadowFadeProfile.start_fade_in",
-        _fake_start_fade_in,
-    )
-
     mode_transition.start_widget_fade_in(widget, duration_ms=2222)
 
-    assert calls == [2222]
+    fade = widget.presentation_fade()
+    assert fade.is_running(), "the fade authority must own the running animation"
+    assert fade._anim.duration() == 2222
+    assert fade.progress < 1.0, "a started fade must not begin at full opacity"
+    assert getattr(widget, "_shadowfade_anim", None) is None, (
+        "the QWidget opacity effect must not be a competing fade owner"
+    )
     widget.deleteLater()
 
 
