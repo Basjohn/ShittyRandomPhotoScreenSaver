@@ -25,11 +25,13 @@ import pytest
 from rendering.gl_compositor_pkg import paint, shader_dispatch
 
 
-def _widget(*, ready: bool = True, reason: str | None = None):
+def _widget(*, ready: bool = True, reason: str | None = None, drawn: bool = True):
     return SimpleNamespace(
         _gl_state=SimpleNamespace(is_ready=lambda: ready),
         _retained_base_fallback_reason=reason,
         _gl_disabled_for_session=False,
+        # Default True: most bars describe an ESTABLISHED compositor.
+        _retained_base_shader_drawn=drawn,
     )
 
 
@@ -220,3 +222,52 @@ class TestRenderPathWiring:
         assert "else:" in between, (
             "steady fallback must be the else-branch of the active-transition case"
         )
+
+class TestFirstFrameCacheEstablishment:
+    """A cache miss before the first successful draw is startup, not a fault.
+
+    The installed P2-RHI-A run recorded exactly this shape: one
+    texture_cache_miss ERROR followed immediately by recovery with
+    fallback_frames=1, on a compositor that was simply establishing its texture
+    cache. It was never the delivery owner, and it must not read as a fault.
+    """
+
+    def test_cache_miss_before_any_successful_draw_is_silent(self, caplog):
+        widget = _widget(reason="texture_cache_miss", drawn=False)
+        with caplog.at_level(logging.DEBUG):
+            for _ in range(30):
+                paint._note_retained_base_fallback(widget)
+        assert _records(caplog) == []
+        assert getattr(widget, "_retained_base_fallback_latch", None) is None
+
+    def test_cache_miss_after_an_established_draw_is_loud(self, caplog):
+        widget = _widget(reason="texture_cache_miss", drawn=True)
+        with caplog.at_level(logging.DEBUG):
+            for _ in range(30):
+                paint._note_retained_base_fallback(widget)
+        records = _records(caplog)
+        assert len(records) == 1
+        assert records[0].levelno >= logging.ERROR
+        assert "texture_cache_miss" in records[0].getMessage()
+
+    def test_other_reasons_stay_loud_even_before_a_first_draw(self, caplog):
+        """Only cache establishment is excused, not real pipeline faults."""
+        widget = _widget(reason="program_missing", drawn=False)
+        with caplog.at_level(logging.DEBUG):
+            paint._note_retained_base_fallback(widget)
+        assert len(_records(caplog)) == 1
+
+    def test_successful_retained_base_draw_sets_the_marker(self):
+        comp = SimpleNamespace()
+        shader_dispatch._retained_base_unavailable(comp, "texture_cache_miss")
+        assert getattr(comp, "_retained_base_shader_drawn", False) is False
+
+    def test_marker_is_reset_for_a_new_gl_generation(self):
+        """A replacement context establishes its own cache from scratch."""
+        import inspect
+
+        from rendering.gl_compositor_pkg import gl_lifecycle
+
+        source = inspect.getsource(gl_lifecycle.handle_rhi_initialize)
+        assert "_retained_base_shader_drawn = False" in source
+

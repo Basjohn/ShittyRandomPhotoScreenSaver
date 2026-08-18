@@ -309,6 +309,9 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
 
         # Loud-but-bounded shader fallback diagnostics. These are intentionally
         # compositor-local so repeated fallback frames do not flood the logs.
+        # True once a retained-base shader frame has succeeded in the current
+        # GL generation; gates startup-vs-regression fallback reporting.
+        self._retained_base_shader_drawn: bool = False
         self._last_shader_path_failure: str = ""
         self._last_shader_fallback_signature: Optional[tuple] = None
         self._shader_fallback_suppressed_count: int = 0

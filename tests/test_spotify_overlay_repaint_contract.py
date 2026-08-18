@@ -42,7 +42,7 @@ def _references_attribute(method: ast.FunctionDef, attr_name: str) -> bool:
     )
 
 
-def test_spotify_overlay_render_does_not_self_schedule_repaint():
+def test_spotify_overlay_paintgl_does_not_self_schedule_repaint():
     source_path = Path(__file__).resolve().parents[1] / "widgets" / "spotify_bars_gl_overlay.py"
     tree = ast.parse(source_path.read_text(encoding="utf-8"))
     overlay_class = next(
@@ -51,10 +51,7 @@ def test_spotify_overlay_render_does_not_self_schedule_repaint():
         if isinstance(node, ast.ClassDef) and node.name == "SpotifyBarsGLOverlay"
     )
 
-    # paintGL became gl_render when the surface migrated to QRhiWidget; the
-    # contract it guards is unchanged: the render callback is not a repaint
-    # scheduler, set_state() remains the sole repaint authority.
-    paint_gl = _method_tree(overlay_class, "gl_render")
+    paint_gl = _method_tree(overlay_class, "paintGL")
     set_state = _method_tree(overlay_class, "set_state")
     request_frame_update = _method_tree(overlay_class, "_request_frame_update")
 

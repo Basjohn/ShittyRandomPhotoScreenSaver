@@ -52,9 +52,6 @@ logger = get_logger(__name__)
 # The compositor is opaque: the QRhi pass clears to opaque black exactly like
 # the previous QOpenGLWidget surface did before its first draw.
 OPAQUE_CLEAR_COLOR = QColor(0, 0, 0, 255)
-# Overlay surfaces composited above a QWidget card must clear fully
-# transparent, or the pass would paint an opaque rectangle over the card.
-TRANSPARENT_CLEAR_COLOR = QColor(0, 0, 0, 0)
 DEFAULT_DEPTH_STENCIL_CLEAR = QRhiDepthStencilClearValue(1.0, 0)
 
 

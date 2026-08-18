@@ -871,6 +871,11 @@ def handle_rhi_initialize(widget, generation_changed: bool) -> None:
             widget._rhi_gl.generation,
         )
 
+    # The retained-base success marker is per GL generation: a replacement
+    # context has its own texture cache to establish, so an early miss there is
+    # startup behaviour again rather than a regression.
+    widget._retained_base_shader_drawn = False
+
     # Transition to INITIALIZING state
     if not widget._gl_state.transition(GLContextState.INITIALIZING):
         logger.warning("[GL COMPOSITOR] Failed to transition to INITIALIZING state")
