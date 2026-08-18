@@ -49,25 +49,47 @@ def activate_visualization_mode(
     mode: Any,
     *,
     reset_runtime: bool = True,
-) -> None:
-    """Apply a target mode using the canonical direct-switch ordering contract."""
+) -> bool:
+    """Apply a target mode using the canonical direct-switch ordering contract.
+
+    The resolved activation payload is the authority that commits ``_vis_mode``.
+    Assigning it up front made ``apply_resolved_activation_payload()`` compute
+    ``mode_changed == False`` for a genuine cross-mode switch, so the target
+    reset ran here instead - outside the already-committed activation
+    transaction - and the installed Bubble -> Spectrum switch advanced the real
+    engine twice: generation 2 at ``mode_switch:activation_payload`` and
+    generation 3 at ``smoothing_reset``.
+    """
     if mode == widget._vis_mode:
-        return
-    widget._vis_mode = mode
+        return False
+
+    # Stamped BEFORE the apply, because the activation transaction now runs
+    # prepare_engine_for_mode_reset() itself and that helper consumes the stamp
+    # to know the transaction already owns configuration.
+    widget._mode_activation_committed_for = mode
     try:
         widget._apply_full_runtime_config_for_mode(mode, reason="mode_switch")
-        # Stamp this mode as transaction-committed so the later engine-reset
-        # phase does not repeat the same configuration work.
-        widget._mode_activation_committed_for = mode
     except Exception:
         widget._mode_activation_committed_for = None
         logger.debug("[SPOTIFY_VIS] Failed to apply runtime config on mode switch", exc_info=True)
+
+    # The activation path commits the mode when it can resolve a payload. When
+    # it cannot - no settings manager, resolution failure - the switch must
+    # still happen, and this function owns preparation instead.
+    activation_committed = widget._vis_mode == mode
+    if not activation_committed:
+        widget._vis_mode = mode
+        widget._mode_activation_committed_for = None
+
     widget._last_gpu_geom = None
     widget._last_gpu_fade_sent = -1.0
     widget._has_pushed_first_frame = False
     widget._waiting_for_fresh_engine_frame = True
     widget._waiting_for_fresh_frame = True
-    if reset_runtime:
+    if reset_runtime and not activation_committed:
+        # Only the fallback shape reaches here. Repeating this after a
+        # committed activation is the duplicate engine reset, not merely a
+        # duplicate counter.
         try:
             reset_mode_owned_runtime_state(widget, reason="mode_switch")
             widget._clear_gl_overlay()
@@ -76,6 +98,9 @@ def activate_visualization_mode(
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to prepare engine on mode switch", exc_info=True)
     logger.debug("[SPOTIFY_VIS] Visualization mode changed to %s", mode.name)
+    # True when ONE activation transaction already performed the target
+    # engine preparation, so no caller may repeat it.
+    return activation_committed
 
 
 def resolve_shared_widget_fade_in_duration_ms() -> int:
@@ -130,10 +155,11 @@ def switch_to_mode(widget: Any, mode_id: str) -> bool:
     return _begin_mode_transition_request(widget, target_enum, request_kind="switch")
 
 
-def _activate_pending_mode_after_fade_out(widget: Any, *, resume_ts: float) -> None:
+def _activate_pending_mode_after_fade_out(widget: Any, *, resume_ts: float) -> bool:
+    """Activate the pending mode; report whether it owned the engine reset."""
     pending = getattr(widget, "_mode_transition_pending", None)
     if pending is None:
-        return
+        return False
     try:
         setattr(widget, "_mode_transition_resume_ts", resume_ts)
     except Exception:
@@ -147,7 +173,9 @@ def _activate_pending_mode_after_fade_out(widget: Any, *, resume_ts: float) -> N
     # Applying in both shapes would be the duplicate transaction that produced
     # triple configuration work and duplicate engine-generation churn.
     mode_changed = pending != widget._vis_mode
-    activate_visualization_mode(widget, pending, reset_runtime=False)
+    transaction_owned_reset = bool(
+        activate_visualization_mode(widget, pending, reset_runtime=False)
+    )
     widget._mode_transition_pending = None
 
     if not mode_changed:
@@ -168,6 +196,8 @@ def _activate_pending_mode_after_fade_out(widget: Any, *, resume_ts: float) -> N
             request_overlay_reset(mode=widget._vis_mode_str, reason="mode_fade_out_complete")
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to request target overlay reset at fade completion", exc_info=True)
+
+    return transaction_owned_reset
 
 
 def mode_transition_fade_factor(widget: Any, now_ts: float) -> float:
@@ -590,7 +620,9 @@ def on_mode_fade_out_complete(widget: Any) -> None:
     ):
         return
     widget._clear_gl_overlay()
-    _activate_pending_mode_after_fade_out(widget, resume_ts=time.time())
+    transaction_owned_reset = _activate_pending_mode_after_fade_out(
+        widget, resume_ts=time.time()
+    )
     widget._mode_transition_phase = 3
     widget._mode_teardown_state = 'waiting_bars'
     widget._mode_teardown_block_until_ready = True
@@ -607,7 +639,14 @@ def on_mode_fade_out_complete(widget: Any) -> None:
         widget._clear_runtime_bar_state()
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to clear runtime bars before mode activation", exc_info=True)
-    prepare_engine_for_mode_reset(widget)
+    if not transaction_owned_reset:
+        # A same-mode preset transition still needs this: it is the reset
+        # that discards engine bleed from the previous preset, and its
+        # activation payload deliberately does not run the mode-change
+        # branch. A cross-mode switch already reset inside its single
+        # activation transaction, and repeating it here was the second
+        # engine generation the installed run recorded.
+        prepare_engine_for_mode_reset(widget)
 
 
 def prepare_engine_for_mode_reset(widget: Any) -> None:
