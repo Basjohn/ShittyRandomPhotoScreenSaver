@@ -481,6 +481,33 @@ Consequences:
 Do not disable or resize the HUD in this lane: diagnostic cost must be measured before
 attribution is weakened.
 
+#### First `--diag-p4-stages` runtime was INVALID — probe never armed
+
+The stage probe produced **zero** `[PERF][P4_STAGES]` records. The ring was constructed under the
+CLI gate but `initialize()` was never called at the compositor-context seam, so it was never
+supported. The ResourceManager snapshot confirms it exactly: only the four existing
+`GL_TIME_ELAPSED` handles were present, where a capacity-4 x five-marker ring would add twenty.
+
+**Record no core/HUD/Qt causal conclusion from that run.** Integration defects found and fixed:
+missing `initialize()` call; invented `register_gl_resource`/`release_gl_resource` API instead of
+`register_gl_handle`/`release_tracking`; unsafe `glGenQueries(1)[0]` normalization; Qt observer
+re-attaching a consumed sampled paint to later unsampled compositions; prep/core-draw boundary
+false for transitions whose prep runs inside their paint helper; `render_path` derived from the
+stale `_use_shaders` field; and stage cleanup nested inside the timer-query branch.
+
+Ordinary-runtime observations from that run remain valid and are preserved:
+
+```text
+27 gaps >33 ms, 21 >50 ms; gap p50 ~57.19 ms, max ~71.74 ms
+gap-frame paint p50 ~1.46 ms, max ~14.26 ms
+request_age p50 ~42.76 ms; corr(gap, request_age) ~+0.807; corr(gap, paint) ~-0.09
+391 causal GPU N->N+1 matched, 0 unmatched; 9 sampled >50 ms successors
+  seven with predecessor outer-GPU ~35.47-50.13 ms
+  two with ordinary predecessor GPU ~0.09 / 0.15 ms
+```
+
+The two-class result stands: a large-GPU severe class and an ordinary-GPU severe residual class.
+
 #### Next gate: `--diag-p4-stages`
 
 One bounded CLI-only diagnostic partitioning the entire remaining common path in a single run,

@@ -233,16 +233,27 @@ class QtCompositionObserver:
         )
 
     def on_about_to_compose(self, now_ts: float) -> None:
+        """Consume the newest UNCONSUMED sampled paint exactly once.
+
+        `_paints` holds only unconsumed eligible sampled paint completions.
+        Stage paint records exist solely for sampled frames, so after one is
+        composed and swapped the many subsequent unsampled Qt compositions must
+        NOT re-attach to it - doing so manufactures enormous
+        paint_end_to_compose/swap ages out of an old identity.
+        """
         if self._active is not None:
             self.compose_replaced += 1
-        if not self._paints:
-            self.compose_without_paint += 1
             self._active = None
+        if not self._paints:
+            # No eligible sampled paint: record the composition, associate nothing.
+            self.compose_without_paint += 1
             return
-        paint = self._paints[-1]
-        skipped = self._pending_paints_since_compose - 1
-        if skipped > 0:
-            self.paints_without_compose += skipped
+        # Newest eligible paint is consumed; older uncomposed sampled paints are
+        # counted and discarded rather than matched to this composition.
+        paint = self._paints.pop()
+        if self._paints:
+            self.paints_without_compose += len(self._paints)
+            self._paints.clear()
         self._pending_paints_since_compose = 0
         self._active = {"paint": paint, "compose_ts": float(now_ts)}
 
@@ -361,7 +372,8 @@ def associate_stages(stage_packets, paint_samples, composition_records=()):
             ):
                 values[key] = compose[key]
 
-        per_label = buckets.setdefault(str(packet.transition), {})
+        bucket_key = f"{packet.transition}|{getattr(packet, 'render_path', 'unknown')}"
+        per_label = buckets.setdefault(bucket_key, {})
         per_class = per_label.setdefault(classification, {})
         for field in _STAGE_FIELDS:
             if field in values:
@@ -404,12 +416,14 @@ def format_stage_report_lines(
     lines: list[tuple[str, tuple]] = []
     matched = report.get("matched", {})
     unmatched = report.get("unmatched", {})
-    for label, per_class in sorted(report.get("by_label", {}).items()):
+    for bucket_key, per_class in sorted(report.get("by_label", {}).items()):
+        label, _, render_path = bucket_key.partition("|")
         for classification, fields in sorted(per_class.items()):
             parts = []
             args: list = [
                 screen if screen is not None else "<unknown>",
                 label,
+                render_path or "unknown",
                 report.get("frame_delta", 1),
                 classification,
             ]
@@ -450,7 +464,7 @@ def format_stage_report_lines(
                 ]
             )
             message = (
-                "[PERF][P4_STAGES] screen=%s transition=%s frame_delta=+%d successor=%s "
+                "[PERF][P4_STAGES] screen=%s transition=%s render_path=%s frame_delta=+%d successor=%s "
                 + " ".join(parts)
             )
             lines.append((message, tuple(args)))

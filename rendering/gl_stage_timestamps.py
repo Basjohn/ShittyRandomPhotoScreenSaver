@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from core.logging.logger import get_logger
+from rendering.gl_timer_queries import _query_ids
 
 logger = get_logger(__name__)
 
@@ -58,6 +59,9 @@ class StagePacket:
     transition: str
     render_path: str
     query_ids: dict[str, int] = field(default_factory=dict)
+    # Markers actually issued. A packet that falls back before later markers
+    # must not wait on queries that were never submitted.
+    issued: set = field(default_factory=set)
     results_ns: dict[str, int] = field(default_factory=dict)
     cpu_ms: dict[str, float] = field(default_factory=dict)
     hud: dict[str, Any] = field(default_factory=dict)
@@ -80,8 +84,16 @@ class StagePacket:
 class GLStageTimestampRing:
     """Fixed-size ring of GL_TIMESTAMP queries for stage attribution."""
 
-    def __init__(self, *, owner: str, generation: int, capacity: int = 4) -> None:
+    def __init__(
+        self,
+        *,
+        owner: str,
+        generation: int,
+        capacity: int = 4,
+        resource_group: str = "gl_compositor_stage_timestamp_queries",
+    ) -> None:
         self._owner = str(owner)
+        self._resource_group = str(resource_group)
         self._generation = int(generation)
         self._capacity = max(1, int(capacity))
         self._handles: list[int] = []
@@ -126,35 +138,57 @@ class GLStageTimestampRing:
         if not hasattr(gl_api, "glQueryCounter"):
             self._support_reason = "no_query_counter"
             return False
-        # One query per marker per in-flight packet.
+        # One query per marker per in-flight packet, allocated in a single
+        # call and normalized through the established contract - PyOpenGL may
+        # return a scalar, a sequence or a numpy-like object.
         total = self._capacity * len(STAGE_MARKERS)
         try:
-            for _ in range(total):
-                handle = int(gl_api.glGenQueries(1)[0])
-                self._handles.append(handle)
-                self._resource_ids.append(self._register(handle))
+            handles = [h for h in _query_ids(gl_api.glGenQueries(total)) if int(h) > 0]
         except Exception as exc:
             self._support_reason = f"gen_error:{type(exc).__name__}"
             return False
+        if len(handles) != total:
+            self._support_reason = "allocation_incomplete"
+            return False
+        for handle in handles:
+            self._handles.append(int(handle))
+            self._resource_ids.append(self._register(int(handle)))
         for slot in range(self._capacity):
             self._free.append(slot)
         self._supported = True
         self._support_reason = "supported"
         return True
 
+    def _resolve_resource_manager(self):
+        """Same lazy app-shared resolution policy as GLTimerQueryRing."""
+        if self._resource_manager is not None:
+            return self._resource_manager
+        try:
+            from core.resources.manager import ResourceManager
+
+            self._resource_manager = ResourceManager.instance()
+        except Exception:
+            self._resource_manager = None
+        return self._resource_manager
+
     def _register(self, handle: int) -> str | None:
-        manager = self._resource_manager
-        if manager is None or not hasattr(manager, "register_gl_resource"):
+        manager = self._resolve_resource_manager()
+        if manager is None or not hasattr(manager, "register_gl_handle"):
             return None
         try:
-            return manager.register_gl_resource(
+            return manager.register_gl_handle(
                 handle,
-                kind="gl_timestamp_query",
+                "query",
+                description=f"GL timestamp stage query {handle}",
+                group=self._resource_group,
                 owner=self._owner,
                 generation=self._generation,
-                bytes_size=0,
+                dimensions=None,
+                format="GL_TIMESTAMP",
+                tracked_bytes=None,
             )
         except Exception:
+            logger.debug("[GL STAGE] resource registration failed", exc_info=True)
             return None
 
     def _slot_queries(self, slot: int) -> dict[str, int]:
@@ -198,6 +232,7 @@ class GLStageTimestampRing:
             return
         try:
             gl_api.glQueryCounter(packet.query_ids[marker], gl_api.GL_TIMESTAMP)
+            packet.issued.add(marker)
         except Exception as exc:
             logger.debug("[GL STAGE] glQueryCounter failed: %s", exc)
 
@@ -234,8 +269,21 @@ class GLStageTimestampRing:
                 still_pending.append(packet)
         self._pending = still_pending
 
+    def abandon_frame(self) -> None:
+        """Release the active packet's slot without waiting for markers.
+
+        Used when a sampled frame returns early - the QPainter fallback, or a
+        shader path that bailed - so a never-issued query cannot wedge the ring.
+        """
+        packet = self._active
+        self._active = None
+        if packet is not None:
+            self._release_slot(packet)
+
     def _try_collect(self, gl_api: Any, packet: StagePacket) -> bool:
-        for marker, handle in packet.query_ids.items():
+        # Only markers actually submitted can ever resolve.
+        for marker in list(packet.issued):
+            handle = packet.query_ids[marker]
             if marker in packet.results_ns:
                 continue
             try:
@@ -299,11 +347,11 @@ class GLStageTimestampRing:
             )
 
     def _release_tracking(self, resource_id: str | None) -> None:
-        manager = self._resource_manager
+        manager = self._resolve_resource_manager()
         if manager is None or resource_id is None:
             return
         try:
-            if hasattr(manager, "release_gl_resource"):
-                manager.release_gl_resource(resource_id)
+            if hasattr(manager, "release_tracking"):
+                manager.release_tracking(resource_id)
         except Exception:
             logger.debug("[GL STAGE] resource release failed", exc_info=True)

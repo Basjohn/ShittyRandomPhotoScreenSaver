@@ -931,6 +931,45 @@ def handle_initializeGL(widget) -> None:  # type: ignore[override]
         timer_queries = getattr(widget, "_gpu_timer_queries", None)
         if timer_queries is not None and gl is not None:
             timer_queries.initialize(gl, context=ctx)
+
+        # PART A/F: the stage-timestamp ring is a separate owner and must be
+        # initialized on the same live compositor context. Constructing it under
+        # the CLI gate is not enough - the first --diag-p4-stages runtime emitted
+        # zero records because this call was missing.
+        stage_ring = getattr(widget, "_gl_stage_timestamps", None)
+        if stage_ring is not None:
+            supported = False
+            try:
+                supported = bool(
+                    stage_ring.initialize(
+                        gl,
+                        context=ctx,
+                        resource_manager=getattr(widget, "_resource_manager", None),
+                    )
+                )
+            except Exception as exc:
+                logger.error(
+                    "[PERF][P4_STAGES][INIT] requested=1 supported=0 "
+                    "reason=exception:%s timestamp_queries=0",
+                    type(exc).__name__,
+                )
+            else:
+                record = logger.info if supported else logger.error
+                record(
+                    "[PERF][P4_STAGES][INIT] requested=1 supported=%d reason=%s "
+                    "timestamp_queries=%d",
+                    int(supported),
+                    stage_ring.support_reason,
+                    len(getattr(stage_ring, "_handles", ()) or ()),
+                )
+            if not supported:
+                logger.warning(
+                    "[PERF][P4_STAGES] --diag-p4-stages was requested but stage "
+                    "attribution is UNAVAILABLE (reason=%s). This run will "
+                    "produce no P4_STAGES records; do not interpret it as stage "
+                    "evidence.",
+                    stage_ring.support_reason,
+                )
         
         # Transition to READY state on success
         if widget._gl_pipeline and widget._gl_pipeline.initialized:
@@ -1121,17 +1160,23 @@ def cleanup_gl_pipeline(widget) -> None:
             )
 
     cleanup_errors: list[str] = []
+
+    # Stage-timestamp queries are an INDEPENDENT compositor-context owner.
+    # Their deletion must not be conditional on _gpu_timer_queries existing:
+    # lifecycle correctness cannot depend on an incidental flag combination.
+    stage_ring = getattr(widget, "_gl_stage_timestamps", None)
+    if stage_ring is not None and stage_ring.has_live_queries():
+        try:
+            stage_ring.cleanup(gl)
+        except Exception as exc:
+            cleanup_errors.append(f"stage_timestamps:{type(exc).__name__}:{exc}")
+
     try:
         timer_queries = getattr(widget, "_gpu_timer_queries", None)
         if timer_queries is not None:
             try:
                 timer_queries.poll(gl)
                 timer_queries.cleanup(gl)
-                # Stage-timestamp queries are compositor-context owned; strict
-                # deletion, and failed deletion must remain a hard failure.
-                stage_ring = getattr(widget, "_gl_stage_timestamps", None)
-                if stage_ring is not None and stage_ring.has_live_queries():
-                    stage_ring.cleanup(gl)
                 # Association history is compositor/runtime scoped, not
                 # transition scoped; clear it only here.
                 try:

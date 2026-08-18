@@ -370,6 +370,7 @@ def paint_retained_base_texture(comp: "GLCompositorWidget", target: QRect) -> bo
         paint_qpainter_overlays_gl(comp)
         _stage_mark(comp, "t4")
         _stage_cpu(comp, "overlay_cpu_ms", _stage_t)
+        _stage_path(comp, "retained_base_shader")
         return True
     except Exception:
         logger.debug(
@@ -487,6 +488,13 @@ def _stage_mark(comp, marker: str) -> None:
         ring.mark(gl_api, marker)
 
 
+def _stage_path(comp, path: str) -> None:
+    """Record the render path that actually executed."""
+    from rendering.gl_compositor_pkg.paint import stage_set_render_path
+
+    stage_set_render_path(comp, path)
+
+
 def _stage_cpu(comp, key: str, start: float) -> None:
     """Record one matched CPU stage interval for the active stage packet."""
     ring = getattr(comp, "_gl_stage_timestamps", None)
@@ -537,6 +545,7 @@ def try_shader_path(comp: "GLCompositorWidget", name: str, state, can_use_fn, pa
         # T4: QPainter overlays (incl. the PERF HUD under --perf) complete.
         _stage_mark(comp, "t4")
         _stage_cpu(comp, "overlay_cpu_ms", _stage_t)
+        _stage_path(comp, f"shader:{name}")
         try:
             comp._last_shader_path_failure = ""
         except Exception:
