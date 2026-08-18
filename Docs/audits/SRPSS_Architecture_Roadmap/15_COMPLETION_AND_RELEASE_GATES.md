@@ -1,90 +1,116 @@
 # 15 — Completion and Release Gates
 
-Last reconciled: 2026-08-16
+Last reconciled: 2026-08-18
 
 A release candidate fails when a critical gate fails even if one average metric improves.
+`Current_Plan.md` owns current execution; these are product/architecture exit conditions.
 
-## Architecture Gate
+---
 
-- [ ] Current plan/spec/guardrails/roadmap/code agree.
-- [ ] One explicit owner per mutable concern/deletion identity.
-- [ ] One authoritative monitor-topology decision owner exists; native/Qt/per-window notifications do not independently rebuild the display graph.
-- [ ] Full fail-closed lifecycle remains correct; Settings/Edit ownership does not regress.
-- [ ] Physical monitor replacement uses settle→snapshot→retire-once→barrier→rebuild→reveal.
-- [ ] Visualizer producers never wait for paint and presentation is not a logical clock.
-- [ ] No persistent Bubble lane, paint-local Spectrum state, hidden fallback runtime, monitor polling loop or catch-all thread.
-- [ ] Temporary compatibility/diagnostic façades are gone or justified by a real current contract.
+## Architecture
 
-## Visualizer Gate
+- [ ] One accelerated OpenGL QRhi compositor surface per physical display.
+- [ ] Visualizer is compositor-owned presentation, not a second surface.
+- [ ] One owner per mutable concern/deletion identity.
+- [ ] Visualizer logical/source cadence is independent from physical presentation.
+- [ ] No paint acknowledgement, pending-until-paint, second visualizer clock or source decimation.
+- [ ] Qt-owned QRhi/OpenGL context is borrowed correctly.
+- [ ] No silent CPU/QPainter visualizer fallback.
+- [ ] No rejected persistent Bubble scheduler/lane reactivated.
+- [ ] Compatibility/diagnostic façades are gone or justified by a real current contract.
 
-- [ ] `ff934616` behaviour remains approved until explicitly superseded.
-- [ ] Strong source→state→publication→paint temporal package passes.
-- [ ] Presentation opportunity changes do not alter logical state/events/dt.
-- [ ] Same-display CUSTOM geometry/aspect correction remains intact.
-- [ ] Temporary configured-display sleep/wake/non-participation never migrates ownership.
-- [ ] Genuine settled-topology absence may fallback once only after one coarse ~60-second owned confirmation.
-- [ ] No exact timing dependency, periodic timer, polling loop or dedicated monitor thread is introduced.
-- [ ] Stable configured-display return restores ownership once from topology/readiness events and saved CUSTOM geometry remains authoritative.
-- [ ] User installed review passes for affected modes.
+## Visualizer
 
-## UI / Workload Gate
+- [ ] All five current modes preserve approved authored behaviour.
+- [ ] Reaction latency remains low.
+- [ ] Authored reactions are not routinely missed.
+- [ ] Smoothing is visually continuous when enabled.
+- [ ] No mode/preset/generation poisoning.
+- [ ] Startup/mode fades have no flash/slam/dead scene.
+- [ ] Mode change works from context menu and Settings/recreation.
+- [ ] Ordinary pause/resume does not unnecessarily rebuild GL/runtime state.
+- [ ] CUSTOM Cancel restores a live visualizer.
+- [ ] CUSTOM Save/rebuild restores authoritative geometry.
+- [ ] Intentional cross-display edit transfer works.
+- [ ] Temporary monitor absence does not permanently migrate configured ownership.
 
-- [ ] Retained-current texture becomes next-old cache hit; steady transition uploads only new.
-- [ ] Routine logging file/rotation work is off caller/UI threads with bounded queue/writer ownership.
-- [x] Settings persistence is ordered/background with explicit flush semantics.
-- [ ] Proven provider/cache preparation is outside GUI/paint hot paths.
-- [ ] p95/p99/max request-age/tick tails improve or remaining owners are named.
-- [ ] No catch-all background thread or unbounded queue.
+## Presentation / Frame Pacing
 
-## Lifecycle / Physical Display Gate
+- [ ] 60-Hz display is effectively refresh-limited under ordinary load.
+- [ ] High-refresh delivery is stable rather than collapsing unpredictably between equivalent windows.
+- [ ] Visualizer-only physical presentation does not repeatedly redraw unchanged immutable state.
+- [ ] Transition-active presentation remains eligible every display deadline.
+- [ ] Request/dispatch age tails do not dominate ordinary interaction.
+- [ ] Logical visualizer cadence has no recurring visible 40–90 ms holes under ordinary load.
+- [ ] No callback queue/backlog growth.
+- [ ] Average FPS is never accepted as a substitute for p95/p99/max and perceived smoothness.
 
-- [ ] Repeated ordinary installed both-monitors-off→screensaver-active→wake cycles pass.
-- [ ] Simultaneous, D0→D1 and D1→D0 wake orders all restore both displays.
-- [ ] Clock/widgets continue advancing and Escape/context-menu/input remain responsive.
-- [ ] No Ctrl+Alt+Delete is required to break a wake hang.
-- [ ] Duplicate native+Qt event storms result in one topology transaction.
-- [ ] Strict GL teardown remains owner-context, fail-closed and byte-accounted.
-- [ ] Before/after native breadcrumbs remain observational and bounded.
-- [ ] Ordinary stable desktop→screensaver startup remains flash-free; `grabWindow(0)` is not globally removed.
-- [ ] Physical-wake/topology recovery does not require synchronous desktop capture.
+## CPU / Workload / Efficiency
 
-## GPU Gate
+- [ ] Post-migration CPU usage is re-established.
+- [ ] Post-migration GPU usage is re-established.
+- [ ] Efficiency gains come from removed waste/churn, not cadence/quality reduction.
+- [ ] No unnecessary repeated cache/shadow/card/static raster construction.
+- [ ] No task-per-paint architecture.
+- [ ] IO/COMPUTE queues remain bounded.
+- [ ] Runtime-owned provider work retires promptly with its generation.
+- [ ] Same-machine utilization is credible for a screensaver workload.
 
-- [ ] Representative transitions produce truthful paint + non-blocking GPU timing samples.
-- [ ] No routine `glFinish()` profiler synchronization.
-- [ ] Process GPU busy is separated among upload/transition/visualizer/presentation owners sufficiently to guide action.
-- [ ] Overlay state/update/paint rate is compared against display refresh without reducing logical cadence.
-- [ ] Phase 8 is not started unless later evidence justifies the lifecycle risk.
+## Lifecycle / Runtime Replacement
 
-## Memory / Resource Gate
+- [ ] Settings/Edit replacement retires the old generation before the new one publishes.
+- [ ] Destruction barrier remains fail-closed.
+- [ ] Slow provider work cannot strand a retiring runtime.
+- [ ] No stale old-generation callback/result applies to replacement runtime.
+- [ ] Strict GL deletion occurs on legal owner/context.
+- [ ] Tracked GL ownership returns to zero on retired runtime/final teardown.
+- [ ] No timeout extension/ignore-list used to paper over a live old owner.
 
-- [ ] No post-warmup monotonic equivalent-state growth.
-- [ ] Preferred whole-app warm RSS under ~600 MiB or approved explanation; >900 MiB unresolved blocks release.
-- [ ] Preferred dedicated VRAM under ~300 MiB or approved explanation; >500 MiB unresolved blocks release.
-- [ ] No unexplained multi-GiB private commit.
-- [ ] Strict retired-generation application GL ownership reaches zero.
-- [ ] No fidelity/cadence/quality reduction used to hit resource targets.
+## Physical Monitor / P5
 
-## Logging / Evidence Gate
+- [ ] One topology decision authority.
+- [ ] Trailing-edge topology settlement.
+- [ ] Immutable accepted topology snapshot.
+- [ ] Notify -> Settle -> Snapshot -> Retire -> Barrier -> Rebuild -> Reveal.
+- [ ] Both-monitors-off -> long idle -> wake succeeds repeatedly.
+- [ ] Simultaneous and staggered wake orders recover.
+- [ ] Input/Escape/context menu remain responsive.
+- [ ] No Ctrl+Alt+Delete required to break a wake hang.
+- [ ] Temporary configured-monitor sleep/non-participation keeps ownership sticky.
+- [ ] Genuine settled absence may fallback only under the owned confirmation policy.
+- [ ] Recovery does not require synchronous waking-desktop capture.
+- [ ] No monitor polling loop.
+
+## Memory / Resources
+
+- [ ] Equivalent-state RAM/private commit plateaus.
+- [ ] Dedicated/shared VRAM plateaus.
+- [ ] CPU image caches remain bounded.
+- [ ] Texture/PBO/card/program ownership remains bounded.
+- [ ] No unexplained multi-GiB private-commit growth.
+- [ ] No fidelity/cadence reduction used to hit memory/resource targets.
+
+## Logging / Diagnostics
 
 - [ ] Main log remains readable with WARNING/ERROR/CRITICAL visibility.
-- [ ] Routine families route to sidecars without systematic duplication.
-- [x] Structured routing prevents token accidents.
-- [ ] Logging queue depth/writer lag/drop/flush telemetry is bounded and visible.
-- [ ] Raw logs/failed runs/manifests/parser commands are preserved when available.
+- [ ] Sidecar routing remains bounded/semantic.
+- [ ] No per-frame INFO flood.
+- [ ] Diagnostics remain passive and cannot change admission/cadence.
+- [ ] GPU timing does not synchronize the workload with routine `glFinish()`.
+- [ ] A new diagnostic family exists only when it chooses between concrete unresolved mechanisms.
 
-## Product Gate
+## Product
 
 - [ ] Correct multi-display routing/geometry/overlays.
 - [ ] Cursor/interaction overlays remain smooth.
-- [ ] Image/transition quality unchanged unless explicitly approved.
-- [ ] All supported visualizer modes retain approved behaviour.
-- [ ] Configured visualizer monitor remains sticky through ordinary monitor sleep/wake.
-- [ ] Background-load behaviour is equal or better than approved runtime.
-- [ ] Resource/GPU usage is appropriate for a screensaver, not merely technically bounded.
+- [ ] Image/transition fidelity is unchanged unless explicitly approved.
+- [ ] Visualizer feels immediate and smooth, not merely numerically active.
+- [ ] Screensaver workload is reasonably lightweight on the available same-machine evidence.
+- [ ] No “energy saving” refresh/cadence throttle damages presentation or reactivity.
 
-## Final Comparison
+## Final comparison
 
-Compare ordinary work against the exact previous/current approved commit. Use historical
-commits only for named forensic/negative-control questions. State remaining weaknesses and
-uncertainty; a single favorable metric is never release readiness.
+Compare ordinary current work against the nearest valid accepted checkpoint on the same machine and
+configuration. Historical commits are used only for named forensic/negative-control questions.
+
+State remaining weaknesses explicitly. One favorable metric never equals release readiness.
