@@ -2,7 +2,8 @@
 
 Last updated: 2026-08-18  
 Branch: `main`  
-Document basis: current `main` at `b5ff451efd452780dc4b87dbc1f64d539ff4e6d3` plus the accepted installed runs immediately after it  
+Document basis: current `main` after the P2 single-surface closure slices, against the accepted
+installed runs that followed `b5ff451efd452780dc4b87dbc1f64d539ff4e6d3`  
 Architecture epoch: **OpenGL QRhi, one accelerated presentation surface per physical display**
 
 This file owns **unfinished active work and execution order**. It deliberately does not preserve the
@@ -114,7 +115,7 @@ surface.
 The visualizer/card now render inside the compositor. The latest installed run materially improved
 performance versus the old separate-surface visualizer path.
 
-Accepted current measurement state before the next fixes:
+Accepted measurement state from the run that preceded the closure slices in section 5:
 
 ```text
 single-display:
@@ -139,19 +140,21 @@ exit GL accounting in both accepted runs:
 The single-surface architecture is therefore **not** reopened merely because 165 Hz has not yet been
 reached.
 
-### 3.4 Current known remaining defects
+### 3.4 Corrected mechanisms awaiting installed confirmation
 
-Installed/user-visible defects still open:
+Every installed/user-visible defect from the previous round has a landed correction with a named
+mechanism. None of them is confirmed until the acceptance run in section 5.
 
-1. visualizer fade begins, then flashes/slams to full opacity instead of completing smoothly;
-2. visualizer start/stop/playback transitions visibly hitch;
-3. visualizer feels less reactive / slightly late;
-4. 165-Hz physical presentation remains around 153-154 FPS;
-5. CUSTOM edit integration still contains assumptions from the retired independently presented
-   visualizer surface.
+| Defect | Corrected mechanism |
+|---|---|
+| fade flashes/slams to full opacity | fade-zero renderer/card readiness gates the reveal; one compositor fade authority replaces the QWidget opacity side-channel |
+| startup/stop/resume hitch | just-started capture is STARTING rather than unhealthy, so the immediate wake no longer restarts it; ordinary pause keeps GL, capture and generation intact |
+| visualizer feels late | one analysis compute in flight plus one newest pending source frame, replacing the frame that used to be dropped |
+| 165 Hz stuck near 153-154 | paint-acknowledged update admission removed; only the queued-GUI-dispatch guard remains |
+| CUSTOM edit targets a retired surface | compositor-owned edit snapshot; presentation suspended without destroying generation-owned GL |
 
-Source/evidence already names actionable owners for each. Do **not** start another broad probe
-campaign before correcting those known mechanisms.
+Causal evidence for each is recorded in the P05 report. Do **not** start another broad probe
+campaign; the next input is one ordinary installed acceptance.
 
 ## 4. Non-Negotiable Guardrails For The Active Closure
 
@@ -172,180 +175,32 @@ campaign before correcting those known mechanisms.
 - Do not turn CUSTOM drag/resize into live GL rebuild work on every mouse event.
 - Do not make diagnostics part of cadence/admission/control flow.
 
-## 5. Immediate Execution Queue — Finish P2/P4 Single-Surface Closure
+## 5. Immediate Next Step — One Installed Acceptance
 
-Execute these slices against current source. Use narrow commits and focused tests, but **do not stop
-for operator evidence between them** unless a real visual judgement is unavoidable. One installed
-acceptance comes after the complete closure.
+The P2/P4 single-surface closure slices are landed and pushed:
 
 ```text
-P2-READY-FADE
-    ↓
-P2-ACTIVATION-FINAL
-    ↓
-P2-ANALYSIS-FRESHNESS
-    ↓
-P2-165-DELIVERY
-    ↓
-P2-CUSTOM-EDIT
-    ↓
-one dual-display installed acceptance
+P2-READY-FADE          renderer readiness, one fade authority, audio STARTING health
+P2-ACTIVATION-FINAL    one real generation transaction, identical-refresh suppression
+P2-ANALYSIS-FRESHNESS  one in flight + one latest pending
+P2-165-DELIVERY        paint-acknowledged admission removed
+P2-WARM-PAUSE          hide through the fade authority, keep GL and capture warm
+P2-CUSTOM-EDIT         compositor-owned edit snapshot and edit lifecycle
+```
+
+Remaining order:
+
+```text
+one dual-display installed acceptance   <- next
     ↓
 P5 monitor topology / physical wake hardening
     ↓
 P6 lower-leverage resource / cleanup work
 ```
 
-### 5.1 P2-READY-FADE — state-driven renderer/audio readiness and one fade authority
+P2-SINGLE-SURFACE remains retained and is **not** closed until the acceptance below passes.
 
-Current startup can begin visible fade before the compositor visualizer renderer/card texture is
-actually ready. The visualizer must be prepared at fade zero first.
-
-Create/finish one current-generation readiness contract requiring at least:
-
-- valid current compositor QRhi/OpenGL generation;
-- visualizer programs, VAO/VBO/mask resources ready;
-- authoritative card `PresentationGeometry` committed;
-- canonical card pixmap identity valid;
-- card GL texture uploaded for that revision;
-- compositor card/visualizer ownership established;
-- final current visualizer engine generation/activation;
-- required fresh authoritative frame;
-- required audio readiness;
-- no failed GL-init state.
-
-Visible fade begins only after readiness.
-
-The compositor owns card + visualizer pixels from fade 0 through 1. Preserve the authored 1800 ms
-InOutCubic profile unless an exact current product contract says otherwise, but expose **one** fade
-scalar to both layers. A hidden logical QWidget opacity effect cannot be a competing pixel owner or
-cause a halfway ownership handoff.
-
-Audio capture needs explicit startup semantics:
-
-```text
-STOPPED -> STARTING -> HEALTHY -> STALE/FAILED
-```
-
-A successfully started capture is not unhealthy merely because its first callback has not arrived
-yet. Immediate `wake()` while STARTING must not restart it. A previously healthy stream that later
-becomes stale may restart once.
-
-Cold AGC/reactivity warmup may advance while hidden. Do not expose a visually ready compositor and
-then deliberately show another 1.5 seconds of avoidable cold lethargy if the authored protection can
-settle behind readiness. Do not change steady-state reactivity curves to accomplish this.
-
-### 5.2 P2-ACTIVATION-FINAL — one real target activation generation
-
-The prior transaction stamp reduced duplicate config application but production still showed a
-cross-mode/bar-count switch advancing engine activation more than once.
-
-One target mode/preset activation must perform all required target preparation before a single final
-activation/generation commit:
-
-- cancel/reject stale compute;
-- bar-count/buffer resize if needed;
-- smoothing/floor/reactivity/waveform resets;
-- target technical configuration;
-- audio block-size restart at most once if actually required;
-- one final generation/activation identity.
-
-There must be no intermediate target generation capable of publishing/revealing.
-
-Do not use a global per-mode memoization cache. Instead remember a canonical activation-payload
-identity/revision for the committed activation. A later `settings_refresh` with the same runtime,
-activation and identical resolved payload is a no-op; genuine preset/settings changes still apply.
-
-Tests must model the **real engine generation semantics**, not a fake whose reset/reconfigure methods
-do not increment as production does.
-
-### 5.3 P2-ANALYSIS-FRESHNESS — one in flight + one latest pending
-
-Compositor publication-to-paint is already fast enough that the perceived lateness points upstream.
-Current analysis can consume the newest audio frame while a compute task is active and then simply
-lose that frame because no next task is admitted.
-
-Use:
-
-```text
-maximum one analysis compute in flight
-maximum one newest pending source frame
-```
-
-If B/C/D arrive while A is computing, pending becomes D only. When A completes, commit any required
-valid DSP/worker state, then immediately launch D if its generation/activation is still current.
-Intermediate B/C are never replayed.
-
-No FIFO, no catch-up queue, no source-decimation policy. This is latest-state freshness under one
-in-flight compute ownership.
-
-Generation/activation replacement and reset discard stale pending input/results. Failure releases the
-slot and may continue from the newest still-valid pending frame without deadlock.
-
-Use delayed compute test doubles so the actual overlap case is exercised.
-
-### 5.4 P2-165-DELIVERY — remove paint-acknowledged update admission
-
-`AdaptiveTimer` still contains the exact mechanism already forbidden by R-27: a later display deadline
-can be rejected because the previous `QWidget.update()` has not yet reached paint.
-
-Keep only the pre-GUI **dispatch-pending** callback guard:
-
-1. one queued Python/Qt GUI callback may be outstanding;
-2. duplicate deadlines before that callback executes coalesce;
-3. callback executes and calls `widget.update()`;
-4. dispatch guard releases immediately after that call;
-5. a later display deadline may request another `update()` even if paint has not occurred;
-6. Qt owns subsequent update-event/paint coalescing.
-
-Paint-pending timestamps may remain passive diagnostics. They may not gate admission.
-
-The current ~93.2% acceptance on a 165-Hz target numerically corresponds to roughly 153.8 Hz, so this
-known gate plausibly accounts for most of the present 153-154 FPS ceiling. Removing it does not
-promise 165; it removes a known policy defect before blaming Qt/DWM/driver delivery.
-
-### 5.5 P2-CUSTOM-EDIT — migrate edit preview/lifecycle to the compositor-owned scene
-
-CUSTOM still contains retired-surface assumptions. The hidden logical `SpotifyBarsGLOverlay` is not
-the visualizer pixels and must not regain `grabFramebuffer()`/show/hide presentation authority.
-
-Required edit contract:
-
-**Enter**
-
-1. request one compositor-owned snapshot of the current card + visualizer region;
-2. snapshot only the authoritative card scene, with alpha and current authored appearance;
-3. suspend logical/audio work according to existing edit policy;
-4. suspend/clear compositor visualizer presentation without destroying its generation-owned GL
-   resources;
-5. edit shell owns the temporary preview.
-
-**Drag/resize**
-
-- shell moves/scales the preview;
-- no live compositor/card-texture rebuild per mouse event.
-
-**Cancel**
-
-- restore original rect/presentation/liveness exactly once;
-- no duplicate texture/resource generation.
-
-**Save**
-
-- persist target CUSTOM rect/monitor;
-- use the existing full runtime reconstruction boundary;
-- old runtime cannot publish after retirement;
-- new display compositor derives geometry from saved rect + its own DPR;
-- exactly one new card texture/resource owner survives.
-
-**Cross-display intentional transfer**
-
-- old display has no visualizer presentation/liveness/resource owner;
-- new configured display becomes sole owner with correct display-local rect/DPR;
-- this intentional edit transfer must not weaken P5 sticky-monitor behaviour for temporary sleep/wake
-  absence.
-
-## 6. One Installed Acceptance After Section 5
+## 6. The Acceptance Run
 
 Run one ordinary dual-display acceptance with:
 

@@ -62,6 +62,9 @@ After current P2/P4 installed acceptance is complete:
   is permanently recorded;
 - [ ] keep ordinary passive request-age, dispatch-wait, paint-wait, event-loop and state-to-paint
   summaries only where they remain cheap and architecture-neutral;
+- [ ] retire `_srpss_delivery_paint_pending_skips` and its `"paint"` skip stage once the acceptance
+  evidence is recorded. Paint is no longer an admission authority, so the counter is permanently
+  zero and is retained only so old and new runs stay comparable;
 - [ ] retire stage-only GPU query machinery whose sole purpose was locating the old QOpenGLWidget
   post-paint boundary;
 - [ ] keep useful ordinary sampled `--gpu-timing` with correct same-context non-nesting semantics;
@@ -76,9 +79,17 @@ Diagnostics remain passive. Cleanup must never change cadence/admission to make 
 
 After the current P2 readiness/freshness/CUSTOM acceptance passes:
 
-- [ ] remove any surviving code that treats `SpotifyBarsGLOverlay` as a presented surface;
-- [ ] remove obsolete `overlay.show()/hide()/isVisible()/grabFramebuffer()` presentation semantics
-  after exact caller proof;
+- [ ] retire the vestigial `show()` inside `SpotifyBarsGLOverlay.set_state()`; it exists to avoid a
+  startup flash from a surface that no longer presents anything. CUSTOM edit no longer treats the
+  overlay as pixels, so the remaining callers are the last ones to prove;
+- [ ] retire the `ShadowFadeProfile` branch that only served the visualizer card. The visualizer now
+  uses `widgets/spotify_visualizer/presentation_fade.py`; other widgets still use the profile, so
+  only the visualizer-specific `_shadowfade_progress`/`_shadowfade_completed` readers are debt;
+- [ ] replace the forced whole-surface `grabFramebuffer()` that
+  `capture_visualizer_scene_pixmap()` uses purely to drive one render pass. The image is discarded;
+  a narrower one-shot render seam would avoid a full-display readback at edit entry;
+- [ ] drop the two now-unused fields from the `_paused_visualizer` tuple in `CustomLayoutManager`
+  once no caller reads them;
 - [ ] retire old one-update-per-publication counters/scaffolding that no longer describe the physical
   presentation route, retaining only metrics still used for logical/publication/freshness evidence;
 - [ ] retire the dead legacy compositor `set_spotify_visualizer_state()` / Spectrum-only bars seam if
