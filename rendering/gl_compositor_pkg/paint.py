@@ -103,6 +103,107 @@ def _gpu_timer_query_screen(widget) -> int | None:
         return None
 
 
+def _ensure_dwm_probe(widget):
+    """Lazily create the DWM probe under the stage diagnostic gate."""
+    if getattr(widget, "_gl_stage_timestamps", None) is None:
+        return None
+    probe = getattr(widget, "_p4_dwm_probe", None)
+    if probe is None:
+        try:
+            from rendering.dwm_timing import DwmTimingProbe
+
+            probe = DwmTimingProbe()
+            widget._p4_dwm_probe = probe
+            logger.info(
+                "[PERF][P4_DWM][INIT] supported=%d reason=%s qpc_frequency=%s",
+                int(probe.supported),
+                probe.reason,
+                probe.qpc_frequency if probe.qpc_frequency else "na",
+            )
+        except Exception:
+            logger.debug("[P4_DWM] probe unavailable", exc_info=True)
+            widget._p4_dwm_probe = None
+            return None
+    return probe
+
+
+def _probe_present_context_once(widget) -> None:
+    """PART 2: capture the context that actually performs top-level composition.
+
+    QOpenGLWidget does not perform the onscreen swap itself, so the child
+    compositor context having WGL interval 0 says nothing about the context Qt
+    composes/presents with. This is a one-time STATE probe - it changes nothing
+    and is never used as a duration measurement.
+    """
+    if getattr(widget, "_p4_present_context_probed", False):
+        return
+    widget._p4_present_context_probed = True
+    fields = {
+        "current_context": "none",
+        "is_compositor_context": "na",
+        "context_swap_interval": "na",
+        "wgl_context": "na",
+        "wgl_swap_interval": "na",
+        "toplevel_swap_interval": "na",
+    }
+    try:
+        from PySide6.QtGui import QOpenGLContext
+
+        current = QOpenGLContext.currentContext()
+        if current is not None:
+            fields["current_context"] = hex(id(current))
+            try:
+                own = widget.context()
+                fields["is_compositor_context"] = str(current is own).lower()
+            except Exception:
+                pass
+            try:
+                fields["context_swap_interval"] = str(
+                    current.format().swapInterval()
+                )
+            except Exception:
+                pass
+    except Exception:
+        logger.debug("[P4_PRESENT_CONTEXT] Qt context probe failed", exc_info=True)
+
+    try:
+        import ctypes
+
+        opengl32 = ctypes.WinDLL("opengl32")
+        handle = opengl32.wglGetCurrentContext()
+        fields["wgl_context"] = hex(int(handle)) if handle else "0x0"
+        try:
+            proc = opengl32.wglGetProcAddress(b"wglGetSwapIntervalEXT")
+            if proc:
+                prototype = ctypes.CFUNCTYPE(ctypes.c_int)
+                fields["wgl_swap_interval"] = str(prototype(proc)())
+        except Exception:
+            pass
+    except Exception:
+        logger.debug("[P4_PRESENT_CONTEXT] WGL probe unavailable", exc_info=True)
+
+    try:
+        window = widget.window()
+        if window is not None and window.windowHandle() is not None:
+            fields["toplevel_swap_interval"] = str(
+                window.windowHandle().format().swapInterval()
+            )
+    except Exception:
+        pass
+
+    logger.info(
+        "[PERF][P4_PRESENT_CONTEXT] current_context=%s is_compositor_context=%s "
+        "context_swap_interval=%s wgl_context=%s wgl_swap_interval=%s "
+        "toplevel_swap_interval=%s",
+        fields["current_context"],
+        fields["is_compositor_context"],
+        fields["context_swap_interval"],
+        fields["wgl_context"],
+        fields["wgl_swap_interval"],
+        fields["toplevel_swap_interval"],
+    )
+
+
 def _ensure_qt_composition_observer(widget) -> None:
     """PART D: connect aboutToCompose/frameSwapped once, GUI-thread direct.
 
@@ -122,6 +223,8 @@ def _ensure_qt_composition_observer(widget) -> None:
         widget._qt_composition_observer = observer
 
         def _on_about_to_compose():
+            # One-time low-frequency STATE probe only; never a duration source.
+            _probe_present_context_once(widget)
             observer.on_about_to_compose(time.perf_counter())
 
         def _on_frame_swapped():
@@ -265,6 +368,38 @@ def maybe_log_gpu_timer_query_window(widget, *, force: bool = False) -> None:
                         dropped=stage_ring.dropped_no_capacity,
                     ):
                         logger.info(message, *args)
+
+            # PART 1 report: DWM refresh/composition advancement N -> N+1.
+            dwm_probe = getattr(widget, "_p4_dwm_probe", None)
+            if dwm_probe is not None:
+                from rendering.dwm_timing import DELTA_FIELDS, associate_dwm
+
+                snapshots = dwm_probe.take_snapshots()
+                if snapshots:
+                    dwm_report = associate_dwm(snapshots, dwm_probe.qpc_frequency)
+                    for row in dwm_report["rows"]:
+                        logger.info(
+                            "[PERF][P4_DWM] screen=%s gen=%s frame=%s %s "
+                            "qpcCompose_ms=%s qpcVBlank_ms=%s "
+                            "refresh_period_qpc=%s rate=%s/%s "
+                            "unsupported=%d unmatched=%d",
+                            screen if screen is not None else "<unknown>",
+                            row["scene_generation"],
+                            row["frame_index"],
+                            " ".join(
+                                f"d_{name}={'na' if row.get(name) is None else row[name]}"
+                                for name in DELTA_FIELDS
+                            ),
+                            "na" if row.get("qpcCompose_ms") is None
+                            else f"{row['qpcCompose_ms']:.3f}",
+                            "na" if row.get("qpcVBlank_ms") is None
+                            else f"{row['qpcVBlank_ms']:.3f}",
+                            row.get("qpcRefreshPeriod", "na"),
+                            row.get("rateRefreshNumerator", "na"),
+                            row.get("rateRefreshDenominator", "na"),
+                            dwm_report["unsupported"],
+                            dwm_report["unmatched"],
+                        )
     except Exception:
         logger.debug("[GL COMPOSITOR] GPU delivery association failed", exc_info=True)
 
@@ -451,6 +586,35 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
             ):
                 # T0: before render preparation, inside the outer elapsed scope.
                 stage_ring.mark(gl, "t0")
+
+                # PART 1: DWM snapshot at this already-sampled boundary. The GIL
+                # is already held here, so no new callback or GIL entry is added.
+                probe = _ensure_dwm_probe(widget)
+                if probe is not None:
+                    probe.capture(
+                        scene_generation=int(
+                            getattr(paint_metrics, "_active_scene_generation", -1) or -1
+                        ),
+                        frame_index=int(
+                            getattr(paint_metrics, "_active_presented_frame_index", -1)
+                            or -1
+                        ),
+                    )
+
+    # PART 1: successor snapshot before ordinary paint work, so a severe gap can
+    # be compared against real DWM refresh/composition advancement.
+    probe = getattr(widget, "_p4_dwm_probe", None)
+    if probe is not None:
+        paint_metrics = getattr(widget, "_paint_metrics", None)
+        if paint_metrics is not None:
+            probe.capture(
+                scene_generation=int(
+                    getattr(paint_metrics, "_active_scene_generation", -1) or -1
+                ),
+                frame_index=int(
+                    getattr(paint_metrics, "_active_presented_frame_index", -1) or -1
+                ),
+            )
 
     try:
         paintGL_impl(widget, )

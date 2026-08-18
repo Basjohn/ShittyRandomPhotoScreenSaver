@@ -508,6 +508,84 @@ request_age p50 ~42.76 ms; corr(gap, request_age) ~+0.807; corr(gap, paint) ~-0.
 
 The two-class result stands: a large-GPU severe class and an ordinary-GPU severe residual class.
 
+#### VALID stage run — severe stalls are located AFTER compositor paint
+
+The repaired diagnostic armed correctly: `INIT supported=1`, `timestamp_queries=20`,
+`dropped_packets=0`, and actual shader render paths reported.
+
+```text
+29 FRAME_GAP_OWNER records, 28 of them >50 ms
+gap p50 ~58.48 ms   max ~80.69 ms   paint p50 ~1.92 ms
+
+four sampled >50 ms N+1 successors:
+              outer  core  overlay | paint->compose  compose->swap  paint->swap
+  Crumble      3.26  0.29     2.94 |        36.04          14.18        50.22
+  Warp         9.56  6.10     3.44 |        38.08          12.12        50.20
+  Wipe         3.77  0.12     3.62 |        36.61          13.16        49.77
+  Slide        3.95  0.07     3.85 |        35.69          12.81        48.50
+
+ordinary sampled post-paint medians: ~0.4-0.46 ms end-to-swap
+```
+
+Consequences:
+
+- **transition-specific shader optimisation is no longer a P4 lane** — core GPU draw is
+  0.07-6.10 ms in every severe sample;
+- **a 30-50 ms in-paint GPU frame is NOT necessary for severe P4.** The earlier statement that
+  rare 30-47 ms compositor GPU frames were the major mechanism is **demoted**: they occurred in
+  earlier diagnostics, but this valid stage run proves they are not required for a severe stall;
+- the severe sampled class instead places **~48.5-50.2 ms between compositor paint completion and
+  the observed top-level swap boundary**, subject to a known Python/GIL observer caveat on the Qt
+  signal timestamps.
+
+**P4 is not solved.** The missing interval is strongly localized after compositor paint, and its
+owner is not yet named.
+
+#### Known measurement caveat on the Qt signal timestamps
+
+`aboutToCompose`/`frameSwapped` are connected to Python closures, so those direct GUI-thread
+callbacks require PySide to enter Python and acquire the GIL. `paint_end_to_compose` and
+`compose_to_swap` may therefore include GIL-entry delay, and the callback itself can delay Qt
+composition. **Do not yet claim Qt spends 36-38 ms before composition.** The observer is retained
+as supporting evidence; its wall-clock fields are secondary, not clean native timing.
+
+#### Next gate: native validation plus the clean no-HUD control
+
+- [x] DWM composition-timing snapshots at the existing sampled paint boundaries
+      (`DwmGetCompositionTimingInfo(NULL, ...)`, never `DwmFlush`), reporting N→N+1 deltas for
+      refresh/frame/submitted/confirmed/displayed/late/dropped/missed counters plus QPC compose and
+      vblank deltas. Answers whether a severe gap spans ~2-4 real refresh intervals while an
+      ordinary gap spans ~1.
+- [x] One-time `[PERF][P4_PRESENT_CONTEXT]` state probe at the first `aboutToCompose`, capturing
+      the context actually performing top-level composition, its `swapInterval()`, the WGL context
+      and `wglGetSwapIntervalEXT()`. State only, never a duration, and it changes nothing.
+- [x] `--diag-p4-no-perf-hud` CLI control suppressing **only** the HUD build/draw while retaining
+      `--perf`, `--gpu-timing`, `--diag-p4-stages` and every counter, report and history. Justified
+      by the measured HUD cost in the valid run (severe sampled overlay CPU ~7.5-8.6 ms, HUD build
+      ~2.7-3.9 ms, overlay GPU ~2.9-3.9 ms). Flag state is recorded in the `P4_STAGES INIT` record.
+
+Next installed capture — a single run, single display, no visualizer:
+
+```text
+main.py --perf --gpu-timing --diag-p4-stages --diag-p4-no-perf-hud
+```
+
+Do **not** add `--diag-pair-warm-finish`; it stays in the code as the established negative-control
+intervention, and ordinary `PAIR_WARM` telemetry remains active with its forced `glFinish` off.
+
+#### Interpretation bars for that run
+
+- **A — severe gaps collapse materially:** the PERF HUD is a major diagnostic observer/amplifier.
+  Do **not** claim it explains production P4; use the no-HUD stage/DWM data as the first clean
+  approximation of ordinary runtime.
+- **B — severe gaps survive and DWM deltas show ~3 refresh intervals:** P4 is strongly located in
+  Qt/top-level/DWM presentation pacing.
+- **C — severe gaps survive but DWM counters advance normally:** re-open GIL / Python callback /
+  event-dispatch ownership, now without the HUD confound.
+- **D — top-level composition context reports swap interval 1 while the child context is 0:** treat
+  as a concrete architecture defect candidate. Do not change it in the same checkpoint; design the
+  smallest isolated correction next.
+
 #### Next gate: `--diag-p4-stages`
 
 One bounded CLI-only diagnostic partitioning the entire remaining common path in a single run,
