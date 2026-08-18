@@ -185,6 +185,10 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
         self._scheduled_transition_completions: dict[
             int, tuple[Callable[[float], None], Callable[[], None]]
         ] = {}
+        # Presentation liveness reasons. One render strategy instance owns this
+        # display's presentation; a transition and a visible visualizer are two
+        # independent reasons to keep presenting, so neither may stop the other.
+        self._presentation_reasons: set[str] = set()
         self._render_shutdown_requested: bool = False
         self._gl_lifecycle_generation: int = 0
         # Default easing is QUAD_IN_OUT; callers can override per-transition.
@@ -414,19 +418,51 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
             logger.debug("[GL COMPOSITOR] stop_frame_pacing failed: %s", exc)
         self._stop_render_strategy()
 
+    # Presentation liveness reasons.
+    PRESENTATION_TRANSITION_ACTIVE = "TRANSITION_ACTIVE"
+    PRESENTATION_VISUALIZER_ACTIVE = "VISUALIZER_ACTIVE"
+
+    def acquire_presentation_reason(self, reason: str) -> None:
+        """Keep this display presenting while ``reason`` holds.
+
+        The render strategy starts on the first reason and is paused only when
+        the last one is released, so transition completion cannot stop an
+        active visualizer and a visualizer hiding cannot stop a transition.
+        """
+        if reason in self._presentation_reasons:
+            return
+        was_idle = not self._presentation_reasons
+        self._presentation_reasons.add(reason)
+        if was_idle:
+            self._start_render_timer()
+
+    def release_presentation_reason(self, reason: str) -> None:
+        """Release one liveness reason; pause only when none remain."""
+        if reason not in self._presentation_reasons:
+            return
+        self._presentation_reasons.discard(reason)
+        if not self._presentation_reasons:
+            self._pause_render_timer()
+
+    def has_presentation_reason(self, reason: str) -> bool:
+        return reason in self._presentation_reasons
+
     def _start_frame_pacing(self, duration_sec: float) -> FrameState:
         """Create and return a new FrameState for a transition.
-        
+
         Called at the start of any transition to enable decoupled rendering.
-        Also starts the render timer to drive repaints at display refresh rate.
+        Also acquires the transition presentation reason so repaints run at the
+        display refresh rate.
         """
         self._frame_state = FrameState(duration=duration_sec)
-        self._start_render_timer()
+        self.acquire_presentation_reason(self.PRESENTATION_TRANSITION_ACTIVE)
         return self._frame_state
 
     def _stop_frame_pacing(self) -> None:
         """Clear the frame state when a transition completes."""
-        self._pause_render_timer()  # Pause (don't stop) for quick resume
+        # Releasing only the transition reason keeps presentation alive when a
+        # visualizer is still visible on this display.
+        self.release_presentation_reason(self.PRESENTATION_TRANSITION_ACTIVE)
         if self._frame_state is not None:
             self._frame_state.mark_complete()
         self._frame_state = None
@@ -691,7 +727,13 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
         The actual progress interpolation happens in paintGL
         using the FrameState.
         """
-        if self._frame_state is not None and self._frame_state.started and not self._frame_state.completed:
+        transition_live = bool(
+            self._frame_state is not None
+            and self._frame_state.started
+            and not self._frame_state.completed
+        )
+        visualizer_live = self.PRESENTATION_VISUALIZER_ACTIVE in self._presentation_reasons
+        if transition_live or visualizer_live:
             self.update()
             self._record_render_timer_tick(accepted_update=True)
         else:
@@ -853,7 +895,7 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
         self._frame_state.begin_timeline(easing=easing)
         self._begin_paint_metrics(transition_label or "transition")
         self._current_anim_metrics = None
-        self._start_render_timer()
+        self.acquire_presentation_reason(self.PRESENTATION_TRANSITION_ACTIVE)
 
         self._scheduled_transition_completions[animation_generation] = (
             update_callback,
@@ -1672,6 +1714,7 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
             return
 
         self._render_shutdown_requested = True
+        self._presentation_reasons.clear()
         self._gl_lifecycle_generation += 1
         self._transition_animation_generation += 1
         self._cancel_current_animation()
