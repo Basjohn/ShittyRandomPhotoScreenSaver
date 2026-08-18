@@ -45,6 +45,33 @@ def _install_fake_clock(monkeypatch, clock: _FakeClock) -> None:
     monkeypatch.setattr(spotify_bars_gl_overlay, "time", clock, raising=True)
 
 
+
+class _RecordingCompositor:
+    """Stands in for the display compositor that now receives publications.
+
+    The visualizer no longer owns a presentation surface, so "did presentation
+    get requested" is observed where the request actually goes: the compositor's
+    latest-wins publish seam.
+    """
+
+    def __init__(self) -> None:
+        self.publications: list[tuple] = []
+        self.cleared = 0
+
+    def publish_visualizer_state(self, owner, card_rect, **kwargs):
+        self.publications.append((card_rect, kwargs))
+
+    def clear_visualizer_state(self):
+        self.cleared += 1
+
+
+def _attach_recording_compositor(overlay) -> _RecordingCompositor:
+    """Instance-level sink; production classes are never patched."""
+    compositor = _RecordingCompositor()
+    overlay._publication_target_compositor = lambda: compositor
+    return compositor
+
+
 def _publish(overlay: SpotifyBarsGLOverlay, bars, *, vis_mode="spectrum", **kwargs):
     overlay.set_state(
         rect=QRect(0, 0, 320, 180),
@@ -198,9 +225,9 @@ class TestPublicationVersusPresentation:
         clock_b = _FakeClock()
         _install_fake_clock(monkeypatch, clock_b)
         unpainted = SpotifyBarsGLOverlay(None)
-        unpainted_paints = []
-        # Instance-level sinks: production classes are never patched.
-        unpainted.update = lambda *args, **kwargs: unpainted_paints.append(1)
+        # Depth 1 now means: the compositor receives the publication but never
+        # presents it. The visualizer has no surface of its own to repaint.
+        unpainted_publications = _attach_recording_compositor(unpainted)
         for bars in series:
             _publish(unpainted, bars)
             clock_b.advance()
@@ -218,7 +245,9 @@ class TestPublicationVersusPresentation:
         assert _logical_digest(unpainted) == presented_digest
         assert _logical_digest(unrequested) == presented_digest
         assert presented_digest["set_state_total"] == len(series)
-        assert unpainted_paints, "the unpainted control must still request presentation"
+        assert unpainted_publications.publications, (
+            "the unpresented control must still publish state to the compositor"
+        )
 
     def test_logical_cadence_does_not_depend_on_presentation_frequency(
         self, qt_app, monkeypatch
@@ -589,18 +618,17 @@ class TestPresentationSourceLiveness:
         clock = _FakeClock()
         _install_fake_clock(monkeypatch, clock)
         overlay = SpotifyBarsGLOverlay(None)
-        paints = []
-        overlay.update = lambda *a, **k: paints.append(1)
+        compositor = _attach_recording_compositor(overlay)
         overlay.isVisible = lambda: True
 
         for bars in _bar_series(12):
             _publish(overlay, bars)
             clock.advance()
 
-        assert paints, (
-            "with no presentation source running the overlay stopped presenting "
-            "entirely; a paused or absent source must never strand the visualizer "
-            "(R-61)"
+        assert compositor.publications, (
+            "with no presentation source running the visualizer stopped reaching "
+            "the compositor entirely; a paused or absent source must never strand "
+            "the visualizer (R-61)"
         )
         assert list(overlay._bars) == pytest.approx(_bar_series(12)[-1]), (
             "the latest publication must still be the state available to paint"

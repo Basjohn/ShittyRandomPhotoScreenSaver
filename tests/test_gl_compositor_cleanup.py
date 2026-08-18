@@ -91,9 +91,11 @@ def test_gl_compositor_cleanup_releases_pipeline_when_gl_available(qapp):
     comp.show()
     parent.show()
 
-    try:
-        comp.makeCurrent()
-    except Exception:
+    # Realize the QRhi surface, then borrow its Qt-owned OpenGL context.
+    for _ in range(10):
+        comp.update()
+        qapp.processEvents()
+    if not comp._rhi_gl.is_attached() or not comp._rhi_gl.make_current():
         pytest.skip("GL context not available for GLCompositorWidget cleanup test")
 
     # Attempt to initialise the GLSL pipeline; failures should simply leave
@@ -149,10 +151,13 @@ def test_two_live_compositors_have_distinct_program_owners_and_cleanup(qapp):
 
     initialized = []
     for comp in compositors:
+        for _ in range(10):
+            comp.update()
+            qapp.processEvents()
         try:
-            comp.makeCurrent()
+            if not comp._rhi_gl.is_attached() or not comp._rhi_gl.make_current():
+                raise RuntimeError("no borrowed QRhi context")
             comp._init_gl_pipeline()  # type: ignore[attr-defined]
-            comp.doneCurrent()
         except Exception:
             for candidate in compositors:
                 candidate.cleanup()

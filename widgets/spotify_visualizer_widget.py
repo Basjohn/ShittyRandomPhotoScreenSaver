@@ -2023,7 +2023,29 @@ class SpotifyVisualizerWidget(QWidget):
         from widgets.spotify_visualizer.tick_pipeline import on_tick
         on_tick(self)
 
+    # Set by the display compositor once it owns this card's visual layer. The
+    # card is a QWidget sibling ABOVE the compositor surface, so while the
+    # compositor draws the bars it must also draw the card - otherwise the card
+    # would paint over the bars it is supposed to sit behind.
+    _compositor_owns_card_visual: bool = False
+
+    def set_compositor_owns_card_visual(self, owned: bool) -> None:
+        """Hand the card's painted visual to (or back from) the compositor."""
+        owned = bool(owned)
+        if owned == self._compositor_owns_card_visual:
+            return
+        self._compositor_owns_card_visual = owned
+        try:
+            self.update()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Card visual ownership repaint failed", exc_info=True)
+
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
+        if self._compositor_owns_card_visual:
+            # Geometry, layout, CUSTOM movement, fade authority and edit
+            # interaction all stay here; only the pixels move to the compositor.
+            return
+
         if self.uses_painted_frame_shadow():
             self._paint_painted_frame_shadow()
         else:
