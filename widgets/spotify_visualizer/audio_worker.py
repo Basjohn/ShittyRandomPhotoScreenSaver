@@ -15,6 +15,7 @@ from types import SimpleNamespace
 from typing import List, Optional
 import os
 import threading
+import time
 
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QWidget
@@ -290,6 +291,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._spectrum_mirrored: bool = True  # center-out mirrored layout
         self._spectrum_shape_nodes: list = [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]]
         self._effective_block_size: int = 0
+        self._capture_callback_failures: int = 0
 
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         try:
@@ -542,6 +544,45 @@ class SpotifyVisualizerAudioWorker(QObject):
     def is_running(self) -> bool:
         return self._running
 
+    # Bounded reporting for a capture callback that is running but cannot
+    # publish. The installed run proved why this matters: a NameError in the
+    # callback silenced every audio frame for the whole session while the
+    # worker still reported itself started, and the only evidence was a DEBUG
+    # line. Loud on the first failure, sampled after that, never per-frame.
+    _CAPTURE_FAILURE_LOG_INTERVAL = 1000
+
+    def _report_capture_callback_failure(self, exc: BaseException) -> None:
+        """Report a capture callback failure loudly once, then boundedly."""
+        try:
+            self._capture_callback_failures += 1
+            count = self._capture_callback_failures
+        except Exception:
+            count = 1
+        if count == 1:
+            logger.error(
+                "[SPOTIFY_VIS] Audio capture callback failed; no frames are being "
+                "published while the worker reports running",
+                exc_info=True,
+            )
+            return
+        if count % self._CAPTURE_FAILURE_LOG_INTERVAL == 0:
+            logger.error(
+                "[SPOTIFY_VIS] Audio capture callback still failing "
+                "(failures=%d, last=%s: %s)",
+                count,
+                type(exc).__name__,
+                exc,
+            )
+
+    def _note_capture_callback_recovered(self) -> None:
+        """One publication succeeded again; re-arm the loud first report."""
+        failures = self._capture_callback_failures
+        self._capture_callback_failures = 0
+        logger.info(
+            "[SPOTIFY_VIS] Audio capture callback recovered after %d failed frames",
+            failures,
+        )
+
     def start(self) -> None:
         """Start audio capture using centralized audio_capture module."""
         if self._running:
@@ -600,16 +641,16 @@ class SpotifyVisualizerAudioWorker(QObject):
                     activation_id=getattr(self, "_activation_id", None),
                     capture_ts=time.time(),
                 ))
+                if self._capture_callback_failures:
+                    self._note_capture_callback_recovered()
                 
                 if is_verbose_logging():
                     peak = float(np_mod.max(np_mod.abs(mono))) if mono.size else 0.0
                     self._frame_debug_counter += 1
                     if self._frame_debug_counter % 60 == 1:
                         logger.debug("[SPOTIFY_VIS][VERBOSE] loopback frame: samples=%d peak=%.4f", mono.size, peak)
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                if is_verbose_logging():
-                    logger.debug("[SPOTIFY_VIS] Audio callback failed", exc_info=True)
+            except Exception as exc:
+                self._report_capture_callback_failure(exc)
 
         if self._backend.start(_on_audio_samples):
             self._running = True
