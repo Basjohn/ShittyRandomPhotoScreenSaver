@@ -114,6 +114,13 @@ class _SpotifyBeatEngine(QObject):
         self._last_audio_ts: float = 0.0
         self._generation_id: int = 0
         self._activation_id: int = 0
+        # One target activation may need several preparation steps (bar-count
+        # resize, smoothing reset, floor/waveform reset, technical config).
+        # While a transaction is open they all defer their generation bump to
+        # one final commit, so a single mode/preset activation produces exactly
+        # one authoritative generation that consumers can gate a fresh frame on.
+        self._activation_txn_depth: int = 0
+        self._activation_txn_pending: bool = False
         self._latest_generation_with_frame: int = 0
         self._latest_generation_with_waveform: int = 0
         # Diagnostic provenance for the latest committed analysis frame.
@@ -167,6 +174,70 @@ class _SpotifyBeatEngine(QObject):
         self._audio_worker._buffer = self._audio_buffer
         self._audio_worker._activation_id = self._activation_id
 
+    # ------------------------------------------------------------------
+    # Activation transaction
+    # ------------------------------------------------------------------
+
+    def begin_activation_transaction(self) -> None:
+        """Open a target-activation transaction.
+
+        Every preparation step performed until the matching
+        ``end_activation_transaction`` records that a new generation is owed
+        instead of advancing one itself. Nested opens are counted, so a helper
+        that opens its own transaction inside an outer one cannot commit early.
+        """
+        self._activation_txn_depth += 1
+
+    def end_activation_transaction(self, *, reason: str = "activation") -> int:
+        """Close the transaction and commit at most ONE generation.
+
+        Returns the current activation id. A transaction that prepared nothing
+        commits nothing, so an inert apply cannot churn the generation.
+        """
+        if self._activation_txn_depth > 0:
+            self._activation_txn_depth -= 1
+        if self._activation_txn_depth > 0:
+            return self._activation_id
+        if self._activation_txn_pending:
+            self._activation_txn_pending = False
+            self._commit_activation_generation(reason=reason)
+        return self._activation_id
+
+    def in_activation_transaction(self) -> bool:
+        return self._activation_txn_depth > 0
+
+    def _advance_activation_generation(self, *, reason: str) -> None:
+        """Advance now, or record that the open transaction owes a commit."""
+        if self._activation_txn_depth > 0:
+            self._activation_txn_pending = True
+            return
+        self._commit_activation_generation(reason=reason)
+
+    def _commit_activation_generation(self, *, reason: str) -> None:
+        """The single place a runtime generation/activation boundary exists.
+
+        Consumers gate their first fresh frame on this identity, so there must
+        be no intermediate target generation capable of publishing or revealing.
+        """
+        self._generation_id += 1
+        self._activation_id += 1
+        self._audio_worker._activation_id = self._activation_id
+        # Force consumers to wait for the next result produced AFTER this
+        # boundary instead of reusing the pre-boundary generation id.
+        self._latest_generation_with_frame = self._generation_id - 1
+        self._latest_generation_with_waveform = self._generation_id - 1
+        self._latest_authoritative_frame_ts = 0.0
+        self._latest_authoritative_frame_generation = -1
+        self._latest_authoritative_frame_activation = -1
+        logger.debug(
+            "[SPOTIFY_VIS] Beat engine activation committed reason=%s "
+            "(generation=%d activation=%d bars=%d)",
+            reason,
+            self._generation_id,
+            self._activation_id,
+            self._bar_count,
+        )
+
     def reconfigure_bar_count(self, bar_count: int) -> None:
         """Rebuild shared runtime state for a new bar count."""
         new_count = max(1, int(bar_count))
@@ -185,20 +256,7 @@ class _SpotifyBeatEngine(QObject):
         self._waveform_count = 0
         self._idle_wave_phase = 0.0
         self._energy_bands = EnergyBands()
-        self._generation_id += 1
-        self._activation_id += 1
-        self._audio_worker._activation_id = self._activation_id
-        self._latest_generation_with_frame = self._generation_id - 1
-        self._latest_generation_with_waveform = self._generation_id - 1
-        self._latest_authoritative_frame_ts = 0.0
-        self._latest_authoritative_frame_generation = -1
-        self._latest_authoritative_frame_activation = -1
-        logger.debug(
-            "[SPOTIFY_VIS] Beat engine bar-count reconfigured -> %d (generation=%d activation=%d)",
-            new_count,
-            self._generation_id,
-            self._activation_id,
-        )
+        self._advance_activation_generation(reason="bar_count=%d" % new_count)
     
     def reset_smoothing_state(self) -> None:
         """Reset all smoothing/energy state for a clean mode switch.
@@ -219,21 +277,7 @@ class _SpotifyBeatEngine(QObject):
         self._last_audio_ts = 0.0
         self._audio_worker.reset_processing_caches()
         self._audio_worker.reset_reactivity_state()
-        self._generation_id += 1
-        self._activation_id += 1
-        self._audio_worker._activation_id = self._activation_id
-        # Force consumers to wait for the next FFT result produced after
-        # this reset instead of reusing the pre-reset generation id.
-        self._latest_generation_with_frame = self._generation_id - 1
-        self._latest_generation_with_waveform = self._generation_id - 1
-        self._latest_authoritative_frame_ts = 0.0
-        self._latest_authoritative_frame_generation = -1
-        self._latest_authoritative_frame_activation = -1
-        logger.debug(
-            "[SPOTIFY_VIS] Beat engine smoothing state reset (generation=%d activation=%d)",
-            self._generation_id,
-            self._activation_id,
-        )
+        self._advance_activation_generation(reason="smoothing_reset")
 
     def reset_floor_state(self) -> None:
         """Reset dynamic/manual floor accumulator state."""

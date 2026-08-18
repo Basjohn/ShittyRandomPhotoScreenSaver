@@ -6,6 +6,7 @@ authority gates.
 """
 from __future__ import annotations
 
+import contextlib
 import copy
 from typing import Any
 
@@ -205,6 +206,140 @@ def log_live_activation_state(
         logger.debug("[SPOTIFY_VIS] Failed to log live activation state", exc_info=True)
 
 
+def _canonical_value(value: Any) -> Any:
+    """Canonicalize authored/config values only.
+
+    Object identities are never used: two structurally identical payloads must
+    fingerprint identically even though they are different dict instances, and
+    a genuine value change must fingerprint differently.
+    """
+    if isinstance(value, dict):
+        return tuple(
+            (str(key), _canonical_value(value[key])) for key in sorted(value, key=str)
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_canonical_value(item) for item in value)
+    if isinstance(value, set):
+        return tuple(sorted((repr(_canonical_value(item)) for item in value)))
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, (int, float, str)):
+        return value
+    # Anything else is reduced to its repr rather than its id(), so an
+    # equal-but-distinct object still compares equal.
+    return repr(value)
+
+
+def activation_payload_identity(payload: VisualizerActivationPayload) -> tuple:
+    """Stable identity of ONE resolved activation payload.
+
+    Derived from the resolved authored values, so a genuine preset change, a
+    user settings mutation or a mode change all produce a different identity
+    even when the mode id is unchanged. A per-mode memoisation cache was
+    rejected precisely because same-mode preset cycles change the resolved
+    payload while keeping the mode id.
+    """
+    return (
+        str(getattr(payload, "mode", "") or ""),
+        int(getattr(payload, "preset_index", -1) or -1),
+        bool(getattr(payload, "is_custom", False)),
+        str(getattr(payload, "preset_name", "") or ""),
+        str(getattr(payload, "preset_path", "") or ""),
+        _canonical_value(getattr(payload, "resolved_config", {}) or {}),
+    )
+
+
+def _engine_activation_stamp(widget: Any) -> tuple:
+    """Current engine generation/activation, or a sentinel when absent."""
+    engine = getattr(widget, "_engine", None)
+    if engine is None:
+        return (-1, -1)
+    try:
+        return (int(engine.get_generation_id()), int(engine.get_activation_id()))
+    except Exception:
+        return (-1, -1)
+
+
+def _is_duplicate_activation(widget: Any, identity: tuple) -> bool:
+    """Whether this exact payload is already the committed activation.
+
+    Requires the SAME runtime engine generation/activation as well, so a reset
+    or replacement between the two applies still re-applies configuration.
+    """
+    committed = getattr(widget, "_committed_activation_identity", None)
+    if committed is None:
+        return False
+    try:
+        committed_identity, committed_stamp = committed
+    except Exception:
+        return False
+    return committed_identity == identity and committed_stamp == _engine_activation_stamp(widget)
+
+
+def _commit_activation_identity(widget: Any, identity: tuple) -> None:
+    try:
+        widget._committed_activation_identity = (identity, _engine_activation_stamp(widget))
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to record activation identity", exc_info=True)
+
+
+def invalidate_committed_activation_identity(widget: Any) -> None:
+    """Drop the committed identity so the next apply is never suppressed."""
+    try:
+        widget._committed_activation_identity = None
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to clear activation identity", exc_info=True)
+
+
+@contextlib.contextmanager
+def engine_activation_transaction(widget: Any, *, reason: str):
+    """Run one target activation as a single engine generation boundary.
+
+    Bar-count resize, smoothing reset, floor/waveform reset and technical
+    configuration each used to advance the engine generation independently, so
+    one BUBBLE -> DEVCURVE switch produced three of them and consumers could
+    gate a fresh frame on an intermediate one.
+    """
+    engine = getattr(widget, "_engine", None)
+    begin = getattr(engine, "begin_activation_transaction", None)
+    end = getattr(engine, "end_activation_transaction", None)
+    if engine is None or not callable(begin) or not callable(end):
+        yield None
+        return
+    begin()
+    try:
+        yield engine
+    finally:
+        try:
+            end(reason=reason)
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] Failed to close activation transaction", exc_info=True
+            )
+
+
+def _retrack_final_engine_generation(widget: Any) -> None:
+    """Re-bind fresh-frame gating to the committed final activation."""
+    engine = getattr(widget, "_engine", None)
+    if engine is None:
+        return
+    track = getattr(widget, "_track_engine_generation", None)
+    if callable(track):
+        try:
+            track(engine)
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] Failed to re-track final engine generation", exc_info=True
+            )
+    try:
+        if int(getattr(widget, "_mode_teardown_target_generation", -1)) >= 0:
+            widget._mode_teardown_target_generation = int(engine.get_generation_id())
+    except Exception:
+        logger.debug(
+            "[SPOTIFY_VIS] Failed to re-target mode teardown generation", exc_info=True
+        )
+
+
 def apply_resolved_activation_payload(
     widget: Any,
     model: SpotifyVisualizerSettings,
@@ -213,10 +348,27 @@ def apply_resolved_activation_payload(
     reason: str,
     force_runtime_reset: bool = False,
 ) -> None:
-    snapshot = _store_authoritative_settings_model(widget, model)
-
     vm = widget._map_mode_key_to_enum(payload.mode)
     mode_changed = vm != widget._vis_mode
+    identity = activation_payload_identity(payload)
+
+    if (
+        not force_runtime_reset
+        and not mode_changed
+        and _is_duplicate_activation(widget, identity)
+    ):
+        # Identical resolved payload, same runtime generation and activation:
+        # re-applying it is duplicate technical/runtime work, which is what the
+        # installed run showed immediately after every mode switch.
+        logger.debug(
+            "[SPOTIFY_VIS] Skipped identical activation payload replay reason=%s mode=%s",
+            reason,
+            payload.mode,
+        )
+        return
+
+    snapshot = _store_authoritative_settings_model(widget, model)
+
     if mode_changed:
         widget._vis_mode = vm
 
@@ -244,20 +396,35 @@ def apply_resolved_activation_payload(
     if widget._mode_transition_phase == 0 and widget._mode_transition_apply_height_on_resume:
         widget._apply_pending_mode_transition_layout()
 
-    apply_authoritative_runtime_handoff(
-        widget,
-        vm,
-        reason=f"{reason}:activation_payload",
-        replay_engine=not (force_runtime_reset or mode_changed),
-    )
+    # ONE engine generation boundary for the whole target activation. Every
+    # preparation step below defers its bump to the single commit at the end,
+    # so no intermediate target generation can publish or reveal.
+    with engine_activation_transaction(widget, reason=f"{reason}:activation_payload"):
+        apply_authoritative_runtime_handoff(
+            widget,
+            vm,
+            reason=f"{reason}:activation_payload",
+            replay_engine=not (force_runtime_reset or mode_changed),
+        )
+
+        if force_runtime_reset or mode_changed:
+            widget._waiting_for_fresh_engine_frame = True
+            widget._waiting_for_fresh_frame = True
+            widget._reset_mode_owned_runtime_state(reason=reason)
+            widget._clear_gl_overlay()
+            widget._prepare_engine_for_mode_reset()
+            widget._clear_runtime_bar_state()
 
     if force_runtime_reset or mode_changed:
-        widget._waiting_for_fresh_engine_frame = True
-        widget._waiting_for_fresh_frame = True
-        widget._reset_mode_owned_runtime_state(reason=reason)
-        widget._clear_gl_overlay()
-        widget._prepare_engine_for_mode_reset()
-        widget._clear_runtime_bar_state()
+        # Preparation steps inside the transaction snapshot the engine identity
+        # they can see, which is deliberately the PRE-commit one. Fresh-frame
+        # gating must wait for the FINAL activation, so re-snapshot now that the
+        # single generation boundary has actually committed.
+        _retrack_final_engine_generation(widget)
+
+    # Recorded only AFTER the final generation commits, so the identity is
+    # bound to the activation that actually became authoritative.
+    _commit_activation_identity(widget, identity)
 
     log_live_activation_state(widget, vm, payload, reason=reason)
 
