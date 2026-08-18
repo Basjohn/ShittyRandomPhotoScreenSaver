@@ -1239,6 +1239,17 @@ class CustomLayoutManager:
                 self._pause_visualizer_for_edit_mode(vis)
 
     def _pause_visualizer_for_edit_mode(self, vis: Any) -> None:
+        """Suspend the visualizer for editing without tearing its GL down.
+
+        The hidden ``SpotifyBarsGLOverlay`` QWidget's show/hide state is not
+        presentation truth any more, so hiding it suspends nothing. What has to
+        stop is the compositor's published visualizer state and its
+        VISUALIZER_ACTIVE liveness.
+
+        Programs, VAO/VBO and the card texture belong to the compositor
+        generation and are deliberately retained: an edit session is not a
+        runtime lifecycle boundary, and Cancel must not pay for a cold rebuild.
+        """
         if self._paused_visualizer is not None:
             return
         try:
@@ -1246,16 +1257,28 @@ class CustomLayoutManager:
         except Exception:
             overlay = None
         was_visible = bool(getattr(vis, "isVisible", lambda: False)())
-        overlay_visible = bool(getattr(overlay, "isVisible", lambda: False)()) if overlay is not None else False
-        self._paused_visualizer = (vis, was_visible, overlay, overlay_visible)
+        self._paused_visualizer = (vis, was_visible, overlay, False)
         try:
             if was_visible and hasattr(vis, "stop"):
                 vis.stop()
             vis.hide()
-            if overlay is not None:
-                overlay.hide()
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to pause visualizer for edit mode", exc_info=True)
+        self._suspend_compositor_visualizer_presentation()
+
+    def _suspend_compositor_visualizer_presentation(self) -> None:
+        """Clear the published visualizer layer; keep its GL resources."""
+        compositor = getattr(self._display, "_gl_compositor", None)
+        clear_state = getattr(compositor, "clear_visualizer_state", None)
+        if not callable(clear_state):
+            return
+        try:
+            clear_state()
+        except Exception:
+            logger.debug(
+                "[CUSTOM_LAYOUT] Failed to suspend compositor visualizer presentation",
+                exc_info=True,
+            )
 
     def _restore_special_widgets(self) -> None:
         for widget, was_visible in self._special_hidden:
@@ -1268,20 +1291,18 @@ class CustomLayoutManager:
         self._special_hidden.clear()
 
         if self._paused_visualizer is not None:
-            vis, was_visible, overlay, overlay_visible = self._paused_visualizer
+            vis, was_visible, _overlay, _unused = self._paused_visualizer
+            # Cleared first so a second restore cannot resume twice.
+            self._paused_visualizer = None
             try:
                 if was_visible and hasattr(vis, "start"):
+                    # start() re-arms staged startup, which now prepares the
+                    # compositor renderer at fade zero and reveals only once it
+                    # is ready. Showing the overlay QWidget would prove nothing:
+                    # it is not the presentation surface.
                     vis.start()
             except Exception:
                 logger.debug("[CUSTOM_LAYOUT] Failed to resume visualizer after edit mode", exc_info=True)
-            try:
-                if was_visible:
-                    vis.show()
-                if overlay is not None and overlay_visible:
-                    overlay.show()
-            except Exception:
-                logger.debug("[CUSTOM_LAYOUT] Failed to restore visualizer visibility after edit mode", exc_info=True)
-            self._paused_visualizer = None
 
     def _create_shell_state(
         self,
@@ -1444,47 +1465,72 @@ class CustomLayoutManager:
         local_rect: QRect,
         canvas_size: QSize | None = None,
     ) -> QPixmap:
+        """Build the edit preview from the compositor-owned visualizer scene.
+
+        ``SpotifyBarsGLOverlay`` is a plain never-presented QWidget now: it owns
+        no framebuffer to grab, and the card QWidget paints nothing while the
+        compositor owns its visual. Both halves of the old snapshot therefore
+        produced blank pixels. The compositor supplies one card-local,
+        alpha-correct image of the same scene it is drawing.
+        """
         capture_size = QSize(canvas_size) if isinstance(canvas_size, QSize) and not canvas_size.isEmpty() else local_rect.size()
         snapshot = QPixmap(max(1, capture_size.width()), max(1, capture_size.height()))
         snapshot.fill(Qt.GlobalColor.transparent)
-        widget_snapshot = widget.grab()
-        if not widget_snapshot.isNull():
-            painter = QPainter(snapshot)
-            try:
-                painter.drawPixmap(0, 0, widget_snapshot)
-            finally:
-                painter.end()
 
-        overlay = getattr(self._display, "_spotify_bars_overlay", None)
-        if overlay is None:
+        scene = self._capture_compositor_visualizer_scene()
+        if scene is None or scene.isNull():
+            # Loud rather than silently previewing an empty card: the edit
+            # session still works, it just shows no visualizer pixels.
+            logger.warning(
+                "[CUSTOM_LAYOUT] Visualizer edit preview has no compositor scene; "
+                "falling back to the authored card widget grab"
+            )
+            widget_snapshot = widget.grab()
+            if not widget_snapshot.isNull():
+                painter = QPainter(snapshot)
+                try:
+                    painter.drawPixmap(0, 0, widget_snapshot)
+                finally:
+                    painter.end()
             return snapshot
 
-        try:
-            overlay_geom = overlay.geometry()
-        except Exception:
-            logger.debug("[CUSTOM_LAYOUT] Failed to read visualizer overlay geometry", exc_info=True)
-            return snapshot
-
-        if overlay_geom.width() <= 0 or overlay_geom.height() <= 0:
-            return snapshot
-
-        try:
-            overlay_image = overlay.grabFramebuffer()
-        except Exception:
-            logger.debug("[CUSTOM_LAYOUT] Failed to capture visualizer overlay framebuffer", exc_info=True)
-            return snapshot
-
-        if overlay_image.isNull():
-            return snapshot
-
+        offset = self._visualizer_scene_offset(local_rect)
         painter = QPainter(snapshot)
         try:
-            overlay_pixmap = QPixmap.fromImage(overlay_image)
-            overlay_offset = overlay_geom.topLeft() - local_rect.topLeft()
-            painter.drawPixmap(overlay_offset, overlay_pixmap)
+            painter.drawPixmap(offset, scene)
         finally:
             painter.end()
         return snapshot
+
+    def _capture_compositor_visualizer_scene(self) -> QPixmap | None:
+        """One snapshot request, at edit entry, from the display compositor."""
+        compositor = getattr(self._display, "_gl_compositor", None)
+        capture = getattr(compositor, "capture_visualizer_scene_pixmap", None)
+        if not callable(capture):
+            return None
+        try:
+            return capture()
+        except Exception:
+            logger.debug(
+                "[CUSTOM_LAYOUT] Compositor visualizer snapshot failed", exc_info=True
+            )
+            return None
+
+    def _visualizer_scene_offset(self, local_rect: QRect) -> QPoint:
+        """Where the captured card sits inside the shell's preview canvas."""
+        overlay = getattr(self._display, "_spotify_bars_overlay", None)
+        if overlay is None:
+            return QPoint(0, 0)
+        try:
+            overlay_geom = overlay.geometry()
+        except Exception:
+            logger.debug(
+                "[CUSTOM_LAYOUT] Failed to read visualizer geometry anchor", exc_info=True
+            )
+            return QPoint(0, 0)
+        if overlay_geom.width() <= 0 or overlay_geom.height() <= 0:
+            return QPoint(0, 0)
+        return overlay_geom.topLeft() - local_rect.topLeft()
 
     def _read_monitor_value_for_widget(self, descriptor: WidgetRuntimeDescriptor) -> str:
         settings_manager = getattr(self._display, "settings_manager", None)

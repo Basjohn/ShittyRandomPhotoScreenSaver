@@ -2938,7 +2938,13 @@ def test_custom_layout_manager_saves_and_reapplies_imgur_scale_resize(qtbot, mon
     assert payload["resize_mode"] == "imgur_scale"
 
 
-def test_custom_layout_manager_visualizer_shell_snapshot_uses_display_composite(qtbot):
+def test_custom_layout_manager_visualizer_shell_snapshot_uses_compositor_scene(qtbot):
+    """The edit preview must come from the compositor, not a retired surface.
+
+    ``SpotifyBarsGLOverlay`` is a never-presented QWidget with no framebuffer,
+    and the card QWidget paints nothing while the compositor owns its visual,
+    so the old grab-both-halves snapshot produced blank pixels.
+    """
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     settings_stub._widgets_map = {"media": {"position": "Custom", "monitor": "ALL"}}
@@ -2948,18 +2954,36 @@ def test_custom_layout_manager_visualizer_shell_snapshot_uses_display_composite(
 
     visualizer = _VisualizerLikeTestWidget(display)
     display.spotify_visualizer_widget = visualizer
+
     class _OverlayStub(QWidget):
+        """Geometry anchor only. Grabbing it is the retired contract."""
+
         def grabFramebuffer(self):
-            pm = QPixmap(max(1, self.width()), max(1, self.height()))
-            pm.fill(QColor(40, 120, 240, 180))
-            return pm.toImage()
+            raise AssertionError("the overlay is not a presentation surface")
 
     overlay = _OverlayStub(display)
     overlay.setGeometry(visualizer.geometry())
-    overlay.show()
     display._spotify_bars_overlay = overlay
     qtbot.addWidget(visualizer)
     qtbot.addWidget(overlay)
+
+    scene_pixmap = QPixmap(overlay.width(), overlay.height())
+    scene_pixmap.fill(QColor(40, 120, 240, 180))
+
+    class _CompositorStub:
+        def __init__(self):
+            self.captures = 0
+            self.cleared = 0
+
+        def capture_visualizer_scene_pixmap(self):
+            self.captures += 1
+            return scene_pixmap
+
+        def clear_visualizer_state(self):
+            self.cleared += 1
+
+    compositor = _CompositorStub()
+    display._gl_compositor = compositor
 
     manager = CustomLayoutManager(display)
     _attach_manager(display, manager)
@@ -2969,9 +2993,73 @@ def test_custom_layout_manager_visualizer_shell_snapshot_uses_display_composite(
     display.grab = original_grab  # type: ignore[assignment]
 
     state = manager._shell_states["spotify_visualizer"]
-    assert not state.shell._snapshot.isNull()
-    assert overlay.isVisible() is False
+    snapshot = state.shell._snapshot
+    assert not snapshot.isNull()
+    # Exactly one snapshot, taken at edit entry.
+    assert compositor.captures == 1
+    # The preview is the card region, never the whole display.
+    assert snapshot.width() <= display.width()
+    assert snapshot.height() <= display.height()
+    # The compositor scene pixels actually landed in the preview.
+    image = snapshot.toImage()
+    assert image.pixelColor(overlay.width() // 2, overlay.height() // 2).alpha() > 0
+    # Presentation is suspended; logical work is stopped.
+    assert compositor.cleared == 1
     assert visualizer._started is False
+
+
+def test_custom_layout_manager_edit_session_retains_visualizer_gl_resources(qtbot):
+    """An edit session is not a runtime lifecycle boundary."""
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"media": {"position": "Custom", "monitor": "ALL"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    class _OverlayStub(QWidget):
+        def __init__(self, parent):
+            super().__init__(parent)
+            self.gl_cleanups = 0
+
+        def cleanup_gl(self):
+            self.gl_cleanups += 1
+
+    overlay = _OverlayStub(display)
+    overlay.setGeometry(visualizer.geometry())
+    display._spotify_bars_overlay = overlay
+    qtbot.addWidget(overlay)
+
+    scene_pixmap = QPixmap(overlay.width(), overlay.height())
+    scene_pixmap.fill(QColor(10, 200, 90, 255))
+
+    class _CompositorStub:
+        def __init__(self):
+            self.cleared = 0
+
+        def capture_visualizer_scene_pixmap(self):
+            return scene_pixmap
+
+        def clear_visualizer_state(self):
+            self.cleared += 1
+
+    compositor = _CompositorStub()
+    display._gl_compositor = compositor
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    assert overlay.gl_cleanups == 0, "edit mode destroyed visualizer GL resources"
+
+    manager.cancel_session()
+    assert overlay.gl_cleanups == 0
+    # Cancel resumes the logical owner exactly once; readiness owns the reveal.
+    assert visualizer._started is True
+    assert manager._paused_visualizer is None
 
 
 def test_custom_layout_manager_saves_visualizer_rect_under_visualizer_custom_slot(qtbot):
