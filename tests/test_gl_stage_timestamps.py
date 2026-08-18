@@ -266,7 +266,10 @@ class TestSampledIdentityMatchesOuterQuery:
         successor = NS(scene_generation=3, frame_index=9, paint_interval_ms=70.0)
         report = associate_stages([packet], [successor])
 
-        entry = report["by_label"]["burn"]["over_50"]
+        # Buckets are keyed "<transition>|<render_path>" so a log line is
+        # interpretable without cross-referencing the packet.
+        key = next(k for k in report["by_label"] if k.startswith("burn|"))
+        entry = report["by_label"][key]["over_50"]
         assert entry["core_draw_gpu_ms"]["n"] == 1
         assert "unpartitioned_gpu_ms" in entry, (
             "outer sample must join by the same identity so residual is derivable"

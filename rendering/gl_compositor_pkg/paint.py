@@ -135,15 +135,23 @@ def _ensure_qt_composition_observer(widget) -> None:
 
 
 def _stage_render_path(widget) -> str:
-    """Label the active render path so fallback cannot claim shader ownership."""
-    try:
-        if getattr(widget, "_gl_disabled_for_session", False):
-            return "qpainter_fallback"
-        if not getattr(widget, "_use_shaders", True):
-            return "qpainter_fallback"
-    except Exception:
-        return "unknown"
-    return "shader"
+    """Initial label only.
+
+    `_use_shaders` is NOT attribution authority: the GL lifecycle sets it False
+    while the active shader paths are still selected independently through
+    can_use_* and try_shader_path. The packet therefore starts unresolved and is
+    overwritten by whichever path actually succeeds.
+    """
+    del widget
+    return "pending"
+
+
+def stage_set_render_path(widget, path: str) -> None:
+    """Record the render path that actually executed for the sampled frame."""
+    ring = getattr(widget, "_gl_stage_timestamps", None)
+    packet = getattr(ring, "_active", None) if ring is not None else None
+    if packet is not None:
+        packet.render_path = str(path)
 
 
 def _resolve_gl():
@@ -564,6 +572,8 @@ def paintGL_impl(widget) -> None:
 
     if not shader_success:
         # Missing retained base texture or shader failure — use QPainter.
+        # Label the sampled packet honestly: no GL shader stages were executed.
+        stage_set_render_path(widget, "qpainter_fallback")
         if any_transition_active:
             _log_shader_fallback_once(widget, active_names)
         painter = QPainter(widget)
