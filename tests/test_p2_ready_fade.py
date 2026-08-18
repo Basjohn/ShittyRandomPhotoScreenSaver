@@ -600,3 +600,223 @@ class TestColdRampAdvancesWhileHidden:
         assert "self._play_ramp_start_ts = 0.0" in source, (
             "a warm capture resume must not re-enter the cold ramp"
         )
+
+
+# ---------------------------------------------------------------------------
+# Installed regressions from the first closure attempt
+# ---------------------------------------------------------------------------
+
+
+class TestNoFlashBeforeTheFade:
+    """"Visualizer flashes once before the fade starts."
+
+    The compositor layer releases the card visual whenever its published state is
+    cleared. Removing the QGraphicsOpacityEffect left nothing holding the card
+    QWidget at zero opacity in that window, so it self-painted one opaque frame.
+    """
+
+    def test_card_paint_is_gated_on_the_compositor_layer_existing(self, qt_app):
+        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+
+        probe = SpotifyVisualizerWidget.__new__(SpotifyVisualizerWidget)
+        probe._compositor_owns_card_visual = False
+        probe.parentWidget = lambda: SimpleNamespace(
+            _gl_compositor=SimpleNamespace(_visualizer_layer=object())
+        )
+        assert probe._compositor_owns_visualizer_pixels() is True
+
+    def test_a_released_card_visual_still_does_not_self_paint(self, qt_app):
+        from rendering.gl_compositor_pkg.visualizer_layer import CompositorVisualizerLayer
+        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+
+        card = SpotifyVisualizerWidget.__new__(SpotifyVisualizerWidget)
+        card._compositor_owns_card_visual = True
+        compositor = SimpleNamespace(_visualizer_layer=None)
+        card.parentWidget = lambda: SimpleNamespace(_gl_compositor=compositor)
+
+        layer = CompositorVisualizerLayer(compositor)
+        compositor._visualizer_layer = layer
+        owner = SimpleNamespace()
+        owner.parentWidget = lambda: SimpleNamespace(spotify_visualizer_widget=card)
+        layer.publish(VisualizerRenderState(owner, QRect(0, 0, 400, 200)))
+
+        layer.clear()  # mode reset / anchor hide / teardown
+
+        assert card._compositor_owns_card_visual is False
+        assert card._compositor_owns_visualizer_pixels() is True, (
+            "the card must not start painting itself just because the layer cleared"
+        )
+
+
+class TestModeCrossfadeDoesNotStackOnTheCard:
+    """"Trying to change modes leaves a dead visualizer."
+
+    The card used to fade only on its own reveal curve while the mode crossfade
+    multiplied the shader. Multiplying both stacked two 0 -> 1 ramps on the card.
+    """
+
+    def test_the_crossfade_multiplies_only_the_shader(self):
+        import inspect
+
+        from widgets.spotify_visualizer import tick_pipeline
+
+        source = inspect.getsource(tick_pipeline.push_gpu_frame)
+        assert "bars_fade *= transition_fade" in source
+        assert "scene_fade *= transition_fade" not in source, (
+            "the authored card fade must not be multiplied by the mode crossfade"
+        )
+
+
+@pytest.mark.qt
+class TestRevealFollowsSceneStateNotWidgetVisibility:
+    """"Final visualizer does not ever go live when music starts playing."
+
+    ``start_widget_fade_out`` no longer hides the logical widget - the compositor
+    owns the pixels - so a reveal gated on ``isVisible()`` alone did nothing
+    after any fade-out and the scene stayed at zero forever.
+    """
+
+    def test_a_faded_out_but_visible_scene_still_needs_a_reveal(self, qt_app):
+        fade = VisualizerPresentationFade()
+        fade.jump_to(1.0)
+        assert fade.needs_reveal() is False
+        fade.jump_to(0.0)
+        assert fade.needs_reveal() is True
+
+    def test_an_in_flight_animation_is_never_interrupted(self, qt_app):
+        fade = VisualizerPresentationFade()
+        fade.jump_to(1.0)
+        fade.begin_fade_out(duration_ms=1200)
+        assert fade.needs_reveal() is False, "a running hide must be allowed to finish"
+
+        fade.reset()
+        fade.begin_fade_in(duration_ms=1800)
+        assert fade.needs_reveal() is False, "a running reveal must not be restarted"
+
+    def test_the_staged_reveal_consults_scene_state(self):
+        import inspect
+
+        from widgets.spotify_visualizer import startup_staging
+
+        source = inspect.getsource(startup_staging.finish_staged_startup_reveal)
+        assert "scene_needs_reveal(widget)" in source
+
+    def test_the_anchor_sync_consults_scene_state(self):
+        import inspect
+
+        from widgets.spotify_visualizer import media_bridge
+
+        source = inspect.getsource(media_bridge.sync_visibility_with_anchor)
+        assert "_scene_needs_reveal(widget)" in source
+
+    def test_an_anchor_sync_does_not_interrupt_a_mode_transition(self):
+        from widgets.spotify_visualizer import media_bridge
+
+        widget = SimpleNamespace(_mode_transition_phase=2, _mode_teardown_state="fading_out")
+        assert media_bridge._scene_needs_reveal(widget) is False
+
+
+class TestReadinessCanDelayButNeverDeadlock:
+    def test_a_failed_gl_generation_still_permits_reveal(self):
+        layer = CompositorVisualizerLayer(
+            SimpleNamespace(_rhi_gl=SimpleNamespace(context=object(), generation=1))
+        )
+        card = _CardStub()
+        owner = SimpleNamespace(
+            _enabled=True,
+            _fade=0.0,
+            layer_gl_resources_ready=lambda: False,
+            layer_gl_failed=lambda: True,
+        )
+        owner.parentWidget = lambda: SimpleNamespace(spotify_visualizer_widget=card)
+        layer.publish(VisualizerRenderState(owner, QRect(0, 0, 400, 200)))
+
+        assert layer.is_presentation_ready() is False
+        assert layer.can_reveal() is True, (
+            "a permanently invisible visualizer is worse than an imperfect one"
+        )
+
+    def test_an_unprepared_layer_still_waits(self):
+        layer = CompositorVisualizerLayer(
+            SimpleNamespace(_rhi_gl=SimpleNamespace(context=object(), generation=1))
+        )
+        card = _CardStub()
+        owner = SimpleNamespace(
+            _enabled=True,
+            _fade=0.0,
+            layer_gl_resources_ready=lambda: False,
+            layer_gl_failed=lambda: False,
+        )
+        owner.parentWidget = lambda: SimpleNamespace(spotify_visualizer_widget=card)
+        layer.publish(VisualizerRenderState(owner, QRect(0, 0, 400, 200)))
+
+        assert layer.can_reveal() is False
+
+    def test_an_unusable_card_image_does_not_hide_the_visualizer_forever(self, monkeypatch):
+        layer = CompositorVisualizerLayer(
+            SimpleNamespace(_rhi_gl=SimpleNamespace(context=object(), generation=1))
+        )
+        card = _CardStub()
+        owner = SimpleNamespace(
+            _enabled=True,
+            _fade=0.0,
+            initialize_layer_gl=lambda ctx: True,
+            layer_gl_resources_ready=lambda: True,
+            layer_gl_failed=lambda: False,
+        )
+        owner.parentWidget = lambda: SimpleNamespace(spotify_visualizer_widget=card)
+        layer.publish(VisualizerRenderState(owner, QRect(0, 0, 400, 200)))
+
+        monkeypatch.setattr(
+            "widgets.spotify_visualizer.card_paint.ensure_painted_frame_shadow_pixmap",
+            lambda *a, **k: None,
+        )
+        layer.prepare(600, 1.0)
+
+        assert layer.is_presentation_ready() is False
+        assert layer._card_preparation_failed is True
+        assert layer.can_reveal() is True
+
+    def test_preparation_that_never_completes_still_reveals(self):
+        """No unforeseen readiness condition may hide the visualizer forever."""
+        layer = CompositorVisualizerLayer(
+            SimpleNamespace(_rhi_gl=SimpleNamespace(context=object(), generation=1))
+        )
+        card = _CardStub()
+        owner = SimpleNamespace(
+            _enabled=True,
+            _fade=0.0,
+            # Initialization keeps failing, so geometry is never committed.
+            initialize_layer_gl=lambda ctx: False,
+            layer_gl_resources_ready=lambda: False,
+            layer_gl_failed=lambda: False,
+        )
+        owner.parentWidget = lambda: SimpleNamespace(spotify_visualizer_widget=card)
+        layer.publish(VisualizerRenderState(owner, QRect(0, 0, 400, 200)))
+
+        for _ in range(layer._PREPARE_ATTEMPT_BUDGET - 1):
+            layer.prepare(600, 1.0)
+        assert layer.can_reveal() is False, "the gate must still be delaying"
+
+        layer.prepare(600, 1.0)
+        assert layer.can_reveal() is True
+        assert layer.is_presentation_ready() is False, "readiness stays truthful"
+
+    def test_the_attempt_budget_resets_with_the_preparation_state(self):
+        layer = CompositorVisualizerLayer(
+            SimpleNamespace(_rhi_gl=SimpleNamespace(context=object(), generation=1))
+        )
+        owner = SimpleNamespace(
+            _enabled=True,
+            _fade=0.0,
+            initialize_layer_gl=lambda ctx: False,
+            layer_gl_resources_ready=lambda: False,
+            layer_gl_failed=lambda: False,
+        )
+        owner.parentWidget = lambda: None
+        layer.publish(VisualizerRenderState(owner, QRect(0, 0, 400, 200)))
+        for _ in range(10):
+            layer.prepare(600, 1.0)
+        assert layer._prepare_attempts == 10
+        layer.clear()
+        assert layer._prepare_attempts == 0

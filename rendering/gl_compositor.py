@@ -560,6 +560,15 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
     def is_visualizer_presentation_ready(self) -> bool:
         return self._visualizer_layer.is_presentation_ready()
 
+    def visualizer_can_reveal(self) -> bool:
+        """Whether the visible visualizer fade may begin.
+
+        Readiness normally, but also true once preparation has been attempted
+        and cannot complete. The gate delays the reveal; it never hides the
+        visualizer permanently.
+        """
+        return self._visualizer_layer.can_reveal()
+
     def acquire_presentation_reason(self, reason: str) -> None:
         """Keep this display presenting while ``reason`` holds.
 
