@@ -314,8 +314,12 @@ def paint_slide_shader(comp: "GLCompositorWidget", target: QRect) -> None:
         return
     if not comp._slide.old_pixmap or comp._slide.old_pixmap.isNull() or not comp._slide.new_pixmap or comp._slide.new_pixmap.isNull():
         return
+    _stage_t = _stage_now()
     if not prepare_slide_textures(comp):
         return
+    # T1: Slide's real preparation completes here, not at try_shader_path.
+    _stage_mark(comp, "t1")
+    _stage_cpu(comp, "prep_cpu_ms", _stage_t)
     comp._transition_renderer.render_slide_shader(target, comp._slide)
 
 def paint_crossfade_shader(comp: "GLCompositorWidget", target: QRect) -> None:
@@ -488,6 +492,13 @@ def _stage_mark(comp, marker: str) -> None:
         ring.mark(gl_api, marker)
 
 
+def _stage_now() -> float:
+    """perf_counter, isolated so marker sites read uniformly."""
+    import time as _t
+
+    return _t.perf_counter()
+
+
 def _stage_path(comp, path: str) -> None:
     """Record the render path that actually executed."""
     from rendering.gl_compositor_pkg.paint import stage_set_render_path
@@ -519,12 +530,16 @@ def try_shader_path(comp: "GLCompositorWidget", name: str, state, can_use_fn, pa
         import time as _stage_time
 
         _stage_t = _stage_time.perf_counter()
-        if prep_fn is not None and not prep_fn():
-            _record_shader_path_failure(comp, name, "texture_prep_failed")
-            return False
-        # T1: prep/texture/cache complete, before the core draw.
-        _stage_mark(comp, "t1")
-        _stage_cpu(comp, "prep_cpu_ms", _stage_t)
+        if prep_fn is not None:
+            if not prep_fn():
+                _record_shader_path_failure(comp, name, "texture_prep_failed")
+                return False
+            # T1 here only when this transition really has outer prep
+            # (currently BlockSpin). Transitions whose prep runs inside their
+            # paint helper mark T1 there instead, so prep is never attributed
+            # to core_draw.
+            _stage_mark(comp, "t1")
+            _stage_cpu(comp, "prep_cpu_ms", _stage_t)
 
         _stage_t = _stage_time.perf_counter()
         paint_fn(target)
