@@ -445,6 +445,70 @@ def _sync_transition_progress_from_frame_state(widget) -> None:
             logger.debug("[GL COMPOSITOR] Failed to sync %s progress", attr, exc_info=True)
 
 
+# Reasons that mean "retained-base shader drawing was never expected yet".
+# Entering QPainter fallback for one of these is ordinary startup behaviour, not
+# a compositor health problem, and must not produce a warning.
+_RETAINED_BASE_EXPECTED_STATES = frozenset({"no_base_image", "gl_unavailable"})
+
+
+def _note_retained_base_fallback(widget) -> None:
+    """Record one loud entry when a healthy compositor drops to QPainter.
+
+    This is a STATE-CHANGE record, not a per-frame log. An established
+    compositor - GL READY, a valid base image, retained shader drawing expected
+    - must never sit silently in the QPainter path, but repeating the same
+    reason every frame would be exactly the per-frame spam the logging rules
+    forbid. One record per distinct reason, one recovery record, nothing else.
+    """
+    reason = str(getattr(widget, "_retained_base_fallback_reason", "") or "unknown")
+    if reason in _RETAINED_BASE_EXPECTED_STATES:
+        return
+    try:
+        if not widget._gl_state.is_ready():
+            return
+    except Exception:
+        return
+
+    previous = getattr(widget, "_retained_base_fallback_latch", None)
+    if previous == reason:
+        try:
+            widget._retained_base_fallback_frames = int(
+                getattr(widget, "_retained_base_fallback_frames", 0)
+            ) + 1
+        except Exception:
+            pass
+        return
+
+    suppressed = int(getattr(widget, "_retained_base_fallback_frames", 0) or 0)
+    widget._retained_base_fallback_latch = reason
+    widget._retained_base_fallback_frames = 0
+    logger.error(
+        "[GL PAINT][FALLBACK] Steady retained-base shader drawing unavailable; "
+        "rendering base image through QPainter reason=%s previous=%s "
+        "disabled=%s suppressed_previous_frames=%d",
+        reason,
+        previous or "<none>",
+        bool(getattr(widget, "_gl_disabled_for_session", False)),
+        suppressed,
+    )
+
+
+def _note_retained_base_recovered(widget) -> None:
+    """Clear the fallback latch once healthy shader drawing resumes."""
+    previous = getattr(widget, "_retained_base_fallback_latch", None)
+    if previous is None:
+        return
+    suppressed = int(getattr(widget, "_retained_base_fallback_frames", 0) or 0)
+    widget._retained_base_fallback_latch = None
+    widget._retained_base_fallback_frames = 0
+    logger.info(
+        "[GL PAINT][FALLBACK] Steady retained-base shader drawing recovered "
+        "previous_reason=%s fallback_frames=%d",
+        previous,
+        suppressed,
+    )
+
+
 def _log_shader_fallback_once(widget, active_names: list[str]) -> None:
     """Emit one loud fallback record per repeated shader-failure signature."""
     last_failure = getattr(widget, "_last_shader_path_failure", "") or "<none>"
@@ -736,6 +800,8 @@ def paintGL_impl(widget) -> None:
         paint_retained_base = getattr(widget, "_paint_retained_base_texture", None)
         if callable(paint_retained_base):
             shader_success = bool(paint_retained_base(target))
+            if shader_success:
+                _note_retained_base_recovered(widget)
 
     _mark_section("shader_render" if shader_success else "shader_attempt")
 
@@ -745,6 +811,8 @@ def paintGL_impl(widget) -> None:
         stage_set_render_path(widget, "qpainter_fallback")
         if any_transition_active:
             _log_shader_fallback_once(widget, active_names)
+        else:
+            _note_retained_base_fallback(widget)
         # QPainter(widget) targeted the QOpenGLWidget FBO. Under QRhiWidget the
         # painter must render into the QRhi target through the external GL
         # section, otherwise the fallback and PERF HUD silently stop appearing.
