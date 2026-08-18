@@ -1,51 +1,46 @@
 # Project Overview
 
-Last updated: 2026-08-11
+Last updated: 2026-08-18
 
 ## What SRPSS Is
 
-SRPSS is a Windows screensaver and media runtime with:
+SRPSS is a Windows screensaver/media runtime with multi-display image presentation,
+accelerated transitions, a high-fidelity Spotify visualizer, configurable overlay widgets,
+durable settings/profiles and Normal/Media Center runtime variants.
 
-- multi-display image presentation;
-- OpenGL transitions and visual effects;
-- Spotify visualizers;
-- configurable overlay widgets;
-- durable settings, profiles, imports, and migrations;
-- Normal and Media Center runtime variants.
+## Read Order
 
-## Documentation Read Order
+Do **not** read the whole documentation tree for every task.
 
-Do **not** read the entire documentation tree for every task.
+For active engineering work:
 
-1. Read `Index.md` to identify the owning subsystem.
-2. Read the short relevant section of `Docs/Guardrails.md`.
-3. Use `Docs/Contracts.md` to find the canonical code and focused document.
-4. Read `Spec.md` only when changing stable architecture or product behaviour.
-5. Read `Current_Plan.md` only when working on active planned work.
-6. Read focused documents only for the subsystem being changed.
-7. Read `Docs/Historical_Bugs/README.md` when touching a fragile area with prior regressions.
+1. Read the user's current instruction and exact current `main` source first.
+2. Read `Current_Plan.md` when the task belongs to active work.
+3. Use `Index.md` / `Docs/Contracts.md` to identify the current owner.
+4. Read `Docs/Guardrails.md` plus the one focused guardrail for the subsystem.
+5. Read `Spec.md` / focused architecture docs when a stable contract is involved.
+6. Read the relevant current phase report only for accepted evidence and its limits.
+7. Read historical bug/older phase records only for regression lessons or negative controls.
 
-For compositor/architecture work, also read:
+**Phase reports and historical bug records are commit/date-scoped evidence. Their class names,
+owner maps and implementation diagrams do not become current architecture merely because they
+are detailed.** Exact current `main` and the active plan win.
 
-- `Docs/Compositor_Architecture.md`
-- `Docs/TestSuite.md`
-- the relevant section of `Docs/Harness_Index.md`
+## Current Presentation Architecture
 
-## Document Roles
+- Accelerated presentation is required for the modern compositor/visualizer runtime.
+- Each active physical display owns one `GLCompositorWidget` presentation surface.
+- The surface is `ExternalOpenGLRhiWidget` / `QRhiWidget.Api.OpenGL` using the top-level
+  OpenGL QRhi.
+- Existing PyOpenGL transition/visualizer renderers run inside the QRhi external-content pass.
+- The visualizer is a compositor layer, not a second presented `QOpenGLWidget`/`QRhiWidget`.
+- `SpotifyBarsGLOverlay` remains a logical state/geometry/GL-resource owner and never shows or
+  paints as its own surface.
+- Visualizer source/simulation cadence remains independent from physical presentation.
+- One display-local presentation strategy owns physical frame opportunities for transition and
+  visualizer liveness; paint acknowledgement is not admission.
 
-| File | Role |
-|---|---|
-| `Index.md` | Navigation and ownership map |
-| `Docs/Guardrails.md` | Durable cross-cutting safety rules |
-| `Docs/Contracts.md` | Fast task-to-owner routing |
-| `Spec.md` | Stable architecture and behaviour contracts |
-| `Current_Plan.md` | Unfinished active work only |
-| `Docs/Compositor_Architecture.md` | Compositor architecture and target design |
-| `Docs/TestSuite.md` | Testing levels and release bars |
-| `Docs/Harness_Index.md` | Commands for recurring investigations |
-| `Docs/Historical_Bugs/README.md` | Historical incident index and full standalone records |
-| `Docs/Historical_Bugs.md` | Compact historical status/navigation map |
-| `Docs/Documentation_Maintenance.md` | Documentation drift and size control |
+See `Docs/Compositor_Architecture.md` and `Docs/Guardrails/Visualizer_Presentation.md`.
 
 ## Core Engineering Priorities
 
@@ -53,27 +48,19 @@ When goals conflict:
 
 1. visualizer fidelity and reactivity;
 2. lifecycle and GL safety;
-3. frame pacing and perceived smoothness;
+3. frame pacing/perceived smoothness;
 4. correct multi-display behaviour;
-5. bounded RAM and VRAM;
-6. CPU and task efficiency;
+5. bounded RAM/VRAM;
+6. CPU/task efficiency;
 7. average FPS;
-8. code elegance.
+8. architecture elegance.
 
-## Current Architecture Authority
+## Evidence And Repository Stability
 
-Current `main` is the implementation authority. Historical baseline/candidate branches
-and commits are forensic references or negative controls only; they are not design
-owners, merge targets, or implementation starting points.
+Current `main` is implementation authority. Historical commits are forensic references or
+negative controls only.
 
-Runtime evidence belongs under:
+Runtime evidence belongs under `logs/evidence_chest/` when intentionally preserved.
 
-```text
-logs/evidence_chest/
-```
-
-## Repository Stability Rule
-
-Existing files and documents are updated in place.
-
-Do not rename or move any existing file, directory, or document unless the user explicitly requests that exact rename or move.
+Existing files/documents are updated in place. Do not rename or move an existing path unless
+the user explicitly requests that exact rename/move.

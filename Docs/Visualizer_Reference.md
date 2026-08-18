@@ -1,116 +1,140 @@
 # Visualizer Reference
 
-Last updated: 2026-08-08
+Last updated: 2026-08-18
 
-Focused architecture reference for the Spotify visualizer subsystem.
+Current Spotify visualizer architecture/settings reference.
 
-## 1. Mode Identity
+## 1. Modes
 
-Source of truth: `core/settings/visualizer_mode_registry.py`.
+Canonical ids come from `core/settings/visualizer_mode_registry.py`:
 
-| Internal ID | User Label | Status |
-|---|---|---|
-| `spectrum` | Spectrum | active |
-| `oscilloscope` | Oscilloscope | active |
-| `sine_wave` | Sine Waves | active |
-| `bubble` | Bubble | active |
-| `devcurve` | Spline Curve | active |
+- `spectrum`
+- `oscilloscope`
+- `sine_wave`
+- `bubble`
+- `devcurve` (user-facing Spline Curve)
 
-`devcurve` remains the internal id for Spline Curve. `--devcurve` remains accepted as a compatibility no-op.
+Retired Blob identities remain migration/history only.
 
-## 2. Retired Modes
+## 2. Settings / Presets
 
-Blob was removed end to end on 2026-07-15 and is not selectable, gated, rendered, preset-owning, or packaged.
+- model: `core/settings/models/_spotify_visualizer.py`
+- normalization: visualizer settings snapshot/contract modules
+- preset resolution: `core/settings/visualizer_presets.py`
+- mode identity: visualizer mode registry
+- one activation consumes one resolved target payload
 
-- `core/settings/visualizer_retired_modes.py` is the only active Blob-related production seam.
-- A saved/imported `mode: blob` resolves to the registry-owned default.
-- Every `blob_*` and `preset_blob` leaf is stripped before model normalization and never re-emitted.
-- Historical subtype names and controls are migration evidence only, not active settings or runtime contracts.
-- `tests/test_visualizer_retired_modes.py` protects selection fallback, plain/dotted stripping, sibling-preserving schema migration, and canonical-default absence.
+Curated preset selection, same-mode preset cycling and user setting mutation must remain distinct
+from stale/identical settings refresh. Do not globally cache solely by mode id.
 
-## 3. Settings And Activation
+## 3. Logical Runtime
 
-- Settings-model source of truth: `core/settings/models/_spotify_visualizer.py`.
-- Mapping normalization: `core/settings/visualizer_settings_snapshot.py`.
-- Legacy/technical normalization: `core/settings/visualizer_settings_contract.py`.
-- Retired-mode migration: `core/settings/visualizer_retired_modes.py`.
-- Preset index fallback/lookup: `core/settings/visualizer_preset_indices.py`.
-- Runtime activation payload: `core/settings/visualizer_presets.resolve_visualizer_activation_payload()`.
+Primary owners:
 
-Runtime and saved settings use mode-owned keys. Legacy global visualizer keys may be accepted as import/migration inputs, but normalized payloads must not re-emit them. `SettingsManager.set_spotify_visualizer_settings()` persists one normalized visualizer section through an atomic `widgets`-root write while preserving sibling widgets.
+- `widgets/spotify_visualizer_widget.py`
+- `widgets/spotify_visualizer/activation_runtime.py`
+- `widgets/spotify_visualizer/config_applier.py`
+- `widgets/spotify_visualizer/technical_config.py`
+- `widgets/spotify_visualizer/runtime_config.py`
+- `widgets/spotify_visualizer/tick_pipeline.py`
+- `widgets/spotify_visualizer/beat_engine.py`
+- `widgets/spotify_visualizer/audio_worker.py`
 
-Settings and runtime must resolve a selected curated preset through the same
-`apply_preset_to_config()` replace-overlay before mode-owned values are loaded.
-Move To Custom is registry-shared: it snapshots the already resolved controls,
-never stale backing fields hidden beneath a curated preset index.
+Logical/source cadence is independent from paint.
 
-## 4. Presets
+Mode activation produces one final current generation/activation. Intermediate stale generation
+state cannot reveal.
 
-- Active curated tree: `core/settings/visualizer_presets.get_visualizer_presets_dir()`.
-- Packaged/bundled tree: `get_packaged_visualizer_presets_dir()`.
-- Manifest helpers: `core/visualizer_preset_manifest.py`.
-- Import/export helpers: `core/settings/visualizer_preset_transfer.py`.
-- Repair/audit/reindex tool: `tools/visualizer_preset_repair.py`.
+## 4. `SpotifyBarsGLOverlay` Means Logical Owner, Not Surface
 
-Curated presets are supported-mode folders containing JSON payloads. Folder/zip imports replace the curated tree; loose JSON imports are parsed, canonicalized, and written into the inferred mode/slot.
+`widgets/spotify_bars_gl_overlay.py` is intentionally still named `SpotifyBarsGLOverlay`, but in
+current architecture it subclasses plain `QWidget`, is never shown as a presentation surface and
+paints nothing.
 
-## 5. Runtime Pipeline
+It owns/hosts:
 
-- `widgets/spotify_visualizer_widget.py`: coordinator and lifecycle.
-- `widgets/spotify_visualizer/activation_runtime.py`: activation replay.
-- `widgets/spotify_visualizer/config_applier.py`: settings/model to runtime kwargs.
-- `widgets/spotify_visualizer/technical_config.py`: per-mode technical cache/application.
-- `widgets/spotify_visualizer/runtime_config.py`: engine/thread/process/audio-block coordination.
-- `widgets/spotify_bars_gl_overlay.py` plus overlay helpers: GL state transport and render envelope.
-- `widgets/spotify_visualizer/overlay_state.py`: mode reset and activation/generation handoff.
-- Mode renderers/shaders: mode-owned math and uniforms.
+- logical render-state handoff and mode state used by renderer;
+- visualizer GL resource creation/deletion methods on the compositor borrowed context;
+- mode shader/uniform/render helpers;
+- geometry anchor used by CUSTOM/runtime ownership.
 
-Visualizer tick cadence has one steady-state owner: the dedicated recurring timer. Shared audio extraction, timer cadence, compositor ownership, and accepted mode tuning must not change as a side effect of retired-mode cleanup.
+Do not add surface format/update-behaviour/swap ownership back to this class.
 
-### Spectrum presentation smoothing
+## 5. Presentation
 
-- `spectrum_visual_smoothing_enabled` is optional and defaults to `true`.
-- `spectrum_visual_smoothing` ranges from `0.00` to `1.00` and defaults to
-  `0.50`; zero is an effective bypass.
-- `widgets/spotify_visualizer/spectrum_presentation_smoothing.py` applies one
-  symmetric, time-compensated presentation filter to Spectrum bars only on the
-  existing authoritative visualizer tick, before the normal GPU frame push.
-- Strength maps to a `2–14 ms` time constant. It adds no timer, queue, worker,
-  paint mutation, self-requested repaint, source decimation, or Bubble/shared
-  analysis change.
-- First frame, activation/generation/bar-count/render-style identity change,
-  pause/disable, and UI stalls of at least `100 ms` reset or snap to current
-  source so stale filter history cannot add recovery latency.
-- The filter applies to both Spectrum render styles and does not alter the
-  authoritative source bars used by fidelity diagnostics.
+Actual pixels are rendered through:
 
-## 6. CUSTOM Geometry
+`rendering/gl_compositor_pkg/visualizer_layer.py`
 
-- Outside `Custom`, visualizer display routing follows Media.
-- In `Custom`, the visualizer may own its own display/monitor route while visibility still follows Media availability.
-- `Custom + ALL` is not a valid steady-state routing result.
-- Outer-card geometry policy lives in `widgets/spotify_visualizer/card_geometry.py`.
-- Committed CUSTOM rect replay lives in shared CUSTOM/runtime ownership and must not be recalculated from mode/preset height policy.
-- Stencil clipping lives in `overlay_mask.py` / `overlay_frame_shell.py` and stays separate from outer-card placement.
+inside the display's sole `GLCompositorWidget` QRhi/OpenGL surface.
 
-## 7. Diagnostics And Validation
+The visualizer card texture and mode shader share one `PresentationGeometry`/equivalent authority:
+card rect, display DPR, framebuffer origin/size, viewport/scissor and mask coordinates.
 
-- Use `--viz` for ordinary visualizer diagnostics.
-- `--viz-diagnostics` and `--viz-diag` remain compatibility aliases.
-- Use `--geo` for CUSTOM route/geometry questions.
-- Use `--perf` when visualizer work may affect frame or tick cadence.
-- Before and after shared visualizer/runtime changes, run the focused supported-mode reactivity lock from `Docs/Harness_Index.md`.
-- `[SPOTIFY_VIS][FIRST_FRAME_PRIMER]` means an unready activation frame was blanked/primed; investigate repetition or subsequent first-frame bleed rather than accepting stale authority.
-- Deterministic fidelity replay is owned by `widgets/spotify_visualizer/feature_frame.py`, `widgets/spotify_visualizer/replay_runtime.py`, and `tools/visualizer_replay.py`. Fixtures and protected outputs are versioned under `tests/fixtures/visualizer_replay/v1/` and `tests/goldens/visualizer_replay/v1/`.
-- Infrastructure changes run replay verification read-only. Intentional behaviour changes require the roadmap visualizer declaration and explicit golden-update acknowledgements.
+Mode shaders that use framebuffer-space `gl_FragCoord` must explicitly convert to card-local
+coordinates under the compositor viewport.
 
-## 8. Common Drift Risks
+## 6. Card Visual
 
-- settings/model/default omissions,
-- preset parser/import/export divergence,
-- runtime kwargs accepted but not applied,
-- overlay state stored but not rendered,
-- mode-owned caches surviving activation boundaries,
-- retired mode ids or owned keys reappearing in defaults, presets, UI, runtime, or packages,
-- CUSTOM committed rects being overwritten by widget-local sizing,
-- and generic helper tests passing while authored curated preset behavior regresses.
+The authored QWidget/QPainter card appearance may be rasterized/cached on GUI at a known
+size/DPR/style revision. The compositor uploads that source to a GL texture on revision change and
+reuses the texture for steady presentation.
+
+Do not create a QPainter/QOpenGLPaintDevice bridge every visualizer frame merely to draw an
+unchanged card.
+
+## 7. Physical Presentation
+
+The display compositor's one presentation strategy owns physical refresh opportunities while the
+visualizer is active. The visualizer logical tick remains separate.
+
+A 60-Hz display may present the freshest of more-frequent logical updates. A high-refresh display
+must not be artificially capped to 60 Hz.
+
+No paint acknowledgement, pending-until-paint gate or separate visualizer repaint loop.
+
+## 8. Analysis Freshness
+
+Asynchronous analysis is latest-freshness oriented, not backlog oriented.
+
+The bounded target shape is one in-flight analysis plus at most one newest pending source frame.
+Intermediate pending frames may be replaced before compute; valid completed DSP state is committed
+before scheduling the newest pending frame. Stale activation/generation work cannot publish.
+
+Source/analysis age and compositor state-to-paint are measured separately.
+
+## 9. Startup / Mode Switch / Playback
+
+- GL/card resources are prepared at fade zero;
+- all supported runtime programs required for switching are ready before reveal;
+- audio capture STARTING is not immediately treated as stale/unhealthy;
+- mode switches apply one target transaction/final generation;
+- fresh-frame gating uses that final generation only;
+- identical same-activation settings refresh does not replay technical config;
+- ordinary play/pause does not destroy GL resources;
+- warm resume reuses warm capture;
+- cold restart happens once when required.
+
+## 10. Fade
+
+The compositor owns card + visualizer pixels throughout visible fade. One fade scalar/easing applies
+to both layers. The logical QWidget may carry lifecycle state but does not own visible opacity via a
+competing QGraphicsOpacityEffect presentation path.
+
+## 11. CUSTOM Geometry / Edit
+
+Outside CUSTOM, routing follows the normal visualizer/media contract. In CUSTOM, the visualizer may
+own a configured display/rect.
+
+Edit snapshot must come from the compositor-owned visualizer region, not
+`SpotifyBarsGLOverlay.grabFramebuffer()`.
+
+Drag/resize is preview-first. Save publishes the committed rect to the rebuilt current runtime;
+Cancel restores previous authority. Intentional cross-display edit transfer is separate from P5's
+sticky monitor behaviour during temporary sleep/wake absence.
+
+## 12. Validation
+
+Use current replay/goldens for logical fidelity, real-GL single-surface tests for viewport/card
+alignment, lifecycle tests for QRhi generation/resource deletion, and installed review for fade,
+reactivity, mode switch and high-refresh delivery.

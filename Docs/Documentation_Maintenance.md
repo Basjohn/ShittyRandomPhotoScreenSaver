@@ -1,164 +1,121 @@
 # Documentation Maintenance
 
-Last updated: 2026-08-09
+Last updated: 2026-08-18
 
-Rules for keeping SRPSS documentation accurate, navigable, and cheap for Codex to read.
+Rules for keeping SRPSS docs useful to coding agents instead of preserving obsolete architecture by
+accident.
 
-## 1. File Stability
+## 1. Stable Paths
 
-- Existing files and documents are edited in place.
-- **Do not rename or move any file, directory, or document unless the user explicitly requests that exact rename or move.**
-- Do not create “v2”, “new”, “replacement”, or “proposed” canonical duplicates.
-- Preserve incoming links and paths.
+Edit canonical files in place. Do not create “v2/new/proposed” duplicates or rename/move existing
+paths without explicit user instruction.
 
-## 2. Document Roles
+## 2. Roles / Authority
 
-| File | Owns |
+| Document | Owns |
 |---|---|
-| `Docs/00_PROJECT_OVERVIEW.md` | short orientation and read order |
-| `Index.md` | navigation and ownership map |
-| `Docs/Guardrails.md` | durable cross-cutting safety rules |
-| `Docs/Contracts.md` | task-to-owner routing |
-| `Spec.md` | stable architecture and behaviour |
-| `Current_Plan.md` | active unfinished work |
-| focused docs | subsystem-specific contracts |
-| `Docs/Historical_Bugs/` | full standalone significant-regression narratives |
-| `Docs/Historical_Bugs.md` | compact historical status/navigation map |
-| `Docs/Regression_Notes.md` | small resolved notes |
-| `Docs/TestSuite.md` | validation levels and gates |
-| `Docs/Harness_Index.md` | recurring commands |
+| `Current_Plan.md` | active unfinished execution order |
+| `Spec.md` | durable stable architecture/product behaviour |
+| `Docs/Guardrails.md` + focused guardrails | durable prohibitions/stop rules |
+| `Index.md`, `Docs/Contracts.md` | current owner/navigation map |
+| focused architecture docs | current subsystem design |
+| active phase report | accepted current evidence + limits |
+| old phase reports | frozen checkpoint evidence only |
+| specialized audit references | optional detail only; never active task order |
+| `Future_Cleanup.md` | deferred cleanup/debt |
+| historical bug records | incident evidence/negative controls only |
 
-State a rule once in the strongest owner document. Other documents link to it.
+Exact current `main` is always implementation truth when an old evidence document names a class/path
+that no longer has the same role.
 
-## 3. Codex Read Budget
+## 3. Architecture Epoch Rule
 
-Target sizes:
+A major architecture migration must reconcile the entire small core-doc set in the same sweep:
 
-- Project Overview: under 100 lines;
-- Guardrails: under 450 lines;
-- Contracts: under 220 lines;
-- Current Plan: under 250 lines;
-- Documentation Maintenance: under 150 lines;
-- Index: concise tables, no module essays;
-- Spec: stable contracts only;
-- focused architecture docs may be longer but are read only for relevant work.
+- `Spec.md`
+- `Docs/Guardrails.md`
+- relevant focused guardrail
+- `Docs/Compositor_Architecture.md`
+- `Docs/Contracts.md`
+- `Index.md`
+- relevant visualizer/transition checklist/reference
+- any still-referenced specialized audit documents
 
-When a document exceeds its role:
+Do not leave “future target” prose in one document after that target has landed.
 
-- move module-specific detail to the existing focused document;
-- move completed evidence to historical/benchmark records;
-- remove duplicated prose;
-- do not solve size by renaming the file.
+## 4. Evidence Documents Are Not Owner Maps
 
-## 4. Drift Check
+Phase reports and Historical_Bugs deliberately preserve old implementation names because those names
+matter to the evidence.
 
-Run after:
+Therefore:
 
-- architecture changes;
-- settings/default/import changes;
-- visualizer/transition changes;
-- widget descriptor changes;
-- logging/storage path changes;
-- completion of a large task.
+- do not rewrite old evidence merely to use current class names;
+- do not cite an old owner table as current architecture;
+- do not infer a compatibility requirement from an old `QOpenGLWidget`, overlay, timer or context
+  name;
+- current owner questions route to `Index.md`, `Docs/Contracts.md` and exact source.
 
-### Navigation
+`Docs/phase_reports/README.md` states this rule for that folder.
 
-- every canonical document is reachable from `Index.md`;
-- removed references disappear from all core docs;
-- new architectural owners appear in `Index.md` and `Contracts.md`;
-- implementation helpers do not clutter `Index.md`.
+## 5. Volatile Measurements
 
-Useful:
+Do not duplicate current FPS/gap counts/raw log paths across stable docs. The active owning phase
+report keeps detailed evidence. Roadmap/stable docs keep only the durable conclusion and route to
+that report.
 
-```powershell
-rg -n "OldName|RemovedName" Index.md Spec.md Current_Plan.md Docs tests
-rg --files Docs core engine rendering widgets ui tools tests
-```
+This prevents a later agent from treating an old benchmark as the current architecture target.
 
-### Ownership
+## 6. Drift Searches
 
-Check for duplicate authority in:
-
-- settings;
-- visualizer identity/activation;
-- transition identity;
-- widget descriptors;
-- display lifecycle;
-- compositor scheduling;
-- GL resource cleanup.
-
-Useful:
+After presentation/visualizer architecture changes, search at minimum:
 
 ```powershell
-rg -n "SettingsManager|visualizer_mode_registry|transition_registry|widget_descriptors" core engine rendering widgets ui Docs
-rg -n "__getattr__|__setattr__|fallback|retry|generation|makeCurrent|doneCurrent" engine rendering widgets Docs
+rg -n "QOpenGLWidget|QRhiWidget|SpotifyBarsGLOverlay|AdaptiveTimerStrategy|paintGL|grabFramebuffer|Phase 8|one.surface|pending.*paint" \
+  Index.md Spec.md Current_Plan.md Docs
 ```
 
-### Active plan
+Interpret results by document role. Historical records may legitimately match. Core/stable docs may
+not contradict current architecture.
 
-- completed work is removed;
-- benchmark narratives are archived elsewhere;
-- stable rules move to `Spec.md` or focused docs;
-- dated failures move to history;
-- future low-priority ideas move to `Future_Cleanup.md`.
-
-### Tests and harnesses
-
-- `Docs/TestSuite.md` lists validation classes, not every test description;
-- `Docs/Harness_Index.md` lists recurring procedures only;
-- rejected architecture tests are removed or rewritten;
-- user-visible failures have meaningful runtime-shaped coverage.
-
-## 5. Architecture Drift Rule
-
-Documentation must not canonize an implementation merely because it exists.
-
-Before adding a mechanism to `Spec.md` or `Guardrails.md`, ask:
-
-1. Is it a durable product/safety invariant?
-2. Has runtime evidence validated it?
-3. Is it simpler than the alternatives?
-4. Does it preserve visualizer fidelity and lifecycle safety?
-5. Is the mechanism better placed in a focused design document?
-
-Paint acknowledgements, terminal transactions, partial reinit, or other provisional machinery do not become permanent rules by surviving one test suite.
-
-## 6. Link and Name Verification
-
-Before completion:
+Also verify current owner paths:
 
 ```powershell
-rg -n "\.md|Docs/" Index.md Spec.md Current_Plan.md Docs
+rg -n "CompositorVisualizerLayer|ExternalOpenGLRhiWidget|GLCompositorWidget" Index.md Spec.md Docs
 ```
 
-Verify referenced tracked paths exist.
+## 7. Avoid Mechanism Fossils
 
-Do not rename files to repair broken links. Correct the link or update the existing file in place.
+A failed mechanism remains documented as a negative control, but phrase the **scope of the
+rejection**. Do not convert “this use of AdaptiveTimer on a separate transition-scoped visualizer
+surface failed” into “the display compositor can never use its adaptive timer for physical
+presentation.”
 
-## 7. Good Outcome
+Likewise, do not generalize:
 
-- Codex can identify the owner without reading the entire repository.
-- Core docs do not duplicate implementation detail.
-- Current work is obvious.
-- Stable rules are not mixed with benchmark history.
-- Existing names and paths remain stable.
-- Runtime evidence can overturn a bad implementation-specific assumption.
+- one bad QPainter path into “QPainter never allowed”;
+- one bad latest-state coalescer into “presentation must equal publication”;
+- one failed child surface into “never use QRhi”;
+- one lifecycle incident into hide/reuse compatibility requirements.
+
+## 8. Closure
+
+Before marking a large task done:
+
+- core docs agree on current owner/type;
+- no active doc says a landed architecture is still future/deferred;
+- no current navigation doc routes to retired presentation owners;
+- old reports/history are clearly evidence-scoped;
+- Current_Plan retains only unfinished work;
+- Future_Cleanup remains deferred only.
 
 
-## Superseding a Recorded Decision
+## 9. Retiring Duplicate Planning Documents
 
-Analysis records and design decisions are corrected by **superseding**, never by silent
-overwrite. When evidence or review invalidates a recorded decision:
+When a live-plan/audit document has been fully absorbed into `Current_Plan.md`, `Spec.md`, focused
+architecture/guardrail docs and phase evidence, deletion is preferable to maintaining a second
+"current" copy. Preserve dated evidence reports; retire duplicate live-planning owner maps.
 
-1. leave the original claim visible and mark it withdrawn, with the date and the reason;
-2. state what replaced it and which evidence forced the change;
-3. keep both in the document that owned the original decision, so a later reader cannot
-   re-derive the withdrawn reasoning without also seeing why it failed.
-
-This applies to `Docs/phase_reports/`, the roadmap design documents, and
-`Docs/Historical_Bugs/`. It does **not** apply to `Current_Plan.md` or `Future_Cleanup.md`,
-which are live checklists and delete completed items outright.
-
-A withdrawn decision is evidence about the system's failure modes. Deleting it loses the
-reason a plausible-looking approach was rejected, which is exactly what causes the same
-wrong approach to be proposed again.
+The 2026-08-18 QRhi/single-surface reconciliation deliberately retires roadmap `00`-`06` and the
+roadmap manifest. Their useful current rules were moved into canonical owners; their continued
+existence was causing architecture time-travel.

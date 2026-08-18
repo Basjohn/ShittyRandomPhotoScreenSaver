@@ -1,110 +1,144 @@
 # Visualizer Presentation Guardrails
 
-Last updated: 2026-08-08
+Last updated: 2026-08-18
 
-Start from `Docs/Presentation_Change_Preflight.md`, which routes here and lists the designs
-already barred by `Docs/Historical_Bugs/R-27_Pending_Paint_Requeue_UI_Pressure.md`.
+Read after `Docs/Presentation_Change_Preflight.md` for any visualizer cadence, source freshness,
+render-state, fade/readiness or presentation work.
 
-Read this focused guardrail only when changing visualizer cadence, presentation smoothing, render-state delivery, repaint behaviour, or mode-specific animation timing. The full incident history is in `Docs/Historical_Bugs/R-55_Spectrum_Presentation_Smoothing.md`.
+## 1. Current Architecture Boundary
 
-## Accepted Behavioural Baseline
+There are two authorities, not two presentation surfaces:
 
-Until the user explicitly approves a newer named build, the accepted Bubble/Spectrum behaviour is:
+1. **Visualizer logical/source authority** — audio analysis, mode simulation, authored dt,
+   events/edges, smoothing and current render-state publication.
+2. **Display presentation authority** — the display's single QRhi/OpenGL compositor chooses
+   physical presentation opportunities and draws the latest valid state.
 
-```text
-ff93461685476bd0657aa88312fc2e35e9037880
-```
+`SpotifyBarsGLOverlay` is not a surface anymore. It is a logical state/geometry/visualizer-GL
+resource owner. Actual pixels are rendered through the compositor visualizer layer.
 
-That commit is code-equivalent to the approved executor-restoration checkpoint `4bde89e8e39177dc4dd7b5e64b9ac99256ab9486` and excludes the rejected Spectrum smoothing experiment.
+## 2. Logical Cadence Rules
 
-## One Cadence Authority
+- preserve source/audio cadence and authored visualizer tick semantics;
+- integrate every logical input before any presentation coalescing;
+- never derive logical dt/event consumption from paint;
+- never pause simulation until paint;
+- never introduce a second recurring visualizer presentation timer;
+- never mutate authoritative logical arrays in compositor render callbacks.
 
-- Source analysis, mode simulation, presentation-state publication, and GL paint must not become competing clocks.
-- Do not add a second recurring timer, repaint loop, paint-derived clock, token budget, cadence cap, or scheduler for visualizer presentation.
-- `paintGL()` renders the state it receives. It must not become Spectrum/Bubble simulation or interpolation authority.
-- Spectrum smoothing must not request continuation paints independently of the existing authoritative visualizer presentation tick.
-- Do not mutate authoritative bar arrays inside `paintGL()` or a render callback.
-- Do not derive simulation or presentation time from successful paint acknowledgement.
+## 3. Physical Presentation Rules
 
-## Fidelity Rules
+The display compositor's existing adaptive render strategy may be the sole **physical
+presentation strategy** for the display when its liveness includes the visualizer.
 
-- Preserve immediate or demonstrably imperceptible near-immediate attack unless the user explicitly approves a changed attack profile.
-- Smoothing may not create held falls followed by abrupt rises, stale targets, generation bleed, or mode-transition residue.
-- Presentation-only state must reset on mode, activation, engine generation, bar-count, teardown, and first-frame authority changes.
-- Bubble remains completely isolated from Spectrum-only experiments.
-- Shared audio-source timing and a mode-owned presentation path are never changed in the same acceptance slice.
+It is not a visualizer simulation clock.
 
-## Current Unapproved Spectrum Candidate
+### R-61 / R-62 scope
 
-The user authorized one isolated adjustable Spectrum presentation experiment after
-affected-path temporal hazard lights were added. It is not a new approved baseline:
+R-61 and R-62 rejected binding a separately presented visualizer surface to a
+transition-scoped timer/deferral design. The failures were real and remain negative controls.
 
-- `spectrum_visual_smoothing_enabled` defaults to `true` and can disable the filter;
-- `spectrum_visual_smoothing` is a `0.00–1.00` strength, default `0.50`;
-- interpolation runs only on the existing authoritative UI visualizer tick before GPU
-  publication, never inside paint;
-- it is symmetric and time-compensated; slider `0` is an effective bypass, positive
-  strengths map from just above `2 ms` through `14 ms`, the default is `8 ms`, and it
-  snaps after a `100 ms` UI stall;
-- first-frame, mode, activation, engine generation, bar-count, render-style, strength,
-  pause/disable, and teardown boundaries reset or snap presentation state;
-- it creates no timer, queue, scheduler, independent update/repaint, source decimation,
-  Bubble change, or shared-analysis change.
+They do **not** prohibit the one-surface architecture from using the display compositor's own
+presentation strategy once visualizer rendering is part of that same scene and visualizer
+liveness keeps that strategy active outside transitions.
 
-The versioned temporal trace must remain a hazard light, and installed review must
-compare disabled/default/stronger settings against `ff934616`. If the operator sees
-delay, flattened transients, pumping, extra churn, or worse Bubble/Spectrum behaviour,
-restore checkpoint `3b6082dd` and record the candidate as rejected.
+Do not read the old phrase “AdaptiveTimerStrategy disqualified in any scope” literally across the
+new architecture epoch. The durable rule is: **no transition-scoped/paint-coupled mechanism may
+become visualizer logical authority or a second-surface presentation hack.**
 
-## Presentation Opportunity Sources
+## 4. Admission / Coalescing
 
-A visualizer presentation opportunity must come from a source that is **live whenever the
-visualizer is live**. Before adopting any existing mechanism as a presentation opportunity,
-establish its start/stop/pause scope, not merely what it does when it runs.
+A queued GUI-dispatch guard may prevent duplicate Python callbacks only until the queued callback
+actually calls `QWidget.update()`.
 
-`AdaptiveTimerStrategy` / `AdaptiveRenderStrategyManager` is **not** eligible: it is a
-transition-scoped render strategy that starts for a transition and pauses when the transition
-ends. Binding visualizer presentation to it freezes the visualizer after the first transition
-(R-61). The visualizer's own dedicated recurring tick remains the cadence authority.
+After that callback returns, a later display deadline may request another update even if Qt has
+not painted yet. Qt owns paint-event coalescing.
 
-Anything invoked from `AdaptiveTimerStrategy._signal_frame()` additionally runs on a **worker
-thread** and must marshal Qt work to the GUI owner.
+Forbidden:
 
-Tests for a presentation-ownership change must model the real caller — its thread and its
-lifecycle state, including paused/idle — rather than calling the seam directly. A suite that
-only exercises the active state cannot detect a clock that stops.
+- pending-until-paint;
+- paint/swap acknowledgement;
+- producer timestamp display-rate gate;
+- repaint rescue/retry;
+- render callback self-requeue;
+- source/event decimation;
+- catch-up replay of skipped render snapshots.
 
-## Edge Protection Must Be Asserted On The Visible Edge
+## 5. Protected Visible Edges
 
-The protected Bubble response is authored on one tick and becomes visible in the **Bubble
-positional payload on the following tick** (`kick_authored` tick 3, `visible_edge` tick 4 in the
-v1 golden). Any protection keyed on the authored event can therefore act one publication early
-and still leave the visible edge unprotected — this is the suspected cause of R-62.
+Bubble and other authored short-lived responses may exist for fewer logical publications than
+physical presentation opportunities. Tests must protect the **actual visible edge/state**, not
+merely the trigger event.
 
-A test asserting that a protection *fired* is **not** edge coverage. It must assert that the
-real positional-payload edge from the versioned golden **survived presentation**, on the tick
-where it becomes visible.
+Presentation may skip stale intermediate snapshots only after logical state has integrated. It may
+not erase an approved short-lived response without an explicit bounded edge/state contract.
 
-## Required Validation
+## 6. Source Freshness
 
-Before shared-source/cadence work or approval of a presentation candidate:
+Compositor state-to-paint age and upstream audio/analysis age are separate.
 
-1. The affected path must have source-to-first-presentation temporal hazard lights; the full stronger package remains mandatory before shared/cross-mode work or baseline replacement.
-2. Change one causal boundary only.
-3. Compare against the named approved build using the same preset, display route, refresh conditions, and source fixture.
-4. Record source publications, presentation publications, update requests, paints, source age, and first-visible timing.
-5. Run irregular GUI-stall, transition, pause/resume, mode-switch, and generation-reset cases.
-6. Obtain explicit user visual approval.
+If state-to-paint is healthy but the visualizer feels late, inspect the source/analysis pipeline.
+Do not compensate by reducing smoothing or changing shader maths without evidence.
 
-Unit tests, throughput, average FPS, zero rejected submissions, or more paints do not establish smoother behaviour.
+For asynchronous analysis:
 
-## Stop And Roll Back
+- at most one compute may be in flight per owner;
+- one newest pending source frame may replace an older pending frame;
+- no FIFO/backlog/catch-up queue;
+- completed valid DSP state commits before launching the latest pending work;
+- generation/activation replacement discards stale pending/in-flight publication.
 
-If the user reports that Bubble or Spectrum is less smooth, less reactive, less elastic, less reliable, or otherwise worse:
+## 7. Startup / Mode / Playback Readiness
 
-- reject the experiment immediately;
-- revert the isolated commit in a new commit;
-- restore the exact approved code before investigating alternatives;
-- do not retune the failed design in place;
-- record the failure in historical documentation;
-- strengthen the golden/hazard-light coverage that failed to detect it.
+A visible fade must not begin before the single-surface renderer/card resources needed to draw it
+are ready for the current QRhi/runtime generation.
+
+Readiness may include:
+
+- current compositor QRhi/OpenGL generation;
+- visualizer programs/VAO/VBO/mask resources;
+- authoritative card geometry and current card texture revision;
+- final current engine generation/activation;
+- required first fresh frame/audio readiness.
+
+Readiness is state-driven, not a fixed sleep.
+
+Ordinary play/pause should not destroy/recreate visualizer GL resources. Warm capture/resume should
+remain warm. Cold restart happens once when actually necessary.
+
+## 8. Fade Authority
+
+The compositor owns visualizer/card pixels from fade zero through completion. A hidden logical
+QWidget's `QGraphicsOpacityEffect` cannot be a competing pixel owner.
+
+Preserve the authored fade duration/easing unless explicitly changed, but expose one scalar to both
+card texture and visualizer shader. No midway owner handoff, flash, slam or full-opacity fallback.
+
+## 9. Fidelity
+
+Preserve:
+
+- Bubble simulation/dt/one-in-flight semantics, positional/extra/trail state and transients;
+- Spectrum source smoothing/presentation behaviour;
+- Sine/Oscilloscope waveform/ghost/transient behaviour;
+- DevCurve mode state;
+- mode reset isolation;
+- CUSTOM geometry/DPR;
+- source freshness and mode personality.
+
+Do not weaken goldens because presentation plumbing changed.
+
+## 10. Validation
+
+Runtime-shaped tests must exercise:
+
+- 60 Hz and high refresh;
+- irregular GUI stalls;
+- transition overlap and transition-free visualizer presentation;
+- startup, mode change, pause/resume;
+- generation/context replacement;
+- short-lived Bubble visible edge;
+- source age and state-to-paint separately;
+- no callback backlog after paint admission is removed.
+
+Installed manual review remains required for visual feel/timing changes.

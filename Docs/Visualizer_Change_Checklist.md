@@ -1,73 +1,150 @@
 # Visualizer Change Checklist
 
-Last updated: 2026-08-13
+Last updated: 2026-08-18
 
-Use this checklist whenever visualizer settings, presets, activation, runtime transport, renderer behavior, or card geometry changes.
+Use for visualizer settings, presets, logical analysis, activation, compositor rendering, card
+geometry, fade/readiness or CUSTOM work.
 
-## 1. Identity And UI
-- Mode ids, labels, prefixes, and gates come from `core/settings/visualizer_mode_registry.py`.
-- User-facing controls live in `ui/tabs/widgets_tab.py` and `ui/tabs/media/*_settings_binding.py`.
-- Keep mode-specific UI changes mode-owned unless a shared visualizer contract truly changes.
-- Do not build dev-gated mode UI when the mode is not available in the registry.
+## 1. Identity / Settings
 
-## 2. Defaults, Model, And Persistence
-- Add user-facing defaults in `core/settings/default_settings.py`.
-- Keep generated defaults snapshot artifacts derived, not hand-authored.
-- Update `core/settings/models/_spotify_visualizer.py` grouped defaults/build/serialize specs together so `from_settings()`, `from_mapping()`, and `to_dict()` stay one contract.
-- Update `visualizer_settings_snapshot.py`, `visualizer_settings_contract.py`, and `visualizer_preset_indices.py` when normalization or preset-index behavior changes.
-- Root `widgets` writes, SST imports, and visualizer imports must converge on the same normalized visualizer schema.
+- mode ids/labels: `visualizer_mode_registry.py`;
+- grouped settings model stays symmetric;
+- preset activation resolves through the canonical preset resolver;
+- genuine same-mode preset/settings changes apply once;
+- identical same-activation refresh is a no-op rather than duplicate technical work.
 
-## 3. Presets And Import/Export
-- Curated preset loading/apply behavior belongs in `core/settings/visualizer_presets.py`.
-- Curated tree import/export belongs in `core/settings/visualizer_preset_transfer.py`.
-- Manifest ownership belongs in `core/visualizer_preset_manifest.py`.
-- Preset repair/audit/reindex behavior belongs in `tools/visualizer_preset_repair.py`.
-- Reindex logic may normalize slot numbering and filenames; it must not rewrite authored creative intent.
+## 2. Logical Runtime
 
-## 4. Runtime Bridge
-- Activation must use `resolve_visualizer_activation_payload()`.
-- Runtime config application belongs in `widgets/spotify_visualizer/config_applier.py`, `activation_runtime.py`, `technical_config.py`, and `runtime_config.py`.
-- Overlay transport belongs in `widgets/spotify_bars_gl_overlay.py` and the extracted overlay helpers.
-- Renderer math belongs in the mode renderer/shader files.
-- Visualizer ticks stay owned by the dedicated recurring timer, not transition animation callbacks.
+- visualizer source/simulation tick remains authoritative;
+- every logical input integrates before presentation coalescing;
+- no source/event cadence cuts;
+- no paint-derived dt/acknowledgement;
+- mode-owned history/envelopes/pending state reset only at real activation boundaries.
 
-## 5. Geometry And CUSTOM
-- Outer visualizer card policy belongs in `widgets/spotify_visualizer/card_geometry.py`.
-- Painted-card stencil math belongs in `overlay_mask.py` / `overlay_frame_shell.py`.
-- Committed CUSTOM geometry is replayed through shared runtime/CUSTOM layout ownership, not re-derived from live mode/preset height policy.
-- If card size, placement, border, or stencil behavior changes, keep `tests/test_stencil_mask_alignment.py` and relevant first-frame/reset tests in scope.
+## 3. Analysis Freshness
 
-## 6. Tests
-Add or update focused coverage for:
-- settings/model round trip,
-- `from_mapping()` vs `from_settings()` parity for changed families,
-- normalization and migration,
-- runtime kwargs/application,
-- preset parse/apply/import/export behavior,
-- mode switch/preset switch reset isolation,
-- first-frame/fresh-frame authority when touched,
-- and authored curated preset runtime oracles when the visible mode behavior changes.
+For async audio/bar analysis:
 
-Before touching shared visualizer/audio/activation/render/transition paths, run the focused visualizer reactivity lock from `Docs/Harness_Index.md`; rerun it after the change.
+- one task in flight;
+- one newest pending source frame maximum;
+- pending replaces older pending, never appends;
+- completed valid DSP state commits before newest pending schedules;
+- stale generation/activation work cannot schedule/publish after reset;
+- task failure releases ownership without deadlocking the latest valid pending state.
 
-For cadence, batching, coalescing, or task-frequency changes, also require:
+Use delayed-compute tests, not only immediate fake executors.
 
-- source tick or discrete edge to first visible publication latency;
-- every integrated logical edge to remain visible exactly once under the mode's authored semantics;
-- irregular GUI stalls and transition overlap at 60 Hz and high refresh;
-- Bubble loud-passage expansion/elasticity and Spectrum smoothing review;
-- installed manual review against the protected feel.
+## 4. Activation
 
-Final-state equality, packet ordering, worker duration, average FPS, and a task-count cap cannot close a reactive visualizer change. If the runtime-visible complaint remains while these proxy tests pass, reject the change and strengthen the oracle.
+One mode/preset switch must have one authoritative target transaction and one final engine
+activation generation.
 
-A target-refresh request gate is not a presentation scheduler. In particular, sampling a
-`90–100 Hz` producer against a `60 Hz` elapsed-time threshold can quantize to every second
-producer tick, and holding admission until `paintGL()` adds variable Qt-delivery
-backpressure. Before any latest-state presentation policy is enabled for Bubble, sample
-the protected discrete-edge trace across display-phase offsets and prove the edge remains
-visible exactly once; a legal phase that misses it rejects the generic coalescer.
+Bar-count resize, smoothing/floor reset and technical config must not each manufacture independent
+intermediate activation generations inside the same switch.
 
-## 7. Docs And Closure
-- Refresh `Spec.md`, `Index.md`, `Docs/Visualizer_Reference.md`, and `Docs/TestSuite.md` when contracts or validation inventory change.
-- Update `Docs/Historical_Bugs.md` or `Docs/Regression_Notes.md` only for real regression lessons.
-- Visual/timing-sensitive work is not closed by tests alone; state the remaining runtime validation clearly.
+Audio block-size restart is at most once when genuinely required.
+
+## 5. Presentation Owners
+
+Current path:
+
+```text
+logical visualizer state
+    -> SpotifyBarsGLOverlay logical/resource owner
+    -> CompositorVisualizerLayer
+    -> display GLCompositorWidget QRhi/OpenGL surface
+```
+
+`SpotifyBarsGLOverlay` is not a presented overlay. Do not add:
+
+- QOpenGLWidget/QRhiWidget inheritance;
+- its own `update()` presentation stream;
+- its own swap/vsync/context lifecycle;
+- framebuffer snapshot assumptions;
+- fake QPainter visualizer rendering.
+
+## 6. Card / Geometry
+
+One authoritative geometry snapshot feeds card texture, viewport, scissor, shader resolution,
+fragment origin, mask and border.
+
+Compositor DPR is the presentation DPR authority.
+
+The QPainter-authored card source is cached by canonical logical-size/DPR/style identity and
+uploaded only on revision changes. Steady visualizer frames do not recreate QPainter or re-upload
+unchanged card pixels.
+
+Real-GL tests must use non-zero X/Y and non-1 DPR; mock viewport tuple tests are insufficient.
+
+## 7. Presentation Cadence
+
+The display compositor owns physical presentation opportunities. Visualizer logical cadence stays
+separate.
+
+Remove/forbid:
+
+- pending-until-paint;
+- paint/swap acknowledgement;
+- producer/display divisor gates;
+- render self-requeue;
+- repaint rescue timers;
+- second visualizer presentation timer/surface.
+
+A dispatch-pending guard ends when the queued GUI callback calls `QWidget.update()`.
+
+## 8. Readiness / Fade
+
+Before visible fade:
+
+- current QRhi/OpenGL generation ready;
+- visualizer GL resources ready;
+- card geometry/cache/GL texture ready;
+- final engine generation/activation established;
+- required fresh current frame/audio readiness satisfied.
+
+Then one compositor-owned fade scalar controls both card and shader from zero to one. No halfway
+QWidget/compositor ownership transfer.
+
+## 9. Playback
+
+Immediate post-start health must distinguish STARTING from STALE. A just-started capture is not
+restarted merely because the first callback has not happened yet.
+
+Pause/resume should preserve GL/card resources. Warm resume uses warm capture. Cold restart happens
+once.
+
+## 10. CUSTOM / Edit
+
+- edit snapshot comes from compositor-owned card+visualizer region;
+- no `grabFramebuffer()` dependency on logical overlay;
+- drag/resize is preview-only, not live GPU mutation per mouse event;
+- Cancel restores once;
+- Save rebuilds/publishes the new authoritative rect once;
+- cross-display save transfers sole compositor ownership and cleans old display ownership;
+- do not confuse intentional edit transfer with temporary-monitor fallback.
+
+## 11. Lifecycle
+
+- visualizer GL resources are tied to compositor QRhi generation;
+- borrowed context is never destroyed/doneCurrent by SRPSS;
+- hidden/cleared presentation state does not erase destruction authority;
+- cleanup is idempotent after success and fail-closed on deletion failure;
+- QRhi generation replacement releases old resources before reinit;
+- final GL accounting returns to baseline.
+
+## 12. Fidelity / Tests
+
+Keep current logical goldens for all five modes. Add runtime-shaped tests for the actual owner being
+changed. Reintroduce the defect in development where practical to prove the test fails.
+
+Required installed review when relevant:
+
+- Bubble/Spectrum feel;
+- all-mode switching;
+- fade start/finish;
+- play/pause/resume;
+- 60 Hz + high refresh;
+- CUSTOM move/resize/Cancel/Save;
+- dual-display ownership.
+
+Tests/average FPS never overrule a visible fidelity regression.
