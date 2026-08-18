@@ -1679,6 +1679,20 @@ class SpotifyBarsGLOverlay(QWidget):
             self._gl_state.transition(GLContextState.ERROR, str(e))
             return False
 
+    def _compositor_gpu_query_active(self) -> bool:
+        """Whether the owning compositor already has an outer GPU query open."""
+        compositor = self._publication_target_compositor()
+        ring = getattr(compositor, "_gpu_timer_queries", None) if compositor else None
+        if ring is None:
+            return False
+        checker = getattr(ring, "has_active_query", None)
+        if not callable(checker):
+            return False
+        try:
+            return bool(checker())
+        except Exception:
+            return False
+
     def paint_layer(self, rect: QRect, fade: float) -> None:
         """Draw one visualizer frame into the compositor's bound framebuffer.
 
@@ -1695,8 +1709,18 @@ class SpotifyBarsGLOverlay(QWidget):
         if rect.width() <= 0 or rect.height() <= 0:
             return
 
+        # GL_TIME_ELAPSED cannot nest on one context. The visualizer now renders
+        # INSIDE the compositor on the SAME context, so a visualizer-local query
+        # begun while the compositor's outer query is open raises GLError and
+        # poisons visualizer GPU timing for the rest of the run
+        # (gpu_supported=False gpu_reason=begin_error:GLError). The compositor
+        # outer query is the owner; this sampling is skipped underneath it.
+        outer_query_active = self._compositor_gpu_query_active()
+        if outer_query_active:
+            self._gpu_query_skip_reason = "shared_context_outer_query"
         query_started = bool(
             self._gpu_timer_queries is not None
+            and not outer_query_active
             and self._gpu_timer_queries.begin_sampled(gl, label=self._vis_mode)
         )
         try:

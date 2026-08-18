@@ -378,6 +378,15 @@ class GLTimerQueryRing:
         self._pending_scene_generation = int(scene_generation)
         self._pending_frame_index = int(frame_index)
 
+    def has_active_query(self) -> bool:
+        """Whether a GL_TIME_ELAPSED query is currently open on this ring.
+
+        GL_TIME_ELAPSED cannot nest on one context. Under the single-surface
+        architecture the visualizer renders inside the compositor on the SAME
+        context, so an inner ring must consult the outer one before beginning.
+        """
+        return self._active_slot is not None
+
     def begin_sampled(self, gl_api: Any, *, label: str) -> bool:
         """Poll and begin only on the owner's fixed paint-count sample stride.
 
