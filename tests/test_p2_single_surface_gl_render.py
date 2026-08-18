@@ -1114,3 +1114,152 @@ class TestCardRevisionHasOneAuthority:
         assert card._painted_frame_shadow_cache_key == key, (
             "the pixmap cache and the shared resolver must agree exactly"
         )
+
+
+# ---------------------------------------------------------------------------
+# CUSTOM edit snapshot: compositor-owned, card-local, alpha-correct
+# ---------------------------------------------------------------------------
+
+
+class TestEditSceneCapture:
+    """The visualizer owns no framebuffer, so edit preview pixels come here.
+
+    These bars render for real and inspect the captured image, because the whole
+    failure mode being corrected was a preview that looked plausible in code and
+    was blank on screen.
+    """
+
+    def _capture(self, ctx, mode, *, card_rect=CARD, surface=SURFACE):
+        card = _CardStub(width=card_rect.width(), height=card_rect.height())
+        overlay = _overlay_for(mode)
+        layer = _layer_with_card(ctx, card, overlay, card_rect=card_rect)
+        target = _GLTarget(surface)
+        try:
+            target.clear()
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+            # One normal presented frame, then one capture request serviced by
+            # the next frame - exactly the edit-entry sequence.
+            layer.render(surface.height(), 1.0)
+            layer.request_scene_capture()
+            layer.render(surface.height(), 1.0)
+            return layer.take_captured_scene_image(), layer, overlay, target
+        except Exception:
+            try:
+                layer._card_texture.cleanup()
+                overlay.cleanup_gl()
+            except Exception:
+                pass
+            target.destroy()
+            raise
+
+    @staticmethod
+    def _cleanup(layer, overlay, target):
+        try:
+            layer._card_texture.cleanup()
+            overlay.cleanup_gl()
+        except Exception:
+            pass
+        target.destroy()
+
+    def test_capture_is_card_sized_not_display_sized(self, gl_context, qapp):
+        image, layer, overlay, target = self._capture(gl_context, "spectrum")
+        try:
+            assert image is not None and not image.isNull()
+            assert image.width() == CARD.width()
+            assert image.height() == CARD.height()
+            assert image.width() < SURFACE.width()
+        finally:
+            self._cleanup(layer, overlay, target)
+
+    def test_capture_contains_the_authored_card_pixels(self, gl_context, qapp):
+        image, layer, overlay, target = self._capture(gl_context, "spectrum")
+        try:
+            assert image is not None and not image.isNull()
+            arr = _image_array(image)
+            assert _lit(arr).any(), "the captured preview has no card pixels at all"
+        finally:
+            self._cleanup(layer, overlay, target)
+
+    def test_capture_keeps_alpha_instead_of_baking_in_the_base_image(
+        self, gl_context, qapp
+    ):
+        """A readback of the display would be fully opaque and carry the photo."""
+        image, layer, overlay, target = self._capture(gl_context, "spectrum")
+        try:
+            assert image is not None and not image.isNull()
+            arr = _image_array(image)
+            alpha = arr[..., 3]
+            assert alpha.max() > 0, "the capture is entirely transparent"
+            assert alpha.min() < 255, (
+                "every captured pixel is opaque; the card's alpha was lost"
+            )
+        finally:
+            self._cleanup(layer, overlay, target)
+
+    def test_capture_is_card_local_regardless_of_card_position(
+        self, gl_context, qapp
+    ):
+        """The preview must not bake the card's display position into its pixels."""
+        at_origin, l0, o0, t0 = self._capture(
+            gl_context, "spectrum", card_rect=QRect(0, 0, 400, 200)
+        )
+        origin_arr = _image_array(at_origin)
+        self._cleanup(l0, o0, t0)
+
+        offset, l1, o1, t1 = self._capture(gl_context, "spectrum", card_rect=CARD)
+        offset_arr = _image_array(offset)
+        self._cleanup(l1, o1, t1)
+
+        assert origin_arr.shape == offset_arr.shape
+        assert np.array_equal(origin_arr[..., :3], offset_arr[..., :3])
+
+    def test_a_serviced_request_is_not_repeated(self, gl_context, qapp):
+        card = _CardStub()
+        overlay = _overlay_for("spectrum")
+        layer = _layer_with_card(gl_context, card, overlay)
+        target = _GLTarget(SURFACE)
+        try:
+            target.clear()
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+            layer.request_scene_capture()
+            layer.render(SURFACE.height(), 1.0)
+            assert layer.take_captured_scene_image() is not None
+            layer.render(SURFACE.height(), 1.0)
+            assert layer.take_captured_scene_image() is None, (
+                "the capture repeated without a new request"
+            )
+        finally:
+            self._cleanup(layer, overlay, target)
+
+    def test_capture_leaves_the_display_frame_intact(self, gl_context, qapp):
+        """Capturing must not disturb the frame the compositor is drawing."""
+        card = _CardStub()
+        overlay = _overlay_for("spectrum")
+        layer = _layer_with_card(gl_context, card, overlay)
+        target = _GLTarget(SURFACE)
+        try:
+            target.clear(rgba=(0.1, 0.2, 0.3, 1.0))
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+            layer.render(SURFACE.height(), 1.0)
+            without_capture = target.read().copy()
+
+            target.clear(rgba=(0.1, 0.2, 0.3, 1.0))
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
+            layer.request_scene_capture()
+            layer.render(SURFACE.height(), 1.0)
+            with_capture = target.read().copy()
+
+            assert np.array_equal(without_capture, with_capture), (
+                "the capture pass altered the presented display frame"
+            )
+        finally:
+            self._cleanup(layer, overlay, target)
+
+
+def _image_array(image) -> np.ndarray:
+    """QImage -> HxWx4 uint8, without depending on Qt's stride."""
+    converted = image.convertToFormat(QImage.Format.Format_RGBA8888)
+    width, height = converted.width(), converted.height()
+    ptr = converted.constBits()
+    raw = bytes(ptr)[: width * height * 4]
+    return np.frombuffer(raw, dtype=np.uint8).reshape(height, width, 4)

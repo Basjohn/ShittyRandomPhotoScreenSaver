@@ -510,6 +510,44 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
         self.release_presentation_reason(self.PRESENTATION_VISUALIZER_ACTIVE)
         self.release_presentation_reason(self.PRESENTATION_VISUALIZER_PREPARING)
 
+    def capture_visualizer_scene_pixmap(self):
+        """Return ONE compositor-owned snapshot of the visualizer card region.
+
+        CUSTOM edit used to grab the visualizer overlay's framebuffer. That
+        overlay is no longer a presented surface and owns no framebuffer, so the
+        snapshot has to come from the compositor that actually draws those
+        pixels.
+
+        The forced render is deliberate and happens once, at edit entry. The
+        whole-surface image Qt hands back is discarded: what the edit shell gets
+        is the card-local, alpha-correct scene the layer rendered into its own
+        target during that pass.
+        """
+        from PySide6.QtGui import QPixmap
+
+        layer = self._visualizer_layer
+        if layer is None or not layer.has_visible_state():
+            return None
+        layer.request_scene_capture()
+        try:
+            self.grabFramebuffer()
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] Forced compositor render for edit snapshot failed",
+                exc_info=True,
+            )
+        image = layer.take_captured_scene_image()
+        if image is None or image.isNull():
+            return None
+        pixmap = QPixmap.fromImage(image)
+        if pixmap.isNull():
+            return None
+        try:
+            pixmap.setDevicePixelRatio(float(self.devicePixelRatioF()))
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to stamp snapshot DPR", exc_info=True)
+        return pixmap
+
     def visualizer_presentation_readiness(self):
         """Readiness of the compositor-owned visualizer for THIS generation.
 

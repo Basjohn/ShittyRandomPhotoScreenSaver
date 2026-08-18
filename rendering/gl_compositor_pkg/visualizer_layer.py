@@ -252,6 +252,11 @@ class CompositorVisualizerLayer:
         # One readiness notification per preparation, so the reveal gate is
         # event-driven instead of polled.
         self._prepared_notified = False
+        # One-shot edit snapshot request. CUSTOM edit needs the visualizer
+        # scene as pixels, and the visualizer no longer has a framebuffer of
+        # its own to grab.
+        self._capture_requested = False
+        self._captured_scene_image = None
 
     # -- publication ------------------------------------------------------
 
@@ -279,6 +284,8 @@ class CompositorVisualizerLayer:
         self._committed_geometry = None
         self._committed_generation = -1
         self._prepared_notified = False
+        self._capture_requested = False
+        self._captured_scene_image = None
 
     def _release_card_visual(self) -> None:
         card = self._card_widget()
@@ -387,6 +394,11 @@ class CompositorVisualizerLayer:
                 owner.paint_layer(geometry.local_rect(), bars_fade)
             finally:
                 self._restore_gl_state()
+            if self._capture_requested:
+                self._capture_requested = False
+                self._captured_scene_image = self._capture_scene_image(
+                    geometry, owner
+                )
             self._last_failure_signature = None
             return True
         except Exception:
@@ -525,6 +537,151 @@ class CompositorVisualizerLayer:
             return bool(card.uses_painted_frame_shadow())
         except Exception:
             return False
+
+    # -- edit snapshot ----------------------------------------------------
+
+    def request_scene_capture(self) -> None:
+        """Ask for ONE snapshot of the visualizer scene on the next draw.
+
+        The visualizer is not a presented surface any more, so CUSTOM edit
+        cannot grab its framebuffer. This is the compositor-owned replacement:
+        a single request, serviced inside the normal render pass where the
+        borrowed QRhi OpenGL context is legitimately current.
+        """
+        self._capture_requested = True
+
+    def take_captured_scene_image(self):
+        """Pop the captured scene image, if the request has been serviced."""
+        image = self._captured_scene_image
+        self._captured_scene_image = None
+        return image
+
+    def _capture_scene_image(self, geometry: "PresentationGeometry", owner: Any):
+        """Render ONLY the card region into a transparent offscreen target.
+
+        Reading the card rect back out of the compositor framebuffer would
+        bake in the base image behind the card and lose alpha entirely, so the
+        scene is re-drawn card-local into its own target instead. The result is
+        the authored card plus the current shader output at the authoritative
+        geometry, with correct alpha and nothing else on the display.
+
+        Drawn at full opacity: the preview represents the card, not whatever
+        moment of a fade edit mode happened to be entered on.
+        """
+        from PySide6.QtGui import QImage
+
+        width_px, height_px = geometry.framebuffer_size_px
+        if width_px <= 0 or height_px <= 0:
+            return None
+
+        fbo = 0
+        texture = 0
+        stencil = 0
+        previous_fbo = 0
+        try:
+            previous_fbo = int(gl.glGetIntegerv(gl.GL_FRAMEBUFFER_BINDING))
+            fbo = int(gl.glGenFramebuffers(1))
+            texture = int(gl.glGenTextures(1))
+            stencil = int(gl.glGenRenderbuffers(1))
+
+            gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+            gl.glTexImage2D(
+                gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width_px, height_px,
+                0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None,
+            )
+            gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
+            gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+
+            gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, stencil)
+            gl.glRenderbufferStorage(
+                gl.GL_RENDERBUFFER, gl.GL_DEPTH24_STENCIL8, width_px, height_px
+            )
+            gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, 0)
+
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
+            gl.glFramebufferTexture2D(
+                gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0,
+                gl.GL_TEXTURE_2D, texture, 0,
+            )
+            gl.glFramebufferRenderbuffer(
+                gl.GL_FRAMEBUFFER, gl.GL_DEPTH_STENCIL_ATTACHMENT,
+                gl.GL_RENDERBUFFER, stencil,
+            )
+            if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
+                self._record_failure("capture_incomplete_fbo")
+                return None
+
+            # Card-local: this target IS the card, so the mask shader's window
+            # space origin is (0, 0) rather than the card's display position.
+            local_rect = QRect(
+                0, 0,
+                geometry.logical_rect.width(),
+                geometry.logical_rect.height(),
+            )
+            local_geometry = PresentationGeometry(local_rect, geometry.dpr, height_px)
+
+            gl.glViewport(0, 0, width_px, height_px)
+            gl.glEnable(gl.GL_SCISSOR_TEST)
+            gl.glScissor(0, 0, width_px, height_px)
+            gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+            gl.glClearStencil(0)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_STENCIL_BUFFER_BIT)
+            gl.glEnable(gl.GL_BLEND)
+            # Separate alpha blending: compositing onto a transparent target
+            # with the display's straight SRC_ALPHA function would leave the
+            # captured alpha wrong wherever the card is translucent.
+            gl.glBlendFuncSeparate(
+                gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA,
+                gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA,
+            )
+
+            saved_origin = owner._compositor_mask_origin_px
+            saved_geometry = owner._presentation_geometry
+            owner._compositor_mask_origin_px = (0.0, 0.0)
+            owner._presentation_geometry = local_geometry
+            try:
+                self._card_texture.draw(1.0)
+                owner.paint_layer(local_geometry.local_rect(), 1.0)
+            finally:
+                owner._compositor_mask_origin_px = saved_origin
+                owner._presentation_geometry = saved_geometry
+
+            gl.glPixelStorei(gl.GL_PACK_ALIGNMENT, 1)
+            raw = gl.glReadPixels(
+                0, 0, width_px, height_px, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE
+            )
+            # GL row 0 is the bottom row; Qt's is the top. Reversing the rows
+            # here avoids the deprecated QImage mirror helpers and costs one
+            # copy of a card-sized buffer, once, at edit entry.
+            stride = width_px * 4
+            data = bytes(raw)
+            flipped = b"".join(
+                data[row * stride:(row + 1) * stride]
+                for row in range(height_px - 1, -1, -1)
+            )
+            image = QImage(
+                flipped, width_px, height_px, stride, QImage.Format.Format_RGBA8888
+            )
+            return image.copy()
+        except Exception:
+            self._record_failure("capture_exception")
+            return None
+        finally:
+            try:
+                gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, previous_fbo)
+                if fbo:
+                    gl.glDeleteFramebuffers(1, [fbo])
+                if texture:
+                    gl.glDeleteTextures(1, [texture])
+                if stencil:
+                    gl.glDeleteRenderbuffers(1, [stencil])
+            except Exception:
+                logger.debug(
+                    "[SPOTIFY_VIS][LAYER] Failed to release capture target",
+                    exc_info=True,
+                )
+            self._restore_gl_state()
 
     # -- readiness / preparation -----------------------------------------
 
