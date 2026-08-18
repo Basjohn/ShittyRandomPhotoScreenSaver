@@ -55,6 +55,7 @@ def test_cleanup_refuses_gl_teardown_while_adaptive_worker_is_live():
         (),
         {
             "_gl_state": _State(),
+            "_presentation_reasons": set(),
             "_render_shutdown_requested": False,
             "_gl_lifecycle_generation": 1,
             "_transition_animation_generation": 1,
