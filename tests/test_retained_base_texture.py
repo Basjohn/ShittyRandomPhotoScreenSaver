@@ -187,9 +187,10 @@ def test_real_compositor_retained_base_draw_preserves_quadrant_orientation(qapp)
             or not comp._gl_pipeline.initialized
         ):
             pytest.skip("Compositor GL pipeline unavailable")
-        comp.makeCurrent()
+        # Upload outside a QRhi frame through the borrowed Qt-owned context.
+        # There is no matching release: SRPSS must not doneCurrent() it.
+        assert comp._rhi_gl.make_current()
         texture_id = comp._texture_manager.get_or_create_texture(pixmap)
-        comp.doneCurrent()
         if not texture_id:
             pytest.skip("Texture upload unavailable")
 

@@ -336,8 +336,10 @@ def test_compositor_texture_runtime_warmth_requires_context_pipeline_and_manager
             self._gl_pipeline = SimpleNamespace(initialized=True)
             self._texture_manager = object()
 
-        def context(self):
-            return self._context
+        @property
+        def _rhi_gl(self):
+            # Borrowed Qt-owned QRhi OpenGL context handle.
+            return SimpleNamespace(context=self._context)
 
     monkeypatch.setattr(display_image_ops, "GLCompositorWidget", _FakeCompositor)
 
@@ -351,6 +353,8 @@ def test_compositor_texture_runtime_warmth_requires_context_pipeline_and_manager
     assert display_image_ops._compositor_texture_runtime_is_warm(compositor) is False
     compositor._gl_pipeline.initialized = True
     compositor._context = _Context(False)
+    assert display_image_ops._compositor_texture_runtime_is_warm(compositor) is False
+    compositor._context = None
     assert display_image_ops._compositor_texture_runtime_is_warm(compositor) is False
     assert display_image_ops._compositor_texture_runtime_is_warm(object()) is False
 
@@ -458,6 +462,9 @@ def test_failed_transition_start_restores_widget_stack(qt_app, monkeypatch):
             calls.append("raise_widgets")
 
     class _FakeCompositor:
+        # No borrowed QRhi context: this compositor has no warm texture runtime.
+        _rhi_gl = SimpleNamespace(context=None)
+
         def setGeometry(self, *_args):
             calls.append("comp_geom")
 
@@ -647,6 +654,9 @@ def test_set_processed_image_keeps_animation_manager_owned_until_controller_stop
             self._manager.cancel_all()
 
     class _FakeCompositor:
+        # No borrowed QRhi context: this compositor has no warm texture runtime.
+        _rhi_gl = SimpleNamespace(context=None)
+
         def setGeometry(self, *_args):
             calls.append("comp_geom")
 

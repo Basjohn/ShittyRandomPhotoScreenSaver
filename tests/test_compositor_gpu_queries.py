@@ -46,7 +46,7 @@ def test_compositor_gpu_query_wraps_existing_paint_without_scheduling(monkeypatc
     monkeypatch.setattr(paint, "paintGL_impl", lambda _widget: calls.append("paint"))
     monkeypatch.setattr(paint, "_mark_widget_update_consumed", lambda _widget: None)
 
-    paint.handle_paintGL(_Widget())
+    paint.handle_rhi_render(_Widget())
 
     assert timer_queries.calls == [
         ("begin_sampled", fake_gl, "burn"),

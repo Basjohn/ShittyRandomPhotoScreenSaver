@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QRect
-from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtGui import QPixmap
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 
@@ -419,35 +419,6 @@ def paint_burn_shader(comp: "GLCompositorWidget", target: QRect) -> None:
     )
 
 
-def paint_debug_overlay_gl(comp: "GLCompositorWidget") -> None:
-    if not is_perf_metrics_enabled():
-        return
-
-    from rendering.gl_compositor_pkg.overlays import render_debug_overlay_image
-    image = render_debug_overlay_image(comp)
-    if image is None:
-        return
-
-    gl.glUseProgram(0)
-
-    painter = QPainter(comp)
-    try:
-        painter.drawImage(0, 0, image)
-    finally:
-        painter.end()
-
-
-def paint_spotify_visualizer_gl(comp: "GLCompositorWidget") -> None:
-    if not comp._spotify_vis_enabled:
-        return
-    from rendering.gl_compositor_pkg.overlays import paint_spotify_visualizer
-    painter = QPainter(comp)
-    try:
-        paint_spotify_visualizer(comp, painter)
-    finally:
-        painter.end()
-
-
 def paint_qpainter_overlays_gl(comp: "GLCompositorWidget") -> None:
     """Paint QPainter-owned overlays in one session after shader rendering.
 
@@ -466,16 +437,18 @@ def paint_qpainter_overlays_gl(comp: "GLCompositorWidget") -> None:
 
     gl.glUseProgram(0)
 
-    painter = QPainter(comp)
-    try:
+    # QPainter(comp) targeted the QOpenGLWidget FBO. Under QRhiWidget it would
+    # target the widget backing store instead of the QRhi render texture, so
+    # overlays must paint through the QRhi target paint device.
+    with comp.gl_target_painter() as painter:
+        if painter is None:
+            return
         if comp._spotify_vis_enabled:
             from rendering.gl_compositor_pkg.overlays import paint_spotify_visualizer
 
             paint_spotify_visualizer(comp, painter)
         if debug_image is not None:
             painter.drawImage(0, 0, debug_image)
-    finally:
-        painter.end()
 
 
 def _stage_mark(comp, marker: str) -> None:

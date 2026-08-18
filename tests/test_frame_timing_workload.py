@@ -121,11 +121,15 @@ class FrameTimingHarness:
         self.parent._thread_manager = _HarnessThreadManager()
         self.parent._resource_manager = None
         self.qtbot.addWidget(self.parent)
-        self.parent.show()
+        # The compositor must exist before the top-level window is created:
+        # Qt derives the backing-store QRhi configuration at window creation,
+        # and a QRhiWidget added to an already-created window never renders.
+        # This mirrors the production ordering in rendering/display_setup.py.
         self.compositor = GLCompositorWidget(parent=self.parent)
         self.qtbot.addWidget(self.compositor)
         self.compositor.resize(1920, 1080)
         self.compositor.show()
+        self.parent.show()
         self.qtbot.waitExposed(self.compositor)
         self.animation_manager = AnimationManager(fps=60)
         self._original_update: Callable[[], None] = self.compositor.update

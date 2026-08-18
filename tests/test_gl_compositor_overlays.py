@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -137,24 +138,36 @@ def test_build_debug_overlay_payload_supports_burn_and_missing_attrs():
     assert payload == ("Burn t=0.33", "144.0 fps  dt_min=5.0ms  dt_max=11.0ms")
 
 
-def test_paint_qpainter_overlays_gl_batches_visualizer_and_debug_overlay(monkeypatch):
-    events: list[str] = []
+def _install_target_painter(comp, events: list[str]):
+    """Give a stub compositor the QRhi-target painter seam.
+
+    Overlays no longer construct QPainter(widget): under QRhiWidget that would
+    target the widget backing store instead of the QRhi render texture.
+    """
 
     class _Painter:
-        def __init__(self, comp):
-            events.append("painter:start")
-
         def drawImage(self, x, y, image):
             events.append("draw:image")
 
-        def end(self):
+    @contextmanager
+    def _gl_target_painter():
+        events.append("painter:start")
+        try:
+            yield _Painter()
+        finally:
             events.append("painter:end")
+
+    comp.gl_target_painter = _gl_target_painter
+
+
+def test_paint_qpainter_overlays_gl_batches_visualizer_and_debug_overlay(monkeypatch):
+    events: list[str] = []
 
     comp = _OverlayWidget()
     comp._spotify_vis_enabled = True
+    _install_target_painter(comp, events)
 
     monkeypatch.setattr(shader_dispatch, "is_perf_metrics_enabled", lambda: True)
-    monkeypatch.setattr(shader_dispatch, "QPainter", _Painter)
     monkeypatch.setattr(shader_dispatch, "gl", SimpleNamespace(glUseProgram=lambda program: events.append(f"use:{program}")))
     monkeypatch.setattr(
         "rendering.gl_compositor_pkg.overlays.paint_spotify_visualizer",
@@ -174,8 +187,12 @@ def test_paint_qpainter_overlays_gl_skips_painter_when_no_overlays(monkeypatch):
     comp = _OverlayWidget()
     comp._spotify_vis_enabled = False
 
+    def _must_not_paint():
+        raise AssertionError("painter session should not be opened")
+
+    comp.gl_target_painter = _must_not_paint
+
     monkeypatch.setattr(shader_dispatch, "is_perf_metrics_enabled", lambda: False)
-    monkeypatch.setattr(shader_dispatch, "QPainter", lambda comp: (_ for _ in ()).throw(AssertionError("QPainter should not be created")))
     monkeypatch.setattr(shader_dispatch, "gl", SimpleNamespace(glUseProgram=lambda program: None))
 
     shader_dispatch.paint_qpainter_overlays_gl(comp)

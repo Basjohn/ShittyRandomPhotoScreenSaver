@@ -80,11 +80,9 @@ def _compositor_texture_runtime_is_warm(compositor) -> bool:
     """Return whether the compositor can service an existing texture install."""
     if not isinstance(compositor, GLCompositorWidget):
         return False
-    try:
-        context = compositor.context()
-        if context is None or not context.isValid():
-            return False
-    except Exception:
+    borrowed = compositor._rhi_gl
+    context = borrowed.context
+    if context is None or not context.isValid():
         return False
     pipeline = getattr(compositor, "_gl_pipeline", None)
     if pipeline is None or not bool(getattr(pipeline, "initialized", False)):

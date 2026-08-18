@@ -170,7 +170,7 @@ def cancel_current_transition(widget, snap_to_new: bool = True) -> None:
         widget.update()
 
 # ------------------------------------------------------------------
-# QOpenGLWidget hooks
+# Compositor surface hooks
 # ------------------------------------------------------------------
 
 def set_spotify_visualizer_state(

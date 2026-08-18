@@ -1283,3 +1283,117 @@ transitions to overcome 1/8 sampling:
   mechanism;
 - many severe gaps preceded by ordinary GPU samples -> the three matches were selection luck and
   P4 continues down into Qt/driver/DWM presentation.
+
+---
+
+# P4-RHI-A — main compositor `QOpenGLWidget` -> `QRhiWidget(OpenGL)` implementation checkpoint
+
+Date: 2026-08-18. Status: **implementation landed, unvalidated in installed runtime.**
+
+This section records the implementation and the binding/lifecycle facts proven on the pinned
+environment. It does **not** claim P4 is solved: no installed runtime evidence exists yet, and the
+delivery question is decided by P4-RHI-B, not by this checkpoint.
+
+## Binding contract proven on PySide6 6.9.1
+
+Verified by direct execution against the pinned environment, not from documentation:
+
+- `QRhiWidget`, `QRhiCommandBuffer`, `QRhiDepthStencilClearValue`, `QRhiGles2NativeHandles` and
+  `QOpenGLPaintDevice` (in `PySide6.QtOpenGL`) are all present.
+- `cb.beginPass(rt, clearColor, dsClear, resourceUpdates=None, flags=...)`;
+  `QRhiCommandBuffer.BeginPassFlag.ExternalContent` exists; `beginExternal()`/`endExternal()`
+  take no arguments and are legal **inside a pass and outside any pass**.
+- `QRhiWidget.setApi(QRhiWidget.Api.OpenGL)` in the constructor yields `rhi().backendName() == "OpenGL"`.
+- **`QRhi.nativeHandles()` returns a base `QRhiNativeHandles` in PySide6 6.9.1 and does not expose
+  the GLES2 `context` field.** The borrowed `QOpenGLContext` is therefore obtained via
+  `QOpenGLContext.currentContext()` inside `initialize()`, where Qt has made it current. Any port
+  copied from a C++/6.10 snippet that reads `nativeHandles().context` gets `None` here.
+- `QRhi.makeThreadLocalNativeContextCurrent()` returns True and makes exactly the borrowed context
+  current, **including outside a frame**, so foreign OpenGL outside render callbacks is legal.
+- An SRPSS-owned offscreen `QOpenGLContext` created with the borrowed context as share context
+  reports `shareGroup()` identity with it, so the existing hidden warmup mechanism survives.
+- `initialize()` is re-invoked on render-target resize with the **same** QRhi and context; only a
+  real QRhi replacement (reparent/screen change) changes identity.
+- `releaseResources()` runs with **no OpenGL context current**, while `rhi()` is still live. A
+  naive port that deletes GL objects there deletes them with no context. SRPSS therefore makes the
+  borrowed context current explicitly before deleting.
+
+## Orientation: no flip compensation required
+
+A raw-GL bottom-left `glScissor` fill lands at the **bottom** of `grabFramebuffer()`, and a
+`QOpenGLPaintDevice` fill at logical top-left lands at the **top**: the QRhi OpenGL target keeps the
+standard GL convention, matching the retired `QOpenGLWidget` FBO. The existing real-GL quadrant
+test (`test_real_compositor_retained_base_draw_preserves_quadrant_orientation`) passes unchanged
+through the actual compositor shader path. No source image was flipped and
+`setMirrorVertically()` is not used.
+
+## Construction ordering is now a hard contract
+
+**The highest-consequence finding of this checkpoint.** Qt resolves the top-level backing-store
+QRhi configuration when the window is created. A `QRhiWidget` added to an **already-created**
+window never receives a QRhi and never renders — `rhi()` stays unattached and zero frames are
+produced. `QOpenGLWidget` tolerated this because it owned its own context and FBO.
+
+Production previously called `widget.show()` **before** `_ensure_gl_compositor()`, so a direct
+inheritance swap would have produced silently black displays. `rendering/display_setup.py` now
+constructs the compositor before `show()`, and the remaining lazy construction path logs an error
+rather than failing silently. Measured proof: identical scenario yields 57 rendered frames when the
+compositor precedes `show()` and 0 when it follows.
+
+## Frame delivery parity in the timing harness
+
+`tests/test_frame_timing_workload.py` sustained workload, 10 back-to-back 800 ms slides:
+
+```text
+                     dt_max first-half avg    dt_max second-half avg
+QOpenGLWidget base            17.11 ms                 16.84 ms
+QRhiWidget (this checkpoint)  16.97 ms                 16.80 ms
+```
+
+This is parity in a synthetic harness, **not** a delivery result. It only establishes that the QRhi
+surface paints at the requested cadence and that update-request ownership is unchanged.
+
+## Ownership contract changes
+
+- The QRhi `QOpenGLContext` is **borrowed and Qt-owned**. `BorrowedRhiGLContext` may make it
+  current through `makeThreadLocalNativeContextCurrent()`; it exposes no `doneCurrent`, `destroy`
+  or `release`, and SRPSS never destroys it.
+- The borrowed pairing is generation-fenced. A resize keeps the generation; a QRhi replacement
+  increments it and retires the SRPSS-owned hidden warmup context bound to the dead share group.
+- Strict cleanup runs with the borrowed context current and stays fail-closed: live resources plus
+  an unusable context raises and retains ownership. Handles are never cleared to fake a zero count.
+- After strict cleanup the borrowed handle is detached, because the window/drawable can die before
+  Qt destroys the context.
+- `engine/runtime_destruction.py` no longer watches the compositor's context as a retiring root:
+  it is the top-level Qt-owned context and outlives the display. The SRPSS-owned hidden warmup
+  context is still watched.
+- Pipeline creation (which owns VAOs, not shareable across contexts) runs on the borrowed context;
+  texture/program warmup continues to use the SRPSS-owned hidden shared context.
+
+## Raw WGL calls now require a live drawable
+
+Because SRPSS must not `doneCurrent()` a Qt-owned context, the borrowed context can remain
+WGL-current over a **destroyed** drawable after a display is torn down. Calling into the driver
+then access-violates rather than returning an error — reproduced as a hard process fault in
+`wglGetSwapIntervalEXT`. The `P4_PRESENT_CONTEXT` probe now refuses to run unless the compositor's
+own borrowed context is attached *and* current, with regression bars asserting the gate dominates
+every native call.
+
+## Diagnostic seams intentionally disabled
+
+- The `aboutToCompose`/`frameSwapped` P4 observer is **QOpenGLWidget-specific** and is disabled on
+  the QRhi path. The signals are not faked and no substitute events are manufactured. Stage runs
+  now log explicitly that `paint->compose` and `compose->swap` are **not measured**, so their
+  absence can never be read as zero. `QtCompositionObserver` and its tests remain for historical
+  log analysis, pending the retirement already scheduled in `Future_Cleanup.md`.
+- `P4_PRESENT_CONTEXT` now reports whether the current context is the borrowed QRhi context; the
+  old "is this the compositor's own child context" question no longer exists.
+
+## Known confound for P4-RHI-B
+
+`_disable_current_context_swap_interval()` is unchanged production code at the equivalent lifecycle
+point, but its **target has changed**: it previously acted on the QOpenGLWidget child context,
+which never presented, and now acts on the top-level presenting context. The pinned environment
+reports that context coming up at `swapInterval 1` despite the global interval-0 request, so this
+call is no longer inert. It enforces the documented policy on the context that actually swaps —
+and it must be considered when interpreting any delivery improvement in P4-RHI-B.

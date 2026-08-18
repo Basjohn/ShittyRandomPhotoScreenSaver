@@ -152,6 +152,21 @@ def ensure_gl_compositor(widget) -> None:
         return
 
     if widget._gl_compositor is None:
+        # Qt resolves the top-level backing-store QRhi configuration when the
+        # window is created. A QRhiWidget added afterwards gets no QRhi and
+        # never renders, which would show as a silent black display rather than
+        # an error, so this condition must be reported loudly.
+        try:
+            already_created = widget.windowHandle() is not None
+        except Exception:
+            already_created = False
+        if already_created:
+            logger.error(
+                "[GL COMPOSITOR] Creating compositor for screen %s AFTER its window "
+                "was created; the QRhi surface will not render. The compositor must "
+                "be constructed before DisplayWidget.show().",
+                getattr(widget, "screen_index", "?"),
+            )
         try:
             comp = GLCompositorWidget(widget)
             comp.setObjectName("_srpss_gl_compositor")

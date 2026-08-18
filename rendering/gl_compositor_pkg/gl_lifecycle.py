@@ -12,7 +12,7 @@ import time
 import weakref
 from typing import TYPE_CHECKING
 from PySide6.QtCore import QCoreApplication, QThread
-from PySide6.QtGui import QOffscreenSurface, QOpenGLContext
+from PySide6.QtGui import QOffscreenSurface, QOpenGLContext, QSurfaceFormat
 
 try:
     from OpenGL import GL as gl  # type: ignore[import]
@@ -343,25 +343,32 @@ def _ensure_hidden_shared_warmup_context(
     perf_trace: dict[str, object] | None = None,
 ) -> tuple[QOpenGLContext, QOffscreenSurface] | None:
     trace_enabled = perf_trace is not None
+    borrowed = widget._rhi_gl
+    share_ctx = borrowed.context
+    generation = borrowed.generation
     if trace_enabled:
         perf_trace.update(
             hidden_context_reused=False,
-            share_context_present=False,
+            share_context_present=share_ctx is not None,
             share_context_valid=False,
             offscreen_surface_create_ms=0.0,
             shared_context_create_ms=0.0,
+            share_context_generation=generation,
         )
         try:
-            share_context_probe = widget.context()
-        except Exception:
-            share_context_probe = None
-        perf_trace["share_context_present"] = share_context_probe is not None
-        try:
             perf_trace["share_context_valid"] = bool(
-                share_context_probe is not None and share_context_probe.isValid()
+                share_ctx is not None and share_ctx.isValid()
             )
         except Exception:
             perf_trace["share_context_valid"] = False
+
+    # Generation fence: a QRhi replacement destroys the share group, so an
+    # offscreen context created against the previous QRhi context must be
+    # retired rather than reused. Reusing it would attach the warmup owner to a
+    # dead share group.
+    if int(getattr(widget, "_deferred_warmup_generation", -1)) != int(generation):
+        _retire_hidden_shared_warmup_context(widget, reason="rhi_generation_change")
+
     try:
         existing_ctx = getattr(widget, "_deferred_warmup_context", None)
         existing_surface = getattr(widget, "_deferred_warmup_surface", None)
@@ -377,20 +384,8 @@ def _ensure_hidden_shared_warmup_context(
     except Exception:
         logger.debug("[GL COMPOSITOR] Failed to reuse deferred warmup context", exc_info=True)
 
-    share_ctx = None
-    try:
-        share_ctx = widget.context()
-    except Exception:
-        logger.debug("[GL COMPOSITOR] Failed to access compositor context for deferred warmup", exc_info=True)
-    if trace_enabled:
-        perf_trace["share_context_present"] = share_ctx is not None
-        try:
-            perf_trace["share_context_valid"] = bool(
-                share_ctx is not None and share_ctx.isValid()
-            )
-        except Exception:
-            perf_trace["share_context_valid"] = False
     if share_ctx is None:
+        # No QRhi is attached yet; warmup is optional and simply defers.
         return None
 
     surface = None
@@ -428,6 +423,7 @@ def _ensure_hidden_shared_warmup_context(
 
         widget._deferred_warmup_context = context
         widget._deferred_warmup_surface = surface
+        widget._deferred_warmup_generation = int(generation)
         committed = True
         return context, surface
     except Exception:
@@ -450,6 +446,10 @@ def _ensure_hidden_shared_warmup_context(
                     "[GL COMPOSITOR] Failed to destroy deferred warmup surface",
                     exc_info=True,
                 )
+
+
+def _no_context_release() -> None:
+    """Release callable for the borrowed Qt-owned QRhi context: nothing to do."""
 
 
 def acquire_safe_warmup_context(
@@ -522,26 +522,21 @@ def acquire_safe_warmup_context(
         return None
 
     make_current_started = time.perf_counter() if trace_enabled else 0.0
-    try:
-        widget.makeCurrent()
-        if trace_enabled:
-            perf_trace["context_route"] = "compositor"
-            perf_trace["context_make_current_ms"] = (
-                time.perf_counter() - make_current_started
-            ) * 1000.0
-        return widget.doneCurrent
-    except Exception:
-        if trace_enabled:
-            perf_trace["context_route"] = "failed"
-            perf_trace["context_make_current_ms"] = (
-                time.perf_counter() - make_current_started
-            ) * 1000.0
+    acquired = widget._rhi_gl.make_current()
+    if trace_enabled:
+        perf_trace["context_make_current_ms"] = (
+            time.perf_counter() - make_current_started
+        ) * 1000.0
+        perf_trace["context_route"] = "borrowed_rhi" if acquired else "failed"
+    if not acquired:
         logger.debug(
-            "[GL COMPOSITOR] Failed to make compositor context current for %s",
+            "[GL COMPOSITOR] Borrowed QRhi context unavailable for %s",
             fallback_label,
-            exc_info=True,
         )
         return None
+    # The QRhi context is Qt-owned: there is nothing for SRPSS to release, so
+    # the release callable is a no-op rather than a doneCurrent().
+    return _no_context_release
 
 
 def _compile_transition_program(widget, program_name: str, program_attr: str, uniforms_attr: str) -> bool:
@@ -604,19 +599,24 @@ def ensure_transition_program_ready(widget, identity: object) -> bool:
     if getattr(widget._gl_pipeline, program_attr, 0):
         return True
 
-    try:
-        widget.makeCurrent()
-    except Exception:
-        logger.debug("[GL COMPOSITOR] Failed to make compositor context current for transition program ensure", exc_info=True)
+    release_current = acquire_safe_warmup_context(
+        widget,
+        fallback_label="transition program ensure",
+        preserve_live_surface=False,
+    )
+    if release_current is None:
         return False
 
     try:
         return bind_transition_program_for_current_context(widget, identity)
     finally:
         try:
-            widget.doneCurrent()
+            release_current()
         except Exception:
-            logger.debug("[GL COMPOSITOR] doneCurrent failed after transition program ensure", exc_info=True)
+            logger.debug(
+                "[GL COMPOSITOR] Warmup context release failed after transition program ensure",
+                exc_info=True,
+            )
 
 
 def _warm_next_transition_program(widget) -> None:
@@ -666,7 +666,7 @@ def _warm_next_transition_program(widget) -> None:
             if release_current is not None:
                 release_current()
         except Exception:
-            logger.debug("[GL COMPOSITOR] doneCurrent failed after deferred shader warmup", exc_info=True)
+            logger.debug("[GL COMPOSITOR] Warmup context release failed after deferred shader warmup", exc_info=True)
 
     if queue:
         _schedule_deferred_gl_warmup(widget, _warm_next_transition_program)
@@ -819,40 +819,82 @@ def _warm_next_transition_resources(widget) -> None:
             if release_current is not None:
                 release_current()
         except Exception:
-            logger.debug("[GL COMPOSITOR] doneCurrent failed after deferred resource warmup", exc_info=True)
+            logger.debug("[GL COMPOSITOR] Warmup context release failed after deferred resource warmup", exc_info=True)
 
     if queue:
         _schedule_deferred_gl_warmup(widget, _warm_next_transition_resources)
 
 
-def handle_initializeGL(widget) -> None:  # type: ignore[override]
-    """Initialize GL state for the compositor.
+def handle_rhi_release(widget) -> None:
+    """Qt-initiated GL release for the compositor surface.
 
-    Sets up logging and prepares the internal pipeline container. In this
-    phase the shader program and fullscreen quad geometry are created when
-    OpenGL is available, but all drawing still goes through QPainter until
-    later phases explicitly enable the shader path.
+    Qt calls this when the borrowed QRhi is about to change or go away. It is
+    the last point at which SRPSS-owned GL ids are still deletable in their
+    owning context, so the strict pipeline teardown runs here. It must not
+    raise into the Qt virtual override: a failure keeps ownership, keeps the
+    compositor out of DESTROYED, and is reported.
     """
+    try:
+        if gl_pipeline_has_live_resources(widget):
+            cleanup_gl_pipeline(widget)
+        else:
+            _cleanup_deferred_warmup_resources(widget)
+    except Exception:
+        logger.error(
+            "[GL COMPOSITOR] QRhi-initiated GL release failed; ownership retained",
+            exc_info=True,
+        )
+
+
+def handle_rhi_initialize(widget, generation_changed: bool) -> None:
+    """Initialize GL state for the compositor on the borrowed QRhi context.
+
+    Qt re-invokes this for every render-target rebuild, including a plain
+    resize where the QRhi and its context are unchanged. Only a real QRhi
+    replacement invalidates SRPSS-owned GL ids, so a resize must reuse the
+    existing pipeline rather than recreating immutable resources.
+    """
+    if not generation_changed:
+        pipeline = getattr(widget, "_gl_pipeline", None)
+        if pipeline is not None and getattr(pipeline, "initialized", False):
+            # Target resize only: viewport is derived per draw from the live
+            # widget size, so there is nothing to rebuild.
+            return
+    elif gl_pipeline_has_live_resources(widget):
+        # Qt normally calls releaseResources() before replacing the QRhi. If
+        # live ids survive into a new generation, their context is already gone
+        # and they can never be deleted. Report it as the hard ownership
+        # failure it is; do not fabricate a zero count.
+        logger.critical(
+            "[GL COMPOSITOR] QRhi generation changed while SRPSS GL resources were "
+            "still live (generation=%d); those ids are unreachable and leaked",
+            widget._rhi_gl.generation,
+        )
+
     # Transition to INITIALIZING state
     if not widget._gl_state.transition(GLContextState.INITIALIZING):
         logger.warning("[GL COMPOSITOR] Failed to transition to INITIALIZING state")
         return
 
     try:
-        ctx = widget.context()
+        ctx = widget._rhi_gl.context
         swap_disable_ok: bool | None = None
         swap_disable_current: int | None = None
         swap_disable_source = "not_attempted"
         if ctx is not None:
+            # NOTE: under QRhiWidget this now targets the *presenting* top-level
+            # context rather than the retired QOpenGLWidget child context, so it
+            # enforces the documented interval-0 policy on the context that
+            # actually swaps. Record it explicitly in P4-RHI-B comparisons.
             swap_disable_ok, swap_disable_current, swap_disable_source = _disable_current_context_swap_interval()
             fmt = ctx.format()
             requested_interval = 0
             try:
-                requested_interval = int(getattr(widget, "format")().swapInterval())
+                requested_interval = int(QSurfaceFormat.defaultFormat().swapInterval())
             except Exception:
                 requested_interval = 0
             logger.info(
-                "[GL COMPOSITOR] Context initialized: version=%s.%s, swap=%s, interval=%s, requested_interval=%s, wgl_swap_disable=%s, wgl_current_interval=%s, wgl_source=%s",
+                "[GL COMPOSITOR] QRhi OpenGL context initialized: version=%s.%s, swap=%s, interval=%s, global_requested_interval=%s, wgl_swap_disable=%s, wgl_current_interval=%s, wgl_source=%s",
                 fmt.majorVersion(),
                 fmt.minorVersion(),
                 fmt.swapBehavior(),
@@ -988,7 +1030,7 @@ def handle_initializeGL(widget) -> None:  # type: ignore[override]
         # using the existing QPainter-only path. Higher levels can decide
         # to disable GL transitions for the session based on this signal
         # in later phases when shader-backed effects are wired.
-        logger.debug("[GL COMPOSITOR] initializeGL failed", exc_info=True)
+        logger.debug("[GL COMPOSITOR] QRhi surface initialization failed", exc_info=True)
         widget._gl_state.transition(GLContextState.ERROR, str(e))
 
 def init_gl_pipeline(widget) -> None:
@@ -1131,10 +1173,12 @@ def cleanup_gl_pipeline(widget) -> None:
     widget._startup_transition_resource_warm_queue = []
     widget._startup_transition_resource_warm_types = set()
 
-    is_valid = getattr(widget, "isValid", None)
-    if callable(is_valid) and not is_valid():
+    borrowed = widget._rhi_gl
+    if not borrowed.is_attached():
         if live_resources:
-            raise RuntimeError("Cannot delete live GL resources: compositor context is invalid")
+            raise RuntimeError(
+                "Cannot delete live GL resources: no QRhi OpenGL context is attached"
+            )
         widget._reset_pipeline_state()
         _cleanup_deferred_warmup_resources(widget)
         return
@@ -1144,27 +1188,20 @@ def cleanup_gl_pipeline(widget) -> None:
         raise RuntimeError(
             "Cross-thread GL teardown rejected: compositor cleanup must run on the GUI thread"
         )
-    try:
-        widget.makeCurrent()
-    except Exception as exc:
+
+    if not borrowed.make_current():
         if live_resources:
             raise RuntimeError(
-                "Cannot delete live GL resources: makeCurrent() failed"
-            ) from exc
+                "Cannot delete live GL resources: borrowed QRhi context did not become current"
+            )
         widget._reset_pipeline_state()
         _cleanup_deferred_warmup_resources(widget)
         return
 
-    context_getter = getattr(widget, "context", None)
-    expected_context = context_getter() if callable(context_getter) else None
-    current_context = QOpenGLContext.currentContext()
-    if expected_context is not None and current_context != expected_context:
-        try:
-            widget.doneCurrent()
-        finally:
-            raise RuntimeError(
-                "Cannot delete live GL resources: compositor context did not become current"
-            )
+    if QOpenGLContext.currentContext() is not borrowed.context:
+        raise RuntimeError(
+            "Cannot delete live GL resources: borrowed QRhi context did not become current"
+        )
 
     cleanup_errors: list[str] = []
 
@@ -1277,39 +1314,57 @@ def cleanup_gl_pipeline(widget) -> None:
             )
         widget._reset_pipeline_state()
     finally:
-        try:
-            widget.doneCurrent()
-        except Exception as exc:
-            if not cleanup_errors:
-                cleanup_errors.append(f"doneCurrent:{type(exc).__name__}:{exc}")
+        # The QRhi OpenGL context is Qt-owned; SRPSS never releases it here.
+        # Only the SRPSS-owned hidden warmup context/surface are retired.
         _cleanup_deferred_warmup_resources(widget)
+        # Detach the borrowed handle. The compositor is being destroyed, and its
+        # window/drawable may die before Qt destroys the context, so nothing
+        # afterwards may treat this pairing as live and usable.
+        widget._rhi_gl.invalidate()
 
     if cleanup_errors:
         raise RuntimeError(
             "GL context release incomplete: " + " | ".join(cleanup_errors)
         )
 
-def _cleanup_deferred_warmup_resources(widget) -> None:
+def _retire_hidden_shared_warmup_context(widget, *, reason: str) -> None:
+    """Release the SRPSS-owned hidden warmup context/surface.
+
+    This owner is SRPSS's, not Qt's: SRPSS created the offscreen context and
+    surface, so SRPSS destroys them. The borrowed QRhi context it shared with is
+    never touched here.
+    """
     context = getattr(widget, "_deferred_warmup_context", None)
     surface = getattr(widget, "_deferred_warmup_surface", None)
+    if context is None and surface is None:
+        widget._deferred_warmup_generation = int(widget._rhi_gl.generation)
+        return
+
+    widget._deferred_warmup_context = None
+    widget._deferred_warmup_surface = None
+    widget._deferred_warmup_generation = int(widget._rhi_gl.generation)
+
     try:
-        widget._deferred_warmup_context = None
-        widget._deferred_warmup_surface = None
-        widget._deferred_gl_warmup_armed_callbacks = set()
-        widget._deferred_gl_warmup_started = False
-        widget._startup_sequence_last_log = None
+        if isinstance(context, QOpenGLContext) and context.isValid():
+            context.doneCurrent()
     except Exception:
-        pass
+        logger.debug("[GL COMPOSITOR] Failed to release deferred warmup context", exc_info=True)
     try:
         if isinstance(surface, QOffscreenSurface):
             surface.destroy()
     except Exception:
         logger.debug("[GL COMPOSITOR] Failed to destroy deferred warmup surface", exc_info=True)
+    logger.debug("[GL COMPOSITOR] Hidden shared warmup context retired (reason=%s)", reason)
+
+
+def _cleanup_deferred_warmup_resources(widget) -> None:
     try:
-        if isinstance(context, QOpenGLContext):
-            context.doneCurrent()
+        widget._deferred_gl_warmup_armed_callbacks = set()
+        widget._deferred_gl_warmup_started = False
+        widget._startup_sequence_last_log = None
     except Exception:
-        logger.debug("[GL COMPOSITOR] Failed to release deferred warmup context", exc_info=True)
+        pass
+    _retire_hidden_shared_warmup_context(widget, reason="compositor_cleanup")
 
 def create_card_flip_program(widget) -> int:
     """Compile and link the basic textured card-flip shader program."""

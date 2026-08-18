@@ -130,14 +130,28 @@ def _ensure_dwm_probe(widget):
 def _probe_present_context_once(widget) -> None:
     """PART 2: capture the context that actually performs top-level composition.
 
-    QOpenGLWidget does not perform the onscreen swap itself, so the child
-    compositor context having WGL interval 0 says nothing about the context Qt
-    composes/presents with. This is a one-time STATE probe - it changes nothing
-    and is never used as a duration measurement.
+    Under QRhiWidget the compositor no longer owns a separate child context:
+    it renders through the top-level window's QRhi. The probe therefore records
+    whether the current context is the borrowed QRhi context. This is a
+    one-time STATE probe - it changes nothing and is never a duration.
     """
     if getattr(widget, "_p4_present_context_probed", False):
         return
     widget._p4_present_context_probed = True
+
+    # Raw WGL calls are only safe while the borrowed QRhi context is current
+    # against a LIVE drawable. Once a display is torn down, the context can stay
+    # WGL-current over a destroyed surface, and calling into the driver then
+    # access-violates instead of returning an error. Qt only guarantees a live
+    # drawable inside a QRhi frame, so the probe requires the compositor's own
+    # borrowed context to be the current one.
+    borrowed = getattr(widget, "_rhi_gl", None)
+    if borrowed is None or not borrowed.is_attached() or not borrowed.is_current():
+        logger.debug(
+            "[P4_PRESENT_CONTEXT] Skipped: no live borrowed QRhi context is current"
+        )
+        return
+
     fields = {
         "current_context": "none",
         "is_compositor_context": "na",
@@ -152,11 +166,9 @@ def _probe_present_context_once(widget) -> None:
         current = QOpenGLContext.currentContext()
         if current is not None:
             fields["current_context"] = hex(id(current))
-            try:
-                own = widget.context()
-                fields["is_compositor_context"] = str(current is own).lower()
-            except Exception:
-                pass
+            fields["is_compositor_context"] = str(
+                current is borrowed.context
+            ).lower()
             try:
                 fields["context_swap_interval"] = str(
                     current.format().swapInterval()
@@ -205,36 +217,30 @@ def _probe_present_context_once(widget) -> None:
 
 
 def _ensure_qt_composition_observer(widget) -> None:
-    """PART D: connect aboutToCompose/frameSwapped once, GUI-thread direct.
+    """Retired on the QRhi compositor path.
 
-    Introduces no timer, thread, queued callback, invokeMethod, singleShot,
-    update() or repaint(). The handlers only record timestamps.
+    The P4 paint->compose->swap observer was built on QOpenGLWidget's
+    aboutToCompose/frameSwapped signals, which bracketed the child-context
+    handoff that this migration removes. QRhiWidget has no equivalent boundary
+    and the signals do not exist on it.
+
+    The observer is therefore disabled rather than reimplemented: manufacturing
+    substitute events, or emitting zero-valued compose/swap fields, would
+    misreport a boundary that is no longer being measured. The one-time present
+    context probe still runs, since it is a state probe rather than a duration.
     """
     if getattr(widget, "_gl_stage_timestamps", None) is None:
         return
     if getattr(widget, "_qt_composition_connected", False):
         return
-    try:
-        from rendering.gl_compositor_pkg.gpu_delivery_association import (
-            QtCompositionObserver,
-        )
-
-        observer = QtCompositionObserver()
-        widget._qt_composition_observer = observer
-
-        def _on_about_to_compose():
-            # One-time low-frequency STATE probe only; never a duration source.
-            _probe_present_context_once(widget)
-            observer.on_about_to_compose(time.perf_counter())
-
-        def _on_frame_swapped():
-            observer.on_frame_swapped(time.perf_counter())
-
-        widget.aboutToCompose.connect(_on_about_to_compose)
-        widget.frameSwapped.connect(_on_frame_swapped)
-        widget._qt_composition_connected = True
-    except Exception:
-        logger.debug("[GL COMPOSITOR] Qt composition observer unavailable", exc_info=True)
+    widget._qt_composition_observer = None
+    widget._qt_composition_connected = True
+    _probe_present_context_once(widget)
+    logger.info(
+        "[PERF][P4_STAGES] Qt compose/swap observer is unavailable on the QRhi "
+        "compositor path; paint->compose and compose->swap are NOT measured in "
+        "this run and must not be read as zero."
+    )
 
 
 def _stage_render_path(widget) -> str:
@@ -511,7 +517,13 @@ def _record_image_install_next_paint(
     )
 
 
-def handle_paintGL(widget) -> None:  # type: ignore[override]
+def handle_rhi_render(widget) -> None:
+    """Compositor frame entry point, called inside the QRhi external pass.
+
+    The QRhi render pass and the beginExternal()/endExternal() bracketing are
+    owned by ExternalOpenGLRhiWidget; everything below is the unchanged
+    compositor render pipeline.
+    """
     _paint_start = time.perf_counter()
     _perf_metrics_enabled = is_perf_metrics_enabled()
     if _perf_metrics_enabled:
@@ -617,21 +629,14 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
             )
 
     try:
-        paintGL_impl(widget, )
+        paintGL_impl(widget)
     finally:
         if query_started and timer_queries is not None and gl is not None:
             timer_queries.end(gl)
         stage_ring = getattr(widget, "_gl_stage_timestamps", None)
         if stage_ring is not None and stage_ring.supported and gl is not None:
-            active = getattr(stage_ring, "_active", None)
-            observer = getattr(widget, "_qt_composition_observer", None)
-            if active is not None and observer is not None:
-                observer.record_paint_end(
-                    scene_generation=active.scene_generation,
-                    frame_index=active.frame_index,
-                    transition=active.transition,
-                    paint_end_ts=time.perf_counter(),
-                )
+            # No paint-end record is emitted on the QRhi path: without the
+            # compose/swap observer there is no boundary to correlate it with.
             stage_ring.end_frame()
             # Availability-checked; never blocks.
             stage_ring.poll(gl)
@@ -740,16 +745,21 @@ def paintGL_impl(widget) -> None:
         stage_set_render_path(widget, "qpainter_fallback")
         if any_transition_active:
             _log_shader_fallback_once(widget, active_names)
-        painter = QPainter(widget)
+        # QPainter(widget) targeted the QOpenGLWidget FBO. Under QRhiWidget the
+        # painter must render into the QRhi target through the external GL
+        # section, otherwise the fallback and PERF HUD silently stop appearing.
         try:
-            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-            target = widget.rect()
-            widget._transition_renderer.render_base_image(painter, target, widget._base_pixmap)
-            widget._paint_dimming(painter)
-            paint_spotify_visualizer(widget, painter)
-            paint_debug_overlay(widget, painter)
+            with widget.gl_target_painter() as painter:
+                if painter is not None:
+                    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+                    target = widget.rect()
+                    widget._transition_renderer.render_base_image(
+                        painter, target, widget._base_pixmap
+                    )
+                    widget._paint_dimming(painter)
+                    paint_spotify_visualizer(widget, painter)
+                    paint_debug_overlay(widget, painter)
         finally:
-            painter.end()
             _mark_section("qpainter_base_only")
 
     # Log section times if any section took >10ms

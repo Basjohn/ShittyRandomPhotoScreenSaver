@@ -316,12 +316,11 @@ def paint_dimming_gl(widget) -> None:
         return
     
     if gl is None:
-        # Fallback to QPainter if GL not available
-        painter = QPainter(widget)
-        try:
-            widget._paint_dimming(painter)
-        finally:
-            painter.end()
+        # Fallback to QPainter if GL not available. The painter must target the
+        # QRhi render texture, not the widget backing store.
+        with widget.gl_target_painter() as painter:
+            if painter is not None:
+                widget._paint_dimming(painter)
         return
     
     try:
@@ -345,9 +344,7 @@ def paint_dimming_gl(widget) -> None:
         gl.glColor4f(1.0, 1.0, 1.0, 1.0)
     except Exception as e:
         logger.debug("[GL COMPOSITOR] GL dimming failed, falling back to QPainter: %s", e)
-        # Fallback to QPainter
-        painter = QPainter(widget)
-        try:
-            widget._paint_dimming(painter)
-        finally:
-            painter.end()
+        # Fallback to QPainter, into the QRhi render target.
+        with widget.gl_target_painter() as painter:
+            if painter is not None:
+                widget._paint_dimming(painter)

@@ -110,6 +110,34 @@ def test_hidden_deferred_warmup_guard_ignores_hidden_surface_without_base() -> N
     assert _has_live_visible_base_surface(_StubWidget()) is False
 
 
+
+class _StubBorrowedContext:
+    """Stand-in for BorrowedRhiGLContext in warmup unit tests.
+
+    Mirrors the production contract: acquiring currentness is one call and
+    there is no release, because the QRhi OpenGL context is Qt-owned.
+    """
+
+    def __init__(self, context=None, generation=1):
+        self._context = context
+        self.generation = generation
+        self.make_current_calls = 0
+
+    @property
+    def context(self):
+        return self._context
+
+    def is_attached(self):
+        return self._context is not None
+
+    def make_current(self):
+        self.make_current_calls += 1
+        return True
+
+    def is_current(self):
+        return True
+
+
 def test_transition_program_ensure_binds_runtime_alias(monkeypatch) -> None:
     class _StubPipeline:
         initialized = True
@@ -121,14 +149,12 @@ def test_transition_program_ensure_binds_runtime_alias(monkeypatch) -> None:
             self._gl_disabled_for_session = False
             self._gl_pipeline = _StubPipeline()
             self._program_cache = _StubCache()
-            self.make_current_calls = 0
-            self.done_current_calls = 0
+            self._rhi_gl = _StubBorrowedContext(context=object())
+            self._base_pixmap = None
+            self._frame_state = None
 
-        def makeCurrent(self):
-            self.make_current_calls += 1
-
-        def doneCurrent(self):
-            self.done_current_calls += 1
+        def isVisible(self):
+            return False
 
     class _StubCache:
         def get_program(self, name):
@@ -145,8 +171,10 @@ def test_transition_program_ensure_binds_runtime_alias(monkeypatch) -> None:
     assert ensure_transition_program_ready(widget, "wipe") is True
     assert widget._gl_pipeline.wipe_program == 321
     assert widget._gl_pipeline.wipe_uniforms == {"uMix": 7}
-    assert widget.make_current_calls == 1
-    assert widget.done_current_calls == 1
+    # Exactly one borrowed-context acquisition, and no release: the QRhi
+    # OpenGL context belongs to Qt.
+    assert widget._rhi_gl.make_current_calls == 1
+    assert not hasattr(widget, "doneCurrent")
 
 
 def test_transition_program_ensure_binds_compositor_class(monkeypatch) -> None:
@@ -160,12 +188,12 @@ def test_transition_program_ensure_binds_compositor_class(monkeypatch) -> None:
             self._gl_disabled_for_session = False
             self._gl_pipeline = _StubPipeline()
             self._program_cache = _StubCache()
+            self._rhi_gl = _StubBorrowedContext(context=object())
+            self._base_pixmap = None
+            self._frame_state = None
 
-        def makeCurrent(self):
-            return None
-
-        def doneCurrent(self):
-            return None
+        def isVisible(self):
+            return False
 
     class _StubCache:
         def get_program(self, name):
@@ -539,7 +567,8 @@ def test_hidden_shared_warmup_context_trace_splits_creation_cost(monkeypatch) ->
     widget = SimpleNamespace(
         _deferred_warmup_context=None,
         _deferred_warmup_surface=None,
-        context=lambda: share_context,
+        _deferred_warmup_generation=1,
+        _rhi_gl=_StubBorrowedContext(context=share_context, generation=1),
     )
     monkeypatch.setattr(gl_lifecycle, "QOffscreenSurface", _Surface)
     monkeypatch.setattr(gl_lifecycle, "QOpenGLContext", _Context)
@@ -614,7 +643,8 @@ def test_hidden_shared_warmup_context_destroys_surface_on_creation_failure(
         return SimpleNamespace(
             _deferred_warmup_context=None,
             _deferred_warmup_surface=None,
-            context=lambda: _ShareContext(),
+            _deferred_warmup_generation=1,
+            _rhi_gl=_StubBorrowedContext(context=_ShareContext(), generation=1),
         )
 
     monkeypatch.setattr(gl_lifecycle, "QOffscreenSurface", _Surface)

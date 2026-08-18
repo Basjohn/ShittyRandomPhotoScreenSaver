@@ -532,23 +532,22 @@ def test_warm_transition_resources_uses_single_current_context_cycle(qt_app, mon
     )
 
     make_current_calls = {"count": 0}
-    done_current_calls = {"count": 0}
 
     monkeypatch.setattr(
-        comp,
-        "makeCurrent",
-        lambda: make_current_calls.__setitem__("count", make_current_calls["count"] + 1),
-    )
-    monkeypatch.setattr(
-        comp,
-        "doneCurrent",
-        lambda: done_current_calls.__setitem__("count", done_current_calls["count"] + 1),
+        type(comp._rhi_gl),
+        "make_current",
+        lambda self: (
+            make_current_calls.__setitem__("count", make_current_calls["count"] + 1),
+            True,
+        )[1],
     )
 
     assert comp.warm_transition_resources("GLCompositorSlideTransition", old_pm, new_pm) is True
     assert calls == ["bind:GLCompositorSlideTransition", "textures", "state:GLCompositorSlideTransition"]
+    # One acquisition of the borrowed QRhi context, and no release: the context
+    # is Qt-owned, so SRPSS must never doneCurrent() it.
     assert make_current_calls["count"] == 1
-    assert done_current_calls["count"] == 1
+    assert not hasattr(comp, "doneCurrent")
 
 
 @pytest.mark.qt_no_exception_capture
@@ -572,20 +571,17 @@ def test_warm_transition_resources_skips_live_surface_when_hidden_context_is_una
     )
 
     make_current_calls = {"count": 0}
-    done_current_calls = {"count": 0}
     bind_calls: list[str] = []
     texture_calls: list[str] = []
     state_calls: list[str] = []
 
     monkeypatch.setattr(
-        comp,
-        "makeCurrent",
-        lambda: make_current_calls.__setitem__("count", make_current_calls["count"] + 1),
-    )
-    monkeypatch.setattr(
-        comp,
-        "doneCurrent",
-        lambda: done_current_calls.__setitem__("count", done_current_calls["count"] + 1),
+        type(comp._rhi_gl),
+        "make_current",
+        lambda self: (
+            make_current_calls.__setitem__("count", make_current_calls["count"] + 1),
+            True,
+        )[1],
     )
     monkeypatch.setattr(
         "rendering.gl_compositor_pkg.gl_lifecycle.bind_transition_program_for_current_context",
@@ -606,7 +602,6 @@ def test_warm_transition_resources_skips_live_surface_when_hidden_context_is_una
         assert comp.warm_transition_resources("GLCompositorSlideTransition", old_pm, new_pm) is False
 
     assert make_current_calls["count"] == 0
-    assert done_current_calls["count"] == 0
     assert bind_calls == []
     assert texture_calls == []
     assert state_calls == []
@@ -635,18 +630,15 @@ def test_warm_shader_textures_skips_live_surface_when_hidden_context_is_unavaila
     )
 
     make_current_calls = {"count": 0}
-    done_current_calls = {"count": 0}
     texture_calls: list[str] = []
 
     monkeypatch.setattr(
-        comp,
-        "makeCurrent",
-        lambda: make_current_calls.__setitem__("count", make_current_calls["count"] + 1),
-    )
-    monkeypatch.setattr(
-        comp,
-        "doneCurrent",
-        lambda: done_current_calls.__setitem__("count", done_current_calls["count"] + 1),
+        type(comp._rhi_gl),
+        "make_current",
+        lambda self: (
+            make_current_calls.__setitem__("count", make_current_calls["count"] + 1),
+            True,
+        )[1],
     )
     monkeypatch.setattr(
         comp,
@@ -658,7 +650,6 @@ def test_warm_shader_textures_skips_live_surface_when_hidden_context_is_unavaila
         comp.warm_shader_textures(old_pm, new_pm)
 
     assert make_current_calls["count"] == 0
-    assert done_current_calls["count"] == 0
     assert texture_calls == []
     assert any("deferring pair texture warmup to first-use warmup" in message for message in caplog.messages)
 
