@@ -446,10 +446,14 @@ def test_strict_visualizer_overlay_cleanup_retains_failed_program_owner(monkeypa
         _gl_vao=None,
         _gl_vao_rid=None,
         _gl_state=state,
-        isValid=lambda: True,
-        makeCurrent=lambda: None,
-        doneCurrent=lambda: None,
-        context=lambda: context,
+        _publication_target_compositor=lambda: SimpleNamespace(
+            _rhi_gl=SimpleNamespace(
+                is_attached=lambda: True,
+                make_current=lambda: True,
+                context=context,
+                generation=1,
+            )
+        ),
         _release_resource_tracking=lambda rid: released.append(rid),
     )
     fake_gl = _SelectiveGL()
@@ -512,10 +516,14 @@ def test_strict_visualizer_overlay_cleanup_retains_failed_timer_query_owner(monk
         _gl_vao_rid=None,
         _gpu_timer_queries=timer_queries,
         _gl_state=state,
-        isValid=lambda: True,
-        makeCurrent=lambda: None,
-        doneCurrent=lambda: None,
-        context=lambda: context,
+        _publication_target_compositor=lambda: SimpleNamespace(
+            _rhi_gl=SimpleNamespace(
+                is_attached=lambda: True,
+                make_current=lambda: True,
+                context=context,
+                generation=1,
+            )
+        ),
         _release_resource_tracking=lambda _rid: None,
     )
     monkeypatch.setattr(overlay_module, "gl", object())

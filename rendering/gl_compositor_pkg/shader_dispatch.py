@@ -383,6 +383,8 @@ def paint_retained_base_texture(comp: "GLCompositorWidget", target: QRect) -> bo
         _stage_mark(comp, "t3")
         _stage_cpu(comp, "dimming_cpu_ms", _stage_t)
 
+        render_visualizer_layer(comp)
+
         _stage_t = _stage_time.perf_counter()
         paint_qpainter_overlays_gl(comp)
         _stage_mark(comp, "t4")
@@ -434,6 +436,41 @@ def paint_burn_shader(comp: "GLCompositorWidget", target: QRect) -> None:
         lambda: prepare_burn_textures(comp),
         "burn_program", "burn_uniforms", "burn"
     )
+
+
+
+def render_visualizer_layer(comp: "GLCompositorWidget") -> bool:
+    """Draw the compositor-owned visualizer layer, if any state is published.
+
+    Scene order is deliberate: base image and transition first, then the
+    visualizer layer, then the QPainter overlays (HUD). The visualizer is a
+    layer inside this surface, never a surface of its own.
+    """
+    layer = getattr(comp, "_visualizer_layer", None)
+    if layer is None:
+        return False
+    try:
+        _vp_w, vp_h = get_viewport_size(comp)
+        dpr = float(comp.devicePixelRatioF())
+        drawn = bool(layer.render(vp_h, dpr))
+    except Exception:
+        logger.debug("[GL SHADER] Visualizer layer render failed", exc_info=True)
+        return False
+    if drawn:
+        # The layer changed viewport/scissor; restore the full-surface viewport
+        # so later compositor draws are not clipped to the card.
+        _restore_full_viewport(comp)
+    return drawn
+
+
+def _restore_full_viewport(comp: "GLCompositorWidget") -> None:
+    if gl is None:
+        return
+    try:
+        vp_w, vp_h = get_viewport_size(comp)
+        gl.glViewport(0, 0, vp_w, vp_h)
+    except Exception:
+        logger.debug("[GL SHADER] Failed to restore compositor viewport", exc_info=True)
 
 
 def paint_qpainter_overlays_gl(comp: "GLCompositorWidget") -> None:
@@ -544,6 +581,8 @@ def try_shader_path(comp: "GLCompositorWidget", name: str, state, can_use_fn, pa
         # T3: common dimming complete.
         _stage_mark(comp, "t3")
         _stage_cpu(comp, "dimming_cpu_ms", _stage_t)
+
+        render_visualizer_layer(comp)
 
         _stage_t = _stage_time.perf_counter()
         paint_qpainter_overlays_gl(comp)

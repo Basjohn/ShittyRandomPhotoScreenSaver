@@ -185,6 +185,15 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
         self._scheduled_transition_completions: dict[
             int, tuple[Callable[[float], None], Callable[[], None]]
         ] = {}
+        # Compositor-owned visualizer layer. The visualizer has no presentation
+        # surface of its own; it publishes render state here and is drawn inside
+        # this compositor's render pass.
+        from rendering.gl_compositor_pkg.visualizer_layer import (
+            CompositorVisualizerLayer,
+        )
+
+        self._visualizer_layer = CompositorVisualizerLayer(self)
+
         # Presentation liveness reasons. One render strategy instance owns this
         # display's presentation; a transition and a visible visualizer are two
         # independent reasons to keep presenting, so neither may stop the other.
@@ -421,6 +430,62 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
     # Presentation liveness reasons.
     PRESENTATION_TRANSITION_ACTIVE = "TRANSITION_ACTIVE"
     PRESENTATION_VISUALIZER_ACTIVE = "VISUALIZER_ACTIVE"
+
+    def publish_visualizer_state(
+        self,
+        owner,
+        card_rect,
+        *,
+        runtime_generation=None,
+        activation_id=None,
+        visible: bool = True,
+    ) -> None:
+        """Accept the latest visualizer render state for this display.
+
+        Latest-wins and generation-fenced. A publication from a retired runtime
+        generation is rejected rather than drawn, and visibility drives the
+        VISUALIZER_ACTIVE presentation reason so the display keeps presenting
+        while the visualizer is on screen.
+        """
+        from rendering.gl_compositor_pkg.visualizer_layer import VisualizerRenderState
+
+        parent_generation = None
+        try:
+            parent = self.parentWidget()
+            parent_generation = getattr(parent, "_runtime_generation", None)
+        except Exception:
+            parent_generation = None
+        if (
+            runtime_generation is not None
+            and parent_generation is not None
+            and runtime_generation != parent_generation
+        ):
+            logger.debug(
+                "[SPOTIFY_VIS] Rejected stale visualizer publication gen=%s current=%s",
+                runtime_generation,
+                parent_generation,
+            )
+            return
+
+        if not visible:
+            self._visualizer_layer.clear()
+            self.release_presentation_reason(self.PRESENTATION_VISUALIZER_ACTIVE)
+            return
+
+        self._visualizer_layer.publish(
+            VisualizerRenderState(
+                owner,
+                card_rect,
+                runtime_generation=runtime_generation,
+                activation_id=activation_id,
+            )
+        )
+        self.acquire_presentation_reason(self.PRESENTATION_VISUALIZER_ACTIVE)
+
+    def clear_visualizer_state(self) -> None:
+        """Drop published visualizer state and release its liveness reason."""
+        self._visualizer_layer.clear()
+        self.release_presentation_reason(self.PRESENTATION_VISUALIZER_ACTIVE)
 
     def acquire_presentation_reason(self, reason: str) -> None:
         """Keep this display presenting while ``reason`` holds.
@@ -1722,6 +1787,14 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
             raise RuntimeError(
                 "Adaptive render worker remained live; refusing GL/context teardown"
             )
+
+        # Visualizer layer resources live on this compositor's borrowed context,
+        # so they must be deleted here, while it is still valid, through the
+        # visualizer's own strict fail-closed deletion owner.
+        if self._visualizer_layer is not None:
+            if self._rhi_gl.is_attached():
+                self._rhi_gl.make_current()
+            self._visualizer_layer.cleanup()
 
         current_state = self._gl_state.get_state()
         if current_state in {
