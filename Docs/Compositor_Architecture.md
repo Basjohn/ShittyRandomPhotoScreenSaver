@@ -5,6 +5,29 @@ Last updated: 2026-08-13
 Current target architecture for fullscreen presentation. `main` is the implementation
 authority; historical candidates exist only as negative controls/reference.
 
+## 0. Accelerated Presentation Is Required
+
+Accelerated presentation is required for the modern compositor/visualizer
+runtime. Visualizer availability without hardware acceleration is **not a
+supported contract**.
+
+There is one accelerated Qt presentation surface per physical display: the
+display compositor (`GLCompositorWidget` / `ExternalOpenGLRhiWidget`) on the
+top-level window's OpenGL QRhi. The visualizer is a layer inside that surface,
+not an independently presented surface.
+
+Consequently the following are **not** to be implemented:
+
+- a CPU/QPainter replacement visualizer renderer;
+- a `QOpenGLWidget` compatibility surface because `display.hw_accel` is false;
+- a software rendering architecture whose purpose is preserving the visualizer.
+
+Visualizer shader failure clears/omits the visualizer layer and emits one
+bounded loud record; it never substitutes fake bars. The main compositor keeps
+its base-image QPainter fallback, because a screensaver must still show an
+image — that is a different requirement and does not generalize to the
+visualizer.
+
 ## 1. Ownership
 
 ### Runtime coordinator

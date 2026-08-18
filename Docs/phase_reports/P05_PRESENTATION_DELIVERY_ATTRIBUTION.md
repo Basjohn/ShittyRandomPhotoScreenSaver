@@ -1539,3 +1539,72 @@ acknowledgement, second timer, worker queue or source decimation was added. P2-R
 surface/context architecture from request-admission policy, so the installed run answers one
 question only: does removing the visualizer's own QOpenGLWidget child/shared-context architecture
 make the existing high-rate request stream cheap enough?
+# P2-RHI — sibling QRhi visualizer surface — REJECTED
+
+## P2-RHI-A — LANDED experiment, then rolled back
+
+Landed as `9e98755d`, rolled back in `723bcfc8`. The commit history is intact;
+history was not rewritten.
+
+## P2-RHI-B — REJECTED installed
+
+Reason: **severe delivery regression.** Single 60 Hz display, visualizer on:
+
+```text
+                                     >33 ms   >50 ms   median      max
+QRhi compositor, no visualizer            9        0        --   ~42.1 ms
+QRhi compositor + QOpenGLWidget vis      23        4   ~45.23 ms  151.27 ms
+QRhi compositor + QRhiWidget vis         49       29   ~54.76 ms  ~125.07 ms
+```
+
+Severe-gap frequency regressed roughly **5.7x** versus the architecture it
+replaced. Transition examples: BlockSpin 57.3 FPS / dt_max 125.77 ms; BlockSpin
+55.6 FPS / dt_max 107.56 ms; Burn 58.2 FPS / dt_max 71.71 ms; RainDrops
+57.1 FPS / dt_max 78.44 ms.
+
+The decisive detail: the visualizer shader got **cheaper on the GPU** while
+delivery got **worse**.
+
+```text
+sampled GPU median   old QOpenGLWidget   QRhiWidget
+Spectrum                    ~0.044 ms      ~0.018 ms
+Bubble                      ~1.69 ms       ~0.78 ms
+
+surface CPU paint p50
+Spectrum                    ~0.48 ms       ~0.90 ms
+Bubble                      ~0.49 ms       ~0.86 ms
+```
+
+The high-rate independent presentation stream also survived the migration:
+Bubble and Spectrum still issued roughly one surface update per publication,
+commonly ~85-100 Hz on a 60 Hz display.
+
+## What the experiment proved
+
+This was not wasted work. It falsified the remaining cheap hypothesis:
+
+> Sharing the top-level QRhi is **not** sufficient. A second independently
+> dirtied texture-backed presentation surface remains materially harmful on its
+> own, even with no separate context, no separate swapchain, and a cheaper
+> shader.
+
+That result is what promotes the one-surface-per-display architecture, and it
+closes off tuning, rate-capping, coalescing, admission and pacing of a second
+surface as answers. None of those are to be revisited.
+
+## Forbidden follow-ups
+
+- Do not tune the sibling QRhiWidget.
+- Do not cap its update rate or add coalescing.
+- Do not make AdaptiveTimer the authority of a second visualizer surface.
+- Do not re-test the sibling surface on dual display.
+
+## The fallback error in that run was not the owner
+
+The run recorded one `[GL PAINT][FALLBACK] reason=texture_cache_miss` followed in
+the same second by recovery with `fallback_frames=1`, then nothing. Zero later
+fallback entries, zero QRhi render failures, zero visualizer shader failures,
+zero surface initialization failures, clean GL teardown. It was first-frame
+texture cache establishment and is now classified as such (see P4-RHI-C below).
+It is not under investigation as a performance owner.
+
