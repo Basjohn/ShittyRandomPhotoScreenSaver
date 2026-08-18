@@ -5,7 +5,7 @@ from typing import List, Sequence, Optional, Set
 import logging
 import numpy as np
 import time
-from PySide6.QtCore import Qt, QRect, QTimer, QCoreApplication, QThread
+from PySide6.QtCore import Qt, QRect, QCoreApplication, QThread
 from PySide6.QtGui import QColor, QOpenGLContext
 from PySide6.QtWidgets import QWidget
 
@@ -452,8 +452,6 @@ class SpotifyBarsGLOverlay(QWidget):
         from typing import Dict as _Dict, Any as _Any
         self._gl_programs: _Dict[str, _Any] = {}  # mode -> program id
         self._gl_uniforms: _Dict[str, _Dict[str, _Any]] = {}  # mode -> {name: loc}
-        self._gl_program_warm_queue: List[str] = []
-        self._gl_program_warm_timer: Optional[QTimer] = None
         self._gl_vao = None
         self._gl_vbo = None
         # ResourceManager resource IDs for GL handles (for cleanup tracking)
@@ -1902,9 +1900,22 @@ class SpotifyBarsGLOverlay(QWidget):
 
         startup_program_key = resolve_render_program_key(self, self._vis_mode)
         compile_order = prioritized_visualizer_compile_order(startup_program_key, list(frag_sources.keys()))
-        active_mode = compile_order[0] if compile_order else startup_program_key
-        if active_mode and active_mode in frag_sources:
-            self._compile_gl_mode_program(active_mode, frag_sources[active_mode], vs, _gl)
+
+        # Compile EVERY runtime visualizer program here, while the visualizer is
+        # still hidden behind the staged startup/readiness gate.
+        #
+        # Compiling only the active mode left four programs to be linked by a
+        # post-reveal GUI timer queue, which produced visible startup hitching
+        # (Bubble tick spikes around 49-68 ms) and made the first switch to each
+        # mode pay a compile. Hardware acceleration is a required runtime
+        # contract and there are exactly five supported modes, so all of them
+        # become ready as one visualizer-GL readiness contract instead.
+        #
+        # The active mode is compiled first so a failure of a secondary mode
+        # cannot prevent the visualizer starting.
+        for mode_key in compile_order:
+            if mode_key in frag_sources:
+                self._compile_gl_mode_program(mode_key, frag_sources[mode_key], vs, _gl)
 
         _gl.glDeleteShader(vs)
 
@@ -2010,14 +2021,22 @@ void main() {
             self._gl_vao_rid = None
             self._gl_vbo_rid = None
 
+        pending = [mode for mode in compile_order if mode not in self._gl_programs]
         logger.info(
             "[SPOTIFY_VIS] Startup shader ready: active_mode=%s program=%s compiled=%s pending=%s",
             self._vis_mode,
             startup_program_key,
             ", ".join(sorted(self._gl_programs.keys())),
-            ", ".join(mode for mode in compile_order[1:] if mode not in self._gl_programs),
+            ", ".join(pending) or "none",
         )
-        self._schedule_gl_program_warmup_queue([mode for mode in compile_order[1:] if mode in frag_sources])
+        if pending:
+            # A mode that failed to compile is a real failure, not something to
+            # retry silently behind a post-reveal timer. It stays loud, and the
+            # remaining modes still work.
+            logger.error(
+                "[SPOTIFY_VIS] Visualizer programs failed to compile at startup: %s",
+                ", ".join(pending),
+            )
 
     def _compile_gl_mode_program(self, mode: str, fs_source: str, vs: int, _gl) -> bool:
         if mode in self._gl_programs:
@@ -2128,65 +2147,8 @@ void main() {
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to register %s GL handle: %s", mode, e)
 
-    def _warm_next_gl_program(self) -> None:
-        if self._gl_disabled or not self._gl_program_warm_queue:
-            return
-        if not self._gl_state.is_ready():
-            self._schedule_gl_program_warmup_queue(self._gl_program_warm_queue)
-            return
-        from OpenGL import GL as _gl
-        from widgets.spotify_visualizer.shaders import SHARED_VERTEX_SHADER, load_fragment_shader
-        # Programs compile on the compositor's borrowed QRhi context; the
-        # visualizer has no context of its own to make current.
-        compositor = self._publication_target_compositor()
-        borrowed = getattr(compositor, "_rhi_gl", None) if compositor else None
-        if borrowed is None or not borrowed.make_current():
-            self._schedule_gl_program_warmup_queue(self._gl_program_warm_queue)
-            return
-        warm_generation = borrowed.generation
-        try:
-            vs = _gl.glCreateShader(_gl.GL_VERTEX_SHADER)
-            _gl.glShaderSource(vs, SHARED_VERTEX_SHADER)
-            _gl.glCompileShader(vs)
-            if not _gl.glGetShaderiv(vs, _gl.GL_COMPILE_STATUS):
-                info = _gl.glGetShaderInfoLog(vs)
-                raise RuntimeError(f"Vertex shader compile failed: {info}")
-            mode = self._gl_program_warm_queue.pop(0)
-            fs_source = load_fragment_shader(mode)
-            if fs_source:
-                self._compile_gl_mode_program(mode, fs_source, vs, _gl)
-            _gl.glDeleteShader(vs)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Deferred program warmup failed", exc_info=True)
-        # The borrowed QRhi context is Qt-owned and is never doneCurrent()-ed.
-        if warm_generation != borrowed.generation:
-            logger.debug(
-                "[SPOTIFY_VIS] Deferred warmup slice spanned a QRhi generation change"
-            )
-            return
-        if self._gl_program_warm_queue:
-            self._schedule_gl_program_warmup_queue(self._gl_program_warm_queue)
-
-    def _schedule_gl_program_warmup_queue(self, modes: Sequence[str]) -> None:
-        queue = [mode for mode in modes if mode not in self._gl_programs]
-        self._gl_program_warm_queue = queue
-        if not queue:
-            return
-        if self._gl_program_warm_timer is None:
-            self._gl_program_warm_timer = QTimer(self)
-            self._gl_program_warm_timer.setSingleShot(True)
-            self._gl_program_warm_timer.timeout.connect(self._warm_next_gl_program)
-        self._gl_program_warm_timer.start(140)
-
     def cleanup_gl(self) -> None:
         """Strictly delete every overlay-owned GL handle on its owner context."""
-        if self._gl_program_warm_timer is not None:
-            try:
-                self._gl_program_warm_timer.stop()
-            except Exception as exc:
-                logger.debug("[SPOTIFY_VIS] Failed to stop deferred warm timer: %s", exc)
-        self._gl_program_warm_queue = []
-
         live_resources = bool(
             self._gl_programs
             or self._gl_program is not None

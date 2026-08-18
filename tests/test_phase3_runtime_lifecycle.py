@@ -434,8 +434,6 @@ def test_strict_visualizer_overlay_cleanup_retains_failed_program_owner(monkeypa
     assert state.transition(GLContextState.READY)
     released = []
     overlay = SimpleNamespace(
-        _gl_program_warm_timer=None,
-        _gl_program_warm_queue=[],
         _gl_programs={"spectrum": 11, "bubble": 22},
         _gl_uniforms={"spectrum": {"u": 1}, "bubble": {"u": 2}},
         _gl_program=11,
@@ -503,8 +501,6 @@ def test_strict_visualizer_overlay_cleanup_retains_failed_timer_query_owner(monk
     assert state.transition(GLContextState.READY)
     timer_queries = _TimerQueries()
     overlay = SimpleNamespace(
-        _gl_program_warm_timer=None,
-        _gl_program_warm_queue=[],
         _gl_programs={},
         _gl_uniforms={},
         _gl_program=None,
