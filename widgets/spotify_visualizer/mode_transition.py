@@ -18,11 +18,20 @@ from core.logging.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _clear_mode_activation_commit(widget: Any) -> None:
+    """A new switch request invalidates the previous transaction stamp."""
+    try:
+        widget._mode_activation_committed_for = None
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to clear mode activation commit", exc_info=True)
+
+
 def _begin_mode_transition_request(widget: Any, target_mode: Any, *, request_kind: str) -> bool:
     if widget._mode_transition_phase != 0:
         return False
     if target_mode == widget._vis_mode:
         return False
+    _clear_mode_activation_commit(widget)
     widget._mode_transition_pending = target_mode
     widget._mode_transition_phase = 1
     widget._mode_transition_ts = time.time()
@@ -47,7 +56,11 @@ def activate_visualization_mode(
     widget._vis_mode = mode
     try:
         widget._apply_full_runtime_config_for_mode(mode, reason="mode_switch")
+        # Stamp this mode as transaction-committed so the later engine-reset
+        # phase does not repeat the same configuration work.
+        widget._mode_activation_committed_for = mode
     except Exception:
+        widget._mode_activation_committed_for = None
         logger.debug("[SPOTIFY_VIS] Failed to apply runtime config on mode switch", exc_info=True)
     widget._last_gpu_geom = None
     widget._last_gpu_fade_sent = -1.0
@@ -125,15 +138,30 @@ def _activate_pending_mode_after_fade_out(widget: Any, *, resume_ts: float) -> N
         setattr(widget, "_mode_transition_resume_ts", resume_ts)
     except Exception:
         setattr(widget, "_mode_transition_resume_ts", 0.0)
+    # ONE target activation transaction.
+    #
+    # activate_visualization_mode() performs the full runtime apply, but it
+    # returns early when the target equals the current mode - which is exactly
+    # what a PRESET cycle looks like. In that shape this call was historically
+    # the only apply that ran, so it stays load-bearing and must still happen.
+    # Applying in both shapes would be the duplicate transaction that produced
+    # triple configuration work and duplicate engine-generation churn.
+    mode_changed = pending != widget._vis_mode
     activate_visualization_mode(widget, pending, reset_runtime=False)
     widget._mode_transition_pending = None
 
-    apply_full = getattr(widget, "_apply_full_runtime_config_for_mode", None)
-    if callable(apply_full):
-        try:
-            apply_full(widget._vis_mode, reason="mode_fade_out_complete")
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to apply target config at fade completion", exc_info=True)
+    if not mode_changed:
+        apply_full = getattr(widget, "_apply_full_runtime_config_for_mode", None)
+        if callable(apply_full):
+            try:
+                # Deliberately NOT stamped: a same-mode transition is a preset
+                # cycle, and the engine-reset phase must still apply technical
+                # config there because that is what discards engine bleed from
+                # the previous preset.
+                apply_full(widget._vis_mode, reason="mode_fade_out_complete")
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to apply target config at fade completion", exc_info=True)
+
     request_overlay_reset = getattr(widget, "_request_overlay_mode_reset", None)
     if callable(request_overlay_reset):
         try:
@@ -597,13 +625,30 @@ def prepare_engine_for_mode_reset(widget: Any) -> None:
         engine = None
     if engine is None:
         return
+    # The stamp is single-use: it suppresses exactly the applies belonging to
+    # its own activation transaction. Leaving it set would make a later preset
+    # cycle, settings apply or engine replacement silently skip configuration it
+    # genuinely needs.
+    committed_for = getattr(widget, "_mode_activation_committed_for", None)
+    widget._mode_activation_committed_for = None
+    transaction_owns_config = committed_for == widget._vis_mode
+
     try:
-        apply_full = getattr(widget, "_apply_full_runtime_config_for_mode", None)
-        if callable(apply_full):
-            try:
-                apply_full(widget._vis_mode, reason="mode_prepare_reset")
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to apply target config before engine reset", exc_info=True)
+        # All three historical apply sites are retained, because each one is the
+        # ONLY apply for some entry shape: a direct mode switch, a same-mode
+        # preset cycle, and a plain engine reset. They are now guarded by a
+        # single-use transaction stamp instead, so exactly one of them runs per
+        # mode switch while every other entry point keeps working.
+        if not transaction_owns_config:
+            apply_full = getattr(widget, "_apply_full_runtime_config_for_mode", None)
+            if callable(apply_full):
+                try:
+                    apply_full(widget._vis_mode, reason="mode_prepare_reset")
+                except Exception:
+                    logger.debug(
+                        "[SPOTIFY_VIS] Failed to apply target config before engine reset",
+                        exc_info=True,
+                    )
         log_render = getattr(widget, "_log_active_render_state_snapshot", None)
         if callable(log_render):
             try:
@@ -624,6 +669,8 @@ def prepare_engine_for_mode_reset(widget: Any) -> None:
 
         # Ensure technical config cache is populated before applying config
         settings_model = getattr(widget, "_settings_model", None)
+        if transaction_owns_config:
+            settings_model = None
         if settings_model is not None:
             build_cache = getattr(widget, "_build_technical_cache", None)
             if callable(build_cache):
@@ -638,7 +685,7 @@ def prepare_engine_for_mode_reset(widget: Any) -> None:
             logger.debug("[SPOTIFY_VIS] Widget has no settings_model, cannot rebuild technical config cache")
 
         apply_technical = getattr(widget, "_apply_technical_config_for_mode", None)
-        if callable(apply_technical):
+        if callable(apply_technical) and not transaction_owns_config:
             apply_technical(widget._vis_mode, reason="mode_prepare_reset")
             log_render = getattr(widget, "_log_active_render_state_snapshot", None)
             if callable(log_render):
