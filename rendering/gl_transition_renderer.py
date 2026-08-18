@@ -63,6 +63,38 @@ def _blockspin_spin_from_progress(p: float) -> float:
     return 1.0 - pow(-2.0 * p + 2.0, 3) / 2.0
 
 
+def _stage_now() -> float:
+    import time as _t
+
+    return _t.perf_counter()
+
+
+def _stage_owner(renderer):
+    """Resolve the compositor that owns the stage ring, if any."""
+    owner = getattr(renderer, "_compositor", None)
+    if owner is not None and getattr(owner, "_gl_stage_timestamps", None) is not None:
+        return owner
+    return None
+
+
+def _stage_mark_owner(renderer, marker: str) -> None:
+    owner = _stage_owner(renderer)
+    if owner is None:
+        return
+    from rendering.gl_compositor_pkg.shader_dispatch import _stage_mark
+
+    _stage_mark(owner, marker)
+
+
+def _stage_cpu_owner(renderer, key: str, start: float) -> None:
+    owner = _stage_owner(renderer)
+    if owner is None:
+        return
+    from rendering.gl_compositor_pkg.shader_dispatch import _stage_cpu
+
+    _stage_cpu(owner, key, start)
+
+
 class GLTransitionRenderer:
     """Renders transition effects via shader or QPainter paths.
     
@@ -142,8 +174,14 @@ class GLTransitionRenderer:
             return
         if not state.old_pixmap or state.old_pixmap.isNull() or not state.new_pixmap or state.new_pixmap.isNull():
             return
+        _stage_prep_t = _stage_now()
         if not prep_fn():
             return
+        # T1: real preparation for simple/fullscreen transitions completes
+        # here, inside the renderer - not at try_shader_path, where it would
+        # be misattributed to core_draw.
+        _stage_mark_owner(self, "t1")
+        _stage_cpu_owner(self, "prep_cpu_ms", _stage_prep_t)
         
         vp_w, vp_h = self._get_viewport_size()
         tex_mgr = self._get_texture_manager()
