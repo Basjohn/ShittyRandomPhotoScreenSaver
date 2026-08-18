@@ -1397,3 +1397,145 @@ which never presented, and now acts on the top-level presenting context. The pin
 reports that context coming up at `swapInterval 1` despite the global interval-0 request, so this
 call is no longer inert. It enforces the documented policy on the context that actually swaps —
 and it must be considered when interpreting any delivery improvement in P4-RHI-B.
+
+---
+
+# P4-RHI-B — ACCEPTED (installed)
+
+Date: 2026-08-18. Status: **accepted installed evidence. P4 architecture correction retained.**
+
+Preserved evidence: `logs/evidence_chest/08_18_qrhibaselinenoviz_10_26`.
+Do not overwrite, rename, move or clean that directory.
+
+Accepted no-visualizer result — single 60 Hz display, QRhi main compositor, no visualizer:
+
+```text
+                         >33 ms gaps   >50 ms gaps   worst
+P4 pathology (pre-QRhi)      29            28        ~80.7 ms   (median ~58.5 ms)
+QRhi compositor               9             0        ~42.1 ms
+```
+
+Normal transition delivery is approximately refresh-limited. The recurring severe `>50 ms` class
+collapsed to zero in that run.
+
+## Known co-change — do not fabricate an attribution split
+
+P4-RHI-A changed two things in effect, even though only one was designed:
+
+1. the `QOpenGLWidget` child-context to top-level shared-context composition handoff was removed; and
+2. `_disable_current_context_swap_interval()`, unchanged code at the equivalent lifecycle point,
+   now acts on the **top-level presenting context** rather than the retired non-presenting child
+   context, so interval-0 enforcement became effective where it had been inert.
+
+Both plausibly contribute. **No percentage attribution between them is claimed**, and none should
+be invented without an experiment that isolates them. P4 is accepted as an architecture correction,
+not as a single proven mechanism.
+
+## P4 forensic scaffolding is closed for this phase
+
+No further P4 stage/DWM/no-HUD attribution runs precede P2. Remaining scaffolding is retained only
+per the retirement schedule in `Future_Cleanup.md`.
+
+---
+
+# P2-RHI baseline — ACCEPTED (pre-migration, visualizer on)
+
+Same QRhi main compositor, visualizer ON, latest ordinary raw logs before P2-RHI-A:
+
+```text
+>33 ms gaps   >50 ms gaps   median      max
+    23             4        ~45.23 ms   151.27 ms
+```
+
+Most transition averages remained roughly 59-60 FPS, with Bubble and Spectrum both exercised. The
+visualizer surface was still `QOpenGLWidget` for this baseline.
+
+Steady auxiliary request stream on a 60 Hz display, roughly one surface update per publication:
+
+```text
+Bubble    set_state / update_requests ~889-971 per 10 s, paints ~854-969 per 10 s
+Spectrum  set_state / update_requests ~913-920 per 10 s, paints roughly similar
+```
+
+This baseline is what P2-RHI-A must be compared against. The earlier controlled A/B already proved
+the auxiliary presentation stream is a material shared-GUI amplifier; this baseline shows the owner
+survives the main-compositor correction. No further attribution experiment was run, and none is
+required before the migration.
+
+---
+
+# P4-RHI-C — compositor fallback state made explicit
+
+Steady retained-base rendering could previously fall through to the QPainter base-image path with no
+record, while active-transition shader failure was already loud. An established compositor could
+therefore sit silently in fallback indefinitely.
+
+`paint_retained_base_texture()` now records a reason at each existing early return
+(`gl_unavailable`, `gl_disabled_for_session`, `no_base_image`, `pipeline_unavailable`,
+`program_missing`, `texture_manager_missing`, `texture_cache_miss`, `draw_rejected`,
+`draw_exception`) without logging there; the render caller decides whether the state deserves a
+record. Ordinary startup states stay silent, an established compositor entering fallback emits one
+error naming the reason, repeated frames never spam, and recovery emits one info record and clears
+the latch. Rendering behaviour, cadence, dispatch, scheduling and GL ownership are unchanged, and
+there is no new CLI flag or timing measurement.
+
+---
+
+# P2-RHI-A — Spotify visualizer surface migration (implementation checkpoint)
+
+Date: 2026-08-18. Status: **implementation landed, unvalidated in installed runtime.**
+
+`SpotifyBarsGLOverlay` now subclasses the shared `ExternalOpenGLRhiWidget` on the OpenGL QRhi
+backend. It remains the same sibling surface above the `SpotifyVisualizerWidget` card: no scene
+composition change, no card move into the compositor, and no logical timing change.
+
+## Binding/lifecycle facts proven on PySide6 6.9.1
+
+- A **second** `QRhiWidget(Api.OpenGL)` created **after** the top-level window is shown joins the
+  **same top-level QRhi** already established by the main compositor: identical `QRhi` pointer, one
+  `initialize()`, zero `releaseResources()`, and normal rendering. The P4-RHI-A late-creation hazard
+  therefore does **not** apply here, precisely because the compositor locks the window to an OpenGL
+  QRhi before `show()`. Production's existing lazy overlay creation is safe unchanged.
+- The QRhi target exposes a real depth/stencil buffer, which the rounded-card stencil mask requires.
+- `grabFramebuffer()` in the old prewarm did **not** spin a temporary QRhi in the production shape
+  (already parented and shown under a live top-level QRhi). It was nevertheless removed: under
+  QRhiWidget it is no longer needed to force surface realization, and it costs a full synchronous
+  readback. `show()` plus one ordinary `update()` initializes the surface once on the real QRhi.
+
+## Ownership contract
+
+- The overlay borrows the Qt-owned QRhi OpenGL context through `self._rhi_gl`. `self.context()`,
+  `makeCurrent()`, `doneCurrent()` and `isValid()` are gone from the overlay entirely.
+- GPU timer queries are initialized against the borrowed context.
+- Deferred shader warmup borrows the context via the QRhi seam, captures the generation before
+  compiling, and refuses to queue forward across a generation change.
+- `clear_overlay_buffer()` no longer performs any raw GL framebuffer mutation. Making the top-level
+  context current outside the render callback does not bind this overlay's QRhi target, so the old
+  make-current/clear/done-current sequence would have cleared an unspecified framebuffer. It now
+  resets logical payload and requests a frame; the next `gl_render()` clears its own transparent
+  target inside the render pass.
+- `cleanup_gl()` is the single deletion owner; Qt's `releaseResources()` delegates to it through
+  `gl_release()` and never raises into the virtual override. Failed deletion retains ownership and
+  remains a hard lifecycle error.
+- A plain render-target resize does not rebuild immutable programs/VAO/VBO. A real generation
+  replacement that finds live resources is reported as an ownership failure rather than silently
+  overwriting numeric ids.
+- `GLContextState.DESTROYED` stays terminal **per generation**. A QRhi replacement on a still-live
+  overlay installs a fresh `GLStateManager` for the new generation, so the overlay can reach READY
+  again instead of being stranded terminal. Final object destruction is unchanged.
+
+## Shared substrate change
+
+`ExternalOpenGLRhiWidget` gained a per-**class** `RHI_CLEAR_COLOR` policy. The compositor keeps
+opaque black; the visualizer clears fully transparent, otherwise the pass would paint an opaque
+rectangle over the card and its neighbours. Because the policy is per class, one surface cannot
+mutate the other's. The render-pass implementation is not duplicated.
+
+## Presentation contract deliberately unchanged
+
+One accepted publication still produces exactly one `_request_frame_update()` and one
+`QWidget.update()`. No coalescing, timestamp gate, refresh divisor, pending-until-paint latch, paint
+acknowledgement, second timer, worker queue or source decimation was added. P2-RHI-A isolates the
+surface/context architecture from request-admission policy, so the installed run answers one
+question only: does removing the visualizer's own QOpenGLWidget child/shared-context architecture
+make the existing high-rate request stream cheap enough?

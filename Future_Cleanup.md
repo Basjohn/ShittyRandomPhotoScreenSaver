@@ -65,11 +65,17 @@ be retained during that test and what becomes cleanup **after** the candidate is
   This overlaps the existing "production-contract bar for methods that exist on test doubles"
   backlog item; merge them when either is promoted.
 
+# 2026-08-18 Debt Discovered During P4-RHI-C / P2-RHI-A
+
+- [ ] **`tests/test_spotify_visualizer_widget.py::test_bubble_transition_time_worker_perf_oracle_stays_within_current_budget_band` is host-scheduling flaky.** Sampled 1 failure in 5 full-file runs on clean `main` and 1 in 3 with the P2 migration, at ~1.06 ms against a 1.0 ms band; it passes 3/3 in isolation. It measures Bubble worker snapshot cost, which the presentation-surface migration does not touch. Make the bound deterministic/tolerance-based like the known paused-AdaptiveTimer bar; do not delete the budget assertion and do not raise the band to hide drift.
+- [ ] **Decide the hw_accel=off visualizer contract.** The visualizer QRhi surface obtains its QRhi from the top-level window, which the main compositor establishes before `show()`. With `display.hw_accel` disabled no compositor is created, so no top-level QRhi exists and a lazily created visualizer overlay would have nothing to render through. The old QOpenGLWidget overlay carried its own context and was independent of that setting. Decide deliberately: either gate the GL visualizer on the same setting, or give the participating display a QRhi owner before show. Do not paper over it with a silent QOpenGLWidget fallback.
+- [ ] Re-check `prewarm_context()` once P2-RHI-B is accepted. The `grabFramebuffer()` force was removed because the surface now initializes on the real top-level QRhi from one ordinary `update()`; if installed startup shows any first-reveal shader stall, fix it at the warmup owner rather than reinstating a synchronous full-target readback.
+- [ ] `tools/perf_integration_harness.py` constructs `SpotifyBarsGLOverlay` directly. It was not exercised by this migration; verify its construction order gives the overlay a live top-level QRhi before treating any harness output as valid.
+
 # Presentation / Delivery Test Debt
 
 - [ ] Keep `tests/test_adaptive_timer.py::TestDeliveryStageInvariants` green whenever the passive delivery seam is touched: mutually exclusive skip reasons, non-negative/generation-bounded ages, unchanged PERF-off scheduling, no pending-timestamp inheritance across widget generations, independent per-display counters.
-- [ ] Main QRhi compositor tests must cover external-pass bracketing, borrowed-context ownership, strict GL cleanup, QRhi reinitialization, fallback/HUD painting and unchanged transition progress/easing.
-- [ ] Spotify QRhi overlay tests must cover transparent composition, rounded-card stencil, CUSTOM geometry/DPR, mode switching, state-to-paint, startup hidden state, Settings/display recreation and strict GL teardown.
+- [ ] Extend the P2 QRhi overlay suite with installed-shaped coverage still missing after P2-RHI-A: mode switching under live audio, state-to-paint latency, and Settings/display-reassignment recreation against a real QRhi generation change.
 - [ ] A mixed-refresh 165 Hz + 60 Hz installed gate remains required; no unit test may substitute for physical presentation behaviour.
 
 # Unrelated / Unvalidated Experiments That Must Not Contaminate The QRhi Lane

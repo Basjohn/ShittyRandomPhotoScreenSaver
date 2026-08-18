@@ -7,7 +7,6 @@ import numpy as np
 import time
 from PySide6.QtCore import Qt, QRect, QTimer, QCoreApplication, QThread
 from PySide6.QtGui import QColor, QOpenGLContext
-from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from core.logging.logger import (
     get_logger,
@@ -16,7 +15,10 @@ from core.logging.logger import (
     is_viz_diagnostics_enabled,
 )
 from core.settings.visualizer_mode_registry import coerce_visualizer_mode_id
-from rendering.gl_format import apply_widget_surface_format
+from rendering.gl_rhi_surface import (
+    TRANSPARENT_CLEAR_COLOR,
+    ExternalOpenGLRhiWidget,
+)
 from rendering.gl_state_manager import GLStateManager, GLContextState
 from rendering.gl_timer_queries import GLTimerQueryRing
 from OpenGL import GL as gl
@@ -147,20 +149,32 @@ def _perf_metric_text(value: float | None) -> str:
     return "na" if value is None else f"{float(value):.3f}"
 
 
-class SpotifyBarsGLOverlay(QOpenGLWidget):
+class SpotifyBarsGLOverlay(ExternalOpenGLRhiWidget):
     """Small GL surface that renders the Spotify bar field.
 
     This overlay is parented to ``DisplayWidget`` and positioned so that it
     exactly covers the Spotify visualiser card. The card itself (background,
     border, fade, shadow) continues to be drawn by ``SpotifyVisualizerWidget``;
     this class is responsible only for the bar geometry.
+
+    The surface renders through the **top-level window's QRhi**, which the main
+    compositor establishes before the display window is shown. It stays a
+    sibling above the card rather than being folded into the compositor, so
+    Z-order, CUSTOM geometry and the rounded-card stencil are unchanged.
     """
+
+    # Unlike the opaque full-screen compositor, this surface composites over a
+    # QWidget card: the pass must clear fully transparent or it would paint an
+    # opaque rectangle across the card and its neighbours.
+    RHI_CLEAR_COLOR = TRANSPARENT_CLEAR_COLOR
 
     def __init__(self, parent=None, initial_mode: str | None = None) -> None:  # type: ignore[override]
         super().__init__(parent)
         self._painted_frame_shadow_enabled: bool = True
-
-        apply_widget_surface_format(self, reason="spotify_bars_overlay")
+        # NOTE: no per-child setFormat()/setUpdateBehavior() here. QRhiWidget
+        # takes its configuration from the top-level window, and the global
+        # pre-QApplication QSurfaceFormat policy remains the presentation-policy
+        # owner. This surface never touches WGL swap interval.
 
         # CRITICAL: Hide immediately at construction to prevent startup flash.
         # The widget will be shown later when set_state() is called with fade > 0.
@@ -177,11 +191,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self.setAttribute(Qt.WidgetAttribute.WA_AlwaysStackOnTop, True)
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        try:
-            self.setUpdateBehavior(QOpenGLWidget.UpdateBehavior.NoPartialUpdate)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-
         self._enabled: bool = False
         self._bars: List[float] = []
         self._bar_count: int = 0
@@ -1557,20 +1566,19 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         try:
             if not self.isVisible():
                 self.show()
+            # One ordinary update is enough to realise the surface: the overlay
+            # renders through the top-level window's QRhi, which the main
+            # compositor already established before the window was shown, so
+            # Qt initializes this surface on the next compose.
+            #
+            # The old grabFramebuffer() force existed to make a QOpenGLWidget
+            # create its own child context early. Under QRhiWidget it is not
+            # needed, and grabbing a surface that is not yet associated with the
+            # visible top-level QRhi can make Qt spin up a temporary dedicated
+            # QRhi, then release and re-initialize when the real one arrives.
+            # The overlay stays visually transparent here because prewarm sets
+            # fade 0 / disabled above, so the existing reveal semantics hold.
             self.update()
-            # Force the QOpenGLWidget to realise its GL surface now instead
-            # of waiting until the visualizer's staged reveal window. This
-            # shifts context creation + shader compilation into the shared
-            # startup prewarm phase.
-            if not self._gl_state.is_ready() and not self._gl_state.is_error():
-                try:
-                    self.grabFramebuffer()
-                except Exception:
-                    logger.warning(
-                        "[SPOTIFY_VIS][FALLBACK] grabFramebuffer prewarm fallback triggered",
-                        exc_info=True,
-                    )
-                    self.repaint()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to prewarm SpotifyBarsGLOverlay", exc_info=True)
 
@@ -1593,20 +1601,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._bubble_count = 0
         reset_overlay_spectrum_solid_hysteresis_state(self)
 
-        if self._gl_state.is_ready():
-            try:
-                self.makeCurrent()
-                gl.glDisable(gl.GL_SCISSOR_TEST)
-                gl.glClearColor(0.0, 0.0, 0.0, 0.0)
-                gl.glClear(gl.GL_COLOR_BUFFER_BIT)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to clear overlay buffer", exc_info=True)
-            finally:
-                try:
-                    self.doneCurrent()
-                except Exception:
-                    pass
-
+        # No raw GL target mutation here. Making the top-level QRhi context
+        # current outside the render callback does NOT bind this overlay's QRhi
+        # render target, so a glClear() would land on an unspecified framebuffer.
+        # The next gl_render() clears its own transparent target through the
+        # normal render pass, which is the only place that target is bound.
         self.update()
 
     # ------------------------------------------------------------------
@@ -1622,15 +1621,42 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         return self._gl_state.get_state()
 
     # ------------------------------------------------------------------
-    # QOpenGLWidget hooks
+    # QRhi surface hooks
     # ------------------------------------------------------------------
 
-    def initializeGL(self) -> None:  # type: ignore[override]
+    def gl_initialize(self, generation_changed: bool) -> None:  # type: ignore[override]
         """Create the small shader pipeline used for bar rendering.
 
-        Any failure here is treated as non-fatal – the widget will skip
+        Qt re-invokes this for every render-target rebuild, including a plain
+        resize where the QRhi and its context are unchanged. Only a real QRhi
+        replacement invalidates the overlay's GL ids, so a resize must reuse the
+        existing programs/VAO/VBO rather than recreating immutable resources.
+
+        Any failure here is treated as non-fatal - the widget will skip
         rendering until the GL pipeline recovers.
         """
+        if not generation_changed:
+            if self._gl_state.is_ready() and self._gl_programs:
+                # Target resize only: geometry is derived per draw from the live
+                # widget rect, so there is nothing to rebuild.
+                return
+        elif self._has_live_gl_resources():
+            # Qt normally releases resources before replacing the QRhi. Live ids
+            # surviving into a new generation belong to a context that is gone
+            # and can never be deleted; report the ownership failure rather than
+            # overwriting the numeric ids and pretending cleanup succeeded.
+            logger.critical(
+                "[SPOTIFY_VIS] QRhi generation changed while overlay GL resources "
+                "were still live (generation=%d); those ids are unreachable",
+                self._rhi_gl.generation,
+            )
+
+        # A QRhi replacement on a still-live overlay is not final destruction.
+        # Return the state machine to a usable lifecycle so initialize() can
+        # reach READY again instead of being stranded in terminal DESTROYED.
+        if self._gl_state.get_state() == GLContextState.DESTROYED:
+            self._reset_gl_state_for_new_generation()
+
         # Transition to INITIALIZING state
         if not self._gl_state.transition(GLContextState.INITIALIZING):
             logger.warning("[SPOTIFY_VIS] Failed to transition to INITIALIZING state")
@@ -1639,16 +1665,32 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         try:
             self._init_gl_pipeline()
             if self._gpu_timer_queries is not None:
-                self._gpu_timer_queries.initialize(gl, context=self.context())
+                self._gpu_timer_queries.initialize(gl, context=self._rhi_gl.context)
             # Transition to READY state on success
             self._gl_state.transition(GLContextState.READY)
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to initialise GL pipeline for SpotifyBarsGLOverlay", exc_info=True)
             self._gl_state.transition(GLContextState.ERROR, str(e))
-        
+
         # GLStateManager now tracks initialization state - no separate flag needed
 
-    def paintGL(self) -> None:  # type: ignore[override]
+    def gl_release(self) -> None:  # type: ignore[override]
+        """Qt-initiated release of overlay GL resources.
+
+        Qt calls this when the borrowed QRhi is about to change or go away. It
+        must not raise into the Qt virtual override, so a failed deletion keeps
+        ownership and is reported rather than propagated. SRPSS's own strict
+        teardown remains ``cleanup_gl()``.
+        """
+        try:
+            self.cleanup_gl()
+        except Exception:
+            logger.error(
+                "[SPOTIFY_VIS] QRhi-initiated GL release failed; ownership retained",
+                exc_info=True,
+            )
+
+    def gl_render(self) -> None:  # type: ignore[override]
         paint_started = time.perf_counter() if self._perf_metrics_enabled else 0.0
         self._perf_paint_count += 1
         self._perf_paint_total += 1
@@ -1690,8 +1732,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         )
                     )
 
-                # set_state() is the repaint authority. Scheduling from paintGL()
-                # creates a child-GL self-loop that can overdrive the owning display.
+                # set_state() is the repaint authority. Scheduling from the
+                # render callback would create a self-loop that can overdrive
+                # the owning display.
                 self._maybe_log_perf_counters(reason="paintGL")
 
     def _begin_painted_card_stencil_clip(self, rect: QRect) -> bool:
@@ -2081,8 +2124,14 @@ void main() {
             return
         from OpenGL import GL as _gl
         from widgets.spotify_visualizer.shaders import SHARED_VERTEX_SHADER, load_fragment_shader
+        # Programs are shareable objects compiled on the borrowed Qt-owned QRhi
+        # context. The generation is captured so a QRhi replacement mid-warmup
+        # cannot attribute a program to the wrong context generation.
+        warm_generation = self._rhi_gl.generation
+        if not self._rhi_gl.make_current():
+            self._schedule_gl_program_warmup_queue(self._gl_program_warm_queue)
+            return
         try:
-            self.makeCurrent()
             vs = _gl.glCreateShader(_gl.GL_VERTEX_SHADER)
             _gl.glShaderSource(vs, SHARED_VERTEX_SHADER)
             _gl.glCompileShader(vs)
@@ -2096,11 +2145,14 @@ void main() {
             _gl.glDeleteShader(vs)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Deferred program warmup failed", exc_info=True)
-        finally:
-            try:
-                self.doneCurrent()
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] doneCurrent failed after deferred shader warmup", exc_info=True)
+        # The borrowed QRhi context is Qt-owned and is never doneCurrent()-ed.
+        if warm_generation != self._rhi_gl.generation:
+            # The QRhi was replaced while this slice compiled; anything produced
+            # belongs to a dead generation and must not be queued forward.
+            logger.debug(
+                "[SPOTIFY_VIS] Deferred warmup slice spanned a QRhi generation change"
+            )
+            return
         if self._gl_program_warm_queue:
             self._schedule_gl_program_warmup_queue(self._gl_program_warm_queue)
 
@@ -2115,16 +2167,9 @@ void main() {
             self._gl_program_warm_timer.timeout.connect(self._warm_next_gl_program)
         self._gl_program_warm_timer.start(140)
 
-    def cleanup_gl(self) -> None:
-        """Strictly delete every overlay-owned GL handle on its owner context."""
-        if self._gl_program_warm_timer is not None:
-            try:
-                self._gl_program_warm_timer.stop()
-            except Exception as exc:
-                logger.debug("[SPOTIFY_VIS] Failed to stop deferred warm timer: %s", exc)
-        self._gl_program_warm_queue = []
-
-        live_resources = bool(
+    def _has_live_gl_resources(self) -> bool:
+        """Whether this overlay still owns deletable GL handles."""
+        return bool(
             self._gl_programs
             or self._gl_program is not None
             or self._gl_mask_program is not None
@@ -2135,6 +2180,28 @@ void main() {
                 and self._gpu_timer_queries.has_live_queries()
             )
         )
+
+    def _reset_gl_state_for_new_generation(self) -> None:
+        """Start a fresh GL state machine for a replacement QRhi generation.
+
+        ``DESTROYED`` is deliberately terminal, and it is the correct final state
+        for the generation that just died. A Qt QRhi replacement is not final
+        object destruction though: the overlay is still alive and must be able to
+        reach READY again. A new generation therefore gets a new state manager
+        rather than reopening a terminal one.
+        """
+        self._gl_state = GLStateManager(f"spotify_bars_{id(self)}")
+
+    def cleanup_gl(self) -> None:
+        """Strictly delete every overlay-owned GL handle on its owner context."""
+        if self._gl_program_warm_timer is not None:
+            try:
+                self._gl_program_warm_timer.stop()
+            except Exception as exc:
+                logger.debug("[SPOTIFY_VIS] Failed to stop deferred warm timer: %s", exc)
+        self._gl_program_warm_queue = []
+
+        live_resources = self._has_live_gl_resources()
         state = self._gl_state.get_state()
         if state == GLContextState.DESTROYED:
             if live_resources:
@@ -2142,13 +2209,6 @@ void main() {
             return
 
         if not live_resources:
-            if state == GLContextState.DESTROYING:
-                try:
-                    self.doneCurrent()
-                except Exception as exc:
-                    raise RuntimeError(
-                        "Visualizer overlay context release remains incomplete"
-                    ) from exc
             if state in {
                 GLContextState.READY,
                 GLContextState.ERROR,
@@ -2164,27 +2224,23 @@ void main() {
         application = QCoreApplication.instance()
         if application is not None and QThread.currentThread() is not application.thread():
             raise RuntimeError("Visualizer overlay GL teardown must run on the GUI thread")
-        if not self.isValid():
-            raise RuntimeError("Cannot delete live visualizer GL resources: context is invalid")
+        if not self._rhi_gl.is_attached():
+            raise RuntimeError(
+                "Cannot delete live visualizer GL resources: no QRhi OpenGL context is attached"
+            )
         if state != GLContextState.DESTROYING:
             if not self._gl_state.transition(GLContextState.DESTROYING):
                 raise RuntimeError("Visualizer overlay could not enter DESTROYING")
 
-        try:
-            self.makeCurrent()
-        except Exception as exc:
+        if not self._rhi_gl.make_current():
             raise RuntimeError(
-                "Cannot delete live visualizer GL resources: makeCurrent() failed"
-            ) from exc
-
-        expected_context = self.context()
-        if expected_context is not None and QOpenGLContext.currentContext() != expected_context:
-            try:
-                self.doneCurrent()
-            finally:
-                raise RuntimeError(
-                    "Cannot delete live visualizer GL resources: owner context is not current"
-                )
+                "Cannot delete live visualizer GL resources: borrowed QRhi context "
+                "did not become current"
+            )
+        if QOpenGLContext.currentContext() is not self._rhi_gl.context:
+            raise RuntimeError(
+                "Cannot delete live visualizer GL resources: owner context is not current"
+            )
 
         errors: list[str] = []
         if (
@@ -2192,60 +2248,58 @@ void main() {
             and int(self._gl_program) not in {int(value) for value in self._gl_programs.values()}
         ):
             errors.append(f"untracked_program:{int(self._gl_program)}")
-        try:
-            timer_queries = getattr(self, "_gpu_timer_queries", None)
-            if timer_queries is not None:
-                try:
-                    timer_queries.poll(gl)
-                    timer_queries.cleanup(gl)
-                except Exception as exc:
-                    errors.append(f"timer_queries:{type(exc).__name__}:{exc}")
-
-            for mode, program_id in list(self._gl_programs.items()):
-                try:
-                    gl.glDeleteProgram(int(program_id))
-                except Exception as exc:
-                    errors.append(f"program:{mode}:{type(exc).__name__}:{exc}")
-                    continue
-                self._gl_programs.pop(mode, None)
-                self._gl_uniforms.pop(mode, None)
-                self._release_resource_tracking(self._gl_program_rids.pop(mode, None))
-
-            if self._gl_mask_program is not None:
-                try:
-                    gl.glDeleteProgram(int(self._gl_mask_program))
-                except Exception as exc:
-                    errors.append(f"mask_program:{type(exc).__name__}:{exc}")
-                else:
-                    self._gl_mask_program = None
-
-            if self._gl_vbo is not None:
-                try:
-                    gl.glDeleteBuffers(1, [int(self._gl_vbo)])
-                except Exception as exc:
-                    errors.append(f"vbo:{type(exc).__name__}:{exc}")
-                else:
-                    self._gl_vbo = None
-                    self._release_resource_tracking(self._gl_vbo_rid)
-                    self._gl_vbo_rid = None
-
-            if self._gl_vao is not None:
-                try:
-                    gl.glDeleteVertexArrays(1, [int(self._gl_vao)])
-                except Exception as exc:
-                    errors.append(f"vao:{type(exc).__name__}:{exc}")
-                else:
-                    self._gl_vao = None
-                    self._release_resource_tracking(self._gl_vao_rid)
-                    self._gl_vao_rid = None
-            perf_logger = getattr(self, "_maybe_log_perf_counters", None)
-            if callable(perf_logger):
-                perf_logger(reason="cleanup", force=True)
-        finally:
+        # Deletion runs with the borrowed QRhi context current. Failures are
+        # collected rather than raised so every owned handle gets its attempt,
+        # then reported as a hard lifecycle error below.
+        timer_queries = getattr(self, "_gpu_timer_queries", None)
+        if timer_queries is not None:
             try:
-                self.doneCurrent()
+                timer_queries.poll(gl)
+                timer_queries.cleanup(gl)
             except Exception as exc:
-                errors.append(f"doneCurrent:{type(exc).__name__}:{exc}")
+                errors.append(f"timer_queries:{type(exc).__name__}:{exc}")
+
+        for mode, program_id in list(self._gl_programs.items()):
+            try:
+                gl.glDeleteProgram(int(program_id))
+            except Exception as exc:
+                errors.append(f"program:{mode}:{type(exc).__name__}:{exc}")
+                continue
+            self._gl_programs.pop(mode, None)
+            self._gl_uniforms.pop(mode, None)
+            self._release_resource_tracking(self._gl_program_rids.pop(mode, None))
+
+        if self._gl_mask_program is not None:
+            try:
+                gl.glDeleteProgram(int(self._gl_mask_program))
+            except Exception as exc:
+                errors.append(f"mask_program:{type(exc).__name__}:{exc}")
+            else:
+                self._gl_mask_program = None
+
+        if self._gl_vbo is not None:
+            try:
+                gl.glDeleteBuffers(1, [int(self._gl_vbo)])
+            except Exception as exc:
+                errors.append(f"vbo:{type(exc).__name__}:{exc}")
+            else:
+                self._gl_vbo = None
+                self._release_resource_tracking(self._gl_vbo_rid)
+                self._gl_vbo_rid = None
+
+        if self._gl_vao is not None:
+            try:
+                gl.glDeleteVertexArrays(1, [int(self._gl_vao)])
+            except Exception as exc:
+                errors.append(f"vao:{type(exc).__name__}:{exc}")
+            else:
+                self._gl_vao = None
+                self._release_resource_tracking(self._gl_vao_rid)
+                self._gl_vao_rid = None
+        perf_logger = getattr(self, "_maybe_log_perf_counters", None)
+        if callable(perf_logger):
+            perf_logger(reason="cleanup", force=True)
+        # The QRhi OpenGL context is Qt-owned; SRPSS never releases it here.
 
         self._gl_program = next(iter(self._gl_programs.values()), None)
         if errors:
