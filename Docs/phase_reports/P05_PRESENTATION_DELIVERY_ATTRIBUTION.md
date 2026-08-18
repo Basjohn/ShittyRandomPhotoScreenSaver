@@ -1608,3 +1608,84 @@ zero surface initialization failures, clean GL teardown. It was first-frame
 texture cache establishment and is now classified as such (see P4-RHI-C below).
 It is not under investigation as a performance owner.
 
+
+---
+
+# P2-SINGLE-SURFACE — implementation checkpoint
+
+Date: 2026-08-18. Status: **implementation landed, unvalidated in installed runtime.**
+
+## LANDED — visualizer renders inside the compositor (`cb041ba6`)
+
+`SpotifyBarsGLOverlay` is no longer a presented surface. It is a plain,
+never-shown `QWidget` that paints nothing, retaining the authored logical state
+integration and the card geometry anchor. Presentation moved to
+`rendering/gl_compositor_pkg/visualizer_layer.py`, drawn inside the compositor's
+existing external GL render pass.
+
+Scene order:
+
+```text
+base image -> transition -> visualizer card visual -> visualizer shader layer -> HUD
+```
+
+### Publication seam
+
+Each accepted publication publishes latest-wins render state to the owning
+display compositor, carrying runtime generation and activation identity. A
+publication from a retired generation is rejected rather than drawn. Nothing is
+queued, nothing is acknowledged, there is no pending-until-paint latch and no
+catch-up replay. The old one-update-per-publication surface stream is removed
+rather than redirected to another QWidget.
+
+### Coordinates
+
+The mode shaders draw a fullscreen quad, so the card rect becomes a
+`glViewport`/`glScissor` in display pixels with the GL y-flip, while the shaders
+still receive a card-sized local rect so authored geometry is unchanged. The
+stencil mask reads `gl_FragCoord` (window space), so its rect uniform now
+carries the card's display-space origin explicitly. Scissor bounds every write
+the layer makes, including the stencil clear, and the layer never clears the
+colour buffer.
+
+### Card visual
+
+The card QWidget is a sibling **above** the compositor, so leaving it painting
+its own background would cover the bars. It now yields only its pixels - reusing
+its existing cached pixmap, so border width, radius, shadow and fade are
+unchanged - and keeps geometry, CUSTOM movement, saved layout, visibility/fade
+authority and edit interaction. Ownership is handed back when the layer clears
+or tears down.
+
+### Lifecycle
+
+Visualizer GL resources live on the compositor's borrowed QRhi OpenGL context.
+Creation is idempotent so a render-target resize does not rebuild immutable
+programs/VAO/VBO; deferred warmup borrows through the QRhi seam and is
+generation-fenced; strict deletion runs with that context current through the
+existing fail-closed owner; compositor teardown drives it. There is no
+independent visualizer surface lifecycle left to race display teardown.
+
+### Failure policy
+
+Visualizer failure clears the layer and reports once, boundedly. There is no
+CPU/QPainter substitute renderer, per the hardware-acceleration contract in
+`Docs/Compositor_Architecture.md` section 0.
+
+### Bars
+
+36 in `tests/test_p2_single_surface.py`: one accelerated surface per display and
+no reacquired surface class; publication contract including stale-generation
+rejection and no admission/pacing; non-zero CUSTOM offset and DPR coordinate
+conversion; mask origin in display space; scene safety and scissor containment;
+card ownership and release; bounded failure with no CPU substitute; and
+`publications == integrations` across 60/165-style presentation schedules.
+
+The P1 presentation-contract bars were re-pointed at the publication seam
+instead of a surface repaint, because `publications == paints` is no longer the
+architecture. Their logical-equality assertions are unchanged.
+
+Two real-GL compositor cleanup tests that had silently skipped since P4-RHI-A
+(they called the retired `makeCurrent()`) now borrow the QRhi context and
+exercise strict cleanup again.
+
