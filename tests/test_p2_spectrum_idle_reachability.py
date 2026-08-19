@@ -212,7 +212,10 @@ class TestPausedSpectrumReachesPresentation:
         widget.set_visualization_mode(_spectrum_mode())
         widget._spotify_playing = False
         widget._waiting_for_fresh_engine_frame = True
-        widget._pending_engine_generation = 7
+        # A generation no engine can already have delivered, so the wait can only
+        # clear through the path under test rather than through a shared engine
+        # another suite left at a high generation.
+        widget._pending_engine_generation = 10**9
         widget._display_bars = [0.0] * 16
         widget._display_bars_source_generation = -1
         widget._display_bars_source_activation = -1
