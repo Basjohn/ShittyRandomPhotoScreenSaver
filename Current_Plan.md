@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-19
 Branch: `main`
-Current source anchor: `fbac9ea8ca6abd1c8a085fb0d445fb9958c9d0da`
+Current source anchor: `257b2823` (sections 3, 4, 5 and the section-7 idle edge landed)
 Named accepted rollback/fidelity baseline: **4.7.2 / `42033c84eabbdf25ccd34bb0e83f9e553f2f8f11`**
 Current-head status: **UNACCEPTED — first installed run after the latest runtime changes regressed materially**
 
@@ -326,6 +326,24 @@ Do not add another diagnostic family first.
 
 ---
 
+### Landed
+
+The rejection was wrong and is withdrawn: absence of `overlay.frame_shadow.regen` measured paint
+cost, not semantic state loss.
+
+Audited every edit target. `_start_session_local()` hides the live widget and an `EditShellWidget`
+carries the preview, and the only live-runtime mutations during a session are the visualizer
+(explicit `suspend_for_edit()`) and the recovery placeholder (deleted by `_finish_session()`). No
+ordinary widget diverges, so replaying a persisted payload into one restores nothing.
+
+`cancel_session()` now restores only `_CANCEL_RESTORE_WIDGET_IDS` (the visualizer) through a new
+`only_widget_ids` filter on `apply_saved_layouts_to_display()`. Save and ordinary startup replay are
+unchanged. `MediaWidget.set_artwork_size()`/`set_font_size()` also return early on an unchanged
+value, matching their background-style siblings, so a repeated identical apply from any caller can
+no longer rebuild the card from a possibly empty `_last_info`.
+
+---
+
 ## 4. ACTIVE — the actual visible startup GL warmup problem was NOT fixed
 
 The previous requested startup correction was to move normal deferred transition GL program/resource
@@ -417,6 +435,24 @@ This is a source-proven ordering bug. Do not probe it again before fixing it.
 
 ---
 
+### Landed
+
+The compositor takes a `gl_transition_warmup` startup hold when the warmup queue is armed, and
+releasing that hold is what lets the fade start. Its own hold no longer reads as a block reason, and
+`FADING` only blocks once the pre-reveal window is over.
+
+Pacing follows visibility: at fade-zero there is no live cadence to protect, so the queue drains
+inside the held window instead of one program per 140 ms slice; once visible the original paced
+cadence is unchanged.
+
+Real completed work releases the hold. Every path that schedules no further work settles it - GL
+disabled, no warmup context, no base surface, nothing remaining - and RHI release settles it, so a
+retiring generation cannot strand a fade. The 5 s budget is a fail-safe only, and a compositor with
+no fade coordinator keeps the previous paced behaviour rather than inventing a hold nothing can
+release.
+
+---
+
 ## 5. ACTIVE — Spectrum gets a real idle presentation
 
 Spectrum is currently the only visualizer mode whose startup/card reveal is gated on real playback.
@@ -491,6 +527,23 @@ Prove:
 - steady idle does not produce continuous scene revisions merely to stay visible;
 - Play replaces idle bars with real source bars without card recreation/pop/stall;
 - Pause returns to idle presentation without hiding/restarting the logical runtime.
+
+---
+
+### Landed
+
+`idle_spectrum_baseline()` is a pure function of the bar count - no time term, no randomness, and
+nothing from audio capture, the BeatEngine, source bars, generations or the
+energy/transient/onset buses. Steady idle settles to one scene revision, so existing unchanged-scene
+suppression keeps its physical cost near zero. Real values win wherever they exceed the floor, so
+Play replaces the resting bars in place with no card recreation.
+
+Reveal and source authority were deliberately separated rather than sharing one set, which the first
+attempt got wrong. Spectrum joins the idle-reveal set but is **not** idle self-animating: it keeps
+waiting for a fresh engine frame while paused, and `_mode_requires_authoritative_first_source()` now
+keys on self-animation, so every bar Spectrum shows during playback still proves it came from the
+current activation. The idle cold-start handoff no longer waits on an engine frame that a
+presentation-owned idle scene never needs.
 
 ---
 
@@ -659,6 +712,30 @@ plumbing rather than layering a second clock beside it.
 
 ---
 
+### NOT LANDED — still the next major P2 item
+
+This section was not attempted in the 2026-08-19 round, and nothing was half-built toward it. The
+entry condition and the target architecture above stand unchanged.
+
+Reasoning, so the next round does not re-derive it:
+
+- the extraction spans `tick_pipeline.py` (~1450 lines) plus `tick_helpers.py` (~578) and the widget
+  tick entry, and section 6.3 correctly forbids moving `_on_tick()` wholesale, so the logical core
+  has to be separated from transition context, timer interval management, teardown state and the
+  compositor push first;
+- section 6.7 requires all five modes to stay equivalent against their goldens, which is the real
+  cost of the change rather than the thread itself;
+- landing an unvalidated cadence-ownership rewrite immediately before the single acceptance run,
+  on a head already marked UNACCEPTED, would make that run uninterpretable: a regression could not
+  be attributed between the new runtime and the existing regression under investigation.
+
+A partial extraction that leaves a second clock beside the Qt timer is explicitly forbidden by
+sections 1.1, 6.4 and 9, so no intermediate shape was landed either.
+
+The next round should begin here, from the post-acceptance evidence.
+
+---
+
 ## 7. ACTIVE WITH SECTION 6 — remove mode/playback edge stalls, do not add another state machine
 
 The operator sees brief stutter:
@@ -733,6 +810,23 @@ A timeout may remain fail-safe. It must not be the normal successful reveal owne
 
 ---
 
+### Partially landed — the part independent of section 6
+
+`check_mode_teardown_ready()` waited for the engine to deliver a frame at or beyond the target
+generation before fading a new mode in. While paused there is no capture and no such frame arrives,
+so the 0.35 s fallback was the normal control flow for every paused mode switch - a visible stall on
+exactly one of the reported edges, and a direct violation of section 7.3.
+
+A paused switch into an idle-capable mode is now ready as soon as the mode is idle-ready. A playing
+switch is unchanged and still proves its source, waveform modes still wait for a waveform, and the
+timeout keeps its original fail-safe role for a stalled playing switch or a mode with no idle scene.
+
+The remaining section 7.2 contract (one atomic logical activation transaction, single reset, no
+duplicate engine/config reset, resume without cold staging) is stated to follow the section 6
+extraction and is therefore still open.
+
+---
+
 ## 8. Status of current overlay pre-reveal frame work
 
 Keep the two latest frame-cache changes while the active work above proceeds.
@@ -753,7 +847,18 @@ At the next installed gate:
 
 ---
 
-## 9. ONE installed acceptance after Sections 3–7
+## 9. ONE installed acceptance after Sections 3-7
+
+Sections 3, 4, 5 and the section-7 idle edge are landed; section 6 and the rest of section 7 are
+not. The run below therefore judges the current head against the 4.7.2 baseline **with the Qt-timer
+logical cadence owner still in place**, which is the same owner the regressed run had.
+
+Expect the functional gates (9.1) and the startup/recreation gate (9.2) to be decidable. The
+cadence gate (9.3) can only show whether the landed waste/ordering corrections moved it; the
+recurring logical holes are section 6's target and are not expected to be resolved by this round.
+
+The run's other job is section 2.3: decide whether current head as a whole earns the baseline back,
+or whether the retained overlay frame-cache changes belong in rollback.
 
 No intermediary installed runs.
 
