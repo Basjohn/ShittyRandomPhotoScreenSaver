@@ -1,501 +1,824 @@
-# Current Plan — P2 Visualizer Recovery
+# Current Plan — P2 Visualizer Recovery After Installed Acceptance Failure
 
-Last updated: 2026-08-19 after the failed worker-cadence installed run and the post-revert installed run  
+Last updated: 2026-08-19 after the first installed run on the repaired logical runtime  
 Branch: `main`  
-Current source anchor at review: `5c286616f20c9eeb232c632ea70dff5d34a86464`  
+Current source anchor at review: `80c8ed35f2f027522b00dcbe9795eb95b42076f4`  
 Named accepted rollback/fidelity baseline: **4.7.2 / `42033c84eabbdf25ccd34bb0e83f9e553f2f8f11`**  
-Architecture epoch: **single-surface OpenGL QRhi compositor + compositor-owned visualizer presentation**
+Architecture epoch: **single-surface OpenGL QRhi compositor + compositor-owned visualizer presentation + dedicated mode-general logical runtime**
 
-This file owns unfinished active work and supersedes stale execution/status language in the earlier plan. The reorientation document remains engineering doctrine, not execution authority.
+This file owns unfinished active P2 work.
 
-Exact current source and installed behavior override commit messages, comments, unit-test victory reports, and previous claims that a component is “correct.”
+For architecture orientation, use the handoff reorientation supplied with this documentation refresh. It is doctrine only and does not override this plan.
+
+Current installed evidence checkpoint: `Docs/P2_Installed_Acceptance_Findings_2026-08-19.md`.
+
+Exact installed behaviour and exact current source override commit messages, test counts, comments, and claims that a slice is “done.”
+
+The previous recovery plan successfully forced a real architectural correction. It is now stale because Slices A–E landed and the required installed run exposed the next failures.
 
 ---
 
-## 0. Corrected current truth
+# 0. Executive truth
 
-### 0.1 The single-surface compositor architecture remains accepted
+## 0.1 P2 is NOT complete
 
-Do not reopen the compositor migration. Current evidence still says:
+The repaired logical runtime is a real improvement and must be retained. It does not make the installed product acceptable.
 
-- one physical display owns one QRhi/OpenGL compositor presentation surface;
-- the visualizer is a compositor layer, not a second presented widget/surface;
-- renderer/GPU cost is too small to explain the large visualizer timing holes;
-- transition delivery is back around the accepted low/mid-150 FPS class on the 165 Hz display;
-- the remaining user-visible failure is predominantly logical cadence / lifecycle-edge smoothness.
+The installed run still has three user-visible failures:
 
-Do not create mode-specific or transition-specific optimization work unless new evidence actually names mode-owned or transition-owned cost.
+1. **Pause/Play hitching remains essentially unchanged.**
+2. **Paused Spectrum reveals its card but its intended idle bars are not perceptibly visible.**
+3. **Overall presentation performance remains materially below the accepted class, including on the 165 Hz display that does not own the visualizer.**
 
-### 0.2 The first logical-runtime wiring attempt FAILED and was reverted
+Bubble is no longer showing the old catastrophic logical-cadence collapse, but it still fails the full Bubble Temporal Fidelity contract because long-tail logical and presentation gaps remain visible-risk territory.
 
-The attempted worker-cadence landing broke the product in two independent ways:
+## 0.2 The installed run DID include `--viz`
 
-1. a required presentation handoff was looked up with optional `getattr(..., None)` after that method had been removed, so logical work ran while no frames were presented;
-2. the logical worker still reached mode-reveal code which performs QWidget/QPixmap/layout/fade work, so mode switches could leave data flowing with the target visualizer invisible.
-
-The worker wiring was reverted. The Qt-free runtime module and logical/presentation refactor pieces remain present but unwired.
-
-### 0.3 REVOKED CLAIM: “the logical runtime itself is correct”
-
-That statement is no longer accepted.
-
-The failed installed worker run reported, over long windows:
+The operator ran:
 
 ```text
-interval requested:             11.11 ms
-observed logical service:       ~63.9–64.0 Hz
-run A:                          3883 steps / 1581 skipped deadlines
-run B:                          2825 steps / 1148 skipped deadlines
-skipped-deadline fraction:      ~29%
-slow_steps:                     0
-step failures:                  0
+.\main.py --debug --perf --gpu-timing --viz --usage --viz --life --set --geo --fresh
 ```
 
-A runtime that deterministically services roughly 64 Hz while targeting roughly 90 Hz is not a valid cadence owner merely because its individual callback bodies are fast and it joins correctly.
+The duplicate `--viz` is harmless.
 
-The exact ~64 Hz plateau is a scheduler/wait-loop defect or platform interaction until proven otherwise. The current runtime uses a timed `Event.wait()` as its deadline wait. That is an immediate audit/fix target, but the cause must not be overclaimed before the scheduler gate below proves it.
+Do not claim the installed run lacked visualizer diagnostics.
 
-**Do not wire this runtime back into production until the scheduler-only cadence bar passes on the installed Windows/Python environment.**
+There are no `[SPOTIFY_VIS][LATENCY]` warning records in this run. That means no latency warning was emitted by the existing thresholded logger; it does **not** mean `--viz` was absent, and it does not authorize inventing a source-latency number.
 
-### 0.4 The post-revert GUI timer is still the known wrong owner
+## 0.3 Keep the architecture gains from Slices B–D
 
-After the revert there is no logical worker. The GUI recurring timer again owns the visualizer tick.
+Do not broadly revert the latest round.
 
-The post-revert installed run is functional but still bad:
+The following are now accepted unless new evidence directly disproves them:
+
+- logical cadence is no longer owned by the GUI recurring timer;
+- `VisualizerLogicalRuntime` is the one authoritative logical cadence owner;
+- the worker scheduler now uses a high-resolution deadline clock and a non-quantized sleep path;
+- logical mode-reveal readiness is separated from GUI reveal side effects;
+- GUI-only reveal work stays GUI-owned;
+- required logical/presentation handoffs are explicit rather than silently optional;
+- mode switching works across all five modes on the worker-owned cadence;
+- no second logical clock should be reintroduced;
+- no 700 ms playback debounce should be reintroduced.
+
+Slice E is accepted only for the narrow identity/lifecycle claim. It did **not** solve the perceptual Pause/Play hitch and must not be described as having done so.
+
+## 0.4 Current source anchor
+
+At review, `main` is:
 
 ```text
-ordinary logical service:       roughly low/mid-80 Hz class
-large GUI logical gaps:         repeatedly ~42–72 ms
-pause/resume examples:          ~60–62 ms logical gaps
-resume audio-to-log sample:     ~91 ms in one observed edge
+80c8ed35f2f027522b00dcbe9795eb95b42076f4
+Slice E - Pause/Play identity on the qualified logical runtime
 ```
 
-This is why reverting the worker did not restore a finished product. It restored the known GUI-starvation architecture.
+If `main` advances before work begins, re-read the changed files and update this anchor before making claims.
 
-### 0.5 Playback debounce correction is LANDED; the pause/play hitch remains
+---
 
-The old visualizer-owned ~700 ms pause confirmation timer has been removed. Visible playback state now follows the canonical MediaWidget state promptly, while BeatEngine retains its separate six-second capture keepalive/warm-resume policy.
+# 1. What the installed run actually proved
 
-The post-revert installed run still hitches severely on Pause and Play.
+## 1.1 The old ~64 Hz scheduler collapse is fixed
+
+The long installed runtime reported:
+
+```text
+generation                 -1   <-- invalid generation mapping defect; see §4
+steps                   22636
+skipped deadlines           38
+slow steps                   4
+failures                     0
+joined                    True
+```
+
+Over the installed interval this is approximately the **89.8–89.9 Hz class**, with skipped deadlines around **0.17%**.
+
+After Settings/recreation the replacement runtime reported:
+
+```text
+generation                  1
+steps                     1621
+skipped deadlines            1
+slow steps                   0
+failures                     0
+joined                    True
+```
+
+This is a real production win. The previous stable ~63.9–64.0 Hz / ~29% skipped-deadline failure is gone.
+
+Do not revert the scheduler merely because other performance problems remain.
+
+## 1.2 The scheduler average is healthy; the tails are not yet BTF-green
+
+During Bubble the logical metrics reached the expected ~89.8 Hz average, but the installed run still logged ordinary Bubble logical gaps including:
+
+```text
+49.83 ms
+42.27 ms
+```
+
+The long runtime also counted four steps above the current 25 ms slow-step diagnostic threshold.
+
+Per BTF:
+
+- healthy average alone is insufficient;
+- recurring or unexplained >33 ms logical holes are RED alarms;
+- a timing repair must preserve continuous positional evolution, not merely restore an average.
+
+The next work must therefore retain the new scheduler while tracing/removing the remaining long-tail stalls.
+
+## 1.3 Bubble simulation admission/publication is no longer the obvious bottleneck
+
+The final long Bubble cadence snapshot reported:
+
+```text
+offered                 11328
+submitted tasks         11324
+publish ratio           1.000
+worker busy deferrals       4
+result waiting deferrals    0
+submission failures         0
+stale results               0
+```
+
+This strongly exonerates the current Bubble compute lane as the cause of the remaining system-wide performance regression.
+
+Do not tune Bubble equations, reduce its cadence, increase smoothing, or add Bubble-specific throttling to compensate for shared delivery problems.
+
+Bubble remains the strongest perceptual canary.
+
+## 1.4 Bubble presentation still carries unhealthy tails
+
+Across the long Bubble interval, `state_to_paint_p95_ms` was repeatedly roughly 9–12 ms.
+
+Measured Bubble windows:
+
+```text
+median p95        ~9.737 ms
+worst p95         11.727 ms
+worst max         71.797 ms
+```
+
+This is materially worse than the historical healthy ~5–9 ms p95 comparison class and repeatedly approaches the known rejected presentation-delivery class.
+
+Do not call Bubble temporally healthy until these tails are understood and reduced.
+
+## 1.5 The 165 Hz display proves the remaining problem is shared/system-level
+
+The 165 Hz display does not own the visualizer, yet its completed compositor transition paint windows ranged approximately:
+
+```text
+103.8 FPS  ..  152.2 FPS
+median            131.6 FPS
+```
+
+Representative accepted/poor examples:
+
+```text
+Particle     152.2 FPS
+Blockspin    147.3 FPS
+Wipe         131.6 FPS
+Warp         103.8 FPS
+later Blockspin windows ~121–143 FPS
+```
+
+This is decisive evidence against “Bubble itself is consuming the missing presentation budget.”
+
+The remaining performance work must continue at shared GUI / compositor-delivery / runtime scheduling boundaries unless evidence isolates a narrower owner.
+
+Do not optimize transitions individually merely because particular transition windows expose the starvation more strongly.
+
+## 1.6 Event-loop tails remain bad
+
+During the ordinary long run, event-loop summaries commonly showed approximately:
+
+```text
+p95             ~14–19 ms
+p99             ~30–38 ms
+```
+
+After Settings/recreation, summaries degraded into approximately:
+
+```text
+p95             ~20–22 ms
+p99             ~50–54 ms
+```
+
+There were larger outliers as well, including lifecycle/settings periods.
+
+This is consistent with the user-visible report that the product remains unimpressive even though the logical worker average is now healthy.
+
+The worker removes GUI stalls from the simulation clock; it does not make the GUI/compositor immune to the same stalls.
+
+---
+
+# 2. Spectrum: exact current failure
+
+## 2.1 Slice A fixed the old first-frame blocker
+
+The prior defect was real:
+
+- paused Spectrum had a presentation-owned idle scene;
+- missing live source generation/activation was incorrectly treated as a presentation blocker;
+- first-frame primer problems forced `effective_fade = 0`;
+- the card stayed hidden until Play.
+
+That source/presentation readiness conflation has been corrected.
+
+Retain that separation.
+
+## 2.2 The new installed failure is visual magnitude, not reachability
+
+The installed Spectrum shader debug snapshot proves the actual renderer received idle values:
+
+```text
+count=35
+min=0.0100
+max=0.0300
+```
 
 Therefore:
 
-> **Do not “fix Section 6” by reintroducing or replacing a playback debounce.**
+- the idle baseline generator ran;
+- the frame reached the real renderer;
+- the card/reveal path is no longer blocked by missing source identity.
 
-The remaining edge hitch must be solved through the cadence/ownership correction and, only if necessary afterward, by narrowing synchronous wake/source-handoff work.
+But the operator sees **zero idle bars**.
 
-### 0.6 Spectrum idle architecture is correct in concept but still blocked at first presentation
-
-Keep the consistency model:
-
-```text
-mode          idle reveal   idle self-motion   presentation-owned idle   fresh source for reactive play
-Bubble            yes             yes                    no                         no
-Spectrum          yes             no                     yes                        yes
-Sine              yes             yes                    no                         no
-Oscilloscope      yes             yes                    no                         no
-DevCurve          yes             yes                    no                         no
-```
-
-This is cleaner than making Spectrum disappear whenever paused:
-
-- every mode can retain/reveal its card while idle;
-- Spectrum shows a static, presentation-owned low baseline with no fake audio;
-- the baseline does not grant source authority;
-- on Play, real current-generation Spectrum data must still become authoritative before reactive bars are accepted.
-
-The current code now reaches the Spectrum idle-baseline resolver, but another gate still hides it.
-
-The first-frame primer treats Spectrum as requiring authoritative source generation/activation even while paused. When those source ids are absent, it forces effective scene/bar fade to zero and refuses to complete the normal first-frame reveal handoff.
-
-That exactly matches the post-revert installed behavior:
+Current `spectrum_presentation_smoothing.py` defines the idle baseline as only 1–3% of full scale:
 
 ```text
-paused Spectrum persists through Settings
--> idle baseline logic is reachable
--> waiting_engine remains true (correct for future reactive authority)
--> first-frame primer reports missing source generation/activation
--> reveal watchdog expires
--> Spectrum remains invisible
--> press Play
--> fresh source arrives
--> reveal finally completes
+_IDLE_BASELINE_MIN = 0.010
+_IDLE_BASELINE_MAX = 0.030
 ```
 
-This is now the bounded Spectrum defect. Do not redesign Spectrum again.
+Current Spectrum uniform upload then multiplies bar values by `0.55` before the shader receives them.
 
-### 0.7 Ordinary mode switching is not the current rewrite target
+The effective values entering shader height math are therefore roughly:
 
-The post-revert run successfully exercises ordinary switching across modes again. The failed worker wiring showed that reveal ownership must be separated before cadence moves threads.
+```text
+0.0055 .. 0.0165
+```
 
-Do not start a new mode-switch state-machine rewrite. Extract only the GUI-bound reveal side effects that block the worker boundary.
+That can be mathematically non-zero while being perceptually absent in the installed card.
+
+## 2.3 Gate 1 was not a true visible-pixel gate
+
+The current Gate 1 parent is a recording QWidget stub whose `push_spotify_visualizer_frame()` only stores keyword arguments and returns `True`.
+
+Its key content assertion is effectively:
+
+```text
+max(frame["bars"]) > 0
+```
+
+That proves data is non-zero. It does not prove the real GL Spectrum shader produces perceptible bar pixels.
+
+Therefore Gate 1 is structurally incapable of catching the installed failure.
+
+### Required correction
+
+Keep:
+
+- presentation-owned idle scene;
+- source-authority separation;
+- source generation/activation unset while paused;
+- fresh-source wait retained for reactive Play;
+- in-place replacement on Play.
+
+Change only the idle presentation magnitude/renderer contract necessary to make the intended resting bars actually visible.
+
+Do not feed fake audio into BeatEngine.
+
+### Required replacement gate
+
+A Spectrum idle gate must prove a **real visual result**, not just non-zero floats.
+
+Preferred order:
+
+1. real offscreen/current GL render readback or image comparison if the existing compositor test infrastructure can do it reliably;
+2. otherwise a renderer-aware deterministic geometry/pixel-height contract that proves the tallest idle bars occupy a deliberately visible minimum height on representative card sizes and DPRs.
+
+The gate must exercise the real renderer math, including the 0.55 upload scale and height-scale/profile math.
+
+It must cover at least:
+
+- standard Spectrum card;
+- current installed enlarged Spectrum card;
+- DPR 1.0 and 1.5 if practical;
+- segmented and single-piece if the idle scene supports both.
+
+The new test must fail on the current 0.010–0.030 visual result if that result is below the approved visible minimum.
+
+Do not choose the minimum merely to make the current numbers pass. Choose it from an intentional resting-scene visual contract.
 
 ---
 
-## 1. Binding product contracts
+# 3. Pause/Play: current failure and strongest bounded suspect
 
-Priority order remains:
+## 3.1 What Slice E actually proved
 
-1. **visualizer fidelity and reactivity**;
-2. lifecycle / GL safety;
-3. perceived smoothness / frame pacing;
-4. multi-display correctness;
-5. bounded RAM / VRAM;
-6. CPU / task efficiency;
-7. average FPS;
-8. architecture elegance.
+Slice E proved:
 
-For Bubble especially, “smooth” means **continuous-looking motion without visible hitch/flicker while preserving immediate audio reaction**. Do not smooth, average, delay, decimate, or lower source/logical cadence to disguise timing defects.
+- runtime identity survives Pause/Play;
+- runtime generation does not intentionally churn on the edge;
+- warm BeatEngine capture policy remains independent;
+- cold visualizer/card/GL recreation is not intentionally invoked;
+- the removed ~700 ms visualizer playback debounce remains removed.
 
-Preserve:
+Retain those properties.
 
-- authored mode appearance;
-- shaders/glow;
-- trajectories and elasticity;
-- transient response;
-- existing visual-only motion smoothing;
-- reaction latency;
-- idle personality;
-- source/event fidelity.
+It did **not** prove:
 
-Do not solve P2 by:
+- no visible hitch;
+- no GUI starvation;
+- no presentation gap;
+- no expensive edge-owned UI feedback.
 
-- lowering authored logical cadence;
-- capping high-refresh presentation;
-- source/event decimation;
-- adding a second logical clock;
-- FIFO/backlog/catch-up simulation;
-- paint acknowledgement/backpressure;
-- QPainter/CPU visualizer fallback;
-- moving QWidget/QPixmap/GL access onto a worker;
-- hiding defects behind longer fades or debounces.
+The installed run says the perceptual hitch is still there.
+
+## 3.2 Do not reopen the old debounce
+
+No new pause-confirm timer.
+
+No “stability delay.”
+
+No smoothing the visualizer source to hide the edge.
+
+No fade extension to mask the freeze.
+
+The user reports the Pause/Play hitch is essentially unchanged. Treat that as a hard product failure.
+
+## 3.3 MediaWidget control feedback is now the strongest bounded first target
+
+Every Play/Pause control action starts MediaWidget feedback.
+
+Current source:
+
+- runs an animated feedback path when no image transition is active;
+- uses `AnimationManager`;
+- every animation update calls `_request_feedback_paint()`;
+- `_request_feedback_paint()` calls `widget._safe_update()`.
+
+The source itself already contains a special **static** feedback mode during compositor transitions because a normal feedback fade repaints the complete Media card repeatedly and can starve presentation delivery.
+
+The fresh installed run gives the same mechanism direct relevance to ordinary Pause/Play:
+
+For completed `command=play` events:
+
+```text
+paint requests per event:     35 .. 66
+mean:                         ~43.7
+configured duration:          1350 ms
+```
+
+Feedback animations themselves frequently ran only around:
+
+```text
+~24.8 .. 46.8 FPS
+max animation gap up to ~77.23 ms
+```
+
+MediaWidget paint telemetry during those periods commonly shows:
+
+```text
+full media-card area          170400 px
+average paint                 roughly 4–5 ms
+max paint                     often ~7–9 ms
+```
+
+This is not yet proof that Media feedback is the sole hitch owner.
+
+It **is** enough evidence to make it the first bounded edge-specific optimization target before speculative wake/source-handoff changes.
+
+It also explains why ordinary visualizer mode switching can feel better than Play/Pause: mode switching does not inherently launch this 1.35-second full MediaWidget repaint stream.
+
+## 3.4 Required Pause/Play correction shape
+
+Preserve the feedback visual meaning.
+
+Remove the technical waste of repainting the complete MediaWidget card dozens of times for one small control acknowledgement.
+
+Allowed implementation shapes include, depending on current architecture:
+
+- a lightweight child/overlay that owns only the feedback pixels;
+- a cached feedback layer;
+- dirty-region-only feedback painting;
+- compositor-owned small feedback presentation;
+- a static immediate acknowledgement if that is an explicitly accepted visual change.
+
+Do not simply lower the animation FPS to hide cost. That keeps the same ownership mistake at a lower frequency and risks making the feedback itself visibly bad.
+
+Do not remove feedback entirely without explicit product approval.
+
+## 3.5 Required Pause/Play behavioral gate
+
+The gate must cover both functional identity **and** delivery cost.
+
+For one ordinary Pause/Play feedback event:
+
+- visual feedback is still produced;
+- visualizer runtime identity is retained;
+- no cold startup/recreate occurs;
+- no playback debounce exists;
+- the MediaWidget parent is not repainted as a full card once per animation frame;
+- full-card paint requests caused by feedback are bounded to start/end or another explicitly small count;
+- the lightweight feedback owner may animate independently if cheap;
+- no second logical clock is introduced.
+
+A test that only checks runtime identity is no longer sufficient to call Gate 7 green.
 
 ---
 
-## 2. Execute in this exact order
+# 4. Generation fencing defect: valid generation 0 becomes -1
 
-The order is binding because each slice establishes a prerequisite for the next one.
+This is a real current-source bug and must be fixed before generation fencing is considered trustworthy.
 
-### Slice A — finish Spectrum paused reveal on the CURRENT GUI cadence owner
+The initial runtime/lifecycle generation is validly `0`.
 
-Do not touch worker wiring in this slice.
+Current worker creation uses the common pattern:
 
-#### Required semantic correction
-
-Separate:
-
-```text
-presentation_ready
-reactive_source_ready
+```python
+int(getattr(widget, "_runtime_generation", -1) or -1)
 ```
 
-For paused Spectrum with a presentation-owned idle scene:
+For valid `0`:
 
 ```text
-presentation_ready        = true
-reactive_source_ready     = false
-waiting_for_fresh_engine  = true
-source generation/id      = unset / -1
+0 or -1  ->  -1
 ```
 
-The first-frame primer/guard must not classify missing source generation or activation as a presentation blocker when ALL are true:
-
-- playback is not playing;
-- the current mode allows idle reveal;
-- the current mode has a presentation-owned idle scene.
-
-In that state:
-
-- build/publish the idle Spectrum baseline;
-- allow non-zero authored scene/bar fade;
-- allow the first presentation handoff to complete;
-- allow the card to become visibly revealed;
-- retain `_waiting_for_fresh_engine_frame=True`;
-- do not fabricate source generation/activation;
-- do not feed baseline bars into BeatEngine/source state.
-
-On Play:
-
-- keep the existing visible idle scene until replacement is ready;
-- accept reactive Spectrum only from a fresh current activation/generation;
-- replace the idle scene in place;
-- no blank/pop/recreate.
-
-#### Required gate
-
-A production-shaped test must prove **visible presentation**, not merely that `resolve_widget_spectrum_presentation()` was called.
-
-It must assert, through a real widget/event-loop path:
-
-- parent receives a Spectrum frame containing the non-zero idle baseline;
-- effective fade/bars fade are not forced to zero;
-- first-frame publication completes;
-- startup/mode reveal no longer waits for an impossible paused source frame;
-- the card/scene reaches visible/revealed state;
-- `_waiting_for_fresh_engine_frame` remains true;
-- source generation/activation remain unassigned.
-
-A second path must recreate Settings while paused with Spectrum persisted and prove the same visible result.
-
-### Slice B — separate logical readiness from GUI reveal side effects
-
-Still keep the GUI recurring timer as the cadence owner during this slice.
-
-#### Required ownership change
-
-`logical_tick()` must no longer call or transitively reach GUI presentation operations such as:
-
-- `begin_mode_fade_in()`;
-- `invalidate_shadow_cache_if_needed()`;
-- `apply_pending_mode_transition_layout()`;
-- `start_widget_fade_in()`;
-- QWidget show/hide/update/geometry;
-- QPixmap/QPainter;
-- GL/compositor mutation.
-
-Instead the logical half should produce plain-data results/intents, for example:
+The fresh installed log directly shows:
 
 ```text
-LogicalStepResult / PresentationIntent
-    render_state
-    render_revision
-    mode_activation_id
-    generation
-    mode_reveal_ready: bool
-    startup_reveal_ready: bool
-    source_authority_ready: bool
-    optional bounded reason/identity fields
+initial runtime started generation=-1
+post-Settings runtime started generation=1
 ```
 
-The exact type/name is implementation-owned. The contract is not.
+Current presentation-side generation checks also use the same style of coercion and conditionally skip fencing when the resolved generation is negative.
 
-The GUI/presentation half consumes that result and performs:
+Therefore the initial generation can silently fall outside the guard the tests claim to prove.
 
-- layout/shadow work;
-- card/fade work;
-- widget visibility;
-- compositor publication;
-- GL upload/presentation.
+## Required fix
 
-No required handoff may use `getattr(..., None)` or another silent optional lookup. Required interfaces fail loudly in tests/development when missing.
+Treat `None` / missing as invalid.
 
-#### Required gates
+Treat integer `0` as a valid generation.
 
-1. Static/transitive guard: logical worker-callable code owns no QObject/QTimer/QWidget/QPixmap/QPainter/GL side effects.
-2. GUI-only presentation methods assert/verify GUI-thread execution in test/debug paths.
-3. Production-shaped all-five-mode switch test uses a real widget/event loop and proves the target actually presents/reveals. Do not monkeypatch the fade into a list append and call that “visible.”
-4. The known bad worker-wiring commit should fail this bar if tested in an isolated worktree.
+Audit this exact coercion pattern across:
 
-### Slice C — qualify and repair the logical scheduler while it remains UNWIRED
+- logical runtime construction;
+- logical publication;
+- GUI presentation generation comparison;
+- any compositor publication/reveal generation fence;
+- tests that construct generation 0.
 
-Do not infer scheduler health from callback duration.
+Do not globally replace every `or -1` in the repository. Fix only identity fields for which zero is valid.
 
-The current runtime must first prove it can actually service the authored cadence without the GUI or compositor attached.
+## Required gate
 
-#### Audit target
-
-The existing deadline loop waits with a timed `threading.Event.wait()` and produced an extraordinarily stable ~64 Hz against an ~90 Hz request while reporting no slow steps.
-
-Audit/fix the wait/deadline mechanism first. A high-resolution deadline sleep or equivalent bounded mechanism is allowed. Busy-spinning is not.
-
-A production visualizer interval is about 11 ms, so shutdown does not require a five-second-interruptible wait contract. Prefer a simple deterministic scheduler over a complicated wake mechanism whose timing quantizes the cadence.
-
-#### Scheduler bar
-
-On the installed Windows/Python class used by SRPSS, run the runtime alone with an 11.11 ms authored interval and a cheap representative step for a meaningful window.
-
-Required:
+Generation-fencing tests must explicitly exercise:
 
 ```text
-achieved logical cadence:       >= 88 Hz
-ordinary scheduler gaps:        no recurring >33 ms class
-skipped deadlines:              <= 2% under scheduler-only load
-catch-up bursts:                none
-step failures:                  0
-shutdown:                       bounded and joined
+generation 0  -> valid
+generation 1  -> valid
+missing/None  -> invalid sentinel
+retired 0 cannot reveal/publish into replacement 1
+retired 1 cannot reveal/publish into replacement 2
 ```
 
-The exact duration can be 10–20 seconds; it must be long enough to expose the previous 64 Hz plateau.
-
-The current test “at least 10 callbacks within 2 seconds” is invalid as a cadence regression bar and must be replaced or supplemented.
-
-If this gate fails, **stop**. Do not wire the worker, do not call the runtime correct, and do not request an installed product run. Fix the scheduler first.
-
-### Slice D — wire ONE authoritative logical cadence owner
-
-Only after A, B and C pass.
-
-Target:
-
-```text
-Audio / analysis producer
-        |
-        v
-immutable latest analysis/source snapshot
-        |
-        v
-VisualizerLogicalRuntime
-  one standard Python thread
-  one monotonic deadline owner
-  no Qt / QWidget / QPixmap / GL
-  all five logical simulations
-  playback target + idle evolution
-  activation/generation fencing
-        |
-        v
-single-slot latest immutable render state + revision
-        |
-        v
-GUI/compositor consumer
-  presentation readiness/reveal
-  card/layout/geometry/fade
-  GL upload/shader/presentation
-```
-
-After landing there must be exactly one logical clock.
-
-Delete/disable simulation ownership from:
-
-- the recurring visualizer GUI QTimer;
-- AnimationManager visualizer ticks;
-- hidden fallback timers;
-- per-mode logical timers.
-
-Qt timers may remain for actual UI deadlines/fades/lifecycle work. They may not advance visualizer simulation.
-
-The GUI must sample the latest current-generation state. No FIFO. No catch-up. No callback posted to GUI for every logical tick.
-
-### Slice E — close Pause/Play on the new owner
-
-Do not build a separate pause/play architecture before the worker cadence is healthy.
-
-Required behavior:
-
-#### Pause
-
-- logical runtime stays alive;
-- mode/card/GL resources stay alive;
-- current mode is retained;
-- no mode activation/generation churn solely because playback paused;
-- logical state promptly begins authored idle evolution;
-- BeatEngine may keep capture warm independently;
-- no multi-frame simulation freeze.
-
-#### Warm resume
-
-- same logical runtime continues;
-- same visualizer/card resources continue;
-- warm capture resumes without cold startup staging;
-- fresh source gets authority promptly;
-- no blank/recreate;
-- no visible 40–80 ms logical hole caused by GUI starvation.
-
-If the user-visible hitch remains after worker cadence is healthy, then inspect the edge-specific synchronous work around duplicated wake/source-handoff notifications. Do not pre-emptively layer another debounce/timer over the symptom.
+A Gate 9 suite that never uses generation 0 is incomplete.
 
 ---
 
-## 3. Commit and revert discipline
+# 5. Minor logical-runtime contract defect: `wake()` does not wake `_wait_until()`
 
-This project has lost too much time to giant commits and broad reversions.
-
-### One semantic slice per commit
-
-Expected sequence resembles:
-
-1. Spectrum primer/reveal semantics + visible gate;
-2. logical readiness / GUI reveal split + real mode-switch gate;
-3. scheduler repair + cadence gate;
-4. worker ownership wiring + single-clock/lifecycle gates;
-5. pause/play edge closure + behavioral gates;
-6. docs/status closure.
-
-Do not bundle an entire cadence swap into a commit named after the first symptom it fixed.
-
-### Before reverting anything
-
-State explicitly:
-
-- the exact commit(s) proposed for revert;
-- files and semantic behavior those commits own;
-- which prerequisite/refactor/fix commits will remain;
-- why forward-fixing the bounded defect is less safe than reverting that exact slice.
-
-Do not use “revert the cadence work” as a substitute for understanding which parts are valid.
-
-### A failed slice does not authorize a broad rollback
-
-Fix forward inside that slice or revert only that slice. Retained improvements such as canonical mode capabilities, playback ownership, warmup ownership, or pure logical/runtime modules are not collateral damage unless evidence identifies them as defective.
-
----
-
-## 4. Evidence and gate discipline
-
-Every important bar must assert a **behavioral end condition**.
-
-Bad bars:
+Current runtime exposes:
 
 ```text
-runtime object exists
-mailbox revision increased
-fade function was invoked
-idle baseline resolver was called
-10 callbacks happened in two seconds
+wake()
 ```
 
-Good bars:
+and documents that it nudges the logical loop out of its wait.
+
+Current `_wait_until()` sleeps in bounded `time.sleep()` slices while checking only `_stop_event`. It does not test `_wake_event`.
+
+Because the maximum sleep slice is currently 4 ms, this is unlikely to explain the large Pause/Play hitch.
+
+It is still a contract/code mismatch.
+
+## Required treatment
+
+Do not redesign the scheduler around `Event.wait()` again; that would risk reintroducing the measured Windows quantization failure.
+
+Either:
+
+- make `wake()` truthfully influence the bounded sleep loop without using the old quantized timed wait; or
+- remove/rename the claimed wake semantics if the runtime intentionally only guarantees <=4 ms response.
+
+Keep scheduler cadence gates green.
+
+This correction is lower priority than generation 0, Spectrum idle visibility, and Pause/Play full-card feedback cost.
+
+---
+
+# 6. Shared presentation/delivery remains unfinished P2 work
+
+Fixing the logical clock exposed rather than solved the broader GUI/presentation starvation.
+
+The 165 Hz non-visualizer display is the strongest proof.
+
+## 6.1 Do not blame the visualizer merely because visualizer work is present
+
+Frame-gap ownership records often show:
+
+- visualizer logical presentation callbacks are individually sub-millisecond;
+- compositor paint itself is often only low-single-digit milliseconds;
+- nevertheless request age / dispatch pending can climb into tens or >100 ms;
+- high-refresh transition delivery collapses despite no visualizer on that display.
+
+Treat this as a shared scheduling/admission/delivery problem until evidence names a narrower owner.
+
+## 6.2 Next shared-system questions after Pause/Play feedback
+
+Once the edge-specific Media feedback stream is corrected, re-evaluate current logs/tests around:
+
+- GUI dispatch-pending suppression;
+- adaptive timer request acceptance;
+- UI callback bursts;
+- IO/compute callbacks that marshal to GUI;
+- expensive ordinary widgets repainting during high-refresh compositor windows;
+- settings/recreation lifecycle bursts;
+- cursor/stacking/overlay callbacks if frame-gap ownership repeatedly names them;
+- whether unchanged-scene/request suppression is behaving as intended.
+
+Do not optimize Warp, Wipe, Blockspin, Particle, etc. individually unless source attribution proves transition-owned work.
+
+The fact that different transitions expose different severity does not make them separate root causes.
+
+## 6.3 Presentation acceptance target
+
+Do not invent a new universal percentage merely to close the plan.
+
+Use the accepted baseline/historical class already documented for this architecture:
+
+- the 165 Hz display should return to the previous **low/mid-150 FPS completed-paint class** for ordinary transition windows where it previously achieved that;
+- repeated ~104–132 FPS windows are a regression;
+- repeated 80–100+ ms frame gaps are unacceptable;
+- 60 Hz display should not show repeated missed-frame classes that visibly hitch Bubble/visualizer motion.
+
+The exact final numeric gate should be anchored to existing accepted baseline runs, not arbitrary round numbers.
+
+---
+
+# 7. Execute next work in this exact order
+
+These are the new active slices. Previous Slices A–E are historical landed work.
+
+## Slice F — repair generation 0 identity/fencing
+
+Scope only:
+
+- fix valid-zero generation coercion in current logical/presentation identity paths;
+- add generation-0 regression bars;
+- no visual behavior changes;
+- no cadence changes;
+- no worker rollback.
+
+Acceptance:
+
+- generation 0 remains 0 end-to-end;
+- stale retired 0 cannot publish/reveal into 1;
+- all existing single-clock/thread-affinity gates remain green.
+
+## Slice G — make paused Spectrum idle actually visible
+
+Scope only:
+
+- retain `presentation_ready != reactive_source_ready`;
+- retain source wait and no fabricated identity;
+- make idle bars visibly present in the real renderer;
+- replace Gate 1 with a renderer-aware visible-pixel/height test.
+
+Acceptance:
+
+- paused Spectrum card visible;
+- resting bars visibly present;
+- no fake source authority;
+- Play replaces idle baseline in place with fresh real current-generation bars;
+- no blank/recreate.
+
+## Slice H — remove Pause/Play Media feedback full-card repaint waste
+
+Scope only:
+
+- preserve control feedback;
+- stop using full MediaWidget repaint as the per-animation-frame vehicle;
+- add full-card paint/request accounting gate;
+- retain warm capture, no debounce, no visualizer recreation.
+
+Acceptance:
+
+- ordinary feedback no longer produces ~35–66 full-card paint requests;
+- feedback still looks intentional;
+- Pause/Play identity remains stable;
+- existing visualizer logical cadence remains healthy.
+
+Do not touch BeatEngine wake/source handoff in this slice unless the same source evidence directly proves it is required for this correction.
+
+## Slice I — close remaining shared GUI/compositor presentation starvation
+
+Only after F–H are green.
+
+Use existing telemetry first.
+
+Goal:
+
+- restore high-refresh completed-paint delivery toward accepted low/mid-150 class;
+- reduce request-age / dispatch-pending long tails;
+- reduce 60 Hz visualizer state-to-paint tails;
+- retain one compositor surface, one logical clock, latest-state publication.
+
+Do not trade fidelity for lower work.
+
+## Slice J — final P2 installed acceptance
+
+ONE installed run after F–I.
+
+Do not ask the operator for repeated intermediate installed runs unless a failure is literally impossible to reproduce or bound in the production-shaped test/harness environment.
+
+---
+
+# 8. Updated behavioral gates
+
+`Docs/P2_Behavioral_Gates.md` is binding and the repository replacement accompanying this plan is already revised for the post-installed-run failures.
+
+It contains at minimum:
+
+1. paused Spectrum **real visible pixels/height**, not `max(bars) > 0`;
+2. all-five-mode production-shaped reveal;
+3. scheduler cadence gate;
+4. logical worker cannot touch GUI;
+5. required handoffs fail loudly;
+6. exactly one logical clock;
+7. Pause/Play identity **plus separate delivery-cost gate**;
+8. BTF;
+9. generation 0 fencing;
+10. known-bad historical validation where practical;
+11. Media feedback does not repaint the full card per animation frame;
+12. shared high-refresh presentation regression bar.
+
+A green unit count is not a product result.
+
+A bar is valid only if it would have failed on the installed defect it claims to prevent.
+
+---
+
+# 9. Bubble Temporal Fidelity remains binding
+
+Read:
 
 ```text
-90 Hz owner actually services ~90 Hz
-paused Spectrum actually produces visible non-zero presentation
-mode switch actually ends with the target presented/revealed
-Pause -> Play retains identity and does not create a logical timing hole
-worker-callable code cannot reach GUI mutations
-retired generation cannot publish
-there is only one logical simulation clock
+Docs/Guardrails/Bubble_Temporal_Fidelity.md
 ```
 
-Tests are not evidence merely because they are green. A test must be structurally capable of failing on the defect it claims to guard.
+before changing anything that can affect Bubble timing.
+
+The current installed outcome is:
+
+```text
+logical average cadence       GREEN
+skipped-deadline fraction     GREEN
+Bubble worker admission       GREEN
+logical >33 ms tails          RED
+state->paint long tails       RED / warning-to-fail class
+perceptual smoothness         user reports still unimpressive
+```
+
+Do not retune Bubble to fit technical starvation.
+
+Do not add audio smoothing to hide timing holes.
+
+Do not reduce logical/source cadence.
+
+Do not use physical FPS as a substitute for source/logical/presentation timing.
 
 ---
 
-## 5. Installed acceptance — ONE run after the full P2 slice set
+# 10. Commit and revert discipline
 
-Do not ask the operator to repeatedly exercise intermediate worker states.
+## 10.1 One semantic slice per commit
 
-After Slices A–E and the relevant suites are green, perform one installed run with the existing diagnostic/performance flags.
+Expected next sequence:
 
-Exercise:
+```text
+F  generation-zero identity/fencing
+G  Spectrum idle visual magnitude + real gate
+H  Media feedback repaint isolation
+I  shared GUI/compositor delivery closure
+J  docs/status closure after installed acceptance
+```
 
-1. startup on both displays;
-2. Bubble ordinary playback long enough to judge continuous motion and reaction;
-3. all five mode switches while playing;
-4. switch to Spectrum while paused — card + idle bars must visibly reveal;
-5. Settings/recreate while paused on Spectrum — Spectrum remains visibly Spectrum;
-6. Play from that state — real Spectrum bars replace idle in place;
-7. repeated quick Pause/Play while capture remains warm;
-8. one populated Media CUSTOM Cancel;
-9. ordinary high-refresh transitions;
-10. clean shutdown/resource accounting.
+Do not combine unrelated “while I am here” refactors.
 
-Acceptance is perceptual **and** measured.
+## 10.2 Before reverting anything
 
-Bubble failing the eye test for hitch/flicker is a failure even if average FPS is high.
+State:
 
-Required measurement shape:
+- exact commit(s);
+- exact files;
+- exact semantic behavior lost;
+- exact retained prerequisite work;
+- why bounded forward-fix is less safe.
 
-- authored logical cadence near target rather than a 64–85 Hz service class;
-- no recurring ordinary >33 ms logical holes;
-- renderer/GPU remains cheap;
-- state-to-paint remains healthy;
-- no second logical clock;
-- no stale-generation publication;
-- no mode becomes invisible after a switch;
-- Pause/Play no longer produces the characteristic multi-frame visual stall.
+No broad “revert the worker changes.”
+
+The repaired logical runtime is currently a demonstrated improvement.
+
+## 10.3 Installed behavior overrides tests
+
+If a gate says visible Spectrum and the operator sees no bars, the gate is wrong.
+
+If a gate says Pause/Play and the operator sees the same hitch, the gate did not cover the hitch.
+
+Fix the gate.
+
+Do not argue with the installed product.
 
 ---
 
-## 6. After P2 acceptance
+# 11. Documentation discipline
 
-Proceed to **P5 physical monitor lifecycle / topology reconstruction**.
+No helper scripts for moving or applying documentation.
 
-Do not let visualizer polishing indefinitely displace the known monitor-off / long-idle / wake lifecycle work.
+When documentation changes are needed:
+
+- edit the actual repository files directly;
+- keep canonical files at their intended paths;
+- do not add root clutter;
+- do not generate `apply_docs.py`, PowerShell movers, patch scripts, or similar document-install machinery.
+
+The repository itself is the workspace.
+
+---
+
+# 12. Final installed acceptance
+
+After F–I and relevant suites are green, run with the operator’s normal diagnostic set, including `--viz`.
+
+Acceptance exercise:
+
+1. both-display startup;
+2. Bubble long enough to judge continuous motion and reactivity;
+3. all five mode switches;
+4. rapid Pause/Play toggles;
+5. paused Spectrum with clearly visible idle bars;
+6. Settings/recreate while paused Spectrum remains visibly correct;
+7. Play replaces idle bars in place;
+8. populated Media CUSTOM Cancel;
+9. ordinary transitions;
+10. high-refresh display observed during multiple transitions;
+11. clean shutdown.
+
+Hard failures:
+
+- Pause/Play visible hitch remains;
+- Bubble shows stepping/flicker/freeze/jump;
+- recurring >33 ms ordinary logical gaps remain unexplained;
+- BTF source/logical/presentation alarms enter rejected class;
+- paused Spectrum bars are visually absent;
+- high-refresh presentation remains in persistent ~104–132 FPS class;
+- mode switch hides target;
+- stale generation reveals;
+- generation 0 maps to invalid identity;
+- second logical clock appears;
+- lifecycle/GL cleanup fails.
+
+Only after that run is acceptable may P2 be declared complete and work proceed to P5 monitor-topology/lifecycle closure.
+
+---
+
+# 13. Explicit non-goals for the next round
+
+Do not:
+
+- reopen single-surface compositor migration;
+- rewrite the mode switch state machine;
+- create per-mode schedulers;
+- create per-transition optimizations without attribution;
+- retune Bubble physics;
+- reduce authored 90 Hz class;
+- reintroduce pause debounce;
+- smooth audio/source to hide scheduling;
+- add paint acknowledgement/backpressure;
+- add FIFO/catch-up;
+- add a second visualizer surface;
+- add QPainter visualizer fallback;
+- request an installed run after every slice;
+- treat raw test count as acceptance;
+- generate documentation install/move scripts.
+
+The current job is narrower:
+
+> **preserve the repaired logical owner, make the remaining visual contracts real, remove the edge-owned full-card feedback waste, then finish the shared GUI/presentation starvation that the 165 Hz non-visualizer display proves still exists.**

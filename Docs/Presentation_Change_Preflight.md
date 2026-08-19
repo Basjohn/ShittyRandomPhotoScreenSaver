@@ -1,117 +1,154 @@
 # Presentation / Cadence Change Preflight
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
-Rejected-mechanism register for current QRhi single-surface presentation. It does not override
-`Current_Plan.md`.
+Rejected-mechanism register for the current single-surface + dedicated-logical-runtime architecture.
+It does not override `Current_Plan.md`.
 
-## 1. Architecture Epoch
+For Bubble timing/feel, BTF is additionally binding:
+`Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
 
-Current production direction is **one accelerated QRhi/OpenGL compositor surface per display**.
-The Spotify visualizer is a layer inside that surface. Any historical record describing a
-separate visualizer `QOpenGLWidget`/`QRhiWidget` is evidence from the previous architecture.
-
-## 2. Rejected Mechanisms
-
-| Mechanism | Why rejected | Still rejected now? |
-|---|---|---|
-| producer timestamp/display-rate divisor | quantizes 90–100 Hz sources and changes visible cadence | yes |
-| pending-until-paint admission | Qt delivery delay becomes scheduler backpressure | yes |
-| paint/swap acknowledgement | producer/presentation deadlines depend on consumer completion | yes |
-| render callback self-`update()` loop | creates independent repaint loop/UI pressure | yes |
-| repaint rescue/requeue timer | more GUI pressure without fixing delivery | yes |
-| admission before logical integration | loses/decays authored events before publication | yes |
-| source/event decimation | lowers fidelity to improve FPS | yes |
-| catch-up replay | bursts stale visual states after a stall | yes |
-| separate visualizer presentation surface | measured material shared-GUI/presentation cost; sibling QRhi was worse | yes |
-| transition-scoped timer driving a separate visualizer surface (R-61/R-62) | freezes/degrades visualizer and couples it to transition lifecycle | yes |
-
-## 3. Adaptive Timer Clarification
-
-Older docs said `AdaptiveTimerStrategy` was “disqualified in any scope.” That statement belonged
-to the old separate-visualizer-surface experiments and is superseded by the single-surface
-architecture.
-
-Current distinction:
-
-**Forbidden**
-
-- using adaptive timer as visualizer source/simulation cadence;
-- using a transition-only liveness scope so visualizer presentation stops when transition ends;
-- using it to pace another visualizer QWidget/QRhiWidget;
-- making paint completion release its next deadline.
-
-**Allowed/current**
-
-- one display compositor physical presentation strategy targeting the display refresh;
-- liveness remains active while either a transition or visualizer needs animated presentation;
-- it presents the freshest already-integrated scene state.
-
-## 4. Dispatch Guard Clarification
-
-One cross-thread `dispatch_pending` flag is allowed only to prevent duplicate queued Python GUI
-callbacks.
-
-Lifecycle:
+## 1. Current architecture epoch
 
 ```text
-timer/deadline
-   -> queue GUI callback (dispatch_pending=true)
-   -> GUI callback executes
-   -> QWidget.update()
-   -> dispatch_pending=false
+one display
+    -> one OpenGL QRhi compositor surface
+
+visualizer logical cadence
+    -> one VisualizerLogicalRuntime
+
+visualizer presentation
+    -> layer inside the display compositor
 ```
 
-A later deadline is then eligible even before paint. A second flag that stays latched until paint
-and rejects deadlines is the forbidden pending-until-paint family regardless of its variable name.
+Old separate visualizer surfaces and GUI-timer logical cadence are previous-epoch evidence.
 
-## 5. Visualizer Logical / Presentation Boundary
+## 2. Rejected mechanisms
+
+| Mechanism | Why rejected | Current status |
+|---|---|---|
+| producer timestamp/display-rate divisor | quantizes authored logical/source cadence | rejected |
+| pending-until-paint admission | Qt delivery delay becomes backpressure | rejected |
+| paint/swap acknowledgement | producer deadline depends on consumer completion | rejected |
+| render callback self-update loop | independent repaint loop/UI pressure | rejected |
+| repaint rescue timer | more GUI pressure without ownership correction | rejected |
+| source/event decimation | lowers fidelity to improve counters | rejected |
+| catch-up replay | bursts stale logical/render state after stall | rejected |
+| separate visualizer presentation surface | material shared presentation cost | rejected |
+| GUI recurring timer as visualizer logical owner | Qt stalls become logical holes | rejected |
+| AnimationManager as visualizer logical owner | couples simulation to UI animation service | rejected |
+| per-mode logical timer/thread | fragments ownership | rejected |
+| timed coarse wait mechanism reproducing ~64 Hz scheduler | cannot service authored cadence | rejected |
+
+## 3. Adaptive physical presentation clarification
+
+The display compositor's adaptive render strategy is allowed as **physical presentation strategy**.
+
+It may not:
+
+- own source/simulation cadence;
+- become transition-only liveness when another scene reason needs frames;
+- wait for paint acknowledgement;
+- pace a second visualizer surface.
+
+Do not delete the display's physical presentation strategy because old reports rejected an adaptive
+timer in a different owner/surface role.
+
+## 4. Logical / physical boundary
 
 ```text
 audio/events
-   -> analysis/logical integration at authored cadence
-   -> current generation/activation render state
-   -> sole display compositor presentation opportunity
+    -> BeatEngine/source state
+    -> VisualizerLogicalRuntime integration
+    -> latest logical publication
+    -> GUI presentation handoff
+    -> display compositor opportunity
 ```
 
-Presentation may sample latest current state. It may not modify logical time, source/event cadence
-or mode state.
+Physical presentation may sample latest current state.
 
-## 6. Short-Lived Edge Rule
+It may not modify logical time/event cadence.
 
-Latest-state sampling alone is insufficient where an approved visible response can exist for a
-single logical publication. Protect/assert the actual visible state/edge, not only its trigger.
+## 5. Readiness
 
-## 7. No Instrumentation Escalation By Default
+Before changing reveal/fade code ask separately:
 
-When source/current architecture already identifies a policy-violating owner, fix the owner and
-use existing passive evidence. Do not add another diagnostic family simply to prove an already
-known paint-ack latch, duplicate surface, cold startup compile or duplicate activation transaction
-exists.
+```text
+is presentation drawable now?
+is real reactive source authoritative now?
+```
 
-New instrumentation is justified only when the next architectural decision genuinely cannot be
-made from current source + existing evidence.
+Do not require real source identity for a presentation-owned idle scene.
 
-## 8. Runtime Evidence
+Do not permit reactive playback state to masquerade as current without valid source identity.
 
-Use the owning sidecars:
+## 6. Dispatch guard
 
-- `screensaver_perf.log`: display delivery/frame evidence;
-- `screensaver_spotify_vis.log`: logical/state/source-age visualizer evidence;
-- `screensaver_lifecycle.log`: lifetime/cleanup;
-- `screensaver.log`: human narrative/WARNING+.
+One cross-thread dispatch-pending flag is allowed only to avoid duplicate queued GUI callbacks.
 
-High paint/update ratios are not proof of useful physical presentation.
+It ends when the queued callback executes.
 
-## 9. Required Acceptance
+It may not remain latched until paint.
 
-For presentation changes require:
+## 7. Protected edge rule
 
-- logical/fidelity goldens remain green;
-- 60 Hz remains effectively refresh-limited;
-- high-refresh result materially reflects removal of known admission loss;
-- state-to-paint remains healthy;
-- source age/reactivity does not regress;
-- no GUI callback backlog growth;
-- no new presentation timer/surface;
-- installed visual review when feel/fade is affected.
+Latest-state sampling is allowed only after logical integration.
+
+If a protected visible response can exist briefly, assert the resulting visible/positional state,
+not only the trigger flag.
+
+BTF supplies Bubble-specific requirements.
+
+## 8. Generation identity
+
+Check valid generation zero explicitly.
+
+Do not use truthiness conversion where zero is meaningful.
+
+Stale retired generation cannot enter current presentation.
+
+## 9. Instrumentation proportionality
+
+Use current source/evidence first.
+
+Add a new probe only when it chooses between materially different remaining owners/designs.
+
+A known full-card feedback repaint stream or known invalid generation conversion does not require a
+new probe merely to prove it exists.
+
+## 10. Runtime evidence
+
+Current P2 checkpoint:
+
+`Docs/P2_Installed_Acceptance_Findings_2026-08-19.md`
+
+Use sidecars as needed:
+
+- `screensaver_perf.log`
+- `screensaver_spotify_vis.log`
+- `screensaver_lifecycle.log`
+- `screensaver.log`
+
+Separate:
+
+- source age;
+- logical cadence/gaps;
+- GUI dispatch;
+- state-to-paint;
+- display delivery.
+
+## 11. Required acceptance
+
+For cadence/presentation changes require relevant:
+
+- authored logical/fidelity goldens green;
+- scheduler actual-cadence gate;
+- one-clock gate;
+- source freshness does not regress;
+- state-to-paint tails healthy;
+- 60 Hz effectively refresh-limited;
+- high-refresh display materially uses available presentation opportunity;
+- no callback backlog growth;
+- no new surface/clock;
+- BTF if Bubble affected;
+- installed visual review.

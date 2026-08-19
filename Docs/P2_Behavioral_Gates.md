@@ -1,67 +1,80 @@
-# P2 Behavioral Gates
+# P2 Behavioral Gates — Post-Installed-Run Revision
 
-Date: 2026-08-19  
-Purpose: prevent another all-green suite from certifying a visibly broken visualizer.
+Last updated: 2026-08-19  
+Reviewed source anchor: `80c8ed35f2f027522b00dcbe9795eb95b42076f4`
 
-A gate is valid only if the defect it names can make that gate fail.
+Status: **binding P2 regression contract**
+
+These gates exist because several previous tests asserted internal calls while the installed product remained visibly broken.
+
+A gate is valid only if it proves the user-visible or architecture-visible end condition it claims to guard.
+
+Where practical, prove the gate would fail against the known-bad historical revision that exhibited the defect.
 
 ---
 
-## Gate 1 — Spectrum paused presentation is actually visible
+# Gate 1 — Paused Spectrum must produce a perceptibly visible idle scene
 
-### Regression being guarded
+## Defect class
 
-Spectrum's idle baseline resolver can run while the first-frame primer still forces effective fade to zero because no authoritative source generation/activation exists while paused.
-
-### Required production-shaped path
+The old gate proved:
 
 ```text
-playing mode
--> Pause
--> switch to Spectrum
--> no fresh engine frame is available
--> Spectrum presentation-owned idle baseline is produced
--> first-frame guard permits idle presentation
--> card + baseline visibly reveal
+resolver called
+bars > 0
+fade > 0
 ```
 
-Assert all of:
+while the installed result still looked like **zero bars**.
 
-- mode is Spectrum;
-- playback is paused;
-- presentation-owned baseline contains non-zero values;
-- the parent/compositor receives that Spectrum frame;
-- effective scene fade > 0 during/after reveal;
-- effective bars fade > 0 during/after reveal;
-- first presentation handoff completes;
-- scene/card reaches revealed/visible state;
+The current real renderer received values only in the 0.010–0.030 range, then Spectrum upload scaled them by 0.55. A recording-parent stub cannot prove those numbers create visible pixels.
+
+## Required behavior
+
+Paused Spectrum:
+
+- card is visible;
+- idle bars are visibly present;
+- idle scene remains presentation-owned, not fake audio;
 - `_waiting_for_fresh_engine_frame` remains true;
-- source generation/activation remain unset;
-- no fake engine generation is created.
+- source generation and source activation remain unset/invalid;
+- no source identity is fabricated;
+- on Play, fresh real current-generation data replaces idle bars in place.
 
-### Settings continuation
+## Required test shape
+
+Preferred:
+
+- render real Spectrum through the actual renderer/compositor path into an offscreen/current GL target;
+- read back or compare a bounded image/pixel result;
+- assert the idle bar region contains non-background pixels with an intentional minimum visible height.
+
+Fallback only if reliable GL readback is impractical:
+
+- exercise the real Spectrum renderer math in a deterministic geometry contract;
+- include upload scale, card height, bar height scale, profile/power curve and segment/single-piece math;
+- assert tallest resting bar maps to a deliberately visible minimum pixel height.
+
+Cover representative:
 
 ```text
-paused visible Spectrum
--> Settings/recreate
--> persisted Spectrum restored
--> no source available
--> visible Spectrum card + idle baseline returns
+normal Spectrum card
+expanded Spectrum card
+DPR 1.0
+DPR 1.5
+segmented
+single-piece where applicable
 ```
 
-Do not count “resolver called” as pass.
+The test must fail on a resting scene that is technically non-zero but visually negligible.
+
+`max(bars) > 0` is forbidden as the sole visibility assertion.
 
 ---
 
-## Gate 2 — every mode switch ends in real presentation
+# Gate 2 — All five modes must actually reveal after switch
 
-### Regression being guarded
-
-Worker logical code reached GUI fade/layout operations off-thread. Earlier tests monkeypatched reveal functions and asserted only that a function was invoked.
-
-### Required path
-
-For each target:
+Modes:
 
 ```text
 Bubble
@@ -71,206 +84,334 @@ Oscilloscope
 DevCurve
 ```
 
-Use a real `SpotifyVisualizerWidget`/real parent presentation stub or compositor-facing integration harness with a running Qt event loop.
+For playing and paused where supported:
 
-Assert:
-
-- target mode activation completes;
-- at least one target-mode frame is accepted by the parent;
-- target scene fade becomes non-zero;
-- target reaches revealed/visible state;
-- old mode does not remain the presented mode;
+- switch request accepted;
+- old mode teardown completes;
+- target mode logical state publishes;
+- target mode frame reaches presentation;
+- effective target fade becomes non-zero;
+- target mode becomes the scene actually presented;
+- no worker-thread GUI mutation occurs;
 - no thread-affinity exception is swallowed.
 
-Run both playing and paused where the mode contract allows idle reveal.
+Use a real widget and live Qt loop.
 
-A monkeypatched `start_widget_fade_in()` that merely appends `"fade"` to a list is not this gate.
+Do not monkeypatch the fade method into “append a string” and call that visibility.
 
 ---
 
-## Gate 3 — scheduler cadence means actual cadence
+# Gate 3 — Logical scheduler must deliver the authored cadence
 
-### Regression being guarded
-
-The worker requested ~90 Hz but installed execution locked near 64 Hz with ~29% skipped deadlines while the unit suite passed.
-
-### Harness
-
-Run `VisualizerLogicalRuntime` unwired from Qt/compositor at:
+At approximately 11.11 ms authored interval for a meaningful scheduler-only window:
 
 ```text
-interval = 1 / 90 s
-window   = 10–20 s
-step     = cheap representative logical callable
-```
-
-Collect every serviced timestamp and deadline skip.
-
-### Pass
-
-```text
-achieved rate               >= 88 Hz
-skipped deadline fraction   <= 2%
-p95 inter-step gap          close to authored interval
-recurring >33 ms gaps       none under scheduler-only load
-catch-up burst              none
+achieved cadence            >= 88 Hz
+skipped deadlines           <= 2%
+recurring >33 ms gaps       none
+catch-up bursts             none
 step failures               0
-join                        succeeds
+join                         succeeds
 ```
 
-Use a tolerant platform-aware upper tail rather than requiring impossible nanosecond precision. The purpose is to reject the 64 Hz class decisively.
+Collect p50/p95/p99/max interval statistics.
 
-### Invalid substitute
+This gate must reject independently:
+
+- coarse deadline clock;
+- coarse timed wait mechanism;
+- any regression to the old ~64 Hz / ~29% skipped class.
+
+Do not use “10 callbacks happened in two seconds.”
+
+---
+
+# Gate 4 — Worker-callable logical code cannot perform GUI/GL work
+
+`logical_tick()` and every transitively worker-callable function must not:
+
+- show/hide/update QWidget;
+- read/write QWidget geometry for presentation;
+- construct/use QPixmap/QPainter;
+- mutate compositor/GL state;
+- start GUI fades;
+- invalidate GUI shadow/layout caches.
+
+GUI-only functions must assert thread affinity in tests/debug.
+
+A real worker-thread test must run enough logical steps to cross mode/readiness paths, not only the simplest steady-state tick.
+
+---
+
+# Gate 5 — Required handoffs are required
+
+The logical-to-presentation mailbox and presentation request seam are required interfaces.
+
+Missing required handoff:
+
+- must fail loudly in tests/development;
+- must not silently become “do nothing” through `getattr(..., None)`.
+
+This gate must catch deletion/renaming of the handoff while logical work continues.
+
+---
+
+# Gate 6 — Exactly one logical clock
+
+While enabled:
 
 ```text
-assert callbacks >= 10 within 2 seconds
+VisualizerLogicalRuntime    active
+visualizer GUI recurring timer    absent/inert as logical owner
+AnimationManager listener         absent/inert as logical owner
+per-mode logical timers           absent
+hidden fallback logical clock     absent
 ```
 
-That would pass at 5 Hz and proved nothing about a 90 Hz owner.
+Pause/Play and mode switching reuse the same logical runtime.
+
+Cleanup joins it.
+
+No architecture change may create a source/display cadence split where a second clock advances simulation.
 
 ---
 
-## Gate 4 — logical code cannot reach GUI mutation
+# Gate 7A — Pause/Play preserves visualizer identity and warm ownership
 
-Build a call-boundary guard around every function reachable from the worker step.
+Across rapid Pause -> Play -> Pause -> Play:
 
-At minimum fail if worker-callable code reaches:
+- same logical runtime object;
+- same valid runtime generation;
+- same mode/card identity;
+- no GL/card recreation solely due to playback edge;
+- no cold startup staging on warm resume;
+- no 700 ms visible playback debounce;
+- BeatEngine capture keepalive remains separate policy.
 
-- QObject/QTimer ownership;
-- QWidget show/hide/update/geometry;
-- QPixmap/QPainter;
-- mode fade execution;
-- shadow/layout mutation;
-- compositor/GL mutation.
+This is the narrow identity gate.
 
-In test/debug, GUI-only functions should assert they are running on the GUI thread.
-
-The test must fail loudly rather than rely on production broad `except` handlers.
-
----
-
-## Gate 5 — required presentation handoffs are not optional
-
-Regression:
-
-A deleted `_request_logical_present` method was obtained through optional `getattr`, silently producing logical work with zero presentation.
-
-Required cross-boundary methods/interfaces must be explicit and test-covered.
-
-Assert that removing/omitting the handoff fails immediately rather than running a zero-frame product.
+Passing Gate 7A does **not** mean Pause/Play is perceptually smooth.
 
 ---
 
-## Gate 6 — exactly one logical clock after wiring
+# Gate 7B — Pause/Play feedback must not repaint the whole Media card per animation frame
 
-After worker landing, inspect live runtime ownership and source code/runtime registrations.
+## Defect class
 
-Assert:
-
-- one `VisualizerLogicalRuntime` is live for the generation;
-- recurring GUI timer does not call logical simulation;
-- AnimationManager does not call logical simulation;
-- no fallback/per-mode logical timer exists;
-- pause/play does not create another logical runtime;
-- mode switch does not create a second concurrent logical runtime;
-- retirement joins old runtime before replacement publishes.
-
----
-
-## Gate 7 — Pause/Play preserves identity and cadence
-
-### Pause -> warm Play
-
-Exercise quick toggles inside the existing capture keepalive window.
-
-Assert:
-
-- logical runtime identity is unchanged;
-- mode activation identity is unchanged unless a real mode change occurred;
-- card/presentation resource identity is retained;
-- capture may transition to warm hold/resume independently;
-- no cold startup stage is entered;
-- logical cadence continues across the edge;
-- no recurring >33 ms logical hole is introduced by the playback edge itself.
-
-The visible-state debounce must remain absent.
-
----
-
-## Gate 8 — Bubble fidelity and perceptual smoothness
-
-Automated bars protect mechanics but do not replace the eye test.
-
-Before installed acceptance, preserve existing Bubble fidelity/golden tests for:
-
-- trajectories;
-- event/transient consumption;
-- visual-only smoothing response;
-- elasticity/motion parameters;
-- source reaction strength/latency.
-
-Do not “improve” smoothness by lowering source cadence or applying extra audio smoothing.
-
-Installed acceptance fails if Bubble visibly hitches/flickers even when average presentation FPS looks healthy.
-
----
-
-## Gate 9 — stale generation cannot reveal or publish
-
-Exercise:
+Fresh installed behavior showed ordinary Play feedback producing roughly:
 
 ```text
-old generation logically ready
--> retirement begins
--> replacement generation starts
--> delayed old completion arrives
+35 .. 66 paint requests per event
+~43.7 mean
+1350 ms feedback duration
 ```
 
-Assert old state cannot:
+and MediaWidget full-card paint telemetry around the 4–5 ms average class over a ~170400 px card.
 
-- enter latest-state mailbox for the new generation;
-- trigger a reveal;
-- release a new-generation hold;
-- mutate current GUI/GL presentation.
+Current source requests `widget._safe_update()` from every feedback animation update.
 
----
+## Required behavior
 
-## Gate 10 — known-bad validation
+Keep the visual feedback.
 
-Where practical, use an isolated git worktree to validate that the new guards reject the known bad architecture without disturbing `main`.
+But ordinary Pause/Play feedback must not use full MediaWidget repaint as its per-frame animation vehicle.
 
-Useful known-bad target:
+A production-shaped gate must prove:
 
-- `a6a423bc...` — worker wiring state that left mode-reveal GUI work reachable from the logical thread.
+- feedback appears;
+- its progression/completion still works;
+- full MediaWidget paint/update requests attributable to one feedback event are bounded to a very small number;
+- per-frame animation work, if retained, belongs to a small/lightweight feedback owner or dirty region;
+- visualizer logical runtime is unaffected;
+- no second timer/clock is introduced to hide the problem.
 
-Expected:
-
-- real mode-switch presentation/thread-affinity gate fails there;
-- current/fixed source passes.
-
-The scheduler cadence gate should also reject any runtime implementation that reproduces the installed ~64 Hz plateau.
+Do not “pass” this gate by reducing feedback FPS while retaining full-card repaint ownership.
 
 ---
 
-# Final installed acceptance script
+# Gate 8 — Bubble Temporal Fidelity (BTF)
 
-Run only after the P2 implementation gates are green.
+Canonical contract:
 
-Exercise in one session:
+```text
+Docs/Guardrails/Bubble_Temporal_Fidelity.md
+```
 
-1. startup both displays;
-2. Bubble playing for perceptual judgement;
-3. all mode switches;
-4. Pause while Bubble/another self-animated mode is active;
-5. quick Play/Pause toggles inside warm-capture grace;
-6. Pause -> switch to Spectrum -> confirm visible static idle bars;
-7. Settings -> return while still paused -> confirm visible Spectrum persists;
-8. Play -> real Spectrum bars take over without blanking;
-9. switch out/in again;
-10. populated Media CUSTOM Cancel;
-11. ordinary transitions;
-12. clean exit.
+Required mechanically:
 
-Collect existing perf/GPU/viz logs.
+```text
+logical cadence                   >= 88 Hz sustained
+skipped authored deadlines        <= 2%
+recurring ordinary >33 ms holes   none
+Bubble cadence publication        no suppression class regression
+protected replay/goldens          unchanged unless explicitly authorized
+source freshness                  separately measured
+state->paint                      must not enter known rejected class
+```
 
-Do not accept a test report that substitutes green unit counts for the operator-visible results above.
+Required behaviorally:
+
+- continuous positional evolution;
+- no freeze/jump cadence;
+- no flicker between stale/current states;
+- immediate audio reaction preserved;
+- no added source smoothing;
+- no flattened hot-passage elasticity;
+- no lowered authored cadence.
+
+The installed operator report remains a hard fail if the gate says green but Bubble visibly stutters.
+
+---
+
+# Gate 9 — Generation fencing, including valid generation 0
+
+This gate must explicitly treat:
+
+```text
+0        valid generation
+1        valid generation
+None     invalid/unassigned
+missing  invalid/unassigned
+```
+
+Required:
+
+- runtime constructed for generation 0 reports generation 0;
+- logical publication generated under 0 carries 0;
+- GUI presentation compares 0 as a real identity;
+- retired generation 0 cannot publish/reveal into replacement 1;
+- retired generation 1 cannot publish/reveal into replacement 2;
+- stale delayed worker publication is rejected;
+- no `value or -1` coercion may map a valid 0 to -1.
+
+A suite that begins at generation 1 is insufficient.
+
+---
+
+# Gate 10 — Known-bad historical validation
+
+Where practical, run the relevant new gates against isolated known-bad revisions.
+
+At minimum preserve evidence that:
+
+- worker-thread reveal ownership gate fails against `a6a423bc10c44b392ef83151896039d16e38dd9a`;
+- scheduler gate rejects the old coarse clock/wait behavior;
+- current Spectrum visible-pixel gate fails if the idle scene is returned to the installed-invisible magnitude;
+- generation-0 gate fails when `int(value or -1)` coercion is reintroduced.
+
+Do not contort production code merely to make historical worktrees runnable.
+
+The point is to prove the gate is capable of catching its named defect.
+
+---
+
+# Gate 11 — Shared high-refresh presentation must remain in accepted class
+
+The 165 Hz display is especially useful because it does not own the visualizer.
+
+The fresh installed run produced completed transition paint windows from roughly:
+
+```text
+103.8 FPS .. 152.2 FPS
+median 131.6 FPS
+```
+
+This proves shared presentation can degrade independently of Bubble.
+
+The final P2 bar must compare against the accepted historical single-surface class already documented for the project.
+
+Required:
+
+- ordinary high-refresh transition windows return to the previous low/mid-150 FPS completed-paint class where the baseline achieved it;
+- repeated ~104–132 FPS windows are not accepted;
+- large request-age / dispatch-pending tails must be bounded;
+- no per-transition special-case optimization unless attribution names transition-owned work.
+
+Do not replace this with average process CPU or average GPU utilization.
+
+---
+
+# Gate 12 — 60 Hz visualizer presentation tails
+
+On the visualizer-owning 60 Hz display:
+
+- compositor should make essentially every useful display opportunity under ordinary load;
+- repeated 33/50+ ms visualizer-frame holes are failures;
+- Bubble state-to-paint must remain outside the historical rejected ~13–15 ms p95 / ~50+ ms peak class;
+- logical cadence must remain independent of display refresh.
+
+This gate is about physical presentation continuity, not forcing one physical frame per logical step.
+
+---
+
+# Gate 13 — Required Pause/Play perceptual end condition
+
+The final product gate is simple:
+
+```text
+Pause does not visibly hitch the visualizer.
+Play does not visibly hitch the visualizer.
+```
+
+The automated evidence underneath it must include:
+
+- Gate 7A identity;
+- Gate 7B feedback ownership;
+- BTF logical tails;
+- state-to-paint tails;
+- event-loop/GUI dispatch tails.
+
+If those all claim green and the installed product still visibly hitches, the automated gates are incomplete.
+
+Do not argue that stable identity makes the hitch acceptable.
+
+---
+
+# Gate 14 — Stale source/activation cannot gain visible authority
+
+For modes requiring fresh reactive source:
+
+- stale generation bars cannot reveal;
+- stale activation bars cannot replace current presentation;
+- paused presentation-owned idle state does not fabricate authority;
+- Play must wait for fresh current-generation/current-activation real source before reactive authority transfers.
+
+Spectrum idle visibility must not weaken this gate.
+
+---
+
+# Gate 15 — Shutdown/recreation lifecycle
+
+After Settings/recreation and normal shutdown:
+
+- old logical runtime quiesces and joins;
+- replacement owns a new valid generation;
+- stale mailbox content is fenced;
+- compositor/visualizer GL resources clean up through existing ownership contract;
+- no retired thread publishes after destruction;
+- no duplicate logical runtime survives.
+
+Generation 0 must be tested before the first recreation.
+
+---
+
+# Final acceptance rule
+
+No single gate substitutes for the installed run.
+
+The installed run occurs once after the active P2 slices are complete.
+
+P2 cannot close while any of these remain:
+
+- Pause/Play visible hitch;
+- Spectrum idle bars visually absent;
+- Bubble BTF tails in rejected class;
+- generation 0 mapped to invalid identity;
+- persistent high-refresh presentation collapse;
+- stale generation/source authority;
+- second logical clock;
+- lifecycle/GL failure.
+
+Test count is informational.
+
+Behavior is the contract.

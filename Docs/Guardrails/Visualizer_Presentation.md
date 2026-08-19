@@ -1,144 +1,261 @@
 # Visualizer Presentation Guardrails
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
 Read after `Docs/Presentation_Change_Preflight.md` for any visualizer cadence, source freshness,
 render-state, fade/readiness or presentation work.
 
-## 1. Current Architecture Boundary
+For Bubble timing/feel also read `Docs/Guardrails/Bubble_Temporal_Fidelity.md` (**BTF**).
 
-There are two authorities, not two presentation surfaces:
+## 1. Current owner boundary
 
-1. **Visualizer logical/source authority** — audio analysis, mode simulation, authored dt,
-   events/edges, smoothing and current render-state publication.
-2. **Display presentation authority** — the display's single QRhi/OpenGL compositor chooses
-   physical presentation opportunities and draws the latest valid state.
+There are separate authorities with one-way handoffs:
 
-`SpotifyBarsGLOverlay` is not a surface anymore. It is a logical state/geometry/visualizer-GL
-resource owner. Actual pixels are rendered through the compositor visualizer layer.
+```text
+audio / analysis owner
+        ↓ source snapshots
+VisualizerLogicalRuntime
+        ↓ latest logical publication
+GUI presentation owner
+        ↓ current scene state
+display compositor
+        ↓
+physical presentation
+```
 
-## 2. Logical Cadence Rules
+### Logical runtime
 
-- preserve source/audio cadence and authored visualizer tick semantics;
-- integrate every logical input before any presentation coalescing;
+`VisualizerLogicalRuntime` is the one mode-general authored visualizer clock.
+
+It is current architecture, not a future proposal.
+
+Worker-callable code owns:
+
+- authored logical deadline/dt;
+- source snapshot consumption;
+- mode simulation;
+- envelopes/events/transients;
+- visual-only motion state;
+- latest plain-data logical publication;
+- readiness decisions that do not mutate GUI state.
+
+It does **not** own:
+
+- QWidget show/hide/update;
+- presentation geometry mutation;
+- QPixmap/QPainter;
+- fade execution;
+- card/shadow raster;
+- compositor/GL mutation.
+
+### GUI/compositor
+
+The GUI half consumes the latest publication and owns reveal/layout/card/GL-facing commit.
+
+The display compositor owns physical presentation opportunity and pixels.
+
+## 2. One logical clock
+
+The production visualizer logical clock is the dedicated runtime.
+
+Forbidden logical owners:
+
+- recurring GUI visualizer timer;
+- AnimationManager visualizer listener;
+- per-mode logical timers;
+- hidden fallback logical timer;
+- physical compositor timer.
+
+Qt timers may remain for real UI/lifecycle/fade deadlines.
+
+## 3. Logical cadence rules
+
+- preserve authored source/logical cadence;
+- integrate every logical input before presentation coalescing;
 - never derive logical dt/event consumption from paint;
 - never pause simulation until paint;
-- never introduce a second recurring visualizer presentation timer;
-- never mutate authoritative logical arrays in compositor render callbacks.
+- never catch up by replaying stale deadlines;
+- never mutate logical arrays in compositor render callbacks;
+- measure scheduler health by achieved cadence and gap tails, not callback body time alone.
 
-## 3. Physical Presentation Rules
+## 4. Latest-state publication
 
-The display compositor's existing adaptive render strategy may be the sole **physical
-presentation strategy** for the display when its liveness includes the visualizer.
+The logical-to-GUI handoff is one-slot/latest-wins.
 
-It is not a visualizer simulation clock.
+Allowed:
 
-### R-61 / R-62 scope
+```text
+N published
+N+1 supersedes N before GUI consumes
+GUI consumes N+1
+```
 
-R-61 and R-62 rejected binding a separately presented visualizer surface to a
-transition-scoped timer/deferral design. The failures were real and remain negative controls.
+Forbidden:
 
-They do **not** prohibit the one-surface architecture from using the display compositor's own
-presentation strategy once visualizer rendering is part of that same scene and visualizer
-liveness keeps that strategy active outside transitions.
+- FIFO render queue;
+- callback posted to GUI for every logical publication;
+- paint acknowledgement/backpressure;
+- catch-up replay.
 
-Do not read the old phrase “AdaptiveTimerStrategy disqualified in any scope” literally across the
-new architecture epoch. The durable rule is: **no transition-scoped/paint-coupled mechanism may
-become visualizer logical authority or a second-surface presentation hack.**
+Every authored event must integrate before its state may be superseded.
 
-## 4. Admission / Coalescing
+Protected short-lived visible edges require explicit edge-survival tests.
 
-A queued GUI-dispatch guard may prevent duplicate Python callbacks only until the queued callback
-actually calls `QWidget.update()`.
+## 5. Physical presentation
 
-After that callback returns, a later display deadline may request another update even if Qt has
-not painted yet. Qt owns paint-event coalescing.
+The display compositor's existing render strategy is the sole physical presentation strategy for
+that display.
+
+It may stay active for transition, visualizer or other scene reasons.
+
+It is not the logical visualizer clock.
+
+R-61/R-62 remain negative controls against transition-scoped/paint-coupled pacing of a separate
+visualizer surface. They do not ban the current display compositor's physical adaptive strategy.
+
+## 6. Dispatch / admission
+
+A queued-GUI dispatch guard may prevent duplicate queued Python callbacks only until the callback
+actually executes.
+
+Paint completion does not release the next producer or display deadline.
 
 Forbidden:
 
 - pending-until-paint;
 - paint/swap acknowledgement;
-- producer timestamp display-rate gate;
+- producer timestamp/display-rate gate;
 - repaint rescue/retry;
-- render callback self-requeue;
-- source/event decimation;
-- catch-up replay of skipped render snapshots.
+- render self-requeue;
+- source/event decimation.
 
-## 5. Protected Visible Edges
+## 7. Readiness: presentation vs reactive source
 
-Bubble and other authored short-lived responses may exist for fewer logical publications than
-physical presentation opportunities. Tests must protect the **actual visible edge/state**, not
-merely the trigger event.
+Never overload “fresh source” to mean “allowed to display anything.”
 
-Presentation may skip stale intermediate snapshots only after logical state has integrated. It may
-not erase an approved short-lived response without an explicit bounded edge/state contract.
+At minimum:
 
-## 6. Source Freshness
+```text
+presentation_ready
+reactive_source_ready
+```
 
-Compositor state-to-paint age and upstream audio/analysis age are separate.
+Presentation readiness may include:
 
-If state-to-paint is healthy but the visualizer feels late, inspect the source/analysis pipeline.
-Do not compensate by reducing smoothing or changing shader maths without evidence.
+- current runtime/QRhi generation;
+- renderer GL resources;
+- card texture;
+- authoritative geometry;
+- valid presentation owner.
 
-For asynchronous analysis:
+Reactive-source readiness concerns current real analysis/source identity.
 
-- at most one compute may be in flight per owner;
-- one newest pending source frame may replace an older pending frame;
-- no FIFO/backlog/catch-up queue;
-- completed valid DSP state commits before launching the latest pending work;
-- generation/activation replacement discards stale pending/in-flight publication.
+### Paused Spectrum
 
-## 7. Startup / Mode / Playback Readiness
+Paused Spectrum may be:
 
-A visible fade must not begin before the single-surface renderer/card resources needed to draw it
-are ready for the current QRhi/runtime generation.
+```text
+presentation_ready = true
+reactive_source_ready = false
+waiting_for_fresh_engine_frame = true
+source generation/activation = absent
+```
 
-Readiness may include:
+Its idle baseline is presentation-owned state.
 
-- current compositor QRhi/OpenGL generation;
-- visualizer programs/VAO/VBO/mask resources;
-- authoritative card geometry and current card texture revision;
-- final current engine generation/activation;
-- required first fresh frame/audio readiness.
+Do not fabricate source identity.
 
-Readiness is state-driven, not a fixed sleep.
+When Play occurs, fresh current-generation/current-activation real data replaces the idle scene in
+place.
 
-Ordinary play/pause should not destroy/recreate visualizer GL resources. Warm capture/resume should
-remain warm. Cold restart happens once when actually necessary.
+## 8. Fade authority
 
-## 8. Fade Authority
+The compositor owns visualizer/card pixels from fade zero through completion.
 
-The compositor owns visualizer/card pixels from fade zero through completion. A hidden logical
-QWidget's `QGraphicsOpacityEffect` cannot be a competing pixel owner.
+One scalar/easing authority applies to both card and shader.
 
-Preserve the authored fade duration/easing unless explicitly changed, but expose one scalar to both
-card texture and visualizer shader. No midway owner handoff, flash, slam or full-opacity fallback.
+No midway QWidget/compositor opacity handoff.
 
-## 9. Fidelity
+A presentation-owned idle scene may fade in when presentation-ready even while reactive source
+authority remains false.
 
-Preserve:
+## 9. Source freshness
 
-- Bubble simulation/dt/one-in-flight semantics, positional/extra/trail state and transients;
-- Spectrum source smoothing/presentation behaviour;
-- Sine/Oscilloscope waveform/ghost/transient behaviour;
-- DevCurve mode state;
-- mode reset isolation;
-- CUSTOM geometry/DPR;
-- source freshness and mode personality.
+Measure separately:
 
-Do not weaken goldens because presentation plumbing changed.
+```text
+capture/source age
+logical integration
+logical publication
+GUI dispatch age
+state-to-paint age
+physical display delivery
+```
 
-## 10. Validation
+Smooth motion over stale audio is not healthy.
 
-Runtime-shaped tests must exercise:
+Do not retune shader/Bubble smoothing to compensate for source staleness.
 
-- 60 Hz and high refresh;
-- irregular GUI stalls;
-- transition overlap and transition-free visualizer presentation;
-- startup, mode change, pause/resume;
-- generation/context replacement;
+## 10. Pause / Play
+
+Ordinary Pause/Play:
+
+- keeps the logical runtime alive;
+- preserves mode/card/GL identity;
+- changes authored logical playback/idle state promptly;
+- keeps capture lifetime under BeatEngine policy;
+- does not enter cold startup on warm resume;
+- does not reintroduce a visualizer pause debounce.
+
+Identity continuity is necessary but does not prove perceptual continuity.
+
+If the edge still hitches, inspect edge-owned GUI/presentation work with current evidence.
+
+## 11. Fidelity
+
+Preserve all mode personality and current goldens.
+
+For Bubble, BTF additionally binds:
+
+- authored shape;
+- logical cadence/gap tails;
+- source freshness;
+- protected event/positional-edge survival;
+- state-to-screen timing;
+- final perceptual result.
+
+Average FPS or a green deterministic replay cannot overrule a BTF failure.
+
+## 12. Generation fencing
+
+Generation/activation are ownership identity.
+
+Valid `0` stays valid `0`.
+
+Never use truthiness conversion that turns zero into an invalid sentinel.
+
+Retired generation state cannot:
+
+- enter replacement mailbox/presentation;
+- trigger reveal;
+- mutate current GUI/GL state.
+
+## 13. Validation
+
+Runtime-shaped tests must cover:
+
+- scheduler actual cadence;
+- one logical clock;
+- worker thread cannot reach GUI/GL;
+- all five modes actually reveal;
+- paused Spectrum actual rendered idle visibility;
+- source authority remains separate;
+- quick Pause/Play identity **and** no-hitch/delivery behavior;
+- valid generation 0 fencing;
+- 60 Hz and high-refresh physical presentation;
+- injected GUI stalls;
+- Settings/Edit recreation;
 - short-lived Bubble visible edge;
-- source age and state-to-paint separately;
-- no callback backlog after paint admission is removed.
+- BTF.
 
-Installed manual review remains required for visual feel/timing changes.
+Installed manual review remains required for visual/timing changes.

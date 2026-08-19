@@ -1,42 +1,46 @@
 # Index
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
-Navigation and current ownership map. This file is not a benchmark report.
+Navigation and **current ownership map**. This file is not a benchmark report.
 
-## Authority Chain
+## Authority chain
 
 ```text
 current user instruction + exact current main
         ↓
-Current_Plan.md                         active execution order
+Current_Plan.md                         active unfinished execution
         ↓
 Spec.md + Docs/Guardrails.md + focused current docs
                                         durable architecture/safety contracts
         ↓
-Docs/phase_reports/                     checkpoint evidence, scoped to named source/commit
+current evidence checkpoint             installed/runtime evidence, scoped to named source
+        ↓
+Docs/phase_reports/                     older checkpoint evidence
         ↓
 Future_Cleanup.md                       deferred cleanup/debt
         ↓
-Docs/Historical_Bugs/                   incident evidence/negative controls
+Docs/Historical_Bugs/                   incident evidence / negative controls
 ```
 
-`Docs/audits/SRPSS_Architecture_Roadmap/` now contains supplemental specialized references only. It
-is not an authority layer or second task list.
+Specialized documents under `Docs/audits/SRPSS_Architecture_Roadmap/` are optional reference only.
+They are never a second task list or owner map.
 
-## Start Here
+## Start here
 
 | Task | Read |
 |---|---|
 | Active work | `Current_Plan.md` first |
-| Find the current owner | `Docs/Contracts.md` |
+| Current owner / architecture seam | `Docs/Contracts.md` |
 | Cross-cutting safety | `Docs/Guardrails.md` |
 | Stable architecture | `Spec.md` |
-| Compositor/QRhi/single-surface work | `Docs/Compositor_Architecture.md` |
+| Compositor / QRhi / single-surface work | `Docs/Compositor_Architecture.md` |
 | Visualizer presentation/cadence | `Docs/Presentation_Change_Preflight.md`, then `Docs/Guardrails/Visualizer_Presentation.md` |
+| Bubble feel / BTF / Bubble stutter-reactivity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` (**BTF**) |
 | Visualizer subsystem | `Docs/Visualizer_Reference.md`, `Docs/Visualizer_Change_Checklist.md` |
-| Current delivery evidence | `Docs/phase_reports/P05_PRESENTATION_DELIVERY_ATTRIBUTION.md` while P2/P4 remains active |
-| Monitor lifecycle / wake | `Current_Plan.md` P5; optional specialized audit references only after it |
+| Current P2 installed evidence | `Docs/P2_Installed_Acceptance_Findings_2026-08-19.md` |
+| Current P2 gates | `Docs/P2_Behavioral_Gates.md` |
+| Monitor lifecycle / wake | `Current_Plan.md` P5 boundary; current topology docs only |
 | Tests | `Docs/TestSuite.md` |
 | Recurring harnesses | `Docs/Harness_Index.md` |
 | Prior regression | `Docs/Historical_Bugs/README.md` |
@@ -44,7 +48,7 @@ is not an authority layer or second task list.
 
 Do not read every document by default.
 
-## Current Runtime Owners
+## Current runtime owners
 
 | Domain | Current owner/location |
 |---|---|
@@ -54,11 +58,13 @@ Do not read every document by default.
 | Fullscreen host | `rendering/display_widget.py` |
 | Accelerated presentation surface | `rendering/gl_compositor.py`, `rendering/gl_rhi_surface.py` |
 | QRhi/OpenGL lifecycle | `rendering/gl_compositor_pkg/gl_lifecycle.py`, `rendering/gl_rhi_surface.py` |
-| Physical presentation cadence | display compositor `AdaptiveRenderStrategyManager`; presentation only, never visualizer simulation |
-| Image transition scene | `rendering/gl_compositor_pkg/`, transition modules |
-| Visualizer logical/runtime state | `widgets/spotify_visualizer_widget.py`, `widgets/spotify_visualizer/`, `widgets/spotify_bars_gl_overlay.py` |
-| Visualizer presentation layer | `rendering/gl_compositor_pkg/visualizer_layer.py` inside the display compositor |
-| Visualizer card pixels | compositor card-texture path; QWidget remains logical/layout/edit anchor where required |
+| Physical presentation cadence | each display compositor's render strategy; presentation only |
+| Visualizer logical cadence | `widgets/spotify_visualizer/logical_runtime.py::VisualizerLogicalRuntime` |
+| Visualizer logical integration / mailbox handoff | `widgets/spotify_visualizer/tick_pipeline.py`, `tick_helpers.py` |
+| Visualizer GUI reveal/presentation commit | GUI half of `tick_pipeline.py`, mode/startup/fade owners |
+| Visualizer render resources/state host | `widgets/spotify_bars_gl_overlay.py` — historical name, not a surface |
+| Visualizer physical pixels | `rendering/gl_compositor_pkg/visualizer_layer.py` inside the display compositor |
+| Visualizer card pixels | compositor card-texture path; QWidget remains layout/edit anchor where required |
 | Visualizer audio analysis | `widgets/spotify_visualizer/beat_engine.py`, audio worker/backend, analysis helpers |
 | Widget lifecycle | `rendering/widget_manager.py` |
 | CUSTOM layout | `rendering/custom_layout_manager.py` and descriptor/layout owners |
@@ -66,32 +72,44 @@ Do not read every document by default.
 | Resource accounting | `core/resources/manager.py` |
 | Settings | `core/settings/settings_manager.py` plus persistence/store owners |
 | Logging | `core/logging/logger.py`, `core/logging/tags.py` |
-| Evidence analysis | focused tools under `tools/` |
 
-### Important visualizer naming rule
-
-`SpotifyBarsGLOverlay` is retained as a class/path for logical state, geometry and visualizer GL
-resources. Its name is historical. It is **not** a separately presented GL overlay anymore.
-
-## Current Presentation Route
+## Current visualizer route
 
 ```text
-visualizer audio/events
-      ↓ authored logical cadence
-visualizer logical owner / immutable current render state
-      ↓
-DisplayWidget's single GLCompositorWidget (QRhi/OpenGL)
-      ├── base/transition
-      ├── cached visualizer card texture
-      └── visualizer shader layer
-      ↓
-Qt physical presentation opportunity
+audio / analysis producer
+        ↓
+current source snapshot + generation/activation identity
+        ↓
+VisualizerLogicalRuntime
+        ↓
+single-slot latest logical publication
+        ↓ GUI-thread presentation handoff
+display GLCompositorWidget
+        ├── base / transition
+        ├── cached visualizer card
+        └── visualizer shader layer
+        ↓
+Qt / OS physical presentation
 ```
 
-There is no ordinary producer acknowledgement from paint.
+There is:
 
-## Historical Navigation Rule
+- one logical visualizer clock;
+- one physical presentation owner per display;
+- no ordinary producer acknowledgement from paint;
+- no independently presented visualizer surface.
 
-Older phase reports and incident records intentionally contain old QOpenGLWidget/separate-overlay
-owner maps. Use those names only for the checkpoint they describe. Current owner discovery comes
-from this index, `Docs/Contracts.md`, current focused docs and exact source.
+## Readiness rule
+
+`presentation_ready` and `reactive_source_ready` are distinct.
+
+Paused Spectrum can reveal a presentation-owned idle scene without fabricating real source identity.
+Reactive Spectrum playback still requires fresh current-generation/current-activation source state.
+
+## Historical navigation rule
+
+Older phase reports and incident records intentionally contain old QOpenGLWidget, GUI-timer,
+separate-overlay and pre-worker owner maps. Use those names only for the checkpoint they describe.
+
+Current owner discovery comes from this index, `Docs/Contracts.md`, focused current docs and exact
+source.

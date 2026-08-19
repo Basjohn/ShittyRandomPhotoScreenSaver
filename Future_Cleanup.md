@@ -2,146 +2,125 @@
 
 Last updated: 2026-08-19
 
-This is deferred debt only. `Current_Plan.md` owns active work.
+Deferred debt only. `Current_Plan.md` owns active work.
 
-The mode-general Qt-free visualizer logical runtime is **not** future cleanup anymore; it has been
-promoted to active P2 work because the latest installed run meets its entry condition.
-
----
+The dedicated mode-general visualizer logical runtime is **landed architecture**, not future cleanup
+and not an unfinished future proposal.
 
 ## 1. Presentation / QRhi diagnostic retirement
 
 After P2 and P5 are accepted:
 
-- [ ] retire QOpenGLWidget-only compositor lifecycle compatibility with no current caller;
-- [ ] retire obsolete `aboutToCompose` / `frameSwapped` forensic observers;
-- [ ] retire old P4 DWM/no-HUD/present-context scaffolding after evidence is preserved;
+- [ ] retire QOpenGLWidget-only compositor lifecycle compatibility with no caller;
+- [ ] retire obsolete compose/frame-swapped forensic observers;
+- [ ] retire old DWM/present scaffolding after evidence is preserved;
 - [ ] keep cheap architecture-neutral request-age/dispatch/state-to-paint summaries;
-- [ ] retire permanently-zero paint-pending metrics once comparison value is exhausted;
-- [ ] retire old GPU-query machinery whose only purpose was the QOpenGLWidget composition boundary;
+- [ ] retire old presentation counters with no comparison value;
 - [ ] keep bounded sampled `--gpu-timing`.
 
-Diagnostics remain passive and never become cadence control.
-
----
+Diagnostics remain passive.
 
 ## 2. Visualizer single-surface legacy cleanup
 
-After the active logical-runtime/idle/edge work is accepted:
+After active P2 edge/delivery work is accepted:
 
-- [ ] retire vestigial `SpotifyBarsGLOverlay` show/visibility plumbing after caller proof;
-- [ ] retire visualizer-specific legacy ShadowFade readers when compositor fade is sole owner;
-- [ ] replace whole-surface edit `grabFramebuffer()` forcing with a narrower one-shot seam;
-- [ ] shrink old `_paused_visualizer` compatibility shape after the explicit edit seam is fully
-  canonical;
+- [ ] retire vestigial historical `SpotifyBarsGLOverlay` visibility plumbing after caller proof;
+- [ ] retire old visualizer ShadowFade compatibility readers once compositor fade is sole owner;
+- [ ] narrow whole-surface edit capture where possible;
+- [ ] shrink old paused-visualizer compatibility state after explicit edit seams are canonical;
 - [ ] retire stale one-update-per-publication counters;
-- [ ] remove dead legacy Spectrum-only compositor paths with no production caller;
+- [ ] remove dead old Spectrum-only compositor paths;
 - [ ] remove redundant QOpenGLWidget/QRhiWidget compatibility imports/helpers;
 - [ ] keep one canonical card-pixel cache identity;
-- [ ] keep resource deletion independent from visibility/publication state.
+- [ ] keep resource deletion independent from visibility.
 
-No cosmetic rename project while correctness/performance work is active.
+No cosmetic rename project while correctness/performance is active.
 
----
+## 3. Post-worker compute efficiency
 
-## 3. Mode-general compute efficiency
-
-After the dedicated logical runtime is accepted, profile the resulting architecture before creating
-another scheduler.
+Only after P2 shared GUI/presentation delivery is stable, profile the landed worker architecture.
 
 If task/Future/executor scaffolding remains materially expensive:
 
-- [ ] design a **mode-general** bounded visualizer compute service;
-- [ ] preserve one-in-flight/latest-fresh semantics where applicable;
+- [ ] design a **mode-general** bounded visualizer compute service if evidence justifies it;
+- [ ] preserve one-in-flight/latest-fresh semantics;
 - [ ] preserve exact dt/events/transients;
-- [ ] preserve generation/activation fencing;
+- [ ] preserve generation/activation fencing including valid zero;
 - [ ] require all-mode temporal/fidelity goldens;
 - [ ] do not resurrect the rejected persistent Bubble lane.
 
-If the in-process Python logical thread later proves materially GIL-starved even after GUI/runtime
-waste is controlled:
+If the Python logical runtime later proves materially GIL-starved after shared waste is controlled:
 
-- [ ] decide between a helper process and a native extension from fresh evidence;
-- [ ] prefer the smallest ownership change that preserves the now-clean logical/render-state
-  contract;
+- [ ] compare helper process vs native extension from fresh evidence;
+- [ ] preserve the current logical/render-state ownership boundary;
 - [ ] do not pre-emptively rewrite visualizer maths in C/C++.
 
----
+## 4. Logical runtime cleanup
 
-## 4. Test / harness debt
+After current P2 correctness closes:
 
-- [ ] fix `tests/test_slide_jitter.py` top-level composition;
+- [ ] reconcile/remove any remaining dead GUI visualizer timer helpers;
+- [ ] remove misleading comments that still call GUI recurring timing the normal visualizer owner;
+- [ ] make the `wake()` API semantics exactly match the wait implementation without reintroducing
+  the old coarse timed-wait scheduler defect;
+- [ ] audit remaining wall-clock use where a monotonic clock is semantically required.
+
+These are cleanup only if the active plan has not promoted a specific defect.
+
+## 5. Test / harness debt
+
+- [ ] stabilize host-sensitive Bubble worker-budget oracle without deleting its budget;
 - [ ] establish one shared frame-timing harness contract;
-- [ ] stabilize the host-sensitive Bubble worker budget oracle without deleting its budget;
-- [ ] stabilize paused-AdaptiveTimer timing bars without weakening no-polling;
-- [ ] make `tools/perf_integration_harness.py --help` safe and bounded;
-- [ ] classify large cross-file/native-exit harness contamination separately from runtime defects;
-- [ ] split large slow widget test monoliths while preserving production-shaped coverage.
+- [ ] make long Qt/GL harnesses more isolated;
+- [ ] keep generation-zero and one-clock gates permanent;
+- [ ] retire tests that only protect GUI-timer/separate-surface architecture.
 
-A helper/stub-call assertion is not sufficient for a production lifecycle seam.
+A stub-call assertion is not sufficient for a visible/lifecycle seam.
 
----
+## 6. CUSTOM / Edit cleanup
 
-## 5. CUSTOM / Edit cleanup
+After active Media Cancel/visualizer edit paths pass:
 
-After active Media Cancel and visualizer edit paths pass:
+- [ ] weakify edit-shell callbacks where retention remains;
+- [ ] retire duplicate teardown/replay helpers;
+- [ ] split large managers only by real ownership;
+- [ ] tighten broad exception suppression.
 
-- [ ] weakify edit-shell callbacks where teardown retention remains possible;
-- [ ] retire duplicate miniature teardown/replay helpers after caller proof;
-- [ ] split `custom_layout_manager.py` only by real ownership;
-- [ ] audit corner/anchor scaling UX;
-- [ ] tighten broad exception suppression;
-- [ ] silence benign disconnect warnings without weakening ownership.
-
----
-
-## 6. Whole-process resources
+## 7. Whole-process resources
 
 After P5:
 
-- [ ] run long warm RAM/private-commit/VRAM slopes;
-- [ ] separate bounded cache high-water from monotonic ownership growth;
+- [ ] long warm RAM/private-commit/VRAM slopes;
+- [ ] separate cache high-water from monotonic ownership growth;
 - [ ] attribute native/driver memory gaps;
-- [ ] define repeatable refresh/DPR/display-route/mode comparisons;
-- [ ] retain same-machine CPU/GPU usage as the available efficiency proxy.
+- [ ] repeatable refresh/DPR/display-route/mode comparisons.
 
----
-
-## 7. Repository / compatibility debris
+## 8. Repository / compatibility debris
 
 - [ ] remove generated preview debris after clean-checkout proof;
-- [ ] collapse deprecated class-global input authority into the current multi-monitor coordinator;
-- [ ] retire deprecated Imgur end-to-end;
-- [ ] add lightweight repository-hygiene checks;
-- [ ] preserve APPDATA/LOCALAPPDATA isolation in tests/tools.
+- [ ] collapse deprecated class-global input authority;
+- [ ] retire deprecated Imgur;
+- [ ] add lightweight repository-hygiene checks.
 
----
-
-## 8. Unrelated backlog
+## 9. Unrelated backlog
 
 - [ ] Browser GSMTC resolver work;
-- [ ] low-pressure Gmail relative-timestamp freshness;
+- [ ] low-pressure Gmail relative timestamp freshness;
 - [ ] Steam settings-hydration/cache consolidation;
-- [ ] Steam artwork scaling only after measured ownership/DPR comparison;
-- [ ] two-profile Steam credential/privacy validation.
+- [ ] Steam artwork scaling after measured DPR/ownership comparison;
+- [ ] Steam credential/privacy validation.
 
----
-
-## 9. Product backlog
+## 10. Product backlog
 
 - [ ] true eight-direction widget shadows;
-- [ ] first-run source onboarding returning cleanly to RUN;
+- [ ] first-run source onboarding;
 - [ ] remaining real-runtime CUSTOM edit-shell oracle;
-- [ ] visualizer wall-clock -> monotonic audit where still relevant after the logical-runtime move;
 - [ ] curated Spectrum source/release mirror reconciliation.
 
----
-
-## 10. Documentation hygiene
+## 11. Documentation hygiene
 
 - [ ] keep `Current_Plan.md` active-only;
-- [ ] keep phase reports evidence-scoped;
-- [ ] retain the 4.7.2 named baseline as rollback evidence until a newer installed run genuinely
-  supersedes it;
-- [ ] reconcile external agent guardrails when architecture ownership changes;
+- [ ] keep current owner docs synchronized with landed architecture;
+- [ ] keep phase reports/Historical_Bugs evidence-scoped;
+- [ ] retain named baselines as rollback evidence until genuinely superseded;
 - [ ] do not create another live roadmap hierarchy.

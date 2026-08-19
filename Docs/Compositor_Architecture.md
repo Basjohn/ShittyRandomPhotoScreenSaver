@@ -1,95 +1,100 @@
 # Compositor Architecture
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
 Current accelerated presentation architecture for `main`.
 
-## 1. Non-Negotiable Shape
+## 1. Non-negotiable surface shape
 
-Each physical display owns **one** accelerated Qt presentation surface:
+Each physical display owns one accelerated Qt presentation surface:
 
 ```text
 DisplayWidget
    └── GLCompositorWidget
-          └── ExternalOpenGLRhiWidget / QRhiWidget.Api.OpenGL
+          └── OpenGL QRhi surface
 ```
 
 The visualizer is not a second surface.
 
-Hardware acceleration is required for the modern compositor/visualizer runtime. Do not add a
-QOpenGLWidget/QRhiWidget/CPU visualizer compatibility surface when acceleration is disabled.
+Do not add a visualizer QOpenGLWidget/QRhiWidget/CPU compatibility renderer.
 
-## 2. QRhi / Raw OpenGL Boundary
-
-`rendering/gl_rhi_surface.py` owns the shared QRhi/OpenGL substrate.
+## 2. QRhi / raw OpenGL boundary
 
 - QRhi backend is OpenGL.
-- Qt owns the QRhi and its `QOpenGLContext`.
+- Qt owns QRhi and its QOpenGLContext.
 - SRPSS borrows that context.
-- existing PyOpenGL draw code executes inside QRhi ExternalContent / beginExternal-endExternal
-  boundaries.
+- PyOpenGL draw code runs inside legal QRhi external-content boundaries.
 - SRPSS does not own `swapBuffers()`.
 - top-level no-vsync policy remains intentional.
 
-`releaseResources()` handles QRhi-generation/resource retirement. Resize alone is not a resource
-lifetime reset.
+Resize alone is not resource-lifetime reset.
 
-## 3. Scene Ownership
+## 3. Scene ownership
 
-The compositor owns display-local draw order and presentation:
+The compositor owns display-local draw order:
 
 1. retained base image / active transition;
-2. compositor-owned visual layers such as the visualizer card;
+2. compositor-owned card/visual layers;
 3. visualizer shader layer;
-4. any later explicitly compositor-owned GL layers.
+4. later explicitly compositor-owned GL layers.
 
 Ordinary QWidget overlays remain separate UI where appropriate.
 
-## 4. Visualizer Single-Surface Integration
+## 4. Visualizer integration
 
-`widgets/spotify_bars_gl_overlay.py::SpotifyBarsGLOverlay` is retained for:
+Current flow:
 
-- logical visualizer render-state integration;
-- mode-owned state/GL resource owner methods;
-- geometry anchor used by runtime/CUSTOM;
-- shader uniform/render helpers.
+```text
+BeatEngine / source analysis
+        ↓
+VisualizerLogicalRuntime
+        ↓ latest plain-data publication
+GUI presentation handoff
+        ↓
+CompositorVisualizerLayer
+        ↓
+display compositor framebuffer
+```
 
-It is a plain QWidget that is never a presented surface and paints nothing.
+`SpotifyBarsGLOverlay` remains historically named state/GL-resource host code. It is not a
+presented surface.
 
-`rendering/gl_compositor_pkg/visualizer_layer.py::CompositorVisualizerLayer` consumes the current
-visualizer state and renders it inside the compositor framebuffer.
+The logical runtime never mutates compositor/GL state.
 
-### Card
+The compositor never advances visualizer simulation.
 
-The authored card may still be prepared with QPainter/QPixmap at state/geometry/style invalidation
-boundaries. Steady presentation uses a compositor-owned GL texture and textured quad. Upload occurs
-only when canonical card-pixel cache identity changes.
+## 5. Card
 
-Card texture and visualizer shader use the same authoritative presentation geometry:
+The authored card may be prepared with QPainter/QPixmap at state/geometry/style invalidation
+boundaries.
+
+Steady presentation uses a retained compositor-owned GL texture.
+
+Card texture and visualizer shader use one authoritative presentation geometry:
 
 - logical rect;
 - compositor/display DPR;
-- framebuffer origin;
-- framebuffer size;
+- framebuffer origin/size;
 - viewport/scissor/mask alignment.
 
-## 5. Presentation Liveness
+## 6. Presentation liveness
 
 One display presentation strategy owns physical frame opportunities.
 
-Its active reasons are additive. A transition ending cannot stop presentation while the
-visualizer remains active; visualizer hide cannot stop an active transition.
+Active reasons are additive. Transition end cannot stop presentation while another compositor-owned
+animation still needs frames.
 
-When no animated reason remains, return to existing idle retained behaviour.
+There is no second visualizer presentation timer.
 
-There is no second visualizer timer.
+There is no compositor-owned visualizer simulation clock.
 
-## 6. Admission
+## 7. Admission
 
-Cross-thread callback coalescing may keep one queued GUI callback outstanding. That guard ends when
-the GUI callback calls `QWidget.update()`.
+Cross-thread callback coalescing may keep one queued GUI callback outstanding.
 
-Paint completion is not an admission token. Repeated `update()` requests may be coalesced by Qt.
+That guard ends when the callback executes.
+
+Paint completion is not an admission token.
 
 No:
 
@@ -99,54 +104,67 @@ No:
 - repaint rescue;
 - producer/display divisor gate.
 
-## 7. Visualizer Readiness / Fade
+## 8. Visualizer readiness / fade
 
-The single-surface visualizer is prepared while visually at fade zero. Current-generation
-renderer/card/audio/fresh-frame readiness must exist before visible fade begins.
+Visible presentation requires the current compositor/card/geometry/resources to be ready.
 
-The compositor owns card+visualizer pixels for the entire fade. One scalar/easing profile applies
-to both. A hidden QWidget opacity effect cannot hand presentation ownership to the compositor
-halfway through the animation.
+Do **not** universally require real audio/source identity before every visible scene.
 
-## 8. GL Resource Ownership
+At minimum distinguish:
 
-- Qt-owned context is borrowed, never destroyed/doneCurrent by SRPSS;
+```text
+presentation_ready
+reactive_source_ready
+```
+
+A presentation-owned idle scene may reveal while reactive source remains unavailable.
+
+Paused Spectrum is the canonical case.
+
+The compositor owns card + visualizer pixels for the entire fade. One fade authority applies to both.
+
+## 9. GL resource ownership
+
+- Qt-owned context is borrowed;
 - one numeric handle has one deletion owner;
-- visualizer programs/VBO/VAO/mask/card texture are associated with compositor QRhi generation;
-- hidden/no-current-published visualizer state does not erase destruction authority;
-- explicit runtime cleanup and QRhi `releaseResources()` converge on one deletion implementation;
+- visualizer programs/VBO/VAO/mask/card texture are tied to compositor QRhi generation;
+- hidden/no-published visualizer state does not erase destruction authority;
+- runtime cleanup and QRhi resource release converge on one owner contract;
 - failed deletion retains ownership and fails closed;
-- ResourceManager accounting is released only after deletion succeeds.
+- ResourceManager accounting releases only after deletion succeeds.
 
-## 9. QPainter Fallback
+## 10. QPainter fallback
 
-The main compositor may use its explicit base-image QPainter fallback when accelerated retained-base
-shader drawing is unavailable. Unexpected fallback after an established healthy shader path is
-state-loud and bounded.
+Main compositor may use its explicit base-image QPainter fallback where acceleration is unavailable
+for that base path.
 
-This fallback does not generalize to the visualizer. Visualizer shader failure clears/omits that
-layer and logs a bounded loud error.
+This does not generalize to visualizer rendering.
 
-## 10. Transition Model
+## 11. Transition model
 
-Transition progress is display-local monotonic elapsed time. Completion is exactly once:
-destination becomes base, source/temp ownership releases and transition becomes inactive.
+Transition progress is display-local monotonic elapsed time with exactly-once completion.
 
-Transition shader cost is not automatically blamed for a delivery gap; current P05 evidence owns
-causal claims.
+A bad transition window does not automatically prove transition-shader cost. Shared GUI/dispatch
+starvation must be excluded before per-transition optimization.
 
-## 11. CUSTOM / Edit Boundary
+The 165 Hz non-visualizer display is a useful shared-presentation control.
 
-The visualizer's pixels now belong to the compositor, while its logical geometry/editor anchor may
-remain QWidget-based.
+## 12. CUSTOM / Edit
 
-Edit preview must capture the compositor-owned visualizer region rather than an obsolete visualizer
-framebuffer. Drag/resize may scale/move a preview; it does not require live GPU resize on every
-mouse event. Save/rebuild publishes the new authoritative rect to the correct display compositor;
-Cancel restores the previous state once.
+Visualizer pixels belong to the compositor while logical geometry/editor anchor may remain
+QWidget-based.
 
-## 12. P5 Boundary
+Edit preview comes from compositor-owned scene state, not an obsolete visualizer framebuffer.
 
-Presentation architecture does not replace monitor topology lifecycle work. P5 still owns one
-settled topology authority, frozen transaction snapshot, retire/rebuild/reveal, sticky configured
-visualizer monitor semantics and physical off/wake acceptance.
+Drag/resize may use preview state. Save publishes one new authoritative rect; Cancel restores/resumes
+the prior owner.
+
+## 13. P5 boundary
+
+Presentation architecture does not replace monitor topology lifecycle.
+
+P5 still owns settled topology authority, immutable transaction snapshot, retire/barrier/rebuild/
+reveal and sticky configured-monitor semantics.
+
+The visualizer logical runtime is another generation-owned producer that must quiesce/join during
+runtime retirement.

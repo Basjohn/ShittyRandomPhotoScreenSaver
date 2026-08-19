@@ -3,85 +3,119 @@
 Last updated: 2026-08-19
 
 Use for visualizer settings, presets, logical analysis, activation, compositor rendering, card
-geometry, fade/readiness or CUSTOM work.
+geometry, fade/readiness, playback or CUSTOM work.
 
-Also read `Docs/Guardrails/Runtime_Efficiency.md` for shared-runtime/performance changes.
+Also read:
 
-## 1. Identity / Settings
+- `Docs/Guardrails/Visualizer_Presentation.md`
+- `Docs/Guardrails/Runtime_Efficiency.md` for shared-runtime work
+- `Docs/Guardrails/Bubble_Temporal_Fidelity.md` (**BTF**) when Bubble timing/feel can change
 
-- mode ids/labels: `visualizer_mode_registry.py`;
+## 1. Identity / settings
+
+- mode ids/labels remain registry-owned;
 - grouped settings model stays symmetric;
-- preset activation resolves through the canonical preset resolver;
-- genuine same-mode preset/settings changes apply once;
-- identical same-activation refresh is a no-op rather than duplicate technical work.
+- preset activation resolves one canonical target payload;
+- genuine same-mode changes apply once;
+- identical same-activation refresh is a no-op;
+- valid generation 0 is never collapsed into “missing.”
 
-## 2. Logical Runtime
+## 2. Current logical runtime
 
-- visualizer source/simulation tick remains authoritative;
-- every logical input integrates before presentation coalescing;
-- no source/event cadence cuts;
-- no paint-derived dt/acknowledgement;
-- mode-owned history/envelopes/pending state reset only at real activation boundaries.
+Current production owner is `VisualizerLogicalRuntime`.
 
-## 3. Analysis Freshness
+Check:
+
+- exactly one runtime per enabled generation;
+- no GUI recurring timer advances simulation;
+- no AnimationManager listener advances simulation;
+- no per-mode/fallback logical clock;
+- runtime stop/join is generation-owned;
+- scheduler preserves authored cadence;
+- no FIFO/catch-up.
+
+Do **not** describe a dedicated logical thread as future work.
+
+## 3. Worker-callable ownership
+
+`logical_tick()` and transitive worker-callable code must not:
+
+- show/hide/update QWidget;
+- mutate presentation geometry/layout;
+- use QPixmap/QPainter;
+- start GUI fade;
+- mutate compositor/GL.
+
+GUI-only methods should assert thread affinity in test/debug paths.
+
+## 4. Analysis freshness
 
 For async audio/bar analysis:
 
-- one task in flight;
-- one newest pending source frame maximum;
-- pending replaces older pending, never appends;
-- completed valid DSP state commits before newest pending schedules;
-- stale generation/activation work cannot schedule/publish after reset;
-- task failure releases ownership without deadlocking the latest valid pending state.
+- one compute in flight;
+- one newest pending source maximum;
+- pending replaces old pending;
+- completed valid DSP state commits before newest pending runs;
+- stale generation/activation work cannot publish;
+- source age is measured separately from state-to-paint.
 
 Use delayed-compute tests, not only immediate fake executors.
 
-## 4. Activation
+## 5. Readiness
 
-One mode/preset switch must have one authoritative target transaction and one final engine
-activation generation.
+Do not use one “fresh source ready” boolean for all presentation.
 
-Bar-count resize, smoothing/floor reset and technical config must not each manufacture independent
-intermediate activation generations inside the same switch.
+At minimum:
 
-Audio block-size restart is at most once when genuinely required.
+```text
+presentation_ready
+reactive_source_ready
+```
 
-## 5. Presentation Owners
+Paused Spectrum may reveal presentation-owned idle bars with no source generation/activation while
+still waiting for fresh real data on Play.
+
+A playing mode that requires real source authority remains gated by its current-generation source
+contract.
+
+## 6. Presentation owners
 
 Current path:
 
 ```text
-logical visualizer state
-    -> SpotifyBarsGLOverlay logical/resource owner
+audio / analysis
+    -> VisualizerLogicalRuntime
+    -> latest mailbox state
+    -> GUI presentation handoff
     -> CompositorVisualizerLayer
-    -> display GLCompositorWidget QRhi/OpenGL surface
+    -> display GLCompositorWidget
 ```
 
-`SpotifyBarsGLOverlay` is not a presented overlay. Do not add:
+`SpotifyBarsGLOverlay` is not a presented overlay.
 
-- QOpenGLWidget/QRhiWidget inheritance;
-- its own `update()` presentation stream;
-- its own swap/vsync/context lifecycle;
-- framebuffer snapshot assumptions;
-- fake QPainter visualizer rendering.
+Do not add:
 
-## 6. Card / Geometry
+- another visualizer surface;
+- visualizer swap/vsync lifecycle;
+- presentation self-update loop;
+- QPainter visualizer fallback.
 
-One authoritative geometry snapshot feeds card texture, viewport, scissor, shader resolution,
-fragment origin, mask and border.
+## 7. Card / geometry
 
-Compositor DPR is the presentation DPR authority.
+One authoritative presentation geometry feeds card texture, viewport, scissor, shader resolution,
+origin, mask and border.
 
-The QPainter-authored card source is cached by canonical logical-size/DPR/style identity and
-uploaded only on revision changes. Steady visualizer frames do not recreate QPainter or re-upload
-unchanged card pixels.
+Compositor DPR is presentation DPR authority.
 
-Real-GL tests must use non-zero X/Y and non-1 DPR; mock viewport tuple tests are insufficient.
+Stable card source pixels are cached by logical-size/DPR/style identity.
 
-## 7. Presentation Cadence
+Real-GL tests use non-zero X/Y and non-1 DPR.
 
-The display compositor owns physical presentation opportunities. Visualizer logical cadence stays
-separate.
+## 8. Presentation cadence
+
+Display compositor owns physical frame opportunities.
+
+Logical runtime owns simulation cadence.
 
 Remove/forbid:
 
@@ -89,88 +123,96 @@ Remove/forbid:
 - paint/swap acknowledgement;
 - producer/display divisor gates;
 - render self-requeue;
-- repaint rescue timers;
-- second visualizer presentation timer/surface.
+- repaint rescue timer;
+- second presentation timer/surface;
+- second logical timer/thread.
 
-A dispatch-pending guard ends when the queued GUI callback calls `QWidget.update()`.
+A physical adaptive render strategy is allowed when it remains presentation-only.
 
-Visualizer-only physical presentation may skip a scene revision already requested when no transition
-or fade change requires another physical frame. This is not a logical/source cadence cap.
+## 9. Spectrum idle
 
-## 8. Readiness / Fade
+Paused Spectrum gate must prove **perceptible rendered output**.
 
-Before visible fade:
+Preferred:
 
-- current QRhi/OpenGL generation ready;
-- visualizer GL resources ready;
-- card geometry/cache/GL texture ready;
-- final engine generation/activation established;
-- required fresh current frame/audio readiness satisfied;
-- deterministic normal-runtime GL/program/resource preparation that would otherwise visibly hitch
-  immediately after reveal is complete when that work is safe to perform pre-reveal.
+- actual GL/pixel readback or image comparison.
 
-Then one compositor-owned fade scalar controls both card and shader from zero to one. No halfway
-QWidget/compositor ownership transfer.
+Acceptable deterministic fallback:
 
-Readiness is completion-driven, not a fixed sleep.
+- real renderer/upload/geometry math yielding deliberate minimum visible pixel height.
 
-## 9. Playback
+Forbidden sole assertion:
 
-Immediate post-start health must distinguish STARTING from STALE. A just-started capture is not
-restarted merely because the first callback has not happened yet.
+```text
+max(bars) > 0
+```
 
-Pause/resume should preserve GL/card resources. Warm resume uses warm capture. Cold restart happens
-once.
+Keep source identity unassigned while idle.
 
-## 10. CUSTOM / Edit
+## 10. Playback / feedback
 
-- edit snapshot comes from compositor-owned card+visualizer region;
-- no `grabFramebuffer()` dependency on logical overlay;
-- drag/resize is preview-only, not live GPU mutation per mouse event;
-- Cancel resumes/restores once without re-entering cold startup staging;
-- Save rebuilds/publishes the new authoritative rect once;
-- cross-display save transfers sole compositor ownership and cleans old display ownership;
-- do not confuse intentional edit transfer with temporary-monitor fallback;
-- do not use broad settings/CUSTOM replay to restore unrelated preview-only widgets.
+Pause/Play:
 
-## 11. Lifecycle
+- preserves logical runtime/card/GL identity;
+- keeps warm capture separate;
+- does not reintroduce playback debounce;
+- does not cold-start on ordinary warm resume.
 
-- visualizer GL resources are tied to compositor QRhi generation;
-- borrowed context is never destroyed/doneCurrent by SRPSS;
-- hidden/cleared presentation state does not erase destruction authority;
-- cleanup is idempotent after success and fail-closed on deletion failure;
-- QRhi generation replacement releases old resources before reinit;
+Also inspect edge-owned GUI work.
+
+A small feedback animation should not repaint the entire Media card dozens of times per event.
+
+Do not solve that by merely lowering feedback FPS.
+
+## 11. Bubble / BTF
+
+Before accepting Bubble-affecting timing/runtime work, check the BTF alarm panel:
+
+- logical Hz;
+- deadline skip fraction;
+- logical gap tails;
+- source freshness;
+- Bubble protected replay/goldens;
+- publication/edge survival;
+- state-to-paint tails;
+- final visual feel.
+
+No Bubble algorithm retune is authorized merely because Bubble exposes a shared-system problem.
+
+## 12. Lifecycle
+
+- logical runtime joins before retired generation is destroyed;
+- stale mailbox publication is rejected;
+- visualizer GL resources remain tied to compositor QRhi generation;
+- borrowed context is never destroyed by SRPSS;
+- hidden presentation state does not erase destruction authority;
 - final GL accounting returns to baseline.
 
-## 12. Shared-Runtime Attribution
+Generation tests must include `0 -> 1`.
 
-The 2026-08-19 baseline demonstrated that all five modes can run near intended steady logical cadence
-once shared GUI/presentation waste is removed.
+## 13. Shared-runtime attribution
 
-Therefore:
-- do not call a future cadence regression “Bubble performance” merely because Bubble exposes it most
-  clearly;
-- compare mode-owned compute/render cost with shared GUI dispatch/timing/cache/recreation cost;
-- preserve all-mode fidelity before changing mode algorithms;
-- if a future dedicated logical-runtime thread is justified, it is mode-general and replaces one
-  unsuitable cadence owner rather than adding a Bubble-specific side lane.
+The 165 Hz display without a visualizer is a control for shared presentation cost.
 
-The current 4.7.2 baseline is a negative control against unnecessary mode-specific simplification.
+If high-refresh delivery falls badly there:
 
-## 13. Fidelity / Tests
+- do not blame Bubble;
+- do not optimize individual transitions first;
+- inspect shared GUI dispatch/update/widget/lifecycle owners.
 
-Keep current logical goldens for all five modes. Add runtime-shaped tests for the actual owner being
-changed. Reintroduce the defect in development where practical to prove the test fails.
+Mode/transition-specific tuning requires owner-specific evidence.
 
-Required installed review when relevant:
+## 14. Required installed review when relevant
 
-- all five mode feel/reactivity;
-- all-mode switching;
-- fade start/finish;
-- play/pause/resume;
+- Bubble long enough for BTF judgement;
+- all five mode switches;
+- Pause/Play quick toggles;
+- paused Spectrum visible idle bars;
+- Play replacing idle bars in place;
+- Settings/recreate;
+- CUSTOM Cancel/Save;
 - 60 Hz + high refresh;
-- CUSTOM move/resize/Cancel/Save;
 - dual-display ownership;
-- first-visible startup/recreation smoothness when GL/warmup ordering changes.
+- clean shutdown.
 
 Tests/average FPS never overrule a visible fidelity regression.
