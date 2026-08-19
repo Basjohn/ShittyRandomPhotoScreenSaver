@@ -380,18 +380,15 @@ class TestTheInstalledCancelFailure:
 class TestEditSuspend:
     def test_suspend_stops_the_logical_tick_and_audio(self, runtime):
         rt = _bring_up(runtime)
-        assert rt.widget._logical_runtime is not None
-        assert rt.widget._logical_runtime.is_running() is True
+        assert rt.thread_manager.live_timers
 
         assert rt.widget.suspend_for_edit(reason="custom_edit") is True
 
         assert rt.widget.is_edit_suspended() if hasattr(rt.widget, "is_edit_suspended") else True
         assert startup_staging.is_edit_suspended(rt.widget) is True
         assert rt.widget._enabled is False
-        assert rt.widget._logical_runtime is None, (
-            "the logical runtime was left running through an edit session"
-        )
         assert rt.widget._bars_timer is None
+        assert rt.thread_manager.live_timers == []
         assert rt.engine._audio_worker.is_running() is False
 
     def test_suspend_retains_startup_and_runtime_identity(self, runtime):
@@ -445,15 +442,13 @@ class TestEditResume:
     def test_resume_restarts_the_logical_tick(self, runtime):
         rt = _bring_up(runtime)
         rt.widget.suspend_for_edit(reason="custom_edit")
-        assert rt.widget._logical_runtime is None
+        assert rt.thread_manager.live_timers == []
 
         rt.widget.resume_after_edit(reason="custom_edit_restore")
 
         assert rt.widget._enabled is True
-        assert rt.widget._logical_runtime is not None, (
-            "resume did not bring the logical cadence owner back"
-        )
-        assert rt.widget._logical_runtime.is_running() is True
+        assert rt.widget._bars_timer is not None
+        assert len(rt.thread_manager.live_timers) == 1
 
     def test_resume_does_not_advance_the_engine_generation(self, runtime):
         rt = _bring_up(runtime)
@@ -513,7 +508,7 @@ class TestEditResume:
         assert rt.widget._startup_reveal_pending is False
         # Logical work still resumes; only presentation stays hidden.
         assert rt.widget._enabled is True
-        assert rt.widget._logical_runtime is not None
+        assert rt.widget._bars_timer is not None
 
     def test_resume_is_idempotent(self, runtime):
         rt = _bring_up(runtime)
@@ -535,7 +530,7 @@ class TestEditResume:
         startup_staging.finish_staged_startup_reveal(rt.widget, reason="renderer_ready")
 
         assert rt.widget._enabled is True
-        assert rt.widget._logical_runtime is not None
+        assert rt.widget._bars_timer is not None
         assert rt.engine._audio_worker.is_running() is True
         assert rt.engine.get_generation_id() == generation
         assert rt.widget.isVisible() is True

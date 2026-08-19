@@ -143,34 +143,40 @@ def authored_logical_interval_s(widget: Any) -> float:
 
 
 def ensure_tick_source(widget: Any) -> None:
-    """Ensure the visualizer has exactly one logical cadence owner."""
+    """Ensure the visualizer has exactly one cadence owner.
+
+    The GUI recurring timer is deliberately still that owner.
+    `VisualizerLogicalRuntime` exists and is correct, but the logical half of
+    `on_tick()` is not yet separable from the GUI: `check_mode_teardown_ready()`
+    reaches `begin_mode_fade_in()`, which invalidates the shadow cache, applies
+    the pending transition layout and starts the widget fade. Driving that from
+    a worker thread silently failed inside the broad handlers and left every
+    mode switch with data flowing but nothing visible
+    (`set_state=338 paint=0 visible=False`).
+
+    Current_Plan section 7.3 requires the GUI-owned mode-activation/fade work to
+    move out of the logical path *before* the thread can own cadence. Until that
+    lands, one owner - this timer - drives both halves.
+
+    The interval is the authored logical cadence rather than the old 16ms
+    default plus per-tick retuning, so the target service class is unchanged.
+    """
     if not widget._enabled:
         return
     if widget._thread_manager is None:
         return
-    if getattr(widget, "_logical_runtime", None) is not None:
-        return
     if widget._bars_timer is not None:
-        # A GUI fallback tick is already driving this widget; never run both.
         return
-
-    from widgets.spotify_visualizer.logical_runtime import VisualizerLogicalRuntime
-    from widgets.spotify_visualizer.tick_pipeline import logical_tick
-
-    interval_s = authored_logical_interval_s(widget)
+    interval_ms = max(4, int(round(authored_logical_interval_s(widget) * 1000.0)))
     try:
-        runtime = VisualizerLogicalRuntime(
-            step=lambda _deadline_ts, _w=widget: logical_tick(_w),
-            interval_s=interval_s,
-            generation=int(getattr(widget, "_runtime_generation", -1) or -1),
+        widget._bars_timer = widget._thread_manager.schedule_recurring(
+            interval_ms, widget._on_tick
         )
-        runtime.start()
-        widget._logical_runtime = runtime
-        widget._target_timer_interval_ms = int(round(interval_s * 1000.0))
-        widget._current_timer_interval_ms = widget._target_timer_interval_ms
+        widget._target_timer_interval_ms = interval_ms
+        widget._current_timer_interval_ms = interval_ms
     except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to start logical runtime", exc_info=True)
-        widget._logical_runtime = None
+        logger.debug("[SPOTIFY_VIS] Failed to create tick source timer", exc_info=True)
+        widget._bars_timer = None
 
 
 def stop_tick_source(widget: Any) -> None:

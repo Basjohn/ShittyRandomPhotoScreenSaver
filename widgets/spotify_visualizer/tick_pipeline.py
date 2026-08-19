@@ -1486,7 +1486,10 @@ def logical_tick(widget: Any) -> Optional[dict]:
             generation=int(getattr(widget, "_runtime_generation", -1) or -1),
             activation_id=int(getattr(widget, "_activation_id", -1) or -1),
         )
-        request_logical_present(widget)
+        if getattr(widget, "_logical_runtime", None) is not None:
+            # Only a thread-owned cadence needs marshalling; the GUI-driven path
+            # presents synchronously in `on_tick()`.
+            request_logical_present(widget)
     used_gpu = False
     first_frame = not widget._has_pushed_first_frame
     _record_tick_phase("publish")
