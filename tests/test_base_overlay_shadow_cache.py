@@ -414,3 +414,143 @@ class TestUnchangedStyleDoesNotRebuild:
         before = self._revision(widget)
         widget.set_background_opacity(4.0)  # clamps to the same 1.0
         assert self._revision(widget) == before
+
+
+# ---------------------------------------------------------------------------
+# Pre-reveal preparation (Current_Plan section 7, candidate 2)
+#
+# The 2026-08-19 / 4.7.2 acceptance recorded, on the settings-close full
+# restart, seven overlays each rebuilding their painted frame in the same
+# reveal window:
+#
+#   weather 8.88ms  gmail 8.46ms  reddit2 12.08ms  reddit 16.25ms
+#   media 6.45ms x3  achievement_pulse 7.99ms x2  abandonment_issues 8.62ms x2
+#
+# `_commit_painted_frame_shadow_cache()` returns early while a widget is hidden,
+# so `showEvent` is the only builder during reconstruction - and the reveal
+# starter is what calls `show()`. These bars hold the boundary: a hidden widget
+# whose geometry and style are final can be prepared, and a prepared widget must
+# reveal without building anything.
+# ---------------------------------------------------------------------------
+
+
+def _hidden_configured_overlay(qtbot) -> _Overlay:
+    """A widget in the exact state a reveal starter finds it in."""
+    widget = _Overlay()
+    qtbot.addWidget(widget)
+    widget.resize(360, 180)
+    widget.set_show_background(True)
+    widget.set_background_color(QColor(24, 36, 48, 220))
+    widget.set_background_corner_radius(14)
+    return widget
+
+
+def test_a_hidden_widget_coalesces_instead_of_building():
+    """The premise: hidden style changes must not build eagerly."""
+    widget = _Overlay()
+    widget.resize(360, 180)
+    widget.set_show_background(True)
+    widget.set_background_color(QColor(10, 20, 30, 200))
+    assert widget.isVisible() is False
+    assert widget._painted_frame_shadow_pixmap is None
+
+
+def test_a_hidden_widget_can_be_prepared_before_reveal(qtbot):
+    widget = _hidden_configured_overlay(qtbot)
+    assert widget._painted_frame_shadow_pixmap is None
+
+    prepared = widget._prepare_painted_frame_shadow_pixmap()
+
+    assert prepared is not None and not prepared.isNull(), (
+        "a hidden widget with final geometry/style must be preparable"
+    )
+    assert widget._prepared_painted_frame_shadow_pixmap_for_paint() is prepared
+
+
+def test_a_prepared_widget_reveals_without_building(qtbot, monkeypatch):
+    """The actual saving: showEvent must find a cache hit."""
+    widget = _hidden_configured_overlay(qtbot)
+    prepared = widget._prepare_painted_frame_shadow_pixmap()
+    assert prepared is not None
+
+    builds = []
+    original = widget._prepare_painted_frame_shadow_pixmap
+
+    def _count_builds():
+        before = widget._painted_frame_shadow_pixmap
+        before_key = before.cacheKey() if before is not None else None
+        result = original()
+        after_key = result.cacheKey() if result is not None else None
+        if after_key is not None and after_key != before_key:
+            builds.append(after_key)
+        return result
+
+    monkeypatch.setattr(widget, "_prepare_painted_frame_shadow_pixmap", _count_builds)
+
+    widget.show()
+    qtbot.waitExposed(widget)
+
+    assert builds == [], "the reveal rebuilt a frame that was already prepared"
+    assert widget._prepared_painted_frame_shadow_pixmap_for_paint() is prepared
+
+
+def test_an_unprepared_widget_still_builds_at_reveal(qtbot):
+    """The negative control: without pre-reveal work the cost lands at show."""
+    widget = _hidden_configured_overlay(qtbot)
+    assert widget._painted_frame_shadow_pixmap is None
+
+    widget.show()
+    qtbot.waitExposed(widget)
+
+    assert widget._painted_frame_shadow_pixmap is not None, (
+        "showEvent remains the fallback builder"
+    )
+
+
+def test_pre_reveal_preparation_preserves_pixels(qtbot):
+    """Same cache key in, same authored frame out."""
+    early = _hidden_configured_overlay(qtbot)
+    early_pixmap = early._prepare_painted_frame_shadow_pixmap()
+    early.show()
+    qtbot.waitExposed(early)
+
+    late = _hidden_configured_overlay(qtbot)
+    late.show()
+    qtbot.waitExposed(late)
+    late_pixmap = late._painted_frame_shadow_pixmap
+
+    assert early_pixmap is not None and late_pixmap is not None
+    # Everything the raster depends on - size, DPR, colours, border, radius and
+    # tuning - must match. The trailing element is the invalidation counter,
+    # which is bookkeeping rather than an input to a single pixel.
+    assert (
+        early._painted_frame_shadow_cache_key[:-1]
+        == late._painted_frame_shadow_cache_key[:-1]
+    )
+    assert early_pixmap.toImage() == late_pixmap.toImage(), (
+        "preparing earlier changed the authored frame"
+    )
+
+
+def test_a_geometry_change_after_preparation_still_rebuilds(qtbot):
+    """Preparation is a cache, never a freeze."""
+    widget = _hidden_configured_overlay(qtbot)
+    first = widget._prepare_painted_frame_shadow_pixmap()
+    assert first is not None
+
+    widget.resize(420, 240)
+    widget.show()
+    qtbot.waitExposed(widget)
+
+    assert widget._prepared_painted_frame_shadow_pixmap_for_paint() is not None
+    assert widget._painted_frame_shadow_pixmap is not first, (
+        "a stale frame survived a real geometry change"
+    )
+
+
+def test_preparing_twice_builds_once(qtbot):
+    """Identical input is a no-op, per the runtime-efficiency guardrail."""
+    widget = _hidden_configured_overlay(qtbot)
+    first = widget._prepare_painted_frame_shadow_pixmap()
+    second = widget._prepare_painted_frame_shadow_pixmap()
+    assert first is second
