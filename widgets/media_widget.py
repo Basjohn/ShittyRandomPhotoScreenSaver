@@ -170,6 +170,12 @@ class MediaWidget(BaseOverlayWidget):
         self._refresh_in_flight_generation: int = 0
         self._pending_state_override: Optional[MediaPlaybackState] = None
         self._pending_state_timer: Optional[QTimer] = None
+        # Playback-state freshness epoch. Each accepted optimistic transport edge
+        # advances it; an async GSMTC refresh captures the epoch it started under,
+        # so a refresh that began BEFORE the command (stale pre-command reality)
+        # cannot reverse the optimistic post-command state - only a refresh
+        # started after the command may confirm or genuinely reverse it.
+        self._playback_epoch: int = 0
         self._pending_keyboard_alias_command: Optional[tuple[str, float]] = None
         self._pending_keyboard_alias_timer: Optional[QTimer] = None
         self._last_external_transport_feedback: Optional[tuple[str, float]] = None
@@ -1068,6 +1074,12 @@ class MediaWidget(BaseOverlayWidget):
     def _apply_pending_state_override(self, state: MediaPlaybackState) -> None:
         self._clear_pending_state_timer()
         self._pending_state_override = state
+        # An accepted optimistic transport edge: advance the freshness epoch so a
+        # refresh already in flight cannot later reverse this state.
+        self._playback_epoch = int(getattr(self, "_playback_epoch", 0)) + 1
+        # Drop any pre-command cached GSMTC result so the next refresh cannot
+        # serve stale pre-command state from the 500 ms cache path.
+        self._gsmtc_cached_result = None
 
         try:
             self._safe_update()
@@ -1374,10 +1386,59 @@ class MediaWidget(BaseOverlayWidget):
             logger.debug("[MEDIA_WIDGET] No ThreadManager available, skipping blocking refresh")
         # Don't call get_current_track() synchronously - it blocks!
 
+    def _reconcile_refresh_playback_epoch(
+        self,
+        info: Optional[MediaTrackInfo],
+        refresh_epoch: int,
+    ) -> Optional[MediaTrackInfo]:
+        """Pin a stale pre-command refresh's playback state to the optimistic one.
+
+        A refresh that STARTED before a transport command reflects pre-command
+        reality. If a command advanced the playback epoch while the query was in
+        flight, that result's playback state is stale and must not reverse the
+        optimistic post-command state; only a refresh started after the command
+        (same epoch) may confirm or genuinely reverse it. Non-state fields
+        (artwork/metadata) still apply either way.
+        """
+        if info is None:
+            return info
+        try:
+            if int(refresh_epoch) == int(getattr(self, "_playback_epoch", 0)):
+                return info  # no command intervened: authoritative for state too
+        except Exception:
+            return info
+
+        override = getattr(self, "_pending_state_override", None)
+        current = getattr(self._last_info, "state", None) if self._last_info is not None else None
+        optimistic_state = override if override is not None else current
+        if optimistic_state is None:
+            return info
+        try:
+            if info.state == optimistic_state:
+                return info
+            from dataclasses import replace
+            pinned = replace(info, state=optimistic_state)
+        except Exception:
+            logger.debug("[MEDIA_WIDGET] Failed to pin stale playback state", exc_info=True)
+            return info
+        logger.debug(
+            "[MEDIA_WIDGET] Rejected stale pre-command playback state %s; pinned to %s "
+            "(refresh_epoch=%s current_epoch=%s)",
+            getattr(info.state, "value", info.state),
+            getattr(optimistic_state, "value", optimistic_state),
+            refresh_epoch,
+            getattr(self, "_playback_epoch", 0),
+        )
+        return pinned
+
     def _refresh_async(self) -> None:
         # Desync: Check GSMTC cache first to reduce IO contention
         now = time.time()
         refresh_started_monotonic = time.monotonic()
+        # Capture the freshness epoch this refresh begins under, so a transport
+        # command that lands while the query is in flight can reject this result's
+        # stale pre-command playback state.
+        refresh_playback_epoch = int(getattr(self, "_playback_epoch", 0))
         if self._gsmtc_cached_result is not None:
             elapsed_ms = (now - self._gsmtc_cache_ts) * 1000
             if elapsed_ms < self._gsmtc_cache_ms:
@@ -1549,6 +1610,12 @@ class MediaWidget(BaseOverlayWidget):
                         return
                     if int(result_provider_generation) != self._provider_generation:
                         return
+                    # Reject a stale pre-command playback state before it can
+                    # reverse an optimistic transport edge that landed while this
+                    # query was in flight.
+                    info = self._reconcile_refresh_playback_epoch(
+                        info, refresh_playback_epoch
+                    )
                     if failover_provider is not None:
                         self._apply_provider_failover(failover_provider)
                     runtime_provider = failover_provider or artwork_provider
