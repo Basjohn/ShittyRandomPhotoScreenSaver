@@ -1,25 +1,22 @@
 # 08 — CPU, Threading, and Workload Architecture
 
-Last reconciled: 2026-08-18  
+Last reconciled: 2026-08-19  
 Status: **stable architecture/reference only; `Current_Plan.md` owns execution**
 
-This document describes workload ownership under the current QRhi/single-surface architecture. It
-does not define phase order.
-
----
+This optional audit reference has been reconciled to the landed single-surface + dedicated visualizer
+logical-runtime architecture.
 
 ## 1. Goal
 
 Make SRPSS cheap by removing waste while preserving:
+
 - authored visualizer reaction/fidelity;
 - transition fidelity;
 - source freshness;
 - multi-display support;
-- strict lifecycle/resource ownership.
+- lifecycle/resource ownership.
 
 Do not improve efficiency by reducing cadence, refresh opportunity, source/event rate or quality.
-
----
 
 ## 2. Core model
 
@@ -30,199 +27,183 @@ Prepare -> Commit -> Present
 ```
 
 Prepare:
+
 - network/file IO;
 - parsing/filtering/sorting;
 - QImage/plain-data work;
-- finite worker-safe simulation/calculation;
+- bounded worker-safe computation;
 - immutable result assembly.
 
 Commit:
+
 - generation/staleness validation;
-- minimal QWidget/QPixmap/GL mutation on legal owner;
+- narrow QWidget/QPixmap/GL mutation on legal owner;
 - cache/revision publication.
 
 Present:
+
 - compositor consumes current prepared state;
 - no hidden simulation clock;
 - no disk/network/model construction.
 
-Persistence is a separate ordered process-scoped service where durability/order require it.
-
----
-
 ## 3. GUI thread
 
-Keep only work that actually requires GUI/context ownership:
+Keep only work that truly requires GUI/context ownership:
+
 - QObject/QWidget lifetime;
 - geometry/visibility/input;
-- QPixmap mutation/promotion;
+- QPixmap promotion/mutation;
 - QRhi/GL create/delete/render;
 - narrow current-generation commits;
-- compositor presentation scheduling callback.
+- compositor presentation scheduling callback;
+- visualizer reveal/card/presentation commit.
 
-Remove or avoid:
-- synchronous network/file IO;
-- repeated JSON/serialization;
-- duplicate static/cache raster construction;
+Remove/avoid:
+
+- sync network/file IO;
+- duplicate static raster/cache work;
 - unchanged shadow/card regeneration;
 - broad pure-data preparation;
-- per-frame diagnostic/log formatting;
-- useless physical repaints of unchanged immutable state.
+- per-frame diagnostic formatting;
+- whole-parent repaint for tiny child feedback;
+- useless physical repaint of unchanged state.
 
----
+The GUI thread is no longer the visualizer logical clock.
 
-## 4. Visualizer logical runtime
+## 4. Visualizer logical runtime — current, landed
 
-The visualizer logical authority is independent from compositor paint.
+Current owner:
 
-Protect:
-- one authoritative logical cadence;
-- all authored dt/events/transients;
-- smoothing;
-- mode-specific history/state;
-- one-in-flight/latest-fresh analysis;
-- generation fencing.
+`widgets/spotify_visualizer/logical_runtime.py::VisualizerLogicalRuntime`
 
-Current GUI-QTimer service is a known architectural pressure point only if ordinary logical gaps
-survive current GUI-waste removal.
-
-If promoted, the preferred larger design is:
+Current shape:
 
 ```text
-Qt-free logical visualizer runtime
-    -> dedicated logical cadence owner
-    -> immutable latest render state
-    -> GUI/compositor consumer
+audio / analysis snapshot
+        ↓
+dedicated mode-general logical runtime
+        ↓
+single-slot latest logical publication
+        ↓
+GUI presentation consumer
 ```
 
-Do not move the existing QWidget-touching `_on_tick()` wholesale onto a worker.
+Protect:
 
-The extraction must first separate logical state mutation from QWidget/QPixmap/GL/presentation
-mutation.
+- one authoritative logical cadence;
+- authored dt/events/transients;
+- mode-specific history/state;
+- no GUI/GL mutation on worker;
+- generation-owned join;
+- latest-state/no-FIFO semantics;
+- valid generation zero;
+- scheduler actual-cadence gate.
 
----
+Do not reintroduce:
 
-## 5. Bubble compute
+- GUI-QTimer simulation;
+- AnimationManager simulation;
+- per-mode logical thread/timer;
+- timed coarse wait reproducing the old ~64 Hz plateau.
 
-The rejected persistent Bubble scheduler is a negative control, not a dormant optimization.
+## 5. Audio / analysis
 
-Current approved semantics:
-- one lane-free authored step;
-- one in flight;
-- no FIFO/backlog;
-- no catch-up;
-- exact event/dt semantics;
-- stale generation result rejected.
+BeatEngine/audio worker remains separate from the logical clock.
 
-Current `BubbleComputeLane` is intentionally a facade over the ordinary COMPUTE executor.
+Capture lifetime and visual playback target are separate concerns.
 
-If task/Future churn later proves meaningful, a replacement mechanism may be designed, but it must
-start from those accepted semantics and pass full trajectory/event goldens.
+One-in-flight/latest-pending analysis is bounded and freshness-oriented.
 
-Do not reactivate the rejected persistent scheduler.
+Do not make capture keepalive a visualizer presentation debounce.
 
----
+## 6. Bubble compute
 
-## 6. IO ownership and lifecycle
+Bubble's current compute lane remains bounded.
 
-“Runs on IO” does not mean “safe to outlive the runtime.”
+Current installed evidence no longer supports Bubble as the shared system bottleneck.
 
-Runtime-owned provider work must:
-- carry runtime generation/owner identity;
-- become stale immediately on retirement;
-- stop/cancel/cooperate promptly enough for the destruction barrier;
-- never apply stale results.
+Do not:
 
-Long blocking operations that truly need to survive display/runtime replacement may move to a
-genuine process-scoped data service, but only if:
-- service lifetime is really process-scoped;
-- widget consumers are replaceable/generation-fenced;
-- the service does not retain QWidget/runtime owners.
+- lower Bubble cadence;
+- add Bubble-specific logical clock;
+- resurrect rejected persistent scheduler semantics;
+- retune Bubble physics to hide presentation gaps.
 
-Do not weaken destruction barriers for slow IO.
+BTF owns Bubble temporal fidelity.
 
----
+## 7. Shared GUI availability
 
-## 7. Presentation workload
+After logical cadence extraction, GUI starvation primarily damages:
 
-One display compositor owns physical presentation.
+- physical presentation;
+- reveal/fade/layout;
+- widgets/feedback;
+- Settings/Edit;
+- legal card/QPixmap/GL commits;
+- lifecycle/recreation.
 
-Allowed:
-- display-rate deadlines;
-- transition-active every-deadline eligibility;
-- visualizer-only unchanged-scene suppression by scene revision;
-- Qt coalescing after `QWidget.update()` is requested.
+It no longer directly defines visualizer simulation dt.
 
-Forbidden:
-- paint acknowledgement;
-- pending-until-paint;
-- producer paint scheduling;
-- second visualizer timer;
-- visualizer logical state evolving in paint;
-- display-rate cap on logical source/simulation.
+Still measure process/GIL contention separately because a Python worker can be delayed by broader CPU
+contention even without Qt event-loop dependence.
 
----
+## 8. Small animation ownership
 
-## 8. Caches and raster work
+A small animated visual affordance should use the smallest practical owner.
 
-Every cache needs:
-- stable identity/revision;
-- explicit invalidation boundaries;
-- bounded bytes/count where relevant;
-- one owner;
-- no stale-generation mutation.
+The current Pause/Play Media feedback investigation is the motivating example: repeatedly repainting
+a large stable parent card for one small control acknowledgement is shared-GUI waste.
 
-Do not regenerate an identical frame shadow/card/static widget image because the caller happened to
-paint again.
+Preserve the visual effect while narrowing paint/presentation ownership.
 
-Worker-safe raster preparation may use QImage/plain data; QPixmap remains GUI-owned.
+## 9. Physical presentation
 
----
+Each display compositor owns one physical presentation strategy.
 
-## 9. Process-scoped services
+It may be adaptive and target refresh rate.
 
-Appropriate examples:
-- serialized settings writer;
-- bounded logging writer;
-- potentially provider data services whose lifetime genuinely exceeds display runtimes.
+It is not logical simulation.
 
-A process-scoped service must not hold stale QWidget/runtime ownership.
+The 165 Hz display without a visualizer is a useful shared-presentation control.
 
-Process scope is not a loophole around lifecycle accounting.
+If it degrades, do not blame the visualizer.
 
----
+## 10. ThreadManager
 
-## 10. Evidence proportionality
+ThreadManager remains general async work/task infrastructure.
 
-Do not instrument by reflex.
+It is not:
 
-A probe is justified when:
-- multiple plausible owners remain;
-- the result will choose a concrete architecture/action;
-- the decision threshold is known in advance.
+- the visualizer logical clock;
+- the physical display clock;
+- a reason to put every calculation into a pool.
 
-When exact source plus existing evidence already identifies the bad boundary, prefer a bounded
-refactor/replacement plus production-shaped tests.
+Use generation ownership for runtime-scoped tasks.
 
-The project explicitly allows replacing a structurally bad subsystem when that removes timers,
-queues, state machines or ownership ambiguity and preserves the locked behaviour.
+## 11. Future workload changes
 
----
+A future thread/process/native change is justified only when:
 
-## 11. Efficiency acceptance
+- current source/evidence names a remaining owner/cost;
+- the new mechanism replaces an unsuitable owner;
+- behavioural contracts are locked;
+- lifecycle is explicit;
+- no duplicate clock/queue/state machine remains.
 
-Track:
-- logical/source age and cadence;
-- GUI request/dispatch age;
-- paint/render duration;
-- CPU/GPU usage;
-- task/queue depth;
-- memory/GL resource plateau.
+One successful worker migration does not authorize indiscriminate thread extraction.
 
-Interpretation:
-- high FPS with low utilization is fine;
-- a discrete GPU merely being awake is not a defect;
-- high sustained utilization caused by unnecessary work is;
-- reducing cadence/quality to lower utilization is not accepted.
+## 12. Evidence
 
-Use same-machine before/after evidence as the available proxy for lower-end hardware.
+Use:
+
+```text
+source
+-> existing evidence
+-> production-shaped gate
+-> bounded correction
+```
+
+Do not return to probe-heavy investigation when current source already identifies the bounded waste.
+
+This audit is reference only. Exact current `main`, `Current_Plan.md`, `Docs/Contracts.md` and focused
+guardrails outrank it.

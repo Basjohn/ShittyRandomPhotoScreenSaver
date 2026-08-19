@@ -5,16 +5,20 @@ Last updated: 2026-08-19
 Rules for keeping SRPSS docs useful to coding agents instead of preserving obsolete architecture by
 accident.
 
-## 1. Stable Paths
+## 1. Stable paths
 
-Edit canonical files in place. Do not create “v2/new/proposed” duplicates or rename/move existing
-paths without explicit user instruction.
+Edit canonical files in place.
 
-A focused guardrail may be added only when it owns a distinct durable policy rather than duplicating
-an active plan. Current focused guardrails include visualizer presentation and runtime efficiency /
-change safety.
+Do not create `v2/new/proposed` duplicates or rename/move canonical paths without explicit user
+instruction.
 
-## 2. Roles / Authority
+Focused guardrails may exist only when they own distinct durable policy. Current examples:
+
+- visualizer presentation;
+- runtime efficiency/change safety;
+- Bubble Temporal Fidelity (**BTF**).
+
+## 2. Roles / authority
 
 | Document | Owns |
 |---|---|
@@ -22,128 +26,130 @@ change safety.
 | `Spec.md` | durable stable architecture/product behaviour |
 | `Docs/Guardrails.md` + focused guardrails | durable prohibitions/stop rules |
 | `Index.md`, `Docs/Contracts.md` | current owner/navigation map |
-| focused architecture docs | current subsystem design |
-| active phase report | accepted current evidence + limits |
-| old phase reports | frozen checkpoint evidence only |
-| specialized audit references | optional detail only; never active task order |
-| `Future_Cleanup.md` | deferred cleanup/debt |
-| historical bug records | incident evidence/negative controls only |
+| focused architecture/reference docs | current subsystem design |
+| current installed evidence checkpoint | current volatile measurements/evidence |
+| old phase reports | frozen checkpoint evidence |
+| specialized audit references | optional detail only; never task order |
+| `Future_Cleanup.md` | deferred cleanup |
+| Historical_Bugs | incident evidence / negative controls |
 
-Exact current `main` is always implementation truth when an old evidence document names a class/path
-that no longer has the same role.
+Exact current `main` is implementation truth.
 
-## 3. Architecture Epoch Rule
+## 3. Architecture epoch reconciliation
 
-A major architecture migration must reconcile the entire small core-doc set in the same sweep:
+After a major owner migration reconcile this small current-authority set in the same sweep:
 
+- `Current_Plan.md`
 - `Spec.md`
-- `Docs/Guardrails.md`
-- relevant focused guardrail
-- `Docs/Compositor_Architecture.md`
-- `Docs/Contracts.md`
 - `Index.md`
-- relevant visualizer/transition checklist/reference
-- any still-referenced specialized audit documents
+- `Docs/Contracts.md`
+- `Docs/Guardrails.md`
+- relevant focused guardrails
+- `Docs/Compositor_Architecture.md`
+- visualizer/reference/checklist where relevant
+- `Docs/TestSuite.md`
+- `Docs/Harness_Index.md`
+- any “stable architecture/reference” audit that directly names the changed owner
+- `Future_Cleanup.md` if a former future target landed
 
-Do not leave “future target” prose in one document after that target has landed.
+Do not leave “future target” prose after the target has landed.
 
-## 4. Evidence Documents Are Not Owner Maps
+## 4. Reorientation documents
 
-Phase reports and Historical_Bugs deliberately preserve old implementation names because those names
-matter to the evidence.
+A reorientation file is handoff/orientation doctrine only.
 
-Therefore:
+It is not a second `Current_Plan.md`.
 
-- do not rewrite old evidence merely to use current class names;
-- do not cite an old owner table as current architecture;
-- do not infer a compatibility requirement from an old `QOpenGLWidget`, overlay, timer or context
-  name;
-- current owner questions route to `Index.md`, `Docs/Contracts.md` and exact source.
+Prefer keeping reorientation files outside the repository or in an explicit handoff package unless
+the user asks to store one in-repo.
 
-`Docs/phase_reports/README.md` states this rule for that folder.
+Do not add root clutter merely to make an agent read it.
 
-## 5. Volatile Measurements / Named Baselines
+## 5. Evidence is not an owner map
 
-Do not duplicate current FPS/gap counts/raw log paths across stable docs. The active owning phase
-report keeps detailed evidence. Roadmap/stable docs keep only the durable conclusion and route to
-that report.
+Phase reports and Historical_Bugs preserve old implementation names intentionally.
 
-After a major architecture/performance improvement, name one installed baseline in the active plan
-and owning phase report. The baseline exists to:
-- preserve rollback/fidelity evidence;
-- catch future widget/settings/minor changes that silently spend recovered headroom;
-- provide a comparison point for later architectural work.
+Do not rewrite them merely to use current class names.
 
-It is not a permanent ceiling and should not be copied into every stable document.
+Do not infer current ownership from old:
 
-The 2026-08-19 / 4.7.2 baseline is the current example.
+- QOpenGLWidget;
+- separate overlay;
+- GUI timer;
+- old scheduler;
+- old context owner.
 
-## 6. Drift Searches
+Current owner questions route to `Index.md`, `Docs/Contracts.md` and source.
 
-After presentation/visualizer architecture changes, search at minimum:
+## 6. Volatile measurements
 
-```powershell
-rg -n "QOpenGLWidget|QRhiWidget|SpotifyBarsGLOverlay|AdaptiveTimerStrategy|paintGL|grabFramebuffer|Phase 8|one.surface|pending.*paint" \
-  Index.md Spec.md Current_Plan.md Docs
-```
+Do not duplicate current FPS/gap/raw-log counts across stable docs.
 
-Interpret results by document role. Historical records may legitimately match. Core/stable docs may
-not contradict current architecture.
+Keep detailed volatile numbers in:
 
-Also verify current owner paths:
+- `Current_Plan.md` while actively relevant;
+- current installed evidence checkpoint.
 
-```powershell
-rg -n "CompositorVisualizerLayer|ExternalOpenGLRhiWidget|GLCompositorWidget" Index.md Spec.md Docs
-```
+Stable docs keep durable conclusions and routes.
 
-After runtime-efficiency/settings/widget changes also search for accidental duplicate technical
-work or old broad-replay guidance, for example:
+## 7. Mandatory drift search after visualizer/presentation changes
+
+Search current docs for architecture fossils:
 
 ```powershell
-rg -n "reapply|replay|refresh|invalidate|rebuild|QTimer|schedule_recurring|submit_.*task" \
-  Docs/Guardrails.md Docs/Guardrails Docs/10_WIDGET_GUIDELINES.md Docs/Defaults_Guide.md Current_Plan.md
+rg -n "GUI-QTimer|gui timer|schedule_recurring|_bars_timer|VisualizerLogicalRuntime|Event\.wait|dedicated logical runtime|future logical runtime|presentation_ready|reactive_source_ready|fresh.frame|source generation|source activation|SpotifyBarsGLOverlay|QOpenGLWidget|QRhiWidget|pending.*paint|paint acknowledgement|AdaptiveTimerStrategy" `
+  Index.md Spec.md Current_Plan.md Future_Cleanup.md Docs
 ```
 
-Interpret those results by owner; the terms are not forbidden, duplicate or ownerless use is.
+Interpret by document role.
 
-## 7. Avoid Mechanism Fossils
+Historical evidence may legitimately match.
 
-A failed mechanism remains documented as a negative control, but phrase the **scope of the
-rejection**. Do not convert “this use of AdaptiveTimer on a separate transition-scoped visualizer
-surface failed” into “the display compositor can never use its adaptive timer for physical
-presentation.”
+Current-authority docs may not contradict exact `main`.
 
-Likewise, do not generalize:
+### Generation identity drift
 
-- one bad QPainter path into “QPainter never allowed”;
-- one bad latest-state coalescer into “presentation must equal publication”;
-- one failed child surface into “never use QRhi”;
-- one lifecycle incident into hide/reuse compatibility requirements;
-- one run dominated by a particular visualizer mode into “that mode is the CPU problem”;
-- one successful worker migration into “all work should move off GUI.”
+Also search identity code/docs when generation ownership changes:
+
+```powershell
+rg -n "runtime_generation|generation.*or -1|activation.*or -1|int\(.*or -1" widgets rendering engine tests Docs
+```
+
+Do not global-replace blindly. The purpose is to catch identity fields where valid zero can be lost.
+
+## 8. Avoid mechanism fossils
 
 Keep the proven lesson at the correct owner level.
 
-## 8. Closure
+Examples:
 
-Before marking a large task done:
+- failed adaptive timer on a separate visualizer surface does **not** ban adaptive physical display
+  presentation;
+- failed GUI-QTimer logical cadence does **not** mean all Qt timers are forbidden;
+- successful dedicated visualizer worker does **not** mean all work belongs on workers;
+- failed non-zero Spectrum test means “non-zero data is not visible-output proof,” not “all test
+  doubles are useless”;
+- Bubble exposing a timing defect does not make Bubble the cause.
 
-- core docs agree on current owner/type;
-- no active doc says a landed architecture is still future/deferred;
-- no current navigation doc routes to retired presentation owners;
-- old reports/history are clearly evidence-scoped;
-- Current_Plan retains only unfinished work;
-- Future_Cleanup remains deferred only;
-- a newly named installed baseline is recorded once in the owning evidence/plan, not duplicated
-  across stable docs;
-- future-change guardrails capture the durable lesson when a run reveals a new general anti-pattern.
+## 9. Closure
 
-## 9. Retiring Duplicate Planning Documents
+Before marking a large architecture task done:
 
-When a live-plan/audit document has been fully absorbed into `Current_Plan.md`, `Spec.md`, focused
-architecture/guardrail docs and phase evidence, deletion is preferable to maintaining a second
-"current" copy. Preserve dated evidence reports; retire duplicate live-planning owner maps.
+- current core docs agree on current owner/type;
+- no current doc says landed architecture is future/deferred;
+- no current navigation routes to a retired owner as current evidence;
+- active plan contains only unfinished work;
+- Future_Cleanup contains only deferred work;
+- focused guardrails capture durable lessons;
+- historical reports remain evidence-scoped;
+- current test/harness guides describe the current runtime owner.
 
-The 2026-08-18 QRhi/single-surface reconciliation deliberately retires roadmap `00`-`06` and the
-roadmap manifest. Their useful current rules were moved into canonical owners; their continued
-existence was causing architecture time-travel.
+## 10. Retiring duplicate planning docs
+
+When a live-plan/audit document has been fully absorbed into current canonical owners, deletion is
+preferable to maintaining a second current task list.
+
+Do not delete evidence reports.
+
+If a specialized audit is retained as “stable architecture/reference,” it must be reconciled when
+the owner it describes changes.

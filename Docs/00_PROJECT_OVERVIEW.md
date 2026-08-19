@@ -1,66 +1,96 @@
 # Project Overview
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
-## What SRPSS Is
+## What SRPSS is
 
-SRPSS is a Windows screensaver/media runtime with multi-display image presentation,
-accelerated transitions, a high-fidelity Spotify visualizer, configurable overlay widgets,
-durable settings/profiles and Normal/Media Center runtime variants.
+SRPSS is a Windows screensaver/media runtime with multi-display image presentation, accelerated
+transitions, a high-fidelity multi-mode Spotify visualizer, configurable overlay widgets, durable
+settings/profiles and Normal/Media Center runtime variants.
 
-## Read Order
+## Read order
 
-Do **not** read the whole documentation tree for every task.
+Do **not** read the whole documentation tree.
 
-For active engineering work:
+For active work:
 
-1. Read the user's current instruction and exact current `main` source first.
-2. Read `Current_Plan.md` when the task belongs to active work.
-3. Use `Index.md` / `Docs/Contracts.md` to identify the current owner.
-4. Read `Docs/Guardrails.md` plus the one focused guardrail for the subsystem.
-5. Read `Spec.md` / focused architecture docs when a stable contract is involved.
-6. Read the relevant current phase report only for accepted evidence and its limits.
-7. Read historical bug/older phase records only for regression lessons or negative controls.
+1. user instruction + exact current `main`;
+2. `Current_Plan.md`;
+3. `Index.md` / `Docs/Contracts.md`;
+4. `Docs/Guardrails.md` + one focused guardrail;
+5. `Spec.md` / focused architecture reference;
+6. current installed evidence when the task needs measurements;
+7. older phase/Historical_Bug evidence only for a named mechanism.
 
-**Phase reports and historical bug records are commit/date-scoped evidence. Their class names,
-owner maps and implementation diagrams do not become current architecture merely because they
-are detailed.** Exact current `main` and the active plan win.
+Historical owner maps do not become current architecture because they are detailed.
 
-## Current Presentation Architecture
+## Current presentation architecture
 
-- Accelerated presentation is required for the modern compositor/visualizer runtime.
-- Each active physical display owns one `GLCompositorWidget` presentation surface.
-- The surface is `ExternalOpenGLRhiWidget` / `QRhiWidget.Api.OpenGL` using the top-level
-  OpenGL QRhi.
-- Existing PyOpenGL transition/visualizer renderers run inside the QRhi external-content pass.
-- The visualizer is a compositor layer, not a second presented `QOpenGLWidget`/`QRhiWidget`.
-- `SpotifyBarsGLOverlay` remains a logical state/geometry/GL-resource owner and never shows or
-  paints as its own surface.
-- Visualizer source/simulation cadence remains independent from physical presentation.
-- One display-local presentation strategy owns physical frame opportunities for transition and
-  visualizer liveness; paint acknowledgement is not admission.
+- one accelerated OpenGL QRhi compositor surface per physical display;
+- visualizer card + shader are layers inside that compositor;
+- no separate presented visualizer QOpenGLWidget/QRhiWidget;
+- physical display presentation is owned by the display compositor;
+- no producer-to-paint acknowledgement/backpressure.
 
-See `Docs/Compositor_Architecture.md` and `Docs/Guardrails/Visualizer_Presentation.md`.
+## Current visualizer cadence architecture
 
-## Core Engineering Priorities
+- `VisualizerLogicalRuntime` is the one mode-general logical visualizer clock;
+- it is a standard Python thread, independent from Qt event-loop timing;
+- logical code publishes latest plain-data state;
+- GUI presentation code consumes that state and owns reveal/layout/card/GL work;
+- the former GUI visualizer timer does not advance simulation;
+- `AnimationManager` does not advance visualizer simulation.
 
-When goals conflict:
+This worker architecture is **landed**, not a future proposal.
 
-1. visualizer fidelity and reactivity;
-2. lifecycle and GL safety;
+## Current readiness rule
+
+Presentation permission and reactive source authority are different.
+
+Paused Spectrum may reveal its presentation-owned idle scene while still waiting for real
+current-generation source data for reactive playback.
+
+## Bubble / BTF
+
+For “Bubble feel”, Bubble stutter/flicker/latency/elasticity or shared timing changes that affect
+Bubble, read:
+
+`Docs/Guardrails/Bubble_Temporal_Fidelity.md`
+
+BTF protects both authored Bubble behaviour and temporal delivery.
+
+## Current P2 truth
+
+The dedicated logical scheduler fixed the old ~64 Hz cadence collapse, but P2 remains open because:
+
+- Pause/Play still visibly hitches;
+- paused Spectrum's card reveals but its current idle bars are effectively invisible;
+- valid runtime generation 0 is mishandled in part of the logical/presentation fence;
+- shared GUI/compositor delivery remains weak even on the 165 Hz display without a visualizer;
+- Bubble still sees unacceptable long-tail logical/presentation gaps.
+
+Use `Current_Plan.md` for exact active order and
+`Docs/P2_Installed_Acceptance_Findings_2026-08-19.md` for the current evidence checkpoint.
+
+## Core engineering priorities
+
+1. visualizer fidelity/reactivity;
+2. lifecycle/GL safety;
 3. frame pacing/perceived smoothness;
-4. correct multi-display behaviour;
+4. multi-display correctness;
 5. bounded RAM/VRAM;
 6. CPU/task efficiency;
 7. average FPS;
-8. architecture elegance.
+8. elegance.
 
-## Evidence And Repository Stability
+Efficiency means removing technical waste, not reducing authored content.
 
-Current `main` is implementation authority. Historical commits are forensic references or
-negative controls only.
+## Repository/document stability
 
-Runtime evidence belongs under `logs/evidence_chest/` when intentionally preserved.
+Current `main` is implementation authority.
 
-Existing files/documents are updated in place. Do not rename or move an existing path unless
-the user explicitly requests that exact rename/move.
+Existing canonical documents are updated in place. Do not rename/move paths without explicit user
+instruction.
+
+Old phase reports and Historical_Bugs remain evidence-scoped and may intentionally describe retired
+architectures.

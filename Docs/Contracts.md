@@ -1,11 +1,11 @@
 # Contracts
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
 Fast task-to-owner routing for current `main`. `Current_Plan.md` owns active sequencing.
 Historical reports own evidence only.
 
-## Core Runtime
+## Core runtime
 
 | Family | Current owner | Focused document | Contract |
 |---|---|---|---|
@@ -13,45 +13,76 @@ Historical reports own evidence only.
 | Monitor topology | engine/display-manager topology owner | `Current_Plan.md` while P5 active | native/Qt events invalidate; one owner settles/snapshots/rebuilds |
 | Fullscreen presentation | each `DisplayWidget` + `GLCompositorWidget` | `Docs/Compositor_Architecture.md` | one accelerated QRhi/OpenGL surface per display |
 | Widget lifecycle | `WidgetManager` | `Docs/10_WIDGET_GUIDELINES.md` | one setup/reveal/cleanup owner |
-| Task registry | `ThreadManager` | `Docs/Guardrails.md` | async work; never paint acknowledgement |
+| General async task registry | `ThreadManager` | `Docs/Guardrails.md` | async work; not a visualizer logical or physical display clock |
 | GL accounting | explicit GL owner + `ResourceManager` | `Docs/Compositor_Architecture.md` | context owner deletes; ResourceManager accounts |
 
-## Rendering / Presentation
+## Visualizer ownership
 
 | Family | Current owner | Focused document | Contract |
 |---|---|---|---|
-| QRhi surface | `rendering/gl_rhi_surface.py` | `Docs/Compositor_Architecture.md` | `QRhiWidget.Api.OpenGL`; borrowed Qt context; ExternalContent raw GL |
-| Main compositor | `rendering/gl_compositor.py` | `Docs/Compositor_Architecture.md` | base + transition + compositor-owned visual layers |
-| Physical frame opportunities | display compositor render strategy | `Docs/Presentation_Change_Preflight.md` | display-refresh presentation only; not simulation |
-| Transition state/progress | compositor/transition owners | `Docs/Compositor_Architecture.md` | monotonic local progress; exactly-once completion |
-| Visualizer logical cadence | visualizer tick/model | `Docs/Guardrails/Visualizer_Presentation.md` | integrate authored inputs independently of paint |
-| Visualizer render state | visualizer logical owner | `Docs/Visualizer_Reference.md` | latest current generation/activation state; no paint ack |
-| Visualizer presentation | `rendering/gl_compositor_pkg/visualizer_layer.py` | `Docs/Compositor_Architecture.md` | layer inside the sole display compositor |
-| Visualizer GL resources | `SpotifyBarsGLOverlay` resource owner on compositor borrowed context | `Docs/Visualizer_Reference.md` | no independent visualizer surface/context |
-| Visualizer card texture | compositor visualizer layer/card texture | `Docs/Compositor_Architecture.md` | QPainter-prepared source pixels uploaded on revision change; steady draw is GL |
-| Performance instrumentation | owning renderer + perf modules | `Docs/Logging_Guide.md` | passive/bounded; never admission/cadence |
+| Audio capture / analysis | BeatEngine + audio worker/backend | `Docs/Visualizer_Reference.md` | bounded latest-fresh source; capture lifetime separate from visual playback state |
+| Logical cadence | `VisualizerLogicalRuntime` | `Docs/P2_Visualizer_Recovery_Contract.md` | one mode-general authored logical clock; no GUI-timer simulation ownership |
+| Logical integration | worker-callable `tick_pipeline.logical_tick()` path | `Docs/Guardrails/Visualizer_Presentation.md` | no QWidget/QPixmap/GL mutation; every authored input integrates before presentation coalescing |
+| Logical publication | one-slot latest-state mailbox | `Docs/P2_Visualizer_Recovery_Contract.md` | latest wins; no FIFO/catch-up/backpressure |
+| GUI reveal / present commit | GUI `present_tick` / reveal/fade/layout owners | `Docs/Guardrails/Visualizer_Presentation.md` | consumes current-generation plain-data intent and performs GUI/GL-facing work |
+| Bubble temporal fidelity | shared visualizer chain + Bubble authored state | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` | **BTF**: approved Bubble shape plus healthy source/logical/publication/presentation timing |
+| Visualizer render state / GL resources | `SpotifyBarsGLOverlay` historical host | `Docs/Visualizer_Reference.md` | resource/state host only; no independent presentation surface |
+| Visualizer physical presentation | compositor visualizer layer | `Docs/Compositor_Architecture.md` | layer inside the sole display compositor |
+| Visualizer card texture | compositor visualizer layer/card texture | `Docs/Compositor_Architecture.md` | source pixels update by revision; steady draw is retained GL |
 
-## Physical Presentation vs Logical Visualizer Cadence
+## Physical presentation
 
-The display compositor may use `AdaptiveRenderStrategyManager` / its adaptive timer as the
-**one physical presentation strategy for that display**, provided its liveness covers every
-reason the display needs animated presentation (for example active transition and active
-visualizer).
+| Family | Current owner | Contract |
+|---|---|---|
+| QRhi surface | `rendering/gl_rhi_surface.py` | `QRhiWidget.Api.OpenGL`; borrowed Qt context; external-content raw GL |
+| Main compositor | `rendering/gl_compositor.py` | base + transition + compositor-owned visual layers |
+| Physical frame opportunities | display compositor render strategy | display-refresh presentation only; not visualizer simulation |
+| Transition state/progress | compositor/transition owners | monotonic local progress; exactly-once completion |
+| Performance instrumentation | owning renderer/perf modules | passive/bounded; never admission/cadence |
 
-This does **not** authorize it to own visualizer source sampling, simulation dt, event
-integration or publication.
+The display's physical presentation strategy may remain live for multiple reasons such as a
+transition, visualizer or other compositor-owned animation. It samples the freshest valid scene.
 
-R-61/R-62 rejected a different architecture: binding a separately presented visualizer surface
-to a transition-scoped timer/deferral mechanism. Those incidents do not require resurrecting a
-second visualizer presentation clock after the visualizer has moved into the sole display scene.
+It may **not**:
 
-### Admission rule
+- become the visualizer logical clock;
+- wait for producer acknowledgement;
+- release logical deadlines from paint;
+- create a second visualizer presentation loop.
 
-A cross-thread `dispatch_pending` guard may prevent duplicate queued Python/Qt callbacks only
-until the queued callback actually executes on the GUI thread and calls `QWidget.update()`.
+## Readiness contract
 
-Paint pending/paint completion may be observed for diagnostics but may not block the next
-presentation deadline. Qt may coalesce repeated `update()` requests itself.
+Do not overload source freshness into presentation permission.
+
+At minimum distinguish:
+
+```text
+presentation_ready
+reactive_source_ready
+```
+
+Renderer/card/geometry/current-runtime readiness may permit a presentation-owned idle scene while
+reactive source authority remains false.
+
+Paused Spectrum is the canonical example.
+
+No source generation/activation may be fabricated merely to satisfy presentation code.
+
+## Generation / activation identity
+
+Generations and activations are ownership fences.
+
+- integer `0` is valid identity when the owner starts at zero;
+- `None` / missing may map to an invalid sentinel;
+- never use truthiness conversion that turns valid zero into `-1`;
+- retired generation/activation state cannot reveal or publish into a replacement owner.
+
+## Admission rule
+
+A cross-thread dispatch-pending guard may prevent duplicate queued GUI callbacks only until the
+queued callback actually executes and requests the relevant GUI update/presentation work.
+
+Paint completion may be observed for diagnostics but may not block the next presentation deadline.
 
 Forbidden:
 
@@ -62,39 +93,29 @@ Forbidden:
 - render-callback self-scheduling loop;
 - repaint rescue/retry timer;
 - source/event decimation;
-- second visualizer presentation clock/surface.
+- second visualizer presentation clock/surface;
+- second visualizer logical clock.
 
-## Visualizer Settings / Activation
+## GL lifecycle
 
-| Family | Owner | Contract |
-|---|---|---|
-| Mode identity | `core/settings/visualizer_mode_registry.py` | stable ids/labels |
-| Settings model | `core/settings/models/_spotify_visualizer.py` | one grouped model/serializer |
-| Preset resolution | `core/settings/visualizer_presets.py` | one resolved activation payload |
-| Runtime activation | visualizer activation/runtime modules | one final activation generation; stale generations never reveal |
-| Audio capture/analysis | beat engine/audio worker | source freshness; no backlog/catch-up semantics |
-| CUSTOM geometry | shared CUSTOM owner + visualizer geometry anchor | one authoritative rect per runtime/display/DPR |
+- Qt owns QRhi and the borrowed OpenGL context.
+- SRPSS never destroys/doneCurrent()s the borrowed context as owner.
+- GL create/delete occurs on the GUI/context owner.
+- one numeric GL handle has one deletion owner.
+- failed deletion retains ownership and fails closed.
+- resize is not context destruction.
+- true QRhi/context generation replacement retires old resources before reinit.
+- no SRPSS-owned `swapBuffers()`.
 
-## GL Lifecycle
+## Validation / evidence
 
-- QRhi/OpenGL context exposed by Qt is borrowed and Qt-owned.
-- SRPSS never destroys it and never `doneCurrent()`s it as owner.
-- GL resources are created/deleted with the correct borrowed context current inside legal QRhi
-  lifecycle/render boundaries.
-- `releaseResources()`/runtime cleanup share one deletion authority.
-- Failed deletion retains ownership and fails closed.
-- resize does not masquerade as context destruction.
-- true QRhi/context generation replacement retires old-generation resources before reinit.
-- global top-level no-vsync request remains intentional; do not add SRPSS-owned `swapBuffers()`.
-
-## Validation / Evidence
-
-| Family | Owner/document | Contract |
-|---|---|---|
-| Active work | `Current_Plan.md` | unfinished work only |
-| Detailed current delivery evidence | P05 phase report | evidence + limits, not task order |
-| Stable contracts | `Spec.md`, `Docs/Guardrails.md` | durable architecture/safety |
-| Historical incidents | `Docs/Historical_Bugs/` | historical mechanism evidence only |
-| Old phase reports | `Docs/phase_reports/` | frozen checkpoint evidence unless explicitly active |
+| Family | Owner/document |
+|---|---|
+| Active work | `Current_Plan.md` |
+| Current P2 installed evidence | `Docs/P2_Installed_Acceptance_Findings_2026-08-19.md` |
+| Current P2 behavioral gates | `Docs/P2_Behavioral_Gates.md` |
+| Stable contracts | `Spec.md`, `Docs/Guardrails.md`, focused guardrails |
+| Older phase reports | frozen checkpoint evidence |
+| Historical incidents | mechanism/regression evidence only |
 
 Do not recover current ownership from an old phase report when exact `main` disagrees.
