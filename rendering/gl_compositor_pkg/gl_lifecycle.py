@@ -87,6 +87,93 @@ def _live_displays_for_compositor(widget) -> list[object]:
     return displays
 
 
+# Name of the startup hold the compositor takes while it prepares the normal
+# transition programs/resources for the current generation.
+#
+# Startup previously revealed first and warmed afterwards: the fade coordinator
+# reported `fade_completed=True` before `deferred_gl_warmup_started=True`, so the
+# remaining deterministic compiles landed on top of live first-visible motion.
+# The compositor now holds the fade while that work completes at fade-zero, then
+# releases. Real completed work releases the hold; the budget below is only a
+# fail-safe so a broken GL path can never strand startup.
+_GL_TRANSITION_WARMUP_HOLD = "gl_transition_warmup"
+_GL_WARMUP_HOLD_BUDGET_S = 5.0
+
+
+def _fade_coordinators_for_compositor(widget) -> list:
+    coordinators = []
+    for display in _live_displays_for_compositor(widget):
+        if not _qt_object_is_valid(display):
+            continue
+        manager = getattr(display, "_widget_manager", None)
+        coordinator = getattr(manager, "_fade_coordinator", None)
+        if coordinator is not None:
+            coordinators.append(coordinator)
+    return coordinators
+
+
+def _acquire_pre_reveal_warmup_hold(widget) -> None:
+    """Hold the startup fade while this generation's warmup completes."""
+
+    if bool(getattr(widget, "_gl_warmup_hold_active", False)):
+        return
+    if bool(getattr(widget, "_gl_warmup_hold_settled", False)):
+        # Released once for this generation; a later paced top-up never re-holds
+        # a fade that has already been allowed to start.
+        return
+    held = False
+    for coordinator in _fade_coordinators_for_compositor(widget):
+        try:
+            coordinator.add_startup_hold(_GL_TRANSITION_WARMUP_HOLD)
+            held = True
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to hold startup fade for warmup", exc_info=True)
+    if not held:
+        # No coordinator to gate: keep the previous paced behaviour rather than
+        # inventing a hold nothing can release.
+        return
+    widget._gl_warmup_hold_active = True
+    widget._gl_warmup_hold_deadline = time.monotonic() + _GL_WARMUP_HOLD_BUDGET_S
+
+
+def _release_pre_reveal_warmup_hold(widget, *, reason: str) -> None:
+    if not bool(getattr(widget, "_gl_warmup_hold_active", False)):
+        return
+    widget._gl_warmup_hold_active = False
+    widget._gl_warmup_hold_settled = True
+    logger.info(
+        "[GL COMPOSITOR] Pre-reveal transition warmup settled (reason=%s)",
+        reason,
+    )
+    for coordinator in _fade_coordinators_for_compositor(widget):
+        try:
+            coordinator.release_startup_hold(_GL_TRANSITION_WARMUP_HOLD)
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to release warmup startup hold", exc_info=True)
+
+
+def _pre_reveal_warmup_active(widget) -> bool:
+    """True while warmup is legitimately running ahead of the visible fade."""
+
+    if not bool(getattr(widget, "_gl_warmup_hold_active", False)):
+        return False
+    deadline = getattr(widget, "_gl_warmup_hold_deadline", None)
+    try:
+        expired = deadline is not None and time.monotonic() > float(deadline)
+    except Exception:
+        expired = True
+    if expired:
+        _release_pre_reveal_warmup_hold(widget, reason="budget_exhausted")
+        return False
+    return True
+
+
+def _warmup_slice_delay_ms(widget) -> int:
+    """Drain promptly while hidden; keep the paced cadence once visible."""
+
+    return 0 if _pre_reveal_warmup_active(widget) else 140
+
+
 def _deferred_warmup_block_reason(widget) -> str | None:
     """Return the current cross-display reason an optional slice must wait."""
 
@@ -101,12 +188,16 @@ def _deferred_warmup_block_reason(widget) -> str | None:
                 fade = coordinator.describe()
             except Exception:
                 fade = {}
-            if fade.get("startup_holds"):
+            holds = set(fade.get("startup_holds") or ())
+            # The compositor's own pre-reveal hold is what created this window;
+            # it must not read as a reason to keep waiting.
+            holds.discard(_GL_TRANSITION_WARMUP_HOLD)
+            if holds:
                 return "startup_hold"
             state = str(fade.get("state", ""))
             if state == "IDLE":
                 return "first_frame"
-            if state == "FADING":
+            if state == "FADING" and not _pre_reveal_warmup_active(widget):
                 return "startup_fade"
             # READY with no pending/active fade is not work. An enabled
             # overlay can remain data-unavailable indefinitely (for example,
@@ -621,9 +712,11 @@ def ensure_transition_program_ready(widget, identity: object) -> bool:
 
 def _warm_next_transition_program(widget) -> None:
     if getattr(widget, "_gl_disabled_for_session", False):
+        _release_pre_reveal_warmup_hold(widget, reason="gl_disabled")
         return
     queue = getattr(widget, "_startup_transition_warm_queue", None)
     if not queue:
+        _schedule_deferred_transition_resource_warmup(widget)
         return
     block_reason = _deferred_warmup_block_reason(widget)
     if block_reason is not None:
@@ -648,8 +741,10 @@ def _warm_next_transition_program(widget) -> None:
         preserve_live_surface=True,
     )
     if release_current is None:
+        _release_pre_reveal_warmup_hold(widget, reason="no_warmup_context")
         return
 
+    drain_fully = _pre_reveal_warmup_active(widget)
     try:
         while queue:
             program_name, program_attr, uniforms_attr = queue.pop(0)
@@ -657,9 +752,13 @@ def _warm_next_transition_program(widget) -> None:
                 continue
             if not _compile_transition_program(widget, program_name, program_attr, uniforms_attr):
                 logger.debug("[GL COMPOSITOR] Deferred compile failed for %s", program_name)
-            # One attempted compile is the complete slice even on failure.
-            # Returning to the event loop lets newly pending fades/transitions
-            # block the next shader before any more driver work begins.
+            if drain_fully:
+                # Nothing is visible yet, so there is no live cadence to protect
+                # and the whole queue is drained inside this one held window.
+                continue
+            # Once visible, one attempted compile is the complete slice even on
+            # failure. Returning to the event loop lets newly pending
+            # fades/transitions block the next shader before more driver work.
             break
     finally:
         try:
@@ -669,7 +768,11 @@ def _warm_next_transition_program(widget) -> None:
             logger.debug("[GL COMPOSITOR] Warmup context release failed after deferred shader warmup", exc_info=True)
 
     if queue:
-        _schedule_deferred_gl_warmup(widget, _warm_next_transition_program)
+        _schedule_deferred_gl_warmup(
+            widget,
+            _warm_next_transition_program,
+            delay_ms=_warmup_slice_delay_ms(widget),
+        )
     else:
         _schedule_deferred_transition_resource_warmup(widget)
 
@@ -682,7 +785,14 @@ def schedule_deferred_transition_program_warmup(widget) -> None:
         _schedule_deferred_transition_resource_warmup(widget)
         return
     widget._startup_transition_warm_queue = list(remaining)
-    _schedule_deferred_gl_warmup(widget, _warm_next_transition_program)
+    # Gate the visible fade on this generation's deterministic warmup rather
+    # than compiling it on top of first-visible motion.
+    _acquire_pre_reveal_warmup_hold(widget)
+    _schedule_deferred_gl_warmup(
+        widget,
+        _warm_next_transition_program,
+        delay_ms=_warmup_slice_delay_ms(widget),
+    )
 
 
 def resume_deferred_transition_warmup(widget) -> None:
@@ -708,17 +818,24 @@ def resume_deferred_transition_warmup(widget) -> None:
 
 
 def _schedule_deferred_transition_resource_warmup(widget) -> None:
+    # Every path that schedules no further work must settle the pre-reveal hold,
+    # otherwise the visible fade would wait on warmup that will never run.
     if getattr(widget, "_gl_disabled_for_session", False):
+        _release_pre_reveal_warmup_hold(widget, reason="gl_disabled")
         return
     base_pixmap = getattr(widget, "_base_pixmap", None)
     if base_pixmap is None:
+        _release_pre_reveal_warmup_hold(widget, reason="no_base_surface")
         return
     try:
         if base_pixmap.isNull():
+            _release_pre_reveal_warmup_hold(widget, reason="no_base_surface")
             return
     except Exception:
+        _release_pre_reveal_warmup_hold(widget, reason="no_base_surface")
         return
     if getattr(widget, "_startup_transition_warm_queue", None):
+        # Programs are still draining; that path owns the hold.
         return
 
     warmed = getattr(widget, "_startup_transition_resource_warm_types", None)
@@ -735,14 +852,21 @@ def _schedule_deferred_transition_resource_warmup(widget) -> None:
         if identity not in warmed
     ]
     if not remaining:
+        _release_pre_reveal_warmup_hold(widget, reason="complete")
         return
 
     widget._startup_transition_resource_warm_queue = list(remaining)
-    _schedule_deferred_gl_warmup(widget, _warm_next_transition_resources)
+    _acquire_pre_reveal_warmup_hold(widget)
+    _schedule_deferred_gl_warmup(
+        widget,
+        _warm_next_transition_resources,
+        delay_ms=_warmup_slice_delay_ms(widget),
+    )
 
 
 def _warm_next_transition_resources(widget) -> None:
     if getattr(widget, "_gl_disabled_for_session", False):
+        _release_pre_reveal_warmup_hold(widget, reason="gl_disabled")
         return
     if getattr(widget, "_startup_transition_warm_queue", None):
         _schedule_deferred_gl_warmup(widget, _warm_next_transition_resources)
@@ -750,6 +874,7 @@ def _warm_next_transition_resources(widget) -> None:
 
     queue = getattr(widget, "_startup_transition_resource_warm_queue", None)
     if not queue:
+        _release_pre_reveal_warmup_hold(widget, reason="complete")
         return
     block_reason = _deferred_warmup_block_reason(widget)
     if block_reason is not None:
@@ -771,13 +896,16 @@ def _warm_next_transition_resources(widget) -> None:
     base_pixmap = getattr(widget, "_base_pixmap", None)
     if base_pixmap is None:
         widget._startup_transition_resource_warm_queue = []
+        _release_pre_reveal_warmup_hold(widget, reason="no_base_surface")
         return
     try:
         if base_pixmap.isNull():
             widget._startup_transition_resource_warm_queue = []
+            _release_pre_reveal_warmup_hold(widget, reason="no_base_surface")
             return
     except Exception:
         widget._startup_transition_resource_warm_queue = []
+        _release_pre_reveal_warmup_hold(widget, reason="no_base_surface")
         return
 
     warmed = getattr(widget, "_startup_transition_resource_warm_types", None)
@@ -791,8 +919,10 @@ def _warm_next_transition_resources(widget) -> None:
         preserve_live_surface=True,
     )
     if release_current is None:
+        _release_pre_reveal_warmup_hold(widget, reason="no_warmup_context")
         return
 
+    drain_fully = _pre_reveal_warmup_active(widget)
     try:
         while queue:
             identity = queue.pop(0)
@@ -813,6 +943,8 @@ def _warm_next_transition_resources(widget) -> None:
                 break
             if textures_ready and state_ready:
                 warmed.add(identity)
+            if drain_fully:
+                continue
             break
     finally:
         try:
@@ -822,7 +954,13 @@ def _warm_next_transition_resources(widget) -> None:
             logger.debug("[GL COMPOSITOR] Warmup context release failed after deferred resource warmup", exc_info=True)
 
     if queue:
-        _schedule_deferred_gl_warmup(widget, _warm_next_transition_resources)
+        _schedule_deferred_gl_warmup(
+            widget,
+            _warm_next_transition_resources,
+            delay_ms=_warmup_slice_delay_ms(widget),
+        )
+    else:
+        _release_pre_reveal_warmup_hold(widget, reason="complete")
 
 
 def handle_rhi_release(widget) -> None:
@@ -834,6 +972,8 @@ def handle_rhi_release(widget) -> None:
     raise into the Qt virtual override: a failure keeps ownership, keeps the
     compositor out of DESTROYED, and is reported.
     """
+    # A retiring generation must never leave the startup fade held.
+    _release_pre_reveal_warmup_hold(widget, reason="rhi_release")
     try:
         if gl_pipeline_has_live_resources(widget):
             cleanup_gl_pipeline(widget)
