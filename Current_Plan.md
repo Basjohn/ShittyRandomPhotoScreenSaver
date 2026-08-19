@@ -1,472 +1,1344 @@
-# Current Plan — P2 Stabilize Worker+Push, Then Prove Qt Quick Physical Presentation
+# Current Plan — P2 Stabilized Worker+Push Reference and Slide-First Qt Quick Architecture Benchmark
 
-Last updated: 2026-08-19 23:03 SAST
+Last updated: 2026-08-20 00:30 SAST
 
-Current pushed source at orientation time:
+## Current exact source checkpoint
+
+Current pushed HEAD reviewed for this plan:
 
 ```text
+82a14b31d4cc71e47d0112479af0ce16596325c1
+4.7.2 - Partial Benchmark
+```
+
+Relevant recent architecture checkpoints:
+
+```text
+690a27e0c6025937161426374ddf2c8ef407b8aa
+    worker+push steady presentation restored;
+    pull-at-paint production seam removed.
+
+39279b2e90a2c91ae30a8168127fb29729969c90
+    playback-state freshness epoch introduced.
+
 3784e91bc40e8d7c95d31d0d96914f3c5443c0e7
-```
+    rejected pull-at-paint architecture preserved as history.
 
-Commit message:
+8ac2421e2bc0a7153942fc33eb9f348b505cde9d
+    pre-pull worker+push installed reference.
 
-```text
-4.7.2 - Even Worse Performance Under Load Or Just Uniquely Shit?
-```
+42033c84eabbdf25ccd34bb0e83f9e553f2f8f11
+    named rollback / fidelity reference.
 
-Historical "last releaseable without shame" source identified by operator:
-
-```text
 15099d389e5091942a0ce3d6e6311d33b6043d3d
+    historical directness reference only; no retained exact raw benchmark.
 ```
 
-No raw performance logs are currently retained for `15099d3`; do not manufacture numeric results for it.
+Documentation-only commits do not create a new behavioral checkpoint.
 
 ---
 
-# 0. Executive direction
+# 0. Executive state
 
-P2 now has enough cumulative evidence to stop treating every current mechanism as equally uncertain.
+The current source is now a credible stabilization/reference architecture.
 
-## Retain
+That statement is based on exact source audit plus two new installed runs at the same HEAD.
 
-- one physical accelerated presentation surface per display as the product goal;
-- dedicated `VisualizerLogicalRuntime`;
-- one authoritative mode-general logical clock;
-- latest-state semantics;
-- valid generation zero;
-- paused Spectrum renderer contract;
-- K fire-and-forget/non-blocking transport command ownership;
+The current production shape is:
+
+```text
+dedicated VisualizerLogicalRuntime (~90 Hz)
+        ->
+latest-state mailbox
+        ->
+coalesced one-pending GUI presentation request
+        ->
+GUI present_tick consumes freshest state
+        ->
+one QRhi/OpenGL physical compositor surface per display
+```
+
+The rejected pull-at-paint machinery is not left half-alive in production.
+
+The current reference therefore retains:
+- dedicated logical runtime;
+- generation-zero and lifecycle fencing;
+- one physical accelerated surface per display;
+- QRhiWidget main compositor;
+- K fire-and-forget transport command execution;
+- paused Spectrum visible-state contract;
 - no FIFO/catch-up;
-- no source smoothing or fidelity reduction.
+- no visualizer-owned second native presentation surface.
 
-## Remove from the active production design
+The next work has three bounded goals:
 
-The current pull-at-paint steady-state notification seam introduced in the working tree and now pushed in `3784e91...`.
+1. close the remaining playback-state confirmation race;
+2. finish a safe, production-shaped current-vs-Qt-Quick benchmark;
+3. use that benchmark to decide whether runtime physical presentation should migrate to standalone QQuickWindow rendering.
 
-It:
-- removes callback-per-logical-publication volume;
-- does not outperform worker+push under comparable heavy load;
-- is highly variable at low load;
-- worsens loaded dispatch/frame-gap tails;
-- uniquely introduces lost-wakeup/sporadic visualizer spawn failures.
-
-Do not preserve it merely because the ThreadManager UI-queued count is smaller.
-
-## Restore as the stabilization/reference state
-
-Dedicated logical worker + latest mailbox + coalescing GUI push presentation as used immediately before the pull conversion.
-
-This is NOT declared the final architecture.
-
-It is the strongest known production-shaped reference while the physical-presentation replacement is proven.
-
-## Next major architecture candidate
-
-Qt Quick **physical runtime presentation**, specifically:
-
-```text
-one top-level QQuickWindow per physical display
-    ->
-Qt Quick threaded scene-graph render loop
-    ->
-custom full-display renderer on the render thread
-```
-
-NOT:
-- `QQuickWidget`;
-- QWidget embedding of Quick as the performance proof;
-- a rewrite of Settings/configuration UI into QML;
-- a blind whole-product QML conversion.
-
-The purpose is to move physical frame recording/render/present work away from the ordinary QWidget GUI paint/event-loop bottleneck while retaining the existing logical runtime and application models.
+Do not spend a long optimization campaign polishing worker+push before the architecture benchmark exists.
 
 ---
 
-# 1. Why the dedicated worker stays
+# 1. Stabilization audit — worker+push is actually restored
 
-Loaded three-state evidence:
+Direct source comparison of the worker+push restoration against `8ac2421e...` established that the pull-era production machinery was removed rather than layered around.
+
+Removed pull-owned production concepts include:
+- compositor logical-source registration;
+- compositor-side `present_revision` polling;
+- `_pull_delivery_active`;
+- pull force-window state;
+- pull-at-paint application of newest logical state;
+- pull-only widget helpers;
+- pull-specific tests that described the rejected ownership.
+
+Restored delivery contract:
 
 ```text
-                         GUI-tick baseline    worker+push    worker+pull
-
-logical service              ~74.7 Hz          ~89.7 Hz        ~89.6 Hz
-165 Hz median                 ~72.1 FPS        ~111.35 FPS      ~94.2 FPS
-60 Hz median                  ~47.7 FPS         ~52.4 FPS       ~49.3 FPS
+logical publication
+    ->
+request_logical_present(widget)
+    ->
+if no present is already pending:
+    marshal one GUI callback
+    ->
+present_logical_frame clears pending
+    ->
+present_tick consumes freshest mailbox state
 ```
 
-The worker:
-- preserves authored logical cadence under load;
-- improves physical delivery relative to GUI-driven baseline;
-- does not own the pull-specific spawn regression.
+If the GUI stalls, newer logical states supersede the mailbox entry.
 
-Do not broadly revert it.
+They do not build a FIFO.
+
+The single-pending flag prevents logical cadence from creating an unbounded GUI callback backlog.
+
+## 1.1 Pull-specific spawn defect status
+
+The two new installed runs at current HEAD contain no visualizer interval in which the logical runtime is active while the physical overlay remains stranded at `paint=0`.
+
+This is consistent with the source ownership: each publication actively requests presentation again.
+
+Treat the pull lost-wakeup / sporadic-spawn defect as:
+
+```text
+REMOVED BY ARCHITECTURE RESTORATION
+```
+
+but retain cold-start and Settings-recreate spawn checks as permanent gates.
 
 ---
 
-# 2. Why push returns without resurrecting K's old synchronous hitch
+# 2. New installed reference evidence at `82a14b31...`
 
-The old transport-command blocking defect and the push/pull presentation seam are independent.
+## 2.1 Light-load installed run
 
-K changed:
-
-```text
-GUI transport ingress
-    -> submit command to IO
-    -> return immediately
-```
-
-That remains.
-
-Restoring worker+push does NOT restore:
+Raw pack:
 
 ```text
-done.wait(2.5s)
+6ef8b47b-bc3a-4921-ac16-22449f8f08ba.zip
+SHA-256:
+fbaaa67d84afee4855330d7026a20dd8b4f4130be44a83469eb20f8f73f45f08
 ```
 
-on the GUI transport-command call.
+Self-identifies:
 
-Therefore the synchronous GSMTC command stall must not return merely because push presentation returns.
+```text
+[SOURCE_HEAD] 82a14b31d4cc71e47d0112479af0ce16596325c1
+```
 
-However:
-- push does create more GUI presentation callbacks;
-- old push installed runs still had visible Pause/Play hitching;
-- playback-state flapping exists independently.
+Approximate run interval:
 
-So push may still expose presentation hitches until the inherited playback-state ownership defect is fixed.
+```text
+2026-08-20 00:15:54 -> 00:20
+```
 
-Treat push as the functional benchmark/reference, not as final P2 closure.
+### Physical delivery
+
+Across 14 completed transitions:
+
+```text
+165 Hz display:
+median completed FPS        ~150.05
+range                       126.8 .. 158.4
+median request acceptance   ~93.26%
+
+60 Hz display:
+median completed FPS        ~58.35
+median request acceptance   ~97.73%
+```
+
+### Logical runtime
+
+```text
+steps=22042
+skipped_deadlines=8
+slow_steps=0
+failures=0
+```
+
+The dedicated logical clock is extremely healthy.
+
+### Environment
+
+Primed system CPU median:
+
+```text
+~8.7%
+```
+
+### Operator acceptance
+
+Direct installed observation:
+
+- light-load behavior is materially better than initially credited;
+- Pause/Play hitches are almost completely absent;
+- visualizer spawn is reliable;
+- paused Spectrum jumps/teleports to its visible resting-bar state rather than visibly shrinking/falling into it.
+
+The Spectrum transition quirk is a lower-priority fidelity issue unless a cheap fix exists. Do not trade system cadence for a more elaborate paused-entry animation.
+
+## 2.2 Heavy-load installed run
+
+Raw pack:
+
+```text
+8f897d84-bd04-4685-8093-611e9815ffef.zip
+SHA-256:
+c09a04cda8431a3704217df6f8b40bd93595946e17db57c751340f4da1d3cadb
+```
+
+Self-identifies the same HEAD:
+
+```text
+82a14b31d4cc71e47d0112479af0ce16596325c1
+```
+
+Approximate run interval:
+
+```text
+2026-08-20 00:03:08 -> 00:05
+```
+
+### Physical delivery
+
+Six completed high-load Blockspin windows:
+
+```text
+165 Hz display:
+median completed FPS       ~105.8
+range                       97.3 .. 130.0
+median request acceptance  ~72.38%
+
+60 Hz display:
+median completed FPS       ~52.8
+```
+
+### Logical runtime
+
+```text
+steps=14119
+skipped_deadlines=36
+slow_steps=4
+failures=0
+```
+
+The logical runtime stays fundamentally in its authored cadence class while physical delivery collapses.
+
+### Environment
+
+Primed system CPU median:
+
+```text
+~42.9%
+```
+
+### Frame-gap class
+
+From the canonical performance log:
+
+```text
+FRAME_GAP_OWNER events  ~270
+median gap              ~52.3 ms
+p95                     ~129.2 ms
+>=100 ms                30
+max                     ~191.4 ms
+```
+
+The exact count depends on which duplicated diagnostic stream is aggregated; use the canonical perf log consistently for architecture comparisons.
+
+## 2.3 Current interpretation
+
+This pair is highly informative:
+
+```text
+light load:
+current worker+push ~= historical desired high-refresh average class
+
+heavy load:
+physical presentation still collapses
+
+both:
+logical runtime remains healthy
+pull-specific spawn failure is absent
+```
+
+Therefore the next architecture problem is no longer:
+
+```text
+"How do we get decent average FPS at all?"
+```
+
+It is:
+
+```text
+"How do we preserve smooth physical cadence and tail latency,
+especially under contention, without regressing the now-good light-load state?"
+```
+
+This makes physical-presentation ownership an even cleaner migration target.
 
 ---
 
-# 3. Fix inherited playback-state flapping on the reference architecture
+# 3. Slide becomes the PRIMARY architecture discriminator
 
-The baseline, worker+push, and pull runs all show playback-state wobble.
+Do not use Blockspin as the first Qt Quick migration workload.
 
-Physical media-key duplicate ingress is already suppressed.
+Keep Blockspin as the secondary stress/regression case.
 
-The remaining defect is state ownership/reconciliation.
+Use the production `GLCompositorSlideTransition` first.
 
-Current shape:
+## 3.1 Why Slide is superior for Stage 1
 
-```text
-transport edge
-    ->
-optimistic MediaTrackInfo state emitted immediately
-    ->
-visualizer/listeners react
-    ->
-asynchronous GSMTC refresh result returns
-    ->
-normal display/state reconciliation
-```
+Slide is architecturally simple:
+- timing + easing + four image positions;
+- one shared compositor;
+- no bespoke 3D mesh/state machine needed;
+- continuous linear positional motion makes cadence holes very visible.
 
-A stale pre-command refresh may contradict the optimistic post-command state.
+Most importantly, the CURRENT LIGHT-LOAD RUN already reproduces the defect while headline FPS looks excellent.
 
-Required contract:
+### First light-load Slide — 165 Hz display
 
 ```text
-one accepted transport edge
-    ->
-new media-state generation / command epoch
-    ->
-optimistic state belongs to that epoch
-    ->
-refresh work captures the epoch it started under
-    ->
-pre-command/stale result cannot reverse the new epoch
-    ->
-first genuinely newer authoritative state may confirm/reverse
+avg_fps                     154.4
+request_acceptance_pct      95.06%
+dt_p50                       6.07 ms
+dt_p95                      10.83 ms
+dt_p99                      16.42 ms
+dt_max                      44.73 ms
+dt_over_33_ms                2
+
+paint_p95                    3.36 ms
+paint_max                    6.48 ms
+
+GPU average                  ~0.30 ms
+GPU max                      ~3.73 ms
 ```
 
-No blind 700 ms debounce.
+### Second light-load Slide — 165 Hz display
 
-No duplicate state owner in the visualizer.
+```text
+avg_fps                     150.2
+request_acceptance_pct      93.90%
+dt_p95                      12.39 ms
+dt_p99                      20.62 ms
+dt_max                      43.22 ms
+dt_over_33_ms                1
 
-Add deterministic delayed/stale-result negative controls.
+paint_p95                    3.47 ms
+paint_max                   14.05 ms
+```
 
-Acceptance:
-- mouse;
-- APPCOMMAND/media key;
-- all visualizer modes;
-- exactly one logical pause/resume edge unless a genuinely newer external state reverses it.
+### Simultaneous 60 Hz display
+
+The same two Slide runs reached approximately:
+
+```text
+59.0 FPS, max gap 65.65 ms
+58.8 FPS, max gap 59.72 ms
+```
+
+The operator reports the linear motion visibly stutters at roughly two points in most Slide runs even when average FPS is high.
+
+That is exactly what the benchmark needs:
+
+```text
+a simple, cheap renderer
++
+good average FPS
++
+repeatable visible cadence failure
+```
+
+If Qt Quick materially reduces those ~43–45 ms 165 Hz holes while rendering the same Slide, that is much stronger evidence for a presentation-ownership win than comparing a complicated Blockspin port.
+
+## 3.2 Additional heavy Slide observation
+
+The operator also reports that a short heavy-load Slide run, particularly the portion after Settings, reproduces severe visible stutter.
+
+At the time this document was generated, that additional raw pack had not surfaced in the conversation file inventory, so no numeric claims are invented for it.
+
+Preserve the operator observation and append the raw metrics later when the pack becomes accessible.
 
 ---
 
-# 4. Selectively remove pull-specific production machinery
+# 4. Playback state freshness — close the remaining race before architecture comparison
 
-Do not `git reset` or revert the entire `3784e91` commit.
+Current `39279b2e...` playback epoch work solves one real race:
 
-Audit the exact production diff from `8ac2421e...` to `3784e91...`.
+```text
+refresh starts before transport command
+    ->
+command advances playback epoch
+    ->
+old result arrives from previous epoch
+    ->
+old playback state is rejected/pinned
+```
 
-Selectively restore the worker+push steady presentation contract while retaining unrelated accepted fixes, including:
-- K;
-- L only where still harmless/useful;
-- slow-tick `is_transition_active` diagnostic correction;
-- source-head logging;
-- evidence/docs;
-- logical worker;
-- generation/Spectrum fixes.
+That is good and must remain.
 
-Expected pull-owned production surface includes:
-- compositor logical-pull registration/revision sampling;
-- pull-specific `present_revision` delivery semantics;
-- pull-specific first/edge force-window machinery;
-- `ensure_compositor_logical_pull` / `apply_latest_logical_present` style steady delivery;
-- pull-specific tests.
+However current source still has a second race.
 
-Preserve the pull implementation as historical evidence before removing it.
+## 4.1 Remaining hole
 
-After restoration, prove:
-- visualizer cannot run for seconds with `paint=0`;
-- startup reveal is deterministic;
-- Settings recreation is deterministic;
-- no pull liveness reason/force-window state remains in production.
+Example:
+
+```text
+state = PLAYING
+
+user/OS Pause accepted
+    ->
+K submits pause asynchronously
+    ->
+MediaWidget optimistically publishes PAUSED
+    ->
+playback epoch advances to N+1
+
+before backend has actually changed:
+    ->
+a NEW poll begins at epoch N+1
+    ->
+GSMTC still returns PLAYING
+```
+
+Current `_reconcile_refresh_playback_epoch()` treats a same-epoch result as immediately authoritative.
+
+So the state can still become:
+
+```text
+PAUSED (optimistic)
+    ->
+PLAYING (same-epoch poll, but backend has not caught up)
+    ->
+PAUSED (later real backend state)
+```
+
+That is a real source-level hole even though the current light-load installed run is already much better perceptually.
+
+## 4.2 Required correction: expected state awaiting confirmation
+
+Do not replace the epoch model.
+
+Extend it with a bounded expected-state confirmation contract.
+
+Suggested conceptual state:
+
+```text
+_pending_state_override
+_pending_state_epoch
+_pending_state_confirm_deadline_monotonic
+```
+
+Exact names may differ.
+
+On accepted optimistic edge:
+
+```text
+playback_epoch += 1
+expected_state = optimistic PAUSED/PLAYING
+expected_epoch = playback_epoch
+confirmation_deadline = now + bounded command-confirmation window
+invalidate pre-command GSMTC cache
+```
+
+### Reconciliation rules
+
+For an incoming refresh:
+
+#### A. Older epoch
+
+```text
+refresh_epoch < current playback_epoch
+```
+
+Playback state cannot reverse current expected state.
+
+Existing metadata/artwork may still flow where safe.
+
+#### B. Current epoch + matches expected state
+
+```text
+info.state == expected_state
+```
+
+This is confirmation.
+
+Accept it and clear the expected-state confirmation ownership.
+
+#### C. Current epoch + contradicts expected state before confirmation deadline
+
+This may simply be post-command/pre-backend reality.
+
+Do NOT reverse the optimistic state yet.
+
+Pin only playback state to the expected state.
+
+Metadata/artwork may still flow.
+
+#### D. Confirmation deadline expired
+
+Do not lie forever if the command failed.
+
+Clear expected-state ownership and allow the latest current-epoch authoritative state through.
+
+The deadline is a bounded command-confirmation expiry, NOT a presentation debounce.
+
+The optimistic UI remains immediate.
+
+### Existing 300 ms timer
+
+The existing ~300 ms timer may remain as a point at which a fresh query is requested.
+
+It must NOT blindly clear expected-state ownership before the result can confirm it.
+
+Prefer:
+
+```text
+300ms timer:
+    request fresh state
+    keep expected-state ownership
+
+confirmation:
+    clear expected state
+
+bounded expiry:
+    allow contradictory authoritative state
+```
+
+Do not add a second recurring timer if a monotonic deadline checked by reconciliation is sufficient.
+
+Choose the bounded confirmation window based on the controller's real command timeout/behavior, not aesthetic preference.
+
+Current transport command coroutine is already internally bounded around the ~2 s class; the confirmation window should be coherent with that rather than an arbitrary 700 ms wobble delay.
+
+## 4.3 Tests required
+
+Extend `tests/test_p2_playback_epoch.py`.
+
+Must prove:
+
+1. stale pre-command PLAYING cannot reverse optimistic PAUSED;
+2. stale pre-command PAUSED cannot reverse optimistic PLAYING;
+3. **same-epoch post-command/pre-backend PLAYING cannot reverse pending PAUSED**;
+4. reverse-direction equivalent;
+5. matching expected state confirms and clears expectation;
+6. after bounded confirmation expiry, a contradictory current-epoch authoritative result may reverse;
+7. stale results still preserve safe metadata/artwork fields;
+8. no arbitrary recurring/debounce state owner is introduced;
+9. a single accepted transport edge yields one visualizer/listener playback edge unless:
+   - expected state later expires because command failed; or
+   - a genuinely authoritative later state changes playback.
+
+This correction is surgical but lives in a large, actively changing `MediaWidget`.
+
+Make a narrow source diff plus tests.
+
+Do not replace unrelated media-widget code.
 
 ---
 
-# 5. Integrated benchmark is the gate for all future presentation architecture
+# 5. Benchmark safety — current `--heavy` implementation must NOT be used
 
-Before optimizing push or migrating runtime presentation, build one reusable local benchmark.
-
-## Workload
+Current:
 
 ```text
-Display A: simulated/real 165 Hz presentation target
-    -> Blockspin transition
-
-Display B: simulated/real 60 Hz presentation target
-    -> active visualizer
-
-Visualizer logical source:
-    -> deterministic synthetic ~90 Hz bars/audio events
-
-Qt:
-    -> real QApplication/QGuiApplication event loop
-    -> real production scheduler/compositor path
+tools/qtquick_presentation_spike.py
 ```
 
-Run three identical repetitions in both:
-- low-load environment;
-- controlled heavy-load environment.
+has two stress characteristics that are not appropriate for the canonical benchmark.
 
-## Record
+## 5.1 `--heavy N` is real same-process synthetic load
 
-- high-refresh completed FPS;
-- request acceptance;
-- dt p50/p95/p99/max;
-- frame-gap count and >=33 / >=50 / >=100 ms classes;
-- 60 Hz completed FPS;
-- logical cadence/skips;
-- publish-to-physical age;
-- media.paint;
-- app/system CPU;
+It starts N Python daemon threads executing a busy arithmetic loop.
+
+That:
+- consumes real CPU;
+- creates aggressive GIL contention;
+- specifically interferes with Python render-thread callbacks;
+- does not reproduce the operator's ordinary external/system load;
+- can distort the architecture comparison toward "Python threads fight Python threads."
+
+Do not run it as the architecture load test.
+
+Delete the built-in CPU-burn behavior from the canonical benchmark path.
+
+No benchmark tool should silently or casually generate system stress.
+
+## 5.2 Normal spike is also currently an unbounded throughput probe
+
+Current Quick spike does:
+
+```text
+afterFrameEnd
+    ->
+window.update()
+```
+
+with swap interval 0.
+
+That asks for another frame immediately and therefore runs as fast as the system will allow.
+
+This is useful only as an explicitly requested throughput/thread-ownership probe.
+
+It is NOT the canonical 165/60 product benchmark.
+
+### Required safe default
+
+Canonical benchmark must default to:
+
+```text
+display 0 target: 165 Hz
+display 1 target: 60 Hz
+```
+
+or the actual selected display refresh rates.
+
+No synthetic CPU burner.
+
+No unbounded frame loop.
+
+If an unbounded renderer-throughput probe is retained at all, it must require an explicit name such as:
+
+```text
+--throughput-probe
+```
+
+and clearly log that it is intentionally unbounded.
+
+The ordinary command must be safe/paced.
+
+## 5.3 External-load comparison
+
+The benchmark does not create heavy load.
+
+The operator supplies a known real-world heavy environment separately.
+
+The benchmark should only LABEL and OBSERVE it.
+
+For example:
+
+```text
+--load-label light
+--load-label external-heavy
+```
+
+and record actual observed:
+- system CPU;
+- process CPU;
 - GPU busy;
+- memory.
+
+If `psutil` or existing SRPSS telemetry is available, sample these passively.
+
+Do not change workload quality automatically based on load.
+
+---
+
+# 6. Canonical architecture benchmark
+
+Build one common workload definition so current worker+push and Qt Quick are compared against the same timeline.
+
+Do not compare:
+- production Slide on current architecture
+against
+- animated clear colour on Quick.
+
+That proves nothing about product architecture.
+
+## 6.1 Canonical on-screen sequence
+
+Use the real two-display topology where available.
+
+### Display 0
+
+```text
+165 Hz target
+production-equivalent Slide transition
+no visualizer
+```
+
+### Display 1
+
+```text
+60 Hz target
+same Slide transition
+visualizer layer active
+```
+
+This mirrors the current installed topology closely.
+
+### Timeline
+
+Recommended deterministic run:
+
+```text
+T = 0
+    windows exist but are not visibly exposed with blank/default content
+    initial base image/resources are ready
+    first intentional frame becomes visible
+    record first-frame/startup event
+
+T = 1s
+    start Slide on both displays
+    fixed direction, e.g. LEFT
+    production duration: 5 seconds
+    production easing semantics
+
+T = 1s
+    start visualizer logical runtime / synthetic source on display 1
+    Bubble is the primary temporal canary
+
+T = 1s -> 6s
+    deterministic simulated audio drives visualizer while Slide is running
+
+T = 6s -> 11s
+    keep deterministic visualizer running after Slide settles
+
+T = 11s
+    simulated playback PAUSE
+    record exact logical and physical edge timestamps
+
+T = 11s -> 13s
+    hold paused state
+
+T = 13s
+    simulated PLAY/RESUME
+
+T = 13s -> 15s
+    continue deterministic visualizer
+
+T = 15s
+    finish and report
+```
+
+The exact timeline can be adjusted slightly if production ownership requires it.
+
+The important property is that every candidate runs the SAME sequence.
+
+## 6.2 Synthetic audio
+
+Use deterministic generated visualizer input.
+
+Do not depend on:
+- Spotify;
+- GSMTC;
+- WASAPI;
+- network;
+- operator key timing.
+
+It must produce repeatable:
+- ordinary continuous energy;
+- several transients;
+- enough movement for Bubble to expose temporal holes.
+
+Prefer using the real logical visualizer runtime and real render-state generation with a fake/synthetic audio source rather than hand-manufacturing final GPU vertices.
+
+The benchmark is meant to include real visualizer architecture without real media-device nondeterminism.
+
+## 6.3 Primary mode
+
+Use Bubble first.
+
+Reason:
+- continuous positional motion;
+- BTF is already a durable temporal canary;
+- it exposes cadence gaps immediately.
+
+Use Spectrum as a secondary correctness/idle-state case after the architecture comparison works.
+
+The current Spectrum "teleport to visible resting bars" is not a reason to complicate Stage 1.
+
+---
+
+# 7. Benchmark measurement — average FPS is not enough
+
+The current Slide evidence proves this.
+
+A run at:
+
+```text
+154.4 average FPS
+```
+
+still contains:
+
+```text
+44.73 ms
+```
+
+physical gaps that are plainly visible in linear motion.
+
+The architecture benchmark therefore makes tail latency a first-class result.
+
+## 7.1 Per-display physical metrics
+
+Record:
+
+```text
+requested presentation opportunities
+accepted presentation requests
+completed physical frames
+completed FPS
+
+dt p50
+dt p90
+dt p95
+dt p99
+dt max
+
+count >= 12 ms
+count >= 16 ms
+count >= 25 ms
+count >= 33 ms
+count >= 50 ms
+count >= 100 ms
+
+paint p50/p95/p99/max
+request age p50/p95/p99/max
+```
+
+For each large gap, retain:
+- timestamp;
+- display;
+- benchmark phase;
+- transition state;
+- visualizer state;
+- nearest logical publication/physical pull/present event.
+
+## 7.2 Logical metrics
+
+Record:
+- logical target cadence;
+- steps;
+- skipped deadlines;
+- slow steps;
+- failures;
+- longest logical holes;
+- synthetic source publication cadence.
+
+## 7.3 Cross-boundary freshness
+
+Record a semantically useful age:
+
+```text
+logical state publication
+    ->
+physical render consumes newest state
+```
+
+p50/p95/p99/max.
+
+Do not treat old push-era `state_to_paint` nomenclature as meaningful if the candidate architecture changes where state is applied.
+
+## 7.4 Resource/context metrics
+
+Passively record:
+- system CPU;
+- process CPU;
+- GPU busy;
+- memory;
 - GUI callback count;
-- first-physical-frame latency;
-- playback-state edges.
+- Quick render thread IDs;
+- render-loop selection.
 
-Do not use framebuffer readback every frame.
-
-Use framebuffer capture only for bounded correctness/pixel assertions.
-
-Absolute FPS is a same-machine architecture benchmark, not a generic CI portability gate.
+No benchmark success is inferred solely from lower callback count.
 
 ---
 
-# 6. Qt Quick is now an active architecture spike, not future speculation
+# 8. Offscreen and on-screen modes have different jobs
 
-The cumulative evidence has earned the question.
+## 8.1 Offscreen/deterministic mode
 
-Across all three QWidget/QRhi states, the shared failure remains:
+Use for:
+- shader/image correctness;
+- deterministic replay;
+- state sequence;
+- generation/lifecycle;
+- first-frame content validity;
+- bounded framebuffer/image assertions.
+
+Offscreen is desirable and should exist where practical.
+
+But it cannot prove:
+- DWM presentation;
+- swapchain behavior;
+- actual mixed-refresh windows;
+- on-screen startup flash;
+- real present stalls.
+
+## 8.2 On-screen mode
+
+Required for the architecture decision.
+
+Keep it:
+- short;
+- deterministic;
+- target-paced;
+- automatically ending.
+
+The user accepts an on-screen benchmark when it is necessary to measure the real problem.
+
+---
+
+# 9. Qt Quick Stage 0 currently landed
+
+Current partial tool is useful as a primitive proof:
 
 ```text
-deadline wake occurs reasonably near target
-    ->
-GUI dispatch/presentation is not serviced
-    ->
-physical opportunities are missed
-    ->
-GPU remains lightly loaded
+tools/qtquick_presentation_spike.py
 ```
 
-The logical worker already moved simulation away from this bottleneck.
+It already demonstrates:
+- standalone QQuickWindow topology;
+- no QQuickWidget;
+- OpenGL backend;
+- explicit Qt scene-graph logging;
+- render-thread ID capture;
+- `beforeRendering` native-GL integration;
+- basic vs threaded comparison possibility.
 
-The next candidate is moving physical frame rendering/presentation away from ordinary QWidget GUI paint ownership.
+Preserve that work.
 
-## Spike topology
+But its current animated-clear workload is not a product architecture benchmark.
 
-Use standalone top-level windows:
+Do not draw architecture conclusions from its FPS.
+
+---
+
+# 10. Qt Quick Stage 1 — Slide-first scheduling proof
+
+Finish the benchmark with Slide BEFORE porting Blockspin.
+
+## 10.1 Existing renderer reuse
+
+Do not port all SRPSS shaders.
+
+Use the existing OpenGL renderer concepts/code wherever technically safe.
+
+For Slide this should be significantly easier than Blockspin:
+- two textures/images;
+- position interpolation;
+- production-equivalent easing/progress;
+- same output geometry.
+
+The architecture question is:
 
 ```text
-QQuickWindow screen 0
-QQuickWindow screen 1
+does standalone QQuickWindow threaded physical presentation
+remove/reduce the characteristic Slide cadence holes
+and improve load resilience?
 ```
 
-Do not embed them in QWidget for the performance proof.
+## 10.2 Valid Quick topology
 
-Do not use `QQuickWidget`.
-
-The current QWidget Settings/editor/control application remains untouched.
-
-## First renderer spike: preserve the existing shader work
-
-Do NOT begin by porting every shader to QRhi/QSB.
-
-First prove the scheduling lever with a minimal renderer:
-
-- force/check Qt Quick `threaded` render loop;
-- OpenGL graphics API;
-- current no-vsync policy;
-- one fullscreen custom render pass per window;
-- reuse representative existing PyOpenGL code:
-  - retained/base image;
-  - Blockspin;
-  - one representative visualizer mode, preferably Bubble plus Spectrum;
-- feed immutable synthetic state;
-- render via a Qt Quick render-thread integration point such as direct `beforeRendering`/`afterRendering` native OpenGL or an equivalent direct scene-graph render node;
-- no runtime QWidget overlays in the spike.
-
-Verify via Qt scene-graph logging that the render loop is actually threaded and identify render-thread ownership.
-
-## Why not QQuickWidget
-
-`QQuickWidget` disables Qt Quick's threaded render loop and adds an offscreen render pass/texture composition.
-
-That defeats the exact architectural property being tested.
-
-## Why not start with QQuickRhiItem
-
-`QQuickRhiItem` is available and is a credible later integration tool, but it renders to an offscreen texture which is then composited.
-
-For a full-display compositor spike, prefer a direct/inline render path with no extra full-screen offscreen pass.
-
-If the Quick architecture wins and portable QRhi rendering becomes desirable, `QQuickRhiItem` / `QSGRenderNode` become valid migration tools.
-
----
-
-# 7. Qt Quick no-vsync / mixed-refresh rules for the spike
-
-Do not change the product's no-vsync policy merely to make Qt Quick look good.
-
-Use:
-- OpenGL graphics API initially;
-- swap interval 0 / Qt Quick no-vsync equivalent;
-- two on-screen QQuickWindows;
-- current actual 60/165 topology.
-
-Qt Quick's threaded loop supports explicit no-vsync and falls back to timer-based animation advancement when vsync cannot be used.
-
-Because SRPSS owns its logical transition/visualizer time, do not depend on Qt Quick NumberAnimation timing as the product clock.
-
-Also test/consider the elapsed-time Quick animation driver only where Qt's own scene-graph housekeeping needs it; SRPSS logical time remains authoritative.
-
----
-
-# 8. Qt Quick spike decision bar
-
-The spike is not accepted because a window renders.
-
-It must beat worker+push repeatedly.
-
-## Minimum migration signal
-
-Under identical low-load and controlled-load benchmark passes:
-
-- no sporadic first-frame/spawn failure;
-- no new lifecycle/resource leak class;
-- high-refresh delivery materially above worker+push;
-- tail frame gaps materially lower;
-- no regression in 60 Hz visualizer delivery;
-- no dependence on lowered fidelity;
-- low run-to-run variance.
-
-A useful target for low load remains the historical ~150 FPS high-refresh class, with the long-term goal of approaching display rate.
-
-Under controlled load, the spike must show a clear, repeatable improvement over worker+push rather than a one-run anomaly.
-
-If Qt Quick does NOT improve delivery:
-- do not port the rest of the app to Quick;
-- inspect whether Python render-thread/GIL contention is the blocker;
-- the next escalation becomes a small native/C++ physical renderer owner or other dedicated native presentation path.
-
----
-
-# 9. If Qt Quick wins: actual migration destination
-
-Do NOT rewrite all application logic.
-
-Target architecture:
+Required:
 
 ```text
-QWidget/Python application shell
-    -> Settings
-    -> configuration
-    -> providers
-    -> media control
-    -> lifecycle orchestration
-
-Dedicated logical visualizer runtime
-    -> immutable latest render state
-
-One QQuickWindow per runtime display
-    -> one scene graph / render thread per window
-    -> full-display base image + transitions
-    -> visualizer layer
-    -> runtime overlay presentation
+QQuickWindow display 0
+QQuickWindow display 1
 ```
 
-Existing runtime QWidget overlays cannot simply remain child widgets of QQuickWindow.
+standalone top-level windows.
 
-Migration options, in preferred order:
-1. present existing retained/cached card content as scene-graph textures while keeping data/model logic;
-2. incrementally port runtime overlay presentation to Qt Quick items;
-3. only rewrite model/business logic if there is a separate reason.
+Not:
+- QQuickWidget;
+- QWidget embedding for the performance proof;
+- second transparent native accelerated overlay window.
 
-Do not use extra independently dirtied transparent GL windows to avoid migrating overlay presentation; historical evidence already showed multiple accelerated presentation surfaces are harmful.
+Prove through Qt logs and captured thread IDs that:
+- threaded scene-graph loop is active;
+- render thread is distinct from GUI thread.
+
+If the loop falls back to basic/GUI-thread rendering, mark that run INVALID for the architecture comparison.
+
+## 10.3 Candidate renderer remains deliberately open
+
+Do not pre-decide all future rendering around one Quick primitive.
+
+Candidates remain:
+
+### A. Direct/native or QSGRenderNode
+
+Likely attractive for:
+- full-screen base image;
+- Slide;
+- transitions;
+- inline full-display compositor work.
+
+Potential benefit:
+no mandatory extra full-screen offscreen texture pass.
+
+### B. QQuickRhiItem
+
+Likely attractive for:
+- contained custom GPU regions;
+- visualizer;
+- clean item/renderer synchronization;
+- compositable GPU texture ownership.
+
+Potential cost:
+offscreen render target/pass.
+
+### C. Hybrid
+
+Explicitly allowed:
+
+```text
+QQuickWindow
+    ->
+direct/QSGRenderNode full-screen compositor
+    +
+QQuickRhiItem visualizer or other contained GPU item
+    +
+normal Quick scene items as appropriate
+```
+
+This still obeys:
+
+```text
+ONE physical presentation surface per display
+```
+
+Choose after measurement.
+
+Do not reject QQuickRhiItem because direct rendering is initially simpler.
+
+Do not force QQuickRhiItem because its abstraction is neater.
 
 ---
 
-# 10. What `15099d3` teaches us
+# 11. Startup flash/flicker remains a hard migration gate
 
-`15099d3` used:
-- `QOpenGLWidget` main compositor;
-- independent `SpotifyBarsGLOverlay(QOpenGLWidget)`;
-- direct visualizer `set_state()` -> `self.update()` presentation;
-- substantially less current-generation handoff/lifecycle/presentation machinery.
+Current SRPSS handles screensaver startup well.
 
-That likely explains part of its low-load responsiveness:
-- short direct presentation path;
-- fewer ownership fences/revision layers;
-- fewer cross-thread handoffs;
-- more resource residency;
-- independent visualizer presentation.
+Quick is not allowed to regress it.
 
-But later controlled history disproves a simplistic return:
-- single-display no-visualizer QOpenGLWidget compositor still produced severe native/Qt transition stalls;
-- QRhi main-compositor migration later eliminated the severe >50 ms no-visualizer class in its acceptance run;
-- a second QRhi visualizer presentation surface made delivery dramatically worse;
-- one-surface-per-display was therefore a real architectural correction.
+Reject:
+- white/default window flash;
+- black blank frame;
+- uninitialized root background;
+- old/new texture pop;
+- visualizer card flash;
+- one display visibly exposing a placeholder significantly before the other.
 
-The goal is not to recover `15099d3`.
+Required conceptual contract:
 
-The goal is to recover its **directness and low coordination overhead** while retaining the correctness/resource/lifecycle improvements made since then.
+```text
+prepare initial intentional frame/resources
+    ->
+only then expose runtime window visibly
+```
+
+The benchmark must include:
+- cold startup;
+- first visible frame;
+- timestamped first paint;
+- human eyes-on flash/flicker acceptance.
+
+An offscreen correctness test is insufficient for this gate.
+
+Settings/recreate and topology/lifecycle remain later migration gates too.
 
 ---
 
-# 11. Work order
+# 12. Stage 2 — Blockspin is the secondary stress case
 
-1. Archive current pull architecture and evidence.
-2. Selectively restore worker+push steady presentation.
-3. Verify spawn/reveal determinism.
-4. Fix media playback-state generation/freshness ownership.
-5. Build reusable integrated low-load/heavy-load benchmark.
-6. Establish worker+push reference numbers.
-7. Build QQuickWindow threaded-render vertical slice using representative existing OpenGL shaders.
-8. Benchmark it three times low-load and heavy-load.
-9. Decide:
-   - Quick wins -> begin bounded runtime-presentation migration;
-   - Quick loses -> escalate physical renderer ownership, not QWidget micro-tuning.
-10. Append immutable evidence before the next architecture change.
+Only after Slide produces a meaningful current-vs-Quick comparison:
 
-Do not spend weeks optimizing worker+push before running the Qt Quick vertical slice.
+Add Blockspin.
+
+Why:
+- it exercises more complex 3D shader/state/resource work;
+- it is a valuable secondary regression/stress workload;
+- it should not be the initial migration tax.
+
+The desired sequence is:
+
+```text
+Slide:
+    prove/refute presentation architecture cheaply
+
+then Blockspin:
+    prove the result survives a complex transition
+```
+
+Do not make Stage 1 wait for every transition to be ported.
+
+---
+
+# 13. Current-vs-Quick decision criteria
+
+Current worker+push is now a stronger reference than it looked yesterday.
+
+A Quick migration must earn its complexity.
+
+## 13.1 Light-load bar
+
+Current Slide already averages about:
+
+```text
+150–154 FPS on 165 Hz
+```
+
+Therefore Quick does not win merely by reporting a higher headline FPS.
+
+It should:
+- preserve comparable average physical delivery;
+- materially reduce the characteristic ~43–45 ms Slide holes;
+- reduce >=25/33 ms gap frequency;
+- preserve 60 Hz visualizer cadence;
+- preserve visual fidelity;
+- avoid startup flash/flicker.
+
+A run at 149 FPS with dramatically cleaner tails can be better than 154 FPS with repeated visible 44 ms holes.
+
+Perceptual continuity matters.
+
+## 13.2 Heavy/external-load bar
+
+Against the current heavy reference, Quick should materially improve:
+- high-refresh FPS;
+- request acceptance;
+- p95/p99/max frame gaps;
+- >=50/100 ms gap frequency;
+- 60 Hz visualizer delivery;
+- run-to-run variance.
+
+It may not achieve perfect 165 FPS under heavy contention.
+
+It must show a clear, repeatable architecture advantage.
+
+## 13.3 Repetition
+
+At least three identical runs per candidate in:
+- light environment;
+- operator-provided external-heavy environment.
+
+Report:
+- median;
+- min;
+- max;
+- tails.
+
+One lucky run does not decide architecture.
+
+---
+
+# 14. Migration scope if Quick wins
+
+Do not move code that is unrelated to runtime presentation.
+
+Remain QWidget/Python unless separately justified:
+- Settings GUI;
+- configuration/editor UX;
+- persistence;
+- providers;
+- media/GSMTC integration;
+- business logic;
+- general orchestration.
+
+Likely migration boundary:
+
+```text
+Python / QWidget application shell
+        |
+        +-- providers / media / settings / lifecycle
+        |
+        +-- dedicated logical runtimes
+                    |
+                    v
+             immutable/latest render state
+                    |
+        +-----------+-----------+
+        |                       |
+  QQuickWindow 0           QQuickWindow 1
+  render thread            render thread
+        |                       |
+   runtime physical presentation/composition
+```
+
+Runtime overlay PRESENTATION may need incremental migration because QWidget children cannot simply live as normal Quick children.
+
+Their data/model logic does not need to migrate.
+
+Do not solve overlay migration with new independently presented transparent GPU windows.
+
+---
+
+# 15. GIL discriminator
+
+The first Quick renderer may still execute Python/PyOpenGL on Qt's render thread.
+
+That means it still acquires the Python GIL.
+
+Do not hide this.
+
+The benchmark should capture thread identities and interpret results carefully.
+
+If Quick:
+- fixes the presentation tails despite Python callbacks -> strong architectural win.
+
+If Quick:
+- still exhibits Python scheduling holes while native/GPU work is cheap -> investigate Python/GIL as the next boundary.
+
+Only then consider a small native/C++ physical renderer owner.
+
+Do not start with C++.
+
+---
+
+# 16. Prohibitions
+
+No:
+- built-in CPU stress generator in the normal benchmark;
+- current `--heavy` Python burner as architecture evidence;
+- unbounded no-vsync benchmark as the default;
+- broad worker revert;
+- return to pull-at-paint;
+- synchronous GSMTC transport wait;
+- arbitrary playback debounce;
+- Bubble cadence/fidelity cuts;
+- source decimation;
+- transition fidelity cuts;
+- transition-specific optimization to hide a shared presentation defect;
+- QQuickWidget as the Quick architecture proof;
+- wholesale Settings/QML rewrite;
+- startup flash accepted as migration debt;
+- second accelerated native overlay surface;
+- architecture decision based on average FPS alone.
+
+---
+
+# 17. Required execution order
+
+## Phase A — finish correctness stabilization
+
+1. Keep current worker+push architecture.
+2. Extend playback freshness ownership with expected-state confirmation.
+3. Extend deterministic playback tests.
+4. Run focused playback tests.
+5. Do one short installed verification:
+   - mouse Pause/Play;
+   - physical media key;
+   - visualizer edge count;
+   - no automatic PAUSE/PLAY flap.
+
+Do not run a giant full suite as the first step.
+
+## Phase B — make benchmark safe
+
+6. Remove same-process CPU-burn `--heavy` from canonical Quick benchmark.
+7. Remove unbounded update loop from default path.
+8. If throughput mode is retained, make it explicit `--throughput-probe`.
+9. Add passive `--load-label`.
+10. Add actual 165/60 target pacing.
+
+## Phase C — common Slide benchmark
+
+11. Define shared deterministic images/timeline/synthetic audio.
+12. Implement matching worker+push benchmark using current production Slide/compositor path.
+13. Implement equivalent Slide path in standalone QQuickWindow benchmark.
+14. Include Bubble visualizer on the 60 Hz side.
+15. Record phase markers and tail metrics.
+16. Add offscreen correctness mode where useful.
+17. Preserve short on-screen real mixed-refresh mode.
+
+## Phase D — establish reference
+
+18. Run worker+push three times light.
+19. Run worker+push three times with operator-provided external heavy load.
+20. Save results as immutable evidence.
+
+## Phase E — test Quick
+
+21. Prove threaded Quick render loop.
+22. Run identical three-pass light protocol.
+23. Run identical external-heavy protocol.
+24. Compare tails first, then average throughput/resource cost.
+25. Human eyes-on Slide continuity and startup flash acceptance.
+
+## Phase F — decision
+
+26. If Quick materially wins:
+    - compare direct/QSGRenderNode vs QQuickRhiItem vs hybrid only where useful;
+    - add Blockspin secondary stress case;
+    - perform runtime feature-parity migration audit.
+
+27. If Quick does not materially win:
+    - do not port Settings/runtime widgets into QML;
+    - inspect Python/GIL/native presentation ownership;
+    - consider a small native physical renderer candidate only if evidence earns it.
+
+---
+
+# 18. Evidence hierarchy
+
+When conclusions conflict:
+
+1. installed visible behavior;
+2. repeated production-shaped benchmark;
+3. installed structured telemetry;
+4. exact current source;
+5. deterministic regression tests;
+6. docs;
+7. commit messages;
+8. agent prose.
+
+Human perception remains authoritative for:
+- Slide continuity;
+- Bubble continuity;
+- Pause/Play hitch;
+- startup flash/flicker.
+
+Metrics explain those observations.
+
+They do not overrule them.
+
+---
+
+# 19. Immediate definition of success
+
+The next milestone is NOT:
+
+```text
+"Qt Quick renders."
+```
+
+It is:
+
+```text
+current worker+push correctness stabilized
++
+one safe reproducible Slide+visualizer benchmark exists
++
+current reference recorded
++
+Quick runs the same workload on a proven threaded QQuickWindow path
++
+we can compare the characteristic microgaps and heavy-load collapse directly
+```
+
+Only then decide the physical presentation architecture.

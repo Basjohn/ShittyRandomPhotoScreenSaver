@@ -142,10 +142,10 @@
       "slide": {
         "direction": "Random"
       },
-      "type": "Particle",
+      "type": "3D Block Spins",
       "wipe": {
-        "direction": "Diagonal TL-BR",
-        "last_direction": "Diagonal TL-BR"
+        "direction": "Bottom to Top",
+        "last_direction": "Bottom to Top"
       }
     },
     "ui": {
@@ -166,13 +166,13 @@
       "last_tab_scroll.widgets": 230,
       "tab_state.widgets.view_state.scroll": 230,
       "tab_state.widgets.view_state.subtab": 2,
-      "tab_state.widgets.view_state.subtab_id": "gmail",
+      "tab_state.widgets.view_state.subtab_id": "visualizers",
       "tab_state.widgets.view_state.subtab_scrolls.0": 0,
       "tab_state.widgets.view_state.subtab_scrolls.1": 0,
       "tab_state.widgets.view_state.subtab_scrolls.2": 0,
       "tab_state.widgets.view_state.subtab_scrolls.3": 0,
       "tab_state.widgets.view_state.subtab_scrolls.4": 0,
-      "tab_state.widgets.view_state.subtab_scrolls.5": 919,
+      "tab_state.widgets.view_state.subtab_scrolls.5": 0,
       "tab_state.widgets.view_state.subtab_scrolls.6": 0,
       "tab_state.widgets.view_state.subtab_scrolls.7": 0,
       "visualizer_adv_states.bubble": false,
@@ -205,6 +205,7 @@
       "visualizer_bucket_states.spectrum:ghost": true,
       "visualizer_bucket_states.spectrum:render": true,
       "visualizer_bucket_states.spectrum:shape": true,
+      "visualizer_scroll_positions.bubble": 0,
       "visualizer_tech_bucket_states.bubble:agc": false,
       "visualizer_tech_bucket_states.bubble:transient": true,
       "visualizer_tech_bucket_states.devcurve:agc": false,
@@ -220,11 +221,27 @@
       "visualizer_tech_states.oscilloscope": true,
       "visualizer_tech_states.sine_wave": true,
       "visualizer_tech_states.spectrum": true,
+      "widget_bucket_states.clock:layout": false,
+      "widget_bucket_states.clock:time": true,
+      "widget_bucket_states.defaults:appearance": true,
+      "widget_bucket_states.defaults:cache": true,
+      "widget_bucket_states.defaults:layout": true,
+      "widget_bucket_states.media:appearance": true,
+      "widget_bucket_states.media:controls": true,
       "widget_bucket_states.media:provider_layout": true,
-      "widget_bucket_states.reddit:shared_appearance": true,
-      "widget_bucket_states.reddit:shared_layout": true,
-      "widget_bucket_states.steam:achievement_pulse": false,
-      "widget_bucket_states.steam:connection": false,
+      "widget_bucket_states.reddit:interaction": false,
+      "widget_bucket_states.reddit:reddit1": false,
+      "widget_bucket_states.reddit:shared_appearance": false,
+      "widget_bucket_states.reddit:shared_layout": false,
+      "widget_bucket_states.steam:abandonment_issues": true,
+      "widget_bucket_states.steam:abandonment_issues_appearance": true,
+      "widget_bucket_states.steam:abandonment_issues_content": true,
+      "widget_bucket_states.steam:abandonment_issues_layout": true,
+      "widget_bucket_states.steam:achievement_pulse": true,
+      "widget_bucket_states.steam:achievement_pulse_appearance": true,
+      "widget_bucket_states.steam:achievement_pulse_content": true,
+      "widget_bucket_states.steam:achievement_pulse_layout": true,
+      "widget_bucket_states.steam:connection": true,
       "widget_bucket_states.weather:content": true,
       "widget_bucket_states.weather:source_layout": true
     },
@@ -365,7 +382,7 @@
         "margin": 30,
         "minimum_inactivity_weeks": 12,
         "minimum_playtime_minutes": 15,
-        "monitor": "ALL",
+        "monitor": "1",
         "never_show_appids": [],
         "pinned_appid": null,
         "position": "Bottom Right",
@@ -430,7 +447,7 @@
         "latest_unlock_count": 5,
         "margin": 30,
         "monitor": "1",
-        "position": "Bottom Right",
+        "position": "Bottom Left",
         "preferred_height": 334,
         "preferred_width": 600,
         "selection_mode": "most_recent",
@@ -461,7 +478,7 @@
           255
         ],
         "border_opacity": 1.0,
-        "calendar_font_size": 20,
+        "calendar_font_size": 22,
         "calendar_layout": "shared_line",
         "color": [
           255,
@@ -480,7 +497,7 @@
         "shared_tick": true,
         "show_background": false,
         "show_date": false,
-        "show_day_of_week": false,
+        "show_day_of_week": true,
         "show_digital_separator": false,
         "show_numerals": true,
         "show_seconds": true,
@@ -500,7 +517,7 @@
         "font_size": 32,
         "format": "24h",
         "margin": 30,
-        "monitor": "2",
+        "monitor": 2,
         "position": "Bottom Right",
         "show_numerals": true,
         "show_seconds": false,
@@ -534,9 +551,13 @@
       "custom_layout_restore": {
         "version": 1,
         "widgets": {
-          "achievement_pulse": {
+          "abandonment_issues": {
             "monitor": "1",
             "position": "Bottom Right"
+          },
+          "achievement_pulse": {
+            "monitor": "1",
+            "position": "Bottom Left"
           },
           "clock": {
             "monitor": "ALL",
@@ -555,7 +576,7 @@
             "position": "Bottom Left"
           },
           "media": {
-            "monitor": "1",
+            "monitor": "2",
             "position": "Top Left"
           },
           "reddit": {
@@ -567,7 +588,7 @@
             "position": "Bottom Right"
           },
           "spotify_visualizer": {
-            "monitor": "1",
+            "monitor": "2",
             "position": "Top Left"
           },
           "weather": {
@@ -758,7 +779,7 @@
         "font_family": "Inter",
         "font_size": 17,
         "margin": 30,
-        "monitor": 1,
+        "monitor": 2,
         "mute_button_enabled": false,
         "playback_progress_enabled": false,
         "playback_progress_fill_color": [
@@ -818,7 +839,7 @@
         "header_logo_px_adjust": 0,
         "limit": 20,
         "margin": 30,
-        "monitor": "2",
+        "monitor": 2,
         "position": "Bottom Center",
         "provider": "rss",
         "show_background": true,
@@ -849,7 +870,7 @@
         ],
         "enabled": true,
         "limit": 20,
-        "monitor": "2",
+        "monitor": 2,
         "position": "Bottom Right",
         "show_background": true,
         "subreddit": "Games"
@@ -914,15 +935,15 @@
         "bubble_ghosting_enabled": true,
         "bubble_gradient_dark": [
           0,
-          16,
-          45,
+          4,
+          11,
           255
         ],
         "bubble_gradient_direction": "top",
         "bubble_gradient_light": [
-          0,
-          82,
-          175,
+          43,
+          61,
+          80,
           255
         ],
         "bubble_gradient_semantics_version": 2,
@@ -932,14 +953,14 @@
         "bubble_kick_lane_gain": 1.0,
         "bubble_manual_floor": 0.3,
         "bubble_outline_color": [
-          219,
-          239,
+          243,
+          250,
           255,
-          255
+          245
         ],
         "bubble_pop_color": [
-          38,
-          115,
+          138,
+          146,
           191,
           255
         ],
@@ -951,10 +972,10 @@
         "bubble_small_freq_pulse": 1.1,
         "bubble_small_size_max": 0.01,
         "bubble_specular_color": [
-          219,
-          239,
           255,
-          255
+          255,
+          255,
+          235
         ],
         "bubble_specular_direction": "top_left",
         "bubble_stream_constant_speed": 0.15,
@@ -1159,8 +1180,8 @@
         "devcurve_transient_clamp": 1.5,
         "devcurve_transient_pulse_gain": 1.0,
         "enabled": true,
-        "mode": "bubble",
-        "monitor": "2",
+        "mode": "devcurve",
+        "monitor": "ALL",
         "osc_ghost_decay": 0.4,
         "osc_ghost_intensity": 0.4,
         "osc_ghost_line2_enabled": true,
@@ -1285,16 +1306,16 @@
         "preset_bubble": 0,
         "preset_devcurve": 0,
         "preset_oscilloscope": 0,
-        "preset_sine_wave": 2,
+        "preset_sine_wave": 4,
         "preset_spectrum": 0,
         "rainbow_enabled": false,
-        "rainbow_speed": 0.15,
-        "sine_card_adaptation": 0.3,
-        "sine_crawl_amount": 0.4,
-        "sine_density": 1.0,
+        "rainbow_speed": 0.5,
+        "sine_card_adaptation": 0.24,
+        "sine_crawl_amount": 0.0,
+        "sine_density": 1.6,
         "sine_displacement": 0.0,
-        "sine_ghost_alpha": 0.45,
-        "sine_ghost_decay": 0.3,
+        "sine_ghost_alpha": 0.12,
+        "sine_ghost_decay": 0.68,
         "sine_ghost_line2_enabled": true,
         "sine_ghost_line3_enabled": true,
         "sine_ghost_line4_enabled": true,
@@ -1302,42 +1323,42 @@
         "sine_ghost_line6_enabled": true,
         "sine_ghosting_enabled": true,
         "sine_glow_color": [
-          0,
-          107,
-          230,
-          240
+          148,
+          188,
+          255,
+          218
         ],
         "sine_glow_enabled": true,
-        "sine_glow_intensity": 0.6,
-        "sine_glow_reactivity": 1.0,
+        "sine_glow_intensity": 0.42,
+        "sine_glow_reactivity": 1.3,
         "sine_heartbeat": 0.0,
         "sine_line1_shift": 0.0,
         "sine_line2_color": [
+          192,
+          224,
           255,
-          255,
-          255,
-          200
+          198
         ],
         "sine_line2_glow_color": [
-          47,
-          165,
+          160,
+          178,
           255,
-          180
+          178
         ],
-        "sine_line2_shift": 0.35,
+        "sine_line2_shift": 0.22,
         "sine_line3_color": [
+          230,
+          196,
           255,
-          255,
-          255,
-          200
+          190
         ],
         "sine_line3_glow_color": [
-          47,
-          116,
-          227,
-          180
+          202,
+          148,
+          255,
+          172
         ],
-        "sine_line3_shift": -0.35,
+        "sine_line3_shift": -0.22,
         "sine_line4_color": [
           255,
           120,
@@ -1381,25 +1402,25 @@
           255,
           255,
           255,
-          240
+          228
         ],
         "sine_line_count": 3,
         "sine_line_dim": false,
-        "sine_line_offset_bias": 0.0,
-        "sine_micro_wobble": 0.2,
+        "sine_line_offset_bias": 0.12,
+        "sine_micro_wobble": 0.08,
         "sine_reactive_glow": true,
-        "sine_sensitivity": 2.75,
+        "sine_sensitivity": 0.36,
         "sine_smoothing": 0.7,
-        "sine_speed": 0.7,
+        "sine_speed": 0.42,
         "sine_travel_line2": 0,
         "sine_travel_line3": 0,
         "sine_travel_line4": 0,
         "sine_travel_line5": 0,
         "sine_travel_line6": 0,
-        "sine_vertical_shift": 40,
+        "sine_vertical_shift": 44,
         "sine_wave_adaptive_sensitivity": true,
-        "sine_wave_agc_strength": 0.5,
-        "sine_wave_audio_block_size": 512,
+        "sine_wave_agc_strength": 0.62,
+        "sine_wave_audio_block_size": 256,
         "sine_wave_bar_border_color": [
           255,
           255,
@@ -1409,26 +1430,26 @@
         "sine_wave_bar_border_opacity": 1.0,
         "sine_wave_bar_count": 40,
         "sine_wave_bar_fill_color": [
-          255,
-          255,
-          255,
-          230
+          0,
+          0,
+          0,
+          130
         ],
         "sine_wave_dynamic_floor": true,
         "sine_wave_dynamic_range_enabled": false,
-        "sine_wave_effect": 0.8,
-        "sine_wave_growth": 5.0,
-        "sine_wave_input_gain": 1.0,
-        "sine_wave_kick_lane_gain": 1.0,
+        "sine_wave_effect": 0.3,
+        "sine_wave_growth": 4.0,
+        "sine_wave_input_gain": 0.44,
+        "sine_wave_kick_lane_gain": 0.85,
         "sine_wave_manual_floor": 0.12,
         "sine_wave_rainbow_enabled": false,
-        "sine_wave_rainbow_speed": 0.5,
-        "sine_wave_sensitivity": 0.4,
-        "sine_wave_transient_clamp": 1.5,
+        "sine_wave_rainbow_speed": 0.22,
+        "sine_wave_sensitivity": 0.36,
+        "sine_wave_transient_clamp": 1.0,
         "sine_wave_transient_pulse_gain": 1.0,
-        "sine_wave_transient_width_mix": 0.4,
+        "sine_wave_transient_width_mix": 0.32,
         "sine_wave_travel": 2,
-        "sine_width_reaction": 0.0,
+        "sine_width_reaction": 0.18,
         "spectrum_adaptive_sensitivity": true,
         "spectrum_agc_strength": 0.5,
         "spectrum_audio_block_size": 512,
@@ -1441,9 +1462,9 @@
         "spectrum_bar_border_opacity": 1.0,
         "spectrum_bar_count": 33,
         "spectrum_bar_fill_color": [
-          255,
-          255,
-          255,
+          12,
+          12,
+          12,
           230
         ],
         "spectrum_border_radius": 2.0,
