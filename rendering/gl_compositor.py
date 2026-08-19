@@ -194,15 +194,6 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
 
         self._visualizer_layer = CompositorVisualizerLayer(self)
 
-        # Pull-based visualizer logical source (Current_Plan section 5). When a
-        # dedicated logical runtime is active it registers itself here so the
-        # display presentation opportunity samples its present-revision and
-        # applies its freshest steady state during paint - instead of the worker
-        # marshalling one GUI callback per logical publication. Assigned/cleared
-        # only on the GUI thread; the compute-thread scheduler reads it as a
-        # plain attribute and calls its thread-safe revision probe.
-        self._visualizer_logical_source = None
-
         # Presentation liveness reasons. One render strategy instance owns this
         # display's presentation; a transition and a visible visualizer are two
         # independent reasons to keep presenting, so neither may stop the other.
@@ -557,37 +548,6 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
             logger.debug("[SPOTIFY_VIS] Failed to stamp snapshot DPR", exc_info=True)
         return pixmap
 
-    def set_visualizer_logical_source(self, source) -> None:
-        """Register the pull-based visualizer logical source (GUI thread only).
-
-        `source` must expose a thread-safe `logical_present_revision() -> int`
-        and a GUI-thread `apply_latest_logical_present() -> None`.
-        """
-        self._visualizer_logical_source = source
-
-    def clear_visualizer_logical_source(self, source=None) -> None:
-        """Detach the pull source (GUI thread). A stale source clears no-op."""
-        if source is None or self._visualizer_logical_source is source:
-            self._visualizer_logical_source = None
-
-    def _pull_visualizer_logical_state(self) -> None:
-        """Apply the freshest steady logical state before drawing the layer.
-
-        Runs on the GUI thread inside the compositor paint. This is the pull that
-        replaces the per-publication GUI callback: the display presentation
-        opportunity, not the ~90 Hz logical worker, drives steady-state delivery.
-        """
-        source = self._visualizer_logical_source
-        if source is None:
-            return
-        apply = getattr(source, "apply_latest_logical_present", None)
-        if not callable(apply):
-            return
-        try:
-            apply()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Compositor logical pull failed", exc_info=True)
-
     def presentation_scene_revision(self) -> int | None:
         """Revision of the scene a paint would present, or None if always eligible.
 
@@ -595,13 +555,6 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
         the frame - an active image transition, or any additional liveness
         reason - so those paths keep every admitted display deadline exactly
         as before.
-
-        When a pull-based logical source is registered, the freshness signal is
-        that source's present-revision (advances only for visually significant
-        logical state), so the display presents when the logical scene changes
-        and suppresses a settled idle scene - without the worker posting a GUI
-        callback. Otherwise it falls back to the layer scene revision for the
-        legacy push path.
 
         This is NOT a cadence cap, a refresh divisor, producer-owned paint
         scheduling or a second clock. The compositor timer still wakes at the
@@ -620,14 +573,6 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
         }
         if not reasons or not reasons.issubset(visualizer_reasons):
             return None
-        source = self._visualizer_logical_source
-        if source is not None:
-            probe = getattr(source, "logical_present_revision", None)
-            if callable(probe):
-                try:
-                    return int(probe())
-                except Exception:
-                    return None
         layer = self._visualizer_layer
         if layer is None:
             return None
