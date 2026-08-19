@@ -165,7 +165,10 @@ def ensure_tick_source(widget: Any) -> None:
         # A GUI fallback tick already drives this widget; never run both.
         return
 
-    from widgets.spotify_visualizer.logical_runtime import VisualizerLogicalRuntime
+    from widgets.spotify_visualizer.logical_runtime import (
+        VisualizerLogicalRuntime,
+        coerce_identity,
+    )
     from widgets.spotify_visualizer.tick_pipeline import logical_tick
 
     interval_s = authored_logical_interval_s(widget)
@@ -173,7 +176,7 @@ def ensure_tick_source(widget: Any) -> None:
         runtime = VisualizerLogicalRuntime(
             step=lambda _deadline_ts, _w=widget: logical_tick(_w),
             interval_s=interval_s,
-            generation=int(getattr(widget, "_runtime_generation", -1) or -1),
+            generation=coerce_identity(getattr(widget, "_runtime_generation", None)),
         )
         runtime.start()
         widget._logical_runtime = runtime

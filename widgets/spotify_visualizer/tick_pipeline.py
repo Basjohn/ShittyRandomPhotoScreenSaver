@@ -24,6 +24,7 @@ from core.logging.logger import (
 )
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
 from widgets.spotify_visualizer import mode_capabilities, mode_transition
+from widgets.spotify_visualizer.logical_runtime import coerce_identity
 from widgets.spotify_visualizer.spectrum_presentation_smoothing import (
     reset_widget_spectrum_presentation_smoothing,
     resolve_widget_spectrum_presentation,
@@ -1368,9 +1369,11 @@ def present_tick(widget: Any) -> bool:
     if frame is None:
         return False
     payload = frame.state
-    generation = int(getattr(widget, "_runtime_generation", -1) or -1)
+    generation = coerce_identity(getattr(widget, "_runtime_generation", None))
     if generation >= 0 and int(frame.generation) != generation:
-        # A retired generation's frame must never be presented.
+        # A retired generation's frame must never be presented. `coerce_identity`
+        # keeps a valid generation 0 as 0 so this fence stays armed for the first
+        # generation instead of being disabled by a -1 sentinel.
         return False
     if bool(payload.get("mode_reveal_ready", False)):
         # The logical half decided; the GUI half performs the reveal.
@@ -1445,11 +1448,16 @@ def _publish_logical_state(
         # A decided reveal still has to reach the GUI half even on paths that
         # must not push a frame - the fresh-engine-frame gate is one of them.
         "present_frame": bool(present_frame),
-        "generation": int(getattr(widget, "_runtime_generation", -1) or -1),
+        # Generation and activation are ownership fences that both start at a
+        # valid 0; `coerce_identity` preserves that instead of collapsing it to
+        # the -1 sentinel through truthiness.
+        "generation": coerce_identity(getattr(widget, "_runtime_generation", None)),
         # `_activation_id` is not a widget attribute; the widget-owned identity
         # is `_last_engine_activation_seen`, updated once the engine's fresh
         # frame for the pending activation actually arrives.
-        "mode_activation_id": int(getattr(widget, "_last_engine_activation_seen", -1) or -1),
+        "mode_activation_id": coerce_identity(
+            getattr(widget, "_last_engine_activation_seen", None)
+        ),
         "mode": mode_capabilities.widget_mode_key(widget),
     }
     mailbox = widget._logical_mailbox

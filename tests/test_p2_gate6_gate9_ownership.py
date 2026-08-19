@@ -14,6 +14,7 @@ from widgets.spotify_visualizer import tick_helpers
 from widgets.spotify_visualizer.logical_runtime import (
     LatestStateMailbox,
     VisualizerLogicalRuntime,
+    coerce_identity,
 )
 
 
@@ -182,6 +183,153 @@ class TestGate9StaleGenerationCannotPublishOrReveal:
             "current generation's presenter"
         )
         widget.cleanup()
+
+
+class TestGate9GenerationZeroFencing:
+    """Slice F - a valid generation 0 must survive as 0, not collapse to -1.
+
+    The first installed run started its logical runtime as `generation=-1`
+    because `int(getattr(widget, "_runtime_generation", -1) or -1)` mapped the
+    valid initial generation 0 to the invalid sentinel through truthiness. That
+    disabled the `generation >= 0` presentation fence for the entire first
+    generation. Each bar here fails if that `int(value or -1)` coercion returns.
+    """
+
+    def test_coerce_identity_preserves_zero_and_rejects_none(self):
+        assert coerce_identity(0) == 0
+        assert coerce_identity(1) == 1
+        assert coerce_identity(None) == -1
+        assert coerce_identity("not-an-int") == -1
+        # The exact defect being guarded: the old truthiness coercion.
+        assert (0 or -1) == -1
+        assert coerce_identity(0) != (0 or -1)
+
+    def test_ensure_tick_source_constructs_generation_zero_as_zero(self, live_widget):
+        live_widget._runtime_generation = 0
+
+        tick_helpers.ensure_tick_source(live_widget)
+
+        assert live_widget._logical_runtime.generation == 0, (
+            "a valid generation 0 was collapsed to the -1 sentinel at construction"
+        )
+        assert live_widget._logical_runtime.describe()["generation"] == 0
+
+    def test_publication_under_generation_zero_carries_zero(self, qt_app, qtbot):
+        from PySide6.QtWidgets import QWidget
+
+        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+        from widgets.spotify_visualizer import tick_pipeline
+
+        parent = QWidget()
+        qtbot.addWidget(parent)
+        widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+        qtbot.addWidget(widget)
+        widget._enabled = True
+        widget._engine = None
+        widget._waiting_for_fresh_engine_frame = False
+        widget._waiting_for_fresh_frame = False
+        widget._runtime_generation = 0
+
+        tick_pipeline.logical_tick(widget)
+
+        published = widget._logical_mailbox.peek()
+        assert published is not None
+        assert published.generation == 0, (
+            "a frame published under generation 0 carried the -1 sentinel instead"
+        )
+        widget.cleanup()
+
+    def test_the_present_fence_is_armed_at_generation_zero(
+        self, qt_app, qtbot, monkeypatch
+    ):
+        """A foreign-generation frame must not reveal while we own generation 0.
+
+        The observable is the reveal side effect, not `present_tick`'s return
+        value: `push_gpu_frame` can return False on its own gating, so only a
+        spy on `execute_mode_reveal` distinguishes an armed fence (never called)
+        from a disabled one (called for the foreign generation).
+        """
+        from PySide6.QtWidgets import QWidget
+
+        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+        from widgets.spotify_visualizer import tick_pipeline
+
+        reveals: list = []
+        monkeypatch.setattr(
+            tick_pipeline.mode_transition,
+            "execute_mode_reveal",
+            lambda w, now: reveals.append(now),
+        )
+
+        parent = QWidget()
+        qtbot.addWidget(parent)
+        widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+        qtbot.addWidget(widget)
+        widget._enabled = True
+        widget._runtime_generation = 0
+        # A frame from some other generation is sitting in the slot, carrying a
+        # decided reveal that only an armed fence will refuse.
+        widget._logical_mailbox.publish(
+            {"now_ts": 1.0, "present_frame": True, "changed": False,
+             "mode_reveal_ready": True},
+            generation=5,
+            activation_id=1,
+        )
+
+        tick_pipeline.present_tick(widget)
+
+        assert reveals == [], (
+            "the fence was disabled at generation 0, so a foreign-generation "
+            "frame drove a reveal"
+        )
+        widget.cleanup()
+
+    def test_retired_generation_zero_cannot_reveal_into_replacement_one(
+        self, qt_app, qtbot, monkeypatch
+    ):
+        from PySide6.QtWidgets import QWidget
+
+        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+        from widgets.spotify_visualizer import tick_pipeline
+
+        reveals: list = []
+        monkeypatch.setattr(
+            tick_pipeline.mode_transition,
+            "execute_mode_reveal",
+            lambda w, now: reveals.append(now),
+        )
+
+        parent = QWidget()
+        qtbot.addWidget(parent)
+        widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+        qtbot.addWidget(widget)
+        widget._enabled = True
+        widget._engine = None
+        widget._waiting_for_fresh_engine_frame = False
+        widget._waiting_for_fresh_frame = False
+        widget._runtime_generation = 0
+
+        # The initial generation 0 publishes a frame carrying a decided reveal...
+        tick_pipeline.logical_tick(widget)
+        published = widget._logical_mailbox.peek()
+        assert published is not None and published.generation == 0
+        published.state["mode_reveal_ready"] = True
+        # ...then retirement/recreation advances the owner to generation 1.
+        widget._runtime_generation = 1
+
+        tick_pipeline.present_tick(widget)
+
+        assert reveals == [], (
+            "a retired generation-0 frame revealed into replacement generation 1"
+        )
+        widget.cleanup()
+
+    def test_retired_generation_one_cannot_publish_into_replacement_two(self):
+        mailbox = LatestStateMailbox()
+        mailbox.publish({"gen": 1}, generation=1, activation_id=0)
+
+        assert mailbox.take_for_generation(2) is None
+        assert mailbox.take() is None
 
 
 class TestGate4LogicalCodeCannotReachGuiMutation:
