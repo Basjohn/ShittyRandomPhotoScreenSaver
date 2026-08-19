@@ -262,6 +262,11 @@ class CompositorVisualizerLayer:
         # its own to grab.
         self._capture_requested = False
         self._captured_scene_image = None
+        # Monotonic identity of the latest useful visualizer scene. It
+        # advances on every publication and on clear, so a physical
+        # presentation deadline can tell whether painting again would
+        # reveal anything the last requested paint did not.
+        self._scene_revision = 0
         # Set when the authored card image genuinely could not be produced
         # or uploaded. Readiness stays truthful, but the reveal gate must not
         # wait forever for something that cannot arrive.
@@ -274,6 +279,9 @@ class CompositorVisualizerLayer:
 
     def publish(self, state: Optional[VisualizerRenderState]) -> None:
         """Accept the latest render state, replacing any previous one."""
+        # Every publication is a new authored scene: fade progress, card
+        # identity and mode state all arrive through here.
+        self._scene_revision += 1
         self._state = state
         if state is not None and state.owner is not None:
             # Establish destruction authority deliberately; it outlives
@@ -292,6 +300,8 @@ class CompositorVisualizerLayer:
         """
         self._release_card_visual()
         self._state = None
+        # Clearing is itself a scene change: the card must stop being drawn.
+        self._scene_revision += 1
         # Readiness must not survive the state it described.
         self._committed_geometry = None
         self._committed_generation = -1
@@ -317,6 +327,19 @@ class CompositorVisualizerLayer:
     @property
     def state(self) -> Optional[VisualizerRenderState]:
         return self._state
+
+    @property
+    def scene_revision(self) -> int:
+        """Monotonic identity of the latest useful visualizer scene."""
+        return self._scene_revision
+
+    def invalidate_scene(self) -> None:
+        """Force the next deadline to be eligible.
+
+        For changes that alter the drawn result without a new publication -
+        a card style/geometry rebuild, for example.
+        """
+        self._scene_revision += 1
 
     def has_visible_state(self) -> bool:
         """Whether a published state currently wants to be drawn."""

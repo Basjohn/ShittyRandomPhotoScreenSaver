@@ -548,6 +548,39 @@ class GLCompositorWidget(ExternalOpenGLRhiWidget):
             logger.debug("[SPOTIFY_VIS] Failed to stamp snapshot DPR", exc_info=True)
         return pixmap
 
+    def presentation_scene_revision(self) -> int | None:
+        """Revision of the scene a paint would present, or None if always eligible.
+
+        Returns None whenever anything other than the visualizer can change
+        the frame - an active image transition, or any additional liveness
+        reason - so those paths keep every admitted display deadline exactly
+        as before.
+
+        This is NOT a cadence cap, a refresh divisor, producer-owned paint
+        scheduling or a second clock. The compositor timer still wakes at the
+        display rate and remains the sole presentation authority; it simply
+        declines to queue a GUI paint for a scene it has already requested.
+        """
+        try:
+            reasons = set(self._presentation_reasons)
+        except Exception:
+            return None
+        if self.PRESENTATION_TRANSITION_ACTIVE in reasons:
+            return None
+        visualizer_reasons = {
+            self.PRESENTATION_VISUALIZER_ACTIVE,
+            self.PRESENTATION_VISUALIZER_PREPARING,
+        }
+        if not reasons or not reasons.issubset(visualizer_reasons):
+            return None
+        layer = self._visualizer_layer
+        if layer is None:
+            return None
+        try:
+            return int(layer.scene_revision)
+        except Exception:
+            return None
+
     def visualizer_presentation_readiness(self):
         """Readiness of the compositor-owned visualizer for THIS generation.
 

@@ -77,6 +77,7 @@ def _reset_delivery_perf_window(widget) -> None:
         setattr(widget, "_srpss_delivery_dispatch_pending_skips", 0)
         setattr(widget, "_srpss_delivery_paint_pending_skips", 0)
         setattr(widget, "_srpss_delivery_unknown_skips", 0)
+        setattr(widget, "_srpss_delivery_unchanged_scene_skips", 0)
         setattr(widget, "_srpss_delivery_dispatch_unknown", 0)
         setattr(widget, "_srpss_delivery_window_active_last", None)
         setattr(widget, "_srpss_delivery_window_active_changes", 0)
@@ -171,6 +172,16 @@ def _record_delivery_wake(
         pass
 
 
+def _record_unchanged_scene_skip(widget) -> None:
+    """Label an intentional no-change skip so it is not read as a delivery miss."""
+    if widget is None or not is_perf_metrics_enabled():
+        return
+    try:
+        setattr(widget, "_srpss_timer_last_skip_stage", "unchanged_scene")
+    except Exception:
+        pass
+
+
 def _record_delivery_result(widget, accepted_update: bool) -> None:
     if widget is None or not is_perf_metrics_enabled():
         return
@@ -185,6 +196,7 @@ def _record_delivery_result(widget, accepted_update: bool) -> None:
         stage = str(_safe_attr(widget, "_srpss_timer_last_skip_stage", "unknown") or "unknown")
         counter = {
             "dispatch": "_srpss_delivery_dispatch_pending_skips",
+            "unchanged_scene": "_srpss_delivery_unchanged_scene_skips",
             "paint": "_srpss_delivery_paint_pending_skips",
         }.get(stage, "_srpss_delivery_unknown_skips")
         setattr(widget, counter, int(_safe_attr(widget, counter, 0) or 0) + 1)
@@ -275,7 +287,13 @@ def _log_delivery_perf_window(widget, *, outcome: str, target_fps: int) -> None:
     dispatch_skips = int(_safe_attr(widget, "_srpss_delivery_dispatch_pending_skips", 0) or 0)
     paint_skips = int(_safe_attr(widget, "_srpss_delivery_paint_pending_skips", 0) or 0)
     unknown_skips = int(_safe_attr(widget, "_srpss_delivery_unknown_skips", 0) or 0)
-    acceptance_pct = (accepted / wakeups * 100.0) if wakeups > 0 else 0.0
+    unchanged_scene_skips = int(
+        _safe_attr(widget, "_srpss_delivery_unchanged_scene_skips", 0) or 0
+    )
+    # Intentional no-change suppression is not a delivery failure, so it is
+    # excluded from the acceptance denominator rather than counted as a miss.
+    useful_wakeups = max(0, wakeups - unchanged_scene_skips)
+    acceptance_pct = (accepted / useful_wakeups * 100.0) if useful_wakeups > 0 else 0.0
     wake_n, wake_p50, wake_p95, wake_max = _delivery_stats(widget, "_srpss_delivery_wake_late_ms")
     dispatch_n, dispatch_p50, dispatch_p95, dispatch_max = _delivery_stats(widget, "_srpss_delivery_dispatch_ms")
     paint_n, paint_p50, paint_p95, paint_max = _delivery_stats(widget, "_srpss_delivery_paint_pending_ms")
@@ -305,7 +323,7 @@ def _log_delivery_perf_window(widget, *, outcome: str, target_fps: int) -> None:
         "[PERF][DELIVERY_STAGE][CADENCE] screen=%s transition=%s window=%d outcome=%s "
         "target_hz=%d elapsed_ms=%.1f wakeups=%d deadline_wakeups=%d immediate_requests=%d "
         "accepted=%d acceptance_pct=%.2f dispatch_pending_skips=%d paint_pending_skips=%d "
-        "unknown_skips=%d wake_late_n=%d wake_late_p50_ms=%.3f wake_late_p95_ms=%.3f "
+        "unknown_skips=%d unchanged_scene_skips=%d wake_late_n=%d wake_late_p50_ms=%.3f wake_late_p95_ms=%.3f "
         "wake_late_max_ms=%.3f dispatch_skip_n=%d dispatch_skip_age_p95_ms=%.3f "
         "dispatch_skip_age_max_ms=%.3f paint_skip_n=%d paint_skip_age_p95_ms=%.3f "
         "paint_skip_age_max_ms=%.3f",
@@ -318,6 +336,7 @@ def _log_delivery_perf_window(widget, *, outcome: str, target_fps: int) -> None:
         dispatch_skips,
         paint_skips,
         unknown_skips,
+        unchanged_scene_skips,
         wake_n,
         wake_p50,
         wake_p95,
@@ -733,6 +752,11 @@ class AdaptiveTimerStrategy:
     def __init__(self, compositor: "GLCompositorWidget", config: AdaptiveTimerConfig):
         self._compositor = compositor
         self._config = config
+        # Scene revision this strategy last asked to have presented. None means
+        # "always eligible", which is every shape except visualizer-only,
+        # transition-free operation.
+        self._last_requested_scene_revision: object = None
+        self._current_scene_revision: object = None
         
         # Atomic state management
         self._state = AtomicTimerState(TimerState.IDLE)
@@ -1041,17 +1065,56 @@ class AdaptiveTimerStrategy:
                         deadline_ts=deadline_ts,
                         immediate=immediate,
                     )
-                accepted_update = _queue_safe_widget_update(self._compositor)
-                if perf_delivery:
-                    _record_delivery_result(self._compositor, accepted_update)
+                if self._scene_is_already_requested():
+                    # Nothing new to reveal. The compositor timer keeps waking at
+                    # the display rate and remains the sole presentation
+                    # authority; it simply does not queue a GUI paint that would
+                    # present the identical scene again.
+                    accepted_update = False
+                    if perf_delivery:
+                        _record_unchanged_scene_skip(self._compositor)
+                        _record_delivery_result(self._compositor, False)
+                else:
+                    accepted_update = _queue_safe_widget_update(self._compositor)
+                    if accepted_update:
+                        self._last_requested_scene_revision = (
+                            self._current_scene_revision
+                        )
+                    if perf_delivery:
+                        _record_delivery_result(self._compositor, accepted_update)
                 if hasattr(self._compositor, "_record_render_timer_tick"):
                     self._compositor._record_render_timer_tick(accepted_update=accepted_update)
                 self._metrics.frame_count += 1
             except Exception as e:
                 logger.debug("[ADAPTIVE_TIMER] Frame signal failed: %s", e)
     
+    def _scene_is_already_requested(self) -> bool:
+        """Whether this deadline would present a scene already requested.
+
+        Only ever true for visualizer-only, transition-free operation: the
+        compositor returns ``None`` for every other shape, which keeps each
+        admitted display deadline eligible exactly as before.
+        """
+        compositor = self._compositor
+        probe = getattr(compositor, "presentation_scene_revision", None)
+        if not callable(probe):
+            self._current_scene_revision = None
+            return False
+        try:
+            revision = probe()
+        except Exception:
+            self._current_scene_revision = None
+            return False
+        self._current_scene_revision = revision
+        if revision is None:
+            return False
+        return revision == self._last_requested_scene_revision
+
     def request_frame(self) -> None:
         """Queue immediate frame request."""
+        # An explicit request is always eligible: it exists precisely because
+        # something outside the visualizer scene needs presenting.
+        self._last_requested_scene_revision = None
         self._frame_queue.push_drop_oldest(True)
     
     def _log_metrics(self) -> None:
