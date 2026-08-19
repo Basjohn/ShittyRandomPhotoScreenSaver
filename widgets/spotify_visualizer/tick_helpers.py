@@ -123,10 +123,6 @@ def init_cadence_state(widget: Any) -> None:
     widget._logical_runtime = None
     widget._logical_mailbox = LatestStateMailbox()
     widget._logical_present_pending = False
-    # Pull-based display presentation delivery (Current_Plan section 5).
-    widget._pull_delivery_active = False
-    widget._registered_pull_compositor = None
-    widget._present_force_until_ts = 0.0
 
 
 def authored_logical_interval_s(widget: Any) -> float:
@@ -211,18 +207,6 @@ def stop_tick_source(widget: Any) -> None:
     if mailbox is not None:
         mailbox.clear()
     widget._logical_present_pending = False
-    # Detach the pull-based logical source from its compositor so a retired
-    # widget cannot be sampled at a later display opportunity.
-    compositor = getattr(widget, "_registered_pull_compositor", None)
-    if compositor is not None:
-        clear_source = getattr(compositor, "clear_visualizer_logical_source", None)
-        if callable(clear_source):
-            try:
-                clear_source(widget)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to clear logical pull source", exc_info=True)
-    widget._registered_pull_compositor = None
-    widget._pull_delivery_active = False
 
 def get_transition_context(widget: Any, parent: Optional[QWidget]) -> Dict[str, Any]:
     """Return lightweight transition metrics from the parent DisplayWidget."""

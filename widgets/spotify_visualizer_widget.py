@@ -2064,24 +2064,6 @@ class SpotifyVisualizerWidget(QWidget):
         from widgets.spotify_visualizer.tick_pipeline import on_tick
         on_tick(self)
 
-    def logical_present_revision(self) -> int:
-        """Present-revision for the compositor's pull-based presentation scheduler.
-
-        Thread-safe: read by the display presentation scheduler off the GUI
-        thread. Advances only when the logical scene is visually significant.
-        """
-        from widgets.spotify_visualizer.tick_pipeline import logical_present_revision
-        return logical_present_revision(self)
-
-    def apply_latest_logical_present(self) -> None:
-        """Compositor pull: apply the freshest steady logical state (GUI thread).
-
-        Called by the display compositor at its own presentation opportunity,
-        replacing the per-publication GUI callback for steady-state frames.
-        """
-        from widgets.spotify_visualizer.tick_pipeline import apply_latest_logical_present
-        apply_latest_logical_present(self)
-
 
     # Set by the display compositor once it owns this card's visual layer. The
     # card is a QWidget sibling ABOVE the compositor surface, so while the
