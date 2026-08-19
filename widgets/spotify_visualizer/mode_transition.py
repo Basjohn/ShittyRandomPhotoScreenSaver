@@ -816,6 +816,17 @@ def check_mode_teardown_ready(widget: Any, engine: Any, now_ts: float) -> None:
             waveform_ready = latest_waveform >= widget._mode_teardown_target_generation
         if latest >= widget._mode_teardown_target_generation and waveform_ready:
             ready = True
+    if not ready and not capture_now:
+        # A paused switch into an idle-capable mode has no engine frame coming:
+        # its first visible scene is idle-owned, so readiness is the mode being
+        # idle-ready rather than the fallback timeout expiring. Without this the
+        # 0.35s timeout below was the normal control flow for every paused mode
+        # switch, which is exactly the edge stall the operator sees.
+        from widgets.spotify_visualizer.tick_pipeline import _mode_allows_idle_reveal_key
+
+        if _mode_allows_idle_reveal_key(getattr(widget, "_vis_mode_str", "")):
+            ready = True
+
     # Never allow permanent waiting_bars deadlocks.
     # Paused/idle mode cycles must complete without worker frames.
     timeout_s = 1.50 if capture_now else 0.35
