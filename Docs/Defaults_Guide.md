@@ -1,8 +1,11 @@
 # Defaults Guide
 
-Last updated: 2026-08-11
+Last updated: 2026-08-19
 
-Canonical guidance for defaults, reset behavior, snapshots, and import safety.
+Canonical guidance for defaults, reset behavior, snapshots, import safety, and runtime application.
+
+For performance/runtime side effects of settings changes also read
+`Docs/Guardrails/Runtime_Efficiency.md`.
 
 ## 1. Sources Of Truth
 - Canonical defaults: `core/settings/default_settings.py`.
@@ -58,7 +61,32 @@ When changing a user-facing default:
 
 A successful Defaults Foundry **Save and Regenerate Defaults** establishes the new authoritative Normal base and MC differential. Existing tests, generated artifacts, and policy text must be updated to follow that saved value; they may reject or revert it only when a reproducible runtime, safety, migration, or compatibility regression proves the value harmful. Tests are guards around the defaults contract, not a second defaults authority.
 
-## 6. Defaults Foundry
+## 6. Runtime Application / No-Op Safety
+
+Persistence correctness is not sufficient. Applying settings must not create unnecessary runtime work.
+
+Rules:
+- applying the same effective value should be a no-op before cache/shadow/raster/runtime invalidation;
+- hydrating controls with persisted values is not a runtime change;
+- a settings section must not contact providers, start workers, rebuild live caches or refresh the
+  runtime merely because it was constructed or hydrated;
+- do not replay an entire settings subtree when one leaf owner changed;
+- do not manufacture a visualizer activation/generation for an identical resolved activation;
+- do not rebuild widget shadow/card/static caches when their identity is unchanged;
+- do not trigger full runtime recreation for a change that has a safe local owner;
+- do not use broad “reapply saved settings” as Cancel semantics for preview-only edit state.
+
+When a runtime recreation is genuinely required, use the one ordered lifecycle boundary rather than
+partial teardown/rebuild side paths.
+
+Add focused tests for:
+- unchanged-value no-op behavior;
+- no provider/work dispatch during hydration;
+- no persisted-state loss from unbuilt lazy sections;
+- correct narrow live application owner;
+- generation/lifecycle correctness when a full recreation is truly necessary.
+
+## 7. Defaults Foundry
 - Run `python tools/default_settings_editor.py` for the standalone styled editor.
 - The tree recursively discovers every editable leaf in the canonical base. New settings therefore appear without a handwritten Foundry form.
 - Normal edits rewrite `default_settings.py`. MC edits serialize only values that differ from resolved Normal defaults.
@@ -71,15 +99,20 @@ A successful Defaults Foundry **Save and Regenerate Defaults** establishes the n
 - Run `python tools/regenerate_defaults_snapshot_artifacts.py` and `python tools/regenerate_sst_defaults.py` after an intentional source change. Two unchanged SST runs must be byte-identical; `tests/test_regenerate_sst_defaults.py` and `tests/test_settings_defaults_parity.py` enforce profile parity, the canonical MC differential, deterministic metadata, no preserve-only Weather coordinates, and no credential/private fields.
 - Retired `preset` and `custom_preset_backup` payloads remain hidden compatibility data and preserve their values when the Foundry rewrites editable defaults.
 
-## 7. Visualizer Defaults
+## 8. Visualizer Defaults
 Visualizer default changes also need:
 - mode-registry and `_spotify_visualizer.py` grouped field-spec review,
 - curated preset expectations reviewed where authored payloads rely on old values,
 - visualizer preset repair/import/export coverage when schema shape changes,
 - and runtime-shaped validation when the change affects visible mode behavior.
 
-## 8. CUSTOM And Widget Defaults
+An identical resolved visualizer configuration must remain a technical no-op. Do not use a settings
+change as an excuse to reset unrelated visualizer history/GL state.
+
+## 9. CUSTOM And Widget Defaults
 - Authored defaults remain the fallback even when a widget uses `Custom`.
 - Committed CUSTOM geometry overlays authored defaults; it is not a replacement defaults surface.
 - Canonical `widgets.layout_slots` starts empty. Saved slots belong to an installation profile and must not be promoted into defaults or checked-in snapshots.
 - If a settings control becomes derived or locked under `Custom`, lock it in UI rather than inventing a hidden alternate default.
+- Preview-only Cancel should preserve the existing live widget/content state; persisted payload replay
+  is not required when the live owner was never mutated.

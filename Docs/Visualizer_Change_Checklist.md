@@ -1,9 +1,11 @@
 # Visualizer Change Checklist
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
 Use for visualizer settings, presets, logical analysis, activation, compositor rendering, card
 geometry, fade/readiness or CUSTOM work.
+
+Also read `Docs/Guardrails/Runtime_Efficiency.md` for shared-runtime/performance changes.
 
 ## 1. Identity / Settings
 
@@ -92,6 +94,9 @@ Remove/forbid:
 
 A dispatch-pending guard ends when the queued GUI callback calls `QWidget.update()`.
 
+Visualizer-only physical presentation may skip a scene revision already requested when no transition
+or fade change requires another physical frame. This is not a logical/source cadence cap.
+
 ## 8. Readiness / Fade
 
 Before visible fade:
@@ -100,10 +105,14 @@ Before visible fade:
 - visualizer GL resources ready;
 - card geometry/cache/GL texture ready;
 - final engine generation/activation established;
-- required fresh current frame/audio readiness satisfied.
+- required fresh current frame/audio readiness satisfied;
+- deterministic normal-runtime GL/program/resource preparation that would otherwise visibly hitch
+  immediately after reveal is complete when that work is safe to perform pre-reveal.
 
 Then one compositor-owned fade scalar controls both card and shader from zero to one. No halfway
 QWidget/compositor ownership transfer.
+
+Readiness is completion-driven, not a fixed sleep.
 
 ## 9. Playback
 
@@ -118,10 +127,11 @@ once.
 - edit snapshot comes from compositor-owned card+visualizer region;
 - no `grabFramebuffer()` dependency on logical overlay;
 - drag/resize is preview-only, not live GPU mutation per mouse event;
-- Cancel restores once;
+- Cancel resumes/restores once without re-entering cold startup staging;
 - Save rebuilds/publishes the new authoritative rect once;
 - cross-display save transfers sole compositor ownership and cleans old display ownership;
-- do not confuse intentional edit transfer with temporary-monitor fallback.
+- do not confuse intentional edit transfer with temporary-monitor fallback;
+- do not use broad settings/CUSTOM replay to restore unrelated preview-only widgets.
 
 ## 11. Lifecycle
 
@@ -132,19 +142,35 @@ once.
 - QRhi generation replacement releases old resources before reinit;
 - final GL accounting returns to baseline.
 
-## 12. Fidelity / Tests
+## 12. Shared-Runtime Attribution
+
+The 2026-08-19 baseline demonstrated that all five modes can run near intended steady logical cadence
+once shared GUI/presentation waste is removed.
+
+Therefore:
+- do not call a future cadence regression “Bubble performance” merely because Bubble exposes it most
+  clearly;
+- compare mode-owned compute/render cost with shared GUI dispatch/timing/cache/recreation cost;
+- preserve all-mode fidelity before changing mode algorithms;
+- if a future dedicated logical-runtime thread is justified, it is mode-general and replaces one
+  unsuitable cadence owner rather than adding a Bubble-specific side lane.
+
+The current 4.7.2 baseline is a negative control against unnecessary mode-specific simplification.
+
+## 13. Fidelity / Tests
 
 Keep current logical goldens for all five modes. Add runtime-shaped tests for the actual owner being
 changed. Reintroduce the defect in development where practical to prove the test fails.
 
 Required installed review when relevant:
 
-- Bubble/Spectrum feel;
+- all five mode feel/reactivity;
 - all-mode switching;
 - fade start/finish;
 - play/pause/resume;
 - 60 Hz + high refresh;
 - CUSTOM move/resize/Cancel/Save;
-- dual-display ownership.
+- dual-display ownership;
+- first-visible startup/recreation smoothness when GL/warmup ordering changes.
 
 Tests/average FPS never overrule a visible fidelity regression.
