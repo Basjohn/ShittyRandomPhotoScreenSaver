@@ -1,160 +1,147 @@
 # Future Cleanup
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
-This file is **not an alternate active plan**. `Current_Plan.md` owns execution order.
+This is deferred debt only. `Current_Plan.md` owns active work.
 
-Promote an item only when current evidence makes it causal or when P2/P5 closure reaches its
-retirement boundary. Active correctness/performance/lifecycle work does not get parked here merely
-because it is difficult.
-
-The obsolete duplicate roadmap files identified during the 2026-08-18 architecture reconciliation
-have already been deleted. Do not restore or recreate them.
+The mode-general Qt-free visualizer logical runtime is **not** future cleanup anymore; it has been
+promoted to active P2 work because the latest installed run meets its entry condition.
 
 ---
 
-## 1. QRhi / Presentation Diagnostic Retirement
+## 1. Presentation / QRhi diagnostic retirement
 
-After P2/P4 installed acceptance is stable:
+After P2 and P5 are accepted:
 
 - [ ] retire QOpenGLWidget-only compositor lifecycle compatibility with no current caller;
-- [ ] retire old `aboutToCompose` / `frameSwapped` observer code once no rollback/evidence path needs it;
-- [ ] retire old P4 DWM/stage/no-HUD/present-context forensic scaffolding after accepted evidence is durable;
-- [ ] keep cheap architecture-neutral request-age/dispatch/event-loop/state-to-paint summaries;
-- [ ] retire permanently-zero paint-pending admission metrics after comparison value is exhausted;
-- [ ] retire GPU-query machinery whose sole purpose was the old QOpenGLWidget composition boundary;
-- [ ] keep ordinary sampled `--gpu-timing` with non-nesting same-context semantics;
-- [ ] retain `--diag-pair-warm-finish` only while its exact hidden pair-warm mechanism exists.
+- [ ] retire obsolete `aboutToCompose` / `frameSwapped` forensic observers;
+- [ ] retire old P4 DWM/no-HUD/present-context scaffolding after evidence is preserved;
+- [ ] keep cheap architecture-neutral request-age/dispatch/state-to-paint summaries;
+- [ ] retire permanently-zero paint-pending metrics once comparison value is exhausted;
+- [ ] retire old GPU-query machinery whose only purpose was the QOpenGLWidget composition boundary;
+- [ ] keep bounded sampled `--gpu-timing`.
 
-Diagnostics remain passive. Cleanup never changes cadence/admission to make counters prettier.
+Diagnostics remain passive and never become cadence control.
 
 ---
 
-## 2. Visualizer Single-Surface Legacy Cleanup
+## 2. Visualizer single-surface legacy cleanup
 
-After current P2/CUSTOM/cadence acceptance:
+After the active logical-runtime/idle/edge work is accepted:
 
-- [ ] retire vestigial `show()`/visibility plumbing in `SpotifyBarsGLOverlay` after caller proof;
-- [ ] retire visualizer-specific legacy `ShadowFadeProfile` readers if compositor fade is sole owner;
-- [ ] replace the forced whole-surface `grabFramebuffer()` used only to drive one edit capture with a narrower one-shot render seam;
-- [ ] shrink `_paused_visualizer` tuple/state once the new explicit edit suspend/resume contract lands;
-- [ ] retire old one-update-per-publication counters that no longer represent physical presentation;
-- [ ] remove dead legacy compositor Spectrum-only visualizer seam if no production caller remains;
-- [ ] remove redundant visualizer QOpenGLWidget/QRhiWidget compatibility imports/helpers;
+- [ ] retire vestigial `SpotifyBarsGLOverlay` show/visibility plumbing after caller proof;
+- [ ] retire visualizer-specific legacy ShadowFade readers when compositor fade is sole owner;
+- [ ] replace whole-surface edit `grabFramebuffer()` forcing with a narrower one-shot seam;
+- [ ] shrink old `_paused_visualizer` compatibility shape after the explicit edit seam is fully
+  canonical;
+- [ ] retire stale one-update-per-publication counters;
+- [ ] remove dead legacy Spectrum-only compositor paths with no production caller;
+- [ ] remove redundant QOpenGLWidget/QRhiWidget compatibility imports/helpers;
 - [ ] keep one canonical card-pixel cache identity;
-- [ ] keep card/visualizer resource deletion independent from visible/publication state.
+- [ ] keep resource deletion independent from visibility/publication state.
 
-Do not rename `SpotifyBarsGLOverlay` merely for cosmetic purity during active work.
-
----
-
-## 3. Hardware-Acceleration Contract Cleanup
-
-Accelerated presentation is required for the modern runtime.
-
-- [ ] retire obsolete non-accelerated compositor/visualizer paths after frozen/runtime caller proof;
-- [ ] retire or redefine any `display.hw_accel` option that promises unsupported software visualizer behaviour;
-- [ ] do not replace it with CPU/QPainter visualizer rendering.
+No cosmetic rename project while correctness/performance work is active.
 
 ---
 
-## 4. Test / Harness Debt
+## 3. Mode-general compute efficiency
 
-- [ ] fix `tests/test_slide_jitter.py` so the top-level actually composes;
+After the dedicated logical runtime is accepted, profile the resulting architecture before creating
+another scheduler.
+
+If task/Future/executor scaffolding remains materially expensive:
+
+- [ ] design a **mode-general** bounded visualizer compute service;
+- [ ] preserve one-in-flight/latest-fresh semantics where applicable;
+- [ ] preserve exact dt/events/transients;
+- [ ] preserve generation/activation fencing;
+- [ ] require all-mode temporal/fidelity goldens;
+- [ ] do not resurrect the rejected persistent Bubble lane.
+
+If the in-process Python logical thread later proves materially GIL-starved even after GUI/runtime
+waste is controlled:
+
+- [ ] decide between a helper process and a native extension from fresh evidence;
+- [ ] prefer the smallest ownership change that preserves the now-clean logical/render-state
+  contract;
+- [ ] do not pre-emptively rewrite visualizer maths in C/C++.
+
+---
+
+## 4. Test / harness debt
+
+- [ ] fix `tests/test_slide_jitter.py` top-level composition;
 - [ ] establish one shared frame-timing harness contract;
-- [ ] stabilize host-scheduling-sensitive Bubble worker budget tests without deleting the budget;
-- [ ] stabilize paused-AdaptiveTimer no-polling timing bar without weakening no-polling;
-- [ ] make `tools/perf_integration_harness.py --help` safe and add bounded scenario/duration/cleanup controls;
-- [ ] verify harnesses that instantiate `SpotifyBarsGLOverlay` use logical-owner semantics;
-- [ ] classify unrelated full-suite/native-exit clusters without weakening runtime contracts;
-  one confirmed instance: `test_spotify_visualizer_fresh_frame_schedules_ready_driven_reveal_after_min_delay`
-  aborts inside a `qtbot.wait()` in large cross-file selections while passing in isolation. Reproduced
-  identically at the untouched 4.7.2 baseline, so it is harness contamination, not a runtime regression;
-- [ ] split large slow widget test monoliths while retaining integrated hydration/save coverage.
+- [ ] stabilize the host-sensitive Bubble worker budget oracle without deleting its budget;
+- [ ] stabilize paused-AdaptiveTimer timing bars without weakening no-polling;
+- [ ] make `tools/perf_integration_harness.py --help` safe and bounded;
+- [ ] classify large cross-file/native-exit harness contamination separately from runtime defects;
+- [ ] split large slow widget test monoliths while preserving production-shaped coverage.
 
-A test that only asserts a helper/stub was called is not sufficient evidence for a production
-lifecycle seam.
+A helper/stub-call assertion is not sufficient for a production lifecycle seam.
 
 ---
 
-## 5. CUSTOM / Edit Hardening After Active Integration
+## 5. CUSTOM / Edit cleanup
 
-Only after the active edit suspend/resume and cross-display runtime paths pass:
+After active Media Cancel and visualizer edit paths pass:
 
-- [ ] weakify edit-shell live-geometry callbacks where teardown retention remains possible;
-- [ ] retire duplicate CUSTOM miniature teardown/replay helpers after caller proof;
-- [ ] split `custom_layout_manager.py` by real ownership only if maintenance still benefits;
+- [ ] weakify edit-shell callbacks where teardown retention remains possible;
+- [ ] retire duplicate miniature teardown/replay helpers after caller proof;
+- [ ] split `custom_layout_manager.py` only by real ownership;
 - [ ] audit corner/anchor scaling UX;
-- [ ] tighten broad exception suppression that can hide persistence/session failure;
-- [ ] silence benign disconnect warnings without weakening disconnect ownership.
+- [ ] tighten broad exception suppression;
+- [ ] silence benign disconnect warnings without weakening ownership.
 
 ---
 
-## 6. P6 Whole-Process Resource / Efficiency Follow-Up
+## 6. Whole-process resources
 
-This work never authorizes fidelity or refresh reduction.
+After P5:
 
-- [ ] run long post-warm-up RAM/private-commit/VRAM slopes after P5;
+- [ ] run long warm RAM/private-commit/VRAM slopes;
 - [ ] separate bounded cache high-water from monotonic ownership growth;
 - [ ] attribute native/driver memory gaps;
-- [ ] deepen task snapshots only if existing snapshots cannot answer a real owner question;
-- [ ] define repeatable hardware/profile comparison using refresh/DPR/display route/transition/mode;
-- [ ] retain same-machine CPU/GPU usage as the available proxy for weaker hardware.
-
-If per-step Bubble executor/Future churn is later proven materially expensive:
-- [ ] design a **new** bounded compute mechanism from accepted one-in-flight semantics;
-- [ ] do not reactivate the rejected persistent Bubble lane;
-- [ ] require exact trajectory/event/generation goldens.
-
-If GUI-timer starvation remains after known waste removal:
-- [ ] consider extracting a Qt-free logical visualizer runtime with one dedicated cadence authority;
-- [ ] publish immutable latest state to GUI/compositor;
-- [ ] never move QWidget/QPixmap/GL mutation off its legal owner;
-- [ ] require full all-mode fidelity locks before implementation.
-
-These are legitimate future architecture targets, not forbidden because they are larger refactors.
+- [ ] define repeatable refresh/DPR/display-route/mode comparisons;
+- [ ] retain same-machine CPU/GPU usage as the available efficiency proxy.
 
 ---
 
-## 7. Repository / Compatibility Debris
+## 7. Repository / compatibility debris
 
-- [ ] remove generated preview debris after clean-checkout recreation proof;
-- [ ] collapse deprecated class-global input authority into the existing multi-monitor coordinator incrementally;
-- [ ] retire deprecated Imgur end-to-end rather than repairing it;
-- [ ] add lightweight repository-hygiene checks for generated debris/credential-shaped values/default drift;
-- [ ] preserve APPDATA/LOCALAPPDATA isolation in tests/tools;
-- [ ] keep `rendering/gl_compositor_pkg` documented as active code, not deletion debt.
+- [ ] remove generated preview debris after clean-checkout proof;
+- [ ] collapse deprecated class-global input authority into the current multi-monitor coordinator;
+- [ ] retire deprecated Imgur end-to-end;
+- [ ] add lightweight repository-hygiene checks;
+- [ ] preserve APPDATA/LOCALAPPDATA isolation in tests/tools.
 
 ---
 
-## 8. Unrelated / Unvalidated Work
+## 8. Unrelated backlog
 
-Keep separate from P2/P5:
-
-- [ ] Browser GSMTC resolver changes;
-- [ ] low-pressure Gmail relative-timestamp freshness policy without per-minute repaint;
+- [ ] Browser GSMTC resolver work;
+- [ ] low-pressure Gmail relative-timestamp freshness;
 - [ ] Steam settings-hydration/cache consolidation;
-- [ ] Steam artwork scaling work only after measured ownership and DPR-sharp comparison;
+- [ ] Steam artwork scaling only after measured ownership/DPR comparison;
 - [ ] two-profile Steam credential/privacy validation.
 
 ---
 
-## 9. Product Backlog
+## 9. Product backlog
 
 - [ ] true eight-direction widget shadows;
-- [ ] first-run source onboarding re-entering normal RUN after Settings closes with valid sources;
+- [ ] first-run source onboarding returning cleanly to RUN;
 - [ ] remaining real-runtime CUSTOM edit-shell oracle;
-- [ ] visualizer wall-clock -> monotonic audit only with explicit clock-jump coverage;
-- [ ] curated Spectrum source/release mirror reconciliation through canonical preset authority;
-- [ ] old transition/visualizer dt-gap correlation only if a pathology survives current architecture/P5.
+- [ ] visualizer wall-clock -> monotonic audit where still relevant after the logical-runtime move;
+- [ ] curated Spectrum source/release mirror reconciliation.
 
 ---
 
-## 10. Documentation Hygiene
+## 10. Documentation hygiene
 
-- [ ] keep `Current_Plan.md` pruned to active work;
-- [ ] keep phase reports as dated evidence, not live implementation maps;
-- [ ] periodically remove stale references to deleted roadmap files;
-- [ ] reconcile any external Claude/Opus guardrail skill with current repository guardrails whenever the architecture epoch changes.
-
-Do not create another live roadmap hierarchy.
+- [ ] keep `Current_Plan.md` active-only;
+- [ ] keep phase reports evidence-scoped;
+- [ ] retain the 4.7.2 named baseline as rollback evidence until a newer installed run genuinely
+  supersedes it;
+- [ ] reconcile external agent guardrails when architecture ownership changes;
+- [ ] do not create another live roadmap hierarchy.
