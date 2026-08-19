@@ -1,9 +1,12 @@
 # SRPSS Guardrails
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
 Durable cross-cutting stop rules. `Current_Plan.md` owns active sequencing. Focused guardrails
 may be stricter for their domain.
+
+For widget/settings/startup/performance/minor-optimization work also read
+`Docs/Guardrails/Runtime_Efficiency.md`.
 
 ## 1. Priority
 
@@ -29,6 +32,9 @@ Changing more than one long-lived timer/thread/queue/context/generation/fallback
 a slice requires explicit architecture justification and a statement of what existing mechanism
 is removed.
 
+For a “small optimization”, name the work that disappears. Adding a mechanism without deleting or
+avoiding meaningful work is not automatically an optimization.
+
 ## 3. Immediate Stop Conditions
 
 Stop/reassess when:
@@ -42,7 +48,11 @@ Stop/reassess when:
 - resources grow monotonically or ownership cannot be explained;
 - a fallback silently changes behaviour/render owner;
 - tests pass while the known installed failure remains;
-- a fix needs another presentation surface/clock merely to preserve old plumbing.
+- a fix needs another presentation surface/clock merely to preserve old plumbing;
+- a no-op settings/style/geometry replay performs expensive invalidation or reconstruction;
+- visible startup is made smoother only by moving expensive work into the first visible seconds;
+- a new widget adds blocking GUI work, high-frequency private polling or provider activity merely
+  because its local code path is convenient.
 
 ## 4. Repository / Documentation Stability
 
@@ -68,6 +78,9 @@ One mutable concern, one owner. Current examples:
 - accounting: ResourceManager, never deletion fallback.
 
 Do not create shadow settings/task/transition/descriptor/lifecycle/render frameworks.
+
+Runtime-owned background work must retire with its generation. Moving work to the IO/COMPUTE pool
+does not make it process-scoped.
 
 ## 6. Presentation / Compositor
 
@@ -131,7 +144,9 @@ Rules:
 - average FPS/task count/final-state equality cannot overrule an installed fidelity regression;
 - one-in-flight compute may retain one latest pending source frame; no backlog/catch-up FIFO;
 - compositor state-to-paint and upstream source age are separate metrics; do not tune the shader
-  for an upstream freshness problem.
+  for an upstream freshness problem;
+- shared runtime starvation must not be relabelled as a mode-specific problem without mode-owned
+  evidence.
 
 See `Docs/Guardrails/Visualizer_Presentation.md`.
 
@@ -163,7 +178,13 @@ Do not use hide-only reuse, cleanup retry timers, force-clear numeric handles, g
 CUSTOM edit preview must not resurrect retired presentation surfaces. Preview may be a snapshot;
 mouse-drag preview does not require live GPU geometry mutation on every event.
 
-## 10. CPU / Threading
+Preview-only Cancel should restore the unchanged live owner rather than broadly replay persisted
+payloads into every widget. Save/rebuild remains a distinct lifecycle action.
+
+Identical settings/style/layout application should be a no-op before expensive invalidation whenever
+the authored result cannot change.
+
+## 10. CPU / Threading / Runtime Availability
 
 Reduce/remove duplicate work before adding threads.
 
@@ -174,9 +195,15 @@ Do not:
 - create a worker-to-paint handshake;
 - mutate QWidget/QPixmap/GL from workers;
 - create an unbounded visualizer frame queue;
-- change authored source cadence merely to lower task count.
+- change authored source cadence merely to lower task count;
+- treat a widget's synchronous GUI cost as isolated from the rest of the application.
 
 Workers may prepare detached immutable data and bounded measured compute.
+
+Work required for smooth ordinary first-visible operation should, where legal and deterministic, be
+prepared before reveal rather than deliberately compiled/rebuilt immediately after reveal.
+
+See `Docs/Guardrails/Runtime_Efficiency.md`.
 
 ## 11. Logging / Diagnostics
 
@@ -184,6 +211,9 @@ Diagnostics are passive, sampled, bounded, non-overlapping and lazily formatted.
 one GUI callback per event, modify task admission or become presentation control flow.
 
 No per-frame INFO logging. Heavy GL timing stays opt-in and non-blocking; never wait for a query.
+
+When source/current evidence already identifies an expensive owner or invalid replay, fix it rather
+than adding another diagnostic family.
 
 ## 12. Memory / Resources
 
@@ -200,7 +230,11 @@ Normal cycling and repeated lifecycle operations must plateau.
 - visualizer mode/preset identity registry/model-owned;
 - committed CUSTOM geometry is a distinct authority from authored/default geometry;
 - live refresh cannot silently become a second outer-geometry owner;
-- intentional cross-display edit transfer is not sleep/wake fallback.
+- intentional cross-display edit transfer is not sleep/wake fallback;
+- settings hydration is not permission to start providers, workers, runtime refreshes or broad
+  invalidation;
+- an unchanged setting/value should not rebuild caches, shadows, card pixels or runtime state;
+- new widgets must be lazy/settings-cheap and must not spend shared GUI budget casually.
 
 ## 14. Testing / Evidence
 
@@ -209,6 +243,9 @@ review where relevant.
 
 Do not use a fake engine/context whose lifecycle counters cannot reproduce the production boundary
 being asserted. A regression test must fail when the real defect is reintroduced.
+
+Keep a named installed baseline after major architecture improvements so later widget/settings/minor
+changes cannot silently spend recovered headroom.
 
 ## 15. Architecture Prohibitions
 

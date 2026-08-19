@@ -1,6 +1,6 @@
 # Documentation Maintenance
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
 Rules for keeping SRPSS docs useful to coding agents instead of preserving obsolete architecture by
 accident.
@@ -9,6 +9,10 @@ accident.
 
 Edit canonical files in place. Do not create “v2/new/proposed” duplicates or rename/move existing
 paths without explicit user instruction.
+
+A focused guardrail may be added only when it owns a distinct durable policy rather than duplicating
+an active plan. Current focused guardrails include visualizer presentation and runtime efficiency /
+change safety.
 
 ## 2. Roles / Authority
 
@@ -58,13 +62,21 @@ Therefore:
 
 `Docs/phase_reports/README.md` states this rule for that folder.
 
-## 5. Volatile Measurements
+## 5. Volatile Measurements / Named Baselines
 
 Do not duplicate current FPS/gap counts/raw log paths across stable docs. The active owning phase
 report keeps detailed evidence. Roadmap/stable docs keep only the durable conclusion and route to
 that report.
 
-This prevents a later agent from treating an old benchmark as the current architecture target.
+After a major architecture/performance improvement, name one installed baseline in the active plan
+and owning phase report. The baseline exists to:
+- preserve rollback/fidelity evidence;
+- catch future widget/settings/minor changes that silently spend recovered headroom;
+- provide a comparison point for later architectural work.
+
+It is not a permanent ceiling and should not be copied into every stable document.
+
+The 2026-08-19 / 4.7.2 baseline is the current example.
 
 ## 6. Drift Searches
 
@@ -84,6 +96,16 @@ Also verify current owner paths:
 rg -n "CompositorVisualizerLayer|ExternalOpenGLRhiWidget|GLCompositorWidget" Index.md Spec.md Docs
 ```
 
+After runtime-efficiency/settings/widget changes also search for accidental duplicate technical
+work or old broad-replay guidance, for example:
+
+```powershell
+rg -n "reapply|replay|refresh|invalidate|rebuild|QTimer|schedule_recurring|submit_.*task" \
+  Docs/Guardrails.md Docs/Guardrails Docs/10_WIDGET_GUIDELINES.md Docs/Defaults_Guide.md Current_Plan.md
+```
+
+Interpret those results by owner; the terms are not forbidden, duplicate or ownerless use is.
+
 ## 7. Avoid Mechanism Fossils
 
 A failed mechanism remains documented as a negative control, but phrase the **scope of the
@@ -96,7 +118,11 @@ Likewise, do not generalize:
 - one bad QPainter path into “QPainter never allowed”;
 - one bad latest-state coalescer into “presentation must equal publication”;
 - one failed child surface into “never use QRhi”;
-- one lifecycle incident into hide/reuse compatibility requirements.
+- one lifecycle incident into hide/reuse compatibility requirements;
+- one run dominated by a particular visualizer mode into “that mode is the CPU problem”;
+- one successful worker migration into “all work should move off GUI.”
+
+Keep the proven lesson at the correct owner level.
 
 ## 8. Closure
 
@@ -107,8 +133,10 @@ Before marking a large task done:
 - no current navigation doc routes to retired presentation owners;
 - old reports/history are clearly evidence-scoped;
 - Current_Plan retains only unfinished work;
-- Future_Cleanup remains deferred only.
-
+- Future_Cleanup remains deferred only;
+- a newly named installed baseline is recorded once in the owning evidence/plan, not duplicated
+  across stable docs;
+- future-change guardrails capture the durable lesson when a run reveals a new general anti-pattern.
 
 ## 9. Retiring Duplicate Planning Documents
 
