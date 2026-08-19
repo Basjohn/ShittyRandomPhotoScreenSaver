@@ -91,9 +91,11 @@ class TestPresentIsRequested:
         """
         import inspect
 
-        source = inspect.getsource(tick_pipeline.logical_tick)
+        # Publication moved into `_publish_logical_state()`, which every
+        # logical-tick exit path goes through.
+        source = inspect.getsource(tick_pipeline._publish_logical_state)
         assert "request_logical_present(widget)" in source, (
-            "logical_tick no longer requests presentation of what it publishes"
+            "the publish path no longer requests presentation of what it publishes"
         )
         assert 'getattr(widget, "_request_logical_present"' not in source, (
             "presentation is being requested through a silently-optional lookup"

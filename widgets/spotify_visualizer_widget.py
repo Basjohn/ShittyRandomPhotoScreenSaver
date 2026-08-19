@@ -1937,10 +1937,10 @@ class SpotifyVisualizerWidget(QWidget):
         from widgets.spotify_visualizer.mode_transition import begin_mode_fade_in
         begin_mode_fade_in(self, now_ts)
 
-    def _check_mode_teardown_ready(self, engine: Optional[_SpotifyBeatEngine], now_ts: float) -> None:
-        """Delegates to widgets.spotify_visualizer.mode_transition."""
-        from widgets.spotify_visualizer.mode_transition import check_mode_teardown_ready
-        check_mode_teardown_ready(self, engine, now_ts)
+    def _check_mode_teardown_ready(self, engine: Optional[_SpotifyBeatEngine], now_ts: float) -> bool:
+        """Plain-data readiness only; the GUI half performs the reveal."""
+        from widgets.spotify_visualizer.mode_transition import evaluate_mode_teardown_ready
+        return evaluate_mode_teardown_ready(self, engine, now_ts)
 
     def _apply_pending_mode_transition_layout(self) -> None:
         """Delegates to widgets.spotify_visualizer.mode_transition."""
