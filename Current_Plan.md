@@ -1,602 +1,472 @@
-# Current Plan — P2 Shared Presentation Recovery After Third Installed Acceptance Failure
+# Current Plan — P2 Stabilize Worker+Push, Then Prove Qt Quick Physical Presentation
 
-Last updated: 2026-08-19 20:19 SAST  
-Branch: `main`  
-Installed behavioral checkpoint from the log itself:
+Last updated: 2026-08-19 23:03 SAST
 
-```text
-[SOURCE_HEAD] 8ac2421e2bc0a7153942fc33eb9f348b505cde9d
-```
-
-Named accepted rollback/fidelity baseline:
+Current pushed source at orientation time:
 
 ```text
-4.7.2
-42033c84eabbdf25ccd34bb0e83f9e553f2f8f11
+3784e91bc40e8d7c95d31d0d96914f3c5443c0e7
 ```
 
-Architecture epoch:
+Commit message:
 
 ```text
-one QRhi/OpenGL physical compositor surface per display
-+
-one dedicated mode-general visualizer logical runtime
-+
-latest-state publication
+4.7.2 - Even Worse Performance Under Load Or Just Uniquely Shit?
 ```
 
-This file owns unfinished P2 work.
+Historical "last releaseable without shame" source identified by operator:
 
-A later documentation-only commit does not supersede the installed behavioral checkpoint above. Do not reinterpret the tested code epoch merely because these Markdown files are committed afterward.
+```text
+15099d389e5091942a0ce3d6e6311d33b6043d3d
+```
+
+No raw performance logs are currently retained for `15099d3`; do not manufacture numeric results for it.
 
 ---
 
-# 0. Executive truth
+# 0. Executive direction
 
-## 0.1 P2 is substantially failing
+P2 now has enough cumulative evidence to stop treating every current mechanism as equally uncertain.
 
-The third installed acceptance is the worst observed presentation run in this recovery sequence.
+## Retain
 
-Operator report:
+- one physical accelerated presentation surface per display as the product goal;
+- dedicated `VisualizerLogicalRuntime`;
+- one authoritative mode-general logical clock;
+- latest-state semantics;
+- valid generation zero;
+- paused Spectrum renderer contract;
+- K fire-and-forget/non-blocking transport command ownership;
+- no FIFO/catch-up;
+- no source smoothing or fidelity reduction.
 
-- general performance is terrible;
-- transitions are universally poor;
-- Pause/Play hitching remains and feels worse;
-- the hitch occurs through both mouse transport controls and physical media-key input;
-- the hitch affects all visualizer modes, not only Bubble;
-- the visualizer as a whole is performing worse than in prior installed runs.
+## Remove from the active production design
 
-The logs agree with the broad failure.
+The current pull-at-paint steady-state notification seam introduced in the working tree and now pushed in `3784e91...`.
 
-This is no longer a reasonable point for another sequence of tiny edge patches.
+It:
+- removes callback-per-logical-publication volume;
+- does not outperform worker+push under comparable heavy load;
+- is highly variable at low load;
+- worsens loaded dispatch/frame-gap tails;
+- uniquely introduces lost-wakeup/sporadic visualizer spawn failures.
 
-## 0.2 The problem is shared/system-level
+Do not preserve it merely because the ThreadManager UI-queued count is smaller.
 
-Retain the existing doctrine:
+## Restore as the stabilization/reference state
 
-> Bubble is a temporal canary, not the presumed owner.
+Dedicated logical worker + latest mailbox + coalescing GUI push presentation as used immediately before the pull conversion.
 
-All visualizer modes share the degraded presentation environment.
+This is NOT declared the final architecture.
 
-The 165 Hz display that does not own the visualizer also collapses during ordinary transition work.
+It is the strongest known production-shaped reference while the physical-presentation replacement is proven.
 
-The dominant installed signature remains:
+## Next major architecture candidate
+
+Qt Quick **physical runtime presentation**, specifically:
 
 ```text
-logical/source/compute work continues
-        ->
-latest logical state exists
-        ->
-GUI delivery/presentation is not serviced promptly
-        ->
-queued GUI dispatch remains pending
-        ->
-later physical presentation opportunities are skipped
-        ->
-visualizer modes hitch
-AND
-other-display transitions lose cadence
+one top-level QQuickWindow per physical display
+    ->
+Qt Quick threaded scene-graph render loop
+    ->
+custom full-display renderer on the render thread
 ```
 
-The next active work therefore moves to the shared logical-to-GUI-to-physical-presentation ownership boundary.
+NOT:
+- `QQuickWidget`;
+- QWidget embedding of Quick as the performance proof;
+- a rewrite of Settings/configuration UI into QML;
+- a blind whole-product QML conversion.
+
+The purpose is to move physical frame recording/render/present work away from the ordinary QWidget GUI paint/event-loop bottleneck while retaining the existing logical runtime and application models.
 
 ---
 
-# 1. What the latest run actually established
+# 1. Why the dedicated worker stays
 
-## 1.1 Source identity diagnostic works
-
-The log contains:
+Loaded three-state evidence:
 
 ```text
-[SOURCE_HEAD] 8ac2421e2bc0a7153942fc33eb9f348b505cde9d
+                         GUI-tick baseline    worker+push    worker+pull
+
+logical service              ~74.7 Hz          ~89.7 Hz        ~89.6 Hz
+165 Hz median                 ~72.1 FPS        ~111.35 FPS      ~94.2 FPS
+60 Hz median                  ~47.7 FPS         ~52.4 FPS       ~49.3 FPS
 ```
 
-Keep this diagnostic.
+The worker:
+- preserves authored logical cadence under load;
+- improves physical delivery relative to GUI-driven baseline;
+- does not own the pull-specific spawn regression.
 
-It is:
-- script/debug only;
-- local Git metadata only;
-- one lookup per process;
-- absent from compiled builds;
-- not a GitHub/network dependency.
-
-## 1.2 Slice K implementation is real; its causal claim failed
-
-Slice K removed the GUI wait from ordinary GSMTC transport command submission.
-
-Retain the non-blocking command ownership unless exact command-correctness evidence disproves it.
-
-However the installed product falsifies the claim that the old synchronous wait was the owner of:
-- the visible Pause/Play hitch;
-- the broad `dispatch_pending_skips`;
-- the visualizer cadence collapse.
-
-Why:
-
-- mouse Pause/Play still hitches;
-- physical media-key Pause/Play also hitches;
-- all visualizer modes exhibit the edge problem;
-- broad transition/presentation performance is worse even though the transport command wait is gone.
-
-K fixed a real latency-sensitive design flaw. It did not fix the product failure.
-
-Do not spend another slice proving K is asynchronous. That property is already established.
-
-## 1.3 Slice L is not accepted as a production performance fix
-
-Slice L introduced a feedback-only `MediaWidget` paint branch.
-
-Its deterministic test proves that, for an artificially clean controls-row-only real Qt repaint event, five named expensive subpainters can be skipped.
-
-The installed application still shows frame-count-scale `media.paint` activity with high cost.
-
-Representative current windows include approximately:
-
-```text
-50 calls @ 5.11 ms average
-50 calls @ 4.95 ms average
-50 calls @ 5.22 ms average
-50 calls @ 5.90 ms average
-45 calls @ 6.39 ms average
-```
-
-Therefore the production objective:
-
-```text
-animated feedback is genuinely lightweight
-```
-
-is NOT established.
-
-Possible reasons include:
-- real Qt damage coalescing widens the event and bypasses the containment fast path;
-- `BaseOverlayWidget.paintEvent()` still executes on the feedback branch;
-- another parent/card paint path overlaps the animation;
-- parent paint cost itself remains too large.
-
-Do not call Gate 7C green from the existing unit test.
-
-Do not make this the only next task. It is now one contributor inside a larger GUI-availability problem.
-
-## 1.4 A stale slow-tick diagnostic can throw inside the logical runtime
-
-The installed run contains:
-
-```text
-NameError: name 'is_transition_active' is not defined
-```
-
-from the slow-tick diagnostic path in `widgets/spotify_visualizer/tick_pipeline.py`.
-
-The logical runtime catches the failure and continues, which turns the defect into a timing hole instead of a process crash.
-
-This stale diagnostic reference already existed before K/L and therefore does not explain the whole regression.
-
-Required:
-- fix it immediately while touching this area;
-- add a regression gate that the slow-tick diagnostics themselves cannot throw;
-- do not elevate this into the supposed sole root cause.
+Do not broadly revert it.
 
 ---
 
-# 2. How much the third installed run regressed
+# 2. Why push returns without resurrecting K's old synchronous hitch
 
-Compared with the previous installed acceptance, approximate observed classes:
+The old transport-command blocking defect and the push/pull presentation seam are independent.
 
-| Metric | Previous run | Third run |
-|---|---:|---:|
-| 165 Hz completed transition median | ~140.2 FPS | ~111.5 FPS |
-| 165 Hz worst completed window | ~136.4 FPS | ~64.7 FPS |
-| 165 Hz request acceptance median | ~90.1% | ~75.6% |
-| 60 Hz transition median | ~56.9 FPS | ~52.5 FPS |
-| 60 Hz worst completed window | ~55.6 FPS | ~41.3 FPS |
-| late-run event-loop p95 | ~12.9 ms | ~27.7 ms |
-| frame-gap event rate | ~0.68/s | ~2.78/s |
-| media.paint average | ~3.16 ms | ~5.37 ms |
-| media.paint CPU/sec | ~14.2 ms | ~20.3 ms |
-| logical skipped deadlines | ~0.09% | ~0.32% |
-
-Representative 165 Hz completed windows in the third run include:
+K changed:
 
 ```text
-108.7
-64.7
-96.1
-114.2
-133.0
-119.7 FPS
+GUI transport ingress
+    -> submit command to IO
+    -> return immediately
 ```
 
-One delivery window fell to roughly:
+That remains.
+
+Restoring worker+push does NOT restore:
 
 ```text
-54.47% request acceptance
-673 dispatch_pending_skips
-dispatch-skip age p95 ~143.7 ms
+done.wait(2.5s)
 ```
 
-This is a system-level presentation failure, not a marginal tuning miss.
+on the GUI transport-command call.
+
+Therefore the synchronous GSMTC command stall must not return merely because push presentation returns.
+
+However:
+- push does create more GUI presentation callbacks;
+- old push installed runs still had visible Pause/Play hitching;
+- playback-state flapping exists independently.
+
+So push may still expose presentation hitches until the inherited playback-state ownership defect is fixed.
+
+Treat push as the functional benchmark/reference, not as final P2 closure.
 
 ---
 
-# 3. Important environment qualification
+# 3. Fix inherited playback-state flapping on the reference architecture
 
-The third run also carried higher machine CPU load than the previous run.
+The baseline, worker+push, and pull runs all show playback-state wobble.
 
-Approximate observed class:
+Physical media-key duplicate ingress is already suppressed.
+
+The remaining defect is state ownership/reconciliation.
+
+Current shape:
 
 ```text
-previous system CPU: low/mid-20%
-third-run system CPU: ~41–44%
-
-previous SRPSS CPU median: ~88%
-third-run SRPSS CPU median: ~104%
+transport edge
+    ->
+optimistic MediaTrackInfo state emitted immediately
+    ->
+visualizer/listeners react
+    ->
+asynchronous GSMTC refresh result returns
+    ->
+normal display/state reconciliation
 ```
 
-GPU remains low, approximately the few-percent class.
+A stale pre-command refresh may contradict the optimistic post-command state.
 
-Therefore:
-
-- do not falsely claim K or L alone caused the entire numeric regression;
-- do not dismiss the regression as “external CPU” either.
-
-SRPSS itself consumed more CPU and its GUI/presentation system became dramatically more fragile under contention.
-
-A screensaver on this hardware must not collapse into 65–110 FPS high-refresh delivery because total CPU load is in the ~40% class.
-
-The architecture must tolerate ordinary contention without losing the GUI for 50–150 ms at a time.
-
----
-
-# 4. Adaptive timer status
-
-The latest run again does NOT name adaptive deadline wake precision as the dominant owner.
-
-Observed class:
+Required contract:
 
 ```text
-wake lateness p95: generally a few ms
-paint_pending_skips: 0
-dispatch_pending_skips: dominant
-GUI dispatch / skip age: tens to >100 ms
+one accepted transport edge
+    ->
+new media-state generation / command epoch
+    ->
+optimistic state belongs to that epoch
+    ->
+refresh work captures the epoch it started under
+    ->
+pre-command/stale result cannot reverse the new epoch
+    ->
+first genuinely newer authoritative state may confirm/reverse
 ```
 
-Do not:
-- lower target display Hz;
-- retune timer precision;
-- restore vsync;
-- replace the adaptive timer merely because presentation is poor.
+No blind 700 ms debounce.
 
-The timer is usually waking and attempting delivery.
+No duplicate state owner in the visualizer.
 
-The GUI is frequently not available to service that delivery.
+Add deterministic delayed/stale-result negative controls.
+
+Acceptance:
+- mouse;
+- APPCOMMAND/media key;
+- all visualizer modes;
+- exactly one logical pause/resume edge unless a genuinely newer external state reverses it.
 
 ---
 
-# 5. Active architecture correction — remove steady-state worker -> GUI callback pressure
+# 4. Selectively remove pull-specific production machinery
 
-## 5.1 Current seam
+Do not `git reset` or revert the entire `3784e91` commit.
 
-The dedicated logical runtime publishes immutable latest state to `_logical_mailbox`.
+Audit the exact production diff from `8ac2421e...` to `3784e91...`.
 
-Current `_publish_logical_state()` then calls:
+Selectively restore the worker+push steady presentation contract while retaining unrelated accepted fixes, including:
+- K;
+- L only where still harmless/useful;
+- slow-tick `is_transition_active` diagnostic correction;
+- source-head logging;
+- evidence/docs;
+- logical worker;
+- generation/Spectrum fixes.
 
-```python
-request_logical_present(widget)
-```
+Expected pull-owned production surface includes:
+- compositor logical-pull registration/revision sampling;
+- pull-specific `present_revision` delivery semantics;
+- pull-specific first/edge force-window machinery;
+- `ensure_compositor_logical_pull` / `apply_latest_logical_present` style steady delivery;
+- pull-specific tests.
 
-whenever the dedicated logical runtime exists.
+Preserve the pull implementation as historical evidence before removing it.
 
-This means the ~90 Hz logical producer continuously marshals GUI presentation work merely because a fresher logical state exists.
+After restoration, prove:
+- visualizer cannot run for seconds with `paint=0`;
+- startup reveal is deterministic;
+- Settings recreation is deterministic;
+- no pull liveness reason/force-window state remains in production.
 
-Meanwhile physical display presentation is already independently paced at the display/compositor layer.
+---
 
-On the current 60 Hz visualizer display this can create up to ~90 logical freshness notifications for at most ~60 physical presentation opportunities.
+# 5. Integrated benchmark is the gate for all future presentation architecture
 
-Those GUI callbacks also share one GUI thread with the 165 Hz display's transition delivery and ordinary widgets.
+Before optimizing push or migrating runtime presentation, build one reusable local benchmark.
 
-This is now an active architecture target.
-
-## 5.2 Required replacement shape
-
-Retain:
+## Workload
 
 ```text
-VisualizerLogicalRuntime @ authored cadence
-        ->
-thread-safe latest-state mailbox/revision
+Display A: simulated/real 165 Hz presentation target
+    -> Blockspin transition
+
+Display B: simulated/real 60 Hz presentation target
+    -> active visualizer
+
+Visualizer logical source:
+    -> deterministic synthetic ~90 Hz bars/audio events
+
+Qt:
+    -> real QApplication/QGuiApplication event loop
+    -> real production scheduler/compositor path
 ```
 
-Change steady-state delivery toward:
+Run three identical repetitions in both:
+- low-load environment;
+- controlled heavy-load environment.
+
+## Record
+
+- high-refresh completed FPS;
+- request acceptance;
+- dt p50/p95/p99/max;
+- frame-gap count and >=33 / >=50 / >=100 ms classes;
+- 60 Hz completed FPS;
+- logical cadence/skips;
+- publish-to-physical age;
+- media.paint;
+- app/system CPU;
+- GPU busy;
+- GUI callback count;
+- first-physical-frame latency;
+- playback-state edges.
+
+Do not use framebuffer readback every frame.
+
+Use framebuffer capture only for bounded correctness/pixel assertions.
+
+Absolute FPS is a same-machine architecture benchmark, not a generic CI portability gate.
+
+---
+
+# 6. Qt Quick is now an active architecture spike, not future speculation
+
+The cumulative evidence has earned the question.
+
+Across all three QWidget/QRhi states, the shared failure remains:
 
 ```text
-physical display presentation opportunity
-        ->
-GUI/compositor samples freshest current-generation logical state
-        ->
-apply current presentation state
-        ->
-render
+deadline wake occurs reasonably near target
+    ->
+GUI dispatch/presentation is not serviced
+    ->
+physical opportunities are missed
+    ->
+GPU remains lightly loaded
 ```
 
-The logical producer must not need to enqueue one GUI callback for every ordinary published logical revision.
+The logical worker already moved simulation away from this bottleneck.
 
-The exact current-source implementation can choose the narrowest safe seam, but the required ownership is:
+The next candidate is moving physical frame rendering/presentation away from ordinary QWidget GUI paint ownership.
 
-### Logical worker owns
-- authored logical time;
-- source/event/smoothing/simulation evolution;
-- immutable latest-state publication;
-- mailbox revision/current-generation state.
+## Spike topology
 
-### GUI/presentation owner owns
-- QWidget geometry;
-- card/background pixels;
-- reveal/fade side effects;
-- compositor layer state;
-- GL/QRhi interaction;
-- physical presentation.
-
-### Physical presentation opportunity owns
-- sampling the freshest available logical revision;
-- deciding whether a new visualizer revision must be applied before that display frame.
-
-No FIFO.
-No catch-up.
-No replay of intermediate logical states.
-
-At 60 Hz, presentation naturally samples the freshest ~60 of the ~90 logical states.
-
-At 165 Hz, transition/compositor presentation remains free to run at display cadence while visualizer logical state changes only at its authored cadence.
-
-## 5.3 Freshness without callback-per-state
-
-Do not solve this by introducing another 90 Hz GUI timer.
-
-Use a thread-safe mailbox revision / dirty revision / equivalent existing primitive that the presentation owner can observe at its normal display opportunity.
-
-If the adaptive/compositor scheduler currently suppresses presentation when scene revision is unchanged, integrate logical-mailbox freshness into the scheduler's existing notion of pending scene work without posting a full GUI presentation callback for every logical tick.
-
-The worker may publish plain thread-safe state/revision.
-
-It may not call QWidget, QPixmap, QPainter, GL or QRhi APIs.
-
-## 5.4 Edge events remain explicit
-
-Not every logical publication is equivalent to a steady-state frame.
-
-Explicit edge/lifecycle operations may still require one bounded GUI marshal, including:
-- mode reveal;
-- card reveal/hide;
-- geometry changes;
-- activation/generation changes;
-- teardown/recreation;
-- other GUI-owned state changes.
-
-Do not eliminate required edge handoffs merely to reduce callback count.
-
-The goal is:
+Use standalone top-level windows:
 
 ```text
-remove continuous steady-state callback pressure
-while
-preserving explicit edge/lifecycle ownership
+QQuickWindow screen 0
+QQuickWindow screen 1
 ```
 
----
+Do not embed them in QWidget for the performance proof.
 
-# 6. Required production-shaped regression gates for the architecture replacement
+Do not use `QQuickWidget`.
 
-Do not create an A/B installed experiment.
+The current QWidget Settings/editor/control application remains untouched.
 
-Build deterministic bars around the intended ownership.
+## First renderer spike: preserve the existing shader work
 
-## Gate A — steady logical publication does not enqueue GUI work per revision
+Do NOT begin by porting every shader to QRhi/QSB.
 
-Drive the dedicated logical runtime through many ordinary logical steps.
+First prove the scheduling lever with a minimal renderer:
 
-Prove:
-- mailbox revision/state advances at authored cadence;
-- ordinary steady-state publications do not call/enqueue `present_logical_frame` once per logical step;
-- there is no hidden replacement 90 Hz GUI timer;
-- no FIFO/backlog forms.
+- force/check Qt Quick `threaded` render loop;
+- OpenGL graphics API;
+- current no-vsync policy;
+- one fullscreen custom render pass per window;
+- reuse representative existing PyOpenGL code:
+  - retained/base image;
+  - Blockspin;
+  - one representative visualizer mode, preferably Bubble plus Spectrum;
+- feed immutable synthetic state;
+- render via a Qt Quick render-thread integration point such as direct `beforeRendering`/`afterRendering` native OpenGL or an equivalent direct scene-graph render node;
+- no runtime QWidget overlays in the spike.
 
-Negative control:
-the old callback-per-publication seam must fail the callback-count bound.
+Verify via Qt scene-graph logging that the render loop is actually threaded and identify render-thread ownership.
 
-## Gate B — physical presentation samples newest state
+## Why not QQuickWidget
 
-Publish logical revisions faster than a simulated/controlled presentation consumer.
+`QQuickWidget` disables Qt Quick's threaded render loop and adds an offscreen render pass/texture composition.
 
-On each physical presentation opportunity:
-- consume/apply the newest current-generation revision;
-- intermediate stale revisions are not replayed;
-- state age remains bounded by logical + display cadence;
-- generation/activation fences remain enforced.
+That defeats the exact architectural property being tested.
 
-## Gate C — all visualizer modes retain semantics
+## Why not start with QQuickRhiItem
 
-Exercise all five modes.
+`QQuickRhiItem` is available and is a credible later integration tool, but it renders to an offscreen texture which is then composited.
 
-Prove:
-- logical reactions still advance at authored cadence;
-- presentation sees current mode state;
-- mode switching reveals correctly;
-- paused Spectrum idle remains visible;
-- no Bubble trajectory/cadence retuning;
-- no source smoothing/decimation;
-- no CPU/QPainter visualizer fallback.
+For a full-display compositor spike, prefer a direct/inline render path with no extra full-screen offscreen pass.
 
-## Gate D — two-display independence
-
-With a controlled 60 Hz visualizer consumer and 165 Hz transition/display consumer:
-
-- 60 Hz visualizer sampling must not require ~90 GUI callbacks/s from the logical producer;
-- 165 Hz display opportunities must remain independently serviceable;
-- no global lock/queue couples the two display rates;
-- visualizer state publication on one display must not create a callback backlog that starves the other.
-
-This is a deterministic ownership/scheduling test, not an installed FPS benchmark.
-
-## Gate E — edge GUI handoffs still work
-
-Pause/Play, mode switch, Settings/recreate and reveal/hide edges must:
-- execute required GUI-owned mutations exactly once/bounded;
-- preserve generation fences;
-- preserve warm visualizer ownership;
-- not restore playback debounce;
-- not create a second logical clock.
-
-## Gate F — slow-tick diagnostics cannot throw
-
-Force the slow-tick diagnostic path.
-
-No exception may escape or increment logical-runtime failure count.
+If the Quick architecture wins and portable QRhi rendering becomes desirable, `QQuickRhiItem` / `QSGRenderNode` become valid migration tools.
 
 ---
 
-# 7. Pause/Play after K — trace the common edge, not the transport mechanism
+# 7. Qt Quick no-vsync / mixed-refresh rules for the spike
 
-The latest operator report distinguishes two input paths:
+Do not change the product's no-vsync policy merely to make Qt Quick look good.
+
+Use:
+- OpenGL graphics API initially;
+- swap interval 0 / Qt Quick no-vsync equivalent;
+- two on-screen QQuickWindows;
+- current actual 60/165 topology.
+
+Qt Quick's threaded loop supports explicit no-vsync and falls back to timer-based animation advancement when vsync cannot be used.
+
+Because SRPSS owns its logical transition/visualizer time, do not depend on Qt Quick NumberAnimation timing as the product clock.
+
+Also test/consider the elapsed-time Quick animation driver only where Qt's own scene-graph housekeeping needs it; SRPSS logical time remains authoritative.
+
+---
+
+# 8. Qt Quick spike decision bar
+
+The spike is not accepted because a window renders.
+
+It must beat worker+push repeatedly.
+
+## Minimum migration signal
+
+Under identical low-load and controlled-load benchmark passes:
+
+- no sporadic first-frame/spawn failure;
+- no new lifecycle/resource leak class;
+- high-refresh delivery materially above worker+push;
+- tail frame gaps materially lower;
+- no regression in 60 Hz visualizer delivery;
+- no dependence on lowered fidelity;
+- low run-to-run variance.
+
+A useful target for low load remains the historical ~150 FPS high-refresh class, with the long-term goal of approaching display rate.
+
+Under controlled load, the spike must show a clear, repeatable improvement over worker+push rather than a one-run anomaly.
+
+If Qt Quick does NOT improve delivery:
+- do not port the rest of the app to Quick;
+- inspect whether Python render-thread/GIL contention is the blocker;
+- the next escalation becomes a small native/C++ physical renderer owner or other dedicated native presentation path.
+
+---
+
+# 9. If Qt Quick wins: actual migration destination
+
+Do NOT rewrite all application logic.
+
+Target architecture:
 
 ```text
-mouse transport click
-physical media key
+QWidget/Python application shell
+    -> Settings
+    -> configuration
+    -> providers
+    -> media control
+    -> lifecycle orchestration
+
+Dedicated logical visualizer runtime
+    -> immutable latest render state
+
+One QQuickWindow per runtime display
+    -> one scene graph / render thread per window
+    -> full-display base image + transitions
+    -> visualizer layer
+    -> runtime overlay presentation
 ```
 
-Both still produce the visualizer hitch.
+Existing runtime QWidget overlays cannot simply remain child widgets of QQuickWindow.
 
-Therefore do not return to “the WinRT command blocks the GUI.”
+Migration options, in preferred order:
+1. present existing retained/cached card content as scene-graph textures while keeping data/model logic;
+2. incrementally port runtime overlay presentation to Qt Quick items;
+3. only rewrite model/business logic if there is a separate reason.
 
-The common owner must be downstream of the point where those input paths converge, for example:
-- accepted playback-state propagation;
-- visualizer playback-edge wake/state application;
-- shared feedback/state notification;
-- GUI invalidation caused by playback state;
-- logical/presentation edge handoff.
-
-While implementing the shared presentation correction, trace the exact common playback-state edge in current source.
-
-If a synchronous/repeated GUI operation is plainly present there, correct it in the same architecture slice and lock it with a deterministic gate.
-
-Do not add a new telemetry campaign merely to rediscover that both input methods visibly hitch.
-
-Acceptance is all-mode:
-- Bubble;
-- Spectrum;
-- Devcurve;
-- remaining visualizer modes.
+Do not use extra independently dirtied transparent GL windows to avoid migrating overlay presentation; historical evidence already showed multiple accelerated presentation surfaces are harmful.
 
 ---
 
-# 8. Media feedback remains open but secondary
+# 10. What `15099d3` teaches us
 
-Keep Slice L's selective paint work only if it is visually correct and does not create broader invalidation problems.
+`15099d3` used:
+- `QOpenGLWidget` main compositor;
+- independent `SpotifyBarsGLOverlay(QOpenGLWidget)`;
+- direct visualizer `set_state()` -> `self.update()` presentation;
+- substantially less current-generation handoff/lifecycle/presentation machinery.
 
-Do not claim it solved the production cost.
+That likely explains part of its low-load responsiveness:
+- short direct presentation path;
+- fewer ownership fences/revision layers;
+- fewer cross-thread handoffs;
+- more resource residency;
+- independent visualizer presentation.
 
-During the architecture work:
-- inspect why installed events still produce high `media.paint` cost;
-- if the fast path is routinely defeated by coalesced damage, repair the ownership rather than adding another containment special-case;
-- a dedicated lightweight child/overlay remains acceptable if that is cleaner than forcing parent-paint region inference.
+But later controlled history disproves a simplistic return:
+- single-display no-visualizer QOpenGLWidget compositor still produced severe native/Qt transition stalls;
+- QRhi main-compositor migration later eliminated the severe >50 ms no-visualizer class in its acceptance run;
+- a second QRhi visualizer presentation surface made delivery dramatically worse;
+- one-surface-per-display was therefore a real architectural correction.
 
-Do not lower feedback animation cadence as the fix.
+The goal is not to recover `15099d3`.
 
-Do not let feedback work derail the shared presentation correction into another week of local paint micro-optimization.
-
----
-
-# 9. Explicit prohibitions
-
-No:
-- another generic probe/instrumentation phase;
-- A/B production architecture branch;
-- lowering visualizer logical cadence;
-- lowering display target Hz;
-- Bubble retuning;
-- source/audio smoothing;
-- source/event decimation;
-- playback debounce;
-- FIFO/catch-up;
-- paint acknowledgement/backpressure;
-- second visualizer surface;
-- second logical clock;
-- per-transition fidelity cuts;
-- broad “move everything to workers” rewrite;
-- vsync restoration as a diagnostic experiment.
-
-The next change should remove an ownership/callback mechanism, not layer another scheduler on top of it.
+The goal is to recover its **directness and low coordination overhead** while retaining the correctness/resource/lifecycle improvements made since then.
 
 ---
 
-# 10. What may be rewritten
+# 11. Work order
 
-The project is no longer constrained to baby-step patches if the current owner boundary is the defect.
+1. Archive current pull architecture and evidence.
+2. Selectively restore worker+push steady presentation.
+3. Verify spawn/reveal determinism.
+4. Fix media playback-state generation/freshness ownership.
+5. Build reusable integrated low-load/heavy-load benchmark.
+6. Establish worker+push reference numbers.
+7. Build QQuickWindow threaded-render vertical slice using representative existing OpenGL shaders.
+8. Benchmark it three times low-load and heavy-load.
+9. Decide:
+   - Quick wins -> begin bounded runtime-presentation migration;
+   - Quick loses -> escalate physical renderer ownership, not QWidget micro-tuning.
+10. Append immutable evidence before the next architecture change.
 
-A bounded architecture replacement is allowed when:
-- existing behavioural contracts are retained;
-- one source-owned boundary is replaced;
-- old callback/timer/state machinery is deleted rather than duplicated;
-- lifecycle/generation ownership remains explicit;
-- deterministic negative controls prove the removed bad shape;
-- rollback remains coherent.
-
-Architecture elegance is not the goal.
-
-Removing shared GUI starvation while preserving authored behavior is.
-
----
-
-# 11. Installed acceptance after the architecture slice
-
-After the shared presentation correction and focused gates pass, request ONE installed script/debug acceptance run.
-
-Use the normal comprehensive diagnostic command.
-
-The log must identify itself via:
-
-```text
-[SOURCE_HEAD] <sha>
-```
-
-Exercise:
-1. startup both displays;
-2. each visualizer mode;
-3. ordinary and rapid mouse Pause/Play;
-4. physical media-key Pause/Play;
-5. long Bubble observation;
-6. ordinary 165 Hz transitions while visualizer remains active on the other display;
-7. paused Spectrum idle;
-8. mode switching;
-9. Settings/recreate;
-10. clean shutdown.
-
-Hard fail:
-- Pause/Play hitches in any visualizer mode;
-- visible all-mode cadence holes;
-- recurring ordinary >33 ms BTF holes;
-- 165 Hz display remains in the current ~65–130 FPS collapse class;
-- request acceptance remains in the current ~55–80% collapse class;
-- 60 Hz visualizer presentation visibly steps;
-- logical-runtime failures/exceptions;
-- generation/lifecycle regression.
-
-The installed product decides closure.
-
----
-
-# 12. P2 is not allowed to close merely because this architecture slice lands
-
-The third installed run proves that the broader problem is still substantial.
-
-Even if the steady-state callback replacement is correct, P2 remains open until:
-- all-mode visualizer hitching is gone;
-- Pause/Play is perceptually clean through mouse and media-key paths;
-- high-refresh transition delivery returns toward the accepted class;
-- BTF tails are controlled;
-- lifecycle remains correct.
-
-If the next installed run still fails, continue from the new source/log evidence.
-
-Do not convert “no probe treadmill” into “stop after one architecture commit.”
+Do not spend weeks optimizing worker+push before running the Qt Quick vertical slice.
