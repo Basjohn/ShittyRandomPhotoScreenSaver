@@ -679,6 +679,57 @@ decision from a much cleaner boundary.
 
 ---
 
+### Attempted and reverted 2026-08-19 — read this before retrying
+
+The runtime itself is correct and is retained, unwired, in
+`widgets/spotify_visualizer/logical_runtime.py`: one non-daemon thread, one
+monotonic deadline sequence, missed deadlines skipped rather than replayed, a
+latest-wins mailbox with generation fencing, and a bounded quiesce/join. The
+installed run confirms it behaves: `steps=2825 skipped_deadlines=1148
+slow_steps=0 failures=0 joined=True`.
+
+Wiring it as the cadence owner broke the product, in two stages:
+
+1. **Nothing presented at all.** `logical_tick()` requested presentation through
+   `getattr(widget, "_request_logical_present", None)`, and that widget method
+   had been removed when the plumbing moved into `tick_pipeline`. The optional
+   lookup returned `None` silently, so 1082 logical steps produced zero pushed
+   frames and the reveal watchdog expired with `waiting_frame=True`.
+
+2. **Every mode switch failed.** With presentation fixed, switches still ended
+   invisible: `[OVERLAY] reason=cleanup mode=oscilloscope set_state=338 paint=0
+   visible=False enabled=False`. `logical_tick()` reaches
+   `check_mode_teardown_ready()` -> `begin_mode_fade_in()`, which calls
+   `invalidate_shadow_cache_if_needed()`, `apply_pending_mode_transition_layout()`
+   and `start_widget_fade_in()`. Those are QWidget/QPixmap operations; off the
+   GUI thread they failed inside the surrounding broad handlers, silently.
+
+The operator also reported Bubble losing its visual-only smoothing and Spectrum
+showing no idle bars in that run. Both are consistent with ~29% of logical
+deadlines being dropped with irregular dt, and neither was re-diagnosed
+separately after the revert.
+
+**The blocking prerequisite, precisely.** Section 7.3 already says the logical
+runtime owns only plain-data work. The mode-activation/fade reveal path is the
+concrete thing that is not plain-data and is still reachable from the logical
+half. Before the thread can own cadence, that path has to become: logical
+runtime decides *readiness* as plain data, GUI owns the *reveal*. That is a
+bounded piece of work with a clear boundary, and it should be a slice of its
+own with its own installed check, not folded into the cadence swap.
+
+**What the gates missed, and what was added.** Every bar asserted a piece - the
+runtime stepped, the mailbox published, the timer existed - and none asserted
+that anything became visible. `tests/test_p2_mode_switch_becomes_visible.py`
+now requires a switch into each of the five modes to reach its fade-in and
+start the widget fade, and fails if a thread cadence owner is wired up again
+while the reveal work is still in the logical path.
+
+Cadence meanwhile returns to the GUI recurring timer, now running at the
+authored logical interval instead of the old 16 ms default plus per-tick
+retuning.
+
+---
+
 ## 8. Current mode-switch reset path — simplify only where the new runtime makes it obsolete
 
 Ordinary mode switching is now visibly better than playback pause/resume.
