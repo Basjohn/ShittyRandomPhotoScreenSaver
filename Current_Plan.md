@@ -2,7 +2,8 @@
 
 Last updated: 2026-08-18
 Branch: `main`
-Current source anchor: `0adb1a56` (P2-CUSTOM-CANCEL, Gmail ownership, PERF-A, PERF-B landed)
+Current source anchor: `c9784be5` (pre-reveal frame preparation)
+Named installed baseline: **4.7.2 / 2026-08-19** (`42033c84`)
 Architecture epoch: **OpenGL QRhi, one accelerated presentation surface per physical display**
 
 This file owns unfinished active work and execution order. Current source and installed evidence
@@ -594,6 +595,24 @@ rather than inventing a speculative rewrite.
 
 ### Landed
 
+The 4.7.2 acceptance named candidate 2's owner, so it is now landed as well.
+
+`BaseOverlayWidget` coalesces frame-shadow invalidation while a widget is hidden
+(`_commit_painted_frame_shadow_cache()` returns early unless `isVisible()`), so during
+reconstruction `showEvent` was the only builder - and the reveal starter is what calls `show()`.
+`WidgetManager` now prepares the frame where the overlay declares itself ready for display, with
+geometry, DPR and style final and the widget still hidden, leaving the later `showEvent` a cache
+hit.
+
+That alone was not sufficient: `resizeEvent` and the DevicePixelRatioChange/ScreenChangeInternal
+handler both invalidated unconditionally, and first show delivers both events even when neither
+the size nor the ratio changes - discarding the prepared frame. Both sites now invalidate only
+when the cache is not already current. Pixels and cache identity are unchanged in both commits.
+
+Reddit/Gmail content-cache regeneration in the same window was examined and left alone: that cache
+is identity-guarded, prepared on data arrival rather than at show, and already defers during
+transitions, so its regeneration during reconstruction is genuinely new content.
+
 `BaseOverlayWidget.set_show_background()`, `set_background_color()`,
 `set_background_opacity()` and `set_background_corner_radius()` rebuilt the painted frame
 shadow unconditionally. Their siblings `set_background_border()`/`_apply_border_width()`
@@ -601,9 +620,9 @@ already returned early on an unchanged value; these four now do too, so a repeat
 style apply during setup, settings refresh or reconstruction no longer invalidates the shared
 frame and rebuilds the pixmap synchronously. Pixels and cache identity are unchanged.
 
-Candidates 2-4 were not landed: existing evidence does not yet name a specific reconstruction
-warmup, raster preparation or transition-setup owner concretely enough to change source without
-speculating. They stay listed above rather than being invented.
+Candidates 3-4 remain unlanded: existing evidence still names no specific raster-preparation or
+transition-setup owner concretely enough to change source without speculating. They stay listed
+above rather than being invented.
 
 ## 8. Do not jump straight to a timer-rate “fix”
 
@@ -703,6 +722,55 @@ class or more. The desired movement is:
 - tracked GL ownership returns to zero on teardown.
 
 No throttling/fidelity sacrifice is accepted as an efficiency win.
+
+---
+
+### Result — run performed 2026-08-19, baseline 4.7.2 (`42033c84`)
+
+The acceptance was run and is the named baseline. Established by that run's own logs:
+
+**Functional/CUSTOM gate — passed.** The edit seam works in production: `Visualizer suspended for
+edit session (reason=custom_edit)` -> `Seeded playback state from anchor (custom_edit_restore
+state=playing)` -> `Visualizer resumed after edit session`, with no secondary-stage deferral
+between them and Bubble tick metrics resuming immediately. `custom_edit_restore` occurred four
+times. No `[LIFECYCLE_BARRIER] timeout` anywhere in the run, and no `gmail_fetch` barrier
+residency: sections 3 and 4 are confirmed against the installed runtime, not only against tests.
+
+**Physical presentation gate — passed.** `paint_pending_skips=0` throughout. Queued GUI dispatch
+improved sharply against section 5.3's evidence:
+
+```text
+60 Hz, no transition:   accepted 1946/2005 = 99.69%   dispatch_pending_skips=6
+                        (was ~75% after recreation)
+60 Hz, no transition:   accepted 1288/1382 = 99.54%   dispatch_pending_skips=6
+165 Hz, blockspin:      accepted 1429/1513 = 94.45%   dispatch_pending_skips=84
+                        (was 87.21% with 610 skips)
+```
+
+`unchanged_scene_skips` reports as designed (53 and 88 in the visualizer-only 60-Hz windows, 0
+during transition) and is excluded from the acceptance denominator.
+
+**Visualizer feel/cadence gate — materially improved, not fully met.** Steady playback now reaches
+89-97 logical FPS against the ~90-100 Hz target, up from section 5.2's 65.3-69.7. Section 5.5's
+GUI waste is therefore real and its removal worked.
+
+Recurring holes are reduced but not gone. Per-session running `dt_max` still climbs mid-session in
+ordinary steady playback:
+
+```text
+19.76 -> 42.61 -> 59.62 ms   over three 5s windows
+21.05 -> 37.65 -> 60.91 ms
+38.33 -> 63.87 ms
+49.69 -> 49.69 -> 70.33 ms
+```
+
+That is roughly one >33 ms hole per 5-second window in several sessions.
+
+**Therefore section 8's condition is met.** The remaining gap is the trigger for logical cadence
+isolation from GUI delivery, which section 8 requires to begin from fresh post-waste-removal
+evidence and forbids improvising. The pre-reveal preparation landed since this run removes further
+GUI-thread waste from the reveal window but was not exercised by it, so the next acceptance should
+re-measure before that larger step is designed.
 
 ---
 

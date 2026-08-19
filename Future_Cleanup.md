@@ -67,6 +67,9 @@ Accelerated presentation is required for the modern runtime.
 - [ ] make `tools/perf_integration_harness.py --help` safe and add bounded scenario/duration/cleanup controls;
 - [ ] verify harnesses that instantiate `SpotifyBarsGLOverlay` use logical-owner semantics;
 - [ ] classify unrelated full-suite/native-exit clusters without weakening runtime contracts;
+  one confirmed instance: `test_spotify_visualizer_fresh_frame_schedules_ready_driven_reveal_after_min_delay`
+  aborts inside a `qtbot.wait()` in large cross-file selections while passing in isolation. Reproduced
+  identically at the untouched 4.7.2 baseline, so it is harness contamination, not a runtime regression;
 - [ ] split large slow widget test monoliths while retaining integrated hydration/save coverage.
 
 A test that only asserts a helper/stub was called is not sufficient evidence for a production
