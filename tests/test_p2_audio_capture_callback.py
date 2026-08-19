@@ -34,6 +34,30 @@ def np_module():
     return pytest.importorskip("numpy")
 
 
+class _RecordingHandler(logging.Handler):
+    """Counts records on the audio-worker logger only."""
+
+    def __init__(self):
+        super().__init__(level=logging.ERROR)
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+@pytest.fixture
+def worker_errors():
+    """Capture ERROR records from the worker logger, isolated from other suites."""
+    from widgets.spotify_visualizer import audio_worker as module
+
+    handler = _RecordingHandler()
+    module.logger.addHandler(handler)
+    try:
+        yield handler.records
+    finally:
+        module.logger.removeHandler(handler)
+
+
 class _FakeBackend(AudioCaptureBackend):
     """A capture backend that hands the worker's own callback back to the test.
 
@@ -159,11 +183,10 @@ class TestRealCallbackPublishes:
         backend.deliver(_block(np_module))
         assert instance._capture_callback_failures == 0
 
-    def test_no_error_is_logged_for_a_healthy_callback(self, worker, np_module, caplog):
+    def test_no_error_is_logged_for_a_healthy_callback(self, worker, np_module, worker_errors):
         _instance, backend, _buffer = worker
-        with caplog.at_level(logging.ERROR):
-            backend.deliver(_block(np_module))
-        assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+        backend.deliver(_block(np_module))
+        assert worker_errors == []
 
     def test_mono_input_publishes_too(self, worker, np_module):
         _instance, backend, buffer = worker
@@ -208,47 +231,40 @@ class TestReintroducingTheDefectFailsThisBar:
 
 class TestCallbackFailureIsLoudAndBounded:
     def test_the_first_failure_is_an_error_not_a_debug_line(
-        self, worker, np_module, monkeypatch, caplog
+        self, worker, np_module, monkeypatch, worker_errors
     ):
+        """End to end: a dead callback must not stay DEBUG-only."""
         _instance, backend, _buffer = worker
         monkeypatch.delattr(
             "widgets.spotify_visualizer.audio_worker.time", raising=True
         )
-        with caplog.at_level(logging.ERROR):
-            backend.deliver(_block(np_module))
-        errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
-        assert errors, "a silently dead audio path must not stay DEBUG-only"
+        backend.deliver(_block(np_module))
+        assert worker_errors, "a silently dead audio path must not stay DEBUG-only"
 
-    def test_repeated_failures_do_not_log_per_frame(
-        self, worker, np_module, monkeypatch, caplog
-    ):
-        instance, backend, _buffer = worker
-        monkeypatch.delattr(
-            "widgets.spotify_visualizer.audio_worker.time", raising=True
-        )
-        with caplog.at_level(logging.ERROR):
-            for _ in range(200):
-                backend.deliver(_block(np_module))
-        errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
-        assert len(errors) == 1, "the failure report flooded the log"
+    def test_repeated_failures_do_not_log_per_frame(self, worker, worker_errors):
+        instance, _backend, _buffer = worker
+        before = len(worker_errors)
+
+        for _ in range(200):
+            instance._report_capture_callback_failure(RuntimeError("boom"))
+
+        assert len(worker_errors) - before == 1, "the failure report flooded the log"
         assert instance._capture_callback_failures == 200
 
-    def test_a_sampled_report_appears_for_a_long_failure_run(
-        self, worker, np_module, monkeypatch, caplog
-    ):
-        instance, backend, _buffer = worker
-        monkeypatch.delattr(
-            "widgets.spotify_visualizer.audio_worker.time", raising=True
-        )
+    def test_a_sampled_report_appears_for_a_long_failure_run(self, worker, worker_errors):
+        instance, _backend, _buffer = worker
+        before = len(worker_errors)
         interval = instance._CAPTURE_FAILURE_LOG_INTERVAL
-        with caplog.at_level(logging.ERROR):
-            for _ in range(interval):
-                backend.deliver(_block(np_module))
-        errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
-        assert len(errors) == 2, "a persistent failure must stay visible, boundedly"
+
+        for _ in range(interval):
+            instance._report_capture_callback_failure(RuntimeError("boom"))
+
+        assert len(worker_errors) - before == 2, (
+            "a persistent failure must stay visible, boundedly"
+        )
 
     def test_recovery_re_arms_the_loud_report(
-        self, worker, np_module, monkeypatch, caplog
+        self, worker, np_module, monkeypatch
     ):
         instance, backend, buffer = worker
         monkeypatch.delattr(
