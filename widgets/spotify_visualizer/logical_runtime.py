@@ -58,6 +58,31 @@ _clock = time.perf_counter
 _MAX_SLEEP_SLICE_S = 0.004
 
 
+# The sentinel for an unassigned generation/activation identity.
+UNASSIGNED_IDENTITY = -1
+
+
+def coerce_identity(value: Any, *, missing: int = UNASSIGNED_IDENTITY) -> int:
+    """Coerce a generation/activation identity, preserving a valid integer 0.
+
+    Runtime and engine identity counters both start at `0` (see
+    `ScreensaverEngine._runtime_generation` and `_SpotifyBeatEngine._generation_id`
+    / `_activation_id`), so `0` is a real, fenceable identity - not "unassigned."
+    The old `int(value or -1)` coercion collapsed that valid zero into the
+    invalid sentinel through truthiness: the first installed run started its
+    logical runtime as `generation=-1`, which disabled the presentation fence
+    (`generation >= 0`) for the entire first generation. Only `None`, a missing
+    attribute, or a non-integer maps to the sentinel here; `0` stays `0`.
+    """
+
+    if value is None:
+        return missing
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return missing
+
+
 @dataclass(frozen=True)
 class LogicalPublication:
     """An immutable published logical frame plus its identity."""
