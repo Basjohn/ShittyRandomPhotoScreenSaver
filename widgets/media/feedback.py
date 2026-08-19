@@ -10,7 +10,7 @@ import time
 import weakref
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QRect, QTimer, Qt
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
@@ -166,15 +166,84 @@ def _has_transition_work(widget: "MediaWidget") -> bool:
         return False
 
 
-def _record_feedback_paint_request(cls: type, event_id: str) -> None:
+def _record_feedback_paint_request(
+    cls: type, event_id: str, *, full_card: bool
+) -> None:
     meta = cls._shared_feedback_events.get(event_id)
     if meta is not None:
         meta["paint_requests"] = int(meta.get("paint_requests", 0)) + 1
+        if full_card:
+            meta["full_card_paint_requests"] = (
+                int(meta.get("full_card_paint_requests", 0)) + 1
+            )
+
+
+def _feedback_dirty_rect(widget: "MediaWidget") -> QRect | None:
+    """The card region a feedback repaint must cover: the controls row plus a
+    small margin for the glow that can bleed a few pixels past it.
+
+    The transport controls are a band across the bottom of the card; the
+    artwork, metadata text, header and playback progress all sit above it. So a
+    feedback repaint confined to this rect draws only the (cached) background
+    frame and the controls row - Qt clips the whole paint to the requested
+    region, and `BaseOverlayWidget.paintEvent` re-clears the band to the frame
+    pixmap before the semi-transparent row composites over it, so there is no
+    stale-alpha accumulation. Returns None when the layout is unavailable, so
+    the caller falls back to a full-card update.
+    """
+
+    try:
+        layout = widget._compute_controls_layout()
+    except Exception:
+        logger.debug("[MEDIA_WIDGET][FEEDBACK] controls layout unavailable", exc_info=True)
+        return None
+    if not layout:
+        return None
+    row_rect = layout.get("row_rect")
+    if row_rect is None or row_rect.isNull():
+        return None
+
+    margin = max(6, int(row_rect.height() * 0.25))
+    dirty = row_rect.adjusted(-margin, -margin, margin, margin)
+    try:
+        return dirty.intersected(widget.rect())
+    except Exception:
+        return dirty
+
+
+def _safe_update_region(widget: "MediaWidget", rect: QRect) -> None:
+    """Best-effort partial `QWidget.update(rect)` that tolerates deleted objects."""
+    if Shiboken is not None:
+        try:
+            if not Shiboken.isValid(widget):
+                return
+        except Exception:
+            pass
+    try:
+        widget.update(rect)
+    except RuntimeError:
+        pass
+    except Exception as exc:
+        logger.debug("[MEDIA_WIDGET] region update suppressed: %s", exc)
 
 
 def _request_feedback_paint(widget: "MediaWidget", event_id: str) -> None:
-    _record_feedback_paint_request(type(widget), event_id)
-    widget._safe_update()
+    """Repaint the control feedback.
+
+    A feedback fade animates a small control glow. Repainting the whole media
+    card once per animation frame (the old `_safe_update()` path) cost ~35-66
+    full-card paints over the 1.35s fade and starved presentation delivery on
+    the Pause/Play edge. The feedback only touches the controls row, so a
+    dirty-region update confines the paint there; a full-card repaint is used
+    only when the controls layout is unavailable.
+    """
+    dirty = _feedback_dirty_rect(widget)
+    if dirty is not None and not dirty.isNull():
+        _record_feedback_paint_request(type(widget), event_id, full_card=False)
+        _safe_update_region(widget, dirty)
+    else:
+        _record_feedback_paint_request(type(widget), event_id, full_card=True)
+        widget._safe_update()
 
 
 def schedule_static_feedback_clear(
@@ -243,6 +312,7 @@ def trigger_controls_feedback(
         "transition_active": transition_static,
         "mode": "static" if transition_static else "animated",
         "paint_requests": 0,
+        "full_card_paint_requests": 0,
     }
 
     if transition_static:
@@ -416,7 +486,13 @@ def finalize_feedback_key(widget: "MediaWidget", key: str) -> None:
     widget._feedback_deadlines.pop(key, None)
     active_id = widget._active_feedback_events.pop(key, None)
     if active_id and event_meta is not None:
+        # The final clearing repaint below is a single full-card update: it
+        # retires the feedback and lets the card settle. Counted so the "start
+        # and end only" full-card bound stays honest.
         event_meta["paint_requests"] = int(event_meta.get("paint_requests", 0)) + 1
+        event_meta["full_card_paint_requests"] = (
+            int(event_meta.get("full_card_paint_requests", 0)) + 1
+        )
         log_feedback_path_metric(
             widget,
             phase="complete",
