@@ -248,3 +248,44 @@ class TestGate4LogicalCodeCannotReachGuiMutation:
             "the worker thread never published a logical frame"
         )
         widget.cleanup()
+
+
+class TestPublishedActivationIdentityIsReal:
+    """`_activation_id` is not a widget attribute; a getattr default of -1
+    made this silently always wrong rather than failing loudly.
+    """
+
+    def test_the_publish_path_reads_a_real_widget_attribute(self):
+        import inspect
+
+        from widgets.spotify_visualizer import tick_pipeline
+
+        source = inspect.getsource(tick_pipeline._publish_logical_state)
+        assert '"_activation_id"' not in source, (
+            "mode_activation_id reads a widget attribute that does not exist "
+            "and would always publish -1"
+        )
+        assert "_last_engine_activation_seen" in source
+
+    def test_a_confirmed_activation_is_published(self, qt_app, qtbot):
+        from PySide6.QtWidgets import QWidget
+
+        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+        from widgets.spotify_visualizer import tick_pipeline
+
+        parent = QWidget()
+        qtbot.addWidget(parent)
+        widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+        qtbot.addWidget(widget)
+        widget._enabled = True
+        widget._engine = None
+        widget._waiting_for_fresh_engine_frame = False
+        widget._waiting_for_fresh_frame = False
+        widget._last_engine_activation_seen = 4
+
+        tick_pipeline.logical_tick(widget)
+
+        published = widget._logical_mailbox.peek()
+        assert published is not None
+        assert published.activation_id == 4
+        widget.cleanup()
