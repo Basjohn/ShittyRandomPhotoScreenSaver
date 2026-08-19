@@ -835,6 +835,10 @@ class MediaWidget(BaseOverlayWidget):
     def set_font_size(self, size: int) -> None:  # type: ignore[override]
         """Set the font size and invalidate any cached media text layout."""
 
+        if int(size) == int(getattr(self, "_font_size", -1)):
+            # Same reasoning as `set_artwork_size`: an unchanged size must not
+            # rebuild the live card.
+            return
         super().set_font_size(size)
         self._invalidate_metadata_layout()
         invalidate = getattr(self, "_invalidate_controls_layout", None)
@@ -846,6 +850,11 @@ class MediaWidget(BaseOverlayWidget):
         """Set preferred artwork size in pixels and refresh layout."""
 
         if size <= 0:
+            return
+        if int(size) == int(self._artwork_size):
+            # Re-applying the current footprint cannot change the authored card,
+            # but the rebuild below reconstructs the display from `_last_info`
+            # and would drop live artwork/metadata when that is unavailable.
             return
         self._artwork_size = int(size)
         self._invalidate_metadata_layout()
