@@ -23,6 +23,7 @@ from core.logging.logger import (
     is_viz_logging_enabled,
 )
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
+from widgets.spotify_visualizer import mode_capabilities
 from widgets.spotify_visualizer.spectrum_presentation_smoothing import (
     reset_widget_spectrum_presentation_smoothing,
     resolve_widget_spectrum_presentation,
@@ -55,37 +56,14 @@ def _mode_requires_fresh_waveform(mode_str: str) -> bool:
     return str(mode_str or "").lower() in {"oscilloscope", "sine_wave"}
 
 
-# Every authored mode may present while idle. Bubble, Sine, Oscilloscope and
-# DevCurve animate themselves; Spectrum shows a static presentation baseline.
-_IDLE_REVEAL_MODES = frozenset({"bubble", "sine_wave", "oscilloscope", "devcurve", "spectrum"})
-
-# Modes whose idle motion is generated from engine ticks, so a paused tick may
-# stop waiting for a fresh engine frame. Spectrum is deliberately absent: its
-# idle scene is owned by presentation and needs no source at all, so it keeps
-# waiting and its real bars still prove they came from the current activation.
-_IDLE_SELF_ANIMATING_MODES = frozenset({"bubble", "sine_wave", "oscilloscope", "devcurve"})
-
-
-def _mode_allows_idle_reveal_key(mode_str: str) -> bool:
-    """Return True when a mode may reveal while paused."""
-    return str(mode_str or "").lower() in _IDLE_REVEAL_MODES
-
-
-def _mode_is_idle_self_animating(mode_str: str) -> bool:
-    """Return True when paused motion comes from engine ticks rather than presentation."""
-    return str(mode_str or "").lower() in _IDLE_SELF_ANIMATING_MODES
-
-
-def _mode_requires_authoritative_first_source(mode_str: str) -> bool:
-    """Return True when first visible output must come from a fresh source-tracked frame.
-
-    Deliberately keyed on self-animation, not on idle reveal. Spectrum may now
-    reveal while idle, but every bar it ever shows during playback is still
-    purely source-derived, so it must keep proving its first reactive frame came
-    from the current activation.
-    """
-
-    return not _mode_is_idle_self_animating(mode_str)
+# Mode capability answers come from one canonical owner; see
+# `widgets.spotify_visualizer.mode_capabilities` for why these three questions
+# are deliberately distinct.
+_mode_allows_idle_reveal_key = mode_capabilities.allows_idle_reveal
+_mode_is_idle_self_animating = mode_capabilities.is_idle_self_animating
+_mode_requires_authoritative_first_source = (
+    mode_capabilities.requires_authoritative_first_source
+)
 
 
 # ------------------------------------------------------------------
@@ -1400,9 +1378,21 @@ def on_tick(widget: Any) -> None:
     # Let paused mode transitions progress even when fresh-engine wait short-circuits.
     widget._check_mode_teardown_ready(widget._engine, now_ts)
     _record_tick_phase("teardown_check")
-    # If consume returned (False, False) while waiting for fresh engine frame, bail
+    # If consume returned (False, False) while waiting for fresh engine frame, bail.
+    #
+    # A mode whose idle scene is presentation-owned is the exception: it needs no
+    # source frame to draw anything, and `push_gpu_frame()` downstream is the
+    # only normal call site that builds that scene. Returning here meant paused
+    # Spectrum said "my idle needs no source" and "do not run my idle until
+    # source arrives" at the same time, which is why its card stayed blank.
+    #
+    # The wait itself is deliberately preserved: it still gates reactive source
+    # authority when playback resumes.
     if widget._waiting_for_fresh_engine_frame and not changed and not _any_nonzero:
-        return
+        if widget._spotify_playing or not mode_capabilities.has_presentation_owned_idle_scene(
+            getattr(widget, "_vis_mode_str", "")
+        ):
+            return
 
     # Heartbeat transient detection for sine mode
     process_heartbeat(widget, now_ts)

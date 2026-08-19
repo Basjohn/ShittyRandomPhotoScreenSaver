@@ -119,11 +119,14 @@ def seed_playback_state_from_anchor(
             source="seed",
             seed_source=best_source,
         )
-        idle_capable_mode = str(getattr(widget, "_vis_mode_str", "") or "").lower() in {
-            "bubble",
-            "sine_wave",
-            "devcurve",
-        }
+        # This used to be a third hard-coded set that omitted Oscilloscope and
+        # never learned about Spectrum's idle scene, so a provisional paused seed
+        # could block a startup the other owners considered legal.
+        from widgets.spotify_visualizer import mode_capabilities
+
+        idle_capable_mode = mode_capabilities.allows_idle_reveal(
+            getattr(widget, "_vis_mode_str", "")
+        )
         widget._startup_idle_reveal_requires_authoritative_media = (
             provisional_nonplaying_seed and not idle_capable_mode
         )
