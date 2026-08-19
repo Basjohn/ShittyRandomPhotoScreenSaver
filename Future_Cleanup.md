@@ -61,8 +61,6 @@ After current P2 correctness closes:
 
 - [ ] reconcile/remove any remaining dead GUI visualizer timer helpers;
 - [ ] remove misleading comments that still call GUI recurring timing the normal visualizer owner;
-- [ ] make the `wake()` API semantics exactly match the wait implementation without reintroducing
-  the old coarse timed-wait scheduler defect;
 - [ ] audit remaining wall-clock use where a monotonic clock is semantically required.
 
 These are cleanup only if the active plan has not promoted a specific defect.
@@ -73,7 +71,16 @@ These are cleanup only if the active plan has not promoted a specific defect.
 - [ ] establish one shared frame-timing harness contract;
 - [ ] make long Qt/GL harnesses more isolated;
 - [ ] keep generation-zero and one-clock gates permanent;
-- [ ] retire tests that only protect GUI-timer/separate-surface architecture.
+- [ ] retire tests that only protect GUI-timer/separate-surface architecture;
+- [ ] fix combined-run contamination flakes that pass in isolation but fail in the
+  full suite: `test_media_command_ingress` (one-command-before-lookup),
+  `test_visualizer_settings_plumbing::TestCreateTimeRefreshParity`, the
+  `test_visualizer_doc_references` trio, and `test_sine_line4_builder_integration`
+  (`TestTab` harness missing `media_enabled`); these are shared-state/ordering
+  leaks, not product defects;
+- [ ] fix the `tools/recovery_evidence_parser.py` `analyze_evidence_source`
+  infinite self-recursion that fails `test_recovery_evidence_parser` even in
+  isolation.
 
 A stub-call assertion is not sufficient for a visible/lifecycle seam.
 

@@ -574,79 +574,61 @@ The exact final numeric gate should be anchored to existing accepted baseline ru
 
 # 7. Execute next work in this exact order
 
-These are the new active slices. Previous Slices A–E are historical landed work.
+Previous Slices A–E are historical landed work. Slices F, G, H and the
+section 5 `wake()` correction are landed this round (see "Landed this round"
+below). Slice I is audited; Slice J (the single installed acceptance) is the
+only remaining active step before P2 can be evaluated.
 
-## Slice F — repair generation 0 identity/fencing
+## Landed this round
 
-Scope only:
+```text
+F   db86e742  valid generation 0 survives as 0, not the -1 sentinel
+G   0205579b  paused Spectrum idle bars render as visible pixels (real-GL gate)
+H   838ee340  Pause/Play feedback repaints only the controls row, not the card
+§5  be81f303  wake() truthfully interrupts the bounded wait (no Event.wait)
+```
 
-- fix valid-zero generation coercion in current logical/presentation identity paths;
-- add generation-0 regression bars;
-- no visual behavior changes;
-- no cadence changes;
-- no worker rollback.
+Each landed as its own commit with a production-shaped gate and a proven
+negative control. The full combined suite shows zero regressions from these
+slices; the only failures are the pre-existing contamination already recorded
+in `Future_Cleanup.md` (sine_line4, visualizer_doc_references,
+recovery_evidence_parser RecursionError, combined-run harness ordering).
 
-Acceptance:
+## Slice I — shared GUI/compositor presentation starvation (audited)
 
-- generation 0 remains 0 end-to-end;
-- stale retired 0 cannot publish/reveal into 1;
-- all existing single-clock/thread-affinity gates remain green.
-
-## Slice G — make paused Spectrum idle actually visible
-
-Scope only:
-
-- retain `presentation_ready != reactive_source_ready`;
-- retain source wait and no fabricated identity;
-- make idle bars visibly present in the real renderer;
-- replace Gate 1 with a renderer-aware visible-pixel/height test.
-
-Acceptance:
-
-- paused Spectrum card visible;
-- resting bars visibly present;
-- no fake source authority;
-- Play replaces idle baseline in place with fresh real current-generation bars;
-- no blank/recreate.
-
-## Slice H — remove Pause/Play Media feedback full-card repaint waste
-
-Scope only:
-
-- preserve control feedback;
-- stop using full MediaWidget repaint as the per-animation-frame vehicle;
-- add full-card paint/request accounting gate;
-- retain warm capture, no debounce, no visualizer recreation.
-
-Acceptance:
-
-- ordinary feedback no longer produces ~35–66 full-card paint requests;
-- feedback still looks intentional;
-- Pause/Play identity remains stable;
-- existing visualizer logical cadence remains healthy.
-
-Do not touch BeatEngine wake/source handoff in this slice unless the same source evidence directly proves it is required for this correction.
-
-## Slice I — close remaining shared GUI/compositor presentation starvation
-
-Only after F–H are green.
-
-Use existing telemetry first.
-
-Goal:
+Goal (unchanged, installed-run measured):
 
 - restore high-refresh completed-paint delivery toward accepted low/mid-150 class;
 - reduce request-age / dispatch-pending long tails;
 - reduce 60 Hz visualizer state-to-paint tails;
 - retain one compositor surface, one logical clock, latest-state publication.
 
-Do not trade fidelity for lower work.
+Audit outcome:
+
+- the shared admission path (`rendering/adaptive_timer.py`) is already minimal
+  and contract-compliant: one dispatch-pending guard, no paint-ack backpressure,
+  unchanged-scene suppression only for visualizer-only operation, GIL-friendly
+  deadline wait. There is no speculative change to make there;
+- the one **evidence-named** shared-GUI cost was the per-frame full-card
+  MediaWidget feedback repaint, which ran on the shared GUI thread during
+  exactly the Pause/Play windows where the 165 Hz collapse and event-loop tails
+  appeared. That is removed in Slice H;
+- attributing any **residual** 165 Hz shortfall requires the fresh installed
+  run's `[PERF][DELIVERY_STAGE]` telemetry. Per the plan's own rule (shared
+  problem until evidence names a narrower owner) and its anti-speculation
+  directive, no further shared-scheduler change is made without that attribution.
+  Gates 11/12 are inherently installed-run gates.
 
 ## Slice J — final P2 installed acceptance
 
-ONE installed run after F–I.
+ONE installed run now that F–H and the section 5 correction are landed and all
+production-shaped gates are green. If the run shows Slice H closed the shared
+starvation, P2 proceeds; if a residual owner remains, the DELIVERY_STAGE
+telemetry names it for a bounded follow-up.
 
-Do not ask the operator for repeated intermediate installed runs unless a failure is literally impossible to reproduce or bound in the production-shaped test/harness environment.
+Do not ask the operator for repeated intermediate installed runs unless a
+failure is literally impossible to reproduce or bound in the production-shaped
+test/harness environment.
 
 ---
 
