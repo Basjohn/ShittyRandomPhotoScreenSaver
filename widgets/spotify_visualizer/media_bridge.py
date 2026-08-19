@@ -11,13 +11,24 @@ from __future__ import annotations
 import time
 from dataclasses import asdict, is_dataclass
 from typing import Any, Optional
-from PySide6.QtCore import QTimer
 
 from core.logging.logger import get_logger, is_verbose_logging
 
 logger = get_logger(__name__)
 
-_PLAYBACK_PAUSE_CONFIRM_MS = 700
+# The visualizer no longer debounces its own visible playback state.
+#
+# A 700 ms confirm timer used to sit between a paused/stopped media update and
+# `_spotify_playing`, and any wobbling update re-armed it - the installed run
+# shows deferred pause messages at 13:15:14, :16, :17, :19, :23 with the engine
+# only settling at :24, which is the multi-second "limbo" the operator sees on
+# pause/resume.
+#
+# It was never needed to protect capture: `SpotifyBeatEngine` already holds
+# `_capture_keepalive_grace = 6.0s` and warm-resumes inside that window. So the
+# two concerns are now split - the logical/presentation playback target follows
+# the trusted MediaWidget state promptly, and capture lifetime stays engine
+# policy. No replacement timer was introduced.
 _SHARED_SEED_SOURCES = {"shared_valid_info", "shared_last_valid_info"}
 
 
@@ -165,6 +176,12 @@ def seed_playback_state_from_anchor(
 
 
 def clear_pending_playback_pause(widget: Any) -> None:
+    """Drop any retained pending-pause state.
+
+    Nothing arms a pending pause any more, but lifecycle owners (engine
+    acquire/release, edit suspend/resume, staged startup) still call this to
+    guarantee a clean slate, and it stays cheap and safe.
+    """
     """Cancel any pending deferred non-playing commit."""
     timer = getattr(widget, "_pending_playback_pause_timer", None)
     if timer is not None:
@@ -212,43 +229,8 @@ def _commit_playback_state(widget: Any, *, state: str, reason: str) -> None:
     ):
         widget._finish_staged_startup_reveal(reason="play_state_ready")
 
+    widget._last_committed_playback_state = state
     widget.sync_visibility_with_anchor()
-
-
-def _schedule_nonplaying_commit(widget: Any, *, state: str) -> None:
-    existing_timer = getattr(widget, "_pending_playback_pause_timer", None)
-    existing_state = getattr(widget, "_pending_playback_pause_state", None)
-    if existing_timer is not None and existing_state == state:
-        try:
-            if existing_timer.isActive():
-                return
-        except Exception:
-            pass
-
-    clear_pending_playback_pause(widget)
-    widget._pending_playback_pause_state = state
-
-    timer = QTimer(widget)
-    timer.setSingleShot(True)
-    timer.setInterval(_PLAYBACK_PAUSE_CONFIRM_MS)
-
-    def _on_timeout() -> None:
-        widget._pending_playback_pause_timer = None
-        pending_state = getattr(widget, "_pending_playback_pause_state", None)
-        widget._pending_playback_pause_state = None
-        if pending_state not in {"paused", "stopped"}:
-            return
-        _commit_playback_state(widget, state=pending_state, reason="play_state_pause_confirmed")
-
-    timer.timeout.connect(_on_timeout)
-    widget._pending_playback_pause_timer = timer
-    try:
-        register_resource = getattr(widget, "_register_resource", None)
-        if callable(register_resource):
-            register_resource(timer, "visualizer pending playback pause timer")
-    except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to register pending pause timer", exc_info=True)
-    timer.start()
 
 
 def handle_media_update(
@@ -287,10 +269,14 @@ def handle_media_update(
             widget._spotify_playing = True
             widget._startup_require_playing_before_reveal = False
     elif state in {"paused", "stopped"}:
-        if prev:
-            _schedule_nonplaying_commit(widget, state=state)
-        else:
-            clear_pending_playback_pause(widget)
+        # Prompt in both directions. The visualizer trusts the canonical
+        # MediaWidget state and begins its authored move toward idle now;
+        # absorbing provider wobble is the media state owner's job, and keeping
+        # capture warm across a short pause is the engine's.
+        clear_pending_playback_pause(widget)
+        # Idempotent: a provider repeating "paused" must not redo the idle
+        # commit and its visibility sync, while paused -> stopped still commits.
+        if prev or getattr(widget, "_last_committed_playback_state", None) != state:
             _commit_playback_state(widget, state=state, reason="play_state_nonplaying")
     else:
         clear_pending_playback_pause(widget)
@@ -321,13 +307,7 @@ def handle_media_update(
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
-    if state in {"paused", "stopped"} and prev and getattr(widget, "_pending_playback_pause_timer", None) is not None:
-        logger.debug(
-            "[SPOTIFY_VIS] Deferring %s media state for %dms to absorb playback-state wobble",
-            state,
-            _PLAYBACK_PAUSE_CONFIRM_MS,
-        )
-    elif source == "seed" and state in {"paused", "stopped"} and seed_source in _SHARED_SEED_SOURCES:
+    if source == "seed" and state in {"paused", "stopped"} and seed_source in _SHARED_SEED_SOURCES:
         logger.debug(
             "[SPOTIFY_VIS] Provisional non-playing startup seed retained until live media confirms state (source=%s)",
             seed_source,

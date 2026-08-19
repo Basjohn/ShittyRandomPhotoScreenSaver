@@ -9846,9 +9846,7 @@ def test_spotify_visualizer_media_update_sets_playing_state(qt_app, monkeypatch)
     
     vis._spotify_playing = True
     vis.handle_media_update({"state": "paused"})
-    assert vis._spotify_playing is True
-    assert vis._pending_playback_pause_timer is not None
-    vis._pending_playback_pause_timer.timeout.emit()
+    # Idle entry is prompt; there is no visible-state debounce to step through.
     assert vis._spotify_playing is False
     
     vis.handle_media_update({"state": "playing"})
@@ -9868,9 +9866,7 @@ def test_spotify_visualizer_media_update_provider_neutral_musicbee_payload(qt_ap
     assert vis._spotify_playing is True
 
     vis.handle_media_update({"state": "paused", "app_name": "MusicBee"})
-    assert vis._spotify_playing is True
-    assert vis._pending_playback_pause_timer is not None
-    vis._pending_playback_pause_timer.timeout.emit()
+    # Idle entry is prompt for every provider; no visible-state debounce.
     assert vis._spotify_playing is False
 
     vis.deleteLater()
@@ -9901,13 +9897,13 @@ def test_spotify_visualizer_paused_update_keeps_visible_anchor_path(qt_app, qtbo
 
     vis.handle_media_update({"state": "paused"})
 
-    assert vis._spotify_playing is True
-    assert engine_states == []
-    assert vis._pending_playback_pause_timer is not None
+    # The visualizer no longer debounces its own visible playback state: it
+    # enters idle promptly and lets the engine's capture keepalive absorb short
+    # provider wobble. The contract this bar owns is that idle entry does not
+    # hide the widget or restart a fade.
+    assert vis._pending_playback_pause_timer is None
     assert hide_calls == []
     assert fade_calls == []
-
-    vis._pending_playback_pause_timer.timeout.emit()
 
     assert vis._spotify_playing is False
     assert engine_states == [False]
@@ -9918,8 +9914,14 @@ def test_spotify_visualizer_paused_update_keeps_visible_anchor_path(qt_app, qtbo
 
 
 @pytest.mark.qt
-def test_spotify_visualizer_quick_playback_wobble_does_not_commit_pause(qt_app):
-    """Rapid paused/playing flaps should not collapse visualizer playback state."""
+def test_spotify_visualizer_quick_playback_wobble_follows_media_state_promptly(qt_app):
+    """A paused/playing flap now moves visible state promptly in both directions.
+
+    Absorbing provider wobble belongs to the canonical media state owner, and
+    keeping capture alive across a short pause belongs to the engine, which
+    already holds a 6s capture keepalive. The visualizer must not add a
+    multi-second visible debounce on top of those.
+    """
     vis = SpotifyVisualizerWidget(parent=None, bar_count=10)
     engine_states = []
     try:
@@ -9928,22 +9930,29 @@ def test_spotify_visualizer_quick_playback_wobble_does_not_commit_pause(qt_app):
 
         vis.handle_media_update({"state": "paused"})
 
-        assert vis._spotify_playing is True
-        assert vis._pending_playback_pause_timer is not None
-        assert engine_states == []
+        assert vis._spotify_playing is False
+        assert vis._pending_playback_pause_timer is None, (
+            "the visualizer re-introduced a visible playback debounce timer"
+        )
+        assert engine_states == [False]
 
         vis.handle_media_update({"state": "playing"})
 
         assert vis._spotify_playing is True
-        assert vis._pending_playback_pause_timer is None
-        assert engine_states == []
+        assert engine_states == [False, True]
     finally:
         vis.deleteLater()
 
 
 @pytest.mark.qt
 def test_spotify_visualizer_repeated_paused_updates_do_not_extend_pause_confirmation(qt_app):
-    """Repeated provider-paused snapshots should not keep pushing idle entry away."""
+    """Repeated provider-paused snapshots must not keep pushing idle entry away.
+
+    Previously each repeat re-armed a 700ms confirm timer, and the installed run
+    shows that becoming many seconds of visible limbo. Idle entry is now
+    immediate, so the property holds by construction - and repeats must stay
+    idempotent rather than re-notifying the engine.
+    """
     vis = SpotifyVisualizerWidget(parent=None, bar_count=10)
     engine_states = []
     try:
@@ -9952,17 +9961,14 @@ def test_spotify_visualizer_repeated_paused_updates_do_not_extend_pause_confirma
 
         vis.handle_media_update({"state": "paused"})
 
-        first_timer = vis._pending_playback_pause_timer
-        assert first_timer is not None
-
-        vis.handle_media_update({"state": "paused"})
-        vis.handle_media_update({"state": "paused"})
-
-        assert vis._pending_playback_pause_timer is first_timer
-        first_timer.timeout.emit()
-
         assert vis._spotify_playing is False
         assert engine_states == [False]
+
+        vis.handle_media_update({"state": "paused"})
+        vis.handle_media_update({"state": "paused"})
+
+        assert vis._spotify_playing is False
+        assert vis._pending_playback_pause_timer is None
     finally:
         vis.deleteLater()
 
