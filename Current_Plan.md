@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-18
 Branch: `main`
-Current source anchor: `0589783c0a0332d5da9fc7e710de87b85b253321`
+Current source anchor: `0adb1a56` (P2-CUSTOM-CANCEL, Gmail ownership, PERF-A, PERF-B landed)
 Architecture epoch: **OpenGL QRhi, one accelerated presentation surface per physical display**
 
 This file owns unfinished active work and execution order. Current source and installed evidence
@@ -208,6 +208,20 @@ whose `start()` merely increments a counter is not sufficient.
 
 ---
 
+### Landed
+
+`startup_staging` gained an explicit edit seam. `suspend_for_edit()` stops logical admission,
+the tick and the engine reference while keeping the runtime generation, staged-startup
+bookkeeping, committed mode/config, engine identity and GL resources. `resume_after_edit()`
+resumes that same runtime: re-seeds playback state, re-acquires the engine without resetting it,
+restarts capture exactly once, restarts the logical tick, and arms only the reveal gate so
+presentation returns through the current fade/readiness owner. No secondary-stage event is
+required and no engine generation changes.
+
+`CustomLayoutManager` prefers the seam and falls back to `stop()`/`start()` for a visualizer
+without it. The stub-only Cancel bars are retired; the replacement drives the real startup/edit
+state machine with the real audio worker over a fake capture device.
+
 ## 4. CUSTOM cross-display “crash” — PROVEN fail-closed lifecycle timeout
 
 The one apparently non-reproducible crash was real, but it was **not a native visualizer crash**.
@@ -303,6 +317,18 @@ Then prove:
 - terminal fail-closed behaviour remains intact for a genuinely unretired owner.
 
 ---
+
+### Landed
+
+The cancellation boundary is corrected at the producer, not the barrier.
+`GmailClient.list_messages()`/`_get_message_metadata()`/`_make_request()` and the IMAP client
+accept a cancellation predicate and check it before the list request, before every metadata
+request and before each retry, raising `GmailFetchCancelled`. `GmailWidget` passes a
+generation-fenced predicate and treats cancellation as quiet abandonment: no error, no UI
+callback for a retired generation, fetch guard still released.
+
+The barrier, its 8-second budget and its `gmail_fetch` accounting are untouched, and tests pin
+all three. A client without the seam still works through an explicit fallback.
 
 ## 5. P2-PERF — current bottleneck is delivery/cadence, not visualizer rendering
 
@@ -510,6 +536,19 @@ Extend the existing cadence summary with one bounded `unchanged_scene_skips` (or
 so intentional no-change suppression is not misreported as dispatch failure. Do not create a new
 diagnostic family.
 
+### Landed
+
+`CompositorVisualizerLayer` owns a monotonic `scene_revision`, advanced by every publication,
+by `clear()` and by explicit invalidation. `GLCompositorWidget.presentation_scene_revision()`
+reports it only when the visualizer is the sole liveness reason with no active transition, and
+`None` otherwise. The adaptive timer declines to queue a GUI paint for a revision it already
+requested; `request_frame()` is always eligible.
+
+Suppression is reported as `unchanged_scene_skips` inside the existing cadence record and is
+excluded from the acceptance denominator. `u_time` was confirmed to come from
+`_accumulated_time`, advanced in `set_state()` and never in `paint_layer()`, so no mode was
+using duplicate physical paints as a hidden simulation clock.
+
 ### Tests
 
 - no transition + unchanged revision -> no GUI update request;
@@ -552,6 +591,19 @@ If the existing evidence cannot justify a concrete source change for a candidate
 rather than inventing a speculative rewrite.
 
 ---
+
+### Landed
+
+`BaseOverlayWidget.set_show_background()`, `set_background_color()`,
+`set_background_opacity()` and `set_background_corner_radius()` rebuilt the painted frame
+shadow unconditionally. Their siblings `set_background_border()`/`_apply_border_width()`
+already returned early on an unchanged value; these four now do too, so a repeated identical
+style apply during setup, settings refresh or reconstruction no longer invalidates the shared
+frame and rebuilds the pixmap synchronously. Pixels and cache identity are unchanged.
+
+Candidates 2-4 were not landed: existing evidence does not yet name a specific reconstruction
+warmup, raster preparation or transition-setup owner concretely enough to change source without
+speculating. They stay listed above rather than being invented.
 
 ## 8. Do not jump straight to a timer-rate “fix”
 

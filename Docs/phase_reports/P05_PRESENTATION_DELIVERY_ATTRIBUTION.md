@@ -376,3 +376,105 @@ Current presentation/delivery closure requires:
 - strict GL/lifecycle ownership returns to zero at teardown.
 
 P5 physical monitor topology/off-wake hardening remains mandatory after this closure.
+
+---
+
+## P2 Cancel / Gmail / Cadence Round
+
+Evidence and corrections from the 2026-08-18 `--geo` acceptance. That run was
+functionally much better than the previous one - live audio, working mode
+switches, good fades, no pre-fade flash - so the findings below are the residue,
+not a regression class.
+
+### Cancel was a lifecycle-ownership fault, not geometry loss
+
+CUSTOM replay restored the exact pre-edit rect through `replay_start` ..
+`replay_final`. The failure was that edit entry/exit used the STARTUP entry
+points. Mid-runtime, `start_legacy()` re-arms staged startup, sees
+`_startup_secondary_stage_pending` and defers to the Spotify secondary stage - a
+one-shot event that already fired for the process:
+
+```text
+Seeded playback state from anchor (start ... state=playing)
+Deferred hot start to Spotify secondary stage
+```
+
+with no later `Audio worker started`.
+
+Corrected with an explicit `suspend_for_edit()`/`resume_after_edit()` seam. An
+edit session is not a lifecycle boundary: the runtime generation, staged-startup
+bookkeeping, committed mode/config, engine identity and GL resources all survive,
+and resume re-acquires the engine without resetting it.
+
+The previous bar could not see this because it stubbed `vis.start()` with a
+counter. The replacement drives the real state machine through
+startup -> secondary stage completes -> live -> suspend -> Cancel.
+
+### The cross-display "crash" was the barrier working correctly
+
+```text
+[LIFECYCLE_BARRIER] timeout reason=custom_edit retiring_generation=5
+thread_work=[{category: gmail_fetch, pool: io,
+              owner_class: GmailWidget, runtime_generation: 5}]
+```
+
+`GmailWidget` cleanup set `_cancelled` and advanced `_fetch_generation`, but
+`GmailClient.list_messages()` never consulted that state again once inside its
+traversal - one list request plus one metadata request per message, each with its
+own timeout and retry budget. The fetch held an IO worker for the whole 8-second
+window, so the replacement runtime could not be built.
+
+Corrected at the producer: the client and the IMAP client accept a cancellation
+predicate checked before the list request, before every metadata request and
+before each retry. The barrier, its budget and its accounting are unchanged, and
+tests pin that they were not weakened.
+
+This is a direct input to P5: replacement must never proceed while a retired
+generation still owns work, so the producer ownership is what has to be fixed.
+
+### Presentation waste: unchanged scenes were being painted again
+
+Visualizer on the 165-Hz display, representative 10-second window:
+
+```text
+logical/state publications     ~86.6 / sec
+physical paints                ~140.7 / sec
+display refresh                ~164.8 Hz
+state -> paint p50             ~5 ms
+```
+
+Roughly 54 paints/sec presented an identical scene. P1 forbids paint-local
+visualizer simulation, and `u_time` was confirmed to come from
+`_accumulated_time` advanced in `set_state()` - never in `paint_layer()` - so
+those paints revealed no new authored state.
+
+The compositor timer remains the sole physical presentation authority and still
+wakes at the display rate. It now declines to queue a GUI paint for a scene
+revision it already requested, and only when the visualizer is the sole liveness
+reason with no active transition. Transitions keep every admitted deadline.
+
+Intentional suppression is reported as `unchanged_scene_skips` in the existing
+cadence record and excluded from the acceptance denominator, so it cannot be
+misread as a dispatch failure.
+
+### GUI waste: an unchanged style rebuilt the painted frame shadow
+
+Frame-shadow regeneration was measured at 8-20+ ms of synchronous GUI work.
+`set_background_border()`/`_apply_border_width()` already returned early on an
+unchanged value; `set_show_background()`, `set_background_color()`,
+`set_background_opacity()` and `set_background_corner_radius()` did not, so every
+repeated identical style apply during setup, settings refresh or reconstruction
+rebuilt the frame for pixels that could not differ.
+
+The remaining P2-PERF-B candidates - reconstruction warmup, off-GUI raster
+preparation, repeated transition setup - were deliberately not landed: current
+evidence does not name a specific owner concretely enough to change source
+without speculating.
+
+### Still open
+
+The dominant visualizer-feel problem remains the logical tick being serviced
+late: ~65-70 logical FPS against a ~90-100 Hz target, with recurring 42-80 ms
+gaps in ordinary playback, alongside queued-GUI-dispatch ages in the same class.
+Whether removing the above waste moves it is the question the next acceptance
+answers.
