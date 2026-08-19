@@ -43,6 +43,20 @@ _SLOW_STEP_MS = 25.0
 # How long `stop()` waits for the thread to leave its step before reporting.
 _DEFAULT_JOIN_TIMEOUT_S = 2.0
 
+# The deadline clock. `time.monotonic()` is `GetTickCount64()` on this Windows
+# build - measured resolution 15.625 ms - so a deadline sequence built on it can
+# only ever observe time advancing in ~16 ms steps. That is precisely why the
+# first wiring attempt locked at ~63.9-64.0 Hz against an 11.11 ms request with
+# ~29% of deadlines reported missed while every callback was fast and no step
+# failed. `perf_counter()` is `QueryPerformanceCounter()`, measured resolution
+# 0.0001 ms, and is monotonic on every platform SRPSS targets.
+_clock = time.perf_counter
+
+# Longest single sleep inside a wait. Bounded so `stop()` stays prompt without
+# busy-spinning: the thread really sleeps, it just re-checks the stop flag
+# between slices.
+_MAX_SLEEP_SLICE_S = 0.004
+
 
 @dataclass(frozen=True)
 class LogicalPublication:
@@ -203,7 +217,7 @@ class VisualizerLogicalRuntime:
             return False
         self._stop_event.clear()
         self._wake_event.clear()
-        self._started_ts = time.monotonic()
+        self._started_ts = _clock()
         # Explicitly not a daemon: this runtime must be joined by its owning
         # generation rather than silently outliving it at interpreter exit.
         thread = threading.Thread(target=self._run, name=self._name, daemon=False)
@@ -254,16 +268,32 @@ class VisualizerLogicalRuntime:
         self._wake_event.set()
 
     # -- loop ----------------------------------------------------------
+    def _wait_until(self, deadline: float) -> None:
+        """Sleep until `deadline`, interruptibly, without a coarse wait.
+
+        `threading.Event.wait(timeout)` is independently quantised to the same
+        ~15.6 ms Windows tick as `time.monotonic()`; measured against a
+        high-resolution clock it still delivers ~64 Hz with ~29% of an 11.11 ms
+        deadline sequence missed. `time.sleep()` uses a high-resolution waitable
+        timer on this platform and delivers the requested cadence, so the wait
+        is a bounded sleep with a stop check between slices. That is a real
+        sleep, not a spin.
+        """
+
+        while not self._stop_event.is_set():
+            remaining = deadline - _clock()
+            if remaining <= 0.0:
+                return
+            time.sleep(min(remaining, _MAX_SLEEP_SLICE_S))
+
     def _run(self) -> None:
-        next_deadline = time.monotonic()
+        next_deadline = _clock()
         while not self._stop_event.is_set():
             interval = self.interval_s
-            now = time.monotonic()
+            now = _clock()
 
             if now < next_deadline:
-                # Wait for the deadline, but stay interruptible so stop() and
-                # cadence changes take effect immediately.
-                self._wake_event.wait(next_deadline - now)
+                self._wait_until(next_deadline)
                 self._wake_event.clear()
                 continue
 
@@ -277,7 +307,7 @@ class VisualizerLogicalRuntime:
                 next_deadline += interval * missed
             next_deadline += interval
 
-            started = time.perf_counter()
+            started = _clock()
             try:
                 self._step(now)
             except Exception:
@@ -290,7 +320,7 @@ class VisualizerLogicalRuntime:
                     )
             else:
                 self._reported_step_failure = False
-            elapsed_ms = (time.perf_counter() - started) * 1000.0
+            elapsed_ms = (_clock() - started) * 1000.0
             if elapsed_ms >= _SLOW_STEP_MS:
                 self._slow_steps += 1
             self._steps += 1
