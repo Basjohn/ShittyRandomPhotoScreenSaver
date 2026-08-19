@@ -409,14 +409,14 @@ def begin_hot_start(widget: Any, *, reason: str, reset_reason: str) -> None:
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to start shared beat engine", exc_info=True)
 
-    if widget._thread_manager is not None and widget._bars_timer is None:
-        try:
-            widget._bars_timer = widget._thread_manager.schedule_recurring(16, widget._on_tick)
-            widget._current_timer_interval_ms = 16
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            widget._bars_timer = None
-    elif widget._animation_manager is not None and widget._anim_listener_id is not None:
+    from widgets.spotify_visualizer.tick_helpers import ensure_tick_source
+
+    ensure_tick_source(widget)
+    if (
+        getattr(widget, "_logical_runtime", None) is None
+        and widget._animation_manager is not None
+        and widget._anim_listener_id is not None
+    ):
         widget._using_animation_ticks = True
 
     prewarm_parent_overlay(widget)
@@ -490,12 +490,9 @@ def deactivate_impl(widget: Any) -> None:
     except Exception as e:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
-    if widget._bars_timer is not None:
-        try:
-            widget._bars_timer.stop()
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        widget._bars_timer = None
+    from widgets.spotify_visualizer.tick_helpers import stop_tick_source
+
+    stop_tick_source(widget)
     widget._using_animation_ticks = False
 
     widget._log_perf_snapshot(reset=True)
@@ -569,12 +566,9 @@ def suspend_for_edit(widget: Any, *, reason: str) -> bool:
         widget.detach_from_animation_manager()
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to detach animation ticks for edit", exc_info=True)
-    try:
-        if widget._bars_timer is not None:
-            widget._bars_timer.stop()
-    except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to stop logical tick for edit", exc_info=True)
-    widget._bars_timer = None
+    from widgets.spotify_visualizer.tick_helpers import stop_tick_source
+
+    stop_tick_source(widget)
     widget._using_animation_ticks = False
 
     # Release the engine REFERENCE only. The engine object, its generation and
@@ -666,16 +660,16 @@ def resume_after_edit(widget: Any, *, reason: str) -> bool:
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to reacquire engine after edit", exc_info=True)
 
-    if widget._thread_manager is not None and widget._bars_timer is None:
-        try:
-            interval = max(1, int(getattr(widget, "_current_timer_interval_ms", 16) or 16))
-            widget._bars_timer = widget._thread_manager.schedule_recurring(
-                interval, widget._on_tick
-            )
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to restart logical tick after edit", exc_info=True)
-            widget._bars_timer = None
-    elif widget._animation_manager is not None and widget._anim_listener_id is not None:
+    from widgets.spotify_visualizer.tick_helpers import ensure_tick_source
+
+    # Resume the same runtime's cadence owner. CUSTOM preview suspends
+    # presentation; it must not churn the logical runtime's identity.
+    ensure_tick_source(widget)
+    if (
+        getattr(widget, "_logical_runtime", None) is None
+        and widget._animation_manager is not None
+        and widget._anim_listener_id is not None
+    ):
         widget._using_animation_ticks = True
 
     if was_visible:
@@ -707,6 +701,12 @@ def stop_legacy(widget: Any) -> None:
     from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
     from widgets.spotify_visualizer.media_bridge import clear_pending_playback_pause
 
+    from widgets.spotify_visualizer.tick_helpers import stop_tick_source
+
+    # Before the early return: an already-disabled widget (edit suspend, a
+    # half-built runtime) must still have its non-daemon logical thread joined,
+    # or it would hold the process open.
+    stop_tick_source(widget)
     if not widget._enabled:
         return
     widget._enabled = False
@@ -750,12 +750,9 @@ def stop_legacy(widget: Any) -> None:
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to detach from AnimationManager on stop", exc_info=True)
 
-    try:
-        if widget._bars_timer is not None:
-            widget._bars_timer.stop()
-    except Exception as e:
-        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-    widget._bars_timer = None
+    from widgets.spotify_visualizer.tick_helpers import stop_tick_source
+
+    stop_tick_source(widget)
     widget._using_animation_ticks = False
 
     # Emit a concise PERF summary for this widget's activity during the

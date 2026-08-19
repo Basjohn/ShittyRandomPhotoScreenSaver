@@ -14,6 +14,7 @@ from core.logging.logger import (
     is_verbose_logging,
 )
 from core.threading.manager import ThreadManager
+from widgets.spotify_visualizer.tick_helpers import init_cadence_state
 from core.process import ProcessSupervisor
 from core.settings.models import SpotifyVisualizerSettings, PER_MODE_TECHNICAL_MODES
 from core.settings.visualizer_presets import (
@@ -87,7 +88,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._smoothing: float = 0.18
 
         self._thread_manager: Optional[ThreadManager] = None
-        self._bars_timer = None
+        init_cadence_state(self)
         self._shadow_config = None
         self._show_background: bool = True
         self._painted_frame_shadow_enabled: bool = True
@@ -2062,6 +2063,7 @@ class SpotifyVisualizerWidget(QWidget):
         """Delegates to widgets.spotify_visualizer.tick_pipeline."""
         from widgets.spotify_visualizer.tick_pipeline import on_tick
         on_tick(self)
+
 
     # Set by the display compositor once it owns this card's visual layer. The
     # card is a QWidget sibling ABOVE the compositor surface, so while the

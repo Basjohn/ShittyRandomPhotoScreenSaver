@@ -10,6 +10,7 @@ from PySide6.QtCore import QRect
 from PySide6.QtGui import QColor
 
 from widgets.spotify_visualizer.spectrum_presentation_smoothing import (
+    idle_spectrum_baseline,
     reset_widget_spectrum_presentation_smoothing,
     resolve_widget_spectrum_presentation,
 )
@@ -144,10 +145,22 @@ def test_spectrum_smoothing_snaps_on_identity_stall_pause_and_disable():
     )
     assert stalled == [0.9]
 
+    # Paused Spectrum no longer snaps to a blank scene. Current_Plan section 5
+    # gave it a deterministic presentation-owned idle floor, and that floor is
+    # retained as presentation history so a steady idle settles to one scene
+    # revision instead of restating itself every tick.
     widget._spotify_playing = False
-    paused, _ = resolve_widget_spectrum_presentation(widget, [0.0], now_ts=1.13)
-    assert paused == [0.0]
-    assert widget._spectrum_presentation_bars == []
+    paused, paused_changed = resolve_widget_spectrum_presentation(
+        widget, [0.0], now_ts=1.13
+    )
+    assert paused == idle_spectrum_baseline(1)
+    assert paused_changed is True
+
+    settled, settled_changed = resolve_widget_spectrum_presentation(
+        widget, [0.0], now_ts=1.14
+    )
+    assert settled == paused
+    assert settled_changed is False
 
     widget._spotify_playing = True
     widget._spectrum_visual_smoothing_enabled = False
@@ -201,6 +214,7 @@ def test_gpu_push_settles_on_existing_tick_without_independent_cadence():
         _spectrum_gpu_push_extras={},
     )
     widget._resolve_gpu_target_rect = lambda: QRect(0, 0, 100, 40)
+    widget._get_scene_fade_factor = lambda _now: 1.0
     widget._get_gpu_fade_factor = lambda _now: 1.0
     widget._mode_transition_fade_factor = lambda _now: 1.0
     widget._dynamic_bar_segments = lambda: 18

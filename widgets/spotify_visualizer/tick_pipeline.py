@@ -1309,11 +1309,90 @@ def log_audio_latency_metrics(
 # ------------------------------------------------------------------
 
 def on_tick(widget: Any) -> None:
-    """Periodic UI tick — PERFORMANCE OPTIMIZED.
+    """Run one logical step and present it on the GUI thread.
 
-    Consumes the latest bar frame from the engine and smoothly
-    interpolates towards it for visual stability.
+    Retained for the GUI-driven paths that still call the whole tick directly
+    (tests, replay harnesses, and any runtime without a logical thread). The
+    logical runtime calls `logical_tick()` and the GUI presents through
+    `present_tick()`.
     """
+
+    if logical_tick(widget) is None:
+        return
+    present_tick(widget)
+
+
+def present_tick(widget: Any) -> bool:
+    """GUI-thread half: turn the freshest logical frame into a pushed frame.
+
+    Owns everything the logical thread must not touch - widget geometry, the
+    presentation fade, card pixels and the compositor publish.
+    """
+
+    if not Shiboken.isValid(widget):
+        return False
+    frame = widget._logical_mailbox.take() if getattr(widget, "_logical_mailbox", None) else None
+    if frame is None:
+        return False
+    payload = frame.state
+    generation = int(getattr(widget, "_runtime_generation", -1) or -1)
+    if generation >= 0 and int(frame.generation) != generation:
+        # A retired generation's frame must never be presented.
+        return False
+    parent = widget.parent()
+    first_frame = not widget._has_pushed_first_frame
+    return bool(
+        push_gpu_frame(
+            widget,
+            parent,
+            float(payload.get("now_ts", time.time())),
+            bool(payload.get("changed", False)),
+            first_frame,
+        )
+    )
+
+
+def request_logical_present(widget: Any) -> None:
+    """Ask the GUI thread to present the freshest logical frame.
+
+    Single-pending on purpose: while one present is outstanding, further logical
+    steps replace the mailbox slot instead of queueing another callback. A GUI
+    stall costs presentation freshness and never builds a backlog, and the
+    simulation keeps its own cadence regardless - which is the point of moving
+    cadence off the event loop.
+    """
+
+    if getattr(widget, "_logical_present_pending", False):
+        return
+    manager = getattr(widget, "_thread_manager", None)
+    if manager is None:
+        return
+    widget._logical_present_pending = True
+    try:
+        manager.run_on_ui_thread(present_logical_frame, widget)
+    except Exception:
+        widget._logical_present_pending = False
+        logger.debug("[SPOTIFY_VIS] Failed to request logical present", exc_info=True)
+
+
+def present_logical_frame(widget: Any) -> None:
+    """GUI-thread presentation of the freshest published logical frame."""
+
+    widget._logical_present_pending = False
+    try:
+        present_tick(widget)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Logical present failed", exc_info=True)
+
+
+def logical_tick(widget: Any) -> Optional[dict]:
+    """Plain-data half: advance the simulation and publish the latest state.
+
+    Safe to run off the GUI thread. It must not read widget geometry, touch
+    QPixmap/GL state, or call `QWidget.update()`; `present_tick()` owns all of
+    that.
+    """
+
     _tick_entry_ts = time.time()
     _tick_phase_start = time.perf_counter()
     _tick_phase_ms: dict[str, float] = {}
@@ -1327,34 +1406,16 @@ def on_tick(widget: Any) -> None:
     _ensure_fresh_generation_state(widget)
     _record_tick_phase("fresh_state")
 
-    # PERFORMANCE: Fast validity check without nested try/except
-    if not Shiboken.isValid(widget):
-        if widget._bars_timer is not None:
-            widget._bars_timer.stop()
-            widget._bars_timer = None
-        widget._enabled = False
-        return
+    if not widget._enabled:
+        return None
     _record_tick_phase("validity")
 
-    if not widget._enabled:
-        return
-
     now_ts = time.time()
-    parent = widget.parent()
-    transition_ctx = widget._get_transition_context(parent)
-    is_transition_active = transition_ctx.get("running", False)
-    was_transition_active = widget._last_transition_running
-    if is_transition_active and not was_transition_active:
-        widget._request_latency_probe("transition_start")
-    elif not is_transition_active and was_transition_active:
-        widget._request_latency_probe("transition_end")
-    widget._last_transition_running = is_transition_active
-
-    # PERF: Keep visualizer work off the transition AnimationManager.
-    widget._pause_timer_during_transition(is_transition_active)
-
-    max_fps = widget._resolve_max_fps(transition_ctx)
-    widget._update_timer_interval(max_fps)
+    # Transition state deliberately no longer reaches the logical step. It used
+    # to retune the tick interval every tick and pause the tick source outright;
+    # per Current_Plan sections 7.3 and 8 the authored logical cadence is
+    # constant and transition activity is a presentation concern.
+    transition_ctx: dict = {}
     _record_tick_phase("context")
 
     last = widget._last_update_ts
@@ -1392,7 +1453,7 @@ def on_tick(widget: Any) -> None:
         if widget._spotify_playing or not mode_capabilities.has_presentation_owned_idle_scene(
             getattr(widget, "_vis_mode_str", "")
         ):
-            return
+            return None
 
     # Heartbeat transient detection for sine mode
     process_heartbeat(widget, now_ts)
@@ -1404,7 +1465,7 @@ def on_tick(widget: Any) -> None:
     _record_tick_phase("bubble_consume")
 
     if widget._mode_teardown_block_until_ready and not widget._mode_transition_ready:
-        return
+        return None
 
     # Bubble simulation dispatch
     dispatch_bubble_simulation(widget, now_ts)
@@ -1414,10 +1475,21 @@ def on_tick(widget: Any) -> None:
     dispatch_devcurve_field(widget, now_ts)
     _record_tick_phase("devcurve_dispatch")
 
-    # GPU frame push
+    # Publish the latest logical frame. The slot is latest-wins, so a GUI thread
+    # that cannot keep up loses freshness rather than accumulating a backlog -
+    # and, critically, the simulation above keeps its own cadence regardless.
+    payload = {"now_ts": now_ts, "changed": bool(changed)}
+    mailbox = getattr(widget, "_logical_mailbox", None)
+    if mailbox is not None:
+        mailbox.publish(
+            payload,
+            generation=int(getattr(widget, "_runtime_generation", -1) or -1),
+            activation_id=int(getattr(widget, "_activation_id", -1) or -1),
+        )
+        request_logical_present(widget)
+    used_gpu = False
     first_frame = not widget._has_pushed_first_frame
-    used_gpu = push_gpu_frame(widget, parent, now_ts, changed, first_frame)
-    _record_tick_phase("gpu_push")
+    _record_tick_phase("publish")
 
     # PERF: Log slow ticks
     _tick_elapsed = (time.time() - _tick_entry_ts) * 1000.0
@@ -1438,3 +1510,4 @@ def on_tick(widget: Any) -> None:
             used_gpu,
             phase_payload,
         )
+    return payload
