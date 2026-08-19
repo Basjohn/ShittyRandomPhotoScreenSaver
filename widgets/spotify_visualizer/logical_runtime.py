@@ -288,7 +288,16 @@ class VisualizerLogicalRuntime:
         return finished
 
     def wake(self) -> None:
-        """Nudge the loop out of its wait without moving the deadline sequence."""
+        """Nudge the loop out of its wait without moving the deadline sequence.
+
+        `_wait_until` observes `_wake_event`, so this truthfully interrupts the
+        current bounded sleep rather than waiting out the remaining slice: a
+        `set_interval()` or `wake()` takes effect within one loop turn, and the
+        loop re-reads the interval before waiting again. It does not restore the
+        old `Event.wait(timeout)` deadline wait - the deadline is still a
+        high-resolution `time.sleep()`, so the Windows ~15.6 ms quantisation
+        cannot come back.
+        """
 
         self._wake_event.set()
 
@@ -303,9 +312,16 @@ class VisualizerLogicalRuntime:
         timer on this platform and delivers the requested cadence, so the wait
         is a bounded sleep with a stop check between slices. That is a real
         sleep, not a spin.
+
+        A `stop()` or `wake()` returns promptly: both are checked between
+        slices, so the maximum a wake waits is one `_MAX_SLEEP_SLICE_S`. The
+        wake flag is checked but not cleared here - the run loop clears it after
+        this returns so it can re-read the interval before waiting again.
         """
 
         while not self._stop_event.is_set():
+            if self._wake_event.is_set():
+                return
             remaining = deadline - _clock()
             if remaining <= 0.0:
                 return

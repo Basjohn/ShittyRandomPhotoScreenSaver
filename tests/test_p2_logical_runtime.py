@@ -286,6 +286,64 @@ class TestRuntimeLifecycle:
         assert runtime.describe()["generation"] == 9
 
 
+class TestWakeIsTruthful:
+    """`wake()` must actually interrupt the bounded sleep (plan section 5).
+
+    The contract said `wake()` nudges the loop out of its wait, but
+    `_wait_until` only checked `_stop_event`, so a wake waited out the full
+    remaining slice. It now observes `_wake_event` between slices - without
+    restoring the quantised `Event.wait(timeout)` deadline wait.
+    """
+
+    def test_wake_interrupts_a_long_bounded_wait_promptly(self):
+        runtime = _runtime(lambda ts: None, interval_s=0.011)
+        runtime._wake_event.set()
+
+        start = time.perf_counter()
+        runtime._wait_until(start + 5.0)
+        elapsed = time.perf_counter() - start
+
+        assert elapsed < 0.05, (
+            "wake() did not interrupt the wait; it slept toward the deadline"
+        )
+
+    def test_a_clear_wait_still_sleeps_to_the_deadline(self):
+        runtime = _runtime(lambda ts: None, interval_s=0.011)
+        assert not runtime._wake_event.is_set()
+
+        start = time.perf_counter()
+        runtime._wait_until(start + 0.03)
+        elapsed = time.perf_counter() - start
+
+        # No wake and no stop: it must actually wait (within a slice) not return
+        # immediately, or the deadline sequence would collapse into a spin.
+        assert elapsed >= 0.02, "the bounded wait returned before its deadline"
+
+    def test_the_wait_uses_wake_event_not_a_timed_event_wait(self):
+        import ast
+        import inspect
+        import textwrap
+
+        from widgets.spotify_visualizer import logical_runtime
+
+        source = textwrap.dedent(
+            inspect.getsource(logical_runtime.VisualizerLogicalRuntime._wait_until)
+        )
+        tree = ast.parse(source)
+        wait_calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "wait"
+        ]
+        assert wait_calls == [], (
+            "_wait_until reintroduced a timed Event.wait(); that is the Windows "
+            "quantisation failure the scheduler repair removed"
+        )
+        assert "_wake_event" in source, "_wait_until does not observe the wake event"
+
+
 class TestRuntimeRobustness:
     def test_a_raising_step_does_not_kill_the_cadence(self):
         calls = {"n": 0}
