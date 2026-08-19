@@ -2554,12 +2554,48 @@ class WidgetManager:
             len(self._fade_coordinator.describe().get("pending", [])),
         )
 
+        self._prepare_overlay_frame_shadow_before_reveal(overlay_name)
         started_immediately = self._fade_coordinator.request_fade(overlay_name, _starter_wrapper)
         logger.debug(
             "[FADE_COORD] %s fade request registered (started_immediately=%s)",
             overlay_name,
             started_immediately,
         )
+
+    def _prepare_overlay_frame_shadow_before_reveal(self, overlay_name: str) -> None:
+        """Build the overlay's painted frame while it is still hidden.
+
+        ``BaseOverlayWidget`` coalesces frame-shadow invalidation while a widget
+        is hidden - ``_commit_painted_frame_shadow_cache()`` returns early unless
+        ``isVisible()`` - and rebuilds once in ``showEvent``. The reveal starter
+        is what calls ``show()``, so that rebuild lands inside the fade window
+        alongside every other participant's.
+
+        This point is the widget declaring itself ready for display: geometry,
+        DPR and background style are already final, and the cache key does not
+        depend on visibility. Preparing here produces the identical cache-keyed
+        pixmap and leaves the later ``showEvent`` a cache hit.
+
+        Same pixels, same cache identity, same GUI owner; no timer, thread,
+        queue or second cache is introduced. A widget that does not use the
+        shared painted frame is untouched, because the prepare resolves no cache
+        key and returns.
+        """
+
+        widget = self._resolve_overlay_fade_widget(overlay_name)
+        if widget is None:
+            return
+        prepare = getattr(widget, "_prepare_painted_frame_shadow_pixmap", None)
+        if not callable(prepare):
+            return
+        try:
+            prepare()
+        except Exception:
+            logger.debug(
+                "[WIDGET_MANAGER] Pre-reveal frame preparation failed (overlay=%s)",
+                overlay_name,
+                exc_info=True,
+            )
 
     def _resolve_overlay_fade_widget(self, overlay_name: str) -> Optional[QWidget]:
         candidates = (
