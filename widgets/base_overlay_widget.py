@@ -1050,7 +1050,10 @@ class BaseOverlayWidget(QLabel):
         super().paintEvent(event)
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
-        self._invalidate_painted_frame_shadow_cache()
+        # Qt delivers an initial resize when a widget is first shown even when
+        # the size is unchanged; that must not discard a prepared frame.
+        if not self._painted_frame_shadow_cache_is_current():
+            self._invalidate_painted_frame_shadow_cache()
         super().resizeEvent(event)
         self._commit_painted_frame_shadow_cache()
         if self._active_custom_layout_rect() is not None:
@@ -1068,15 +1071,41 @@ class BaseOverlayWidget(QLabel):
         self._prepare_painted_frame_shadow_pixmap()
         super().showEvent(event)
 
+    def _painted_frame_shadow_cache_is_current(self) -> bool:
+        """True when the cached frame already matches this widget's exact state.
+
+        The frame is rasterised only from size, device pixel ratio, background
+        colour/border/radius and the shared tuning - all of which the cache key
+        carries. So a geometry or screen event that resolves to the identical
+        key cannot change a single pixel, and invalidating for it discards a
+        valid frame to rebuild the same one.
+
+        This matters at reveal. Showing a widget for the first time delivers an
+        initial resize and a ``ScreenChangeInternal`` even when neither the size
+        nor the device pixel ratio actually changes, which would otherwise throw
+        away a frame prepared while the widget was still hidden and rebuild it
+        inside the fade window.
+        """
+
+        pixmap = self._painted_frame_shadow_pixmap
+        if pixmap is None or pixmap.isNull():
+            return False
+        stored = self._painted_frame_shadow_cache_key
+        if stored is None:
+            return False
+        current = self._current_painted_frame_shadow_cache_key()
+        return current is not None and current == stored
+
     def event(self, event) -> bool:  # type: ignore[override]
         result = super().event(event)
         if event.type() in (
             QEvent.Type.DevicePixelRatioChange,
             QEvent.Type.ScreenChangeInternal,
         ) and hasattr(self, "_painted_frame_shadow_revision"):
-            self._invalidate_painted_frame_shadow_cache()
-            self._commit_painted_frame_shadow_cache()
-            self.update()
+            if not self._painted_frame_shadow_cache_is_current():
+                self._invalidate_painted_frame_shadow_cache()
+                self._commit_painted_frame_shadow_cache()
+                self.update()
         return result
 
     def _schedule_parent_stacking_recalc(self) -> None:
