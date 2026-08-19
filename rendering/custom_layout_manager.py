@@ -132,6 +132,24 @@ class _ShellState:
     resize_corner: str | None = None
 
 
+# Widget ids whose LIVE runtime an edit session genuinely mutates, and which a
+# Cancel therefore has to restore.
+#
+# CUSTOM is preview-first for every ordinary widget: `_start_session_local()`
+# hides the live widget and an `EditShellWidget` carries the preview geometry,
+# so drag/resize never touches the hidden live widget. Replaying persisted
+# payloads into those widgets on Cancel restores nothing that changed - it only
+# re-runs destructive config setters. `MediaWidget.set_artwork_size()` and
+# `set_font_size()` invalidate the metadata/controls layout and rebuild the card
+# from `_last_info`, which is how live artwork and metadata disappeared after a
+# Cancel that changed nothing.
+#
+# The visualizer is the one genuine exception: its live runtime is explicitly
+# suspended by `suspend_for_edit()` and its compositor overlay geometry is
+# re-synced as part of resuming, so it stays on the restore path.
+_CANCEL_RESTORE_WIDGET_IDS = frozenset({"spotify_visualizer"})
+
+
 class CustomLayoutManager:
     """Owns one display participant in the global CUSTOM layout edit session."""
 
@@ -905,14 +923,33 @@ class CustomLayoutManager:
         active_managers = list(CustomLayoutManager._active_managers)
         for manager in active_managers:
             manager._finish_session()
+        # Cancel discards a preview. It restores the specific owners whose live
+        # runtime the session actually suspended, and leaves every preview-only
+        # widget exactly as it was left by `_finish_session()`.
         for instance in self._get_global_display_instances():
+            manager = getattr(instance, "_custom_layout_manager", None)
+            if manager is None:
+                continue
             try:
-                instance._apply_saved_custom_layouts()
+                manager.apply_saved_layouts_to_display(
+                    only_widget_ids=_CANCEL_RESTORE_WIDGET_IDS,
+                )
             except Exception:
-                logger.debug("[CUSTOM_LAYOUT] Failed to reapply saved layouts after cancel", exc_info=True)
+                logger.debug("[CUSTOM_LAYOUT] Failed to restore suspended owners after cancel", exc_info=True)
         return True
 
-    def apply_saved_layouts_to_display(self) -> None:
+    def apply_saved_layouts_to_display(
+        self,
+        *,
+        only_widget_ids: Optional[frozenset[str]] = None,
+    ) -> None:
+        """Reapply committed CUSTOM layout to this display's widgets.
+
+        ``only_widget_ids`` restricts the replay to specific owners. Cancel uses
+        it so a preview-only widget is never rebuilt from a persisted payload it
+        never diverged from.
+        """
+
         if self._active:
             return
         settings_manager = getattr(self._display, "settings_manager", None)
@@ -926,6 +963,8 @@ class CustomLayoutManager:
         layout_changed = False
 
         for descriptor in get_layout_edit_runtime_descriptors():
+            if only_widget_ids is not None and descriptor.widget_id not in only_widget_ids:
+                continue
             widget = getattr(self._display, descriptor.attr_name, None)
             if widget is None:
                 continue
