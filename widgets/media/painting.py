@@ -837,11 +837,43 @@ def paint_playback_progress(widget: "MediaWidget", painter: QPainter) -> None:
         painter.restore()
 
 
+def _is_feedback_only_repaint(widget: "MediaWidget", event) -> bool:
+    """True when this paint event is a control-feedback repaint of the row band.
+
+    A feedback fade issues `update(controls_row_rect)` (Slice H), so its paint
+    event's region is confined to that band. The artwork, metadata, header, logo
+    and progress all sit above the row, so when the damage is inside the row band
+    only the cached background frame and the controls row are actually visible
+    there - the expensive subpainters can be skipped entirely, not merely clipped.
+    Any coalesced wider damage (a full or upper-card update) fails the containment
+    check and takes the ordinary full path.
+    """
+
+    if not getattr(widget, "_controls_feedback", None):
+        return False
+    if not getattr(widget, "_show_controls", False):
+        return False
+    try:
+        from widgets.media.feedback import _feedback_dirty_rect
+
+        dirty = _feedback_dirty_rect(widget)
+        if dirty is None or dirty.isNull():
+            return False
+        return dirty.contains(event.rect())
+    except Exception:
+        return False
+
+
 def paint_contents(widget: "MediaWidget", event) -> None:
     """Internal paint implementation — dispatches to sub-painters."""
     # Call base class paintEvent for background frame
     from widgets.base_overlay_widget import BaseOverlayWidget
     BaseOverlayWidget.paintEvent(widget, event)
+
+    # A control-feedback repaint touches only the controls row; running the full
+    # artwork/text/logo/progress pipeline for it was the frame-count-scale cost
+    # the second installed run measured. Paint only the row band for it.
+    feedback_only = _is_feedback_only_repaint(widget, event)
 
     try:
         painter = QPainter(widget)
@@ -851,23 +883,24 @@ def paint_contents(widget: "MediaWidget", event) -> None:
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
-        # Optional header frame on the left side around logo + SPOTIFY.
-        paint_header_frame(widget, painter)
+        if not feedback_only:
+            # Optional header frame on the left side around logo + SPOTIFY.
+            paint_header_frame(widget, painter)
 
-        # Provider/title/artist text is painter-owned; QLabel rich text is not used.
-        paint_metadata_text(widget, painter)
+            # Provider/title/artist text is painter-owned; QLabel rich text is not used.
+            paint_metadata_text(widget, painter)
 
-        # Album artwork
-        paint_artwork(widget, painter)
+            # Album artwork
+            paint_artwork(widget, painter)
 
-        # Spotify logo
-        paint_header_logo(widget, painter)
+            # Spotify logo
+            paint_header_logo(widget, painter)
 
-        # Optional playback position. This is driven only by accepted GSMTC
-        # snapshots and never owns a timer or animation.
-        paint_playback_progress(widget, painter)
+            # Optional playback position. This is driven only by accepted GSMTC
+            # snapshots and never owns a timer or animation.
+            paint_playback_progress(widget, painter)
 
-        # Transport controls row
+        # Transport controls row (always: it carries the feedback glow).
         paint_controls_row(widget, painter)
     except Exception:
         logger.debug("[MEDIA] Failed to paint artwork pixmap", exc_info=True)
