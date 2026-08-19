@@ -109,18 +109,90 @@ def detach_from_animation_manager(widget: Any) -> None:
     ensure_tick_source(widget)
 
 
+def init_cadence_state(widget: Any) -> None:
+    """Install the visualizer's cadence-ownership attributes.
+
+    `_bars_timer` is the GUI fallback tick; `_logical_runtime` is the
+    authoritative Qt-free owner whenever one exists. Exactly one of them drives
+    the simulation at a time.
+    """
+
+    from widgets.spotify_visualizer.logical_runtime import LatestStateMailbox
+
+    widget._bars_timer = None
+    widget._logical_runtime = None
+    widget._logical_mailbox = LatestStateMailbox()
+    widget._logical_present_pending = False
+
+
+def authored_logical_interval_s(widget: Any) -> float:
+    """The authored logical cadence, independent of transition or playback state.
+
+    Current_Plan section 7.6: the old paused 75-Hz cap and the transition-driven
+    retuning belonged to the QTimer architecture. The logical runtime keeps one
+    authored service class across active and idle; a genuinely static idle scene
+    costs nothing extra because it stops changing its scene revision and physical
+    presentation suppression already drops the duplicate redraws.
+    """
+
+    try:
+        target = float(getattr(widget, "_base_max_fps", 90.0) or 90.0)
+    except (TypeError, ValueError):
+        target = 90.0
+    return 1.0 / max(15.0, target)
+
+
 def ensure_tick_source(widget: Any) -> None:
-    """Ensure the steady recurring timer exists when the visualizer is enabled."""
+    """Ensure the visualizer has exactly one logical cadence owner."""
     if not widget._enabled:
         return
-    if widget._thread_manager is not None and widget._bars_timer is None:
+    if widget._thread_manager is None:
+        return
+    if getattr(widget, "_logical_runtime", None) is not None:
+        return
+    if widget._bars_timer is not None:
+        # A GUI fallback tick is already driving this widget; never run both.
+        return
+
+    from widgets.spotify_visualizer.logical_runtime import VisualizerLogicalRuntime
+    from widgets.spotify_visualizer.tick_pipeline import logical_tick
+
+    interval_s = authored_logical_interval_s(widget)
+    try:
+        runtime = VisualizerLogicalRuntime(
+            step=lambda _deadline_ts, _w=widget: logical_tick(_w),
+            interval_s=interval_s,
+            generation=int(getattr(widget, "_runtime_generation", -1) or -1),
+        )
+        runtime.start()
+        widget._logical_runtime = runtime
+        widget._target_timer_interval_ms = int(round(interval_s * 1000.0))
+        widget._current_timer_interval_ms = widget._target_timer_interval_ms
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to start logical runtime", exc_info=True)
+        widget._logical_runtime = None
+
+
+def stop_tick_source(widget: Any) -> None:
+    """Quiesce and join the logical runtime, and drop any GUI fallback tick."""
+    runtime = getattr(widget, "_logical_runtime", None)
+    if runtime is not None:
+        widget._logical_runtime = None
         try:
-            widget._bars_timer = widget._thread_manager.schedule_recurring(16, widget._on_tick)
-            widget._target_timer_interval_ms = 16
-            widget._current_timer_interval_ms = 16
+            runtime.stop()
         except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to create tick source timer", exc_info=True)
-            widget._bars_timer = None
+            logger.debug("[SPOTIFY_VIS] Failed to stop logical runtime", exc_info=True)
+    timer = getattr(widget, "_bars_timer", None)
+    if timer is not None:
+        try:
+            timer.stop()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to stop fallback tick timer", exc_info=True)
+        widget._bars_timer = None
+    mailbox = getattr(widget, "_logical_mailbox", None)
+    if mailbox is not None:
+        mailbox.clear()
+    widget._logical_present_pending = False
 
 def get_transition_context(widget: Any, parent: Optional[QWidget]) -> Dict[str, Any]:
     """Return lightweight transition metrics from the parent DisplayWidget."""

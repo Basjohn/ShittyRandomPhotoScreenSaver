@@ -33,6 +33,7 @@ import pytest
 
 from utils.audio_capture import AudioCaptureBackend
 from widgets.spotify_visualizer import startup_staging
+from widgets.spotify_visualizer.logical_runtime import LatestStateMailbox
 from widgets.spotify_visualizer.audio_worker import VisualizerMode
 
 
@@ -146,6 +147,9 @@ class _EditVisualizer:
     Only the capture device, the compositor and the anchor are faked.
     """
 
+    def _logical_step(self, _deadline_ts):
+        self.logical_steps += 1
+
     def __init__(self, engine, manager, thread_manager):
         self._engine = engine
         self._widget_manager = manager
@@ -155,6 +159,12 @@ class _EditVisualizer:
         self._bars_timer = None
         self._using_animation_ticks = False
         self._current_timer_interval_ms = 16
+        # Cadence is owned by the Qt-free logical runtime now.
+        self._logical_runtime = None
+        self._logical_mailbox = LatestStateMailbox()
+        self._logical_present_pending = False
+        self._base_max_fps = 90.0
+        self.logical_steps = 0
 
         self._enabled = False
         self._visible = False
@@ -370,15 +380,18 @@ class TestTheInstalledCancelFailure:
 class TestEditSuspend:
     def test_suspend_stops_the_logical_tick_and_audio(self, runtime):
         rt = _bring_up(runtime)
-        assert rt.thread_manager.live_timers
+        assert rt.widget._logical_runtime is not None
+        assert rt.widget._logical_runtime.is_running() is True
 
         assert rt.widget.suspend_for_edit(reason="custom_edit") is True
 
         assert rt.widget.is_edit_suspended() if hasattr(rt.widget, "is_edit_suspended") else True
         assert startup_staging.is_edit_suspended(rt.widget) is True
         assert rt.widget._enabled is False
+        assert rt.widget._logical_runtime is None, (
+            "the logical runtime was left running through an edit session"
+        )
         assert rt.widget._bars_timer is None
-        assert rt.thread_manager.live_timers == []
         assert rt.engine._audio_worker.is_running() is False
 
     def test_suspend_retains_startup_and_runtime_identity(self, runtime):
@@ -432,14 +445,15 @@ class TestEditResume:
     def test_resume_restarts_the_logical_tick(self, runtime):
         rt = _bring_up(runtime)
         rt.widget.suspend_for_edit(reason="custom_edit")
-        assert rt.thread_manager.live_timers == []
+        assert rt.widget._logical_runtime is None
 
         rt.widget.resume_after_edit(reason="custom_edit_restore")
 
         assert rt.widget._enabled is True
-        assert rt.widget._bars_timer is not None
-        assert len(rt.thread_manager.live_timers) == 1
-        assert rt.thread_manager.live_timers[0].callback == rt.widget._on_tick
+        assert rt.widget._logical_runtime is not None, (
+            "resume did not bring the logical cadence owner back"
+        )
+        assert rt.widget._logical_runtime.is_running() is True
 
     def test_resume_does_not_advance_the_engine_generation(self, runtime):
         rt = _bring_up(runtime)
@@ -499,7 +513,7 @@ class TestEditResume:
         assert rt.widget._startup_reveal_pending is False
         # Logical work still resumes; only presentation stays hidden.
         assert rt.widget._enabled is True
-        assert rt.widget._bars_timer is not None
+        assert rt.widget._logical_runtime is not None
 
     def test_resume_is_idempotent(self, runtime):
         rt = _bring_up(runtime)
@@ -521,7 +535,7 @@ class TestEditResume:
         startup_staging.finish_staged_startup_reveal(rt.widget, reason="renderer_ready")
 
         assert rt.widget._enabled is True
-        assert rt.widget._bars_timer is not None
+        assert rt.widget._logical_runtime is not None
         assert rt.engine._audio_worker.is_running() is True
         assert rt.engine.get_generation_id() == generation
         assert rt.widget.isVisible() is True

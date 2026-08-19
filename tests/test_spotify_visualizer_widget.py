@@ -9268,6 +9268,8 @@ def test_spotify_visualizer_secondary_stage_defers_hot_start_until_triggered(qt_
 
     assert vis._startup_secondary_stage_pending is True
     assert fake_engine.acquired == 0
+    # The cadence owner is the logical runtime now, not a GUI QTimer.
+    assert vis._logical_runtime is None
     assert vis._bars_timer is None
     assert fade_calls == []
 
@@ -9279,7 +9281,10 @@ def test_spotify_visualizer_secondary_stage_defers_hot_start_until_triggered(qt_
     assert vis._startup_reveal_pending is True
     assert fake_engine.acquired == 1
     assert fake_engine.playback_states[-1] is False
-    assert vis._bars_timer is not None
+    assert vis._logical_runtime is not None, (
+        "the hot start did not bring up a logical cadence owner"
+    )
+    assert vis._logical_runtime.is_running() is True
     assert fade_calls == []
 
     vis.stop()
