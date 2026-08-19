@@ -15,6 +15,8 @@ from typing import Any, Callable, Optional
 
 from core.logging.logger import get_logger
 
+from widgets.spotify_visualizer.thread_affinity import assert_gui_thread
+
 logger = get_logger(__name__)
 
 
@@ -766,7 +768,8 @@ def prepare_engine_for_mode_reset(widget: Any) -> None:
 
 
 def begin_mode_fade_in(widget: Any, now_ts: float) -> None:
-    """Transition from waiting-for-bars to fade-in phase."""
+    """Transition from waiting-for-bars to fade-in phase. GUI-thread only."""
+    assert_gui_thread("begin_mode_fade_in")
     if widget._mode_transition_phase == 3:
         widget._mode_transition_phase = 2
         widget._mode_transition_ts = now_ts
@@ -785,9 +788,41 @@ def begin_mode_fade_in(widget: Any, now_ts: float) -> None:
 
 
 def check_mode_teardown_ready(widget: Any, engine: Any, now_ts: float) -> None:
-    """Check if the engine has delivered a fresh frame after mode reset."""
+    """Evaluate readiness and execute the reveal. GUI-thread only.
+
+    Retained for the GUI-driven path. The logical half must call
+    `evaluate_mode_teardown_ready()` and let the presentation half call
+    `execute_mode_reveal()`, because the reveal mutates QWidget/QPixmap state.
+    """
+
+    if evaluate_mode_teardown_ready(widget, engine, now_ts):
+        execute_mode_reveal(widget, now_ts)
+
+
+def execute_mode_reveal(widget: Any, now_ts: float) -> None:
+    """GUI-thread half of a completed mode teardown.
+
+    `begin_mode_fade_in()` invalidates the shadow cache, applies the pending
+    transition layout and starts the widget fade. Calling it from the logical
+    worker is the ownership violation that made every mode switch present
+    nothing while its data flowed normally.
+    """
+
+    assert_gui_thread("execute_mode_reveal")
+    widget._mode_teardown_state = 'ready'
+    begin_mode_fade_in(widget, now_ts)
+
+
+def evaluate_mode_teardown_ready(widget: Any, engine: Any, now_ts: float) -> bool:
+    """Plain-data readiness decision. Safe off the GUI thread.
+
+    Returns True when the target mode has satisfied its prerequisites and the
+    presentation half should now perform the reveal. It mutates only plain
+    bookkeeping and never touches QWidget/QPixmap/GL state.
+    """
+
     if widget._mode_teardown_state != 'waiting_bars':
-        return
+        return False
     ready = False
     wait_started = float(getattr(widget, "_mode_teardown_wait_started_ts", 0.0) or 0.0)
     if wait_started <= 0.0:
@@ -839,9 +874,7 @@ def check_mode_teardown_ready(widget: Any, engine: Any, now_ts: float) -> None:
             waited_s,
             getattr(widget, "_mode_teardown_target_generation", -1),
         )
-    if ready and not widget._mode_transition_ready:
-        widget._mode_teardown_state = 'ready'
-        begin_mode_fade_in(widget, now_ts)
+    return bool(ready and not widget._mode_transition_ready)
 
 
 def apply_pending_mode_transition_layout(widget: Any) -> None:

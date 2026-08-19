@@ -59,6 +59,41 @@ class _RecordingParent(QWidget):
         return True
 
 
+class _PlayingEngine:
+    """An engine delivering real current-generation bars, and nothing else."""
+
+    def __init__(self, bar_count: int, *, generation: int, activation: int):
+        self._bars = [0.85] * bar_count
+        self._generation = generation
+        self._activation = activation
+
+    def tick(self):
+        return None
+
+    def set_smoothing(self, _value):
+        return None
+
+    def get_generation_id(self):
+        return self._generation
+
+    def get_activation_id(self):
+        return self._activation
+
+    def get_latest_generation_with_frame(self):
+        return self._generation
+
+    def get_latest_generation_with_waveform(self):
+        return self._generation
+
+    def get_smoothed_bars(self):
+        return list(self._bars)
+
+    def __getattr__(self, name):
+        if name.startswith("get_"):
+            return lambda *args, **kwargs: None
+        raise AttributeError(name)
+
+
 def _paused_spectrum(qtbot, *, bar_count=16):
     from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 
@@ -222,13 +257,13 @@ class TestPlayReplacesIdleInPlace:
         idle_bars = list(_spectrum_frames(parent)[-1]["bars"])
         assert max(idle_bars) > 0.0
 
-        # Play arrives with a genuine current-generation source frame.
+        # Play arrives with a genuine current-generation source frame, delivered
+        # by the engine exactly as production does - the widget does not get to
+        # hand itself bars.
         widget._spotify_playing = True
         widget._waiting_for_fresh_engine_frame = False
-        widget._display_bars = [0.85] * len(idle_bars)
         widget._spectrum_visual_smoothing_enabled = False
-        widget._display_bars_source_generation = 11
-        widget._display_bars_source_activation = 4
+        widget._engine = _PlayingEngine(len(idle_bars), generation=11, activation=4)
         parent._spotify_bars_overlay._engine_generation = 11
         parent._spotify_bars_overlay._activation_id = 4
 

@@ -37,6 +37,7 @@ from widgets.spotify_visualizer_widget import (
     _AudioFrame,
 )
 from widgets.spotify_visualizer.audio_worker import VisualizerMode
+from widgets.spotify_visualizer.logical_runtime import LatestStateMailbox as _LatestStateMailbox
 from widgets.spotify_visualizer.beat_engine import BeatEngineRegistry, _SpotifyBeatEngine
 import widgets.spotify_visualizer_widget as vis_mod
 from PySide6.QtGui import QColor
@@ -522,8 +523,17 @@ def test_on_tick_does_not_double_throttle_when_timer_already_paces(monkeypatch):
         _resolve_max_fps=lambda ctx: 90.0,
         _update_timer_interval=lambda fps: None,
         _log_tick_spike=lambda dt, ctx: None,
-        _check_mode_teardown_ready=lambda engine, now_ts: None,
+        _check_mode_teardown_ready=lambda engine, now_ts: False,
         _request_latency_probe=lambda reason: None,
+        # Required presentation handoff: `_publish_logical_state()` uses it
+        # directly rather than through an optional lookup, so a harness missing
+        # it fails loudly instead of silently producing zero frames.
+        _logical_mailbox=_LatestStateMailbox(),
+        _logical_runtime=None,
+        _logical_present_pending=False,
+        _runtime_generation=1,
+        _activation_id=1,
+        _vis_mode_str="bubble",
     )
 
     monkeypatch.setattr(tick_pipeline.Shiboken, "isValid", lambda obj: True)

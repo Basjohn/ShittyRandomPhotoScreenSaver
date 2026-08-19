@@ -23,7 +23,7 @@ from core.logging.logger import (
     is_viz_logging_enabled,
 )
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
-from widgets.spotify_visualizer import mode_capabilities
+from widgets.spotify_visualizer import mode_capabilities, mode_transition
 from widgets.spotify_visualizer.spectrum_presentation_smoothing import (
     reset_widget_spectrum_presentation_smoothing,
     resolve_widget_spectrum_presentation,
@@ -1372,13 +1372,18 @@ def present_tick(widget: Any) -> bool:
     if generation >= 0 and int(frame.generation) != generation:
         # A retired generation's frame must never be presented.
         return False
+    if bool(payload.get("mode_reveal_ready", False)):
+        # The logical half decided; the GUI half performs the reveal.
+        mode_transition.execute_mode_reveal(widget, float(payload["now_ts"]))
+    if not bool(payload.get("present_frame", True)):
+        return False
     parent = widget.parent()
     first_frame = not widget._has_pushed_first_frame
     return bool(
         push_gpu_frame(
             widget,
             parent,
-            float(payload.get("now_ts", time.time())),
+            float(payload["now_ts"]),
             bool(payload.get("changed", False)),
             first_frame,
         )
@@ -1416,6 +1421,45 @@ def present_logical_frame(widget: Any) -> None:
         present_tick(widget)
     except Exception:
         logger.debug("[SPOTIFY_VIS] Logical present failed", exc_info=True)
+
+
+def _publish_logical_state(
+    widget: Any,
+    now_ts: float,
+    *,
+    changed: bool,
+    mode_reveal_ready: bool,
+    present_frame: bool = True,
+) -> dict:
+    """Publish one immutable logical result for the presentation half.
+
+    Latest-wins: a GUI thread that cannot keep up loses freshness rather than
+    accumulating a backlog, and the simulation keeps its own cadence regardless.
+    """
+
+    payload = {
+        "now_ts": now_ts,
+        "changed": bool(changed),
+        # Plain-data presentation intents. The GUI half decides nothing.
+        "mode_reveal_ready": bool(mode_reveal_ready),
+        # A decided reveal still has to reach the GUI half even on paths that
+        # must not push a frame - the fresh-engine-frame gate is one of them.
+        "present_frame": bool(present_frame),
+        "generation": int(getattr(widget, "_runtime_generation", -1) or -1),
+        "mode_activation_id": int(getattr(widget, "_activation_id", -1) or -1),
+        "mode": mode_capabilities.widget_mode_key(widget),
+    }
+    mailbox = widget._logical_mailbox
+    mailbox.publish(
+        payload,
+        generation=payload["generation"],
+        activation_id=payload["mode_activation_id"],
+    )
+    if getattr(widget, "_logical_runtime", None) is not None:
+        # Only a thread-owned cadence needs marshalling; the GUI-driven path
+        # presents synchronously in `on_tick()`.
+        request_logical_present(widget)
+    return payload
 
 
 def logical_tick(widget: Any) -> Optional[dict]:
@@ -1470,7 +1514,10 @@ def logical_tick(widget: Any) -> Optional[dict]:
     changed, _any_nonzero = consume_engine_bars(widget, now_ts)
     _record_tick_phase("engine_consume")
     # Let paused mode transitions progress even when fresh-engine wait short-circuits.
-    widget._check_mode_teardown_ready(widget._engine, now_ts)
+    # Readiness only. The reveal itself mutates QWidget/QPixmap state and is
+    # executed by the presentation half, which is what makes this step safe to
+    # own off the GUI thread.
+    mode_reveal_ready = bool(widget._check_mode_teardown_ready(widget._engine, now_ts))
     _record_tick_phase("teardown_check")
     # If consume returned (False, False) while waiting for fresh engine frame, bail.
     #
@@ -1486,7 +1533,13 @@ def logical_tick(widget: Any) -> Optional[dict]:
         if widget._spotify_playing or not mode_capabilities.has_presentation_owned_idle_scene(
             getattr(widget, "_vis_mode_str", "")
         ):
-            return None
+            # Nothing new to draw, but a decided reveal must still reach the GUI
+            # half. Before the split this path ran the reveal inline, so losing
+            # it here would strand a completed mode transition.
+            return _publish_logical_state(
+                widget, now_ts, changed=False, mode_reveal_ready=mode_reveal_ready,
+                present_frame=False
+            )
 
     # Heartbeat transient detection for sine mode
     process_heartbeat(widget, now_ts)
@@ -1498,7 +1551,10 @@ def logical_tick(widget: Any) -> Optional[dict]:
     _record_tick_phase("bubble_consume")
 
     if widget._mode_teardown_block_until_ready and not widget._mode_transition_ready:
-        return None
+        return _publish_logical_state(
+            widget, now_ts, changed=False, mode_reveal_ready=mode_reveal_ready,
+            present_frame=False
+        )
 
     # Bubble simulation dispatch
     dispatch_bubble_simulation(widget, now_ts)
@@ -1511,18 +1567,9 @@ def logical_tick(widget: Any) -> Optional[dict]:
     # Publish the latest logical frame. The slot is latest-wins, so a GUI thread
     # that cannot keep up loses freshness rather than accumulating a backlog -
     # and, critically, the simulation above keeps its own cadence regardless.
-    payload = {"now_ts": now_ts, "changed": bool(changed)}
-    mailbox = getattr(widget, "_logical_mailbox", None)
-    if mailbox is not None:
-        mailbox.publish(
-            payload,
-            generation=int(getattr(widget, "_runtime_generation", -1) or -1),
-            activation_id=int(getattr(widget, "_activation_id", -1) or -1),
-        )
-        if getattr(widget, "_logical_runtime", None) is not None:
-            # Only a thread-owned cadence needs marshalling; the GUI-driven path
-            # presents synchronously in `on_tick()`.
-            request_logical_present(widget)
+    payload = _publish_logical_state(
+        widget, now_ts, changed=changed, mode_reveal_ready=mode_reveal_ready
+    )
     used_gpu = False
     first_frame = not widget._has_pushed_first_frame
     _record_tick_phase("publish")
