@@ -21,7 +21,7 @@ from email.utils import parsedate_to_datetime
 from typing import Callable, List, Optional
 
 from core.gmail.gmail_deeplinks import build_open_url, gmail_inbox_url
-from core.gmail.gmail_client import EmailMetadata
+from core.gmail.gmail_client import EmailMetadata, GmailFetchCancelled
 from core.logging.logger import get_logger
 from core.windows.secure_url_launcher import open_url
 
@@ -95,8 +95,16 @@ class GmailImapClient:
         label_ids: Optional[List[str]] = None,
         query: Optional[str] = None,
         max_results: int = 10,
+        should_cancel: Optional[Callable[[], bool]] = None,
     ) -> List[EmailMetadata]:
-        """Fetch recent message metadata (headers only) via IMAP."""
+        """Fetch recent message metadata (headers only) via IMAP.
+
+        ``should_cancel`` matches the API client contract: a fetch whose owning
+        runtime generation has retired stops traversing instead of holding an IO
+        worker past the runtime destruction barrier.
+        """
+        if should_cancel is not None and should_cancel():
+            raise GmailFetchCancelled("imap:list_messages")
         mailbox = "INBOX"
         if label_ids:
             first = label_ids[0]
@@ -132,10 +140,14 @@ class GmailImapClient:
                 results: List[EmailMetadata] = []
                 failed_ids: List[str] = []
                 for mid in recent_ids:
+                    if should_cancel is not None and should_cancel():
+                        raise GmailFetchCancelled("imap:list_messages")
                     try:
                         meta = self._fetch_message_metadata(conn, mid)
                         if meta:
                             results.append(meta)
+                    except GmailFetchCancelled:
+                        raise
                     except Exception as exc:
                         failed_ids.append(
                             mid.decode("ascii", errors="replace") if isinstance(mid, bytes) else str(mid)
@@ -148,6 +160,8 @@ class GmailImapClient:
                     )
 
                 return results
+            except GmailFetchCancelled:
+                raise
             except imaplib.IMAP4.error as exc:
                 logger.error("[GMAIL_IMAP] IMAP error: %s", exc)
                 raise

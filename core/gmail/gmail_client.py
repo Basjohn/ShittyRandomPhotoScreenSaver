@@ -12,13 +12,22 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from core.gmail.gmail_deeplinks import gmail_thread_url
 from core.logging.logger import get_logger
 from core.windows.secure_url_launcher import open_url
 
 logger = get_logger(__name__)
+
+class GmailFetchCancelled(Exception):
+    """Raised when a fetch is abandoned because its owner retired.
+
+    Distinct from a network failure: nothing went wrong, the caller simply
+    stopped being the owner. Callers must not report it as an error or
+    publish a partial result from it.
+    """
+
 
 GMAIL_API_BASE = "https://www.googleapis.com/gmail/v1"
 DEFAULT_TIMEOUT = (5, 30)  # connect, read
@@ -79,8 +88,16 @@ class GmailClient:
         data: Optional[dict] = None,
         params: Optional[dict] = None,
         headers: Optional[dict] = None,
+        should_cancel: Optional[Callable[[], bool]] = None,
     ) -> dict:
-        """Execute an authenticated API request with retry."""
+        """Execute an authenticated API request with retry.
+
+        ``should_cancel`` is checked before the request and before each
+        retry, so a caller whose runtime generation has retired stops
+        occupying the IO pool instead of running its full retry budget.
+        """
+        if should_cancel is not None and should_cancel():
+            raise GmailFetchCancelled(endpoint)
         creds = self._oauth.credentials
         if not creds:
             raise RuntimeError("Not authenticated")
@@ -98,6 +115,8 @@ class GmailClient:
         with self._api_lock:
             last_err: Optional[Exception] = None
             for attempt in range(MAX_RETRIES):
+                if should_cancel is not None and should_cancel():
+                    raise GmailFetchCancelled(endpoint)
                 try:
                     if method.upper() == "GET":
                         resp = requests.get(url, headers=req_headers, params=params, timeout=DEFAULT_TIMEOUT)
@@ -126,33 +145,57 @@ class GmailClient:
         label_ids: Optional[List[str]] = None,
         query: Optional[str] = None,
         max_results: int = 10,
+        should_cancel: Optional[Callable[[], bool]] = None,
     ) -> List[EmailMetadata]:
-        """Fetch message metadata (headers only)."""
+        """Fetch message metadata (headers only).
+
+        One list request followed by one metadata request per message, so
+        without a cancellation check this call could occupy an IO worker far
+        beyond its owner's lifetime. An installed CUSTOM Save proved it: a
+        retiring-generation ``gmail_fetch`` was still alive at the runtime
+        destruction barrier deadline, and the application exited fail-closed.
+
+        ``should_cancel`` is consulted before every request, so a retired
+        owner settles within one request instead of the whole traversal.
+        """
         params = {"maxResults": max_results}
         if label_ids:
             params["labelIds"] = ",".join(label_ids)
         if query:
             params["q"] = query
 
-        data = self._make_request("GET", "users/me/messages", params=params)
+        data = self._make_request(
+            "GET", "users/me/messages", params=params, should_cancel=should_cancel
+        )
         messages = data.get("messages", [])
 
         results: List[EmailMetadata] = []
         for msg_summary in messages:
+            if should_cancel is not None and should_cancel():
+                raise GmailFetchCancelled("users/me/messages")
             try:
-                metadata = self._get_message_metadata(msg_summary["id"])
+                metadata = self._get_message_metadata(
+                    msg_summary["id"], should_cancel=should_cancel
+                )
                 if metadata:
                     results.append(metadata)
+            except GmailFetchCancelled:
+                raise
             except Exception as exc:
                 logger.warning("[GMAIL_CLIENT] Failed to fetch metadata for %s: %s", msg_summary.get("id"), exc)
         return results
 
-    def _get_message_metadata(self, message_id: str) -> Optional[EmailMetadata]:
+    def _get_message_metadata(
+        self,
+        message_id: str,
+        should_cancel: Optional[Callable[[], bool]] = None,
+    ) -> Optional[EmailMetadata]:
         """Fetch headers-only metadata for a message."""
         data = self._make_request(
             "GET",
             f"users/me/messages/{message_id}",
             params={"format": "metadata", "metadataHeaders": "From,Subject,Date"},
+            should_cancel=should_cancel,
         )
         payload = data.get("payload", {})
         headers = {h["name"].lower(): h["value"] for h in payload.get("headers", [])}
