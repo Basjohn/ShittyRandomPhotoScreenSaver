@@ -1446,7 +1446,10 @@ def _publish_logical_state(
         # must not push a frame - the fresh-engine-frame gate is one of them.
         "present_frame": bool(present_frame),
         "generation": int(getattr(widget, "_runtime_generation", -1) or -1),
-        "mode_activation_id": int(getattr(widget, "_activation_id", -1) or -1),
+        # `_activation_id` is not a widget attribute; the widget-owned identity
+        # is `_last_engine_activation_seen`, updated once the engine's fresh
+        # frame for the pending activation actually arrives.
+        "mode_activation_id": int(getattr(widget, "_last_engine_activation_seen", -1) or -1),
         "mode": mode_capabilities.widget_mode_key(widget),
     }
     mailbox = widget._logical_mailbox
