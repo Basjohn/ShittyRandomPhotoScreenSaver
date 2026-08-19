@@ -57,8 +57,8 @@ def rig(monkeypatch):
     manager = _UiThreadManager()
     widget = _Widget(manager)
 
-    def _present(target):
-        target.presented.append({"ok": True})
+    def _present(target, *, allow_edge=True):
+        target.presented.append({"ok": True, "allow_edge": allow_edge})
         return True
 
     monkeypatch.setattr(tick_pipeline, "present_tick", _present)

@@ -1,0 +1,7 @@
+checkpoint,evidence,source_identity,architecture_note,logical_hz,logical_skips,screen0_fps_median,screen0_fps_min,screen0_fps_max,screen0_acceptance_median,screen1_fps_median,screen1_fps_min,screen1_fps_max,conclusion
+accepted_reference,historical,42033c84eabbdf25ccd34bb0e83f9e553f2f8f11,historical,,,,,,,,,Named accepted rollback/fidelity baseline; exact raw metrics not retained
+2026-08-19_15-17,raw,not_embedded,dedicated_worker_quantized,~64-65,1581 / 3883 steps (about 29% target deadlines),143.6,143.2,149.5,91.83,58.0,57.4,58.2,REJECTED scheduler
+2026-08-19_15-29,raw,not_embedded,pre_dedicated_runtime_comparison,~83-87 typical tick,n/a,148.6,147.0,150.1,93.98,58.5,58.0,58.8,Physical-delivery reference; not logical-fidelity baseline
+2026-08-19_17-10,raw+review,associated:80c8ed35f2f027522b00dcbe9795eb95b42076f4,repaired_dedicated_worker,~89.8-89.9,38 / 22636,131.6,103.8,152.2,85.28,57.6,52.7,59.6,Scheduler fixed; installed acceptance failed
+2026-08-19_19-08,raw+review,associated:ccb63542348fec5993a688142bc2e364f8149f6a,gen0+spectrum_fixed,~89.9,11 / 12488 main runtime,140.0,136.3,144.8,89.42,56.8,55.5,58.2,Pause/Play/general/shared presentation failed
+2026-08-19_20-02,raw+self-id,8ac2421e2bc0a7153942fc33eb9f348b505cde9d,post_K_L,~89.9 avg,43 / 13264; failures=1,111.35,64.5,132.8,75.575,52.4,41.2,55.4,Hard failure; shared presentation architecture promoted
