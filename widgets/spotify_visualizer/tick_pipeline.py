@@ -55,14 +55,37 @@ def _mode_requires_fresh_waveform(mode_str: str) -> bool:
     return str(mode_str or "").lower() in {"oscilloscope", "sine_wave"}
 
 
+# Every authored mode may present while idle. Bubble, Sine, Oscilloscope and
+# DevCurve animate themselves; Spectrum shows a static presentation baseline.
+_IDLE_REVEAL_MODES = frozenset({"bubble", "sine_wave", "oscilloscope", "devcurve", "spectrum"})
+
+# Modes whose idle motion is generated from engine ticks, so a paused tick may
+# stop waiting for a fresh engine frame. Spectrum is deliberately absent: its
+# idle scene is owned by presentation and needs no source at all, so it keeps
+# waiting and its real bars still prove they came from the current activation.
+_IDLE_SELF_ANIMATING_MODES = frozenset({"bubble", "sine_wave", "oscilloscope", "devcurve"})
+
+
 def _mode_allows_idle_reveal_key(mode_str: str) -> bool:
-    """Return True when a mode may reveal or animate while paused."""
-    return str(mode_str or "").lower() in {"bubble", "sine_wave", "oscilloscope", "devcurve"}
+    """Return True when a mode may reveal while paused."""
+    return str(mode_str or "").lower() in _IDLE_REVEAL_MODES
+
+
+def _mode_is_idle_self_animating(mode_str: str) -> bool:
+    """Return True when paused motion comes from engine ticks rather than presentation."""
+    return str(mode_str or "").lower() in _IDLE_SELF_ANIMATING_MODES
 
 
 def _mode_requires_authoritative_first_source(mode_str: str) -> bool:
-    """Return True when first visible output must come from a fresh source-tracked frame."""
-    return not _mode_allows_idle_reveal_key(mode_str)
+    """Return True when first visible output must come from a fresh source-tracked frame.
+
+    Deliberately keyed on self-animation, not on idle reveal. Spectrum may now
+    reveal while idle, but every bar it ever shows during playback is still
+    purely source-derived, so it must keep proving its first reactive frame came
+    from the current activation.
+    """
+
+    return not _mode_is_idle_self_animating(mode_str)
 
 
 # ------------------------------------------------------------------
@@ -740,7 +763,7 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     if (
         widget._waiting_for_fresh_engine_frame
         and not widget._spotify_playing
-        and _mode_allows_idle_reveal_key(getattr(widget, "_vis_mode_str", ""))
+        and _mode_is_idle_self_animating(getattr(widget, "_vis_mode_str", ""))
         and (
             not bool(getattr(widget, "_startup_idle_reveal_requires_authoritative_media", False))
             or bool(getattr(widget, "_startup_has_authoritative_media_update", False))
@@ -835,10 +858,15 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     widget._display_bars_source_generation = engine_generation
     widget._display_bars_source_activation = engine_activation
 
+    _idle_mode_key = getattr(widget, "_vis_mode_str", "")
     if (
         not widget._spotify_playing
-        and _mode_allows_idle_reveal_key(getattr(widget, "_vis_mode_str", ""))
-        and not bool(getattr(widget, "_waiting_for_fresh_engine_frame", False))
+        and _mode_allows_idle_reveal_key(_idle_mode_key)
+        and (
+            # A presentation-owned idle scene needs no engine frame to reveal.
+            not _mode_is_idle_self_animating(_idle_mode_key)
+            or not bool(getattr(widget, "_waiting_for_fresh_engine_frame", False))
+        )
         and bool(getattr(widget, "_waiting_for_fresh_frame", False))
     ):
         try:
