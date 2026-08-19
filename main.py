@@ -30,6 +30,7 @@ from core.build_profile import (
     is_compiled_runtime,
     is_diagnostic_build,
 )
+from core.source_head import log_source_head
 from core.settings.settings_manager import SettingsManager
 from core.settings.persistence import flush_and_close_settings_persistence
 from core.animation import AnimationManager
@@ -672,7 +673,11 @@ def main(*, entrypoint: str = "main"):
             entrypoint=entrypoint_name,
             mode=mode.value,
         )
-    
+
+    # Diagnostic-only: name the exact local Git commit for script/dev debug logs.
+    # No-op in compiled builds and when debug logging is off; never derails startup.
+    log_source_head()
+
     # Enable High DPI scaling BEFORE creating QApplication
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
