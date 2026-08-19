@@ -26,7 +26,7 @@ from PySide6.QtWidgets import QMenu, QWidget
 from shiboken6 import Shiboken
 
 from core.gmail.gmail_backend import GmailBackend, GmailBackendMode
-from core.gmail.gmail_client import EmailMetadata, GmailLabel
+from core.gmail.gmail_client import EmailMetadata, GmailFetchCancelled, GmailLabel
 from core.gmail.gmail_deeplinks import gmail_inbox_url
 from core.gmail.gmail_preparation import (
     PreparedGmailStartup,
@@ -780,14 +780,30 @@ class GmailWidget(BaseOverlayWidget):
             self._deferred_fetch_result = None
             self._on_emails_fetched(emails, unread_count, generation, defer_for_transition=False)
 
+    def _fetch_is_retired(self, generation: int) -> bool:
+        """Whether this fetch no longer owns its runtime generation.
+
+        Checked continuously by the client, not just at entry. An installed
+        CUSTOM Save proved why: cleanup set _cancelled and advanced the fetch
+        generation, but a fetch already inside list/metadata traversal did not
+        observe it, stayed alive for the whole runtime destruction barrier, and
+        the application exited fail-closed with retiring-generation gmail_fetch
+        work still registered.
+        """
+        return bool(self._cancelled or generation != self._fetch_generation)
+
     def _fetch_emails_async(self, generation: int) -> None:
         try:
-            if self._cancelled or generation != self._fetch_generation:
+            if self._fetch_is_retired(generation):
                 return
             label_ids = [self._filter_label]
             emails = self._gmail_client.list_messages(
-                max_results=self._fetch_window_capacity, label_ids=label_ids
+                max_results=self._fetch_window_capacity,
+                label_ids=label_ids,
+                should_cancel=lambda: self._fetch_is_retired(generation),
             )
+            if self._fetch_is_retired(generation):
+                return
             unread = sum(1 for e in emails if e.is_unread)
             try:
                 ThreadManager.run_on_ui_thread(
@@ -795,6 +811,19 @@ class GmailWidget(BaseOverlayWidget):
                 )
             except Exception:
                 logger.critical("[GMAIL] run_on_ui_thread failed, dropping fetch result")
+        except GmailFetchCancelled:
+            # Not an error: this fetch stopped because its owner retired. No
+            # result is published and no UI callback is queued for a generation
+            # that no longer exists.
+            logger.debug(
+                "[GMAIL] Fetch abandoned for retired generation=%s", generation
+            )
+        except TypeError as exc:
+            # A client without the cancellation seam (older/foreign backend).
+            if "should_cancel" not in str(exc):
+                raise
+            logger.debug("[GMAIL] Client lacks cancellation seam; fetching without it")
+            self._fetch_emails_async_uncancellable(generation)
         except Exception as exc:
             logger.error("[GMAIL] Fetch failed: %s", exc)
             try:
@@ -805,6 +834,24 @@ class GmailWidget(BaseOverlayWidget):
                 logger.critical("[GMAIL] run_on_ui_thread failed, dropping error")
         finally:
             end_fetch_guard(self, lock_attr="_fetch_lock")
+
+    def _fetch_emails_async_uncancellable(self, generation: int) -> None:
+        """Legacy path for a client that does not accept a cancellation token."""
+        if self._fetch_is_retired(generation):
+            return
+        emails = self._gmail_client.list_messages(
+            max_results=self._fetch_window_capacity,
+            label_ids=[self._filter_label],
+        )
+        if self._fetch_is_retired(generation):
+            return
+        unread = sum(1 for e in emails if e.is_unread)
+        try:
+            ThreadManager.run_on_ui_thread(
+                self._on_emails_fetched, emails, unread, generation
+            )
+        except Exception:
+            logger.critical("[GMAIL] run_on_ui_thread failed, dropping fetch result")
 
     def _on_emails_fetched(
         self,
