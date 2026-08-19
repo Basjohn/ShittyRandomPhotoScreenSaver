@@ -15,10 +15,22 @@ _MAX_TIME_CONSTANT_SECONDS = 0.014
 _STALL_SNAP_SECONDS = 0.100
 _SETTLED_EPSILON = 1.0e-4
 
-# Idle Spectrum baseline, as a fraction of full bar height. Small enough to read
-# as a resting state rather than signal.
-_IDLE_BASELINE_MIN = 0.010
-_IDLE_BASELINE_MAX = 0.030
+# Idle Spectrum baseline, as a fraction of full bar value (pre-upload). These are
+# bar *values*, not pixels: the renderer scales each by 0.55, applies pow(1.15)
+# and the card height-scale, so a value that looks large here still renders as a
+# calm resting hump. The intentional resting-scene contract is that the tallest
+# idle bar is a clearly perceptible height - at least ~5 rendered pixels on the
+# smallest supported card and roughly 10-18% of card height on larger cards -
+# while the edges taper to a low floor.
+#
+# The previous 0.010-0.030 range rendered the tallest bar at ~1px on an 80px card
+# and only ~4px on the installed enlarged card in single-piece mode (value 0.030
+# -> 0.0165 uploaded -> pow(1.15) -> sub-pixel active height), so the first
+# installed run reported the idle scene as visually absent. These values are
+# calibrated against a real offscreen GL render across the single-piece and
+# segmented paths; see `tests/test_p2_gate1_spectrum_idle_pixels.py`.
+_IDLE_BASELINE_MIN = 0.08
+_IDLE_BASELINE_MAX = 0.24
 
 
 def idle_spectrum_baseline(bar_count: int) -> list[float]:
