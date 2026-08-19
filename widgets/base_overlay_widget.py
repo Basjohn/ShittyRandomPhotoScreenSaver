@@ -301,7 +301,13 @@ class BaseOverlayWidget(QLabel):
     
     def set_show_background(self, show: bool) -> None:
         """Enable or disable background frame."""
-        self._show_background = bool(show)
+        show = bool(show)
+        if show == self._show_background:
+            # Unchanged style produces an identical frame, so rebuilding it is
+            # pure synchronous GUI cost. set_background_border() already guards
+            # this way; these setters simply did not.
+            return
+        self._show_background = show
         self._invalidate_painted_frame_shadow_cache()
         self._update_stylesheet()
         self._commit_painted_frame_shadow_cache()
@@ -310,6 +316,8 @@ class BaseOverlayWidget(QLabel):
     def set_background_color(self, color: QColor) -> None:
         """Set background color."""
         if isinstance(color, QColor):
+            if color == self._bg_color:
+                return
             self._bg_color = color
             self._invalidate_painted_frame_shadow_cache()
             self._update_stylesheet()
@@ -317,9 +325,13 @@ class BaseOverlayWidget(QLabel):
     
     def set_background_opacity(self, opacity: float) -> None:
         """Set background opacity (0.0 - 1.0)."""
-        self._bg_opacity = max(0.0, min(1.0, float(opacity)))
+        resolved = max(0.0, min(1.0, float(opacity)))
+        alpha = int(255 * resolved)
+        if resolved == self._bg_opacity and self._bg_color.alpha() == alpha:
+            return
+        self._bg_opacity = resolved
         # Update bg_color alpha
-        self._bg_color.setAlpha(int(255 * self._bg_opacity))
+        self._bg_color.setAlpha(alpha)
         self._invalidate_painted_frame_shadow_cache()
         self._update_stylesheet()
         self._commit_painted_frame_shadow_cache()
@@ -365,7 +377,10 @@ class BaseOverlayWidget(QLabel):
     
     def set_background_corner_radius(self, radius: int) -> None:
         """Set background corner radius."""
-        self._bg_corner_radius = max(0, int(radius))
+        resolved = max(0, int(radius))
+        if resolved == self._bg_corner_radius:
+            return
+        self._bg_corner_radius = resolved
         self._invalidate_painted_frame_shadow_cache()
         self._update_stylesheet()
         self._commit_painted_frame_shadow_cache()

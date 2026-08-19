@@ -307,3 +307,110 @@ def test_representative_base_widget_families_blit_shared_prepared_frame(
     widget.render(target)
 
     assert widget._prepared_painted_frame_shadow_pixmap_for_paint() is prepared
+
+
+# ---------------------------------------------------------------------------
+# P2-PERF-B: an unchanged style must not rebuild the painted frame shadow
+# ---------------------------------------------------------------------------
+
+
+class TestUnchangedStyleDoesNotRebuild:
+    """Frame-shadow regeneration was measured at 8-20+ ms of synchronous GUI work.
+
+    ``set_background_border()`` already returned early on an unchanged value;
+    ``set_show_background()``, ``set_background_color()``,
+    ``set_background_opacity()`` and ``set_background_corner_radius()`` did not,
+    so every settings refresh, widget setup and runtime reconstruction paid a
+    full rebuild per call even when the resolved style was identical.
+    """
+
+    def _widget(self, qtbot):
+        from PySide6.QtGui import QColor
+
+        from widgets.base_overlay_widget import BaseOverlayWidget
+
+        widget = BaseOverlayWidget()
+        qtbot.addWidget(widget)
+        widget.set_show_background(True)
+        widget.set_background_color(QColor(10, 20, 30, 200))
+        widget.set_background_opacity(0.8)
+        widget.set_background_corner_radius(12)
+        return widget
+
+    def _revision(self, widget):
+        return int(widget._painted_frame_shadow_revision)
+
+    def test_reapplying_the_same_show_background_is_a_no_op(self, qtbot):
+        widget = self._widget(qtbot)
+        before = self._revision(widget)
+        widget.set_show_background(True)
+        assert self._revision(widget) == before
+
+    def test_reapplying_the_same_colour_is_a_no_op(self, qtbot):
+        from PySide6.QtGui import QColor
+
+        widget = self._widget(qtbot)
+        before = self._revision(widget)
+        widget.set_background_color(QColor(widget._bg_color))
+        assert self._revision(widget) == before
+
+    def test_reapplying_the_same_opacity_is_a_no_op(self, qtbot):
+        widget = self._widget(qtbot)
+        before = self._revision(widget)
+        widget.set_background_opacity(0.8)
+        assert self._revision(widget) == before
+
+    def test_reapplying_the_same_corner_radius_is_a_no_op(self, qtbot):
+        widget = self._widget(qtbot)
+        before = self._revision(widget)
+        widget.set_background_corner_radius(12)
+        assert self._revision(widget) == before
+
+    def test_a_repeated_full_style_apply_costs_nothing(self, qtbot):
+        """The settings-refresh / reconstruction shape."""
+        from PySide6.QtGui import QColor
+
+        widget = self._widget(qtbot)
+        before = self._revision(widget)
+        for _ in range(5):
+            widget.set_show_background(True)
+            widget.set_background_color(QColor(widget._bg_color))
+            widget.set_background_opacity(0.8)
+            widget.set_background_corner_radius(12)
+        assert self._revision(widget) == before, (
+            "a repeated identical style apply rebuilt the frame shadow"
+        )
+
+    def test_a_genuine_change_still_rebuilds(self, qtbot):
+        from PySide6.QtGui import QColor
+
+        widget = self._widget(qtbot)
+
+        before = self._revision(widget)
+        widget.set_background_corner_radius(18)
+        assert self._revision(widget) > before
+
+        before = self._revision(widget)
+        widget.set_background_color(QColor(200, 30, 40, 255))
+        assert self._revision(widget) > before
+
+        before = self._revision(widget)
+        widget.set_background_opacity(0.35)
+        assert self._revision(widget) > before
+
+        before = self._revision(widget)
+        widget.set_show_background(False)
+        assert self._revision(widget) > before
+
+    def test_an_opacity_change_still_updates_the_colour_alpha(self, qtbot):
+        widget = self._widget(qtbot)
+        widget.set_background_opacity(0.5)
+        assert widget._bg_opacity == 0.5
+        assert widget._bg_color.alpha() == int(255 * 0.5)
+
+    def test_a_clamped_repeat_is_still_a_no_op(self, qtbot):
+        widget = self._widget(qtbot)
+        widget.set_background_opacity(1.0)
+        before = self._revision(widget)
+        widget.set_background_opacity(4.0)  # clamps to the same 1.0
+        assert self._revision(widget) == before
