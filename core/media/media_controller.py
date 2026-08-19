@@ -146,6 +146,11 @@ class WindowsGlobalMediaController(BaseMediaController):
         self._MediaManager = None
         self._PlaybackStatus = None
         self._gsmc_inflight = False
+        # Transport commands (play/pause/next/previous) are fire-and-forget and
+        # must never block the GUI caller, so they get their own inflight guard
+        # rather than sharing the query guard: a background status query must not
+        # be able to drop a user's transport command, and vice versa.
+        self._command_inflight = False
         # Cache last valid info for timeout resilience
         self._last_valid_info: Optional[MediaTrackInfo] = None
         self._last_valid_info_ts: float = 0.0
@@ -180,6 +185,97 @@ class WindowsGlobalMediaController(BaseMediaController):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+    def _run_coro_in_isolated_loop(self, coro_factory) -> object:
+        """Run one coroutine to completion in its own event loop; return result.
+
+        Shared by the blocking query path (`_run_coroutine`) and the
+        non-blocking command path (`_submit_command`). Never raises: WinRT awaits
+        that stall are bounded by an internal timeout and all failures resolve to
+        None.
+        """
+
+        import asyncio
+
+        try:
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+
+                async def _runner():
+                    try:
+                        # Create fresh coroutine inside the loop to avoid reuse errors
+                        coro = coro_factory()
+                        # Best-effort timeout (WinRT awaits do not always
+                        # honour cancellation).
+                        return await asyncio.wait_for(coro, timeout=2.0)
+                    except asyncio.TimeoutError:
+                        logger.debug("[MEDIA] Coroutine timed out, returning None")
+                        return None
+                    except MemoryError:
+                        logger.error("[MEDIA] MemoryError in GSMTC coroutine — returning None")
+                        return None
+
+                return loop.run_until_complete(_runner())
+            finally:
+                try:
+                    loop.close()
+                except Exception:
+                    logger.debug("[MEDIA] Loop close failed")
+        except MemoryError:
+            logger.error("[MEDIA] MemoryError in GSMTC loop runner — returning None")
+            return None
+        except Exception:
+            logger.debug("[MEDIA] GSMTC loop runner failed", exc_info=True)
+            return None
+
+    def _submit_command(self, action_name: str, coro_factory) -> None:
+        """Fire-and-forget a transport command on the IO owner.
+
+        The GUI caller never waits for WinRT completion - that synchronous wait
+        (via `_run_coroutine`'s `done.wait()`) stalled the GUI event loop on the
+        Pause/Play edge, showing up as `dispatch_pending_skips` and a visible
+        hitch. The optimistic UI state and control feedback are applied by the
+        caller immediately, and normal refresh reconciles the real state later.
+
+        Command dedup is preserved: a duplicate arriving while one command is
+        still inflight is dropped, exactly as the old shared inflight guard did -
+        but a background status query can no longer drop a user's command.
+        """
+
+        tm = self._thread_manager
+        if tm is None:
+            logger.warning(
+                "[MEDIA] ThreadManager not injected for GSMTC controller; skipping %s",
+                action_name,
+            )
+            return
+        if self._command_inflight:
+            logger.debug(
+                "[MEDIA] Dropping %s: a transport command is already inflight",
+                action_name,
+            )
+            return
+
+        self._command_inflight = True
+
+        def _run_and_clear() -> None:
+            try:
+                self._run_coro_in_isolated_loop(coro_factory)
+            finally:
+                # Cleared on the IO worker once the WinRT command really finished.
+                self._command_inflight = False
+
+        try:
+            from core.threading.manager import TaskPriority
+            tm.submit_io_task(
+                _run_and_clear,
+                task_id=f"media_cmd_{action_name}",
+                priority=TaskPriority.HIGH,
+            )
+        except Exception:
+            self._command_inflight = False
+            logger.debug("[MEDIA] Failed to submit %s command", action_name, exc_info=True)
+
     def _run_coroutine(self, coro_factory, *, already_on_io_worker: bool = False):
         """Run an async coroutine in an isolated event loop.
 
@@ -196,8 +292,6 @@ class WindowsGlobalMediaController(BaseMediaController):
         Inflight checking prevents query pileup in either path.
         """
 
-        import asyncio
-
         tm = self._thread_manager
         if tm is None:
             logger.warning("[MEDIA] ThreadManager not injected for GSMTC controller; skipping coroutine")
@@ -207,37 +301,7 @@ class WindowsGlobalMediaController(BaseMediaController):
         holder: dict[str, object] = {"result": None}
 
         def _run_in_loop() -> object:
-            try:
-                loop = asyncio.new_event_loop()
-                try:
-                    asyncio.set_event_loop(loop)
-
-                    async def _runner():
-                        try:
-                            # Create fresh coroutine inside the loop to avoid reuse errors
-                            coro = coro_factory()
-                            # Best-effort timeout (WinRT awaits do not always
-                            # honour cancellation).
-                            return await asyncio.wait_for(coro, timeout=2.0)
-                        except asyncio.TimeoutError:
-                            logger.debug("[MEDIA] Coroutine timed out, returning None")
-                            return None
-                        except MemoryError:
-                            logger.error("[MEDIA] MemoryError in GSMTC coroutine — returning None")
-                            return None
-
-                    return loop.run_until_complete(_runner())
-                finally:
-                    try:
-                        loop.close()
-                    except Exception:
-                        logger.debug("[MEDIA] Loop close failed")
-            except MemoryError:
-                logger.error("[MEDIA] MemoryError in GSMTC loop runner — returning None")
-                return None
-            except Exception:
-                logger.debug("[MEDIA] GSMTC loop runner failed", exc_info=True)
-                return None
+            return self._run_coro_in_isolated_loop(coro_factory)
 
         if already_on_io_worker:
             if self._gsmc_inflight:
@@ -767,9 +831,8 @@ class WindowsGlobalMediaController(BaseMediaController):
             except Exception:
                 logger.debug("[MEDIA] %s failed", action_name, exc_info=True)
 
-        result = self._run_coroutine(lambda: _act())
-        if isinstance(result, Exception):
-            logger.debug("[MEDIA] %s coroutine raised: %s", action_name, result, exc_info=True)
+        # Fire-and-forget: the GUI must not block on WinRT completion.
+        self._submit_command(action_name, lambda: _act())
 
     def play_pause(self) -> None:  # pragma: no cover - requires winrt
         self._invoke_simple_action("play_pause", lambda s: s.try_toggle_play_pause_async())
