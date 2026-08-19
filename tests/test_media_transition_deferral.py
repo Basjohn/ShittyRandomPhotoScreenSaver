@@ -59,6 +59,13 @@ def test_transition_media_feedback_is_static_without_frame_animation(
         ),
     )
     widget._safe_update = lambda: updates.append("update")
+    # Feedback repaints are now dirty-region updates confined to the controls
+    # row (Slice H), so the immediate static acknowledgement no longer repaints
+    # the whole card. Count both repaint paths to preserve this test's intent:
+    # one acknowledgement paint on trigger, one clearing paint on completion.
+    monkeypatch.setattr(
+        feedback, "_safe_update_region", lambda w, rect: updates.append("update")
+    )
 
     try:
         feedback.trigger_controls_feedback(widget, "next", source="media_key")
