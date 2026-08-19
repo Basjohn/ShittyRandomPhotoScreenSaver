@@ -1053,6 +1053,31 @@ def push_gpu_frame(
     return used_gpu
 
 
+def presentation_owned_idle_is_active(widget: Any, mode: Any = None) -> bool:
+    """True when the visible scene is presentation-owned and needs no source.
+
+    `presentation_ready` and `reactive_source_ready` are different questions.
+    Paused Spectrum is the mixed state that forced the distinction: its card and
+    static baseline are built entirely by presentation, while real bars still
+    require a fresh current-activation source frame that cannot arrive while
+    capture is paused.
+
+    Treating absent source identity as a presentation blocker in that state is
+    what forced effective fade to zero and refused the first-frame handoff, so
+    the card stayed invisible until Play.
+    """
+
+    mode_key = mode_capabilities.mode_key(
+        mode if mode is not None else getattr(widget, "_vis_mode_str", "")
+    )
+    if bool(getattr(widget, "_spotify_playing", False)):
+        return False
+    return (
+        mode_capabilities.allows_idle_reveal(mode_key)
+        and mode_capabilities.has_presentation_owned_idle_scene(mode_key)
+    )
+
+
 def _collect_first_frame_primer_problems(widget: Any, parent: Any, mode: str) -> list[str]:
     """Return stale pre-push overlay state that requires a hidden priming push."""
     overlay = getattr(parent, "_spotify_bars_overlay", None) if parent is not None else None
@@ -1066,7 +1091,12 @@ def _collect_first_frame_primer_problems(widget: Any, parent: Any, mode: str) ->
     overlay_generation = getattr(overlay, "_engine_generation", None)
     display_source_generation = int(getattr(widget, "_display_bars_source_generation", -1) or -1)
     display_source_activation = int(getattr(widget, "_display_bars_source_activation", -1) or -1)
-    requires_authoritative_source = _mode_requires_authoritative_first_source(mode_key)
+    # Source authority is still required for reactive playback, but a
+    # presentation-owned idle scene is not waiting on it to become visible.
+    requires_authoritative_source = (
+        _mode_requires_authoritative_first_source(mode_key)
+        and not presentation_owned_idle_is_active(widget, mode_key)
+    )
 
     if overlay_mode and overlay_mode != mode_key:
         problems.append("overlay_mode_stale")
@@ -1097,7 +1127,10 @@ def _warn_on_first_frame_guard_mismatch(widget: Any, parent: Any) -> None:
     waiting_engine = bool(getattr(widget, "_waiting_for_fresh_engine_frame", False))
     waiting_frame = bool(getattr(widget, "_waiting_for_fresh_frame", False))
     mode = str(getattr(widget, "_vis_mode_str", "unknown") or "unknown")
-    requires_authoritative_source = _mode_requires_authoritative_first_source(mode)
+    requires_authoritative_source = (
+        _mode_requires_authoritative_first_source(mode)
+        and not presentation_owned_idle_is_active(widget, mode)
+    )
     try:
         display_max = max(getattr(widget, "_display_bars", []) or [0.0])
     except Exception:
