@@ -1651,25 +1651,22 @@ class SpotifyVisualizerWidget(QWidget):
         from widgets.spotify_visualizer.engine_lifecycle import clear_gl_overlay
         clear_gl_overlay(self)
 
-    # ------------------------------------------------------------------
-    # CUSTOM edit-session suspend / resume
-    # ------------------------------------------------------------------
+    # CUSTOM edit-session suspend/resume. Distinct from stop()/start(): an edit
+    # session is not a lifecycle boundary and must not re-enter startup staging.
+    # Contract and ownership live in widgets.spotify_visualizer.startup_staging.
 
     def suspend_for_edit(self, *, reason: str = "custom_edit") -> bool:
-        """Suspend this live runtime for an edit session.
-
-        Distinct from stop(): an edit session is not a lifecycle boundary, and
-        the startup entry points must not be re-entered mid-runtime.
-        """
+        """Delegates to widgets.spotify_visualizer.startup_staging."""
         from widgets.spotify_visualizer.startup_staging import suspend_for_edit
         return suspend_for_edit(self, reason=reason)
 
     def resume_after_edit(self, *, reason: str = "custom_edit") -> bool:
-        """Resume this runtime after an edit session, without cold staging."""
+        """Delegates to widgets.spotify_visualizer.startup_staging."""
         from widgets.spotify_visualizer.startup_staging import resume_after_edit
         return resume_after_edit(self, reason=reason)
 
     def is_edit_suspended(self) -> bool:
+        """Delegates to widgets.spotify_visualizer.startup_staging."""
         from widgets.spotify_visualizer.startup_staging import is_edit_suspended
         return is_edit_suspended(self)
 
@@ -1975,21 +1972,13 @@ class SpotifyVisualizerWidget(QWidget):
         return ensure_presentation_fade(self)
 
     def on_visualizer_presentation_ready(self) -> None:
-        """Compositor renderer/card readiness arrived for this generation.
-
-        Reveal is state-driven: the staged startup gate rejected itself while the
-        renderer was still being prepared at fade zero, and this is the event
-        that lets it re-evaluate. Every other reveal precondition is re-checked
-        by the reveal owner, so this is not a reveal authority of its own.
-        """
+        """Let the reveal owner re-evaluate now the renderer is prepared."""
         from widgets.spotify_visualizer.startup_staging import finish_staged_startup_reveal
 
         try:
             finish_staged_startup_reveal(self, reason="renderer_ready")
         except Exception:
-            logger.debug(
-                "[SPOTIFY_VIS] Renderer-ready reveal attempt failed", exc_info=True
-            )
+            logger.debug("[SPOTIFY_VIS] Renderer-ready reveal attempt failed", exc_info=True)
 
     def _dynamic_bar_segments(self) -> int:
         """Compute segment count based on current widget height.
