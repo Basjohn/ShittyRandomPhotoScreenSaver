@@ -15,6 +15,36 @@ _MAX_TIME_CONSTANT_SECONDS = 0.014
 _STALL_SNAP_SECONDS = 0.100
 _SETTLED_EPSILON = 1.0e-4
 
+# Idle Spectrum baseline, as a fraction of full bar height. Small enough to read
+# as a resting state rather than signal.
+_IDLE_BASELINE_MIN = 0.010
+_IDLE_BASELINE_MAX = 0.030
+
+
+def idle_spectrum_baseline(bar_count: int) -> list[float]:
+    """Return the deterministic resting Spectrum scene for an idle visualizer.
+
+    This is presentation state, not synthetic audio. It never reaches audio
+    capture, the BeatEngine, source bars, source generations, or the
+    energy/transient/onset buses, so nothing downstream can mistake it for a
+    real reaction.
+
+    It is a pure function of the bar count with no time term and no randomness,
+    so a steady idle settles to a single scene revision and the existing
+    unchanged-scene suppression keeps its physical cost near zero.
+    """
+
+    count = max(0, int(bar_count))
+    if count <= 0:
+        return []
+    if count == 1:
+        return [(_IDLE_BASELINE_MIN + _IDLE_BASELINE_MAX) * 0.5]
+    span = _IDLE_BASELINE_MAX - _IDLE_BASELINE_MIN
+    return [
+        _IDLE_BASELINE_MIN + span * math.sin((index / (count - 1)) * math.pi)
+        for index in range(count)
+    ]
+
 
 def reset_widget_spectrum_presentation_smoothing(widget: Any) -> None:
     """Discard presentation-only Spectrum history without touching source bars."""
@@ -59,6 +89,34 @@ def resolve_widget_spectrum_presentation(
     values = [max(0.0, min(1.0, float(value))) for value in source_bars]
     enabled = bool(getattr(widget, "_spectrum_visual_smoothing_enabled", True))
     strength = _clamp_strength(getattr(widget, "_spectrum_visual_smoothing", 0.5))
+
+    is_spectrum = str(getattr(widget, "_vis_mode_str", "") or "").lower() == "spectrum"
+    playing = bool(getattr(widget, "_spotify_playing", False))
+    if is_spectrum and not playing:
+        # Idle Spectrum has a resting scene instead of nothing to present. Any
+        # residual real value still wins where it exceeds the floor, so the
+        # arrival of real playback replaces these bars in place - no card
+        # recreation, no cold startup stage, no second clock.
+        count = len(values) or max(0, int(getattr(widget, "_bar_count", 0) or 0))
+        baseline = idle_spectrum_baseline(count)
+        if values:
+            values = [max(value, floor) for value, floor in zip(values, baseline)]
+        else:
+            values = baseline
+        previous = getattr(widget, "_spectrum_presentation_bars", []) or []
+        changed = len(previous) != len(values) or any(
+            abs(current - prior) > _SETTLED_EPSILON
+            for current, prior in zip(values, previous)
+        )
+        widget._spectrum_presentation_bars = list(values)
+        try:
+            widget._spectrum_presentation_last_ts = float(now_ts)
+        except (TypeError, ValueError):
+            widget._spectrum_presentation_last_ts = 0.0
+        widget._spectrum_presentation_identity = _presentation_identity(widget, strength)
+        widget._spectrum_presentation_pending = False
+        return list(values), changed
+
     active = (
         str(getattr(widget, "_vis_mode_str", "") or "").lower() == "spectrum"
         and bool(getattr(widget, "_spotify_playing", False))

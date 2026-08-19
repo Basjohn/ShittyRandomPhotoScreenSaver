@@ -9643,7 +9643,10 @@ def test_spotify_visualizer_watchdog_does_not_force_reveal_when_startup_begins_p
     vis.begin_spotify_secondary_stage()
     qt_app.processEvents()
 
-    assert vis._startup_require_playing_before_reveal is True
+    # Spectrum gained an idle presentation, so no authored mode defers its
+    # reveal until playback any more. Drive the deferral directly: this bar
+    # owns the reveal-deferral behaviour, not the policy that selects it.
+    vis._startup_require_playing_before_reveal = True
     vis._startup_reveal_not_before_ts = 0.0
     vis._finish_staged_startup_reveal(reason="startup_watchdog")
 
@@ -9728,7 +9731,10 @@ def test_spotify_visualizer_play_transition_still_waits_for_fresh_frame_when_sta
     vis.begin_spotify_secondary_stage()
     qt_app.processEvents()
 
-    assert vis._startup_require_playing_before_reveal is True
+    # Spectrum gained an idle presentation, so no authored mode defers its
+    # reveal until playback any more. Drive the deferral directly: this bar
+    # owns the reveal-deferral behaviour, not the policy that selects it.
+    vis._startup_require_playing_before_reveal = True
     vis._startup_reveal_not_before_ts = 0.0
     vis.handle_media_update({"state": "playing"})
 
