@@ -35,6 +35,13 @@ logger = get_logger(__name__)
 _IDLE_BUBBLE_DT_SCALE = 0.50
 _IDLE_LINE_MODE_DT_SCALE = 0.80
 
+# After a reveal/first-frame edge, keep the compositor presenting at display
+# rate for this long so the GUI-thread reveal fade (a QVariantAnimation, not a
+# tick-driven fade) animates even when the underlying logical scene is a settled
+# idle. Generous on purpose - the only cost is a bounded window of display-rate
+# paints of an already-visible card.
+_PRESENT_FORCE_WINDOW_S = 1.5
+
 
 def _ensure_fresh_generation_state(widget: Any) -> None:
     """Backfill generation-handoff attrs for live widgets created on older paths."""
@@ -1356,16 +1363,38 @@ def on_tick(widget: Any) -> None:
     present_tick(widget)
 
 
-def present_tick(widget: Any) -> bool:
+def present_tick(widget: Any, *, allow_edge: bool = True) -> bool:
     """GUI-thread half: turn the freshest logical frame into a pushed frame.
 
     Owns everything the logical thread must not touch - widget geometry, the
     presentation fade, card pixels and the compositor publish.
+
+    `allow_edge` distinguishes the two GUI-thread callers:
+
+    - the edge callback (`present_logical_frame`, posted for a decided reveal or
+      the first frame) runs with `allow_edge=True` and performs the reveal;
+    - the display presentation pull (`apply_latest_logical_present`, called from
+      the compositor's paint) runs with `allow_edge=False` and applies steady
+      frames only. It must never execute a reveal, because reveal work mutates
+      layout/fade and must not run inside the compositor's paint. An edge frame
+      it happens to sample is left for the marshaled edge callback; the worker
+      re-publishes a pending reveal every tick, so nothing is stranded.
     """
 
     if not Shiboken.isValid(widget):
         return False
-    frame = widget._logical_mailbox.take() if getattr(widget, "_logical_mailbox", None) else None
+    mailbox = getattr(widget, "_logical_mailbox", None)
+    if mailbox is None:
+        return False
+    pending = mailbox.peek()
+    if pending is None:
+        return False
+    is_edge = bool(pending.state.get("mode_reveal_ready", False)) or not widget._has_pushed_first_frame
+    if is_edge and not allow_edge:
+        # A reveal / first frame belongs to the edge callback, not the paint pull.
+        return False
+
+    frame = mailbox.take()
     if frame is None:
         return False
     payload = frame.state
@@ -1376,6 +1405,11 @@ def present_tick(widget: Any) -> bool:
         # generation instead of being disabled by a -1 sentinel.
         return False
     if bool(payload.get("mode_reveal_ready", False)):
+        if not allow_edge:
+            # Sampled an edge in the paint pull after the peek (a reveal was just
+            # published). Do not reveal inside paint; leave it for the edge
+            # callback, which the worker keeps re-arming while the reveal pends.
+            return False
         # The logical half decided; the GUI half performs the reveal.
         mode_transition.execute_mode_reveal(widget, float(payload["now_ts"]))
     if not bool(payload.get("present_frame", True)):
@@ -1391,6 +1425,58 @@ def present_tick(widget: Any) -> bool:
             first_frame,
         )
     )
+
+
+def ensure_compositor_logical_pull(widget: Any) -> bool:
+    """Register this widget as its compositor's pull-based logical source.
+
+    Idempotent, GUI-thread only. Once registered, the compositor samples
+    `logical_present_revision()` at its display opportunity and calls
+    `apply_latest_logical_present()` on the GUI thread to apply the freshest
+    steady logical state - so the worker stops marshalling a GUI callback per
+    steady publication. Returns whether a pull is active after the call.
+    """
+
+    try:
+        parent = widget.parentWidget() if hasattr(widget, "parentWidget") else None
+    except Exception:
+        parent = None
+    compositor = getattr(parent, "_gl_compositor", None) if parent is not None else None
+    setter = getattr(compositor, "set_visualizer_logical_source", None)
+    if compositor is None or not callable(setter):
+        widget._pull_delivery_active = False
+        return False
+    if getattr(widget, "_registered_pull_compositor", None) is not compositor:
+        try:
+            setter(widget)
+            widget._registered_pull_compositor = compositor
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to register logical pull source", exc_info=True)
+            widget._pull_delivery_active = False
+            return False
+    widget._pull_delivery_active = True
+    return True
+
+
+def logical_present_revision(widget: Any) -> int:
+    """Thread-safe present-revision read for the display presentation scheduler."""
+
+    mailbox = getattr(widget, "_logical_mailbox", None)
+    if mailbox is None:
+        return 0
+    try:
+        return int(mailbox.present_revision)
+    except Exception:
+        return 0
+
+
+def apply_latest_logical_present(widget: Any) -> None:
+    """Compositor pull: apply the freshest steady logical state (GUI thread)."""
+
+    try:
+        present_tick(widget, allow_edge=False)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Logical present pull failed", exc_info=True)
 
 
 def request_logical_present(widget: Any) -> None:
@@ -1417,11 +1503,18 @@ def request_logical_present(widget: Any) -> None:
 
 
 def present_logical_frame(widget: Any) -> None:
-    """GUI-thread presentation of the freshest published logical frame."""
+    """GUI-thread presentation of the freshest published logical frame.
+
+    This is the edge/bootstrap path. It also registers the compositor pull, so
+    once the first frame has been delivered here the display presentation
+    opportunity takes over steady-state delivery and the worker stops posting a
+    callback per steady publication.
+    """
 
     widget._logical_present_pending = False
     try:
-        present_tick(widget)
+        ensure_compositor_logical_pull(widget)
+        present_tick(widget, allow_edge=True)
     except Exception:
         logger.debug("[SPOTIFY_VIS] Logical present failed", exc_info=True)
 
@@ -1440,6 +1533,7 @@ def _publish_logical_state(
     accumulating a backlog, and the simulation keeps its own cadence regardless.
     """
 
+    first_frame = not bool(getattr(widget, "_has_pushed_first_frame", False))
     payload = {
         "now_ts": now_ts,
         "changed": bool(changed),
@@ -1460,16 +1554,43 @@ def _publish_logical_state(
         ),
         "mode": mode_capabilities.widget_mode_key(widget),
     }
+
+    # Visual-significance signal for the pull-based display presentation owner.
+    # Animated modes and mode transitions evolve every tick; a settled idle
+    # Spectrum does not, so `present_revision` stops advancing and the compositor
+    # suppresses redundant paints. The reveal fade is a GUI-thread QVariantAnimation
+    # decoupled from this tick, so a bounded force window after a reveal/first
+    # frame keeps the compositor presenting through it.
+    animated_mode = (
+        str(getattr(widget, "_vis_mode_str", "") or "") != "spectrum"
+        or bool(getattr(widget, "_rainbow_enabled", False))
+    )
+    transitioning = int(getattr(widget, "_mode_transition_phase", 0) or 0) != 0
+    if mode_reveal_ready or first_frame:
+        widget._present_force_until_ts = now_ts + _PRESENT_FORCE_WINDOW_S
+    force_active = now_ts < float(getattr(widget, "_present_force_until_ts", 0.0) or 0.0)
+    present_dirty = bool(
+        changed or animated_mode or transitioning or mode_reveal_ready
+        or first_frame or force_active
+    )
+
     mailbox = widget._logical_mailbox
     mailbox.publish(
         payload,
         generation=payload["generation"],
         activation_id=payload["mode_activation_id"],
+        dirty=present_dirty,
     )
     if getattr(widget, "_logical_runtime", None) is not None:
-        # Only a thread-owned cadence needs marshalling; the GUI-driven path
-        # presents synchronously in `on_tick()`.
-        request_logical_present(widget)
+        # Steady-state publications are pulled by the physical display
+        # presentation opportunity (see `present_tick(allow_edge=False)`), so the
+        # ~90 Hz logical producer no longer marshals one GUI callback per tick.
+        # Only explicit edge frames (a decided reveal, the first frame) still
+        # marshal one bounded GUI callback - and the whole path falls back to the
+        # old per-publication marshal when no compositor pull is registered.
+        edge = mode_reveal_ready or first_frame
+        if edge or not bool(getattr(widget, "_pull_delivery_active", False)):
+            request_logical_present(widget)
     return payload
 
 
@@ -1595,10 +1716,9 @@ def logical_tick(widget: Any) -> Optional[dict]:
         )
         logger.warning(
             "[PERF] [SPOTIFY_VIS] Tick phase breakdown total_ms=%.2f mode=%s "
-            "transition_active=%s changed=%s first_frame=%s used_gpu=%s %s",
+            "changed=%s first_frame=%s used_gpu=%s %s",
             _tick_elapsed,
             getattr(widget, "_vis_mode_str", "unknown"),
-            is_transition_active,
             changed,
             first_frame,
             used_gpu,

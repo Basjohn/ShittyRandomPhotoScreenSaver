@@ -108,6 +108,7 @@ class LatestStateMailbox:
         self._lock = threading.Lock()
         self._publication: Optional[LogicalPublication] = None
         self._revision = 0
+        self._present_revision = 0
         self._dropped = 0
 
     def publish(
@@ -117,14 +118,25 @@ class LatestStateMailbox:
         generation: int,
         activation_id: int = -1,
         now_ts: Optional[float] = None,
+        dirty: bool = True,
     ) -> int:
-        """Replace the current slot. Returns the new revision."""
+        """Replace the current slot. Returns the new revision.
+
+        `revision` advances on every publish; `present_revision` advances only
+        when `dirty` - i.e. the publication represents a visually significant
+        change. The display presentation owner samples `present_revision` at its
+        own opportunity, so a settled idle scene (repeated identical logical
+        state) stops advancing it and the compositor suppresses redundant paints
+        without the worker ever posting a GUI callback.
+        """
 
         with self._lock:
             if self._publication is not None:
                 # Superseded before anyone sampled it. Counted, never queued.
                 self._dropped += 1
             self._revision += 1
+            if dirty:
+                self._present_revision += 1
             self._publication = LogicalPublication(
                 state=state,
                 revision=self._revision,
@@ -168,6 +180,17 @@ class LatestStateMailbox:
     def revision(self) -> int:
         with self._lock:
             return self._revision
+
+    @property
+    def present_revision(self) -> int:
+        """Revision that advances only for visually significant publications.
+
+        Read cross-thread by the display presentation scheduler to decide
+        whether a fresh visualizer scene needs a paint.
+        """
+
+        with self._lock:
+            return self._present_revision
 
     @property
     def superseded_count(self) -> int:

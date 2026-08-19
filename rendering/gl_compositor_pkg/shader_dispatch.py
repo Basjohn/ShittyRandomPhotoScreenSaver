@@ -449,6 +449,12 @@ def render_visualizer_layer(comp: "GLCompositorWidget") -> bool:
     layer = getattr(comp, "_visualizer_layer", None)
     if layer is None:
         return False
+    # Pull the freshest steady logical state (GUI thread) before drawing, so the
+    # physical display opportunity - not a per-publication worker callback -
+    # drives steady-state visualizer delivery.
+    pull = getattr(comp, "_pull_visualizer_logical_state", None)
+    if callable(pull):
+        pull()
     try:
         _vp_w, vp_h = get_viewport_size(comp)
         dpr = float(comp.devicePixelRatioF())

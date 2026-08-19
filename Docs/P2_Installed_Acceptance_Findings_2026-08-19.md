@@ -1,135 +1,240 @@
-# P2 Installed Acceptance Findings — Second Run — 2026-08-19
+# P2 Installed Acceptance Findings — Third Run — 2026-08-19
 
-Tested source anchor: `ccb63542348fec5993a688142bc2e364f8149f6a`
-
-Operator report:
-- Spectrum idle fixed;
-- Pause/Play hitch unchanged;
-- fade-in start remains clean;
-- general hitching remains;
-- transition performance remains poor.
-
-Installed behavior overrides unit-test claims of completion.
-
-## Accepted
-
-### Generation zero
-```text
-Runtime started (generation=0 interval_ms=11.11)
-```
-
-### Spectrum idle
-```text
-Shader bars snapshot: count=35, min=0.0738, max=0.4192
-```
-
-Operator confirms visible resting bars.
-
-### Logical runtime average
-```text
-generation=0 steps=12488 skipped_deadlines=11 slow_steps=2 failures=0
-generation=0 steps=1699  skipped_deadlines=3  slow_steps=0 failures=0
-generation=1 steps=5065  skipped_deadlines=5  slow_steps=2 failures=0
-```
-
-The ~64 Hz historical scheduler collapse remains fixed.
-
-## Still failing
-
-- Pause/Play perceptual hitch.
-- General hitching.
-- 165 Hz transition delivery.
-- BTF long tails.
-
-## Slice H installed evidence
-
-Feedback paint requests/event still include:
+Installed source identity from the log:
 
 ```text
-40, 50, 62, 36, 46, 55, 44, 23, 45, 75, 44, 36, 55, 48
+[SOURCE_HEAD] 8ac2421e2bc0a7153942fc33eb9f348b505cde9d
 ```
 
-Real `media.paint` during rapid toggles:
+This is the authoritative behavioral checkpoint for this run even if documentation commits are added afterward.
+
+---
+
+# Operator result
+
+The third installed acceptance is a hard failure.
+
+Reported:
+- worst visualizer performance so far;
+- transitions universally poor;
+- Pause/Play hitching remains and feels worse;
+- mouse controls and physical media keys both trigger the hitch;
+- all visualizer modes are affected;
+- Bubble is not the unique failure owner.
+
+---
+
+# Source-ID diagnostic
+
+The new debug/script-only diagnostic worked:
 
 ```text
-19:07:50 calls=50 avg_ms=3.87 max_ms=7.15
-19:07:51 calls=50 avg_ms=2.62 max_ms=7.38
-19:07:52 calls=50 avg_ms=1.87 max_ms=5.42
-19:07:54 calls=50 avg_ms=2.85 max_ms=6.08
-19:07:56 calls=50 avg_ms=3.45 max_ms=6.87
-19:07:59 calls=50 avg_ms=2.46 max_ms=6.52
+[SOURCE_HEAD] 8ac2421e2bc0a7153942fc33eb9f348b505cde9d
 ```
 
-Card area:
-```text
-170400 px
-```
+Retain it.
 
-Conclusion: dirty-region updates reduced raster area but did not remove frame-count-scale real parent paint execution.
+---
 
-`full_card_paint_requests` is tracked in metadata but is not emitted by the current structured feedback logger; the installed run cannot verify the claimed field.
+# Slice K
 
-## Pause/Play-specific source defect
-
-`MediaWidget.play_pause()` synchronously calls the controller.
-
-The Windows GSMTC controller runs WinRT through IO but waits for completion through `threading.Event`, so a GUI caller can still block.
-
-This strongly matches:
-- Pause hitch;
-- Play hitch;
-- fade-in being clean.
-
-Historical qualification:
-`core/media/media_controller.py` is byte-identical at accepted baseline `42033c84...` and current. Treat this as a real edge defect, not proof of the whole baseline regression.
-
-## Bubble handoff collapse during toggles
+K genuinely changed GSMTC transport ownership from:
 
 ```text
-19:07:40 set_state=816 / 10s
-19:07:50 set_state=688 / ~10s
-19:08:00 set_state=560 / 10s
-19:08:10 set_state=831 / 10s
+submit IO work
+-> GUI waits for completion
 ```
 
-Approximate:
+to:
+
 ```text
-81.6/s -> 68.7/s -> 56.0/s -> 83.1/s
+submit IO command
+-> GUI returns immediately
 ```
 
-Logical runtime remains ~89.9 Hz.
+This is a legitimate correction.
 
-## 165 Hz transition failure
+Installed reality falsifies the stronger causal claim that the old wait owned the Pause/Play hitch or broad dispatch starvation.
 
-Completed Blockspin:
+Both:
+- mouse Pause/Play;
+- physical media-key Pause/Play
+
+still hitch.
+
+Therefore K should be retained as a design improvement, but the causal investigation moves downstream to the shared playback-state/presentation edge.
+
+---
+
+# Slice L
+
+L's unit gate proves selected expensive media subpainters are skipped for a clean controls-row-only repaint.
+
+Installed production still shows expensive repeated parent paint activity.
+
+Representative windows:
+
 ```text
-140.7, 144.8, 140.0, 138.1, 136.3, 136.5, 141.3 FPS
+50 calls avg 5.11 ms
+50 calls avg 4.95 ms
+50 calls avg 5.22 ms
+50 calls avg 5.90 ms
+45 calls avg 6.39 ms
 ```
 
-Target:
+Therefore production Gate 7C remains RED.
+
+Potential reasons:
+- real damage coalescing bypasses the fast path;
+- BaseOverlayWidget parent paint remains costly;
+- overlapping invalidation forces wider parent events;
+- feedback is not the only owner of those paint windows.
+
+Do not count the existing focused unit test as product acceptance.
+
+---
+
+# Logical-runtime diagnostic exception
+
+The run contains:
+
 ```text
-165 Hz
+NameError: name 'is_transition_active' is not defined
 ```
 
-Request acceptance:
+from the slow-tick diagnostic path.
+
+This stale reference existed before K/L and cannot explain the broad regression.
+
+It must still be removed and locked with a failure-path test.
+
+---
+
+# Performance regression
+
+Approximate comparison with the previous installed run:
+
+| Metric | Previous | Third |
+|---|---:|---:|
+| 165 Hz transition median | ~140.2 FPS | ~111.5 FPS |
+| 165 Hz worst | ~136.4 FPS | ~64.7 FPS |
+| 165 Hz acceptance median | ~90.1% | ~75.6% |
+| 60 Hz transition median | ~56.9 FPS | ~52.5 FPS |
+| 60 Hz worst | ~55.6 FPS | ~41.3 FPS |
+| event-loop p95 late-run | ~12.9 ms | ~27.7 ms |
+| frame-gap rate | ~0.68/s | ~2.78/s |
+| media.paint average | ~3.16 ms | ~5.37 ms |
+| media.paint CPU/sec | ~14.2 ms | ~20.3 ms |
+| logical skipped deadline rate | ~0.09% | ~0.32% |
+
+Representative 165 Hz windows:
+
 ```text
-90.01%, 92.38%, 89.42%, 87.78%, 90.20%, 87.95%, 88.50%
+108.7
+64.7
+96.1
+114.2
+133.0
+119.7 FPS
 ```
 
-## Delivery-stage attribution
+One delivery window reached roughly:
 
-Representative screen-0 windows:
-- wake lateness p95 generally ~1–2 ms;
-- `paint_pending_skips=0`;
-- substantial `dispatch_pending_skips`;
-- dispatch skip/GUI dispatch tails reach tens to >100 ms.
+```text
+54.47% request acceptance
+673 dispatch_pending_skips
+dispatch-skip age p95 ~143.7 ms
+```
 
-This run does not justify adaptive-timer deadline changes.
+This is not a small miss.
 
-## Required next work
+---
 
-1. Non-blocking transport command ownership.
-2. Real lightweight feedback paint ownership.
-3. One installed acceptance run.
+# Current delivery owner signature
 
-No A/B architecture experiment and no new generic probe phase before those corrections.
+The adaptive timer still generally wakes near its requested deadline.
+
+Observed shape:
+
+```text
+wake lateness: low single-digit ms p95 class
+paint_pending_skips: 0
+dispatch_pending_skips: dominant
+GUI dispatch/skip age: tens to >100 ms
+```
+
+Interpretation:
+
+```text
+deadline source wakes
+-> requests GUI delivery
+-> GUI has not serviced prior delivery
+-> next display opportunity is skipped
+```
+
+GPU remains low.
+
+This is a shared GUI-availability/presentation problem.
+
+---
+
+# All-mode visualizer evidence
+
+The operator explicitly reports the Pause/Play hitch across visualizer modes.
+
+The logs likewise show degraded visualizer handoff/presentation outside Bubble.
+
+Bubble remains the strongest motion canary, not the unique owner.
+
+Do not tune Bubble equations or cadence.
+
+---
+
+# Environment qualification
+
+The third run also had higher total CPU load.
+
+Approximate class:
+
+```text
+system CPU: ~41–44%
+SRPSS CPU: ~104% median-class
+GPU: low few-percent class
+```
+
+This prevents a clean claim that K or L alone numerically caused the whole regression.
+
+It does not excuse SRPSS:
+- SRPSS CPU increased;
+- GUI dispatch deteriorated;
+- physical presentation collapsed;
+- a screensaver on this hardware should not become unusable under this level of CPU contention.
+
+Robustness under ordinary contention is part of the architecture problem.
+
+---
+
+# New active architecture target
+
+The dedicated logical runtime remains correct.
+
+The active suspect is its steady-state notification/delivery mechanism:
+
+```text
+logical worker publishes latest state
+-> request_logical_present()
+-> GUI callback
+```
+
+for ordinary ~90 Hz publications, while physical display presentation is already independently paced.
+
+The next correction should remove callback-per-logical-revision steady-state pressure and let the physical GUI/compositor presentation opportunity sample the latest current-generation logical mailbox state.
+
+Explicit edge/lifecycle GUI mutations remain marshaled.
+
+No FIFO.
+No catch-up.
+No second logical clock.
+No new 90 Hz GUI timer.
+
+This is a production architecture correction, not an A/B experiment.
