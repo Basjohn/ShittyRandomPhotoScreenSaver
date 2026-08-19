@@ -2,1006 +2,852 @@
 
 Last updated: 2026-08-19
 Branch: `main`
-Current source anchor: `257b2823` (sections 3, 4, 5 and the section-7 idle edge landed)
+Current source anchor: `0a06ebe08c6f6f5d5481f838ea2298e959bc9110`
 Named accepted rollback/fidelity baseline: **4.7.2 / `42033c84eabbdf25ccd34bb0e83f9e553f2f8f11`**
-Current-head status: **UNACCEPTED — first installed run after the latest runtime changes regressed materially**
+Architecture epoch: **single-surface OpenGL QRhi compositor + compositor-owned visualizer presentation**
 
-This file owns active unfinished work and execution order. Exact current source plus installed evidence
-override completion messages. Phase reports/history are evidence only.
+This file owns unfinished active work and execution order. Exact current source and installed evidence
+override completion messages and unit-test victory reports.
 
-Do not reopen the single-surface QRhi migration, old Bubble-lane experiments, or already-closed
-lifecycle defects without contradictory evidence.
+The latest installed run is **not** a reason to reopen the QRhi/single-surface architecture. It
+instead identifies three concrete remaining ownership defects and confirms that the dedicated
+logical-runtime extraction is now mandatory.
 
 ---
 
-## 1. Binding architecture / product contract
+## 1. Binding contracts
 
-### 1.1 Presentation
+### Presentation
 
-One physical display owns one accelerated OpenGL QRhi compositor surface.
+One physical display owns one accelerated QRhi/OpenGL compositor surface.
 
-The visualizer is a compositor layer. It does not own another presented QWidget/QRhi/OpenGL surface.
-
-The compositor owns physical presentation opportunities only.
-
-Do not introduce:
-- another visualizer presentation surface;
+The visualizer is a compositor layer. Do not introduce:
+- another presented visualizer surface;
 - another physical presentation clock;
 - paint acknowledgement/backpressure;
 - pending-until-paint admission;
-- producer/display cadence division;
-- repaint rescue/self-requeue loops;
-- CPU/QPainter visualizer fallback;
-- source/event decimation;
-- FIFO/catch-up rendering.
+- source/display cadence division;
+- repaint rescue/self-requeue;
+- FIFO/catch-up render queues;
+- CPU/QPainter visualizer fallback.
 
-### 1.2 Visualizer logical contract
+Physical presentation samples the freshest valid current-generation visualizer state. It does not
+own simulation time.
 
-One visualizer logical owner must integrate:
-- source/audio state;
-- authored dt;
-- transients/events;
-- smoothing;
-- mode-owned simulation/history;
-- current activation/generation;
-- latest render state.
+### Visualizer
 
 All five modes are peers:
-- Bubble
-- Spectrum
-- Sine
-- Oscilloscope
-- DevCurve
+- Bubble;
+- Spectrum;
+- Sine;
+- Oscilloscope;
+- DevCurve.
 
-Do not call a shared cadence/runtime failure a Bubble problem merely because Bubble exposes motion
-holes clearly.
+Preserve current look, shaders, glow, trajectories, transients, smoothing, elasticity, idle
+personality and reaction latency.
 
-### 1.3 Fidelity
+Do not relabel a shared cadence failure as a Bubble problem merely because continuous Bubble motion
+makes it obvious.
 
-Preserve:
-- lowest practical reaction latency;
-- current mode personality;
-- authored transient/event response;
-- continuous smoothing when enabled;
-- current shaders/card styling/glow/geometry;
-- current one-fade presentation ownership;
-- no state poisoning across mode/preset/generation changes.
+### Efficiency
 
-A performance improvement may remove technical work. It may not remove authored work.
+Remove technical work rather than authored work.
 
-### 1.4 Efficiency
+A new thread is allowed when it **replaces one unsuitable owner with one authoritative owner**.
+It is not allowed as a second clock beside the existing one.
 
-Prefer eliminating:
-- duplicate cache/raster work;
-- identical-value invalidation;
-- unnecessary GUI callbacks;
-- redundant presentation;
-- repeated activation/configuration;
-- unnecessary task/Future scaffolding when causally proven;
-- visible post-reveal warmup that can legally happen while hidden.
-
-Use source + existing evidence + production-shaped tests before new probes. Add instrumentation only
-when it will choose between materially different remaining designs.
+No new probe campaign when source + current logs already distinguish the owner.
 
 ---
 
-## 2. Evidence orientation — baseline remains 4.7.2, current head is not accepted
+## 2. Latest installed result — what is accepted and what is not
 
-### 2.1 What the 4.7.2 baseline established
+### 2.1 Global compositor performance is back in the expected class
 
-The installed `42033c84` run remains the rollback/perceptual authority.
+The previous run's apparent ~100–125-FPS collapse was not a clean source-regression comparison.
+The latest run confirms that.
 
-It established:
-- visualizer steady-state motion could be very good;
-- all five modes were capable of roughly the intended high logical cadence;
-- cross-display CUSTOM worked;
-- visualizer Cancel resume worked;
-- Gmail no longer stranded the runtime destruction barrier;
-- 60-Hz delivery was effectively complete;
-- 165-Hz BlockSpin could reach the upper-150/160-FPS class;
-- renderer/GPU cost remained far smaller than the long service holes.
-
-Representative accepted high-refresh BlockSpin evidence:
+Nine complete 165-Hz transition windows in the new archive deliver approximately:
 
 ```text
-16 complete 165-Hz windows:
-median FPS                ~152.45
-median useful acceptance  ~94.79%
-median dt p95             ~12.10 ms
-median dt p99             ~19.99 ms
-median paint p95          ~2.87 ms
-median request-age p95    ~4.38 ms
-
-good low-load windows:
-157.1 FPS
-159.5 FPS
-160.6 FPS
+149.2–158.0 useful accepted frames/sec
+median ~151.6
+useful acceptance ~90.5–95.8%
 ```
 
-Representative 60-Hz evidence:
+Representative BlockSpin windows are again around the accepted low/mid-150 class.
+
+This is close enough to the named 4.7.2 delivery baseline that there is **no current evidence of a
+large sustained compositor regression** from the overlay-frame cache changes.
+
+Do not create a speculative "restore 152 FPS" project.
+
+The remaining product failure is overwhelmingly **visualizer logical/edge smoothness**, not a
+collapsed compositor renderer.
+
+### 2.2 Renderer/GPU remain too cheap to explain the visualizer hitching
+
+In the short 13:18 run:
 
 ```text
-median FPS                ~59.7
-median useful acceptance  ~99.44%
-median dt p95             ~21.1 ms
+Bubble logical tick:
+~60.6 Hz at ~5 s
+~66.0 Hz at ~10 s
+dt_max ~79 ms
+
+visualizer overlay paint p95:
+~0.66 ms
+
+visualizer GPU p95:
+~0.70 ms
+
+state -> paint p95:
+~11.75 ms
 ```
 
-This is not a permanent ceiling. It is the current proof of what the architecture can already do.
+The longer run also contains repeated visualizer logical holes in roughly the 40–85-ms class and
+occasional worse examples across Bubble/Spectrum/other states.
 
-### 2.2 Latest installed run against current head
+This is the exact condition previously defined for replacing the GUI-thread Qt cadence owner.
 
-The 04:34:35–04:37:06 run is the first installed evidence after the latest runtime changes.
+### 2.3 Latest operator acceptance
 
-Operator report:
-- no visible improvement from the latest round;
-- performance feels significantly worse;
-- Media artwork/metadata still disappears on CUSTOM Cancel;
-- visualizer modes briefly stutter when appearing;
-- playback/idle edges still stutter;
-- the previously good steady-state visualizer is no longer consistently smooth.
+Improved:
+- startup and ordinary mode switching are smoother than playback pause/resume;
+- no report of the previous Media Cancel content loss in this run;
+- transition GL compilation is substantially moved earlier.
 
-The logs agree that this run is materially worse.
+Still failed:
+- visualizer still visibly hitches;
+- Play/Pause is the worst edge by far;
+- Pause does not gracefully enter idle;
+- Resume visibly slogs before healthy motion;
+- Spectrum idle does not appear;
+- switching to Spectrum while paused leaves no card;
+- after Settings/reconstruction in that state the runtime comes back as Bubble.
 
-#### 165-Hz BlockSpin
-
-Five complete high-refresh windows:
-
-```text
-139.1 FPS   90.19% accepted
-128.7 FPS   86.99%
-100.7 FPS   81.62%
-125.4 FPS   85.94%
-100.3 FPS   75.77%
-```
-
-Median:
-
-```text
-FPS                     125.4    vs baseline 152.45
-useful acceptance       85.94%   vs baseline 94.79%
-dt p95                  18.37ms  vs baseline 12.10ms
-dt p99                  33.17ms  vs baseline 19.99ms
-paint p95                3.93ms  vs baseline 2.87ms
-request age p95          6.98ms  vs baseline 4.38ms
-```
-
-The worst complete window reached `dt_max=174.36 ms`.
-
-#### 60-Hz side
-
-Five complete windows have approximately:
-
-```text
-58.0
-56.0
-53.0
-56.5
-50.4 FPS
-```
-
-Median:
-
-```text
-FPS                     56.0    vs baseline 59.7
-useful acceptance       95.56%  vs baseline 99.44%
-dt p95                  27.76ms vs baseline 21.1ms
-paint p95                9.49ms vs baseline 6.69ms
-```
-
-#### CPU/GPU
-
-Ignoring the first priming sample in the latest run:
-
-```text
-app CPU median          ~104.8%
-GPU busy median         ~7.4%
-```
-
-The named baseline whole-run post-prime app CPU median was roughly `~73%`.
-
-Do not claim a precise causal CPU regression from this one short run because host conditions differ.
-However, host load cannot explain the complete result: the first high-refresh transition was already
-only ~139 FPS while the system-CPU sampler still reported its zero/priming-class state, and app CPU
-was already materially above the baseline class.
-
-GPU remains light. This is still not a fixed GPU/render ceiling.
-
-### 2.3 The latest runtime code changes are not yet proven to own the global regression
-
-Between `42033c84` and current head, runtime changes are confined to:
-- `widgets/base_overlay_widget.py`;
-- `rendering/widget_manager.py`.
-
-They:
-1. avoid discarding a current painted-frame cache on no-op resize/DPR/screen events;
-2. prepare a painted overlay frame before the overlay reveal request.
-
-The latest `perf_widgets.log` contains **zero** `overlay.frame_shadow.regen` records, versus many in
-the baseline. So those changes achieved their narrow local objective.
-
-They do not obviously explain sustained transition/cadence loss minutes later.
-
-Therefore:
-- retain them provisionally;
-- do not burn a round on an A/B probe campaign;
-- do not call them accepted either;
-- the next installed acceptance decides whether current head as a whole earns the new baseline;
-- if they conflict with the corrections below or the next run remains regressed without another
-  owner, rollback is permitted rather than defending them because tests pass.
+Those failures are supported by current source and logs below.
 
 ---
 
-## 3. ACTIVE — CUSTOM Cancel must preserve live Media content
+## 3. LANDED — Media Cancel ownership correction
 
-Claude declined this correction because the broad Cancel replay produced no measured frame-shadow
-regen. That conclusion is rejected by installed behavior.
+Commit `ad3d79d9...` removed broad Cancel replay for ordinary preview-only live widgets and made the
+two Media size setters no-op on unchanged values.
 
-### 3.1 Evidence
+The latest archive does not contain a fresh CUSTOM Cancel exercise, so this is:
+- **source/test landed**;
+- **not re-proven by this particular installed run**.
 
-CUSTOM is preview-first for ordinary widgets:
-- the live widget is hidden;
-- `EditShellWidget` carries the preview geometry;
-- ordinary drag/resize does not mutate the hidden live widget.
+Do not reopen it unless the next acceptance reproduces artwork/metadata loss.
 
-Yet Cancel still broadly reapplies persisted CUSTOM entries after the shells finish.
-
-The latest run again shows Media being created with:
-
-```text
-payload={artwork_size=220,font_size=19}
-```
-
-and Cancel replaying the **same** payload through:
-
-```text
-replay_start
-replay_after_payload
-replay_after_update_position
-replay_final
-```
-
-The operator again sees the live Media artwork/metadata disappear after Cancel.
-
-Absence of `overlay.frame_shadow.regen` does not make this replay a semantic no-op. Media owns live
-state beyond the painted frame:
-- `_last_info`;
-- `_artwork_pixmap`;
-- applied/pending artwork identity;
-- artwork generation;
-- painter-owned metadata layout;
-- scaled artwork/layout caches;
-- retained media runtime state.
-
-The generic replay path invokes Media size/config setters even when the authored value is unchanged.
-
-### 3.2 Required contract
-
-Cancel means:
-
-```text
-discard edit-shell preview
--> reveal/restore the unchanged live widget
--> resume explicitly suspended special runtimes
--> do not broadly replay persisted payloads into preview-only live widgets
-```
-
-Save remains distinct and may persist/rebuild according to its existing contract.
-
-Audit whether any edit target genuinely mutates its live runtime during preview. Restore only those
-specific owners.
-
-Preserve:
-- visualizer `suspend_for_edit()` / `resume_after_edit()`;
-- recovery-placeholder behavior;
-- original committed geometry;
-- cross-display Save behavior;
-- deferred-image ownership.
-
-### 3.3 Required regression bar
-
-Use a real populated `MediaWidget` with:
-- non-empty `_last_info`;
-- current `_metadata_paint`;
-- current artwork pixmap/key;
-- stable CUSTOM geometry.
-
-Drive:
-
-```text
-live Media
--> enter CUSTOM
--> no Save
--> Cancel
-```
-
-Pass:
-- metadata is unchanged immediately after Cancel;
-- artwork is unchanged immediately after Cancel;
-- no provider poll/refresh is required to repopulate it;
-- geometry remains the original committed geometry;
-- visualizer still resumes exactly once;
-- no broad persisted-layout replay is required for untouched preview-only widgets.
-
-Do not add another diagnostic family first.
+The next acceptance must still exercise one populated Media Cancel to close it installed.
 
 ---
 
-### Landed
+## 4. ACTIVE CORRECTION — pre-reveal GL warmup has a multi-display hold ownership bug
 
-The rejection was wrong and is withdrawn: absence of `overlay.frame_shadow.regen` measured paint
-cost, not semantic state loss.
+The new warmup design is directionally correct but not yet correct on two displays.
 
-Audited every edit target. `_start_session_local()` hides the live widget and an `EditShellWidget`
-carries the preview, and the only live-runtime mutations during a session are the visualizer
-(explicit `suspend_for_edit()`) and the recovery placeholder (deleted by `_finish_session()`). No
-ordinary widget diverges, so replaying a persisted payload into one restores nothing.
+### Proven log sequence
 
-`cancel_session()` now restores only `_CANCEL_RESTORE_WIDGET_IDS` (the visualizer) through a new
-`only_widget_ids` filter on `apply_saved_layouts_to_display()`. Save and ordinary startup replay are
-unchanged. `MediaWidget.set_artwork_size()`/`set_font_size()` also return early on an unchanged
-value, matching their background-style siblings, so a repeated identical apply from any caller can
-no longer rebuild the card from a possibly empty `_last_info`.
-
----
-
-## 4. ACTIVE — the actual visible startup GL warmup problem was NOT fixed
-
-The previous requested startup correction was to move normal deferred transition GL program/resource
-warmup before visible reveal.
-
-That did not happen.
-
-The landed work moved **widget painted-frame preparation** earlier. Useful, but different.
-
-### 4.1 Current source still deliberately blocks normal GL warmup during fade
-
-`rendering/gl_compositor_pkg/gl_lifecycle.py::_deferred_warmup_block_reason()` still returns:
+On the 13:18 reconstruction, screen 1 behaves correctly:
 
 ```text
-startup_hold
-first_frame
-startup_fade
-```
-
-and specifically blocks deferred warmup while the fade coordinator is `FADING`.
-
-### 4.2 Latest installed log proves the old ordering remains
-
-At startup:
-
-```text
-first frame ready
-critical GL ready
+screen 1:
+hold = gl_transition_warmup
+deferred warmup starts
+raindrops/wipe/.../burn compile
+Pre-reveal transition warmup settled
+hold clears
 fade starts
-...
-fade_completed=True
-deferred_gl_warmup_started=False
-...
-fade_completed=True
-deferred_gl_warmup_started=True
 ```
 
-for both displays.
-
-So the runtime still reveals first and then begins the remaining deterministic GL transition
-program/resource preparation.
-
-That is exactly the visible-startup policy we intended to remove.
-
-### 4.3 Required correction
-
-Use the existing startup/recreation readiness transaction.
-
-Preferred shape:
+Screen 0 does not:
 
 ```text
-QRhi generation/context ready
--> first-frame critical resources ready
--> acquire/retain a current-generation startup hold
--> prepare normal transition programs/resources legally while still hidden/fade-zero
--> release hold
--> visible fade
+screen 0:
+hold = gl_transition_warmup
+...
+screen 1 settles
+screen 0 hold is now gone
+screen 0 fade starts
+screen 0 deferred warmup starts
+screen 0 raindrops/wipe/.../burn compile
 ```
 
-The real owned work, not an arbitrary delay, releases readiness.
+So one display is still compiling its normal transition programs **after its visible fade begins**.
 
-It is acceptable for hidden startup/recreation to take somewhat longer if first-visible motion is
-already ready.
+### Exact source cause
 
-Preserve:
-- current QRhi context ownership;
-- current offscreen/shared-context legality;
-- generation fencing;
-- exact resource deletion;
-- all transition programs/fidelity.
+`gl_lifecycle.py` currently makes each compositor's hold global:
 
-Do not:
-- add a fixed startup sleep;
-- compile GL on an illegal worker/context;
-- add another timer/presentation surface;
-- use `glFinish()` as a shortcut;
-- remove transition programs to avoid their cost.
+```text
+_fade_coordinators_for_compositor(widget)
+    -> enumerates all live display fade coordinators
 
-### 4.4 Bars
+_acquire_pre_reveal_warmup_hold(widget)
+    -> adds the same string "gl_transition_warmup" to every coordinator
 
-Prove:
-- normal transition programs/resources intended for the generation are ready before visible fade;
-- no normal deferred transition compile burst begins only after `fade_completed=True`;
-- first use of a transition does not cold-compile something startup promised to prepare;
-- stale-generation warmup cannot apply;
-- cleanup retires shared/offscreen warmup ownership exactly.
+_release_pre_reveal_warmup_hold(widget)
+    -> releases that same string from every coordinator
+```
 
-This is a source-proven ordering bug. Do not probe it again before fixing it.
+The coordinator hold is a named-set style contract, not a per-compositor reference count.
+
+Therefore the first compositor to finish can release the second compositor's protection.
+
+This is a real ownership bug, not a timing hypothesis.
+
+### Required correction
+
+One compositor must never release another compositor's warmup obligation.
+
+Use a bounded ownership model such as:
+- unique current-generation hold tokens per compositor on the shared startup barrier; or
+- one explicit aggregate startup-warmup owner that releases only after every current-generation
+  compositor reports complete.
+
+Preferred behavior is still globally safe on multi-display startup:
+- no display begins visible fade while another display is about to monopolize the GUI thread with
+  its deterministic startup GL compile burst.
+
+Do not solve this with:
+- sleeps;
+- longer arbitrary delays;
+- a second timer;
+- compiling GL on an illegal worker/context;
+- removing transition programs.
+
+### Bars
+
+Production-shaped dual-display test:
+- two compositor owners acquire distinct obligations;
+- compositor A completion cannot release B;
+- fade cannot begin while any current-generation obligation remains;
+- both complete -> release -> fades may begin;
+- stale/retired generation completion cannot release a current generation;
+- failure/no-context/RHI-retire paths settle only their own obligation;
+- single-display path remains simple.
+
+Installed log must show **both displays** completing normal warmup before either visible startup fade
+is released.
 
 ---
 
-### Landed
+## 5. ACTIVE CORRECTION — Spectrum idle exists in code but is unreachable
 
-The compositor takes a `gl_transition_warmup` startup hold when the warmup queue is armed, and
-releasing that hold is what lets the fade start. Its own hold no longer reads as a block reason, and
-`FADING` only blocks once the pre-reveal window is over.
+The static Spectrum idle visual itself is fine.
 
-Pacing follows visibility: at fade-zero there is no live cadence to protect, so the queue drains
-inside the held window instead of one program per 140 ms slice; once visible the original paced
-cadence is unchanged.
+`idle_spectrum_baseline()` is a deterministic 1–3% presentation floor with no fake audio, time term
+or random input.
 
-Real completed work releases the hold. Every path that schedules no further work settles it - GL
-disabled, no warmup context, no base surface, nothing remaining - and RHI release settles it, so a
-retiring generation cannot strand a fade. The 5 s budget is a fail-safe only, and a compositor with
-no fade coordinator keeps the previous paced behaviour rather than inventing a hold nothing can
-release.
+The bug is the state path that prevents it from ever reaching presentation.
 
----
+### 5.1 Proven paused-switch deadlock
 
-## 5. ACTIVE — Spectrum gets a real idle presentation
+Current `tick_pipeline.py` intentionally excludes Spectrum from
+`_IDLE_SELF_ANIMATING_MODES`.
 
-Spectrum is currently the only visualizer mode whose startup/card reveal is gated on real playback.
+While paused after a Spectrum activation:
 
-### 5.1 Source truth
+```text
+_waiting_for_fresh_engine_frame = True
+```
 
-Both:
-- `startup_staging.mode_allows_idle_reveal()`;
-- `tick_pipeline._mode_allows_idle_reveal_key()`
+The consume path only clears that wait for `_IDLE_SELF_ANIMATING_MODES`.
 
-currently allow idle reveal for:
+Spectrum therefore remains waiting for an engine frame that cannot arrive while capture is paused.
+
+The tick then returns early while waiting.
+
+`push_gpu_frame()` is downstream of that return.
+
+But `push_gpu_frame()` is the only normal call site that invokes:
+
+```text
+resolve_widget_spectrum_presentation(...)
+```
+
+which is where the static idle baseline is created.
+
+So the system currently says:
+
+> Spectrum's idle presentation needs no source frame,
+> but do not call Spectrum's idle presentation until a source frame arrives.
+
+That directly explains the blank card after switching to Spectrum while paused.
+
+### 5.2 Why Settings comes back as Bubble
+
+The latest log shows:
+
+```text
+13:18:25 request Bubble -> Spectrum
+13:18:27 logical mode becomes Spectrum
+...
+13:18:35 phase=2, waiting_engine=True, waiting_frame=True
+```
+
+There is no successful `Persisted vis mode: spectrum` before the subsequent Settings recreation.
+
+At 13:18:40 the replacement runtime therefore starts from persisted Bubble again.
+
+This is a consequence of the stuck Spectrum transition, not evidence that Settings independently
+chooses Bubble.
+
+### 5.3 Second duplicate capability bug
+
+`media_bridge.seed_playback_state_from_anchor()` still has its own hard-coded idle-capable set:
 
 ```text
 bubble
 sine_wave
-oscilloscope
 devcurve
 ```
 
-and exclude `spectrum`.
+It omits both Oscilloscope and the newly-idle Spectrum.
 
-That directly explains the installed behavior:
-- starting while Spectrum is selected and no music is playing shows no visualizer card;
-- playback later has to bring the Spectrum scene into existence from a dormant state.
+That duplicates and contradicts `startup_staging.mode_allows_idle_reveal()` / tick-pipeline
+capability logic.
 
-### 5.2 Desired idle look
+A provisional retained paused media seed can therefore still block Spectrum startup/reconstruction
+even though Spectrum is now supposed to have a presentation-owned idle scene.
 
-Start with the cheapest safe design:
+### Required correction
 
-**a tiny deterministic static Spectrum baseline**.
+Separate these concepts explicitly:
 
-For example:
-- same normal bars;
-- same authored colours/borders/glow;
-- roughly 1–3% visible height;
-- slight fixed bar-to-bar variation is allowed if it looks better;
-- no fake transients/energy/audio.
+1. **may reveal/present while idle**;
+2. **creates logical idle motion without source**;
+3. **requires a fresh real source before reactive playback bars receive authority**.
 
-Do not initially add a moving left-to-right pulse. A static idle scene should settle to one scene
-revision, allowing existing unchanged-scene suppression to make the physical steady cost almost
-zero.
+Spectrum must be:
 
-If a future aesthetic pulse is desired, it must use the one authoritative logical visualizer clock,
-not another timer.
+```text
+idle reveal allowed            YES
+idle self-animation            NO
+presentation-owned idle scene  YES
+fresh real source for PLAY     YES
+```
 
-### 5.3 Ownership
+While paused, Spectrum may publish its presentation-owned idle frame even if
+`_waiting_for_fresh_engine_frame` remains true for future reactive source authority.
 
-Idle Spectrum is **presentation state**, not synthetic audio.
+Do **not**:
+- mark the engine generation fresh;
+- invent source-generation ids;
+- feed baseline values into BeatEngine/audio/transient state;
+- grant stale bars reactive authority.
 
-Do not inject fake values into:
-- audio capture;
-- BeatEngine source bars;
-- source generation;
-- energy/transient buses;
-- onset logic.
+When Play begins, current activation/generation source gating remains strict. Fresh real Spectrum
+bars replace the idle presentation in place.
 
-When real playback arrives:
-- authoritative real Spectrum data takes over immediately;
-- the card does not disappear/recreate;
-- no cold startup stage is re-entered;
-- no new presentation clock is created.
+### Canonicalize capability ownership
 
-All five modes should therefore share the high-level rule:
+Remove the duplicate idle-mode sets from `media_bridge`, `startup_staging`, and tick logic.
 
-> the visualizer/card can exist while idle; real music reactions require real authoritative source.
+Use one canonical visualizer-mode capability source/helper/registry so startup, runtime, mode
+transition and media seeding cannot disagree again.
 
-### 5.4 Bars
+### Bars
 
-Prove:
-- cold startup on Spectrum while paused reveals the card and tiny idle Spectrum;
-- source/energy generations still indicate no invented audio;
-- steady idle does not produce continuous scene revisions merely to stay visible;
-- Play replaces idle bars with real source bars without card recreation/pop/stall;
-- Pause returns to idle presentation without hiding/restarting the logical runtime.
+Production-shaped tests must drive the real tick path:
+
+```text
+paused
+-> switch to Spectrum
+-> target generation waiting for real source
+-> idle card/baseline nevertheless publishes
+-> fade completes
+-> Spectrum mode persists
+```
+
+Then:
+
+```text
+Settings/recreate while paused with Spectrum persisted
+-> runtime remains Spectrum
+-> card + idle baseline reveal
+-> no real source generation is fabricated
+```
+
+Then Play:
+- idle scene stays visible;
+- fresh current-generation real bars become authoritative;
+- no blank/recreate/pop.
 
 ---
 
-### Landed
+## 6. ACTIVE CORRECTION — playback state debounce currently owns visible animation
 
-`idle_spectrum_baseline()` is a pure function of the bar count - no time term, no randomness, and
-nothing from audio capture, the BeatEngine, source bars, generations or the
-energy/transient/onset buses. Steady idle settles to one scene revision, so existing unchanged-scene
-suppression keeps its physical cost near zero. Real values win wherever they exceed the floor, so
-Play replaces the resting bars in place with no card recreation.
+This is the clearest cause of the user's worst pause/resume slog.
 
-Reveal and source authority were deliberately separated rather than sharing one set, which the first
-attempt got wrong. Spectrum joins the idle-reveal set but is **not** idle self-animating: it keeps
-waiting for a fresh engine frame while paused, and `_mode_requires_authoritative_first_source()` now
-keys on self-animation, so every bar Spectrum shows during playback still proves it came from the
-current activation. The idle cold-start handoff no longer waits on an engine frame that a
-presentation-owned idle scene never needs.
+### 6.1 Current coupling
+
+`media_bridge.py` defines:
+
+```text
+_PLAYBACK_PAUSE_CONFIRM_MS = 700
+```
+
+A `paused`/`stopped` media update while `_spotify_playing=True` does not immediately change the
+visualizer's logical playback state. It arms a Qt timer.
+
+Any wobbling update can cancel/re-arm that timer.
+
+Only after confirmation does `_commit_playback_state()` flip `_spotify_playing`.
+
+That same boolean currently controls both:
+- whether the visualizer evolves as active vs idle;
+- BeatEngine playback/capture policy.
+
+### 6.2 Installed evidence
+
+The long run records deferred pause messages at approximately:
+
+```text
+13:15:14
+13:15:16
+13:15:17
+13:15:19
+13:15:23
+```
+
+The BeatEngine does not finally enter non-playing/warm-capture state until roughly:
+
+```text
+13:15:24
+```
+
+So the nominal 700-ms visual debounce can become many seconds of visible limbo when media state
+wobbles or the user retries the command.
+
+The short run shows the same pattern around 13:18:16–13:18:21.
+
+That matches the operator's report that pause/unpause is substantially worse than ordinary mode
+switching.
+
+### 6.3 Capture already has its own anti-churn policy
+
+BeatEngine already has:
+
+```text
+_capture_keepalive_grace = 6.0 seconds
+```
+
+On Play -> Pause it keeps capture warm for six seconds.
+
+If Play returns within that window, the engine logs a warm resume and avoids the cold reactivity
+ramp.
+
+Therefore the visualizer does **not** need a 700-ms delayed visible-state transition merely to
+protect capture from short provider wobble.
+
+### Required ownership split
+
+Separate:
+
+**logical/presentation playback target**
+- changes promptly from the trusted MediaWidget state/user intent;
+- drives active -> idle and idle -> active visual evolution;
+- must never wait multiple seconds for capture-retirement policy.
+
+**capture/service lifetime**
+- may keep loopback capture warm for the existing bounded grace;
+- may absorb provider wobble without tearing the worker down;
+- remains BeatEngine/service policy.
+
+The visualizer bridge should trust the canonical MediaWidget normalized/optimistic state rather than
+adding another visible-state debounce timer on top of MediaWidget's own override logic.
+
+Do not replace the 700-ms timer with a different animation timer.
+
+### Edge behavior
+
+Pause:
+- preserve current mode/card/GL resources;
+- immediately begin authored transition toward that mode's idle state;
+- no clear/rebuild;
+- no generation churn solely because playback paused;
+- capture may remain warm separately.
+
+Resume while capture warm:
+- same logical runtime continues;
+- fresh source takes authority as soon as available;
+- no cold startup staging;
+- no card recreation;
+- no 1.5-s cold ramp when the existing warm-resume contract applies.
+
+If stale provider updates need rejection, solve that at the canonical Media state/override owner, not
+by freezing the visualizer in its old state.
 
 ---
 
-## 6. ACTIVE MAJOR P2 — isolate visualizer logical cadence from the Qt GUI event loop
+## 7. ACTIVE MAJOR P2 — replace the GUI-QTimer logical cadence owner now
 
-The entry condition is now met.
+This is mandatory in this round.
 
-This is no longer a Future-Cleanup idea.
+Do **not** stop after Sections 4–6 and request another acceptance.
 
-### 6.1 Why it is active now
+The latest installed run again satisfies the previously agreed trigger:
+- logical cadence can fall to ~60–66 Hz;
+- recurring ~40–80+ ms logical holes remain;
+- renderer/GPU are sub-ms class;
+- state->paint is healthy enough;
+- no individual visualizer mode workload explains the holes.
 
-Latest visualizer evidence again shows large logical service holes while rendering remains cheap.
+Claude's concern that the extraction is large is reasonable, but the plan already chose the
+architecture precisely to avoid another probe loop. The implementation must now do the bounded
+structural replacement rather than leave the known wrong owner in place.
 
-Initial current-head Bubble session:
+### 7.1 Target
 
-```text
-~0.4s   24.9 logical FPS   dt_max 58.1 ms
-~5.4s   66.1               dt_max 61.5 ms
-~10s+   ~75–82 class
-~30s    79.1               dt_max 95.9 ms
-```
-
-The run repeatedly reports tick gaps in roughly the 50–110+ ms class, including examples near
-115 ms and 150 ms.
-
-Later DevCurve and Bubble periods show the same broad hole class.
-
-Meanwhile representative visualizer presentation remains inexpensive:
+Same process. Python first.
 
 ```text
-visualizer GL/GPU p95       roughly sub-1ms class in many windows
-overlay paint CPU p95       roughly ~1ms class
-state -> paint p95          commonly ~8–12ms
-```
-
-The renderer cannot explain a 60–150 ms logical freeze.
-
-The present logical owner is still a GUI-thread Qt timer.
-
-Known shared waste has been removed repeatedly, yet ordinary authored cadence still depends on Qt
-event-loop service.
-
-That is enough evidence to replace the cadence owner rather than start another timer-probe campaign.
-
-### 6.2 Target architecture
-
-First implementation should remain:
-- inside the existing SRPSS process;
-- Python;
-- one dedicated **non-Qt** visualizer logical thread;
-- one authoritative logical visualizer clock for all modes.
-
-Conceptually:
-
-```text
-audio / media / config inputs
+Audio / analysis producer
+        |
+        v
+immutable latest analysis/source snapshot
         |
         v
 VisualizerLogicalRuntime
-  standard Python thread
-  monotonic deadlines
-  no QObject
-  no QTimer
-  no QWidget
-  no QPixmap
-  no OpenGL
+  one standard-Python thread
+  one monotonic deadline owner
+  no QObject/QTimer/QWidget/QPixmap/OpenGL
+  all five mode logical state
+  playback target / idle evolution
+  activation + generation fencing
         |
         v
-bounded latest-state mailbox
-  immutable current-generation state
-  monotonically increasing revision
+immutable latest VisualizerRenderState + revision
         |
         v
-existing GUI/compositor owner
-  samples latest state
-  uploads/draws legally
-  one QRhi surface
+existing GUI/compositor
+  samples freshest state
+  card/geometry/fade
+  GL upload/shader
+  physical presentation
 ```
 
-### 6.3 Do not move the current widget tick wholesale to a worker
+### 7.2 Replace, do not add
 
-Current `_on_tick()` and helpers still know about QWidget/compositor/UI state.
+There must be one authoritative logical clock after landing.
 
-Extract the logical core.
+The existing recurring visualizer `QTimer` must cease to own simulation cadence.
 
-The logical runtime may own:
-- monotonic cadence/deadline;
-- playback/idle logical state;
-- current mode/activation;
-- source-frame consumption;
-- event/transient integration;
+Do not leave:
+- a worker logical clock plus the old QTimer;
+- a hidden fallback logical timer;
+- an AnimationManager logical tick;
+- per-mode timers.
+
+Qt can still own ordinary UI deadlines and physical presentation.
+
+### 7.3 Extraction boundary
+
+Do not move current `_on_tick()` wholesale to a worker.
+
+Split its concerns.
+
+The logical runtime owns only plain-data work:
+- monotonic dt/deadline;
+- current mode and activation identity;
+- playback target;
+- analysis/source snapshot consumption;
+- source freshness bookkeeping represented as plain data;
 - mode simulation;
-- smoothing;
-- current render-state construction;
-- latest revision publication.
+- smoothing/envelopes/transients;
+- idle evolution;
+- immutable render-state construction.
 
-The GUI side retains:
-- QWidget/CUSTOM anchor;
-- card pixels;
-- geometry;
-- Qt signals/controls;
-- QRhi/GL resources;
-- shader/buffer upload;
+GUI remains owner of:
+- QWidget state;
+- settings controls;
+- CUSTOM geometry;
+- QPixmap/card rendering;
 - presentation fade;
-- physical display timing.
+- QRhi/GL resource creation/deletion;
+- shader/buffer upload;
+- display physical cadence.
 
-### 6.4 Bounded latest-state bridge
+Transition-running state must not retune logical cadence.
 
-Do not create one queued GUI callback per logical step.
+### 7.4 Analysis bridge
 
-Prefer:
-- one immutable latest-state slot/mailbox;
-- one revision;
-- compositor/presentation owner samples the freshest current-generation state at its existing
-  physical opportunity;
-- superseded unpublished state is replaced, not queued.
+Do not make the logical thread call arbitrary QObject-owned APIs.
 
-No FIFO. No catch-up replay.
+Expose the audio/BeatEngine results needed by logical simulation through a bounded immutable/plain
+snapshot boundary.
 
-A 165-Hz display may physically present the latest ~100-Hz authored states without redrawing an
-unchanged scene. A 60-Hz display may sample the same ~100-Hz logical runtime at ~60-Hz physical
-presentation.
+Latest replaces older latest. No analysis FIFO/catch-up.
 
-All authored inputs/events still integrate logically even when every intermediate logical snapshot
-cannot physically appear.
+All authored events/transients that must survive sampling need to be integrated into the snapshot or
+event state before they can be overwritten.
 
-### 6.5 Thread/lifecycle ownership
+### 7.5 Render-state bridge
 
-The logical thread must not become an invisible daemon that survives runtime replacement.
+Do not queue one GUI callback per logical step.
 
-It must:
-- have one explicit visualizer/runtime-generation owner;
-- have a stop/wake primitive;
-- quiesce/join before its runtime generation is destroyed;
-- reject publication from retired generation/activation;
-- retain no QWidget/QObject/GL references;
-- be visible to lifecycle accounting or have an equally explicit owner/bar proving termination.
+Use a latest-state mailbox/slot with:
+- immutable current-generation state;
+- monotonically increasing revision;
+- replacement of superseded unpublished state.
 
-Do not reuse/reactivate the rejected persistent Bubble lane.
+Prefer the existing compositor/presentation opportunity sampling that mailbox. A bounded
+single-pending GUI nudge is acceptable only if required to wake an otherwise-idle compositor.
 
-This is a mode-general runtime, not a Bubble scheduler.
+No backlog.
 
-### 6.6 Python/GIL scope
+### 7.6 Playback/idle belongs here
 
-Use the in-process Python thread first.
+Section 6's ownership split should converge into this runtime.
 
-Do not jump to a helper process/C++ rewrite in this round.
+The logical cadence must not drop from active to a separate 75-Hz clock merely because playback
+paused.
 
-If the isolated runtime later proves materially GIL-starved by Python-heavy GUI work, that becomes a
-new bounded architecture decision based on the clean thread boundary. Do not pre-emptively add IPC
-or native code.
+Current `resolve_max_fps()` has a paused cap of 75 Hz. That policy belongs to the old QTimer
+architecture and should not survive merely by inertia.
 
-### 6.7 Preserve exact mode behavior
+Preserve the intended ~90–100-Hz authored logical service class across active/idle states unless a
+mode is truly static:
+- static Spectrum idle may publish once and stop changing revision;
+- other idle modes continue their authored motion;
+- physical presentation suppression already prevents useless duplicate redraws.
 
-Reuse existing pure mode maths/state where possible. Move ownership, not aesthetics.
+Do not lower logical cadence to manufacture efficiency.
 
-Require current all-mode goldens/temporal tests to remain equivalent for:
-- Bubble trajectory/reaction;
-- Spectrum bar response/smoothing;
-- Sine waveform/heartbeat/crawl;
-- Oscilloscope waveform behavior;
-- DevCurve layer/idle behavior.
+### 7.7 Mode activation
 
-A larger extraction is acceptable if it deletes the GUI-timer ownership and redundant state-machine
-plumbing rather than layering a second clock beside it.
-
----
-
-### NOT LANDED — still the next major P2 item
-
-This section was not attempted in the 2026-08-19 round, and nothing was half-built toward it. The
-entry condition and the target architecture above stand unchanged.
-
-Reasoning, so the next round does not re-derive it:
-
-- the extraction spans `tick_pipeline.py` (~1450 lines) plus `tick_helpers.py` (~578) and the widget
-  tick entry, and section 6.3 correctly forbids moving `_on_tick()` wholesale, so the logical core
-  has to be separated from transition context, timer interval management, teardown state and the
-  compositor push first;
-- section 6.7 requires all five modes to stay equivalent against their goldens, which is the real
-  cost of the change rather than the thread itself;
-- landing an unvalidated cadence-ownership rewrite immediately before the single acceptance run,
-  on a head already marked UNACCEPTED, would make that run uninterpretable: a regression could not
-  be attributed between the new runtime and the existing regression under investigation.
-
-A partial extraction that leaves a second clock beside the Qt timer is explicitly forbidden by
-sections 1.1, 6.4 and 9, so no intermediate shape was landed either.
-
-The next round should begin here, from the post-acceptance evidence.
-
----
-
-## 7. ACTIVE WITH SECTION 6 — remove mode/playback edge stalls, do not add another state machine
-
-The operator sees brief stutter:
-- when a visualizer mode comes on;
-- when playback leaves active state;
-- when it returns from idle.
-
-Some of this is the same GUI cadence starvation described above. Current source also contains a
-separate structural seam worth fixing while logical ownership moves.
-
-### 7.1 Current mode-switch path is still destructive
-
-`mode_transition.py` currently performs, around a normal switch:
-- fade old mode out;
-- `_clear_gl_overlay()`;
-- apply target activation;
-- reset mode-owned runtime state;
-- clear runtime bars;
-- cancel pending compute;
-- reset smoothing/floor;
-- potentially rebuild technical config;
-- potentially restart capture for a block-size change;
-- wait for fresh bars/waveform or timeout;
-- then fade target in.
-
-Some of that reset work is required. Some exists because mode logic, engine state, GUI state and
-presentation readiness are still intertwined.
-
-Do not optimize each mode separately.
-
-### 7.2 Desired edge contract
-
-After the logical-runtime extraction:
-
-**Mode switch**
-- presentation fade remains owned by the existing compositor/fade contract;
-- target activation is one atomic logical-runtime transaction;
-- mode-owned state resets once;
-- logical runtime keeps its one authoritative cadence;
-- GL/card ownership stays alive unless a real GL resource identity changed;
-- target fade-in waits only for the target logical activation/state actually required;
-- no duplicate engine/config reset.
-
-**Pause / idle**
-- logical runtime continues at its authored idle cadence;
-- idle-capable mode state keeps evolving;
-- Spectrum uses its static idle presentation;
-- source capture may warm-pause/stop according to its existing service policy;
-- the visualizer/card is not torn down merely because playback paused.
-
-**Resume**
-- real source becomes authoritative when fresh;
-- no cold visualizer startup staging;
+A mode switch becomes one logical activation transaction:
+- one target identity;
+- one mode-owned reset;
+- no duplicate config/engine generation;
 - no logical-thread restart;
-- no full card/GL recreation;
-- no visual blank while capture catches up.
+- presentation fade remains GUI/compositor-owned.
 
-### 7.3 Tests
+Playing target modes still require fresh current-activation real source where their visuals need it.
 
-Production-shaped all-mode edge bars should cover:
-- playing -> pause -> idle -> play;
-- long enough idle for capture to stop, then play;
-- mode switch while playing;
-- mode switch while idle;
-- each target mode becomes visible without a 0.35/1.5-second timeout being normal control flow;
-- no extra activation generation;
-- no duplicate audio restart;
-- no stale old-mode state;
-- all five mode feel/goldens preserved.
+Idle-ready modes can publish their authored idle scene without waiting for impossible paused source.
 
-A timeout may remain fail-safe. It must not be the normal successful reveal owner.
+### 7.8 Thread lifecycle
 
----
+The logical runtime is runtime-generation owned.
 
-### Partially landed — the part independent of section 6
+It must have:
+- explicit start;
+- explicit stop/wake primitive;
+- bounded quiesce/join before runtime destruction;
+- no daemon escape hatch;
+- no QWidget/QObject/QPixmap/GL references;
+- stale generation/activation publication rejection;
+- destruction-barrier accounting or an equally explicit lifecycle bar.
 
-`check_mode_teardown_ready()` waited for the engine to deliver a frame at or beyond the target
-generation before fading a new mode in. While paused there is no capture and no such frame arrives,
-so the 0.35 s fallback was the normal control flow for every paused mode switch - a visible stall on
-exactly one of the reported edges, and a direct violation of section 7.3.
+CUSTOM Edit should suspend presentation as it does now. It must not destroy/recreate the logical
+thread merely for preview.
 
-A paused switch into an idle-capable mode is now ready as soon as the mode is idle-ready. A playing
-switch is unchanged and still proves its source, waveform modes still wait for a waveform, and the
-timeout keeps its original fail-safe role for a stalled playing switch or a mode with no idle scene.
+Settings/full runtime replacement retires the old logical runtime before the new generation may
+publish.
 
-The remaining section 7.2 contract (one atomic logical activation transaction, single reset, no
-duplicate engine/config reset, resume without cold staging) is stated to follow the section 6
-extraction and is therefore still open.
+### 7.9 Fidelity bars
 
----
+Use the existing all-mode goldens and production-shaped tests.
 
-## 8. Status of current overlay pre-reveal frame work
+Must preserve:
+- Bubble trajectory/reactivity;
+- Spectrum response/glow/smoothing;
+- Sine waveform/heartbeat behavior;
+- Oscilloscope waveform behavior;
+- DevCurve layers/idle behavior;
+- all transients/events;
+- current mode activation semantics.
 
-Keep the two latest frame-cache changes while the active work above proceeds.
+A test that proves only “the thread ran” is insufficient.
 
-They have one useful demonstrated effect:
-- current `perf_widgets.log` shows no painted-frame shadow regeneration family in the latest run.
+### 7.10 No premature native escalation
 
-But:
-- the user saw no perceptual improvement;
-- the current head's global performance is unaccepted.
+Do not use:
+- helper process;
+- C/C++;
+- native extension
 
-Do not spend a separate round proving these changes again.
+in this round.
 
-At the next installed gate:
-- if performance returns to or exceeds the 4.7.2 class, keep them;
-- if the application remains materially below baseline and no newer owner explains it, include them
-  in rollback/reassessment rather than declaring them safe solely from unit tests.
+If the clean in-process Python runtime later proves materially GIL-starved, that becomes a new
+decision from a much cleaner boundary.
 
 ---
 
-## 9. ONE installed acceptance after Sections 3-7
+## 8. Current mode-switch reset path — simplify only where the new runtime makes it obsolete
 
-Sections 3, 4, 5 and the section-7 idle edge are landed; section 6 and the rest of section 7 are
-not. The run below therefore judges the current head against the 4.7.2 baseline **with the Qt-timer
-logical cadence owner still in place**, which is the same owner the regressed run had.
+Ordinary mode switching is now visibly better than playback pause/resume.
 
-Expect the functional gates (9.1) and the startup/recreation gate (9.2) to be decidable. The
-cadence gate (9.3) can only show whether the landed waste/ordering corrections moved it; the
-recurring logical holes are section 6's target and are not expected to be resolved by this round.
+Do not start an independent mode-switch rewrite.
 
-The run's other job is section 2.3: decide whether current head as a whole earns the baseline back,
-or whether the retained overlay frame-cache changes belong in rollback.
+While extracting Section 7, remove only technical reset/wait machinery made obsolete by the new
+logical owner, especially:
+- duplicate logical resets;
+- waiting on source that an idle presentation does not require;
+- timer-interval retuning;
+- GUI-tick-specific transition context.
+
+Keep:
+- one presentation fade authority;
+- one target activation;
+- real-source freshness for active playback;
+- strict old-generation rejection.
+
+The timeout in `check_mode_teardown_ready()` may remain a fail-safe. It must not be normal successful
+control flow.
+
+---
+
+## 9. ONE installed acceptance after Sections 4–8
 
 No intermediary installed runs.
 
-After:
-1. Media Cancel ownership correction;
-2. actual pre-reveal GL warmup ordering;
-3. Spectrum idle presentation;
-4. mode-general logical-runtime isolation;
-5. mode/playback edge continuity;
-
-and after focused/combined automated gates are green, request one:
+Request:
 
 ```text
 python main.py --perf --gpu-timing --geo
 ```
 
-### 9.1 Functional
+### Startup / GL
 
-Exercise:
-- cold startup while paused;
-- Spectrum selected at cold startup with no music;
-- all five modes;
-- all five mode switches;
-- Play -> Pause -> idle -> Play;
-- long-idle capture stop -> Play if practical;
-- CUSTOM enter -> Cancel;
-- Media content before/after Cancel;
-- visualizer Cancel resume;
+Prove on both displays:
+- each current-generation warmup obligation remains owned until that compositor/aggregate is done;
+- no normal transition-program compile begins after either display's visible fade starts;
+- no hold timeout is normal control flow;
+- first visible motion is already past deterministic GL warmup.
+
+### Spectrum
+
+Start the application while paused with Spectrum persisted:
+- it remains Spectrum;
+- card is visible;
+- static low Spectrum baseline is visible;
+- no fake source generation is created.
+
+While paused:
+- switch another mode -> Spectrum;
+- card/baseline appears;
+- fade completes;
+- Spectrum persists.
+
+Then Settings/recreate:
+- Spectrum remains Spectrum;
+- no Bubble fallback.
+
+Then Play:
+- real current-generation Spectrum bars replace idle presentation without blanking/recreation.
+
+### Play/Pause
+
+Exercise repeated:
+- Play -> Pause;
+- Pause -> Play;
+- quick toggle;
+- a pause long enough for capture keepalive to expire if practical.
+
+Pass:
+- visual transition to idle begins promptly;
+- no multi-second debounce limbo;
+- warm resume is immediate/smooth;
+- no card/GL/logical-runtime restart;
+- capture keepalive remains bounded and independent.
+
+### All modes
+
+Exercise all five:
+- playing;
+- idle;
+- mode switching;
+- resume.
+
+Pass installed feel before counters.
+
+### Logical cadence
+
+The dedicated runtime must show:
+- one authoritative non-Qt cadence owner;
+- steady authored cadence back near the intended ~90–100-Hz class;
+- ordinary GUI event-loop stalls no longer create equivalent 40–80-ms **simulation** freezes;
+- no FIFO/catch-up;
+- no source/transient loss;
+- no second logical clock.
+
+Physical presentation can still miss a frame when the GUI is busy; simulation must no longer freeze
+with it.
+
+### Compositor
+
+Preserve current recovered delivery class.
+
+Recent accepted/current evidence says high-refresh transitions are again roughly:
+
+```text
+~149–158 useful accepted FPS
+median ~151.6
+```
+
+Do not trade transition fidelity for a benchmark.
+
+### CUSTOM / lifecycle
+
+Also exercise:
+- populated Media -> CUSTOM -> Cancel;
+- visualizer CUSTOM Cancel;
 - cross-display visualizer Save;
 - Settings recreation.
 
 Pass:
-- Spectrum card/idle state exists before playback;
-- Media artwork/metadata survives Cancel immediately;
-- no visualizer mode/card pop caused by cold re-entry;
-- mode/playback edges have no obvious freeze;
-- all mode aesthetics/reactivity remain correct;
-- no stale-generation application;
-- no destruction-barrier timeout;
-- final resource ownership is clean.
-
-### 9.2 Startup/recreation
-
-Pass:
-- deterministic normal transition GL warmup completes before visible fade release;
-- no post-`fade_completed=True` normal shader compile burst;
-- no fixed readiness sleep;
-- first visible visualizer motion is already in its normal cadence class.
-
-### 9.3 Visualizer cadence
-
-Desired steady behavior:
-- all modes roughly return to the intended ~90–100-Hz logical class where their authored work
-  permits;
-- ordinary Qt event-loop stalls no longer freeze the logical simulation itself;
-- physical presentation samples newest logical state;
-- no backlog/catch-up;
-- no recurring user-visible logical hitch class.
-
-Do not require impossible zero-jitter scheduling. Judge tail distribution plus installed feel.
-
-### 9.4 Compositor comparison
-
-The current head must earn its way back to the named baseline.
-
-Use as comparison:
-
-```text
-165-Hz BlockSpin baseline median    ~152.45 FPS
-baseline acceptance                 ~94.79%
-best accepted windows               ~157–160.6 FPS
-
-60-Hz baseline median               ~59.7 FPS
-baseline acceptance                 ~99.44%
-```
-
-A single noisy window is not enough to fail a run, but a median in the current `~125 FPS` class is
-not acceptable.
-
-Do not sacrifice transition/visualizer fidelity merely to hit a number.
-
-### 9.5 Efficiency
-
-Compare same-machine usage against both:
-- current regressed run: app CPU median ~104.8%;
-- named baseline: roughly low/mid-70% whole-run post-prime class, with workload-dependent higher
-  subsets.
-
-The logical-runtime change should not merely move wasted work onto another core. It should improve
-cadence first and keep/remove technical work where possible.
-
-GPU remaining low is expected.
+- Media artwork/metadata survives immediately;
+- visualizer resumes once;
+- no stale logical runtime publication;
+- destruction barriers remain clean;
+- final tracked GL resources and tasks return to baseline/zero as applicable.
 
 ---
 
-## 10. P5 — monitor topology / physical sleep-wake remains mandatory next major phase
+## 10. P5 remains the mandatory next major phase
 
-Do not call lifecycle complete after P2.
+After this P2 acceptance, do not continue polishing visualizer internals indefinitely.
 
-Existing foundations are useful:
-- screen signatures;
-- screen-added/removed inputs;
-- runtime generation fencing;
-- full stop/destruction-barrier/rebuild;
-- current-image replay.
-
-The complete P5 transaction still has not landed.
-
-Required architecture remains:
+P5 still needs the complete physical monitor transaction:
 
 ```text
 Notify
 -> trailing-edge Settle
 -> immutable topology Snapshot
--> Retire old runtime
+-> Retire
 -> destruction Barrier
--> Rebuild from frozen snapshot
+-> Rebuild
 -> Reveal
 ```
 
 Still required:
 - one topology decision owner;
-- later topology events restart settlement and/or queue the next transaction rather than mutate the
-  frozen one;
-- Windows/Qt screen messages are invalidation inputs, not competing mutation owners;
+- later events cannot mutate the frozen transaction;
+- Qt/Windows topology events are invalidation inputs only;
 - sticky configured visualizer monitor through temporary sleep/non-participation;
-- ~60-second confirmation only for genuine settled absence before fallback;
+- genuine-absence grace before fallback;
 - event-driven return-home;
-- no polling monitor thread;
-- wake recovery does not depend on synchronous waking-desktop screenshot capture;
-- physical both-off/long-idle/simultaneous/staggered-wake acceptance.
+- no monitor polling thread;
+- no wake-critical synchronous desktop screenshot;
+- physical both-off/long-idle/staggered-wake acceptance.
 
-Run P5 only after the next P2 installed result is reviewed against the baseline.
+Existing generation/destruction-barrier machinery is reused, not replaced.
 
 ---
 
 ## 11. After P5
 
-Continue with:
-- long-run RAM/private-commit/VRAM slope work;
-- remaining concrete shared GUI/CPU waste;
-- mode-general compute/task scaffolding if still material after the logical-runtime extraction;
+Then return to:
+- long-run RAM/private-commit/VRAM slopes;
+- remaining concrete GUI/CPU waste;
+- mode-general task/Future scaffolding only if still material after the logical-runtime extraction;
 - diagnostic/legacy retirement from `Future_Cleanup.md`.
 
-Do not stop improving project health because a benchmark is good. Do stop creating speculative
-mechanisms when source/evidence does not name a problem.
+Do not create a separate Bubble optimization project unless future evidence actually isolates
+Bubble-owned cost.

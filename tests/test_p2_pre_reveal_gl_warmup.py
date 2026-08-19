@@ -26,7 +26,6 @@ import pytest
 
 from rendering.gl_compositor_pkg import gl_lifecycle
 from rendering.gl_compositor_pkg.gl_lifecycle import (
-    _GL_TRANSITION_WARMUP_HOLD,
     _acquire_pre_reveal_warmup_hold,
     _deferred_warmup_block_reason,
     _pre_reveal_warmup_active,
@@ -78,9 +77,7 @@ class TestTheHoldGatesTheFade:
     def test_arming_warmup_holds_the_startup_fade(self, rig):
         widget, coordinator = rig
         _acquire_pre_reveal_warmup_hold(widget)
-        assert _GL_TRANSITION_WARMUP_HOLD in coordinator.holds, (
-            "warmup no longer gates the visible fade"
-        )
+        assert coordinator.holds, "warmup no longer gates the visible fade"
 
     def test_completion_releases_the_hold(self, rig):
         widget, coordinator = rig
@@ -208,3 +205,124 @@ class TestOrderingIsSourceProven:
         # Each early return that schedules nothing must settle the hold, or the
         # fade waits on work that will never run.
         assert source.count("_release_pre_reveal_warmup_hold") >= 5
+
+
+# ---------------------------------------------------------------------------
+# Dual-display obligation ownership (Current_Plan section 4)
+#
+# The coordinator hold set is keyed by name and is not reference counted, so one
+# shared hold name let whichever compositor finished first release every other
+# compositor's protection. The 13:18 reconstruction shows exactly that: screen 1
+# settles, screen 0's hold disappears, screen 0's fade starts, and only then does
+# screen 0 compile raindrops/wipe/burn - on top of its own visible fade.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def dual(monkeypatch):
+    """Two compositors sharing both displays' fade coordinators."""
+    coordinators = [_Coordinator(), _Coordinator()]
+    displays = [
+        SimpleNamespace(
+            _widget_manager=SimpleNamespace(_fade_coordinator=coordinator),
+            has_transition_work_pending=lambda: False,
+        )
+        for coordinator in coordinators
+    ]
+    monkeypatch.setattr(gl_lifecycle, "_live_displays_for_compositor", lambda w: displays)
+    monkeypatch.setattr(gl_lifecycle, "_qt_object_is_valid", lambda o: True)
+    return _Compositor(), _Compositor(), coordinators
+
+
+class TestDualDisplayObligations:
+    def test_each_compositor_owns_a_distinct_obligation(self, dual):
+        screen0, screen1, coordinators = dual
+
+        _acquire_pre_reveal_warmup_hold(screen0)
+        _acquire_pre_reveal_warmup_hold(screen1)
+
+        for coordinator in coordinators:
+            assert len(coordinator.holds) == 2, (
+                "the two compositors shared one hold name"
+            )
+
+    def test_completion_of_one_cannot_release_the_other(self, dual):
+        screen0, screen1, coordinators = dual
+        _acquire_pre_reveal_warmup_hold(screen0)
+        _acquire_pre_reveal_warmup_hold(screen1)
+
+        _release_pre_reveal_warmup_hold(screen1, reason="complete")
+
+        for coordinator in coordinators:
+            assert coordinator.holds, (
+                "one display released the other display's warmup protection - "
+                "this is the installed screen 0 defect"
+            )
+
+    def test_no_fade_begins_until_every_obligation_completes(self, dual):
+        screen0, screen1, coordinators = dual
+        for coordinator in coordinators:
+            coordinator.pending.append("clock")
+
+        _acquire_pre_reveal_warmup_hold(screen0)
+        _acquire_pre_reveal_warmup_hold(screen1)
+        _release_pre_reveal_warmup_hold(screen1, reason="complete")
+
+        assert all(c.fades_started == 0 for c in coordinators), (
+            "a display began its visible fade while its sibling was still compiling"
+        )
+
+        _release_pre_reveal_warmup_hold(screen0, reason="complete")
+
+        assert all(c.fades_started == 1 for c in coordinators)
+
+    def test_a_sibling_obligation_does_not_stall_this_compositor(self, dual):
+        """Otherwise two displays would each wait for the other."""
+        screen0, screen1, _coordinators = dual
+        _acquire_pre_reveal_warmup_hold(screen0)
+        _acquire_pre_reveal_warmup_hold(screen1)
+
+        assert _deferred_warmup_block_reason(screen0) is None
+        assert _deferred_warmup_block_reason(screen1) is None
+
+    def test_a_retired_generation_cannot_release_a_current_one(self, dual):
+        screen0, _screen1, coordinators = dual
+        _acquire_pre_reveal_warmup_hold(screen0)
+        held = {name for c in coordinators for name in c.holds}
+
+        # The compositor is rebuilt for a new lifecycle generation and completes.
+        stale = _Compositor()
+        stale._gl_lifecycle_generation = 99
+        _acquire_pre_reveal_warmup_hold(stale)
+        _release_pre_reveal_warmup_hold(stale, reason="rhi_release")
+
+        for coordinator in coordinators:
+            assert held & coordinator.holds, (
+                "a retired generation released a live obligation"
+            )
+
+    def test_a_failing_compositor_settles_only_its_own_obligation(self, dual):
+        screen0, screen1, coordinators = dual
+        _acquire_pre_reveal_warmup_hold(screen0)
+        _acquire_pre_reveal_warmup_hold(screen1)
+
+        screen1._gl_warmup_hold_deadline = 0.0
+        assert _pre_reveal_warmup_active(screen1) is False
+
+        for coordinator in coordinators:
+            assert len(coordinator.holds) == 1, (
+                "a fail-safe release took the sibling's obligation with it"
+            )
+
+    def test_the_token_survives_a_generation_change(self, dual):
+        """Release must use the exact token that was acquired."""
+        screen0, _screen1, coordinators = dual
+        _acquire_pre_reveal_warmup_hold(screen0)
+
+        screen0._gl_lifecycle_generation = 7
+        _release_pre_reveal_warmup_hold(screen0, reason="complete")
+
+        for coordinator in coordinators:
+            assert coordinator.holds == set(), (
+                "the obligation became unreleasable after a generation change"
+            )

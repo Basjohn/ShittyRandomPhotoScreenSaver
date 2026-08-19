@@ -96,7 +96,27 @@ def _live_displays_for_compositor(widget) -> list[object]:
 # The compositor now holds the fade while that work completes at fade-zero, then
 # releases. Real completed work releases the hold; the budget below is only a
 # fail-safe so a broken GL path can never strand startup.
-_GL_TRANSITION_WARMUP_HOLD = "gl_transition_warmup"
+# Prefix for the startup holds the compositors take while they prepare this
+# generation's transition programs/resources.
+#
+# The coordinator's hold set is keyed by name, not reference counted, so a single
+# shared name let whichever compositor finished first release every other
+# compositor's protection - on a dual-display start that let screen 0 begin its
+# visible fade and then compile its programs on top of it. Each compositor
+# therefore owns a token unique to itself and its lifecycle generation, adds that
+# token to every live coordinator, and can only ever release its own.
+_GL_TRANSITION_WARMUP_HOLD_PREFIX = "gl_transition_warmup"
+
+
+def _warmup_hold_token(widget) -> str:
+    """Return this compositor's unique current-generation warmup obligation."""
+
+    generation = int(getattr(widget, "_gl_lifecycle_generation", 0) or 0)
+    return f"{_GL_TRANSITION_WARMUP_HOLD_PREFIX}:{id(widget):x}:{generation}"
+
+
+def _is_warmup_hold(name: str) -> bool:
+    return str(name or "").startswith(_GL_TRANSITION_WARMUP_HOLD_PREFIX)
 _GL_WARMUP_HOLD_BUDGET_S = 5.0
 
 
@@ -121,10 +141,11 @@ def _acquire_pre_reveal_warmup_hold(widget) -> None:
         # Released once for this generation; a later paced top-up never re-holds
         # a fade that has already been allowed to start.
         return
+    token = _warmup_hold_token(widget)
     held = False
     for coordinator in _fade_coordinators_for_compositor(widget):
         try:
-            coordinator.add_startup_hold(_GL_TRANSITION_WARMUP_HOLD)
+            coordinator.add_startup_hold(token)
             held = True
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to hold startup fade for warmup", exc_info=True)
@@ -133,6 +154,9 @@ def _acquire_pre_reveal_warmup_hold(widget) -> None:
         # inventing a hold nothing can release.
         return
     widget._gl_warmup_hold_active = True
+    # Retain the exact token so a later generation change cannot make this
+    # obligation unreleasable.
+    widget._gl_warmup_hold_token = token
     widget._gl_warmup_hold_deadline = time.monotonic() + _GL_WARMUP_HOLD_BUDGET_S
 
 
@@ -141,13 +165,18 @@ def _release_pre_reveal_warmup_hold(widget, *, reason: str) -> None:
         return
     widget._gl_warmup_hold_active = False
     widget._gl_warmup_hold_settled = True
+    token = getattr(widget, "_gl_warmup_hold_token", None) or _warmup_hold_token(widget)
     logger.info(
-        "[GL COMPOSITOR] Pre-reveal transition warmup settled (reason=%s)",
+        "[GL COMPOSITOR] Pre-reveal transition warmup settled (reason=%s token=%s)",
         reason,
+        token,
     )
+    # Only this compositor's own obligation. Any sibling still warming keeps its
+    # own token on the coordinator, so the fade stays held until every
+    # current-generation compositor has reported complete.
     for coordinator in _fade_coordinators_for_compositor(widget):
         try:
-            coordinator.release_startup_hold(_GL_TRANSITION_WARMUP_HOLD)
+            coordinator.release_startup_hold(token)
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to release warmup startup hold", exc_info=True)
 
@@ -188,10 +217,14 @@ def _deferred_warmup_block_reason(widget) -> str | None:
                 fade = coordinator.describe()
             except Exception:
                 fade = {}
-            holds = set(fade.get("startup_holds") or ())
-            # The compositor's own pre-reveal hold is what created this window;
-            # it must not read as a reason to keep waiting.
-            holds.discard(_GL_TRANSITION_WARMUP_HOLD)
+            holds = {
+                name
+                for name in (fade.get("startup_holds") or ())
+                # Warmup obligations are what created this window. A sibling
+                # compositor's obligation must not stall this one either, or two
+                # displays would each wait for the other.
+                if not _is_warmup_hold(name)
+            }
             if holds:
                 return "startup_hold"
             state = str(fade.get("state", ""))
