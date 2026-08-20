@@ -1,4 +1,4 @@
-# Raw Log Manifest — 2026-08-19 P2 Evidence
+# Raw Log Manifest — P2 Evidence
 
 Raw logs are not included in this repository-addition pack.
 
@@ -11,6 +11,7 @@ These hashes allow a retained external/conversation copy to be verified.
 | First repaired-worker installed acceptance | `41f6cf08-f731-4967-8e20-a1a987add126.zip` | `54469e6d8a305e2fa335fa5ac372a86cdca42f4f312274001713146920cd957c` | 17:05–17:10 | No |
 | Second installed acceptance | `a497d069-2ff3-4a03-b553-0c160f584e74.zip` | `134f249a92f17b8885f9bf040834dba92156d5ef9b84132b501cf35f4fea6a18` | 19:04–19:08 | No |
 | Third installed acceptance | `13490052-c96e-4501-b4cf-a29ba3370aca.zip` | `16f532c43154de207d9ede734b01946a262285de21c12d6b8c88a3fbfb18890c` | 19:59–20:02 | **Yes: `8ac2421e...`** |
+| Diagnostic long soak / display-off wake | `dc49978b-ed1b-454a-9ec3-eea14544fbaf.zip` | `7bf1c99aedce5f484f41e80729ae7940b411f439328561491ce93651b49afe22` | 2026-08-20 04:46–13:03 | No — frozen diagnostic; contemporaneous reviewed main `7d1befce...` only |
 
 ## Archival policy
 
@@ -18,9 +19,9 @@ For future runs:
 
 1. Keep the raw ZIP outside Git if desired.
 2. Add its SHA-256 and filename here.
-3. Add an immutable `Acceptance-*` evidence record.
-4. Record `[SOURCE_HEAD]` from the log.
-5. Only then proceed to the next production correction if the run changed the engineering conclusion.
+3. Add an immutable `Acceptance-*` evidence record when the run changes an engineering conclusion.
+4. Record `[SOURCE_HEAD]` when the runtime actually emits it.
+5. If a frozen/diagnostic product cannot embed source SHA, preserve that limitation explicitly; do not infer exact build identity from current repo HEAD.
+6. Only then proceed to the next production correction if the run changed the engineering conclusion.
 
-If raw logs are ever moved into a durable external archive, preserve the original ZIP bytes so this
-manifest remains verifiable.
+If raw logs are ever moved into a durable external archive, preserve the original ZIP bytes so this manifest remains verifiable.

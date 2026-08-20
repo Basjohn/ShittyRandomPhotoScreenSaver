@@ -6,7 +6,7 @@
 [Setup]
 AppId={{9E730AA6-0FF0-4EF5-AE55-7D88956F32DE}
 AppName=SRPSS Diagnostic
-AppVersion=4.7.1
+AppVersion=4.7.2
 AppPublisher=Jayde Ver Elst
 DefaultDirName={localappdata}\SRPSS Diagnostic
 DefaultGroupName=SRPSS Diagnostic
@@ -21,7 +21,7 @@ ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS_Diagnostic.exe
 WizardSmallImageFile=..\images\LogoBMP.bmp
-VersionInfoVersion=4.7.1
+VersionInfoVersion=4.7.2
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

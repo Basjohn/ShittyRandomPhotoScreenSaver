@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
 Durable cross-cutting stop rules. `Current_Plan.md` owns active sequencing. Focused guardrails may
 be stricter.
@@ -30,12 +30,44 @@ overlay behaviour or display support.
 For active architecture work read:
 
 ```text
-exact main
+current repository state
 -> Current_Plan.md
 -> Docs/Contracts.md
 -> Docs/Guardrails.md
 -> one focused guardrail/reference
 ```
+
+When `Current_Plan.md` names a source SHA, treat it as the **behavioral/source-review checkpoint**
+for the plan, not as a requirement that the repository's current `HEAD` exactly equal that SHA.
+
+The normal repository state may legitimately be either:
+
+```text
+checkpoint SHA
++ uncommitted plan/evidence/docs/skill files
+```
+
+or:
+
+```text
+later HEAD
+where the intervening commits contain only plan/evidence/docs/skill changes
+```
+
+Neither case invalidates the active plan.
+
+Before stopping because `HEAD` differs or the working tree is dirty:
+
+1. inspect the actual changed paths;
+2. classify whether they are source/behavioral changes or documentation/evidence/plan/skill changes;
+3. preserve unrelated user work;
+4. continue normally when only documentation/evidence/plan/skill changes separate the current
+   repository state from the named behavioral checkpoint;
+5. if production source changed after the checkpoint, re-audit only the affected current source and
+   determine whether that materially changes the active plan.
+
+Do **not** reset, clean, checkout, stash, revert, discard, or otherwise destroy work merely to make
+`HEAD` match a checkpoint or to obtain a clean tree.
 
 Do not treat old phase reports or historical incidents as current owner maps.
 
@@ -75,6 +107,8 @@ Stop/reassess when:
 - stable contracts live in Spec/Guardrails/focused docs;
 - active work lives only in `Current_Plan.md`;
 - current evidence checkpoint owns current volatile measurements;
+- a named source checkpoint is a behavioral review anchor, not a demand that documentation commits
+  leave `HEAD` unchanged;
 - phase reports/Historical_Bugs remain checkpoint evidence and may intentionally contain obsolete
   class names/timers/surfaces.
 
