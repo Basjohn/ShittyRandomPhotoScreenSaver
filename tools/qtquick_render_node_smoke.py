@@ -62,6 +62,7 @@ _TRANSITION_IDS = (
     "wipe",
     "warp_dissolve",
     "block_flip",
+    "block_spins",
 )
 _TRANSITION_SMOKE_DIRECTIONS = {
     "crossfade": (None,),
@@ -76,6 +77,14 @@ _TRANSITION_SMOKE_DIRECTIONS = {
     ),
     "warp_dissolve": (None,),
     "block_flip": (
+        "left",
+        "right",
+        "up",
+        "down",
+        "diag_tl_br",
+        "diag_tr_bl",
+    ),
+    "block_spins": (
         "left",
         "right",
         "up",
@@ -141,11 +150,18 @@ _TRANSITION_PALETTE_RGB = {
     "wipe": _DIRECTIONAL_PALETTE_RGB,
     "warp_dissolve": _DIRECTIONAL_PALETTE_RGB,
     "block_flip": _DIRECTIONAL_PALETTE_RGB,
+    "block_spins": _DIRECTIONAL_PALETTE_RGB,
 }
 _TRANSITION_SMOKE_PARAMETERS = {
     # Thirteen strips place the fixed 5x5 sample grid on both projected faces
     # and exposed voids during the first eligible midpoint frame.
     "block_flip": {"cols": 13, "rows": 13},
+}
+_TRANSITION_PIXEL_PROBES = {
+    "block_spins": (0.42, 0.50, 0.60),
+}
+_TRANSITION_SMOKE_DURATIONS_MS = {
+    "block_spins": 600,
 }
 
 
@@ -643,12 +659,307 @@ def _matches_block_flip_samples(
     )
 
 
+_BLOCK_SPIN_DIRECTION_STATES = {
+    "left": (0, 1.0),
+    "right": (0, -1.0),
+    "up": (1, 1.0),
+    "down": (1, -1.0),
+    "diag_tl_br": (2, 1.0),
+    "diag_tr_bl": (3, -1.0),
+}
+
+
+def _block_spin_progress(progress: float) -> float:
+    value = max(0.0, min(1.0, float(progress)))
+    if value < 0.5:
+        return 4.0 * value * value * value
+    return 1.0 - ((-2.0 * value + 2.0) ** 3) / 2.0
+
+
+def _block_spin_rotation(
+    axis_mode: int,
+    angle: float,
+) -> tuple[tuple[float, float, float], ...]:
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+    if axis_mode == 0:
+        return (
+            (cosine, 0.0, -sine),
+            (0.0, 1.0, 0.0),
+            (sine, 0.0, cosine),
+        )
+    if axis_mode == 1:
+        return (
+            (1.0, 0.0, 0.0),
+            (0.0, cosine, sine),
+            (0.0, -sine, cosine),
+        )
+    inverse_root_two = 1.0 / math.sqrt(2.0)
+    axis = (
+        (inverse_root_two, -inverse_root_two, 0.0)
+        if axis_mode == 2
+        else (inverse_root_two, inverse_root_two, 0.0)
+    )
+    x, y, z = axis
+    one_minus_cosine = 1.0 - cosine
+    return (
+        (
+            cosine + x * x * one_minus_cosine,
+            x * y * one_minus_cosine - z * sine,
+            x * z * one_minus_cosine + y * sine,
+        ),
+        (
+            y * x * one_minus_cosine + z * sine,
+            cosine + y * y * one_minus_cosine,
+            y * z * one_minus_cosine - x * sine,
+        ),
+        (
+            z * x * one_minus_cosine - y * sine,
+            z * y * one_minus_cosine + x * sine,
+            cosine + z * z * one_minus_cosine,
+        ),
+    )
+
+
+def _block_spin_expected_sample(
+    direction: object,
+    progress: float,
+    coordinate: tuple[float, float],
+) -> tuple[str, tuple[float, float] | None] | None:
+    state = _BLOCK_SPIN_DIRECTION_STATES.get(str(direction))
+    if state is None:
+        return None
+    axis_mode, spin_direction = state
+    spin = _block_spin_progress(progress)
+    angle = math.pi * spin * spin_direction
+    rotation = _block_spin_rotation(axis_mode, angle)
+    face_z = 0.0 if spin < 0.5 else -0.05
+    screen_x, screen_y = coordinate
+    projected_x = screen_x * 2.0 - 1.0
+    projected_y = 1.0 - screen_y * 2.0
+    target_x = projected_x - rotation[0][2] * face_z
+    target_y = projected_y - rotation[1][2] * face_z
+    determinant = (
+        rotation[0][0] * rotation[1][1]
+        - rotation[0][1] * rotation[1][0]
+    )
+    if abs(determinant) < 0.04:
+        return None
+    object_x = (
+        target_x * rotation[1][1] - rotation[0][1] * target_y
+    ) / determinant
+    object_y = (
+        rotation[0][0] * target_y - target_x * rotation[1][0]
+    ) / determinant
+    extent = max(abs(object_x), abs(object_y))
+    if extent >= 1.0:
+        return "void", None
+    if extent > 0.86:
+        return None
+
+    u = object_x * 0.5 + 0.5
+    v = object_y * 0.5 + 0.5
+    if spin < 0.5:
+        return "source", (u, 1.0 - v)
+    if axis_mode == 0:
+        destination_uv = (1.0 - u, 1.0 - v)
+    elif axis_mode == 1:
+        destination_uv = (u, v)
+    elif axis_mode == 2:
+        destination_uv = (1.0 - v, u)
+    else:
+        destination_uv = (v, 1.0 - u)
+    return "destination", destination_uv
+
+
+def _matches_block_spins_samples(
+    source: object,
+    destination: object,
+    midpoint: object,
+    progress: float,
+    direction: object,
+) -> bool:
+    if not all(
+        isinstance(value, (tuple, list))
+        for value in (source, destination, midpoint)
+    ):
+        return False
+    if (
+        not source
+        or len(source) != len(destination)
+        or len(source) != len(midpoint)
+        or len(midpoint) != len(_TRANSITION_SAMPLE_COORDINATES)
+        or not 0.30 <= progress <= 0.75
+    ):
+        return False
+    if {_slide_color_domain(color) for color in source} != {"source"}:
+        return False
+    if {_slide_color_domain(color) for color in destination} != {"destination"}:
+        return False
+
+    counts = {"source": 0, "destination": 0, "void": 0}
+    compared = 0
+    for color, coordinate in zip(
+        midpoint,
+        _TRANSITION_SAMPLE_COORDINATES,
+        strict=True,
+    ):
+        expected = _block_spin_expected_sample(direction, progress, coordinate)
+        if expected is None:
+            continue
+        expected_domain, expected_uv = expected
+        actual_domain = _block_flip_color_domain(color)
+        if actual_domain != expected_domain:
+            return False
+        if expected_uv is not None:
+            actual_uv = _block_flip_decoded_uv(color, expected_domain)
+            if actual_uv is None or any(
+                abs(actual - target) > 0.13
+                for actual, target in zip(actual_uv, expected_uv, strict=True)
+            ):
+                return False
+        counts[expected_domain] += 1
+        compared += 1
+    visible_domain = "source" if _block_spin_progress(progress) < 0.5 else "destination"
+    return bool(
+        compared >= 9
+        and counts[visible_domain] >= 3
+        and counts["void"] >= 2
+    )
+
+
+def _matches_block_spins_midpoint(
+    source: object,
+    destination: object,
+    midpoint: object,
+    progress: float,
+    _direction: object,
+) -> bool:
+    """Keep the generic first-midpoint check cadence-tolerant.
+
+    The nearest-target probe sequence below owns exact projection/UV checks.
+    This uncontrolled first sample only proves that the real slab exposes its
+    black void instead of silently drawing a fullscreen fallback.
+    """
+
+    if not all(
+        isinstance(value, (tuple, list))
+        for value in (source, destination, midpoint)
+    ):
+        return False
+    if (
+        len(source) != len(_TRANSITION_SAMPLE_COORDINATES)
+        or len(destination) != len(_TRANSITION_SAMPLE_COORDINATES)
+        or len(midpoint) != len(_TRANSITION_SAMPLE_COORDINATES)
+        or not 0.30 <= progress <= 0.75
+    ):
+        return False
+    if {_slide_color_domain(color) for color in source} != {"source"}:
+        return False
+    if {_slide_color_domain(color) for color in destination} != {"destination"}:
+        return False
+    black = sum(
+        max(_argb_components(color)[1:]) <= 14 for color in midpoint
+    )
+    face_or_edge = len(midpoint) - black
+    return bool(
+        black >= 1
+        and face_or_edge >= 3
+        and tuple(midpoint) != tuple(source)
+        and tuple(midpoint) != tuple(destination)
+    )
+
+
+def _matches_block_spins_probe_sequence(
+    source: object,
+    destination: object,
+    progresses: object,
+    samples: object,
+    direction: object,
+) -> bool:
+    if not isinstance(progresses, (tuple, list)) or not isinstance(
+        samples,
+        (tuple, list),
+    ):
+        return False
+    if len(progresses) != 3 or len(samples) != 3:
+        return False
+    early_progress, edge_progress, late_progress = (
+        float(progress) for progress in progresses
+    )
+    if not (
+        0.34 <= early_progress < 0.50
+        and 0.44 <= edge_progress <= 0.56
+        and 0.52 < late_progress < 0.76
+    ):
+        return False
+    if not _matches_block_spins_samples(
+        source,
+        destination,
+        samples[0],
+        early_progress,
+        direction,
+    ):
+        return False
+    if not _matches_block_spins_samples(
+        source,
+        destination,
+        samples[2],
+        late_progress,
+        direction,
+    ):
+        return False
+
+    edge_colors = tuple(samples[1])
+    if len(edge_colors) != len(_TRANSITION_SAMPLE_COORDINATES):
+        return False
+    visible_indices = tuple(
+        index
+        for index, color in enumerate(edge_colors)
+        if max(_argb_components(color)[1:]) > 14
+    )
+    if not visible_indices:
+        # A scheduler can land exactly on the edge-on frame.  The authored
+        # unlit side may then be indistinguishable from the surrounding black
+        # void for one direction; the early/late probes still prove both
+        # projected faces and their texture coordinates.
+        return abs(edge_progress - 0.5) <= 0.03
+    if not 3 <= len(visible_indices) <= 13:
+        return False
+    direction_text = str(direction)
+    diagonal_core = 0
+    for index in visible_indices:
+        row, column = divmod(index, 5)
+        if direction_text in {"left", "right"} and abs(column - 2) > 1:
+            return False
+        if direction_text in {"up", "down"} and abs(row - 2) > 1:
+            return False
+        if direction_text == "diag_tl_br":
+            distance = abs(row + column - 4)
+            if distance > 2:
+                return False
+            diagonal_core += int(distance <= 1)
+        if direction_text == "diag_tr_bl":
+            distance = abs(row - column)
+            if distance > 2:
+                return False
+            diagonal_core += int(distance <= 1)
+    return bool(
+        direction_text not in {"diag_tl_br", "diag_tr_bl"}
+        or diagonal_core >= 3
+    )
+
+
 _TRANSITION_MIDPOINT_ORACLES = {
     "crossfade": _matches_crossfade_samples,
     "slide": _matches_slide_samples,
     "wipe": _matches_wipe_samples,
     "warp_dissolve": _matches_warp_samples,
     "block_flip": _matches_block_flip_samples,
+    "block_spins": _matches_block_spins_midpoint,
+}
+_TRANSITION_PROBE_ORACLES = {
+    "block_spins": _matches_block_spins_probe_sequence,
 }
 
 
@@ -659,7 +970,7 @@ def _presentation_image(
     variant: str,
     transition_id: str,
 ) -> PresentationImage:
-    if transition_id == "block_flip":
+    if transition_id in {"block_flip", "block_spins"}:
         image = QImage(32, 24, QImage.Format.Format_RGBA8888)
         for x in range(image.width()):
             normalized_x = x / max(1, image.width() - 1)
@@ -841,6 +1152,10 @@ class _SmokeRunner(QObject):
         telemetry = RenderNodeTelemetry(
             gui_thread_id=threading.get_ident(),
             capture_pixels=True,
+            transition_probe_progresses=_TRANSITION_PIXEL_PROBES.get(
+                self._args.transition_id,
+                (),
+            ),
         )
         runtime = QuickDisplayRuntime(
             screen_index=index,
@@ -1074,7 +1389,10 @@ class _SmokeRunner(QObject):
                     requested_name=self._args.transition_id,
                     selected_from_random=False,
                     duration_ms=max(
-                        80,
+                        _TRANSITION_SMOKE_DURATIONS_MS.get(
+                            self._args.transition_id,
+                            80,
+                        ),
                         min(250, self._args.phase_delay_ms // 2),
                     ),
                     direction=self._args.transition_direction,
@@ -2207,6 +2525,18 @@ class _SmokeRunner(QObject):
         ):
             errors.append(
                 f"{prefix} {self._args.transition_id} midpoint pixels are incorrect"
+            )
+        probe_oracle = _TRANSITION_PROBE_ORACLES.get(self._args.transition_id)
+        if probe_oracle is not None and not probe_oracle(
+            resized_capture.get("ordered_colors"),
+            replacement_capture.get("ordered_colors"),
+            final.transition_probe_eased_progresses,
+            final.transition_probe_colors,
+            self._args.transition_direction,
+        ):
+            errors.append(
+                f"{prefix} {self._args.transition_id} authored pixel probes are "
+                "incorrect"
             )
         if final_scene.get("transition_run") is not None:
             errors.append(f"{prefix} scene retained a finalized transition run")

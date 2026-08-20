@@ -23,6 +23,22 @@ def _int_state(name: int) -> int:
         return int(value[0])
 
 
+def _bool_state(name: int) -> bool:
+    value = gl.glGetBooleanv(name)
+    try:
+        return bool(value[0])
+    except (IndexError, TypeError):
+        return bool(value)
+
+
+def _float_state(name: int) -> float:
+    value = gl.glGetFloatv(name)
+    try:
+        return float(value[0])
+    except (IndexError, TypeError):
+        return float(value)
+
+
 def _viewport_state() -> tuple[int, int, int, int]:
     values = tuple(int(value) for value in gl.glGetIntegerv(gl.GL_VIEWPORT))
     if len(values) != 4:
@@ -49,6 +65,9 @@ class _InheritedGlState:
     blend: bool
     cull: bool
     depth: bool
+    depth_write: bool
+    depth_function: int
+    depth_clear_value: float
     stencil: bool
 
     @classmethod
@@ -72,6 +91,9 @@ class _InheritedGlState:
             blend=bool(gl.glIsEnabled(gl.GL_BLEND)),
             cull=bool(gl.glIsEnabled(gl.GL_CULL_FACE)),
             depth=bool(gl.glIsEnabled(gl.GL_DEPTH_TEST)),
+            depth_write=_bool_state(gl.GL_DEPTH_WRITEMASK),
+            depth_function=_int_state(gl.GL_DEPTH_FUNC),
+            depth_clear_value=_float_state(gl.GL_DEPTH_CLEAR_VALUE),
             stencil=bool(gl.glIsEnabled(gl.GL_STENCIL_TEST)),
         )
 
@@ -85,6 +107,9 @@ class _InheritedGlState:
         gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self.array_buffer)
         gl.glUseProgram(self.program)
         gl.glViewport(*self.viewport)
+        gl.glDepthMask(gl.GL_TRUE if self.depth_write else gl.GL_FALSE)
+        gl.glDepthFunc(self.depth_function)
+        gl.glClearDepth(self.depth_clear_value)
         _set_enabled(gl.GL_BLEND, self.blend)
         _set_enabled(gl.GL_CULL_FACE, self.cull)
         _set_enabled(gl.GL_DEPTH_TEST, self.depth)

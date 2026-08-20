@@ -12,10 +12,58 @@ import sys
 import pytest
 from PySide6.QtQuick import QQuickItem, QSGRenderNode
 
-from rendering.quick.render import BackgroundRenderItem, BackgroundRenderNode
+from rendering.quick.render import (
+    BackgroundRenderItem,
+    BackgroundRenderNode,
+    RenderNodeTelemetry,
+)
+from rendering.quick.transitions import TransitionSample
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _transition_sample(progress: float) -> TransitionSample:
+    return TransitionSample(
+        run_id=7,
+        runtime_generation=3,
+        linear_progress=progress,
+        eased_progress=progress,
+        complete=False,
+    )
+
+
+def test_transition_pixel_probes_keep_nearest_frame_across_cadence_jump():
+    telemetry = RenderNodeTelemetry(
+        gui_thread_id=1,
+        capture_pixels=True,
+        transition_probe_progresses=(0.42, 0.50),
+    )
+    before = _transition_sample(0.39)
+    after = _transition_sample(0.47)
+    assert telemetry.wants_transition_probe_sample(before)
+    telemetry.note_transition_probe_sample(sample=before, colors=("before",))
+    assert telemetry.snapshot().transition_probe_colors == ()
+    assert telemetry.wants_transition_probe_sample(after)
+    telemetry.note_transition_probe_sample(sample=after, colors=("after",))
+    assert telemetry.snapshot().transition_probe_linear_progresses == (0.39,)
+    assert telemetry.snapshot().transition_probe_colors == (("before",),)
+
+    before_second = _transition_sample(0.48)
+    after_second = _transition_sample(0.54)
+    telemetry.note_transition_probe_sample(
+        sample=before_second,
+        colors=("second-before",),
+    )
+    telemetry.note_transition_probe_sample(
+        sample=after_second,
+        colors=("second-after",),
+    )
+    assert telemetry.snapshot().transition_probe_linear_progresses == (
+        0.39,
+        0.48,
+    )
+    assert telemetry.snapshot().transition_probe_colors[-1] == ("second-before",)
 
 
 def test_background_item_and_node_use_the_selected_inline_primitive():
@@ -367,6 +415,59 @@ def test_script_smoke_proves_lazy_block_flip_slab_pixels_and_teardown(
     assert window["final"]["last_transition_renderer_id"] == "block_flip"
     assert window["final"]["transition_midpoint_run_id"] == 1
     assert len(window["final"]["transition_midpoint_colors"]) == 25
+    assert window["final"]["viewport"][2] != window["final"]["viewport"][3]
+    assert window["final"]["release_count"] == 1
+    assert window["final"]["image_upload_count"] == 2
+    assert window["final"]["image_release_count"] == 2
+    assert window["final"]["pending_image_release_count"] == 0
+
+
+@pytest.mark.parametrize(
+    "direction",
+    ("left", "right", "up", "down", "diag_tl_br", "diag_tr_bl"),
+)
+def test_script_smoke_proves_lazy_block_spins_3d_slab_and_teardown(direction):
+    env = os.environ.copy()
+    env["QSG_RENDER_LOOP"] = "basic"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.qtquick_render_node_smoke",
+            "--windows",
+            "1",
+            "--size",
+            "240x135",
+            "--phase-delay-ms",
+            "800",
+            "--transition-id",
+            "block_spins",
+            "--transition-direction",
+            direction,
+        ],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    report = json.loads(completed.stdout[completed.stdout.index("{") :])
+    assert report["valid"] is True
+    assert report["requested_transition_id"] == "block_spins"
+    assert report["requested_transition_direction"] == direction
+    window = report["windows"][0]
+    assert window["transition_state_at_start"]["active_transition_id"] == (
+        "block_spins"
+    )
+    assert window["transition_completion"]["outcome"] == "completed"
+    assert window["final"]["last_transition_renderer_id"] == "block_spins"
+    assert window["final"]["transition_midpoint_run_id"] == 1
+    assert len(window["final"]["transition_midpoint_colors"]) == 25
+    assert window["final"]["transition_probe_run_id"] == 1
+    assert len(window["final"]["transition_probe_colors"]) == 3
+    assert len(window["final"]["transition_probe_eased_progresses"]) == 3
     assert window["final"]["viewport"][2] != window["final"]["viewport"][3]
     assert window["final"]["release_count"] == 1
     assert window["final"]["image_upload_count"] == 2

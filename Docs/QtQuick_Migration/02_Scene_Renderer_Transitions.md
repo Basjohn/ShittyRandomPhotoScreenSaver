@@ -313,6 +313,14 @@ Port the canonical active set, not a stale hard-coded list.
 
 No migration fallback to old compositor for "the difficult transition."
 
+BlockSpin's Quick renderer remains a single thin 3D slab over an opaque black void. Its lazy
+`block_spins` implementation owns the context-local 36-vertex box mesh and shader programs, uses
+the shared old/new image textures, and releases those resources through the render-node teardown
+barrier. The canonical run stays linear while the implementation applies the effect's authored
+cubic spin timing. Horizontal, vertical and both diagonal axes preserve their authored back-face
+UV transforms and moving side treatment; the common transition host restores inherited depth
+write/function/clear state after the draw.
+
 ## 11. Presentation frame pacer
 
 Create a production class, e.g.:
