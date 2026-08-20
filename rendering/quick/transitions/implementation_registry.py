@@ -34,6 +34,10 @@ _IMPLEMENTATIONS = (
         transition_id="wipe",
         module_name="rendering.quick.transitions.implementations.wipe",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="warp_dissolve",
+        module_name="rendering.quick.transitions.implementations.warp",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

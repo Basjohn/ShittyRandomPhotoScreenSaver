@@ -64,7 +64,7 @@ print(json.dumps({
     )
 
     assert report == {
-        "ids": ["crossfade", "slide", "wipe"],
+        "ids": ["crossfade", "slide", "wipe", "warp_dissolve"],
         "loaded": [],
         "shader_modules": [],
     }
@@ -121,12 +121,18 @@ wipe = resolve_quick_transition_renderer(
     "wipe",
     enabled_transition_ids=frozenset(),
 )
+warp = resolve_quick_transition_renderer(
+    "warp_dissolve",
+    enabled_transition_ids=frozenset(),
+)
 loaded = sorted(
     name for name in sys.modules
     if name.startswith("rendering.quick.transitions.implementations.")
 )
 print(json.dumps({
-    "resolved": renderer is not None or slide is not None or wipe is not None,
+    "resolved": any(
+        item is not None for item in (renderer, slide, wipe, warp)
+    ),
     "loaded": loaded,
 }))
 """
@@ -251,6 +257,47 @@ print(json.dumps({
         "shader_modules": [
             "rendering.gl_programs.base_program",
             "rendering.gl_programs.wipe_program",
+        ],
+    }
+
+
+def test_enabled_resolution_imports_only_warp_surface():
+    report = _probe(
+        """
+import json
+import sys
+from rendering.quick.transitions.implementation_registry import (
+    resolve_quick_transition_renderer,
+)
+
+renderer = resolve_quick_transition_renderer(
+    "warp_dissolve",
+    enabled_transition_ids=frozenset({"warp_dissolve"}),
+)
+implementation_modules = sorted(
+    name for name in sys.modules
+    if name.startswith("rendering.quick.transitions.implementations.")
+)
+shader_modules = sorted(
+    name for name in sys.modules
+    if name.startswith("rendering.gl_programs.") and name.endswith("_program")
+)
+print(json.dumps({
+    "renderer": type(renderer).__name__,
+    "implementation_modules": implementation_modules,
+    "shader_modules": shader_modules,
+}))
+"""
+    )
+
+    assert report == {
+        "renderer": "QuickWarpRenderer",
+        "implementation_modules": [
+            "rendering.quick.transitions.implementations.warp"
+        ],
+        "shader_modules": [
+            "rendering.gl_programs.base_program",
+            "rendering.gl_programs.warp_program",
         ],
     }
 

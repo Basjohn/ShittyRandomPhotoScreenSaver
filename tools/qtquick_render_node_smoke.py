@@ -55,7 +55,7 @@ from rendering.quick.transitions import (  # noqa: E402
 from rendering.quick.window import QuickDisplayWindow  # noqa: E402
 
 
-_TRANSITION_IDS = ("crossfade", "slide", "wipe")
+_TRANSITION_IDS = ("crossfade", "slide", "wipe", "warp_dissolve")
 _TRANSITION_SMOKE_DIRECTIONS = {
     "crossfade": (None,),
     "slide": ("left", "right", "up", "down"),
@@ -67,6 +67,7 @@ _TRANSITION_SMOKE_DIRECTIONS = {
         "diag_tl_br",
         "diag_tr_bl",
     ),
+    "warp_dissolve": (None,),
 }
 _TRANSITION_DIRECTION_CHOICES = tuple(
     sorted(
@@ -123,6 +124,7 @@ _TRANSITION_PALETTE_RGB = {
     },
     "slide": _DIRECTIONAL_PALETTE_RGB,
     "wipe": _DIRECTIONAL_PALETTE_RGB,
+    "warp_dissolve": _DIRECTIONAL_PALETTE_RGB,
 }
 
 
@@ -392,10 +394,69 @@ def _matches_wipe_samples(
     return compared >= 16 and expected_domains == {"source", "destination"}
 
 
+def _matches_warp_samples(
+    source: object,
+    destination: object,
+    midpoint: object,
+    progress: float,
+    _direction: object = None,
+) -> bool:
+    if not all(
+        isinstance(value, (tuple, list))
+        for value in (source, destination, midpoint)
+    ):
+        return False
+    if (
+        not source
+        or len(source) != len(destination)
+        or len(source) != len(midpoint)
+        or len(midpoint) != len(_TRANSITION_SAMPLE_COORDINATES)
+        or not 0.35 <= progress <= 0.65
+    ):
+        return False
+    if {_slide_color_domain(color) for color in source} != {"source"}:
+        return False
+    if {_slide_color_domain(color) for color in destination} != {"destination"}:
+        return False
+
+    # The centre has fully dissolved by this stage in the canonical shader.
+    # A plain Crossfade would still be purple here, so this is a strong real
+    # Warp-vs-fallback discriminator in addition to the spatial samples below.
+    centre_index = len(midpoint) // 2
+    if _slide_color_domain(midpoint[centre_index]) != "destination":
+        return False
+
+    materially_non_crossfade = 0
+    largest_error = 0
+    amount = max(0.0, min(1.0, float(progress)))
+    for old_color, new_color, warped_color in zip(
+        source,
+        destination,
+        midpoint,
+        strict=True,
+    ):
+        old = _argb_components(old_color)
+        new = _argb_components(new_color)
+        warped = _argb_components(warped_color)
+        crossfade = tuple(
+            round(old_channel * (1.0 - amount) + new_channel * amount)
+            for old_channel, new_channel in zip(old, new, strict=True)
+        )
+        error = max(
+            abs(actual - fallback)
+            for actual, fallback in zip(warped, crossfade, strict=True)
+        )
+        largest_error = max(largest_error, error)
+        if error >= 18:
+            materially_non_crossfade += 1
+    return materially_non_crossfade >= 8 and largest_error >= 48
+
+
 _TRANSITION_MIDPOINT_ORACLES = {
     "crossfade": _matches_crossfade_samples,
     "slide": _matches_slide_samples,
     "wipe": _matches_wipe_samples,
+    "warp_dissolve": _matches_warp_samples,
 }
 
 
