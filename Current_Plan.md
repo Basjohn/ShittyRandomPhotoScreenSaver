@@ -345,22 +345,21 @@ Read:
 
 Land in small commits:
 
-### A4 — early compiled smoke
+### A4 — operator-scheduled compiled smoke
 
-Before the migration depends on QML/Quick packaging, update the smallest required build inputs and
-prove one Quick scene can launch in a Nuitka build.
+- [ ] When the operator explicitly schedules a build window, run
+  `scripts/build_qtquick_smoke.ps1 -Run` and retain the executable result.
 
-This is an early packaging gate, not final build acceptance.
-
-**Checkpoint + push.**
+Do not launch the full build autonomously. This external validation does not block continued
+migration implementation; a failure reopens only the focused A4 packaging/runtime issue.
 
 Exit gate:
 
 ```text
-threaded standalone Quick + inline GL render node + clean teardown + compiled smoke
+threaded standalone Quick + inline GL render node + clean teardown + compiled-smoke inputs accepted
 ```
 
-No further presentation port starts before this gate.
+The explicit operator-run executable validation remains required before production cutover.
 
 ---
 

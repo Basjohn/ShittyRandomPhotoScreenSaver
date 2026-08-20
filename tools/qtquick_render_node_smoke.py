@@ -14,15 +14,17 @@ from typing import Any
 from rendering.quick.bootstrap import (
     configure_quick_environment,
     configure_quick_graphics,
+    quick_qml_root,
 )
 
 
 # Fix process-owned Quick environment before importing Qt.
 configure_quick_environment()
 
-from PySide6.QtCore import QMetaObject, QObject, QSize, Qt, QTimer  # noqa: E402
+from PySide6.QtCore import QMetaObject, QObject, QSize, Qt, QTimer, QUrl  # noqa: E402
 from PySide6.QtGui import QColor, QGuiApplication, QScreen  # noqa: E402
-from PySide6.QtQuick import QQuickWindow, QSGRendererInterface  # noqa: E402
+from PySide6.QtQml import QQmlComponent, QQmlEngine  # noqa: E402
+from PySide6.QtQuick import QQuickItem, QQuickWindow, QSGRendererInterface  # noqa: E402
 
 from rendering.quick.render import (  # noqa: E402
     BackgroundRenderItem,
@@ -36,6 +38,7 @@ class _WindowProbe:
     index: int
     screen_name: str
     window: QQuickWindow
+    scene_root: QQuickItem
     item: BackgroundRenderItem
     telemetry: RenderNodeTelemetry
     initial_capture: dict[str, Any] | None = None
@@ -94,6 +97,18 @@ class _SmokeRunner(QObject):
         self._probes: list[_WindowProbe] = []
         self._initial_snapshots: list[RenderNodeSnapshot] = []
         self._errors: list[str] = []
+        self._qml_root = quick_qml_root()
+        self._qml_url = QUrl.fromLocalFile(
+            str(self._qml_root / "DisplayScene.qml")
+        )
+        self._qml_engine = QQmlEngine(self)
+        self._qml_engine.addImportPath(str(self._qml_root))
+        self._qml_component = QQmlComponent(self._qml_engine, self._qml_url)
+        if self._qml_component.status() != QQmlComponent.Status.Ready:
+            errors = "; ".join(
+                error.toString() for error in self._qml_component.errors()
+            )
+            raise RuntimeError(f"DisplayScene.qml failed to load: {errors}")
 
     def start(self) -> None:
         screens = QGuiApplication.screens()
@@ -130,13 +145,29 @@ class _SmokeRunner(QObject):
             capture_pixels=True,
         )
         content = window.contentItem()
-        item = BackgroundRenderItem(content, telemetry=telemetry)
-        item.setSize(content.size())
+        scene_root = self._qml_component.create()
+        if not isinstance(scene_root, QQuickItem):
+            raise RuntimeError("DisplayScene.qml did not create a QQuickItem root")
+        scene_root.setParent(content)
+        scene_root.setParentItem(content)
+        scene_root.setSize(content.size())
+        item = BackgroundRenderItem(scene_root, telemetry=telemetry)
+        item.setSize(scene_root.size())
         content.widthChanged.connect(
-            lambda item=item, content=content: item.setWidth(content.width())
+            lambda scene_root=scene_root, content=content: scene_root.setWidth(
+                content.width()
+            )
         )
         content.heightChanged.connect(
-            lambda item=item, content=content: item.setHeight(content.height())
+            lambda scene_root=scene_root, content=content: scene_root.setHeight(
+                content.height()
+            )
+        )
+        scene_root.widthChanged.connect(
+            lambda item=item, scene_root=scene_root: item.setWidth(scene_root.width())
+        )
+        scene_root.heightChanged.connect(
+            lambda item=item, scene_root=scene_root: item.setHeight(scene_root.height())
         )
         item.setProofProgress(0.36 + (0.08 * index))
 
@@ -149,6 +180,7 @@ class _SmokeRunner(QObject):
             index=index,
             screen_name=screen.name(),
             window=window,
+            scene_root=scene_root,
             item=item,
             telemetry=telemetry,
         )
@@ -226,6 +258,9 @@ class _SmokeRunner(QObject):
             "created_windows": len(self._probes),
             "render_loop": os.environ.get("QSG_RENDER_LOOP"),
             "graphics_api": QQuickWindow.graphicsApi().name,
+            "qml_url": self._qml_url.toLocalFile(),
+            "qml_loaded": self._qml_component.status()
+            == QQmlComponent.Status.Ready,
             "windows": reports,
             "errors": self._errors,
         }
@@ -248,6 +283,10 @@ class _SmokeRunner(QObject):
         errors: list[str] = []
         if final.error:
             errors.append(f"{prefix} render error: {final.error}")
+        if probe.scene_root.objectName() != "displaySceneRoot":
+            errors.append(f"{prefix} did not instantiate DisplayScene.qml")
+        if probe.scene_root.property("runtimeRole") != "display-scene":
+            errors.append(f"{prefix} QML runtime role is incorrect")
         if initial.render_thread_id is None:
             errors.append(f"{prefix} never rendered")
         elif initial.render_thread_id == initial.gui_thread_id:

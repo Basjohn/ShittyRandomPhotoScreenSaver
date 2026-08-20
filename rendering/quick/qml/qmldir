@@ -1,1 +1,2 @@
-# Package-owned QML import/data root. Components land in later migration slices.
+# Package-owned QML import/data root.
+DisplayScene 1.0 DisplayScene.qml
