@@ -92,6 +92,20 @@ class QuickDisplayIdentity:
 
 
 @dataclass(frozen=True, slots=True)
+class QuickDisplayBindingLoss:
+    """One-shot primitive notice that a generation left its bound display."""
+
+    screen_index: int
+    runtime_generation: int | None
+    expected_screen_key: str
+    observed_screen_key: str | None
+    observed_screen_name: str | None
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
 class QuickSceneReadiness:
     """Explicit generation-scoped presentation readiness and retirement facts."""
 

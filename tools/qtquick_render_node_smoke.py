@@ -76,6 +76,8 @@ class _WindowProbe:
     replacement_capture: dict[str, Any] | None = None
     initial_scene_state: dict[str, object] | None = None
     hide_show_cycles: list[dict[str, Any]] = field(default_factory=list)
+    topology_loss_events: list[dict[str, Any]] = field(default_factory=list)
+    display_identity_events: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _parse_size(value: str) -> QSize:
@@ -210,6 +212,7 @@ class _SmokeRunner(QObject):
         self._topology_generations: list[dict[str, Any]] = []
         self._topology_replacements: list[dict[str, Any]] = []
         self._active_topology_generation: dict[str, Any] | None = None
+        self._topology_displacement: dict[str, Any] | None = None
 
     def start(self) -> None:
         screens = QGuiApplication.screens()
@@ -367,7 +370,7 @@ class _SmokeRunner(QObject):
         )
         runtime.set_presentation_image(presentation_image)
         scene_root = scene.scene_root
-        return _WindowProbe(
+        probe = _WindowProbe(
             index=index,
             generation=generation,
             screen_name=screen.name(),
@@ -387,6 +390,17 @@ class _SmokeRunner(QObject):
             presentation_image=presentation_image,
             replacement_image=replacement_image,
         )
+        runtime.topology_loss_detected.connect(
+            lambda loss, probe=probe: probe.topology_loss_events.append(
+                loss.as_dict()
+            )
+        )
+        runtime.display_identity_changed.connect(
+            lambda identity, probe=probe: probe.display_identity_events.append(
+                identity.as_dict()
+            )
+        )
+        return probe
 
     def _selected_screen_indices(self) -> list[int]:
         if not self._args.topology_recreate:
@@ -567,6 +581,9 @@ class _SmokeRunner(QObject):
             )
         if self._args.topology_recreate and not self._errors:
             self._advance_topology_presentation_state()
+            if self._generation == 0:
+                self._begin_topology_displacement(token)
+                return
         if self._args.hide_show_cycles > 0 and not self._errors:
             self._begin_hide_show_cycle(token)
             return
@@ -829,6 +846,132 @@ class _SmokeRunner(QObject):
             )
             probe.scene.set_background_proof_progress(progress)
 
+    def _begin_topology_displacement(self, token: int) -> None:
+        """Exercise Qt moving one live window onto another physical screen."""
+
+        if token != self._cycle_token:
+            return
+        try:
+            displaced = next(probe for probe in self._probes if probe.index == 0)
+            fallback = next(probe for probe in self._probes if probe.index == 1)
+            fallback_screen = self._current_screen_by_index[1]
+            displaced.runtime.frame_pacer.set_visualizer_active(True)
+            self._topology_displacement = {
+                "generation": self._generation,
+                "displaced_screen_index": displaced.index,
+                "fallback_screen_index": fallback.index,
+                "expected_identity_before": (
+                    displaced.runtime.display_identity.as_dict()
+                ),
+                "pacer_before": displaced.runtime.frame_pacer.describe(),
+                "fallback_refresh_rate_hz": float(fallback_screen.refreshRate()),
+                "fallback_window_object_name": fallback.window.objectName(),
+            }
+            if self._active_topology_generation is not None:
+                self._active_topology_generation[
+                    "unexpected_screen_displacement"
+                ] = self._topology_displacement
+            displaced.window.setScreen(fallback_screen)
+        except Exception as exc:
+            self._errors.append(
+                "topology displacement failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            self._retire_generation(token)
+            return
+        self._visibility_deadline = self._visibility_timeout_deadline()
+        QTimer.singleShot(
+            10,
+            lambda token=token: self._poll_topology_displacement(token),
+        )
+
+    def _poll_topology_displacement(self, token: int) -> None:
+        if token != self._cycle_token:
+            return
+        displaced = next(probe for probe in self._probes if probe.index == 0)
+        fallback = next(probe for probe in self._probes if probe.index == 1)
+        fallback_screen = self._current_screen_by_index[1]
+        runtime_state = displaced.runtime.describe_runtime_state()
+        pacer_state = runtime_state.get("frame_pacer", {})
+        scene_state = runtime_state.get("scene_readiness", {})
+        input_state = runtime_state.get("input", {})
+        visible_on_fallback = [
+            probe.window.objectName()
+            for probe in self._probes
+            if probe.window.isVisible() and probe.window.screen() is fallback_screen
+        ]
+        ready = bool(
+            len(displaced.topology_loss_events) == 1
+            and displaced.runtime.binding_loss is not None
+            and displaced.window.binding_loss is not None
+            and not displaced.window.isVisible()
+            and displaced.runtime.phase.value == "paused"
+            and pacer_state.get("paused")
+            and not pacer_state.get("active")
+            and pacer_state.get("demands") == ["visualizer"]
+            and not input_state.get("admission_open")
+            and scene_state.get("scene_graph_invalidated")
+            and displaced.window.screen() is fallback_screen
+            and visible_on_fallback == [fallback.window.objectName()]
+        )
+        if not ready and time.monotonic() < self._visibility_deadline:
+            QTimer.singleShot(
+                10,
+                lambda token=token: self._poll_topology_displacement(token),
+            )
+            return
+        if not ready:
+            self._errors.append(
+                "generation0 displaced runtime did not quiesce on the fallback screen"
+            )
+
+        original_loss = displaced.runtime.binding_loss
+        displaced.window._on_window_screen_changed(fallback_screen)
+        displaced.window._on_window_screen_changed(None)
+        duplicate_callbacks_ignored = bool(
+            original_loss is not None
+            and displaced.runtime.binding_loss is original_loss
+            and displaced.window.binding_loss == original_loss
+            and len(displaced.topology_loss_events) == 1
+        )
+
+        record = self._topology_displacement
+        if record is None:
+            self._errors.append("topology displacement record was lost")
+        else:
+            record.update(
+                {
+                    "topology_loss_signal_count": len(
+                        displaced.topology_loss_events
+                    ),
+                    "topology_loss": (
+                        displaced.topology_loss_events[0]
+                        if displaced.topology_loss_events
+                        else None
+                    ),
+                    "identity_change_signal_count": len(
+                        displaced.display_identity_events
+                    ),
+                    "duplicate_callbacks_ignored": duplicate_callbacks_ignored,
+                    "identity_after_loss": (
+                        displaced.runtime.display_identity.as_dict()
+                    ),
+                    "pacer_after_loss": pacer_state,
+                    "runtime_state_after_loss": runtime_state,
+                    "actual_window_screen_name_after_loss": str(
+                        displaced.window.screen().name()
+                        if displaced.window.screen() is not None
+                        else ""
+                    ),
+                    "displaced_presenter_active": bool(
+                        displaced.window.isVisible()
+                        or displaced.runtime.frame_pacer.is_active()
+                    ),
+                    "visible_presenters_on_fallback": visible_on_fallback,
+                }
+            )
+        self._finish_presentation_sequence(token)
+
     def _retire_generation(self, token: int) -> None:
         if token != self._cycle_token:
             return
@@ -1071,6 +1214,7 @@ class _SmokeRunner(QObject):
             ),
             "topology_generations": self._topology_generations,
             "topology_replacements": self._topology_replacements,
+            "topology_displacement": self._topology_displacement,
             "presentation_state_by_screen_key": (
                 self._presentation_state_by_screen_key
             ),
@@ -1094,7 +1238,11 @@ class _SmokeRunner(QObject):
 
     def _validate_topology_recreate(self) -> list[str]:
         if not self._args.topology_recreate:
-            if self._topology_generations or self._topology_replacements:
+            if (
+                self._topology_generations
+                or self._topology_replacements
+                or self._topology_displacement is not None
+            ):
                 return ["unexpected topology replacement records were created"]
             return []
 
@@ -1167,6 +1315,56 @@ class _SmokeRunner(QObject):
 
         if len(window_names) != len(set(window_names)):
             errors.append("topology replacement reused a Quick window owner")
+
+        displacement = self._topology_displacement
+        if displacement is None:
+            errors.append("topology recreate did not exercise screen displacement")
+        else:
+            before_identity = displacement.get("expected_identity_before", {})
+            after_identity = displacement.get("identity_after_loss", {})
+            loss = displacement.get("topology_loss", {})
+            before_pacer = displacement.get("pacer_before", {})
+            after_pacer = displacement.get("pacer_after_loss", {})
+            runtime_after = displacement.get("runtime_state_after_loss", {})
+            scene_after = runtime_after.get("scene_readiness", {})
+            if displacement.get("topology_loss_signal_count") != 1:
+                errors.append("topology loss was not published exactly once")
+            if displacement.get("identity_change_signal_count") != 0:
+                errors.append("displaced runtime published a fallback identity")
+            if not displacement.get("duplicate_callbacks_ignored"):
+                errors.append("topology loss was not one-shot across stale callbacks")
+            if before_identity != after_identity:
+                errors.append("displaced runtime mutated its physical identity")
+            if (
+                loss.get("screen_index") != 0
+                or loss.get("runtime_generation") != 0
+                or loss.get("expected_screen_key")
+                != before_identity.get("screen_key")
+            ):
+                errors.append("topology loss did not preserve generation identity")
+            if before_pacer.get("target_hz") != after_pacer.get("target_hz"):
+                errors.append("displaced runtime retargeted its frame pacer")
+            if (
+                runtime_after.get("phase") != "paused"
+                or runtime_after.get("window", {}).get("visible")
+                or not after_pacer.get("paused")
+                or after_pacer.get("active")
+                or runtime_after.get("input", {}).get("admission_open")
+            ):
+                errors.append("displaced runtime remained presentation-active")
+            if (
+                runtime_after.get("close_meta_calls_queued")
+                or runtime_after.get("window_delete_queued")
+                or runtime_after.get("retirement_completed")
+                or scene_after.get("qml_objects_retired")
+            ):
+                errors.append("topology loss bypassed generation retirement barriers")
+            if displacement.get("displaced_presenter_active"):
+                errors.append("displaced runtime remained a fallback presenter")
+            if displacement.get("visible_presenters_on_fallback") != [
+                displacement.get("fallback_window_object_name")
+            ]:
+                errors.append("fallback display retained two active presenters")
         if len(self._topology_replacements) != 2:
             errors.append("topology recreate did not record remove and add replacements")
         else:
