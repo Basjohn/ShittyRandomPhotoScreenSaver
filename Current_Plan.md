@@ -345,15 +345,6 @@ Read:
 
 Land in small commits:
 
-### A3 — production frame pacer
-
-Move/generalize target-pacing logic into production code with unit tests.
-
-The P0 tool may remain evidence code; do not rewrite evidence merely to share code if that damages
-reproducibility.
-
-**Checkpoint + push.**
-
 ### A4 — early compiled smoke
 
 Before the migration depends on QML/Quick packaging, update the smallest required build inputs and
