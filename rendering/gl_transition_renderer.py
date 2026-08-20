@@ -51,18 +51,6 @@ def _aspect_fill_source_rect(source_width: int, source_height: int, target_width
     return QRect(0, crop_y, source_width, crop_height)
 
 
-def _blockspin_spin_from_progress(p: float) -> float:
-    """Convert linear progress to spin amount with ease-in-out."""
-    if p <= 0.0:
-        return 0.0
-    if p >= 1.0:
-        return 1.0
-    # Ease-in-out cubic
-    if p < 0.5:
-        return 4.0 * p * p * p
-    return 1.0 - pow(-2.0 * p + 2.0, 3) / 2.0
-
-
 def _stage_now() -> float:
     import time as _t
 
@@ -263,7 +251,14 @@ class GLTransitionRenderer:
                 gl.glBindTexture(gl.GL_TEXTURE_2D, tex_mgr.new_tex_id)
                 gl.glUniform1i(pipeline.u_new_tex_loc, 1)
             
-            spin = _blockspin_spin_from_progress(base_p)
+            # Keep the retiring compositor and final Quick renderer on the
+            # same authored BlockSpin curve without importing the effect's
+            # shader/mesh module until this legacy transition actually draws.
+            from rendering.gl_programs.blockspin_program import (
+                block_spin_progress,
+            )
+
+            spin = block_spin_progress(base_p)
             angle = math.pi * spin * spin_dir
             
             if pipeline.u_angle_loc != -1:

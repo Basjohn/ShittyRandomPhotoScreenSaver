@@ -46,6 +46,10 @@ class RenderNodeSnapshot:
     transition_midpoint_linear_progress: float | None = None
     transition_midpoint_eased_progress: float | None = None
     transition_midpoint_colors: tuple[str, ...] = ()
+    transition_probe_run_id: int | None = None
+    transition_probe_linear_progresses: tuple[float, ...] = ()
+    transition_probe_eased_progresses: tuple[float, ...] = ()
+    transition_probe_colors: tuple[tuple[str, ...], ...] = ()
     gl_version: str = ""
     error: str | None = None
 
@@ -58,9 +62,22 @@ class RenderNodeTelemetry:
         *,
         gui_thread_id: int | None = None,
         capture_pixels: bool = False,
+        transition_probe_progresses: tuple[float, ...] = (),
     ) -> None:
         self._lock = threading.Lock()
         self._capture_pixels = bool(capture_pixels)
+        probes = tuple(float(progress) for progress in transition_probe_progresses)
+        if any(not 0.0 < progress < 1.0 for progress in probes):
+            raise ValueError("transition pixel probes must be inside the run")
+        if probes != tuple(sorted(set(probes))):
+            raise ValueError("transition pixel probes must be unique and increasing")
+        self._transition_probe_progresses = probes
+        self._transition_probe_run_id: int | None = None
+        self._transition_probe_index = 0
+        self._transition_probe_candidate: tuple[
+            TransitionSample,
+            tuple[str, ...],
+        ] | None = None
         self._snapshot = RenderNodeSnapshot(
             gui_thread_id=(
                 threading.get_ident() if gui_thread_id is None else int(gui_thread_id)
@@ -234,6 +251,88 @@ class RenderNodeTelemetry:
                 transition_midpoint_eased_progress=sample.eased_progress,
                 transition_midpoint_colors=tuple(str(color) for color in colors),
             )
+
+    def wants_transition_probe_sample(
+        self,
+        sample: TransitionSample,
+    ) -> bool:
+        with self._lock:
+            if not self._capture_pixels or not self._transition_probe_progresses:
+                return False
+            index = (
+                self._transition_probe_index
+                if self._transition_probe_run_id == sample.run_id
+                else 0
+            )
+            if index >= len(self._transition_probe_progresses):
+                return False
+            target = self._transition_probe_progresses[index]
+            return bool(sample.linear_progress >= target - 0.04 and not sample.complete)
+
+    def note_transition_probe_sample(
+        self,
+        *,
+        sample: TransitionSample,
+        colors: tuple[str, ...],
+    ) -> None:
+        with self._lock:
+            run_changed = self._transition_probe_run_id != sample.run_id
+            if run_changed:
+                self._transition_probe_run_id = sample.run_id
+                self._transition_probe_index = 0
+                self._transition_probe_candidate = None
+            if self._transition_probe_index >= len(
+                self._transition_probe_progresses
+            ):
+                return
+            target = self._transition_probe_progresses[self._transition_probe_index]
+            colors_value = tuple(str(color) for color in colors)
+            candidate = self._transition_probe_candidate
+            if candidate is None or abs(sample.linear_progress - target) < abs(
+                candidate[0].linear_progress - target
+            ):
+                candidate = (sample, colors_value)
+                self._transition_probe_candidate = candidate
+            if sample.linear_progress < target:
+                return
+
+            chosen_sample, chosen_colors = candidate
+            snapshot_matches_run = (
+                self._snapshot.transition_probe_run_id == sample.run_id
+            )
+            linear = (
+                self._snapshot.transition_probe_linear_progresses
+                if snapshot_matches_run
+                else ()
+            )
+            eased = (
+                self._snapshot.transition_probe_eased_progresses
+                if snapshot_matches_run
+                else ()
+            )
+            samples = (
+                self._snapshot.transition_probe_colors
+                if snapshot_matches_run
+                else ()
+            )
+            self._snapshot = replace(
+                self._snapshot,
+                transition_probe_run_id=sample.run_id,
+                transition_probe_linear_progresses=(
+                    *linear,
+                    float(chosen_sample.linear_progress),
+                ),
+                transition_probe_eased_progresses=(
+                    *eased,
+                    float(chosen_sample.eased_progress),
+                ),
+                transition_probe_colors=(
+                    *samples,
+                    chosen_colors,
+                ),
+            )
+            self._transition_probe_index += 1
+            self._transition_probe_candidate = None
 
     def note_released(self, *, release_thread_id: int) -> None:
         with self._lock:

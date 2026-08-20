@@ -447,7 +447,11 @@ class BackgroundRenderNode(QSGRenderNode):
             sample is not None
             and self._telemetry.wants_transition_midpoint_sample(sample)
         )
-        if not wants_sync_sample and not wants_midpoint:
+        wants_transition_probe = bool(
+            sample is not None
+            and self._telemetry.wants_transition_probe_sample(sample)
+        )
+        if not wants_sync_sample and not wants_midpoint and not wants_transition_probe:
             return
         physical_width = max(
             1,
@@ -490,6 +494,11 @@ class BackgroundRenderNode(QSGRenderNode):
             self._telemetry.note_pixel_sample(colors)
         if wants_midpoint and sample is not None:
             self._telemetry.note_transition_midpoint_sample(
+                sample=sample,
+                colors=colors,
+            )
+        if wants_transition_probe and sample is not None:
+            self._telemetry.note_transition_probe_sample(
                 sample=sample,
                 colors=colors,
             )

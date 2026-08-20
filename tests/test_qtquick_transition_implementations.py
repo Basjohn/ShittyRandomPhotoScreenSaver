@@ -9,6 +9,15 @@ import sys
 
 import pytest
 
+from rendering.gl_programs.blockspin_program import (
+    BLOCK_SPIN_BOX_VERTEX_COUNT,
+    BLOCK_SPIN_BOX_VERTICES,
+    BLOCK_SPIN_FRAGMENT_SOURCE,
+    BLOCK_SPIN_QUICK_VERTEX_SOURCE,
+    BLOCK_SPIN_VERTEX_STRIDE_FLOATS,
+    block_spin_progress,
+    block_spin_specular_band_center,
+)
 from rendering.quick.transitions.implementation_registry import (
     resolve_quick_transition_renderer,
 )
@@ -16,6 +25,9 @@ from rendering.quick.transitions.implementations.block_flip import (
     _BLOCK_FLIP_FRAGMENT_SOURCE,
     _block_flip_direction_vector,
     _block_flip_grid,
+)
+from rendering.quick.transitions.implementations.block_spins import (
+    _block_spin_direction_state,
 )
 from rendering.quick.transitions.implementations.slide import (
     _SLIDE_FRAGMENT_SOURCE,
@@ -75,6 +87,7 @@ print(json.dumps({
             "wipe",
             "warp_dissolve",
             "block_flip",
+            "block_spins",
         ],
         "loaded": [],
         "shader_modules": [],
@@ -140,6 +153,10 @@ block_flip = resolve_quick_transition_renderer(
     "block_flip",
     enabled_transition_ids=frozenset(),
 )
+block_spins = resolve_quick_transition_renderer(
+    "block_spins",
+    enabled_transition_ids=frozenset(),
+)
 loaded = sorted(
     name for name in sys.modules
     if name.startswith("rendering.quick.transitions.implementations.")
@@ -152,6 +169,7 @@ print(json.dumps({
             wipe,
             warp,
             block_flip,
+            block_spins,
         )
     ),
     "loaded": loaded,
@@ -160,6 +178,46 @@ print(json.dumps({
     )
 
     assert report == {"resolved": False, "loaded": []}
+
+
+def test_enabled_resolution_imports_only_block_spins_surface():
+    report = _probe(
+        """
+import json
+import sys
+from rendering.quick.transitions.implementation_registry import (
+    resolve_quick_transition_renderer,
+)
+
+renderer = resolve_quick_transition_renderer(
+    "block_spins",
+    enabled_transition_ids=frozenset({"block_spins"}),
+)
+implementation_modules = sorted(
+    name for name in sys.modules
+    if name.startswith("rendering.quick.transitions.implementations.")
+)
+shader_modules = sorted(
+    name for name in sys.modules
+    if name.startswith("rendering.gl_programs.") and name.endswith("_program")
+)
+print(json.dumps({
+    "renderer": type(renderer).__name__,
+    "implementation_modules": implementation_modules,
+    "shader_modules": shader_modules,
+}))
+"""
+    )
+
+    assert report == {
+        "renderer": "QuickBlockSpinsRenderer",
+        "implementation_modules": [
+            "rendering.quick.transitions.implementations.block_spins"
+        ],
+        "shader_modules": [
+            "rendering.gl_programs.blockspin_program",
+        ],
+    }
 
 
 def test_enabled_resolution_imports_only_crossfade_surface():
@@ -397,6 +455,100 @@ def test_block_flip_shader_is_strip_slab_authoritative_with_clean_endpoints():
     assert "showsNewFace" in _BLOCK_FLIP_FRAGMENT_SOURCE
     assert "cellIndex" not in _BLOCK_FLIP_FRAGMENT_SOURCE
     assert "hash1" not in _BLOCK_FLIP_FRAGMENT_SOURCE
+
+
+@pytest.mark.parametrize(
+    ("direction", "state"),
+    (
+        ("left", (0, 1.0)),
+        ("right", (0, -1.0)),
+        ("up", (1, 1.0)),
+        ("down", (1, -1.0)),
+        ("diag_tl_br", (2, 1.0)),
+        ("diag_tr_bl", (3, -1.0)),
+    ),
+)
+def test_block_spins_preserves_all_authored_axis_and_spin_directions(
+    direction,
+    state,
+):
+    assert _block_spin_direction_state(direction) == state
+
+
+def test_block_spins_rejects_an_unresolved_random_direction():
+    with pytest.raises(ValueError, match="unknown resolved 3D Block Spins"):
+        _block_spin_direction_state("Random")
+
+
+def test_block_spins_owns_a_real_thin_box_mesh_without_quad_fallback():
+    assert BLOCK_SPIN_BOX_VERTEX_COUNT == 36
+    assert len(BLOCK_SPIN_BOX_VERTICES) == (
+        BLOCK_SPIN_BOX_VERTEX_COUNT * BLOCK_SPIN_VERTEX_STRIDE_FLOATS
+    )
+    positions = tuple(
+        BLOCK_SPIN_BOX_VERTICES[index : index + 3]
+        for index in range(
+            0,
+            len(BLOCK_SPIN_BOX_VERTICES),
+            BLOCK_SPIN_VERTEX_STRIDE_FLOATS,
+        )
+    )
+    assert {position[2] for position in positions} == {0.0, -0.05}
+    renderer_source = (
+        ROOT
+        / "rendering"
+        / "quick"
+        / "transitions"
+        / "implementations"
+        / "block_spins.py"
+    ).read_text(encoding="utf-8")
+    assert "gl.GL_TRIANGLES" in renderer_source
+    assert "BLOCK_SPIN_BOX_VERTEX_COUNT" in renderer_source
+    assert "box_vao and" not in renderer_source
+
+
+def test_block_spins_keeps_linear_run_input_and_authored_cubic_spin_timing():
+    assert block_spin_progress(0.0) == 0.0
+    assert block_spin_progress(0.25) == pytest.approx(0.0625)
+    assert block_spin_progress(0.5) == pytest.approx(0.5)
+    assert block_spin_progress(0.75) == pytest.approx(0.9375)
+    assert block_spin_progress(1.0) == 1.0
+
+
+def test_block_spins_opposite_directions_move_side_highlight_opposite_ways():
+    assert block_spin_specular_band_center(0.25, 1.0) == pytest.approx(0.295)
+    assert block_spin_specular_band_center(0.25, -1.0) == pytest.approx(0.705)
+    assert block_spin_specular_band_center(0.75, 1.0) == pytest.approx(0.705)
+    assert block_spin_specular_band_center(0.75, -1.0) == pytest.approx(0.295)
+    assert "uSpecDirection < 0.0" in BLOCK_SPIN_FRAGMENT_SOURCE
+    assert "? 1.0 - timeline" in BLOCK_SPIN_FRAGMENT_SOURCE
+    renderer_source = (
+        ROOT
+        / "rendering"
+        / "quick"
+        / "transitions"
+        / "implementations"
+        / "block_spins.py"
+    ).read_text(encoding="utf-8")
+    assert 'uniforms["uSpecDirection"], spin_direction' in renderer_source
+
+
+def test_block_spins_shader_uses_quick_geometry_depth_and_authored_face_uvs():
+    assert "localPosition" in BLOCK_SPIN_QUICK_VERTEX_SOURCE
+    assert "uMatrix * vec4(localPosition" in BLOCK_SPIN_QUICK_VERTEX_SOURCE
+    assert "projected.z = -position.z" in BLOCK_SPIN_QUICK_VERTEX_SOURCE
+    assert "flat out int vFaceKind" in BLOCK_SPIN_QUICK_VERTEX_SOURCE
+    assert "backUv = vec2(1.0 - vUv.x, 1.0 - vUv.y)" in (
+        BLOCK_SPIN_FRAGMENT_SOURCE
+    )
+    assert "backUv = vec2(vUv.x, vUv.y)" in BLOCK_SPIN_FRAGMENT_SOURCE
+    assert "backUv = vec2(1.0 - vUv.y, vUv.x)" in (
+        BLOCK_SPIN_FRAGMENT_SOURCE
+    )
+    assert "backUv = vec2(vUv.y, 1.0 - vUv.x)" in (
+        BLOCK_SPIN_FRAGMENT_SOURCE
+    )
+    assert "u_blockRect" not in BLOCK_SPIN_QUICK_VERTEX_SOURCE
 
 
 @pytest.mark.parametrize(

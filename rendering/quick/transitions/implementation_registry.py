@@ -44,6 +44,12 @@ _IMPLEMENTATIONS = (
             "rendering.quick.transitions.implementations.block_flip"
         ),
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="block_spins",
+        module_name=(
+            "rendering.quick.transitions.implementations.block_spins"
+        ),
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 
