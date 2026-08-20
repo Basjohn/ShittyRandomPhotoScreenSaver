@@ -363,25 +363,6 @@ The explicit operator-run executable validation remains required before producti
 
 ---
 
-# 5. Phase B — runtime-host decomposition
-
-Read `01_Runtime_Host_Lifecycle.md`.
-
-Refactor without a compatibility facade.
-
-`DisplayManager` continues to own topology, but the future display type becomes `QuickDisplayRuntime`,
-not a QWidget-shaped adapter.
-
-Keep engine/provider/settings behaviour unchanged.
-
-Prove in a migration harness:
-
-- topology recreate.
-
-**Checkpoint after each meaningful owner extraction. Push each checkpoint.**
-
----
-
 # 6. Phase C — base image and all transitions
 
 Read `02_Scene_Renderer_Transitions.md`.

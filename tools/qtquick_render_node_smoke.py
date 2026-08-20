@@ -57,6 +57,10 @@ class _WindowProbe:
     qml_runtime_generation: int | None
     target_geometry: tuple[int, int, int, int]
     qml_root_identity: int
+    proof_progress_on_construction: float
+    presentation_state_replayed: bool
+    replayed_from_generation: int | None
+    retired_proof_progress: float | None = None
     initial_capture: dict[str, Any] | None = None
     resized_capture: dict[str, Any] | None = None
     initial_scene_state: dict[str, object] | None = None
@@ -81,6 +85,7 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--generations", type=int, default=1)
     parser.add_argument("--hide-show-cycles", type=int, default=0)
     parser.add_argument("--exit-via-input", action="store_true")
+    parser.add_argument("--topology-recreate", action="store_true")
     parser.add_argument("--size", type=_parse_size, default=QSize(480, 270))
     parser.add_argument("--phase-delay-ms", type=int, default=350)
     parser.add_argument("--output", type=Path)
@@ -93,6 +98,16 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
         parser.error("--hide-show-cycles must be between 0 and 3")
     if args.exit_via_input and args.generations != 1:
         parser.error("--exit-via-input requires exactly one generation")
+    if args.topology_recreate and (
+        args.windows != 2
+        or args.generations != 3
+        or args.hide_show_cycles != 0
+        or args.exit_via_input
+    ):
+        parser.error(
+            "--topology-recreate requires --windows 2 --generations 3 "
+            "without hide/show or input-exit scenarios"
+        )
     if not 100 <= args.phase_delay_ms <= 5000:
         parser.error("--phase-delay-ms must be between 100 and 5000")
     return args
@@ -138,11 +153,20 @@ class _SmokeRunner(QObject):
         self._destroyed_runtime_root_ids: set[int] = set()
         self._runtime_root_destruction_barriers: list[dict[str, Any]] = []
         self._active_runtime_root_barrier: dict[str, Any] | None = None
+        self._presentation_state_by_screen_key: dict[str, dict[str, Any]] = {}
+        self._topology_generations: list[dict[str, Any]] = []
+        self._topology_replacements: list[dict[str, Any]] = []
+        self._active_topology_generation: dict[str, Any] | None = None
 
     def start(self) -> None:
         screens = QGuiApplication.screens()
         if not screens:
             self._finish_with_error("Qt reported no physical screens")
+            return
+        if self._args.topology_recreate and len(screens) < 2:
+            self._finish_with_error(
+                "topology recreate requires two physical QScreens"
+            )
             return
         window_count = min(self._args.windows, len(screens))
         if window_count < self._args.windows:
@@ -174,18 +198,30 @@ class _SmokeRunner(QObject):
         self._destroyed_runtime_root_ids = set()
         self._active_runtime_root_barrier = None
         current_screens = list(QGuiApplication.screens())
-        if len(current_screens) < self._window_count:
+        selected_indices = self._selected_screen_indices()
+        missing_indices = [
+            index for index in selected_indices if index >= len(current_screens)
+        ]
+        if missing_indices:
             self._errors.append(
-                f"generation{self._generation} has only {len(current_screens)} "
-                f"screens; expected {self._window_count}"
+                f"generation{self._generation} cannot bind physical screens "
+                f"{missing_indices}; available={len(current_screens)}"
             )
             self._finish_report()
             return
-        self._current_screens = current_screens[: self._window_count]
+        self._current_screen_by_index = {
+            index: current_screens[index] for index in selected_indices
+        }
         try:
-            for index, screen in enumerate(self._current_screens):
+            for position, index in enumerate(selected_indices):
+                screen = self._current_screen_by_index[index]
                 self._probes.append(
-                    self._create_window(index, screen, generation=self._generation)
+                    self._create_window(
+                        index,
+                        screen,
+                        generation=self._generation,
+                        accepts_focus=position == 0,
+                    )
                 )
         except Exception as exc:
             self._errors.append(
@@ -195,10 +231,12 @@ class _SmokeRunner(QObject):
             self._finish_report()
             return
 
+        self._record_topology_generation(selected_indices)
+
         # Construct the complete display generation before any native window
         # is shown, matching production multi-display ownership ordering.
         for probe in self._probes:
-            if probe.window.screen() is not self._current_screens[probe.index]:
+            if probe.window.screen() is not self._current_screen_by_index[probe.index]:
                 self._errors.append(
                     f"generation{self._generation} screen{probe.index} "
                     "was not bound before show"
@@ -215,6 +253,7 @@ class _SmokeRunner(QObject):
         screen: QScreen,
         *,
         generation: int,
+        accepts_focus: bool,
     ) -> _WindowProbe:
         telemetry = RenderNodeTelemetry(
             gui_thread_id=threading.get_ident(),
@@ -227,7 +266,7 @@ class _SmokeRunner(QObject):
             scene_factory=self._scene_factory,
             window_policy=QuickWindowPolicy(
                 always_on_top=False,
-                accepts_focus=index == 0,
+                accepts_focus=accepts_focus,
                 blank_cursor=False,
             ),
             telemetry=telemetry,
@@ -254,7 +293,15 @@ class _SmokeRunner(QObject):
         window.setGeometry(*target_geometry)
 
         scene = runtime.scene_controller
-        scene.set_background_proof_progress(0.36 + (0.08 * index))
+        screen_key = runtime.display_identity.screen_key
+        saved_state = self._presentation_state_by_screen_key.get(screen_key)
+        if saved_state is None:
+            proof_progress = 0.36 + (0.08 * index)
+            replayed_from_generation = None
+        else:
+            proof_progress = float(saved_state["proof_progress"])
+            replayed_from_generation = int(saved_state["generation"])
+        scene.set_background_proof_progress(proof_progress)
         scene_root = scene.scene_root
         return _WindowProbe(
             index=index,
@@ -270,7 +317,79 @@ class _SmokeRunner(QObject):
             qml_runtime_generation=scene_root.property("runtimeGeneration"),
             target_geometry=target_geometry,
             qml_root_identity=id(scene_root),
+            proof_progress_on_construction=proof_progress,
+            presentation_state_replayed=saved_state is not None,
+            replayed_from_generation=replayed_from_generation,
         )
+
+    def _selected_screen_indices(self) -> list[int]:
+        if not self._args.topology_recreate:
+            return list(range(self._window_count))
+        topology_plan = ([0, 1], [1], [0, 1])
+        return list(topology_plan[self._generation])
+
+    def _record_topology_generation(self, selected_indices: list[int]) -> None:
+        if not self._args.topology_recreate:
+            return
+        generation_record = {
+            "generation": self._generation,
+            "selected_screen_indices": list(selected_indices),
+            "construction_after_completed_generations": self._completed_generations,
+            "construction_after_root_barriers": sum(
+                1
+                for barrier in self._runtime_root_destruction_barriers
+                if barrier.get("crossed")
+            ),
+            "screens": [
+                {
+                    "screen_index": probe.index,
+                    "screen_key": probe.runtime.display_identity.screen_key,
+                    "display_identity": probe.runtime.display_identity.as_dict(),
+                    "window_object_name": probe.window.objectName(),
+                    "qml_runtime_generation": probe.qml_runtime_generation,
+                    "proof_progress_on_construction": (
+                        probe.proof_progress_on_construction
+                    ),
+                    "presentation_state_replayed": (
+                        probe.presentation_state_replayed
+                    ),
+                    "replayed_from_generation": probe.replayed_from_generation,
+                    "retired_proof_progress": None,
+                }
+                for probe in self._probes
+            ],
+            "retirement_complete": False,
+            "runtime_root_barrier_crossed": False,
+        }
+        if self._topology_generations:
+            previous = self._topology_generations[-1]
+            old_keys = {
+                screen["screen_key"] for screen in previous["screens"]
+            }
+            new_keys = {
+                screen["screen_key"] for screen in generation_record["screens"]
+            }
+            self._topology_replacements.append(
+                {
+                    "from_generation": previous["generation"],
+                    "to_generation": self._generation,
+                    "old_screen_keys": sorted(old_keys),
+                    "new_screen_keys": sorted(new_keys),
+                    "removed_screen_keys": sorted(old_keys - new_keys),
+                    "added_screen_keys": sorted(new_keys - old_keys),
+                    "old_generation_retired": previous["retirement_complete"],
+                    "old_runtime_root_barrier_crossed": previous[
+                        "runtime_root_barrier_crossed"
+                    ],
+                    "replayed_screen_keys": sorted(
+                        screen["screen_key"]
+                        for screen in generation_record["screens"]
+                        if screen["presentation_state_replayed"]
+                    ),
+                }
+            )
+        self._active_topology_generation = generation_record
+        self._topology_generations.append(generation_record)
 
     def _capture_initial(self, token: int) -> None:
         if token != self._cycle_token:
@@ -332,6 +451,8 @@ class _SmokeRunner(QObject):
                 )
         except Exception as exc:
             self._errors.append(f"resized capture failed: {type(exc).__name__}: {exc}")
+        if self._args.topology_recreate and not self._errors:
+            self._advance_topology_presentation_state()
         if self._args.hide_show_cycles > 0 and not self._errors:
             self._begin_hide_show_cycle(token)
             return
@@ -578,12 +699,24 @@ class _SmokeRunner(QObject):
         timeout_ms = max(1500, self._args.phase_delay_ms * 8)
         return time.monotonic() + (timeout_ms / 1000.0)
 
+    def _advance_topology_presentation_state(self) -> None:
+        """Change per-screen model state so replacement must replay, not default."""
+
+        for probe in self._probes:
+            progress = round(
+                0.61 + (0.07 * self._generation) + (0.03 * probe.index),
+                6,
+            )
+            probe.scene.set_background_proof_progress(progress)
+
     def _retire_generation(self, token: int) -> None:
         if token != self._cycle_token:
             return
         if self._retirement_started:
             return
         self._retirement_started = True
+        if self._args.topology_recreate:
+            self._capture_topology_presentation_state()
         for probe in self._probes:
             try:
                 if not probe.runtime.close_runtime():
@@ -600,6 +733,35 @@ class _SmokeRunner(QObject):
             max(1500, self._args.phase_delay_ms * 8),
             lambda token=token: self._retirement_timeout(token),
         )
+
+    def _capture_topology_presentation_state(self) -> None:
+        generation_record = self._active_topology_generation
+        screens_by_index = (
+            {
+                int(screen["screen_index"]): screen
+                for screen in generation_record["screens"]
+            }
+            if generation_record is not None
+            else {}
+        )
+        for probe in self._probes:
+            try:
+                progress = float(probe.scene.background_item.getProofProgress())
+            except Exception as exc:
+                self._errors.append(
+                    f"generation{probe.generation} screen{probe.index} "
+                    f"presentation-state capture failed: {type(exc).__name__}: {exc}"
+                )
+                continue
+            probe.retired_proof_progress = progress
+            screen_key = probe.runtime.display_identity.screen_key
+            self._presentation_state_by_screen_key[screen_key] = {
+                "generation": probe.generation,
+                "proof_progress": progress,
+            }
+            screen_record = screens_by_index.get(probe.index)
+            if screen_record is not None:
+                screen_record["retired_proof_progress"] = progress
 
     def _on_runtime_retired(
         self,
@@ -666,8 +828,25 @@ class _SmokeRunner(QObject):
                     "initial_capture": initial_capture,
                     "resized_capture": resized_capture,
                     "hide_show_cycles": probe.hide_show_cycles,
+                    "proof_progress_on_construction": (
+                        probe.proof_progress_on_construction
+                    ),
+                    "presentation_state_replayed": (
+                        probe.presentation_state_replayed
+                    ),
+                    "replayed_from_generation": probe.replayed_from_generation,
+                    "retired_proof_progress": probe.retired_proof_progress,
                     "errors": errors,
                 }
+            )
+        if self._active_topology_generation is not None:
+            self._active_topology_generation["retirement_complete"] = all(
+                probe.runtime.phase.value == "retired" for probe in self._probes
+            )
+            self._active_topology_generation["render_resources_released"] = all(
+                probe.telemetry.snapshot().release_count
+                == 1 + self._args.hide_show_cycles
+                for probe in self._probes
             )
         self._pending_runtime_root_ids = {
             id(probe.runtime) for probe in self._probes
@@ -713,6 +892,10 @@ class _SmokeRunner(QObject):
         if self._destroyed_runtime_root_ids == self._pending_runtime_root_ids:
             if barrier is not None:
                 barrier["crossed"] = True
+            if self._active_topology_generation is not None:
+                self._active_topology_generation[
+                    "runtime_root_barrier_crossed"
+                ] = True
             QTimer.singleShot(0, lambda token=token: self._complete_generation(token))
 
     def _runtime_root_destruction_timeout(self, token: int) -> None:
@@ -751,15 +934,22 @@ class _SmokeRunner(QObject):
         self._report_finished = True
         self._errors.extend(self._validate_exit_sequence())
         self._errors.extend(self._validate_runtime_root_barriers())
+        self._errors.extend(self._validate_topology_recreate())
         report = {
             "valid": not self._errors,
             "requested_windows": self._args.windows,
             "requested_generations": self._args.generations,
             "requested_hide_show_cycles": self._args.hide_show_cycles,
             "requested_exit_via_input": self._args.exit_via_input,
+            "requested_topology_recreate": self._args.topology_recreate,
             "exit_sequence": self._exit_sequence,
             "runtime_root_destruction_barriers": (
                 self._runtime_root_destruction_barriers
+            ),
+            "topology_generations": self._topology_generations,
+            "topology_replacements": self._topology_replacements,
+            "presentation_state_by_screen_key": (
+                self._presentation_state_by_screen_key
             ),
             "completed_generations": self._completed_generations,
             "physical_screens": len(QGuiApplication.screens()),
@@ -778,6 +968,104 @@ class _SmokeRunner(QObject):
             self._args.output.parent.mkdir(parents=True, exist_ok=True)
             self._args.output.write_text(rendered + "\n", encoding="utf-8")
         self._app.exit(0 if report["valid"] else 1)
+
+    def _validate_topology_recreate(self) -> list[str]:
+        if not self._args.topology_recreate:
+            if self._topology_generations or self._topology_replacements:
+                return ["unexpected topology replacement records were created"]
+            return []
+
+        errors: list[str] = []
+        expected_indices = ([0, 1], [1], [0, 1])
+        if len(self._topology_generations) != len(expected_indices):
+            return ["topology recreate did not complete all three generations"]
+
+        retired_progress: dict[tuple[int, str], float] = {}
+        window_names: list[str] = []
+        for expected_generation, (record, indices) in enumerate(
+            zip(self._topology_generations, expected_indices)
+        ):
+            if record.get("generation") != expected_generation:
+                errors.append("topology generation order changed")
+            if record.get("selected_screen_indices") != list(indices):
+                errors.append(
+                    f"generation{expected_generation} selected the wrong QScreens"
+                )
+            if record.get("construction_after_completed_generations") != (
+                expected_generation
+            ):
+                errors.append(
+                    f"generation{expected_generation} constructed before retirement completion"
+                )
+            if record.get("construction_after_root_barriers") != expected_generation:
+                errors.append(
+                    f"generation{expected_generation} constructed before root destruction"
+                )
+            if not record.get("retirement_complete"):
+                errors.append(
+                    f"generation{expected_generation} did not retire its runtime set"
+                )
+            if not record.get("render_resources_released"):
+                errors.append(
+                    f"generation{expected_generation} retained render resources"
+                )
+            if not record.get("runtime_root_barrier_crossed"):
+                errors.append(
+                    f"generation{expected_generation} retained runtime roots"
+                )
+            for screen in record.get("screens", []):
+                screen_index = int(screen["screen_index"])
+                identity = screen.get("display_identity", {})
+                if identity.get("screen_index") != screen_index:
+                    errors.append("topology screen identity was renumbered")
+                if identity.get("runtime_generation") != expected_generation:
+                    errors.append("topology runtime generation identity is stale")
+                if screen.get("qml_runtime_generation") != expected_generation:
+                    errors.append("topology QML generation identity is stale")
+                window_names.append(str(screen.get("window_object_name")))
+                retired = screen.get("retired_proof_progress")
+                if retired is None:
+                    errors.append("topology presentation state was not captured")
+                else:
+                    retired_progress[
+                        (expected_generation, str(screen["screen_key"]))
+                    ] = float(retired)
+                replayed_from = screen.get("replayed_from_generation")
+                if replayed_from is None:
+                    if expected_generation != 0:
+                        errors.append("replacement scene did not replay presentation state")
+                    continue
+                source = retired_progress.get(
+                    (int(replayed_from), str(screen["screen_key"]))
+                )
+                applied = float(screen["proof_progress_on_construction"])
+                if source is None or abs(source - applied) > 1e-6:
+                    errors.append("replacement scene replayed stale presentation state")
+
+        if len(window_names) != len(set(window_names)):
+            errors.append("topology replacement reused a Quick window owner")
+        if len(self._topology_replacements) != 2:
+            errors.append("topology recreate did not record remove and add replacements")
+        else:
+            remove_event, add_event = self._topology_replacements
+            if len(remove_event.get("removed_screen_keys", [])) != 1 or remove_event.get(
+                "added_screen_keys"
+            ):
+                errors.append("topology removal event is incorrect")
+            if len(add_event.get("added_screen_keys", [])) != 1 or add_event.get(
+                "removed_screen_keys"
+            ):
+                errors.append("topology addition event is incorrect")
+            for event in self._topology_replacements:
+                if not event.get("old_generation_retired"):
+                    errors.append("topology replacement started before old retirement")
+                if not event.get("old_runtime_root_barrier_crossed"):
+                    errors.append("topology replacement started before root destruction")
+                if sorted(event.get("replayed_screen_keys", [])) != sorted(
+                    event.get("new_screen_keys", [])
+                ):
+                    errors.append("topology replacement did not replay every selected screen")
+        return errors
 
     def _validate_runtime_root_barriers(self) -> list[str]:
         barriers = self._runtime_root_destruction_barriers
