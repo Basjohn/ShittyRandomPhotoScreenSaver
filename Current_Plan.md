@@ -1,894 +1,868 @@
-# Current Plan — Qt Quick P0 Recorded; Finish the Eyes-On Architecture Decision
+# Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-20 17:26 SAST
+Last updated: 2026-08-20
 
-## Behavioral source checkpoint reviewed
+## Source / decision checkpoint
 
-The implementation behavior reviewed when this plan was realigned was:
-
-```text
-7d1befce2eab44c379a2919aca0e84b05fedc5a7
-4.7.2 - Push Pre-Benchmark Baseline. Good Light, Terrible At Even Modest Load
-```
-
-This SHA is an **evidence/source review anchor, not a required current HEAD**.
-
-`Current_Plan.md`, evidence records, guardrails, skills, or other documentation may be committed after this checkpoint. Documentation-only commits do not make the plan stale. The same files may instead exist as intentional uncommitted handoff changes; that does not make the working tree invalid or require cleanup.
-
-Important architecture checkpoints:
+The documentation/decision checkpoint reviewed for this plan is:
 
 ```text
-690a27e0c6025937161426374ddf2c8ef407b8aa
-    worker+push steady presentation restored; pull-at-paint removed.
-
-39279b2e90a2c91ae30a8168127fb29729969c90
-    playback-state epoch/freshness ownership introduced.
-
-3784e91bc40e8d7c95d31d0d96914f3c5443c0e7
-    rejected pull-at-paint architecture preserved as history.
-
-8ac2421e2bc0a7153942fc33eb9f348b505cde9d
-    pre-pull worker+push installed reference.
-
-42033c84eabbdf25ccd34bb0e83f9e553f2f8f11
-    named rollback/fidelity reference.
-
-15099d389e5091942a0ce3d6e6311d33b6043d3d
-    historical directness reference only; do not roll back to it wholesale.
+18c8f26756df83bd0d8828becc740c72d5526b21
+4.7.2 - Pre-Quick Migration Docs v1
 ```
 
-The long-soak evidence added with this plan is:
-
-```text
-Docs/Performance_Evidence/Acceptance-08_20-13_03-Diagnostic-Long-Soak.md
-```
-
-### Repository-state rule for agents
+This SHA is an orientation anchor, **not** a required current HEAD.
 
 Before active work:
 
-1. inspect the **actual current working tree** and current `HEAD`;
-2. compare changes after the behavioral checkpoint only far enough to classify them;
-3. if intervening or local changes are documentation/evidence/plan/skill only, continue normally;
-4. if code changed after the checkpoint, inspect the current production owner/call chain and update only assumptions actually invalidated by those code changes;
-5. preserve all unrelated local work.
+1. inspect current `HEAD` and the working tree;
+2. preserve unrelated user work;
+3. inspect code changes after the anchor only far enough to update assumptions they actually invalidate;
+4. never reset, clean, checkout, stash, or revert merely to manufacture equality with the anchor.
 
-Do **not** require `HEAD == 7d1befce...`. Do **not** require a clean tree merely because this plan/evidence pack is uncommitted. Do not reset, clean, checkout, stash, revert, or overwrite user work to manufacture checkpoint equality or cleanliness.
-
-The current working tree is authoritative for what code exists now. The checkpoint is authoritative only for the provenance of the conclusions recorded here.
+The Qt Quick architecture decision is closed by the P0 evidence. This plan replaces the old
+"finish the architecture comparison" plan.
 
 ---
 
-# 0. Executive state
+# 0. Mission
 
-The current worker+push architecture is the **stabilization/reference architecture** for the physical-presentation experiment.
-
-It is not declared the final presentation architecture.
-
-Current product shape:
+Perform **one** production presentation migration:
 
 ```text
-dedicated VisualizerLogicalRuntime (~90 Hz)
-        ->
-latest-state mailbox
-        ->
-coalesced one-pending GUI presentation request
-        ->
-GUI present_tick consumes freshest state
-        ->
-one QRhi/OpenGL physical compositor surface per display
+current QWidget / QRhiWidget runtime presentation
+                    ↓
+one standalone threaded QQuickWindow per physical display
+                    ↓
+Qt Quick scene + inline custom GL render nodes
 ```
 
-The remaining primary performance problem is now narrowly stated:
+Do not plan a second presenter migration afterward.
 
-```text
-logical state is produced on time
-+
-local paint/GPU work is usually cheap
-+
-physical presentation still loses opportunities / develops visible tail gaps,
-especially under contention and mixed-refresh production conditions
-```
-
-The worker arm is now accepted as the reference. Do not ask the operator to
-rerun its manual heavy-load capture or continue polishing its harness.
-
-The comparable Quick P0 arm now exists and has three lower-load plus two
-higher-load PresentMon captures using the same workload identity. The first
-repeated result materially improves p95/p99 and severe-gap frequency on both
-display paths, although the 165 Hz maximum tail remains poor.
-
-Therefore the active direction is now:
-
-```text
-obtain the operator eyes-on note for the recorded Quick runs
-        ->
-make the Stage-1 keep/reject decision
-        ->
-only after an accepted Quick win, define the bounded Stage-2 composition proof
-```
-
-Do not start another broad optimization campaign on the current QWidget/QRhi path before this comparison exists.
-
----
-
-# 1. Durable architecture — retain unless new installed evidence directly disproves it
-
-## 1.1 Dedicated logical visualizer runtime
-
-Keep `VisualizerLogicalRuntime`.
-
-It is the one mode-general logical cadence owner.
-
-Do not move visualizer logical time back onto:
-- QWidget paint;
-- GUI QTimer cadence;
-- compositor paint;
-- physical display cadence.
-
-The renderer samples logical state. It is not the simulation clock.
-
-The 2026-08-20 soak strengthens this materially: after an eight-hour dark residency and rapid topology recreation, generation 3 ran:
-
-```text
-steps=39502
-skipped_deadlines=26
-slow_steps=0
-failures=0
-joined=True
-```
-
-Bubble compute for that runtime finished with:
-
-```text
-offered=39502
-submitted_tasks=39495
-publish_ratio=1.000
-worker_busy_deferrals=7
-result_waiting_deferrals=0
-submission_failures=0
-stale_results=0
-```
-
-Do not broadly revert this worker architecture.
-
-## 1.2 Latest-state + one-pending push delivery
+Do not rewrite unaffected product systems.
 
 Keep:
 
+- `ScreensaverEngine` orchestration except where display-runtime calls must change;
+- image source/provider backends;
+- SettingsManager and persistence;
+- QWidget Settings UI;
+- RSS/folder/media/GSMTC/provider logic;
+- ProcessSupervisor / ThreadManager ownership where still appropriate;
+- `VisualizerLogicalRuntime`;
+- visualizer authored algorithms and mode personality;
+- custom-layout persistence/math contracts;
+- transition registry/settings identity;
+- product features and customization.
+
+Replace/refactor what is coupled to the old runtime-pixel owner.
+
+---
+
+# 1. Hard operating rules
+
+## 1.1 No runtime compatibility architecture
+
+Do **not** add:
+
+- a production setting/env switch selecting QRhiWidget vs Quick;
+- a permanent facade that makes `QQuickWindow` pretend to be `DisplayWidget`;
+- a QWidget presenter embedded over/under the Quick runtime;
+- a second accelerated visualizer/widget surface;
+- `QQuickWidget`;
+- a QRhiWidget fallback if Quick rendering fails;
+- a transition-by-transition fallback to the old compositor;
+- duplicated legacy and Quick widget presentation pipelines after cutover.
+
+During development, the old production runtime and the not-yet-active Quick implementation may
+coexist in the repository. Only one is the normal production path at a time. Migration harnesses may
+exercise the Quick path before cutover.
+
+Once production cuts over, legacy presentation removal begins immediately.
+
+## 1.2 Refactor overloaded presentation modules while migrating
+
+Refactor when overload is directly caused by the old presentation boundary.
+
+Required examples:
+
 ```text
-logical publication
-    -> latest-state mailbox
-    -> at most one pending GUI present callback
-    -> present consumes freshest state
+DisplayWidget
+    -> runtime/window owner
+    -> input owner
+    -> scene/presentation owner
+    -> widget/model owner
+    -> CUSTOM/edit owner
+
+WidgetManager
+    -> widget/provider/model lifecycle owner
+    -> layout/visibility owner
+    -> Quick presentation item owner
+
+GLCompositorWidget
+    -> transition renderer/resource owner
+    -> visualizer renderer/resource owner
+    -> presentation pacing owner
 ```
 
-No FIFO.
-No catch-up burst.
-No paint acknowledgement loop.
-No callback-per-state backlog.
+Do **not** use the migration as permission to refactor unrelated source/provider/settings/backend
+systems.
 
-Pull-at-paint remains rejected as the steady production seam.
+## 1.3 Preserve full runtime visual capability
 
-## 1.3 One physical accelerated presentation surface per display
+Migration parity includes, where currently supported:
 
-Keep the product invariant:
+- per-widget opacity;
+- card/background opacity;
+- text opacity/color;
+- shadows;
+- text/header shadows;
+- borders and border opacity;
+- rounded corners;
+- fonts and font sizes;
+- margins;
+- artwork sizes/shapes/rounding;
+- separators/icons/header chrome;
+- progress bars/glow/shadow;
+- widget fades;
+- stacking;
+- monitor routing;
+- pixel shift;
+- dimming;
+- CUSTOM position/resize;
+- multi-monitor transfer during edit;
+- context interaction;
+- visualizer card + all five visualizer modes;
+- all supported transitions;
+- Media Center interaction behaviour.
+
+Do not solve a migration bug by deleting or flattening a visual feature.
+
+## 1.4 Frequent Git checkpoints are mandatory
+
+After **every landed slice**:
+
+1. run the focused gate for the slice;
+2. inspect `git diff` / `git status`;
+3. commit only the intended slice;
+4. `git push`;
+5. continue immediately to the next slice when gates pass.
+
+A normal migration session should produce many small pushed commits, not one giant migration commit.
+
+Good checkpoint scale:
 
 ```text
-ONE independently presented accelerated surface per display
+Quick bootstrap + first render node
+frame pacer extraction
+Quick runtime host
+Slide port
+transition family batch
+visualizer immutable bridge
+Bubble render node
+shared Quick card/shadow primitive
+clock family
+weather
+media
+reddit
+gmail
+Steam family
+CUSTOM session
+production cutover
+legacy deletion batch
+build/tooling closure
 ```
 
-Do not restore:
-- a separate native visualizer window;
-- a transparent accelerated overlay window;
-- per-widget GL presentation surfaces.
+Do not pause after a successful checkpoint to ask permission to continue.
 
-A future `QQuickWindow` may contain multiple scene items/render nodes/textures/passes while still satisfying this rule.
+## 1.5 Do not stop unless an actual blocker is hit
 
-## 1.4 K / non-blocking transport
+A failing test, compile error, visual bug, missing import, wrong geometry, or one difficult widget is
+not by itself a blocker. Diagnose, correct, re-run, checkpoint, continue.
 
-Keep fire-and-forget GSMTC transport command execution.
+An **actual blocker** is something such as:
 
-Do not restore a synchronous GUI wait for WinRT/GSMTC command completion.
+- the selected Quick custom-render primitive is fundamentally unusable in pinned PySide 6.9.1 or
+  the compiled product after a focused proof;
+- required one-window-per-display semantics cannot be preserved;
+- a required product visual/interaction capability cannot be represented without a prohibited
+  second presentation architecture;
+- lifecycle/resource ownership cannot be made deterministic after focused correction;
+- essential external information/credential/device access genuinely unavailable to the agent is
+  required to proceed.
 
-## 1.5 Bubble Temporal Fidelity
+If a blocker is hit:
 
-Bubble remains the strongest temporal canary.
+- stop broad code churn;
+- record exact evidence;
+- name the blocked owner and smallest decision required;
+- do not invent a compatibility layer to go around it.
 
-Do not:
-- lower its authored cadence;
-- tune its motion to mask missing physical frames;
-- smooth away presentation holes;
-- use average FPS as a substitute for visible continuity.
+## 1.6 Support docs do not own sequence
 
-## 1.6 QRhi main compositor remains the current reference owner
-
-The QOpenGLWidget -> QRhiWidget main-compositor migration fixed real ownership/lifecycle problems and improved the old no-visualizer compositor-gap class.
-
-Do not rewrite that history merely because the final presentation architecture may change again.
-
-The target remains:
+The technical decomposition docs under:
 
 ```text
-15099d3 directness
-+
-current correctness/resource discipline
-+
-a better physical presentation owner
+Docs/QtQuick_Migration/
+```
+
+are subordinate to this file.
+
+They explain **how** to perform a named slice. They may not:
+
+- reorder the phases;
+- create a parallel roadmap;
+- authorize work not admitted by this plan;
+- keep completed work active after this plan removes it.
+
+Deferred post-cutover deletion is cross-linked to `Future_Cleanup.md`.
+
+---
+
+# 2. Destination architecture
+
+```text
+ScreensaverEngine
+    |
+    +-- providers / image queue / settings / persistence / media
+    |
+    +-- DisplayManager
+            |
+            +-- QuickDisplayRuntime (one per selected physical display)
+                    |
+                    +-- QuickDisplayWindow : QQuickWindow
+                    |
+                    +-- QuickSceneController
+                    |       |
+                    |       +-- background/transition QSGRenderNode item
+                    |       +-- visualizer QSGRenderNode item
+                    |       +-- retained Quick widget items
+                    |       +-- dimming / halo / edit overlays
+                    |
+                    +-- RuntimeInputController
+                    +-- WidgetRuntimeManager
+                    +-- CustomLayoutSession (when active)
+```
+
+Visualizer:
+
+```text
+audio / analysis
+    -> VisualizerLogicalRuntime
+    -> immutable latest visualizer snapshot
+    -> Quick visualizer item sync
+    -> render-thread GL node
+```
+
+Transition:
+
+```text
+image pipeline
+    -> presentation image state
+    -> TransitionRun (monotonic time + parameters)
+    -> display presentation pacer
+    -> full-screen Quick render node
+```
+
+Ordinary widget:
+
+```text
+existing provider/business logic
+    -> small Python runtime model
+    -> retained Quick component
 ```
 
 ---
 
-# 2. New long-soak evidence — what changes and what does not
+# 3. Selected technical direction
 
-Raw-pack record:
+## 3.1 Graphics API
 
-```text
-Docs/Performance_Evidence/Acceptance-08_20-13_03-Diagnostic-Long-Soak.md
-```
+Keep the successful P0 conditions:
 
-## 2.1 Real soak interval
+- `QSG_RENDER_LOOP=threaded`;
+- Qt Quick graphics API explicitly OpenGL;
+- current OpenGL 4.1/core profile requirements unless source proves a transition/visualizer requires
+  another exact format;
+- one top-level `QQuickWindow` per physical display.
 
-The relevant uninterrupted run is:
+Bootstrap must happen before the first Quick window/scene graph is created.
 
-```text
-2026-08-20 04:46:04 -> 13:03:36
-8 h 17 m 32 s
-```
+## 3.2 Custom GL integration
 
-The archive also contains older short sessions. Do not merge those into the soak.
-
-For most of the soak Windows exposed a single 60 Hz topology while the physical displays were off.
-
-## 2.2 Monitor wake / topology lifecycle is no longer an active work lane
-
-Physical displays returned at approximately `12:55:56`.
-
-Windows then produced several topology changes in rapid succession:
+Preferred production primitive:
 
 ```text
-12:55:57  runtime generation -> 1  reason=monitor_topology
-12:56:11  runtime generation -> 2  reason=monitor_topology
-12:56:14  runtime generation -> 3  reason=monitor_topology
+QQuickItem(ItemHasContents)
+    -> updatePaintNode()
+    -> QSGRenderNode
+    -> direct OpenGL inside the Quick scene
 ```
 
-The final topology settled as the real mixed-refresh pair:
+Reasons:
 
-```text
-screen 0: detected 165 Hz, target 165 Hz
-screen 1: detected 60 Hz,  target 60 Hz
-```
+- inline in the scene;
+- correct stacking relative to retained Quick items;
+- no extra offscreen texture pass solely to re-composite custom rendering;
+- matches the "one physical surface" target;
+- PySide exposes `QSGRenderNode`;
+- the P0 benchmark already proved Python render-thread OpenGL inside `QQuickWindow`.
 
-Both displays reached intentional first-frame readiness and completed coordinated fades. The final generation then continued through real transitions/visualizer work until normal application exit.
+**First code slice must prove this primitive** with pinned PySide 6.9.1, script mode, two real displays
+when available, and an early compiled smoke.
 
-Application exit advanced generation 4 and completed teardown.
+If this primitive itself is an actual binding/runtime blocker, stop and revise the **single chosen
+Quick custom-render primitive** before migrating transitions/widgets. Do not keep two product
+primitives as fallbacks.
 
-Final shared-memory accounting:
+## 3.3 Presentation pacing
 
-```text
-segments_created=80
-segments_consumed=80
-segments_live=0
-segments_reclaimed_late=0
-unlink_failures=0
-```
+Extract a production presentation-only frame pacer from the proven P0 target-pacing semantics.
 
-### Decision
+Properties:
 
-Treat monitor-off/wake/topology recreation as:
+- one pacer per display;
+- target based on that display's refresh;
+- starts only while custom dynamic content requires continuous presentation;
+- transition and visible visualizer are independent frame-demand reasons;
+- missed deadlines are skipped, not replayed;
+- no `afterRendering -> update()` self-loop;
+- no paint acknowledgement;
+- no logical visualizer cadence ownership.
 
-```text
-WATCHLIST + PERMANENT MIGRATION/RELEASE GATE
-```
-
-not:
-
-```text
-ACTIVE PERFORMANCE/REPAIR PRIORITY
-```
-
-Do not spend current architecture time trying to improve a wake path that this soak exercised successfully.
-
-If a future production build reproduces a wake failure, reopen it from fresh evidence.
-
-## 2.3 Diagnostic Winlogon URL behavior is not a production regression
-
-`SRPSS_Diagnostic.exe` deliberately bypasses the standard SCR secure-helper URL handoff and treats URL opening as an interactive direct-launch path.
-
-That makes the observed Firefox/Winlogon failure expected for the diagnostic product shape.
-
-Do not open a current Winlogon/browser repair lane from this diagnostic result.
-
-Only reopen if the ordinary installed `.scr` reproduces the failure through its real Task-Scheduler/helper contract.
-
-## 2.4 Long residency does not progressively degrade 60 Hz presentation
-
-Retained PERF rotations cover approximately:
-
-```text
-06:39:30 -> 12:55:30
-```
-
-before wake.
-
-There are 565 completed 60 Hz Slide paint windows in that retained period.
-
-Hourly medians remain essentially flat:
-
-```text
-completed FPS              ~59.7 .. 59.8
-request acceptance         ~99.67%
-dt p95                     ~16.78 ms
-median per-run max gap     ~35 .. 36 ms
-paint p95                  ~5.7 ms
-```
-
-Trend over retained hours is effectively flat; runtime age does not make cadence progressively rot.
-
-### Decision
-
-Do not explain the current visible cadence defect as an hours-long degradation phenomenon.
-
-The defect reappears when the production presentation topology/load becomes demanding, not merely because the process has been alive for hours.
-
-## 2.5 Post-wake evidence strengthens the physical-presentation hypothesis
-
-After the mixed-refresh topology settled, retained completed windows include both Slide and Blockspin.
-
-Representative medians:
-
-```text
-165 Hz screen / Slide:
-    completed FPS           ~155.1
-    request acceptance      ~94.96%
-    dt p95                  ~10.79 ms
-    median max gap          ~40.4 ms
-    worst observed max      101.3 ms
-    paint p95               ~2.85 ms
-
-165 Hz screen / Blockspin:
-    completed FPS           ~156.0
-    request acceptance      ~95.56%
-    dt p95                  ~10.81 ms
-    worst observed max      57.45 ms
-    paint p95               ~3.0 ms
-
-60 Hz screen / Slide + Bubble:
-    completed FPS           ~58.8
-    request acceptance      ~98.71%
-    dt p95                  ~18.97 ms
-    median max gap          ~66.23 ms
-    worst observed max      102.37 ms
-
-60 Hz screen / Blockspin + Bubble:
-    completed FPS           ~59.4
-    request acceptance      ~99.45%
-    dt p95                  ~18.17 ms
-    worst observed max      73.53 ms
-```
-
-Post-wake `FRAME_GAP_OWNER` population:
-
-```text
-screen 0 / 165 Hz: 63 gaps, median ~51.9 ms, p95 ~93.34 ms, max 101.3 ms
-screen 1 / 60 Hz:  64 gaps, median ~55.94 ms, p95 ~86.79 ms, max 102.37 ms
-```
-
-Bubble overlay GPU samples remain roughly sub-millisecond to ~1 ms-class in ordinary 10 s windows while these physical gaps occur.
-
-### Decision
-
-This strengthens, rather than weakens, the current architecture question:
-
-```text
-can a different physical presentation owner preserve the same logical/render work
-while materially reducing lost physical opportunities and long tail gaps?
-```
-
-Do not respond by individually optimizing Slide, Blockspin, or Bubble.
-
-Slide is a cheap measurement instrument because its linear motion exposes the defect clearly. It is not being blamed as the cause.
-
-## 2.6 Separate long-run resource-retention signal
-
-After excluding the first ~15 minutes of startup/warmup, the dark single-display interval shows approximate linear slopes:
-
-```text
-main USS             +29.2 MB/hour
-main private commit  +90.0 MB/hour
-app handle count     +15/hour
-```
-
-At the same time:
-
-```text
-app threads            essentially flat (~78-79)
-GL resources           essentially flat (10-11)
-RM resources           ~29-33
-tracked resources      bounded/no comparable monotonic explosion
-dedicated VRAM         not monotonically rising
-SHM live segments      returns to zero
-```
-
-This is a real **retention signal**, but this run is Full Telemetry Diagnostic and does not prove a production leak or its owner.
-
-### Decision
-
-Keep this separate from the presentation architecture work.
-
-Required later A/B:
-
-```text
-ordinary/light-telemetry long soak
-vs
-Full Telemetry Diagnostic long soak
-```
-
-Only if the slope survives the lighter run should ownership hunting begin.
-
-Do not make memory/handle retention a prerequisite for the Quick presentation benchmark.
+Retained Quick animations may dirty the scene normally; the custom GL pacer exists for the
+transition/visualizer content that needs continuous render opportunities.
 
 ---
 
-# 3. One bounded correctness prerequisite before architecture comparison
+# 4. Phase A — bootstrap and render-node proof
 
-Current source still contains a same-epoch playback confirmation race.
+Read:
 
-The landed epoch fence correctly prevents a refresh that began before a transport command from reversing the optimistic post-command state.
+- `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md`
+- `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`
+- `Docs/QtQuick_Migration/06_Build_Tooling_Validation.md`
 
-The remaining shape is:
+Land in small commits:
+
+### A1 — Quick bootstrap
+
+Create the production `rendering/quick/` package.
+
+Add deterministic bootstrap for:
+
+- threaded render loop;
+- OpenGL Quick backend;
+- surface format;
+- QML import/data root.
+
+Do not activate Quick as the production DisplayManager path yet.
+
+**Checkpoint + push.**
+
+### A2 — inline render-node proof
+
+Implement the minimum production-shaped custom render item/node.
+
+Prove:
+
+- `QQuickWindow`;
+- render thread != GUI thread;
+- direct GL draw;
+- correct resize/DPR;
+- clean scene-graph invalidation;
+- no `QQuickWidget`;
+- no offscreen QWidget/native helper.
+
+Use deterministic Slide-like content.
+
+**Checkpoint + push.**
+
+### A3 — production frame pacer
+
+Move/generalize target-pacing logic into production code with unit tests.
+
+The P0 tool may remain evidence code; do not rewrite evidence merely to share code if that damages
+reproducibility.
+
+**Checkpoint + push.**
+
+### A4 — early compiled smoke
+
+Before the migration depends on QML/Quick packaging, update the smallest required build inputs and
+prove one Quick scene can launch in a Nuitka build.
+
+This is an early packaging gate, not final build acceptance.
+
+**Checkpoint + push.**
+
+Exit gate:
 
 ```text
-command accepted
-    -> optimistic PAUSED/PLAYING
-    -> playback epoch advances
-    -> a NEW refresh begins in the new epoch before GSMTC backend catches up
-    -> backend returns old state
-    -> current source treats same-epoch state as immediately authoritative
+threaded standalone Quick + inline GL render node + clean teardown + compiled smoke
 ```
 
-Current `_apply_pending_state_override()` also clears the pending override after ~300 ms before requesting a refresh, so the expectation can disappear before a backend confirmation is actually observed.
-
-## Required correction
-
-Extend the existing epoch model with bounded expected-state confirmation ownership.
-
-Conceptually:
-
-```text
-expected_playback_state
-expected_epoch
-confirmation_deadline_monotonic
-```
-
-Rules:
-
-1. **older epoch** — cannot reverse current expected state;
-2. **current epoch + matches expectation** — confirms and clears expectation;
-3. **current epoch + contradicts expectation before deadline** — preserve expected playback state while allowing safe metadata/artwork to flow;
-4. **deadline expires without confirmation** — release expectation and allow authoritative contradiction so a failed command cannot lie forever.
-
-The deadline is command-confirmation ownership, not a presentation debounce.
-
-Do not add another recurring state owner if reconciliation can check one monotonic deadline.
-
-The existing 300 ms timer may request a fresh query, but it must not blindly erase expected-state ownership first.
-
-## Gate
-
-Extend `tests/test_p2_playback_epoch.py` to prove both directions, matching confirmation, pre-deadline contradiction rejection, expiry, metadata flow, and one accepted transport edge -> one listener/visualizer edge unless a later authoritative change is legitimate.
-
-If this correction has already landed when this plan is read, verify source/tests and move on. Do not redesign it again.
-
-Then do one short installed confirmation only if required by the current evidence workflow.
+No further presentation port starts before this gate.
 
 ---
 
-# 4. Benchmark is now the active architecture work
+# 5. Phase B — runtime-host decomposition
 
-The benchmark must compare **physical presentation architecture**, not toy rendering throughput.
+Read `01_Runtime_Host_Lifecycle.md`.
 
-## 4.1 Safe benchmark defaults
+Create:
 
-Do not use same-process Python CPU burners as architecture evidence.
+- `QuickDisplayWindow`;
+- `QuickDisplayRuntime`;
+- `QuickSceneController`;
+- presentation state types;
+- generic runtime input owner;
+- lifecycle/resource ownership hooks.
 
-Do not use an unbounded `afterFrameEnd -> update()` loop as the normal benchmark.
+Refactor without a compatibility facade.
 
-Default benchmark behavior:
-- short;
-- deterministic;
-- target-paced;
-- automatically ending;
-- no network/media-device dependency;
-- passive load observation only.
+`DisplayManager` continues to own topology, but the future display type becomes `QuickDisplayRuntime`,
+not a QWidget-shaped adapter.
 
-If an unbounded throughput probe remains, gate it behind an explicit name such as:
+Keep engine/provider/settings behaviour unchanged.
 
-```text
---throughput-probe
-```
+Prove in a migration harness:
 
-External load is operator-provided and labelled, for example:
+- selected monitor placement;
+- multi-display creation;
+- display-local DPR/refresh identity;
+- hide/show;
+- exit;
+- generation identity including `0`;
+- teardown and scene-graph invalidation;
+- topology recreate.
 
-```text
---load-label light
---load-label external-heavy
-```
-
-Record actual system/process CPU and GPU rather than assuming the label proves the load.
-
-## 4.2 Core common workload — architecture discriminator
-
-Use the same logical/render timeline for current worker+push and Quick.
-
-Primary Stage-1 transition: **Slide**.
-
-Reason:
-- cheap/simple renderer;
-- continuous linear motion;
-- already reproduces visible long-tail holes while average FPS looks good;
-- avoids paying the Blockspin porting tax before the presentation hypothesis is tested.
-
-This does **not** mean Slide is believed to be the root cause.
-
-Core mixed-refresh workload:
-
-```text
-screen 0 / 165 Hz:
-    retained base image
-    production-equivalent Slide
-    no visualizer
-
-screen 1 / 60 Hz:
-    retained base image
-    same Slide timeline
-    Bubble visualizer
-    deterministic synthetic audio/source
-```
-
-Recommended bounded sequence:
-
-```text
-startup intentional first frame
-1s: Slide + Bubble begin
-1-6s: Slide and Bubble coexist
-6-11s: Bubble continues on settled image
-11s: synthetic pause edge
-11-13s: paused hold
-13s: synthetic resume edge
-13-15s: Bubble continues
-15s: stop/report
-```
-
-No Spotify, GSMTC, WASAPI, network, or manual key timing in the core benchmark.
-
-Use the real logical visualizer runtime and real render-state path with a deterministic source where practical.
-
-## 4.3 Required production-population axis
-
-The operator's installed A/B showed Bubble-active GPU load changed materially when Steam/weather runtime widgets were removed.
-
-That does not prove those widgets cause the stutter.
-
-It does prove runtime presentation population materially changes shared cost and must stop being an informal variable.
-
-Record current worker+push reference runs in at least two populations:
-
-### P0 — minimal architecture discriminator
-
-```text
-base + Slide + Bubble/synthetic source
-only presentation needed for the common architecture comparison
-```
-
-### P1 — production-shaped runtime population
-
-Use the ordinary enabled runtime overlay/card population with provider/network nondeterminism suppressed where possible through retained/cached/static state.
-
-The purpose is to measure:
-- GPU busy/frame cost;
-- physical gap tails;
-- request acceptance;
-- whether shared composition load changes the failure class.
-
-### Important Stage-1 limit
-
-Do **not** migrate all runtime widgets to Quick before Quick proves the core scheduling/presentation hypothesis.
-
-Therefore:
-- P0 is the first strict current-vs-Quick common comparison;
-- P1 is a required current-reference characterization;
-- if Quick clearly wins P0, Stage 2 must prove the win survives equivalent production-presentation composition before product migration is accepted.
-
-Equivalent Stage-2 presentation may use cached textures/representative Quick items/incremental overlay migration. Provider/model logic remains Python.
-
-## 4.4 Secondary stress workload
-
-After Slide yields a meaningful current-vs-Quick result, add Blockspin.
-
-Blockspin is a stress/regression case, not the first migration tax.
-
-No per-transition tuning campaign is allowed to replace the architecture comparison.
+**Checkpoint after each meaningful owner extraction. Push each checkpoint.**
 
 ---
 
-# 5. Metrics and evidence contract
+# 6. Phase C — base image and all transitions
 
-Average FPS is insufficient.
+Read `02_Scene_Renderer_Transitions.md`.
 
-For each display/candidate/population record at minimum:
+## C1 — image boundary
 
-```text
-requested opportunities
-accepted requests
-completed physical frames
-completed FPS
+Refactor presentation image state so render-thread code consumes immutable image bytes/state, never
+live `QPixmap`/QWidget state.
 
-dt p50/p90/p95/p99/max
-counts >= 12/16/25/33/50/100 ms
+Do not rewrite source/image queue/provider logic.
 
-paint p50/p95/p99/max
-request age p50/p95/p99/max
-logical publication -> physical consume age p50/p95/p99/max
+## C2 — transition-neutral run controller
 
-logical steps
-skipped deadlines
-slow steps
-failures
-longest logical holes
+Refactor QWidget/compositor coupling out of transition timing/parameter ownership.
 
-system CPU
-process CPU
-GPU busy/frame cost
-memory/VRAM secondary
-GUI callback count
-Quick render-thread identity when applicable
-```
+Preserve:
 
-Retain exact phase timestamps for:
-- first intentional visible frame;
-- Slide start/end;
-- Bubble first logical frame;
-- Bubble first physical frame/reveal;
-- synthetic pause;
-- synthetic resume.
+- registry identity;
+- random/cycle participation;
+- duration;
+- easing;
+- direction;
+- transition-specific authored parameters;
+- exactly-once completion.
 
-For large physical gaps retain nearest logical/presentation ownership context.
+## C3 — renderer port
 
-Human eyes-on acceptance remains required for:
-- Slide continuity;
-- Bubble continuity;
-- startup flash/flicker.
+Reuse existing shader sources/program math wherever possible.
 
-Metrics explain perception. They do not overrule it.
+Port and prove every active compositor transition:
 
----
+- Crossfade;
+- Slide;
+- Wipe;
+- Warp;
+- BlockFlip;
+- BlockSpin;
+- Blinds;
+- Diffuse;
+- Raindrops;
+- Crumble;
+- Particle;
+- Burn;
+- any additional transition still active in the canonical registry when this phase is executed.
 
-# 6. Worker+push reference — accepted; do not rerun
+Do not tune transitions individually to compensate for presentation cadence.
 
-The operator-provided P0 lower-load and manual higher-load JSON + PresentMon
-pairs are the accepted control arm. They use the same common workload SHA-256
-as the Quick candidate.
+Use per-transition deterministic captures/tests where available.
 
-Do not request another manual worker heavy-load run. Do not make worker P1 or
-additional worker harness instrumentation a prerequisite for the P0
-architecture decision.
+Commit/push in small transition batches, not all at once.
+
+Exit gate:
+
+- all registry-eligible production transitions render through Quick;
+- old and new image ownership is correct;
+- completion/cancel/interruption correct;
+- 60 Hz/high-refresh pacing healthy;
+- no old compositor dependency inside the new renderer.
 
 ---
 
-# 7. Qt Quick Stage 1 — prove or reject physical presentation ownership
+# 7. Phase D — visualizer
 
-Use standalone top-level windows:
+Read:
+
+- `Docs/QtQuick_Migration/03_Visualizer.md`
+- `Docs/Guardrails/Visualizer_Presentation.md`
+- BTF for Bubble.
+
+## D1 — separate logical controller from QWidget presentation
+
+Do not instantiate a hidden QWidget merely to host the Quick visualizer.
+
+Extract/retain the non-pixel visualizer controller/state needed by:
+
+- settings activation;
+- playback state;
+- logical runtime;
+- source/BeatEngine;
+- preset state;
+- CUSTOM participation.
+
+## D2 — immutable render snapshot
+
+The current compositor layer's live-owner handle is not render-thread safe.
+
+Replace the Quick path with an immutable/current snapshot containing generation/activation identity,
+geometry, fade/style, and mode-specific render data.
+
+No render-thread reads from live QWidget/QObject presentation state.
+
+## D3 — Quick visualizer render item
+
+Render all five modes through the Quick render node using existing mode shaders/helpers where
+practical.
+
+Preserve:
+
+- Spectrum;
+- Oscilloscope;
+- Sine;
+- Bubble;
+- DevCurve;
+- ghosting;
+- borders/masks;
+- card geometry;
+- fades;
+- Pause/Play;
+- paused Spectrum idle;
+- BTF.
+
+Commit/push at the bridge, renderer foundation, and all-five-modes milestones.
+
+Exit gate includes BTF and real installed eyes-on.
+
+---
+
+# 8. Phase E — widget presentation foundation
+
+Read `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`.
+
+Do this before porting families.
+
+## E1 — descriptor cleanup
+
+Make canonical widget identity/settings metadata presentation-neutral.
+
+Move QWidget-factory-only creation details out of the canonical descriptor authority rather than
+teaching new Quick code to depend on QWidget factories.
+
+## E2 — split WidgetManager ownership
+
+Create/rename the future `WidgetRuntimeManager` around:
+
+- provider/model lifecycle;
+- visibility/enabled state;
+- monitor participation;
+- stacking inputs;
+- live settings updates;
+- fade intent;
+- generation ownership.
+
+Move pixel/QWidget operations out as families migrate.
+
+Do not create a giant "QuickBaseOverlayWidget" Python god object.
+
+## E3 — shared retained Quick visual primitives
+
+Build small reusable Quick components/primitives for:
+
+- card background;
+- border/radius;
+- foreground opacity;
+- card shadow;
+- text/header shadow;
+- image/artwork;
+- separators;
+- common text;
+- fade/visibility;
+- click targets.
+
+### Shadow-specific rule
+
+The old multi-monitor corruption was associated with QWidget `QGraphicsDropShadowEffect` /
+effect-cache behaviour and was fixed by painter-owned shadows.
+
+Do not reintroduce `QGraphicsEffect`.
+
+For Qt Quick:
+
+- prefer a dedicated rectangular/card shadow shader/item for rounded cards so the shadow does not
+  require a general blurred source texture;
+- use `MultiEffect` only where an arbitrary-shaped source genuinely requires it and only on tightly
+  bounded source items;
+- text/header shadows may use a small dedicated effect or equivalent retained representation;
+- never toggle effect topology repeatedly during fade; fade the owning item/parent opacity instead;
+- explicitly test the old corruption triggers.
+
+Exit gate:
+
+- shared style can represent all current shadow/opacity/border/radius requirements;
+- no focus/menu/display corruption in the Quick gallery stress;
+- no whole-screen effect layer for ordinary cards.
+
+---
+
+# 9. Phase F — widget families
+
+Port runtime pixels, not the settings GUI/backends.
+
+Each family is its own landed checkpoint unless very small and inseparable.
+
+Recommended order:
+
+1. Clock / Clock2 / Clock3
+2. Weather
+3. Media core
+4. media volume/mute/progress/control sub-elements
+5. Reddit / Reddit2
+6. Gmail
+7. Steam Progress
+8. Achievement Pulse
+9. Abandonment Issues
+10. Friend Pulse
+11. enabled development widget families still present in the canonical runtime (including Imgur if
+    still supported when reached)
+
+Per family:
+
+1. identify current provider/model/business logic;
+2. extract any non-pixel logic trapped in the QWidget class;
+3. expose a compact runtime model;
+4. implement the retained Quick presentation;
+5. preserve every current customization control;
+6. add/update deterministic model and presentation tests;
+7. exercise CUSTOM geometry expectations;
+8. run the Quick widget gallery;
+9. commit + push;
+10. continue.
+
+Do not create screenshot-to-texture wrappers of the old QWidget as the final implementation.
+
+Do not rewrite provider/network logic into QML.
+
+---
+
+# 10. Phase G — CUSTOM, input, interaction and auxiliary runtime pixels
+
+Read `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`.
+
+## G1 — CUSTOM session
+
+Refactor `CustomLayoutManager` into presentation-neutral session/state + Quick edit presentation.
+
+Keep `custom_layout_contract.py` math/persistence.
+
+Preferred Quick edit behaviour:
+
+- edit the real retained Quick widget item;
+- maintain uncommitted session geometry separately from persisted settings;
+- Save commits;
+- Cancel restores baseline;
+- outline/handles/grid are separate Quick edit items;
+- no duplicate raster snapshot shell for ordinary widgets.
+
+For cross-monitor transfer, one presentation instance moves/recreates on the target scene; do not keep
+simultaneous duplicate live pixel owners.
+
+## G2 — input
+
+Refactor `InputHandler` away from `DisplayWidget` type assumptions.
+
+Route QQuickWindow events into the same product actions.
+
+Preserve:
+
+- exit gestures;
+- hotkeys;
+- media keys;
+- Ctrl interaction mode;
+- layout slots;
+- click behaviour;
+- right-click context menu;
+- Media Center behaviour.
+
+## G3 — auxiliary pixels
+
+Port:
+
+- cursor halo;
+- dimming;
+- pixel shift scene transform/offset;
+- error/fallback display where still product-required;
+- edit grid/handles;
+- any remaining runtime overlay pixel owner.
+
+The existing QWidget context menu/settings dialog may remain if they are transient control UI, but
+must be decoupled from `DisplayWidget` parent assumptions and must not become an accelerated
+presentation surface.
+
+Commit/push each owner slice.
+
+---
+
+# 11. Phase H — production cutover
+
+No cutover until the Quick migration harness has:
+
+- base images;
+- all active transitions;
+- visualizer all modes;
+- all runtime widget families;
+- CUSTOM;
+- input/context;
+- dimming/pixel shift/halo;
+- multi-display;
+- lifecycle;
+- early compiled smoke.
+
+Then make one explicit production-owner switch:
 
 ```text
-QQuickWindow display 0
-QQuickWindow display 1
+DisplayManager
+    from DisplayWidget
+    to QuickDisplayRuntime
 ```
+
+Change callers to the real new API.
+
+Do **not** preserve a `DisplayWidget` compatibility facade.
+
+Do **not** keep a production flag to return to QRhiWidget.
+
+Run focused + chunked tests and an installed smoke.
+
+**Commit + push the cutover immediately when green.**
+
+---
+
+# 12. Phase I — immediate legacy removal
+
+This is part of migration completion, not an optional someday cleanup.
+
+Use `Future_Cleanup.md` as the deletion ledger.
+
+After production cutover is stable, remove in small proven batches:
+
+- QRhiWidget physical presenter;
+- `GLCompositorWidget` scheduling/presentation ownership;
+- old GL RHI surface helpers with no remaining caller;
+- compositor visualizer layer;
+- old GUI `present_tick` paths;
+- old QWidget runtime widget presentation classes once no settings/test owner requires them;
+- old QWidget CUSTOM edit-shell/grid presentation if fully replaced;
+- dead transition classes whose only purpose was `GLCompositorWidget`;
+- obsolete effect/cache-busting presentation code;
+- migration-only scaffolding.
+
+For every deletion batch:
+
+```text
+rg caller proof
+-> focused tests
+-> git commit
+-> git push
+-> continue
+```
+
+Do not leave both presenter architectures "for safety."
+
+---
+
+# 13. Phase J — final build, lifecycle, performance and beyond-parity close
+
+Read `06_Build_Tooling_Validation.md`.
 
 Required:
-- OpenGL backend initially where practical for representative renderer reuse;
-- threaded Qt Quick scene-graph loop;
-- render thread proven distinct from GUI thread through Qt logging/thread IDs;
-- same P0 Slide/Bubble deterministic workload;
-- same pacing and metrics as current reference.
 
-The P0 candidate and its evidence are now recorded in:
+- script RUN;
+- normal compiled `.scr`;
+- diagnostic build;
+- Media Center build where relevant;
+- Settings open/recreate;
+- CUSTOM Save/Cancel;
+- all five visualizer modes;
+- all transitions;
+- all widgets;
+- mixed 60 Hz/high-refresh;
+- monitor off/wake/topology recreation;
+- clean shutdown;
+- resource baseline;
+- PresentMon cadence check;
+- external heavy-load resilience check;
+- long-soak on final architecture.
 
-```text
-Docs/Performance_Evidence/QtQuick-P0-Comparison-2026-08-20.md
-```
+Do not rerun the old manual worker heavy baseline.
 
-Five internally valid Quick runs prove OpenGL, the forced threaded render loop,
-and render-thread IDs distinct from the GUI thread. Three are operator-classed
-lower load and two are operator-classed higher load.
+Beyond-parity acceptance should show at least:
 
-Invalid architecture proof:
-- `QQuickWidget`;
-- QWidget-embedded Quick;
-- basic/GUI-thread render-loop fallback presented as threaded Quick evidence;
-- a second independently presented accelerated visualizer/overlay window;
-- empty clear-colour/triangle FPS used as product proof.
-
-The first question is only:
-
-```text
-does QQuickWindow/render-thread physical presentation materially improve
-physical cadence tails and load resilience for the same core workload?
-```
-
-Do not port every shader or widget first.
-
-## Renderer primitive remains open
-
-If Quick wins enough to continue, compare only where measurement requires it:
-
-```text
-A: direct/native or QSGRenderNode for full-display compositor work
-B: QQuickRhiItem for contained custom GPU regions such as visualizer
-C: hybrid in one QQuickWindow
-```
-
-Do not choose by elegance.
+- no QWidget effect-cache shadow architecture;
+- fewer presentation-specific GUI callbacks than the old path;
+- no per-widget accelerated surfaces;
+- retained Quick widgets do not repaint/rebuild stable content every physical frame;
+- transition/visualizer renderer uses render-thread ownership cleanly;
+- overloaded old presentation modules have been decomposed rather than renamed wholesale.
 
 ---
 
-# 8. Architecture decision bar
+# 14. Documentation closure
 
-Current worker+push is already strong under light load.
+When migration lands:
 
-Quick does not win because headline FPS is a few points higher.
+1. update `Spec.md`, `Index.md`, `Docs/Contracts.md`, architecture/guardrails to landed class/file
+   names;
+2. mark/remove completed migration decomposition docs according to
+   `Docs/Documentation_Maintenance.md`;
+3. retain P0 evidence;
+4. update `Future_Cleanup.md` to contain only genuinely deferred debt;
+5. ensure no current-authority doc calls QRhiWidget the production runtime owner.
 
-A useful Quick win must be **repeatable** and should materially improve:
-- p95/p99/max physical frame gaps;
-- >=25/33/50/100 ms gap frequency;
-- request acceptance under contention;
-- high-refresh completed delivery;
-- mixed-refresh Bubble continuity;
-- run-to-run variance;
-while preserving:
-- logical cadence;
-- visual fidelity;
-- no startup flash;
-- one physical accelerated surface per display.
-
-A slightly lower average FPS with dramatically cleaner visible tails may be the better architecture.
-
-At least three identical P0 runs per candidate in light conditions are required; use repeated external-heavy runs when the operator can provide the environment.
-
-The current structured evidence clears the numerical bar to continue Quick:
-its repeated p95/p99 and severe-gap frequency are materially better than the
-preserved worker reference under both load classes. This remains provisional
-until the operator supplies the eyes-on Slide/Bubble/startup result.
-
-## If Quick wins P0
-
-Then, in order:
-
-1. prove equivalent production-presentation population does not erase the win;
-2. add Blockspin secondary stress;
-3. compare Quick rendering primitive shapes only if useful;
-4. perform runtime overlay migration feasibility;
-5. perform startup/no-flash, Settings/recreate, monitor topology, compiled-build, and long-soak gates.
-
-## If Quick does not clearly win P0
-
-Stop the broad Quick migration.
-
-Do not port Settings/widgets into QML in hope that scale will magically fix it.
-
-Inspect the next boundary:
-- Python/GIL scheduling on render callbacks;
-- native window/present ownership;
-- small native/C++ physical renderer owner only if evidence earns it.
-
-Do not begin with C++.
+Migration is not complete while the docs still teach agents to preserve dead presentation owners.
 
 ---
 
-# 9. Later migration/release gates — not Stage-1 blockers
+# 15. Cross-links
 
-Any winning presenter must eventually prove:
+Technical decompositions:
 
-## Visual/startup
-- no white/default flash;
-- no black blank frame;
-- no uninitialized Quick root;
-- intentional first frame before visible exposure;
-- no visualizer/card flash;
-- no ugly cross-display reveal skew.
+- `Docs/QtQuick_Migration/README.md`
+- `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md`
+- `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`
+- `Docs/QtQuick_Migration/03_Visualizer.md`
+- `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`
+- `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`
+- `Docs/QtQuick_Migration/06_Build_Tooling_Validation.md`
 
-## Lifecycle
-- normal startup/shutdown;
-- Settings/recreate;
-- mixed-refresh 165/60;
-- monitor topology recreation;
-- display-off -> wake;
-- clean generation retirement;
-- compiled/frozen build.
+Deletion ledger:
 
-Use the 2026-08-20 soak as a lifecycle quality bar: the current architecture survived three rapid topology-driven generation replacements after eight hours.
+- `Future_Cleanup.md`
 
-## Long-run resources
+Durable architecture:
 
-Repeat a long soak on the winning architecture.
-
-Separately resolve whether the current memory/handle slope survives light telemetry.
-
-A Quick candidate is not allowed to introduce a materially worse monotonic resource slope.
-
----
-
-# 10. Explicitly out of the active lane
-
-Do not spend current work on these unless fresh product evidence promotes them:
-
-- monitor wake/topology lifecycle optimization;
-- diagnostic-product Firefox/Winlogon URL escape;
-- old dedicated FFT process resurrection;
-- stale ProcessSupervisor/FFT ancestry cleanup as a performance experiment;
-- long-run memory/handle retention ownership before the light-vs-Full-Telemetry A/B;
-- Spectrum paused-entry cosmetic motion;
-- broad provider/media/widget rewrites;
-- wholesale QML/Settings conversion;
-- per-transition optimization intended to hide a shared presentation defect.
-
-The stale FFT/ProcessSupervisor ancestry is cleanup only. Current FFT/audio analysis stays on the bounded ThreadManager compute path unless contrary measurement appears.
-
----
-
-# 11. Prohibitions
-
-No:
-- return to pull-at-paint;
-- broad worker rollback;
-- synchronous GSMTC wait;
-- arbitrary playback debounce;
-- FIFO/catch-up presentation queues;
-- Bubble/source cadence reduction;
-- visual fidelity cuts to hit FPS;
-- QQuickWidget as the architecture proof;
-- second accelerated native presentation surface;
-- same-process CPU burner as canonical heavy-load evidence;
-- unbounded throughput loop as normal benchmark;
-- architecture decision from average FPS alone;
-- destructive git operations that discard local work to obtain a convenient historical state.
-
-Historical commits may be inspected in a separate worktree/read-only comparison. Do not destroy current work to read them.
-
----
-
-# 12. Live execution checklist
-
-- [ ] Record the operator eyes-on result from the Quick captures:
-  - [ ] 165 Hz Slide continuity and any visible long pause;
-  - [ ] 60 Hz Slide + Bubble continuity under higher and lower load;
-  - [ ] startup black/white flash, flicker, or cross-display reveal skew.
-- [ ] Combine that note with `QtQuick-P0-Comparison-2026-08-20.md` and make the explicit Stage-1 keep/reject decision.
-- [ ] **Stop after the decision.** Only after an accepted Quick win may a new plan define the bounded production-composition proof. Do not begin P1, Blockspin, widget migration, provider migration, or QML conversion in this step.
-
-Do not let cleanup work, historical archaeology, wake monitoring, memory retention, or transition-specific tuning jump ahead of step 12.
-
----
-
-# 13. Evidence hierarchy
-
-When sources conflict:
-
-1. installed visible behavior;
-2. repeated production-shaped benchmark;
-3. installed structured telemetry;
-4. exact current source;
-5. deterministic regression tests;
-6. architecture/current-plan documents;
-7. commit messages;
-8. agent claims.
-
-The immediate milestone is:
-
-```text
-operator eyes-on note recorded
-+
-Stage-1 Quick keep/reject decision written
-+
-no migration scope begins before that decision
-```
+- `Spec.md`
+- `Docs/Compositor_Architecture.md`
+- `Docs/Guardrails.md`

@@ -29,20 +29,36 @@ Do not mistake the temporary QRhiWidget reference implementation for the long-te
 | Task | Read |
 |---|---|
 | Active migration work | `Current_Plan.md` |
+| Qt Quick migration technical detail | `Docs/QtQuick_Migration/README.md` + only the active slice document |
 | Accepted runtime presentation architecture | `Docs/Compositor_Architecture.md` |
 | Current/migration ownership map | `Docs/Contracts.md` |
 | Cross-cutting safety | `Docs/Guardrails.md` |
 | Stable architecture | `Spec.md` |
-| Visualizer presentation/cadence | `Docs/Presentation_Change_Preflight.md`, `Docs/Guardrails/Visualizer_Presentation.md` |
+| Visualizer presentation/cadence | `Docs/Guardrails/Visualizer_Presentation.md` |
 | Bubble feel / timing | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
 | Visualizer subsystem | `Docs/Visualizer_Reference.md`, `Docs/Visualizer_Change_Checklist.md` |
+| Transition changes | `Docs/Transition_Change_Checklist.md` |
+| Widget/runtime presentation | `Docs/10_WIDGET_GUIDELINES.md` |
 | Qt Quick architecture evidence | `Docs/Performance_Evidence/QtQuick-P0-Comparison-2026-08-20.md` |
 | Tests | `Docs/TestSuite.md` |
 | Recurring harnesses | `Docs/Harness_Index.md` |
 | Prior regressions | `Docs/Historical_Bugs/README.md` |
-| Deferred cleanup | `Future_Cleanup.md` |
+| Cutover deletion / deferred cleanup | `Future_Cleanup.md` |
 
 Do not read every document by default.
+
+## Active Qt Quick migration support docs
+
+These are subordinate decompositions, not parallel plans:
+
+- `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md`
+- `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`
+- `Docs/QtQuick_Migration/03_Visualizer.md`
+- `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`
+- `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`
+- `Docs/QtQuick_Migration/06_Build_Tooling_Validation.md`
+
+`Current_Plan.md` owns their sequence.
 
 ## Accepted presentation destination
 
@@ -53,7 +69,7 @@ one standalone top-level QQuickWindow
         ↓
 threaded Qt Quick scene graph
         ↓
-base image + transition + visualizer + runtime overlays
+base image + transitions + visualizer + runtime overlays
         ↓
 OS presentation
 ```
@@ -65,15 +81,16 @@ localized measured renderer optimization inside this architecture.
 
 ## Current implementation during migration
 
-Until cutover, `main` may still contain:
+Until production cutover, `main` may still contain and run:
 
 - `DisplayWidget`;
 - `GLCompositorWidget`;
 - QRhiWidget/OpenGL presenter code;
 - GUI-side presentation handoffs.
 
-Those files are the migration source/reference and may remain live until their replacement passes
-parity gates. They are not permission to expand the old architecture.
+Those files are migration source/reference code, not permission to expand the old architecture.
+
+No production runtime switch/fallback between old and Quick is to be introduced.
 
 ## Durable runtime owners
 
@@ -82,54 +99,47 @@ parity gates. They are not permission to expand the old architecture.
 | Runtime sequencing | `ScreensaverEngine` |
 | Display topology | `DisplayManager` |
 | Runtime physical window | destination: one `QQuickWindow` per display |
-| Runtime scene pixels | destination: Quick scene/render-thread presentation |
+| Runtime scene pixels | destination: retained Quick + Quick render-thread custom nodes |
 | Visualizer logical cadence | `VisualizerLogicalRuntime` |
 | Visualizer source/audio | BeatEngine/audio worker/backend |
-| Visualizer logical publication | latest-state, generation-fenced |
 | Settings | existing QWidget/settings owners |
 | Providers / service logic | existing Python owners |
 | Persistence | existing settings/store owners |
-| Widget models/providers | existing Python owners unless separately justified |
-| Runtime widget pixels | destination: inside the display's Quick scene |
+| Widget models/providers | existing/refactored Python owners |
+| Runtime widget pixels | destination: inside display Quick scene |
 | Thread/task ownership | `ThreadManager` for general async work |
 | Resource accounting | `ResourceManager`; never deletion fallback |
 
-## Visualizer route
-
-Accepted direction:
+## Visualizer direction
 
 ```text
 audio / analysis
         ↓
 VisualizerLogicalRuntime
         ↓
-latest immutable/plain-data state
+immutable latest state
         ↓
-Quick presentation bridge
+Quick visualizer item synchronization
         ↓
-display QQuickWindow scene/render owner
+render-thread custom node
         ↓
 physical presentation
 ```
 
-There is:
+## Migration execution rule
 
-- one visualizer logical clock;
-- one physical accelerated runtime surface per display;
-- no paint acknowledgement;
-- no independent visualizer surface.
+After every landed slice:
 
-## Evidence rule
+```text
+focused gate
+-> commit
+-> push
+-> continue
+```
 
-The Qt Quick P0 comparison closed the architecture-choice experiment in favour of Quick.
+Do not stop merely because a slice exposed a fixable bug.
 
-Do not restart:
-
-- QRhiWidget micro-optimization as an alternative architecture programme;
-- C++ physical-presenter research as an assumed phase two;
-- more P0 benchmark variants merely to reconfirm the decision.
-
-New evidence may still guide migration implementation details and local renderer optimizations.
+Do not use destructive Git operations to force checkpoint state.
 
 ## Historical navigation
 
