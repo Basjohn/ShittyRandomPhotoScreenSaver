@@ -1,218 +1,131 @@
 # Visualizer Change Checklist
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
-Use for visualizer settings, presets, logical analysis, activation, compositor rendering, card
-geometry, fade/readiness, playback or CUSTOM work.
+Use for visualizer settings, presets, logical analysis, activation, rendering, card geometry,
+fade/readiness, playback or CUSTOM work.
 
-Also read:
+Read:
 
+- `Current_Plan.md`
+- `Docs/QtQuick_Migration/03_Visualizer.md` during migration
 - `Docs/Guardrails/Visualizer_Presentation.md`
-- `Docs/Guardrails/Runtime_Efficiency.md` for shared-runtime work
-- `Docs/Guardrails/Bubble_Temporal_Fidelity.md` (**BTF**) when Bubble timing/feel can change
+- `Docs/Guardrails/Bubble_Temporal_Fidelity.md` for Bubble
 
-## 1. Identity / settings
+## 1. Logical runtime
 
-- mode ids/labels remain registry-owned;
-- grouped settings model stays symmetric;
-- preset activation resolves one canonical target payload;
-- genuine same-mode changes apply once;
-- identical same-activation refresh is a no-op;
-- valid generation 0 is never collapsed into “missing.”
+`VisualizerLogicalRuntime` remains current/destination authored cadence owner.
 
-## 2. Current logical runtime
+Exactly one runtime per enabled generation.
 
-Current production owner is `VisualizerLogicalRuntime`.
+No GUI/Quick/render clock advances simulation.
 
-Check:
+## 2. Worker ownership
 
-- exactly one runtime per enabled generation;
-- no GUI recurring timer advances simulation;
-- no AnimationManager listener advances simulation;
-- no per-mode/fallback logical clock;
-- runtime stop/join is generation-owned;
-- scheduler preserves authored cadence;
-- no FIFO/catch-up.
+Logical code does not mutate:
 
-Do **not** describe a dedicated logical thread as future work.
+- QWidget;
+- Quick items;
+- GPU resources;
+- presentation geometry.
 
-## 3. Worker-callable ownership
+## 3. Quick migration presentation seam
 
-`logical_tick()` and transitive worker-callable code must not:
+Destination:
 
-- show/hide/update QWidget;
-- mutate presentation geometry/layout;
-- use QPixmap/QPainter;
-- start GUI fade;
-- mutate compositor/GL.
+```text
+logical/source
+-> immutable latest snapshot
+-> Quick visualizer item synchronization
+-> render-thread QSGRenderNode
+-> QQuickWindow
+```
 
-GUI-only methods should assert thread affinity in test/debug paths.
+Do not let the render node read live `SpotifyVisualizerWidget`/QObject mutable state.
 
-## 4. Analysis freshness
+## 4. Modes
 
-For async audio/bar analysis:
+Preserve all five:
 
-- one compute in flight;
-- one newest pending source maximum;
-- pending replaces old pending;
-- completed valid DSP state commits before newest pending runs;
-- stale generation/activation work cannot publish;
-- source age is measured separately from state-to-paint.
+- Spectrum;
+- Oscilloscope;
+- Sine;
+- Bubble;
+- DevCurve.
 
-Use delayed-compute tests, not only immediate fake executors.
+Keep mode personality/goldens.
 
-## 5. Readiness
+## 5. Source/readiness
 
-Do not use one “fresh source ready” boolean for all presentation.
-
-At minimum:
+Separate:
 
 ```text
 presentation_ready
 reactive_source_ready
 ```
 
-Paused Spectrum may reveal presentation-owned idle bars with no source generation/activation while
-still waiting for fresh real data on Play.
+Paused Spectrum idle remains perceptibly visible without fabricated source identity.
 
-A playing mode that requires real source authority remains gated by its current-generation source
-contract.
+## 6. Card/geometry
 
-## 6. Presentation owners
+One authority feeds:
 
-Current path:
+- Quick item rect;
+- GL viewport/scissor;
+- shader resolution/origin;
+- mask/border;
+- CUSTOM.
 
-```text
-audio / analysis
-    -> VisualizerLogicalRuntime
-    -> latest mailbox state
-    -> GUI presentation handoff
-    -> CompositorVisualizerLayer
-    -> display GLCompositorWidget
-```
+No hidden QWidget geometry authority in the final Quick path.
 
-`SpotifyBarsGLOverlay` is not a presented overlay.
+## 7. Cadence
 
-Do not add:
-
-- another visualizer surface;
-- visualizer swap/vsync lifecycle;
-- presentation self-update loop;
-- QPainter visualizer fallback.
-
-## 7. Card / geometry
-
-One authoritative presentation geometry feeds card texture, viewport, scissor, shader resolution,
-origin, mask and border.
-
-Compositor DPR is presentation DPR authority.
-
-Stable card source pixels are cached by logical-size/DPR/style identity.
-
-Real-GL tests use non-zero X/Y and non-1 DPR.
-
-## 8. Presentation cadence
-
-Display compositor owns physical frame opportunities.
-
-Logical runtime owns simulation cadence.
-
-Remove/forbid:
+No:
 
 - pending-until-paint;
-- paint/swap acknowledgement;
-- producer/display divisor gates;
-- render self-requeue;
-- repaint rescue timer;
-- second presentation timer/surface;
-- second logical timer/thread.
+- paint acknowledgement;
+- producer/display divisor;
+- render self-loop;
+- second logical clock;
+- second accelerated surface.
 
-A physical adaptive render strategy is allowed when it remains presentation-only.
+Presentation pacer may request Quick frames while custom GL content is dynamic.
 
-## 9. Spectrum idle
+## 8. Playback
 
-Paused Spectrum gate must prove **perceptible rendered output**.
+Pause/Play preserves logical runtime and warm source semantics.
 
-Preferred:
+Do not make QML state a second playback authority.
 
-- actual GL/pixel readback or image comparison.
+## 9. Bubble
 
-Acceptable deterministic fallback:
+BTF remains binding.
 
-- real renderer/upload/geometry math yielding deliberate minimum visible pixel height.
+No algorithm retune to compensate for presentation defects.
 
-Forbidden sole assertion:
+## 10. Lifecycle
 
-```text
-max(bars) > 0
-```
+- generation zero valid;
+- logical runtime joins;
+- stale snapshots rejected;
+- render resources destroyed on render owner;
+- hidden state does not erase destruction authority.
 
-Keep source identity unassigned while idle.
+## 11. CUSTOM
 
-## 10. Playback / feedback
+Use real Quick presentation geometry/session.
 
-Pause/Play:
+No permanent QWidget snapshot shell.
 
-- preserves logical runtime/card/GL identity;
-- keeps warm capture separate;
-- does not reintroduce playback debounce;
-- does not cold-start on ordinary warm resume.
+## 12. Installed gates
 
-Also inspect edge-owned GUI work.
-
-A small feedback animation should not repaint the entire Media card dozens of times per event.
-
-Do not solve that by merely lowering feedback FPS.
-
-## 11. Bubble / BTF
-
-Before accepting Bubble-affecting timing/runtime work, check the BTF alarm panel:
-
-- logical Hz;
-- deadline skip fraction;
-- logical gap tails;
-- source freshness;
-- Bubble protected replay/goldens;
-- publication/edge survival;
-- state-to-paint tails;
-- final visual feel.
-
-No Bubble algorithm retune is authorized merely because Bubble exposes a shared-system problem.
-
-## 12. Lifecycle
-
-- logical runtime joins before retired generation is destroyed;
-- stale mailbox publication is rejected;
-- visualizer GL resources remain tied to compositor QRhi generation;
-- borrowed context is never destroyed by SRPSS;
-- hidden presentation state does not erase destruction authority;
-- final GL accounting returns to baseline.
-
-Generation tests must include `0 -> 1`.
-
-## 13. Shared-runtime attribution
-
-The 165 Hz display without a visualizer is a control for shared presentation cost.
-
-If high-refresh delivery falls badly there:
-
-- do not blame Bubble;
-- do not optimize individual transitions first;
-- inspect shared GUI dispatch/update/widget/lifecycle owners.
-
-Mode/transition-specific tuning requires owner-specific evidence.
-
-## 14. Required installed review when relevant
-
-- Bubble long enough for BTF judgement;
-- all five mode switches;
-- Pause/Play quick toggles;
-- paused Spectrum visible idle bars;
-- Play replacing idle bars in place;
+- all five modes;
+- Bubble eyes-on;
+- Pause/Play;
+- Spectrum idle;
 - Settings/recreate;
-- CUSTOM Cancel/Save;
-- 60 Hz + high refresh;
-- dual-display ownership;
+- CUSTOM Save/Cancel;
+- mixed refresh;
 - clean shutdown.
 
-Tests/average FPS never overrule a visible fidelity regression.
+Commit and push each landed visualizer slice.
