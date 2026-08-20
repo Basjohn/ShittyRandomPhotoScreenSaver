@@ -1,6 +1,6 @@
-# Current Plan — Worker+Push Reference Locked; Benchmark the Physical Presentation Boundary
+# Current Plan — Worker+Push Harness Ready; Record the Physical Presentation Reference
 
-Last updated: 2026-08-20 14:01 SAST
+Last updated: 2026-08-20 16:05 SAST
 
 ## Behavioral source checkpoint reviewed
 
@@ -849,21 +849,18 @@ Historical commits may be inspected in a separate worktree/read-only comparison.
 
 ---
 
-# 12. Exact execution order from here
+# 12. Live execution checklist
 
-1. **Inspect the actual current working tree and HEAD; classify changes since the behavioral checkpoint without demanding equality or cleanliness.**
-2. **Close the bounded same-epoch playback confirmation race** if still present.
-3. Run focused playback tests; do the smallest installed edge confirmation if needed.
-4. Make `tools/qtquick_presentation_spike.py` safe/paced by default; isolate any explicit throughput probe.
-5. Build the common deterministic Slide + Bubble benchmark timeline and metrics.
-6. Implement the matching current worker+push P0 benchmark path.
-7. Add the P1 production-population reference axis without migrating widget logic.
-8. Record repeated worker+push P0 reference runs; P1 characterizes composition coupling.
-9. Finish the standalone threaded `QQuickWindow` P0 path.
-10. Prove the render loop/thread ownership through Qt evidence.
-11. Run repeated current-vs-Quick P0 comparisons; judge tails first.
-12. **Stop and decide architecture.**
-13. Only after a Quick win: production-presentation population, Blockspin, primitive comparison, parity/lifecycle/soak migration gates.
+- [ ] Complete the three-run worker+push P0/light reference set with an external PresentMon capture for each run.
+  - [ ] Repeat with run IDs/output suffixes `02` and `03`; do not overwrite any JSON or CSV.
+  - [ ] Return each JSON + PresentMon CSV, actual monitor/refresh topology, and a short visible-tail note for each display.
+- [ ] Record worker+push P1/light references with the same capture procedure; use `--population P1` and matching `worker-p1-light-*` identities to characterize static production-card composition coupling.
+- [ ] Repeat P0/P1 under genuinely operator-provided external-heavy load when available; label the actual environment and do not synthesize load in the harness.
+- [ ] Finish the standalone threaded `QQuickWindow` P0 path using the same common workload identity and external physical evidence contract.
+- [ ] Prove Quick render-loop/thread ownership through Qt evidence.
+- [ ] Run at least three current-vs-Quick P0/light comparisons and repeated external-heavy comparisons when available; judge physical tails first.
+- [ ] **Stop and decide architecture.**
+- [ ] Only after a Quick win: production-presentation population, Blockspin, primitive comparison, parity/lifecycle/soak migration gates.
 
 Do not let cleanup work, historical archaeology, wake monitoring, memory retention, or transition-specific tuning jump ahead of step 12.
 

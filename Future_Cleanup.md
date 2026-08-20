@@ -89,6 +89,11 @@ These are cleanup only if the active plan has not promoted a specific defect.
 - [ ] fix the `tools/recovery_evidence_parser.py` `analyze_evidence_source`
   infinite self-recursion that fails `test_recovery_evidence_parser` even in
   isolation.
+- [ ] reconcile the isolated unknown-mode fallback failure in
+  `TestVisualizerModeBinding::test_load_visualizer_mode_selection_falls_back_when_saved_mode_is_unknown`:
+  the test expects canonical `bubble`, while the current binding selects the first
+  registry item (`devcurve`); confirm the intended default owner, then align the
+  binding and oracle.
 
 A stub-call assertion is not sufficient for a visible/lifecycle seam.
 

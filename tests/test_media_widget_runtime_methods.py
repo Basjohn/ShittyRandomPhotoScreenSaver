@@ -128,6 +128,7 @@ def test_media_provider_failover_probe_runs_in_refresh_worker_before_ui_apply(
     )
     widget = MediaWidget(controller=_Controller(), provider="spotify")
     try:
+        widget._enabled = True
         widget._thread_manager = _TaskManager()
         widget._pending_controller_tm = widget._thread_manager
         type(widget)._shared_last_valid_info = None
@@ -357,7 +358,7 @@ def test_media_artwork_size_rebuilds_stale_retained_metadata_layout(qt_app) -> N
         widget.deleteLater()
 
 
-def test_media_pending_state_timer_registers_and_is_cleared_on_stop(qt_app, monkeypatch) -> None:
+def test_media_confirmation_refresh_timer_registers_and_is_cleared_on_stop(qt_app, monkeypatch) -> None:
     widget = MediaWidget()
     registrations = []
     try:
@@ -367,17 +368,20 @@ def test_media_pending_state_timer_registers_and_is_cleared_on_stop(qt_app, monk
         widget._refresh = lambda: None
         widget._register_resource = lambda resource, description: registrations.append((resource, description))
 
-        widget._apply_pending_state_override(MediaPlaybackState.PLAYING)
+        widget._begin_playback_confirmation(MediaPlaybackState.PLAYING)
 
-        assert widget._pending_state_timer is not None
+        assert widget._playback_confirmation_refresh_timer is not None
         assert len(registrations) == 1
-        assert registrations[0][0] is widget._pending_state_timer
-        assert registrations[0][1] == "pending state debounce timer"
+        assert registrations[0][0] is widget._playback_confirmation_refresh_timer
+        assert registrations[0][1] == "playback confirmation refresh timer"
+        assert widget._expected_playback_state == MediaPlaybackState.PLAYING
 
         widget.stop()
 
-        assert widget._pending_state_timer is None
-        assert widget._pending_state_override is None
+        assert widget._playback_confirmation_refresh_timer is None
+        assert widget._expected_playback_state is None
+        assert widget._expected_playback_epoch is None
+        assert widget._playback_confirmation_deadline_monotonic == 0.0
     finally:
         widget.deleteLater()
 
@@ -521,18 +525,34 @@ def test_media_ensure_timer_retunes_active_timer_in_place(monkeypatch) -> None:
     assert stub._update_timer_interval_ms == 2500
 
 
-def test_media_clear_pending_state_timer_uses_canonical_reset() -> None:
-    stub = SimpleNamespace()
-    calls = []
+def test_media_reset_playback_confirmation_clears_timer_and_expectation() -> None:
+    class _FakeTimer:
+        def __init__(self) -> None:
+            self.stop_calls = 0
+            self.delete_calls = 0
 
-    def _fake_reset(*, delete_timer: bool) -> None:
-        calls.append(delete_timer)
+        def stop(self) -> None:
+            self.stop_calls += 1
 
-    stub._reset_pending_state_override = _fake_reset
+        def deleteLater(self) -> None:
+            self.delete_calls += 1
 
-    MediaWidget._clear_pending_state_timer(stub)
+    timer = _FakeTimer()
+    stub = SimpleNamespace(
+        _playback_confirmation_refresh_timer=timer,
+        _expected_playback_state=MediaPlaybackState.PAUSED,
+        _expected_playback_epoch=4,
+        _playback_confirmation_deadline_monotonic=123.0,
+    )
 
-    assert calls == [True]
+    MediaWidget._reset_playback_confirmation(stub, delete_timer=True)
+
+    assert timer.stop_calls == 1
+    assert timer.delete_calls == 1
+    assert stub._playback_confirmation_refresh_timer is None
+    assert stub._expected_playback_state is None
+    assert stub._expected_playback_epoch is None
+    assert stub._playback_confirmation_deadline_monotonic == 0.0
 
 
 def test_media_play_pause_optimistic_feedback_uses_update_not_repaint(qt_app) -> None:
@@ -548,7 +568,7 @@ def test_media_play_pause_optimistic_feedback_uses_update_not_repaint(qt_app) ->
         )
         widget._emit_media_update = lambda info: None  # type: ignore[method-assign]
         widget._invalidate_controls_layout = lambda: None  # type: ignore[method-assign]
-        widget._apply_pending_state_override = lambda state: None  # type: ignore[method-assign]
+        widget._begin_playback_confirmation = lambda state: None  # type: ignore[method-assign]
         widget._handle_control_feedback = lambda *args, **kwargs: None  # type: ignore[method-assign]
         widget.isVisible = lambda: True  # type: ignore[method-assign]
 
