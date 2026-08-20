@@ -103,6 +103,12 @@ class MediaWidget(BaseOverlayWidget):
     
     # Override defaults for media widget
     DEFAULT_FONT_SIZE = 20
+    # A confirmation refresh is requested after 300 ms.  Keep the optimistic
+    # command expectation alive long enough for that query to traverse the
+    # controller's 2.5 s hard-timeout path, but release it promptly and
+    # deterministically if the backend never confirms the command.
+    _PLAYBACK_CONFIRMATION_REFRESH_DELAY_MS = 300
+    _PLAYBACK_CONFIRMATION_TIMEOUT_SEC = 3.0
     
     # Class-level shared state for feedback synchronization
     _instances: ClassVar[weakref.WeakSet] = weakref.WeakSet()
@@ -168,14 +174,16 @@ class MediaWidget(BaseOverlayWidget):
         self._update_timer_interval_ms: Optional[int] = None
         self._refresh_in_flight = False
         self._refresh_in_flight_generation: int = 0
-        self._pending_state_override: Optional[MediaPlaybackState] = None
-        self._pending_state_timer: Optional[QTimer] = None
         # Playback-state freshness epoch. Each accepted optimistic transport edge
         # advances it; an async GSMTC refresh captures the epoch it started under,
-        # so a refresh that began BEFORE the command (stale pre-command reality)
-        # cannot reverse the optimistic post-command state - only a refresh
-        # started after the command may confirm or genuinely reverse it.
+        # so a refresh that began BEFORE the command cannot reverse the optimistic
+        # post-command state. A same-epoch contradiction is also held until the
+        # backend confirms the expected state or this bounded deadline expires.
         self._playback_epoch: int = 0
+        self._expected_playback_state: Optional[MediaPlaybackState] = None
+        self._expected_playback_epoch: Optional[int] = None
+        self._playback_confirmation_deadline_monotonic: float = 0.0
+        self._playback_confirmation_refresh_timer: Optional[QTimer] = None
         self._pending_keyboard_alias_command: Optional[tuple[str, float]] = None
         self._pending_keyboard_alias_timer: Optional[QTimer] = None
         self._last_external_transport_feedback: Optional[tuple[str, float]] = None
@@ -403,6 +411,8 @@ class MediaWidget(BaseOverlayWidget):
                 logger.debug("[MEDIA_WIDGET] Exception suppressing controller TM injection: %s", exc)
 
         old_provider = self._provider
+        self._reset_playback_confirmation(delete_timer=True)
+        self._retire_refresh_generation()
         self._provider_generation += 1
         self._provider = normalized
         self._controller = controller
@@ -489,6 +499,7 @@ class MediaWidget(BaseOverlayWidget):
     
     def _activate_impl(self) -> None:
         """Activate media widget - start polling (lifecycle hook)."""
+        self._reset_playback_confirmation(delete_timer=True)
         invalidate = getattr(self, "_invalidate_controls_layout", None)
         if callable(invalidate):
             invalidate()
@@ -511,7 +522,8 @@ class MediaWidget(BaseOverlayWidget):
     def _deactivate_impl(self) -> None:
         """Deactivate media widget - stop polling (lifecycle hook)."""
         self._stop_update_timers(delete_qtimer=True)
-        self._clear_pending_state_timer()
+        self._reset_playback_confirmation(delete_timer=True)
+        self._retire_refresh_generation()
         
         logger.debug("[LIFECYCLE] MediaWidget deactivated")
     
@@ -541,6 +553,7 @@ class MediaWidget(BaseOverlayWidget):
         if not self._ensure_thread_manager("MediaWidget.start"):
             return
 
+        self._reset_playback_confirmation(delete_timer=True)
         self._enabled = True
         try:
             self.hide()
@@ -564,7 +577,8 @@ class MediaWidget(BaseOverlayWidget):
 
         self._enabled = False
         self._stop_update_timers(delete_qtimer=True)
-        self._clear_pending_state_timer()
+        self._reset_playback_confirmation(delete_timer=True)
+        self._retire_refresh_generation()
 
         self.hide()
         logger.debug("Media widget stopped")
@@ -602,9 +616,21 @@ class MediaWidget(BaseOverlayWidget):
     def _stop_update_timers(self, *, delete_qtimer: bool) -> None:
         self._reset_update_timer_state(delete_qtimer=delete_qtimer)
 
-    def _reset_pending_state_override(self, *, delete_timer: bool) -> None:
-        """Clear optimistic playback-state override and optionally destroy its debounce timer."""
-        timer = self._pending_state_timer
+    def _retire_refresh_generation(self) -> None:
+        """Fence results from a retired provider/runtime refresh generation."""
+        self._artwork_update_generation = (
+            int(getattr(self, "_artwork_update_generation", 0)) + 1
+        )
+        self._refresh_in_flight = False
+        self._refresh_in_flight_generation = self._artwork_update_generation
+        self._gsmtc_cached_result = None
+        self._gsmtc_cached_prepared_artwork = None
+        self._gsmtc_cached_artwork_generation = 0
+        self._gsmtc_cache_ts = 0.0
+
+    def _reset_playback_confirmation(self, *, delete_timer: bool) -> None:
+        """Clear bounded playback confirmation ownership and its refresh timer."""
+        timer = self._playback_confirmation_refresh_timer
         if timer is not None:
             try:
                 timer.stop()
@@ -612,11 +638,10 @@ class MediaWidget(BaseOverlayWidget):
                     timer.deleteLater()
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        self._pending_state_timer = None
-        self._pending_state_override = None
-
-    def _clear_pending_state_timer(self) -> None:
-        self._reset_pending_state_override(delete_timer=True)
+        self._playback_confirmation_refresh_timer = None
+        self._expected_playback_state = None
+        self._expected_playback_epoch = None
+        self._playback_confirmation_deadline_monotonic = 0.0
 
     def set_thread_manager(self, thread_manager) -> None:
         super().set_thread_manager(thread_manager)
@@ -1062,7 +1087,7 @@ class MediaWidget(BaseOverlayWidget):
                     logger.debug("[MEDIA] play_pause optimistic update failed", exc_info=True)
                 try:
                     if new_state is not None:
-                        self._apply_pending_state_override(new_state)
+                        self._begin_playback_confirmation(new_state)
                         refresh_requested = True
                 except Exception:
                     logger.debug("[MEDIA] play_pause optimistic override failed", exc_info=True)
@@ -1071,12 +1096,17 @@ class MediaWidget(BaseOverlayWidget):
 
         self._handle_control_feedback("play", source, force_refresh=not refresh_requested)
 
-    def _apply_pending_state_override(self, state: MediaPlaybackState) -> None:
-        self._clear_pending_state_timer()
-        self._pending_state_override = state
+    def _begin_playback_confirmation(self, state: MediaPlaybackState) -> None:
+        """Own one optimistic transport expectation until confirmation or expiry."""
+        self._reset_playback_confirmation(delete_timer=True)
         # An accepted optimistic transport edge: advance the freshness epoch so a
         # refresh already in flight cannot later reverse this state.
         self._playback_epoch = int(getattr(self, "_playback_epoch", 0)) + 1
+        self._expected_playback_state = state
+        self._expected_playback_epoch = self._playback_epoch
+        self._playback_confirmation_deadline_monotonic = (
+            time.monotonic() + self._PLAYBACK_CONFIRMATION_TIMEOUT_SEC
+        )
         # Drop any pre-command cached GSMTC result so the next refresh cannot
         # serve stale pre-command state from the 500 ms cache path.
         self._gsmtc_cached_result = None
@@ -1091,11 +1121,12 @@ class MediaWidget(BaseOverlayWidget):
 
         timer = QTimer(self)
         timer.setSingleShot(True)
-        timer.setInterval(300)
+        timer.setInterval(self._PLAYBACK_CONFIRMATION_REFRESH_DELAY_MS)
 
         def _on_timeout() -> None:
-            self._pending_state_timer = None
-            self._pending_state_override = None
+            if self._playback_confirmation_refresh_timer is not timer:
+                return
+            self._playback_confirmation_refresh_timer = None
             try:
                 if self._enabled:
                     if self._thread_manager is not None:
@@ -1107,8 +1138,8 @@ class MediaWidget(BaseOverlayWidget):
             self._safe_update()
 
         timer.timeout.connect(_on_timeout)
-        self._pending_state_timer = timer
-        self._register_resource(timer, "pending state debounce timer")
+        self._playback_confirmation_refresh_timer = timer
+        self._register_resource(timer, "playback confirmation refresh timer")
         timer.start()
 
     def next_track(self, source: str = "manual", execute: bool = True) -> None:
@@ -1391,43 +1422,85 @@ class MediaWidget(BaseOverlayWidget):
         info: Optional[MediaTrackInfo],
         refresh_epoch: int,
     ) -> Optional[MediaTrackInfo]:
-        """Pin a stale pre-command refresh's playback state to the optimistic one.
+        """Reconcile one backend snapshot with bounded command-state ownership.
 
         A refresh that STARTED before a transport command reflects pre-command
         reality. If a command advanced the playback epoch while the query was in
         flight, that result's playback state is stale and must not reverse the
-        optimistic post-command state; only a refresh started after the command
-        (same epoch) may confirm or genuinely reverse it. Non-state fields
-        (artwork/metadata) still apply either way.
+        optimistic post-command state. A refresh started after the command may
+        confirm immediately, but a contradictory same-epoch state is pinned until
+        the confirmation deadline expires. Non-state fields still apply while a
+        playback state is pinned.
         """
         if info is None:
             return info
         try:
-            if int(refresh_epoch) == int(getattr(self, "_playback_epoch", 0)):
-                return info  # no command intervened: authoritative for state too
+            result_epoch = int(refresh_epoch)
+            current_epoch = int(getattr(self, "_playback_epoch", 0))
         except Exception:
             return info
 
-        override = getattr(self, "_pending_state_override", None)
-        current = getattr(self._last_info, "state", None) if self._last_info is not None else None
-        optimistic_state = override if override is not None else current
-        if optimistic_state is None:
-            return info
+        expected_state = getattr(self, "_expected_playback_state", None)
+        expected_epoch = getattr(self, "_expected_playback_epoch", None)
+
+        if result_epoch == current_epoch:
+            if expected_state is None or expected_epoch != current_epoch:
+                return info
+            try:
+                if info.state == expected_state:
+                    self._reset_playback_confirmation(delete_timer=True)
+                    logger.debug(
+                        "[MEDIA_WIDGET] Playback state confirmed: state=%s epoch=%s",
+                        getattr(info.state, "value", info.state),
+                        current_epoch,
+                    )
+                    return info
+            except Exception:
+                return info
+
+            deadline = float(
+                getattr(self, "_playback_confirmation_deadline_monotonic", 0.0) or 0.0
+            )
+            if time.monotonic() >= deadline:
+                self._reset_playback_confirmation(delete_timer=True)
+                logger.debug(
+                    "[MEDIA_WIDGET] Playback confirmation expired; accepting state=%s epoch=%s",
+                    getattr(info.state, "value", info.state),
+                    current_epoch,
+                )
+                return info
+            pin_reason = "unconfirmed same-epoch"
+            state_to_preserve = expected_state
+        else:
+            # An older query can never confirm or reverse a later command. Prefer
+            # the live expectation; after it is released, preserve the current
+            # accepted playback state while still taking metadata from the result.
+            current = (
+                getattr(self._last_info, "state", None)
+                if self._last_info is not None
+                else None
+            )
+            state_to_preserve = expected_state if expected_state is not None else current
+            if state_to_preserve is None:
+                return info
+            pin_reason = "stale pre-command"
+
         try:
-            if info.state == optimistic_state:
+            if info.state == state_to_preserve:
                 return info
             from dataclasses import replace
-            pinned = replace(info, state=optimistic_state)
+            pinned = replace(info, state=state_to_preserve)
         except Exception:
             logger.debug("[MEDIA_WIDGET] Failed to pin stale playback state", exc_info=True)
             return info
         logger.debug(
-            "[MEDIA_WIDGET] Rejected stale pre-command playback state %s; pinned to %s "
+            "[MEDIA_WIDGET] Rejected %s playback state %s; pinned to %s "
             "(refresh_epoch=%s current_epoch=%s)",
+            pin_reason,
             getattr(info.state, "value", info.state),
-            getattr(optimistic_state, "value", optimistic_state),
+            getattr(state_to_preserve, "value", state_to_preserve),
             refresh_epoch,
-            getattr(self, "_playback_epoch", 0),
+            current_epoch,
         )
         return pinned
 
@@ -1586,6 +1659,8 @@ class MediaWidget(BaseOverlayWidget):
             def _consume_result() -> None:
                 try:
                     if not Shiboken.isValid(self):
+                        return
+                    if not self._enabled:
                         return
                     result_payload = task_result.result if getattr(task_result, "success", False) else None
                     if isinstance(result_payload, tuple) and len(result_payload) == 7:

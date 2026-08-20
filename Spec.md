@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
 Canonical stable architecture and product-behaviour contracts for SRPSS. Active sequencing belongs
 in `Current_Plan.md`; benchmark narratives belong in evidence reports.
@@ -269,6 +269,9 @@ Diagnostics are CLI-scoped where applicable, passive, sampled, bounded and never
 control.
 
 Separate source age, logical cadence, GUI dispatch age, state-to-paint and physical delivery.
+
+Qt render/submission callbacks are not physical-display evidence. Physical-tail decisions require
+an OS/display-boundary capture (currently PresentMon) correlated to the bounded run identity.
 
 No single average FPS value closes a timing/fidelity change.
 
