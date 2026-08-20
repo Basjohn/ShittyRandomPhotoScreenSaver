@@ -56,6 +56,48 @@ from rendering.quick.transitions import (  # noqa: E402
 from rendering.quick.window import QuickDisplayWindow  # noqa: E402
 
 
+_TRANSITION_IDS = ("crossfade", "slide")
+_SLIDE_SMOKE_DIRECTIONS = ("left", "right")
+_TRANSITION_PALETTE_RGB = {
+    "crossfade": {
+        "initial": (
+            (16, 52, 120),
+            (22, 108, 184),
+            (28, 168, 192),
+            (64, 188, 128),
+            (154, 206, 72),
+            (230, 220, 54),
+        ),
+        "replacement": (
+            (212, 40, 52),
+            (230, 82, 42),
+            (236, 132, 36),
+            (206, 66, 132),
+            (150, 54, 176),
+            (92, 60, 188),
+        ),
+    },
+    "slide": {
+        "initial": (
+            (12, 32, 120),
+            (16, 48, 145),
+            (20, 64, 170),
+            (24, 80, 195),
+            (28, 96, 220),
+            (32, 112, 235),
+        ),
+        "replacement": (
+            (120, 24, 12),
+            (145, 32, 16),
+            (170, 40, 20),
+            (195, 48, 24),
+            (220, 56, 28),
+            (235, 64, 32),
+        ),
+    },
+}
+
+
 @dataclass
 class _WindowProbe:
     index: int
@@ -112,6 +154,16 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--topology-recreate", action="store_true")
     parser.add_argument("--size", type=_parse_size, default=QSize(480, 270))
     parser.add_argument("--phase-delay-ms", type=int, default=350)
+    parser.add_argument(
+        "--transition-id",
+        choices=_TRANSITION_IDS,
+        default="crossfade",
+    )
+    parser.add_argument(
+        "--transition-direction",
+        choices=_SLIDE_SMOKE_DIRECTIONS,
+        default="left",
+    )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     if args.windows < 1:
@@ -163,6 +215,7 @@ def _matches_crossfade_samples(
     destination: object,
     midpoint: object,
     progress: float,
+    _direction: object = None,
     *,
     tolerance: int = 4,
 ) -> bool:
@@ -196,31 +249,63 @@ def _matches_crossfade_samples(
     return True
 
 
+def _slide_color_domain(color: object) -> str | None:
+    _alpha, red, _green, blue = _argb_components(color)
+    if blue - red >= 48:
+        return "source"
+    if red - blue >= 48:
+        return "destination"
+    return None
+
+
+def _matches_slide_samples(
+    source: object,
+    destination: object,
+    midpoint: object,
+    progress: float,
+    direction: object,
+) -> bool:
+    if not all(
+        isinstance(value, (tuple, list))
+        for value in (source, destination, midpoint)
+    ):
+        return False
+    if not source or not destination or not midpoint or not 0.0 < progress < 1.0:
+        return False
+    source_labels = [_slide_color_domain(color) for color in source]
+    destination_labels = [_slide_color_domain(color) for color in destination]
+    midpoint_labels = [_slide_color_domain(color) for color in midpoint]
+    if set(source_labels) != {"source"}:
+        return False
+    if set(destination_labels) != {"destination"}:
+        return False
+    expected_order = {
+        "left": ("source", "destination"),
+        "right": ("destination", "source"),
+    }.get(str(direction))
+    if expected_order is None or set(midpoint_labels) != set(expected_order):
+        return False
+    rank = {label: index for index, label in enumerate(expected_order)}
+    return midpoint_labels == sorted(midpoint_labels, key=rank.__getitem__)
+
+
+_TRANSITION_MIDPOINT_ORACLES = {
+    "crossfade": _matches_crossfade_samples,
+    "slide": _matches_slide_samples,
+}
+
+
 def _presentation_image(
     *,
     screen_index: int,
     generation: int,
     variant: str,
+    transition_id: str,
 ) -> PresentationImage:
-    palettes = {
-        "initial": (
-            QColor(16, 52, 120),
-            QColor(22, 108, 184),
-            QColor(28, 168, 192),
-            QColor(64, 188, 128),
-            QColor(154, 206, 72),
-            QColor(230, 220, 54),
-        ),
-        "replacement": (
-            QColor(212, 40, 52),
-            QColor(230, 82, 42),
-            QColor(236, 132, 36),
-            QColor(206, 66, 132),
-            QColor(150, 54, 176),
-            QColor(92, 60, 188),
-        ),
-    }
-    colors = palettes[variant]
+    colors = tuple(
+        QColor(*rgb)
+        for rgb in _TRANSITION_PALETTE_RGB[transition_id][variant]
+    )
     image = QImage(12, 8, QImage.Format.Format_RGBA8888)
     for x in range(image.width()):
         base = colors[min(len(colors) - 1, x // 2)]
@@ -420,11 +505,13 @@ class _SmokeRunner(QObject):
             screen_index=index,
             generation=generation,
             variant="initial",
+            transition_id=self._args.transition_id,
         )
         replacement_image = _presentation_image(
             screen_index=index,
             generation=generation,
             variant="replacement",
+            transition_id=self._args.transition_id,
         )
         runtime.set_presentation_image(presentation_image)
         scene_root = scene.scene_root
@@ -599,17 +686,20 @@ class _SmokeRunner(QObject):
                 )
                 request = TransitionRequest(
                     runtime_generation=probe.generation,
-                    transition_id="crossfade",
-                    requested_name="Random",
-                    selected_from_random=True,
+                    transition_id=self._args.transition_id,
+                    requested_name=self._args.transition_id,
+                    selected_from_random=False,
                     duration_ms=max(
                         80,
                         min(250, self._args.phase_delay_ms // 2),
                     ),
                     easing_name="InOutQuad",
                     easing_curve=EasingCurve.QUAD_IN_OUT,
-                    direction=None,
-                    parameters={"smoke": "c2-runtime-controller"},
+                    direction={
+                        "crossfade": None,
+                        "slide": self._args.transition_direction,
+                    }[self._args.transition_id],
+                    parameters={"smoke": "c3-transition-renderer"},
                     source_image=probe.presentation_image,
                     destination_image=probe.replacement_image,
                 )
@@ -652,7 +742,8 @@ class _SmokeRunner(QObject):
             == probe.transition_run_id
             and probe.telemetry.snapshot().last_transition_generation
             == probe.generation
-            and probe.telemetry.snapshot().last_transition_id == "crossfade"
+            and probe.telemetry.snapshot().last_transition_id
+            == self._args.transition_id
             and probe.transition_completion is not None
             and not probe.runtime.transition_controller.is_active
             and probe.scene.background_item.transition_run is None
@@ -1342,6 +1433,8 @@ class _SmokeRunner(QObject):
             "requested_hide_show_cycles": self._args.hide_show_cycles,
             "requested_exit_via_input": self._args.exit_via_input,
             "requested_topology_recreate": self._args.topology_recreate,
+            "requested_transition_id": self._args.transition_id,
+            "requested_transition_direction": self._args.transition_direction,
             "exit_sequence": self._exit_sequence,
             "runtime_root_destruction_barriers": (
                 self._runtime_root_destruction_barriers
@@ -1672,7 +1765,8 @@ class _SmokeRunner(QObject):
             not transition_at_start.get("active")
             or transition_at_start.get("active_run_id")
             != probe.transition_run_id
-            or transition_at_start.get("active_transition_id") != "crossfade"
+            or transition_at_start.get("active_transition_id")
+            != self._args.transition_id
             or transition_at_start.get("active_source_identity")
             != probe.presentation_image.identity
             or transition_at_start.get("active_destination_identity")
@@ -1700,29 +1794,34 @@ class _SmokeRunner(QObject):
             final.transition_sample_count < 1
             or final.last_transition_run_id != probe.transition_run_id
             or final.last_transition_generation != probe.generation
-            or final.last_transition_id != "crossfade"
+            or final.last_transition_id != self._args.transition_id
         ):
             errors.append(f"{prefix} render node did not sample the transition run")
         if (
             final.transition_draw_count < 1
-            or final.last_transition_renderer_id != "crossfade"
+            or final.last_transition_renderer_id != self._args.transition_id
         ):
-            errors.append(f"{prefix} Crossfade renderer did not draw the run")
+            errors.append(
+                f"{prefix} {self._args.transition_id} renderer did not draw the run"
+            )
         midpoint_progress = final.transition_midpoint_eased_progress
         if (
             final.transition_midpoint_run_id != probe.transition_run_id
             or midpoint_progress is None
             or not final.transition_midpoint_colors
         ):
-            errors.append(f"{prefix} Crossfade midpoint was not captured")
-        elif not _matches_crossfade_samples(
+            errors.append(
+                f"{prefix} {self._args.transition_id} midpoint was not captured"
+            )
+        elif not _TRANSITION_MIDPOINT_ORACLES[self._args.transition_id](
             resized_capture.get("ordered_colors"),
             replacement_capture.get("ordered_colors"),
             final.transition_midpoint_colors,
             midpoint_progress,
+            self._args.transition_direction,
         ):
             errors.append(
-                f"{prefix} Crossfade midpoint did not blend the authored images"
+                f"{prefix} {self._args.transition_id} midpoint pixels are incorrect"
             )
         if final_scene.get("transition_run") is not None:
             errors.append(f"{prefix} scene retained a finalized transition run")

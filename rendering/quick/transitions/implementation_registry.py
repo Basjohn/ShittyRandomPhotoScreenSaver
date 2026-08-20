@@ -26,6 +26,10 @@ _IMPLEMENTATIONS = (
             "rendering.quick.transitions.implementations.crossfade"
         ),
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="slide",
+        module_name="rendering.quick.transitions.implementations.slide",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

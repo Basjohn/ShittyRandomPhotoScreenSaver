@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
 from PySide6.QtQuick import QQuickItem, QSGRenderNode
 
 from rendering.quick.render import BackgroundRenderItem, BackgroundRenderNode
@@ -175,3 +176,49 @@ def test_script_smoke_proves_threaded_draw_resize_dpr_and_invalidation():
     ]["ordered_colors"]
     assert window["final"]["pending_image_release_count"] == 0
     assert window["final"]["active_image_identity"] is None
+
+
+@pytest.mark.parametrize("direction", ("left", "right"))
+def test_script_smoke_proves_lazy_slide_direction_pixels_and_teardown(direction):
+    env = os.environ.copy()
+    env["QSG_RENDER_LOOP"] = "basic"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.qtquick_render_node_smoke",
+            "--windows",
+            "1",
+            "--size",
+            "240x135",
+            "--phase-delay-ms",
+            "250",
+            "--transition-id",
+            "slide",
+            "--transition-direction",
+            direction,
+        ],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    report = json.loads(completed.stdout[completed.stdout.index("{") :])
+    assert report["valid"] is True
+    assert report["requested_transition_id"] == "slide"
+    assert report["requested_transition_direction"] == direction
+    window = report["windows"][0]
+    assert window["transition_state_at_start"]["active_transition_id"] == "slide"
+    assert window["transition_completion"]["outcome"] == "completed"
+    assert window["final"]["last_transition_id"] == "slide"
+    assert window["final"]["last_transition_renderer_id"] == "slide"
+    assert window["final"]["transition_draw_count"] >= 1
+    assert window["final"]["transition_midpoint_run_id"] == 1
+    assert window["final"]["transition_midpoint_colors"]
+    assert window["final"]["release_count"] == 1
+    assert window["final"]["image_upload_count"] == 2
+    assert window["final"]["image_release_count"] == 2
+    assert window["final"]["pending_image_release_count"] == 0
