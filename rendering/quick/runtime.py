@@ -9,6 +9,7 @@ from PySide6.QtCore import QObject, QPoint, Signal
 from PySide6.QtGui import QScreen
 
 from .frame_pacer import QuickFramePacer
+from .image_state import PresentationImage
 from .input_controller import QuickInputController
 from .render import RenderNodeTelemetry
 from .scene_controller import QuickSceneController, QuickSceneFactory
@@ -220,6 +221,13 @@ class QuickDisplayRuntime(QObject):
 
     def quiesce_for_runtime_pause(self) -> None:
         self.hide()
+
+    def set_presentation_image(self, image: PresentationImage | None) -> None:
+        """Publish immutable base-image state into this display generation."""
+
+        if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
+            raise RuntimeError("cannot update a retiring Quick display runtime")
+        self.scene_controller.set_presentation_image(image)
 
     def close_runtime(self) -> bool:
         """Begin exact retirement without blocking Python on the render thread."""

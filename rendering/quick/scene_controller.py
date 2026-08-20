@@ -10,6 +10,7 @@ from PySide6.QtQml import QQmlComponent, QQmlContext, QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
 from .bootstrap import quick_qml_root
+from .image_state import PresentationImage
 from .render import BackgroundRenderItem, RenderNodeTelemetry
 from .state import QuickSceneReadiness
 from .window import QuickDisplayWindow
@@ -166,6 +167,13 @@ class QuickSceneController(QObject):
             raise RuntimeError("Quick scene admission is closed")
         self.background_item.setProofProgress(float(progress))
 
+    def set_presentation_image(self, image: PresentationImage | None) -> None:
+        """Admit detached image state while this scene generation is live."""
+
+        if not self._readiness.admission_open:
+            raise RuntimeError("Quick scene admission is closed")
+        self.background_item.set_presentation_image(image)
+
     def quiesce_for_retirement(self) -> None:
         """Close state admission; item deletion waits for legal invalidation."""
 
@@ -200,6 +208,12 @@ class QuickSceneController(QObject):
             "release_count": snapshot.release_count,
             "invalidation_count": snapshot.invalidation_count,
             "render_error": snapshot.error,
+            "presentation_image": (
+                None
+                if self._background_item is None
+                or self._background_item.presentation_image is None
+                else self._background_item.presentation_image.describe()
+            ),
         }
 
     def _sync_root_width(self) -> None:

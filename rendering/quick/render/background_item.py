@@ -7,6 +7,7 @@ import threading
 from PySide6.QtCore import Property, Signal, Qt
 from PySide6.QtQuick import QQuickItem, QSGNode
 
+from ..image_state import PresentationImage
 from .background_node import BackgroundRenderNode, SlideProofState
 from .telemetry import RenderNodeTelemetry
 
@@ -48,6 +49,7 @@ class BackgroundRenderItem(QQuickItem):
         super().__init__(parent)
         self.setFlag(QQuickItem.Flag.ItemHasContents, True)
         self._proof_state = SlideProofState()
+        self._presentation_image: PresentationImage | None = None
         self._telemetry = telemetry or RenderNodeTelemetry(
             gui_thread_id=threading.get_ident()
         )
@@ -77,6 +79,30 @@ class BackgroundRenderItem(QQuickItem):
     @property
     def telemetry(self) -> RenderNodeTelemetry:
         return self._telemetry
+
+    @property
+    def presentation_image(self) -> PresentationImage | None:
+        return self._presentation_image
+
+    def set_presentation_image(self, image: PresentationImage | None) -> None:
+        """Publish detached image state for the next render-thread sync."""
+
+        if image is not None and not isinstance(image, PresentationImage):
+            raise TypeError("Quick presentation requires a PresentationImage")
+        current_identity = (
+            None
+            if self._presentation_image is None
+            else self._presentation_image.identity
+        )
+        next_identity = None if image is None else image.identity
+        if current_identity == next_identity:
+            if image != self._presentation_image:
+                raise ValueError(
+                    "presentation image identity was reused for different content"
+                )
+            return
+        self._presentation_image = image
+        self.update()
 
     def _bind_window_invalidation(self, window) -> None:
         if window is self._bound_window:
@@ -113,6 +139,7 @@ class BackgroundRenderItem(QQuickItem):
             logical_size=(float(self.width()), float(self.height())),
             device_pixel_ratio=device_pixel_ratio,
             state=self._proof_state,
+            presentation_image=self._presentation_image,
         )
         self._retirement.set_node(node)
         return node

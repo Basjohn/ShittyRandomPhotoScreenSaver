@@ -141,3 +141,14 @@ def test_script_smoke_proves_threaded_draw_resize_dpr_and_invalidation():
     assert window["initial"]["viewport"][2:] == window["initial"]["render_target_size"]
     assert window["final"]["viewport"][2:] == window["final"]["render_target_size"]
     assert window["initial_capture"]["size"] != window["resized_capture"]["size"]
+    assert window["initial_capture"]["image_upload_count"] == 1
+    assert window["resized_capture"]["image_upload_count"] == 1
+    assert window["replacement_capture"]["image_upload_count"] == 2
+    assert (
+        window["initial_capture"]["colors"]
+        != window["replacement_capture"]["colors"]
+    )
+    assert window["final"]["image_upload_count"] == 2
+    assert window["final"]["image_release_count"] == 2
+    assert window["final"]["pending_image_release_count"] == 0
+    assert window["final"]["active_image_identity"] is None
