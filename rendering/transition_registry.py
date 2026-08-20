@@ -9,7 +9,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Optional
 
-from rendering.gl_programs.program_cache import GLProgramCache
+from rendering.gl_programs.keys import (
+    BLINDS,
+    BLOCK_FLIP,
+    BURN,
+    CROSSFADE,
+    CRUMBLE,
+    DIFFUSE,
+    PARTICLE,
+    RAINDROPS,
+    SLIDE,
+    WARP,
+    WIPE,
+)
 
 
 @dataclass(frozen=True)
@@ -33,7 +45,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Ripple",
         stable_id="ripple",
-        gl_program_key=GLProgramCache.RAINDROPS,
+        gl_program_key=RAINDROPS,
         program_attr="raindrops_program",
         uniforms_attr="raindrops_uniforms",
         compositor_transition_class="GLCompositorRainDropsTransition",
@@ -44,7 +56,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Wipe",
         stable_id="wipe",
-        gl_program_key=GLProgramCache.WIPE,
+        gl_program_key=WIPE,
         program_attr="wipe_program",
         uniforms_attr="wipe_uniforms",
         compositor_transition_class="GLCompositorWipeTransition",
@@ -52,14 +64,14 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="3D Block Spins",
         stable_id="block_spins",
-        gl_program_key=GLProgramCache.WARP,
+        gl_program_key=WARP,
         compositor_transition_class="GLCompositorBlockSpinTransition",
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
         setting_name="Diffuse",
         stable_id="diffuse",
-        gl_program_key=GLProgramCache.DIFFUSE,
+        gl_program_key=DIFFUSE,
         program_attr="diffuse_program",
         uniforms_attr="diffuse_uniforms",
         compositor_transition_class="GLCompositorDiffuseTransition",
@@ -67,7 +79,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Slide",
         stable_id="slide",
-        gl_program_key=GLProgramCache.SLIDE,
+        gl_program_key=SLIDE,
         program_attr="slide_program",
         uniforms_attr="slide_uniforms",
         compositor_transition_class="GLCompositorSlideTransition",
@@ -75,7 +87,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Crossfade",
         stable_id="crossfade",
-        gl_program_key=GLProgramCache.CROSSFADE,
+        gl_program_key=CROSSFADE,
         program_attr="crossfade_program",
         uniforms_attr="crossfade_uniforms",
         compositor_transition_class="GLCompositorCrossfadeTransition",
@@ -84,7 +96,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Block Puzzle Flip",
         stable_id="block_flip",
-        gl_program_key=GLProgramCache.BLOCK_FLIP,
+        gl_program_key=BLOCK_FLIP,
         program_attr="blockflip_program",
         uniforms_attr="blockflip_uniforms",
         compositor_transition_class="GLCompositorBlockFlipTransition",
@@ -92,7 +104,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Warp Dissolve",
         stable_id="warp_dissolve",
-        gl_program_key=GLProgramCache.WARP,
+        gl_program_key=WARP,
         program_attr="warp_program",
         uniforms_attr="warp_uniforms",
         compositor_transition_class="GLCompositorWarpTransition",
@@ -101,7 +113,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Blinds",
         stable_id="blinds",
-        gl_program_key=GLProgramCache.BLINDS,
+        gl_program_key=BLINDS,
         program_attr="blinds_program",
         uniforms_attr="blinds_uniforms",
         compositor_transition_class="GLCompositorBlindsTransition",
@@ -110,7 +122,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Crumble",
         stable_id="crumble",
-        gl_program_key=GLProgramCache.CRUMBLE,
+        gl_program_key=CRUMBLE,
         program_attr="crumble_program",
         uniforms_attr="crumble_uniforms",
         compositor_transition_class="GLCompositorCrumbleTransition",
@@ -119,7 +131,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Particle",
         stable_id="particle",
-        gl_program_key=GLProgramCache.PARTICLE,
+        gl_program_key=PARTICLE,
         program_attr="particle_program",
         uniforms_attr="particle_uniforms",
         compositor_transition_class="GLCompositorParticleTransition",
@@ -128,7 +140,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Burn",
         stable_id="burn",
-        gl_program_key=GLProgramCache.BURN,
+        gl_program_key=BURN,
         program_attr="burn_program",
         uniforms_attr="burn_uniforms",
         compositor_transition_class="GLCompositorBurnTransition",
