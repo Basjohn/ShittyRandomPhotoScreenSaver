@@ -21,7 +21,7 @@ from rendering.quick.bootstrap import (
 # Fix process-owned Quick environment before importing Qt.
 configure_quick_environment()
 
-from PySide6.QtCore import QMetaObject, QObject, QSize, Qt, QTimer, QUrl  # noqa: E402
+from PySide6.QtCore import QObject, QSize, QTimer, QUrl  # noqa: E402
 from PySide6.QtGui import QColor, QGuiApplication, QScreen  # noqa: E402
 from PySide6.QtQml import QQmlComponent, QQmlEngine  # noqa: E402
 from PySide6.QtQuick import QQuickItem, QQuickWindow, QSGRendererInterface  # noqa: E402
@@ -31,13 +31,15 @@ from rendering.quick.render import (  # noqa: E402
     RenderNodeSnapshot,
     RenderNodeTelemetry,
 )
+from rendering.quick.state import QuickWindowPolicy  # noqa: E402
+from rendering.quick.window import QuickDisplayWindow  # noqa: E402
 
 
 @dataclass
 class _WindowProbe:
     index: int
     screen_name: str
-    window: QQuickWindow
+    window: QuickDisplayWindow
     scene_root: QQuickItem
     item: BackgroundRenderItem
     telemetry: RenderNodeTelemetry
@@ -72,12 +74,8 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
 
 
 def _capture_from_snapshot(snapshot: RenderNodeSnapshot) -> dict[str, Any]:
-    physical_size = [
-        round(snapshot.logical_size[0] * snapshot.device_pixel_ratio),
-        round(snapshot.logical_size[1] * snapshot.device_pixel_ratio),
-    ]
     return {
-        "size": physical_size,
+        "size": list(snapshot.render_target_size),
         "viewport": list(snapshot.viewport),
         "device_pixel_ratio": float(snapshot.device_pixel_ratio),
         "sample_count": int(snapshot.pixel_sample_count),
@@ -127,12 +125,17 @@ class _SmokeRunner(QObject):
         QTimer.singleShot(self._args.phase_delay_ms, self._capture_initial)
 
     def _create_window(self, index: int, screen: QScreen) -> _WindowProbe:
-        window = QQuickWindow()
-        window.setObjectName(f"qtquick-a2-screen-{index}")
+        window = QuickDisplayWindow(
+            screen_index=index,
+            runtime_generation=0,
+            screen=screen,
+            policy=QuickWindowPolicy(
+                always_on_top=False,
+                accepts_focus=index == 0,
+                blank_cursor=False,
+            ),
+        )
         window.setColor(QColor("#080b14"))
-        window.setPersistentGraphics(False)
-        window.setPersistentSceneGraph(False)
-        window.setScreen(screen)
 
         size: QSize = self._args.size
         geometry = screen.availableGeometry()
@@ -207,19 +210,7 @@ class _SmokeRunner(QObject):
                 probe.resized_capture = _capture_from_snapshot(
                     probe.telemetry.snapshot()
                 )
-                # A direct Python close() call holds the GIL while Qt waits for
-                # the render thread.  The Python QSGRenderNode cleanup then
-                # cannot acquire that GIL.  Queued C++ meta-calls let the event
-                # loop perform the same legal teardown without that inversion.
-                for method in ("hide", "releaseResources", "close"):
-                    if not QMetaObject.invokeMethod(
-                        probe.window,
-                        method,
-                        Qt.ConnectionType.QueuedConnection,
-                    ):
-                        self._errors.append(
-                            f"screen{probe.index} could not queue {method}()"
-                        )
+                probe.window.queue_close()
         except Exception as exc:
             self._errors.append(f"resized capture failed: {type(exc).__name__}: {exc}")
         QTimer.singleShot(self._args.phase_delay_ms, self._finalize)
@@ -243,6 +234,9 @@ class _SmokeRunner(QObject):
                 {
                     "index": probe.index,
                     "screen": probe.screen_name,
+                    "window_type": type(probe.window).__name__,
+                    "display_identity": probe.window.display_identity.as_dict(),
+                    "window_state": probe.window.describe_window_state(),
                     "initial": _snapshot_dict(initial),
                     "final": _snapshot_dict(final),
                     "initial_capture": initial_capture,
@@ -287,6 +281,13 @@ class _SmokeRunner(QObject):
             errors.append(f"{prefix} did not instantiate DisplayScene.qml")
         if probe.scene_root.property("runtimeRole") != "display-scene":
             errors.append(f"{prefix} QML runtime role is incorrect")
+        identity = probe.window.display_identity
+        if identity.screen_index != probe.index:
+            errors.append(f"{prefix} display identity index is incorrect")
+        if identity.runtime_generation != 0:
+            errors.append(f"{prefix} lost valid runtime generation 0")
+        if identity.name != probe.screen_name:
+            errors.append(f"{prefix} display identity name is incorrect")
         if initial.render_thread_id is None:
             errors.append(f"{prefix} never rendered")
         elif initial.render_thread_id == initial.gui_thread_id:
@@ -324,6 +325,11 @@ class _SmokeRunner(QObject):
         if initial_capture.get("size") == resized_capture.get("size"):
             errors.append(f"{prefix} physical capture size did not change after resize")
         viewport_size = list(final.viewport[2:])
+        if viewport_size != list(final.render_target_size):
+            errors.append(
+                f"{prefix} viewport {viewport_size} does not match render target "
+                f"{list(final.render_target_size)}"
+            )
         capture_size = resized_capture.get("size", [0, 0])
         if any(
             viewport_extent < capture_extent

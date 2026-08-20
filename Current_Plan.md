@@ -369,7 +369,6 @@ Read `01_Runtime_Host_Lifecycle.md`.
 
 Create:
 
-- `QuickDisplayWindow`;
 - `QuickDisplayRuntime`;
 - `QuickSceneController`;
 - presentation state types;

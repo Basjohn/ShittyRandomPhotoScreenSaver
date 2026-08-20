@@ -20,6 +20,7 @@ class RenderNodeSnapshot:
     logical_size: tuple[float, float] = (0.0, 0.0)
     device_pixel_ratio: float = 1.0
     viewport: tuple[int, int, int, int] = (0, 0, 0, 0)
+    render_target_size: tuple[int, int] = (0, 0)
     pixel_sample_count: int = 0
     sampled_sync_count: int = 0
     sample_colors: tuple[str, ...] = ()
@@ -76,6 +77,7 @@ class RenderNodeTelemetry:
         *,
         render_thread_id: int,
         viewport: tuple[int, int, int, int],
+        render_target_size: tuple[int, int],
     ) -> None:
         with self._lock:
             self._snapshot = replace(
@@ -83,6 +85,9 @@ class RenderNodeTelemetry:
                 render_thread_id=int(render_thread_id),
                 render_count=self._snapshot.render_count + 1,
                 viewport=tuple(int(value) for value in viewport),
+                render_target_size=tuple(
+                    int(value) for value in render_target_size
+                ),
             )
 
     def wants_pixel_sample(self) -> bool:
