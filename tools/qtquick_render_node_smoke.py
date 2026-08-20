@@ -56,8 +56,53 @@ from rendering.quick.transitions import (  # noqa: E402
 from rendering.quick.window import QuickDisplayWindow  # noqa: E402
 
 
-_TRANSITION_IDS = ("crossfade", "slide")
-_SLIDE_SMOKE_DIRECTIONS = ("left", "right")
+_TRANSITION_IDS = ("crossfade", "slide", "wipe")
+_TRANSITION_SMOKE_DIRECTIONS = {
+    "crossfade": (None,),
+    "slide": ("left", "right"),
+    "wipe": (
+        "left_to_right",
+        "right_to_left",
+        "top_to_bottom",
+        "bottom_to_top",
+        "diag_tl_br",
+        "diag_tr_bl",
+    ),
+}
+_TRANSITION_DIRECTION_CHOICES = tuple(
+    sorted(
+        {
+            direction
+            for directions in _TRANSITION_SMOKE_DIRECTIONS.values()
+            for direction in directions
+            if direction is not None
+        }
+    )
+)
+_SAMPLE_FRACTIONS = (1.0 / 12.0, 0.25, 0.5, 0.75, 11.0 / 12.0)
+_TRANSITION_SAMPLE_COORDINATES = tuple(
+    (sample_x, 1.0 - readback_y)
+    for readback_y in _SAMPLE_FRACTIONS
+    for sample_x in _SAMPLE_FRACTIONS
+)
+_DIRECTIONAL_PALETTE_RGB = {
+    "initial": (
+        (12, 32, 120),
+        (16, 48, 145),
+        (20, 64, 170),
+        (24, 80, 195),
+        (28, 96, 220),
+        (32, 112, 235),
+    ),
+    "replacement": (
+        (120, 24, 12),
+        (145, 32, 16),
+        (170, 40, 20),
+        (195, 48, 24),
+        (220, 56, 28),
+        (235, 64, 32),
+    ),
+}
 _TRANSITION_PALETTE_RGB = {
     "crossfade": {
         "initial": (
@@ -77,24 +122,8 @@ _TRANSITION_PALETTE_RGB = {
             (92, 60, 188),
         ),
     },
-    "slide": {
-        "initial": (
-            (12, 32, 120),
-            (16, 48, 145),
-            (20, 64, 170),
-            (24, 80, 195),
-            (28, 96, 220),
-            (32, 112, 235),
-        ),
-        "replacement": (
-            (120, 24, 12),
-            (145, 32, 16),
-            (170, 40, 20),
-            (195, 48, 24),
-            (220, 56, 28),
-            (235, 64, 32),
-        ),
-    },
+    "slide": _DIRECTIONAL_PALETTE_RGB,
+    "wipe": _DIRECTIONAL_PALETTE_RGB,
 }
 
 
@@ -161,8 +190,7 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--transition-direction",
-        choices=_SLIDE_SMOKE_DIRECTIONS,
-        default="left",
+        choices=_TRANSITION_DIRECTION_CHOICES,
     )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
@@ -186,6 +214,14 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
         )
     if not 100 <= args.phase_delay_ms <= 5000:
         parser.error("--phase-delay-ms must be between 100 and 5000")
+    allowed_directions = _TRANSITION_SMOKE_DIRECTIONS[args.transition_id]
+    if args.transition_direction is None:
+        args.transition_direction = allowed_directions[0]
+    elif args.transition_direction not in allowed_directions:
+        parser.error(
+            f"--transition-direction {args.transition_direction!r} is invalid for "
+            f"{args.transition_id}"
+        )
     return args
 
 
@@ -286,12 +322,74 @@ def _matches_slide_samples(
     if expected_order is None or set(midpoint_labels) != set(expected_order):
         return False
     rank = {label: index for index, label in enumerate(expected_order)}
-    return midpoint_labels == sorted(midpoint_labels, key=rank.__getitem__)
+    width = len(_SAMPLE_FRACTIONS)
+    rows = (
+        midpoint_labels[index : index + width]
+        for index in range(0, len(midpoint_labels), width)
+    )
+    return all(
+        set(row) == set(expected_order)
+        and row == sorted(row, key=rank.__getitem__)
+        for row in rows
+    )
+
+
+_WIPE_AXES = {
+    "left_to_right": lambda x, y: x,
+    "right_to_left": lambda x, y: 1.0 - x,
+    "top_to_bottom": lambda x, y: y,
+    "bottom_to_top": lambda x, y: 1.0 - y,
+    "diag_tl_br": lambda x, y: (x + y) * 0.5,
+    "diag_tr_bl": lambda x, y: ((1.0 - x) + y) * 0.5,
+}
+
+
+def _matches_wipe_samples(
+    source: object,
+    destination: object,
+    midpoint: object,
+    progress: float,
+    direction: object,
+) -> bool:
+    if not all(
+        isinstance(value, (tuple, list))
+        for value in (source, destination, midpoint)
+    ):
+        return False
+    if not source or not destination or not midpoint or not 0.0 < progress < 1.0:
+        return False
+    if len(midpoint) != len(_TRANSITION_SAMPLE_COORDINATES):
+        return False
+    if {_slide_color_domain(color) for color in source} != {"source"}:
+        return False
+    if {_slide_color_domain(color) for color in destination} != {"destination"}:
+        return False
+    axis_for = _WIPE_AXES.get(str(direction))
+    if axis_for is None:
+        return False
+
+    compared = 0
+    expected_domains: set[str] = set()
+    for color, (sample_x, sample_y) in zip(
+        midpoint,
+        _TRANSITION_SAMPLE_COORDINATES,
+        strict=True,
+    ):
+        axis = axis_for(sample_x, sample_y)
+        if abs(axis - progress) <= 0.025:
+            continue
+        expected = "destination" if axis < progress else "source"
+        expected_domains.add(expected)
+        if _slide_color_domain(color) != expected:
+            return False
+        compared += 1
+    return compared >= 16 and expected_domains == {"source", "destination"}
 
 
 _TRANSITION_MIDPOINT_ORACLES = {
     "crossfade": _matches_crossfade_samples,
     "slide": _matches_slide_samples,
+    "wipe": _matches_wipe_samples,
 }
 
 
@@ -695,10 +793,7 @@ class _SmokeRunner(QObject):
                     ),
                     easing_name="InOutQuad",
                     easing_curve=EasingCurve.QUAD_IN_OUT,
-                    direction={
-                        "crossfade": None,
-                        "slide": self._args.transition_direction,
-                    }[self._args.transition_id],
+                    direction=self._args.transition_direction,
                     parameters={"smoke": "c3-transition-renderer"},
                     source_image=probe.presentation_image,
                     destination_image=probe.replacement_image,

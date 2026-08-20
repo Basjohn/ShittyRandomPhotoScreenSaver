@@ -457,13 +457,20 @@ class BackgroundRenderNode(QSGRenderNode):
             1,
             round(self._logical_size[1] * self._device_pixel_ratio),
         )
-        sample_y = viewport[1] + max(0, physical_height // 4)
-        sample_xs = (
-            viewport[0] + max(0, physical_width // 12),
-            viewport[0] + max(0, physical_width // 4),
-            viewport[0] + max(0, physical_width // 2),
-            viewport[0] + max(0, (physical_width * 3) // 4),
-            viewport[0] + max(0, (physical_width * 11) // 12),
+        def _sample_offsets(extent: int) -> tuple[int, ...]:
+            return (
+                max(0, extent // 12),
+                max(0, extent // 4),
+                max(0, extent // 2),
+                max(0, (extent * 3) // 4),
+                max(0, (extent * 11) // 12),
+            )
+
+        sample_xs = tuple(
+            viewport[0] + offset for offset in _sample_offsets(physical_width)
+        )
+        sample_ys = tuple(
+            viewport[1] + offset for offset in _sample_offsets(physical_height)
         )
         colors = tuple(
             _pixel_hex(
@@ -476,6 +483,7 @@ class BackgroundRenderNode(QSGRenderNode):
                     gl.GL_UNSIGNED_BYTE,
                 )
             )
+            for sample_y in sample_ys
             for sample_x in sample_xs
         )
         if wants_sync_sample:

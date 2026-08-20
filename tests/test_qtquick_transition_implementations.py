@@ -13,6 +13,7 @@ from rendering.quick.transitions.implementation_registry import (
     resolve_quick_transition_renderer,
 )
 from rendering.quick.transitions.implementations.slide import _slide_rects
+from rendering.quick.transitions.implementations.wipe import _wipe_mode
 from rendering.quick.transitions.render_host import QuickTransitionRenderHost
 
 
@@ -59,7 +60,7 @@ print(json.dumps({
     )
 
     assert report == {
-        "ids": ["crossfade", "slide"],
+        "ids": ["crossfade", "slide", "wipe"],
         "loaded": [],
         "shader_modules": [],
     }
@@ -112,12 +113,16 @@ slide = resolve_quick_transition_renderer(
     "slide",
     enabled_transition_ids=frozenset(),
 )
+wipe = resolve_quick_transition_renderer(
+    "wipe",
+    enabled_transition_ids=frozenset(),
+)
 loaded = sorted(
     name for name in sys.modules
     if name.startswith("rendering.quick.transitions.implementations.")
 )
 print(json.dumps({
-    "resolved": renderer is not None or slide is not None,
+    "resolved": renderer is not None or slide is not None or wipe is not None,
     "loaded": loaded,
 }))
 """
@@ -208,6 +213,47 @@ print(json.dumps({
     }
 
 
+def test_enabled_resolution_imports_only_wipe_surface():
+    report = _probe(
+        """
+import json
+import sys
+from rendering.quick.transitions.implementation_registry import (
+    resolve_quick_transition_renderer,
+)
+
+renderer = resolve_quick_transition_renderer(
+    "wipe",
+    enabled_transition_ids=frozenset({"wipe"}),
+)
+implementation_modules = sorted(
+    name for name in sys.modules
+    if name.startswith("rendering.quick.transitions.implementations.")
+)
+shader_modules = sorted(
+    name for name in sys.modules
+    if name.startswith("rendering.gl_programs.") and name.endswith("_program")
+)
+print(json.dumps({
+    "renderer": type(renderer).__name__,
+    "implementation_modules": implementation_modules,
+    "shader_modules": shader_modules,
+}))
+"""
+    )
+
+    assert report == {
+        "renderer": "QuickWipeRenderer",
+        "implementation_modules": [
+            "rendering.quick.transitions.implementations.wipe"
+        ],
+        "shader_modules": [
+            "rendering.gl_programs.base_program",
+            "rendering.gl_programs.wipe_program",
+        ],
+    }
+
+
 @pytest.mark.parametrize(
     ("direction", "old_xy", "new_xy"),
     (
@@ -241,6 +287,28 @@ def test_slide_rects_default_left_clamp_progress_and_reject_unknown_direction():
     )
     with pytest.raises(ValueError, match="unknown canonical Slide direction"):
         _slide_rects("Random", 0.5)
+
+
+@pytest.mark.parametrize(
+    ("direction", "mode"),
+    (
+        ("left_to_right", 0),
+        ("right_to_left", 1),
+        ("top_to_bottom", 2),
+        ("bottom_to_top", 3),
+        ("diag_tl_br", 4),
+        ("diag_tr_bl", 5),
+    ),
+)
+def test_wipe_modes_preserve_all_canonical_direction_semantics(direction, mode):
+    assert _wipe_mode(direction) == mode
+
+
+def test_wipe_mode_defaults_left_to_right_and_rejects_unknown_direction():
+    assert _wipe_mode(None) == 0
+    assert _wipe_mode("LEFT_TO_RIGHT") == 0
+    with pytest.raises(ValueError, match="unknown canonical Wipe direction"):
+        _wipe_mode("Random")
 
 
 def test_common_runtime_owners_have_no_transition_specific_dispatch_tree():

@@ -30,6 +30,10 @@ _IMPLEMENTATIONS = (
         transition_id="slide",
         module_name="rendering.quick.transitions.implementations.slide",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="wipe",
+        module_name="rendering.quick.transitions.implementations.wipe",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 
