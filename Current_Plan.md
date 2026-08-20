@@ -376,7 +376,6 @@ Keep engine/provider/settings behaviour unchanged.
 
 Prove in a migration harness:
 
-- hide/show;
 - exit;
 - topology recreate.
 

@@ -52,6 +52,7 @@ class QuickDisplayWindow(QQuickWindow):
         self._bound_screen: QScreen | None = None
         self._display_identity: QuickDisplayIdentity | None = None
         self._input_controller: QuickInputController | None = None
+        self._desired_visible = False
         self._close_queued = False
 
         generation_label = (
@@ -71,6 +72,7 @@ class QuickDisplayWindow(QQuickWindow):
         self.setScreen(screen)
         self._bind_screen(screen, apply_geometry=False)
         self.screenChanged.connect(self._on_window_screen_changed)
+        self.visibleChanged.connect(self._on_window_visibility_changed)
 
     @property
     def screen_index(self) -> int:
@@ -118,14 +120,13 @@ class QuickDisplayWindow(QQuickWindow):
         if self.screen() is not screen:
             self.setScreen(screen)
         self._apply_screen_geometry(screen)
-        self.show()
-        self.raise_()
-        if self._policy.accepts_focus:
-            self.requestActivate()
+        self._desired_visible = True
+        self._queue_meta_call("show")
 
     def queue_hide(self) -> None:
         """Hide through Qt's event loop so Python never waits on the render thread."""
 
+        self._desired_visible = False
         self._queue_meta_call("hide")
 
     def queue_close(self) -> None:
@@ -134,6 +135,7 @@ class QuickDisplayWindow(QQuickWindow):
         if self._close_queued:
             return
         self._close_queued = True
+        self._desired_visible = False
         try:
             for method in ("hide", "releaseResources", "close"):
                 self._queue_meta_call(method)
@@ -166,6 +168,7 @@ class QuickDisplayWindow(QQuickWindow):
             "runtime_generation": self._runtime_generation,
             "visible": bool(self.isVisible()),
             "active": bool(self.isActive()),
+            "desired_visible": self._desired_visible,
             "close_queued": self._close_queued,
             "input_controller_bound": self._input_controller is not None,
             "geometry": [rect.x(), rect.y(), rect.width(), rect.height()],
@@ -250,6 +253,13 @@ class QuickDisplayWindow(QQuickWindow):
             return
         self._apply_screen_geometry(screen)
         self.refresh_display_identity()
+
+    def _on_window_visibility_changed(self, visible: bool) -> None:
+        if not visible or not self._desired_visible or self._close_queued:
+            return
+        self.raise_()
+        if self._policy.accepts_focus:
+            self.requestActivate()
 
     def _apply_screen_geometry(self, screen: QScreen) -> None:
         geometry = screen.geometry()

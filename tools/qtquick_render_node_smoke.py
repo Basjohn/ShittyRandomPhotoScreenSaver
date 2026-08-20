@@ -1,14 +1,15 @@
-"""Production-shaped script smoke for the Phase A2 inline Quick render node."""
+"""Production-shaped standalone threaded Qt Quick runtime lifecycle smoke."""
 
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 import json
 import os
 from pathlib import Path
 import sys
 import threading
+import time
 from typing import Any
 
 from rendering.quick.bootstrap import (
@@ -47,9 +48,12 @@ class _WindowProbe:
     qml_runtime_role: str
     qml_screen_index: int
     qml_runtime_generation: int | None
+    target_geometry: tuple[int, int, int, int]
+    qml_root_identity: int
     initial_capture: dict[str, Any] | None = None
     resized_capture: dict[str, Any] | None = None
     initial_scene_state: dict[str, object] | None = None
+    hide_show_cycles: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _parse_size(value: str) -> QSize:
@@ -68,6 +72,7 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--windows", type=int, default=2)
     parser.add_argument("--generations", type=int, default=1)
+    parser.add_argument("--hide-show-cycles", type=int, default=0)
     parser.add_argument("--size", type=_parse_size, default=QSize(480, 270))
     parser.add_argument("--phase-delay-ms", type=int, default=350)
     parser.add_argument("--output", type=Path)
@@ -76,6 +81,8 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
         parser.error("--windows must be positive")
     if not 1 <= args.generations <= 3:
         parser.error("--generations must be between 1 and 3")
+    if not 0 <= args.hide_show_cycles <= 3:
+        parser.error("--hide-show-cycles must be between 0 and 3")
     if not 100 <= args.phase_delay_ms <= 5000:
         parser.error("--phase-delay-ms must be between 100 and 5000")
     return args
@@ -109,6 +116,9 @@ class _SmokeRunner(QObject):
         self._completed_generations = 0
         self._retired_runtime_ids: set[int] = set()
         self._cycle_token = 0
+        self._hide_show_cycle = 0
+        self._active_hide_records: dict[int, dict[str, Any]] = {}
+        self._visibility_deadline = 0.0
 
     def start(self) -> None:
         screens = QGuiApplication.screens()
@@ -131,6 +141,8 @@ class _SmokeRunner(QObject):
         self._probes = []
         self._initial_snapshots = []
         self._retired_runtime_ids = set()
+        self._hide_show_cycle = 0
+        self._active_hide_records = {}
         current_screens = list(QGuiApplication.screens())
         if len(current_screens) < self._window_count:
             self._errors.append(
@@ -161,14 +173,11 @@ class _SmokeRunner(QObject):
                     f"generation{self._generation} screen{probe.index} "
                     "was not bound before show"
                 )
-            probe.window.show()
-            if probe.index == 0:
-                probe.window.requestActivate()
+            probe.runtime.show_on_screen()
+            probe.window.setGeometry(*probe.target_geometry)
             probe.window.update()
-        QTimer.singleShot(
-            self._args.phase_delay_ms,
-            lambda token=token: self._capture_initial(token),
-        )
+        self._visibility_deadline = self._visibility_timeout_deadline()
+        QTimer.singleShot(10, lambda token=token: self._capture_initial(token))
 
     def _create_window(
         self,
@@ -207,7 +216,8 @@ class _SmokeRunner(QObject):
         geometry = screen.availableGeometry()
         x = geometry.x() + max(0, (geometry.width() - size.width()) // 2)
         y = geometry.y() + max(0, (geometry.height() - size.height()) // 2)
-        window.setGeometry(x, y, size.width(), size.height())
+        target_geometry = (x, y, size.width(), size.height())
+        window.setGeometry(*target_geometry)
 
         scene = runtime.scene_controller
         scene.set_background_proof_progress(0.36 + (0.08 * index))
@@ -224,11 +234,26 @@ class _SmokeRunner(QObject):
             qml_runtime_role=str(scene_root.property("runtimeRole")),
             qml_screen_index=int(scene_root.property("screenIndex")),
             qml_runtime_generation=scene_root.property("runtimeGeneration"),
+            target_geometry=target_geometry,
+            qml_root_identity=id(scene_root),
         )
 
     def _capture_initial(self, token: int) -> None:
         if token != self._cycle_token:
             return
+        initial_ready = all(
+            probe.runtime.scene_readiness.ready_for_reveal
+            and probe.telemetry.snapshot().render_count >= 1
+            and probe.telemetry.snapshot().pixel_sample_count >= 1
+            for probe in self._probes
+        )
+        if not initial_ready and time.monotonic() < self._visibility_deadline:
+            QTimer.singleShot(10, lambda token=token: self._capture_initial(token))
+            return
+        if not initial_ready:
+            self._errors.append(
+                f"generation{self._generation} initial reveal readiness timed out"
+            )
         try:
             for probe in self._probes:
                 snapshot = probe.telemetry.snapshot()
@@ -243,26 +268,185 @@ class _SmokeRunner(QObject):
                 probe.window.update()
         except Exception as exc:
             self._errors.append(f"initial capture failed: {type(exc).__name__}: {exc}")
-        QTimer.singleShot(
-            self._args.phase_delay_ms,
-            lambda token=token: self._capture_resized(token),
-        )
+        self._visibility_deadline = self._visibility_timeout_deadline()
+        QTimer.singleShot(10, lambda token=token: self._capture_resized(token))
 
     def _capture_resized(self, token: int) -> None:
         if token != self._cycle_token:
             return
+        resized_ready = len(self._initial_snapshots) == len(self._probes) and all(
+            (
+                probe.telemetry.snapshot().render_target_size
+                != self._initial_snapshots[position].render_target_size
+                and probe.telemetry.snapshot().pixel_sample_count
+                > self._initial_snapshots[position].pixel_sample_count
+                and probe.runtime.scene_readiness.ready_for_reveal
+            )
+            for position, probe in enumerate(self._probes)
+        )
+        if not resized_ready and time.monotonic() < self._visibility_deadline:
+            QTimer.singleShot(10, lambda token=token: self._capture_resized(token))
+            return
+        if not resized_ready:
+            self._errors.append(
+                f"generation{self._generation} resized presentation timed out"
+            )
         try:
             for probe in self._probes:
                 probe.resized_capture = _capture_from_snapshot(
                     probe.telemetry.snapshot()
                 )
+        except Exception as exc:
+            self._errors.append(f"resized capture failed: {type(exc).__name__}: {exc}")
+        if self._args.hide_show_cycles > 0 and not self._errors:
+            self._begin_hide_show_cycle(token)
+            return
+        self._retire_generation(token)
+
+    def _begin_hide_show_cycle(self, token: int) -> None:
+        if token != self._cycle_token:
+            return
+        self._active_hide_records = {}
+        try:
+            for probe in self._probes:
+                probe.runtime.frame_pacer.set_visualizer_active(True)
+                before = probe.telemetry.snapshot()
+                geometry = probe.window.geometry()
+                self._active_hide_records[id(probe)] = {
+                    "cycle": self._hide_show_cycle,
+                    "before": _snapshot_dict(before),
+                    "resume_geometry": list(geometry.getRect()),
+                }
+                probe.runtime.hide()
+        except Exception as exc:
+            self._errors.append(
+                f"hide/show cycle {self._hide_show_cycle} hide failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            self._retire_generation(token)
+            return
+        self._visibility_deadline = self._visibility_timeout_deadline()
+        QTimer.singleShot(10, lambda token=token: self._poll_hidden(token))
+
+    def _poll_hidden(self, token: int) -> None:
+        if token != self._cycle_token:
+            return
+        hidden_ready = True
+        for probe in self._probes:
+            record = self._active_hide_records[id(probe)]
+            before = record["before"]
+            snapshot = probe.telemetry.snapshot()
+            readiness = probe.runtime.scene_readiness
+            if (
+                probe.window.isVisible()
+                or probe.runtime.phase.value != "paused"
+                or not readiness.scene_graph_invalidated
+                or snapshot.invalidation_count <= before["invalidation_count"]
+                or snapshot.release_count <= before["release_count"]
+            ):
+                hidden_ready = False
+                break
+
+        if not hidden_ready:
+            if time.monotonic() < self._visibility_deadline:
+                QTimer.singleShot(10, lambda token=token: self._poll_hidden(token))
+                return
+            self._errors.append(
+                f"generation{self._generation} hide/show cycle "
+                f"{self._hide_show_cycle} did not reach hidden invalidation"
+            )
+            self._retire_generation(token)
+            return
+
+        try:
+            for probe in self._probes:
+                record = self._active_hide_records[id(probe)]
+                record["hidden"] = _snapshot_dict(probe.telemetry.snapshot())
+                record["hidden_runtime_state"] = (
+                    probe.runtime.describe_runtime_state()
+                )
+                record["qml_root_preserved_while_hidden"] = (
+                    id(probe.scene.scene_root) == probe.qml_root_identity
+                )
+                probe.runtime.show_on_screen()
+                probe.window.setGeometry(*record["resume_geometry"])
+                probe.window.update()
+        except Exception as exc:
+            self._errors.append(
+                f"hide/show cycle {self._hide_show_cycle} show failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            self._retire_generation(token)
+            return
+        self._visibility_deadline = self._visibility_timeout_deadline()
+        QTimer.singleShot(10, lambda token=token: self._poll_resumed(token))
+
+    def _poll_resumed(self, token: int) -> None:
+        if token != self._cycle_token:
+            return
+        resumed_ready = True
+        for probe in self._probes:
+            record = self._active_hide_records[id(probe)]
+            before = record["before"]
+            snapshot = probe.telemetry.snapshot()
+            if (
+                not probe.window.isVisible()
+                or probe.runtime.phase.value != "visible"
+                or not probe.runtime.scene_readiness.ready_for_reveal
+                or snapshot.initialize_count <= before["initialize_count"]
+                or snapshot.render_count <= before["render_count"]
+                or not probe.runtime.frame_pacer.is_active()
+            ):
+                resumed_ready = False
+                break
+
+        if not resumed_ready:
+            if time.monotonic() < self._visibility_deadline:
+                QTimer.singleShot(10, lambda token=token: self._poll_resumed(token))
+                return
+            self._errors.append(
+                f"generation{self._generation} hide/show cycle "
+                f"{self._hide_show_cycle} did not reach resumed readiness"
+            )
+            self._retire_generation(token)
+            return
+
+        for probe in self._probes:
+            record = self._active_hide_records[id(probe)]
+            record["resumed"] = _snapshot_dict(probe.telemetry.snapshot())
+            record["resumed_capture"] = _capture_from_snapshot(
+                probe.telemetry.snapshot()
+            )
+            record["resumed_runtime_state"] = probe.runtime.describe_runtime_state()
+            record["qml_root_preserved_after_resume"] = (
+                id(probe.scene.scene_root) == probe.qml_root_identity
+            )
+            probe.hide_show_cycles.append(record)
+
+        self._hide_show_cycle += 1
+        if self._hide_show_cycle < self._args.hide_show_cycles:
+            QTimer.singleShot(0, lambda token=token: self._begin_hide_show_cycle(token))
+            return
+        self._retire_generation(token)
+
+    def _visibility_timeout_deadline(self) -> float:
+        timeout_ms = max(1500, self._args.phase_delay_ms * 8)
+        return time.monotonic() + (timeout_ms / 1000.0)
+
+    def _retire_generation(self, token: int) -> None:
+        if token != self._cycle_token:
+            return
+        try:
+            for probe in self._probes:
                 if not probe.runtime.close_runtime():
                     self._errors.append(
                         f"generation{probe.generation} screen{probe.index} "
                         "runtime retirement was not admitted"
                     )
         except Exception as exc:
-            self._errors.append(f"resized capture failed: {type(exc).__name__}: {exc}")
+            self._errors.append(
+                f"runtime retirement failed: {type(exc).__name__}: {exc}"
+            )
         QTimer.singleShot(
             max(1500, self._args.phase_delay_ms * 8),
             lambda token=token: self._retirement_timeout(token),
@@ -332,6 +516,7 @@ class _SmokeRunner(QObject):
                     "final": _snapshot_dict(final),
                     "initial_capture": initial_capture,
                     "resized_capture": resized_capture,
+                    "hide_show_cycles": probe.hide_show_cycles,
                     "errors": errors,
                 }
             )
@@ -349,6 +534,7 @@ class _SmokeRunner(QObject):
             "valid": not self._errors,
             "requested_windows": self._args.windows,
             "requested_generations": self._args.generations,
+            "requested_hide_show_cycles": self._args.hide_show_cycles,
             "completed_generations": self._completed_generations,
             "physical_screens": len(QGuiApplication.screens()),
             "created_windows": len(self._reports),
@@ -424,20 +610,26 @@ class _SmokeRunner(QObject):
             errors.append(f"{prefix} never rendered")
         elif initial.render_thread_id == initial.gui_thread_id:
             errors.append(f"{prefix} render callback ran on the GUI thread")
-        if final.initialize_count != 1:
+        expected_resource_cycles = 1 + self._args.hide_show_cycles
+        if final.initialize_count != expected_resource_cycles:
             errors.append(
-                f"{prefix} GL initialized {final.initialize_count} times instead of once"
+                f"{prefix} GL initialized {final.initialize_count} times; "
+                f"expected {expected_resource_cycles}"
             )
-        if final.render_count < 2:
+        if final.render_count < 2 + self._args.hide_show_cycles:
             errors.append(f"{prefix} rendered only {final.render_count} frames")
-        if final.release_count != 1:
+        if final.release_count != expected_resource_cycles:
             errors.append(
-                f"{prefix} GL released {final.release_count} times instead of once"
+                f"{prefix} GL released {final.release_count} times; "
+                f"expected {expected_resource_cycles}"
             )
         if final.release_thread_id != final.render_thread_id:
             errors.append(f"{prefix} GL release did not run on its render thread")
-        if final.invalidation_count < 1:
-            errors.append(f"{prefix} scene graph was not invalidated")
+        if final.invalidation_count < expected_resource_cycles:
+            errors.append(
+                f"{prefix} scene graph invalidated {final.invalidation_count} times; "
+                f"expected at least {expected_resource_cycles}"
+            )
         if final.invalidation_thread_id != final.render_thread_id:
             errors.append(f"{prefix} invalidation did not run on its render thread")
         if not final.gl_version:
@@ -456,6 +648,63 @@ class _SmokeRunner(QObject):
             errors.append(f"{prefix} resized capture did not contain deterministic bands")
         if initial_capture.get("size") == resized_capture.get("size"):
             errors.append(f"{prefix} physical capture size did not change after resize")
+        if len(probe.hide_show_cycles) != self._args.hide_show_cycles:
+            errors.append(
+                f"{prefix} completed {len(probe.hide_show_cycles)} hide/show cycles; "
+                f"expected {self._args.hide_show_cycles}"
+            )
+        for cycle_index, cycle in enumerate(probe.hide_show_cycles):
+            cycle_prefix = f"{prefix}.hide_show{cycle_index}"
+            hidden_runtime = cycle.get("hidden_runtime_state", {})
+            hidden_snapshot = cycle.get("hidden", {})
+            hidden_window = hidden_runtime.get("window", {})
+            hidden_scene = hidden_runtime.get("scene_readiness", {})
+            hidden_pacer = hidden_runtime.get("frame_pacer", {})
+            resumed_runtime = cycle.get("resumed_runtime_state", {})
+            resumed_window = resumed_runtime.get("window", {})
+            resumed_scene = resumed_runtime.get("scene_readiness", {})
+            resumed_pacer = resumed_runtime.get("frame_pacer", {})
+            if hidden_runtime.get("phase") != "paused" or hidden_window.get(
+                "visible"
+            ):
+                errors.append(f"{cycle_prefix} did not become hidden/paused")
+            if (
+                not hidden_scene.get("scene_graph_invalidated")
+                or not hidden_scene.get("qml_root_created")
+                or hidden_scene.get("qml_objects_retired")
+                or not hidden_scene.get("admission_open")
+            ):
+                errors.append(
+                    f"{cycle_prefix} did not preserve the invalidated QML scene"
+                )
+            if (
+                not hidden_pacer.get("paused")
+                or hidden_pacer.get("active")
+                or hidden_pacer.get("demands") != ["visualizer"]
+            ):
+                errors.append(f"{cycle_prefix} did not preserve paused frame demand")
+            if not cycle.get("qml_root_preserved_while_hidden"):
+                errors.append(f"{cycle_prefix} replaced its QML root while hidden")
+            if hidden_snapshot.get("release_thread_id") != hidden_snapshot.get(
+                "render_thread_id"
+            ):
+                errors.append(f"{cycle_prefix} released off its render thread")
+            if resumed_runtime.get("phase") != "visible" or not resumed_window.get(
+                "visible"
+            ):
+                errors.append(f"{cycle_prefix} did not become visible again")
+            if not resumed_scene.get("ready_for_reveal"):
+                errors.append(f"{cycle_prefix} did not regain reveal readiness")
+            if (
+                resumed_pacer.get("paused")
+                or not resumed_pacer.get("active")
+                or resumed_pacer.get("demands") != ["visualizer"]
+            ):
+                errors.append(f"{cycle_prefix} did not resume frame demand")
+            if not cycle.get("qml_root_preserved_after_resume"):
+                errors.append(f"{cycle_prefix} replaced its QML root on resume")
+            if cycle.get("resumed_capture", {}).get("sample_count", 0) < 3:
+                errors.append(f"{cycle_prefix} did not render resumed pixels")
         viewport_size = list(final.viewport[2:])
         if viewport_size != list(final.render_target_size):
             errors.append(

@@ -203,6 +203,33 @@ def test_stop_allows_reuse_but_close_rejects_stale_runtime_admission():
         pacer.set_transition_active(True)
 
 
+def test_visibility_pause_preserves_demands_and_resumes_without_hidden_debt():
+    pacer, window, timer, clock = _pacer(60.0)
+    pacer.set_transition_active(True)
+
+    assert pacer.pause() is True
+    assert pacer.pause() is False
+    assert pacer.demands == QuickFrameDemand.TRANSITION
+    assert pacer.is_active() is False
+    assert pacer.describe()["paused"] is True
+    updates_before_resume = window.update_count
+    skipped_before_resume = pacer.describe()["skipped_deadlines"]
+
+    clock.now_ns = 5_000_000_000
+    pacer.set_visualizer_active(True)
+    assert window.update_count == updates_before_resume
+    assert pacer.resume() is True
+    assert pacer.resume() is False
+
+    assert pacer.is_active() is True
+    assert pacer.demands == (
+        QuickFrameDemand.TRANSITION | QuickFrameDemand.VISUALIZER
+    )
+    assert window.update_count == updates_before_resume + 1
+    assert pacer.describe()["skipped_deadlines"] == skipped_before_resume
+    assert timer.started_delays[-1] == 17
+
+
 def test_refresh_retarget_starts_fresh_without_replaying_old_deadlines():
     pacer, window, _timer, clock = _pacer(60.0)
     pacer.set_transition_active(True)
