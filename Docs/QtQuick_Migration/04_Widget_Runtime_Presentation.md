@@ -117,6 +117,15 @@ registry. Do not grow `WidgetRuntimeManager` or `QuickSceneController` into a pe
 `if`/`elif` dispatcher. This is an internal modular boundary, not dynamic discovery, manifests, hot
 loading, or an external widget plugin framework.
 
+The catalog stays lightweight enough for Settings, persistence, and discovery without eagerly
+importing every heavy family implementation. `WidgetRuntimeManager` resolves and instantiates only
+enabled families through the generic contract. A disabled family owns no model, provider/service or
+process used solely by that family, polling/timers, refresh callbacks, Quick component, or
+family-specific presentation resources. Shared infrastructure remains alive when another enabled
+feature still requires its capability; do not duplicate it or shut it down as part of one family's
+off-switch. A future optional built-in family uses this same catalog/registry boundary without
+changes to central runtime owners.
+
 ## 5. Widget model contract
 
 Each family exposes only the state its visual needs.

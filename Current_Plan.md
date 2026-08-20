@@ -387,6 +387,8 @@ Preserve:
 
 Use the statically registered internal transition-implementation boundary in the migration doc.
 Do not create a central per-transition dispatcher or a dynamic/external plugin system.
+Keep catalog metadata lightweight: disabled transitions remain settings-visible but are excluded
+from Random/Cycle and do not resolve implementations, shaders, or transition-specific resources.
 
 ## C3 — renderer port
 
@@ -506,6 +508,10 @@ Create/rename the future `WidgetRuntimeManager` around:
 - generation ownership.
 
 Move pixel/QWidget operations out as families migrate.
+
+Resolve only enabled families through the static family registry. Do not eagerly create hidden
+models/providers/presentations for disabled families; keep shared services capability-driven when
+another enabled feature still needs them.
 
 Do not create a giant "QuickBaseOverlayWidget" Python god object.
 
