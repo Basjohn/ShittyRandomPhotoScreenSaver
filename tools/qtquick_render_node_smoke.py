@@ -21,8 +21,15 @@ from rendering.quick.bootstrap import (
 # Fix process-owned Quick environment before importing Qt.
 configure_quick_environment()
 
-from PySide6.QtCore import QObject, QSize, QTimer  # noqa: E402
-from PySide6.QtGui import QColor, QGuiApplication, QScreen  # noqa: E402
+from PySide6.QtCore import (  # noqa: E402
+    QCoreApplication,
+    QEvent,
+    QObject,
+    QSize,
+    Qt,
+    QTimer,
+)
+from PySide6.QtGui import QColor, QGuiApplication, QKeyEvent, QScreen  # noqa: E402
 from PySide6.QtQuick import QQuickWindow, QSGRendererInterface  # noqa: E402
 
 from rendering.quick.render import RenderNodeSnapshot, RenderNodeTelemetry  # noqa: E402
@@ -73,6 +80,7 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--windows", type=int, default=2)
     parser.add_argument("--generations", type=int, default=1)
     parser.add_argument("--hide-show-cycles", type=int, default=0)
+    parser.add_argument("--exit-via-input", action="store_true")
     parser.add_argument("--size", type=_parse_size, default=QSize(480, 270))
     parser.add_argument("--phase-delay-ms", type=int, default=350)
     parser.add_argument("--output", type=Path)
@@ -83,6 +91,8 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
         parser.error("--generations must be between 1 and 3")
     if not 0 <= args.hide_show_cycles <= 3:
         parser.error("--hide-show-cycles must be between 0 and 3")
+    if args.exit_via_input and args.generations != 1:
+        parser.error("--exit-via-input requires exactly one generation")
     if not 100 <= args.phase_delay_ms <= 5000:
         parser.error("--phase-delay-ms must be between 100 and 5000")
     return args
@@ -119,6 +129,11 @@ class _SmokeRunner(QObject):
         self._hide_show_cycle = 0
         self._active_hide_records: dict[int, dict[str, Any]] = {}
         self._visibility_deadline = 0.0
+        self._retirement_started = False
+        self._exit_request_count = 0
+        self._exit_retirement_scheduled = False
+        self._exit_sequence: dict[str, Any] | None = None
+        self._report_finished = False
 
     def start(self) -> None:
         screens = QGuiApplication.screens()
@@ -143,6 +158,8 @@ class _SmokeRunner(QObject):
         self._retired_runtime_ids = set()
         self._hide_show_cycle = 0
         self._active_hide_records = {}
+        self._retirement_started = False
+        self._exit_retirement_scheduled = False
         current_screens = list(QGuiApplication.screens())
         if len(current_screens) < self._window_count:
             self._errors.append(
@@ -209,6 +226,10 @@ class _SmokeRunner(QObject):
                 retired_generation,
             )
         )
+        if self._args.exit_via_input:
+            runtime.exit_requested.connect(
+                lambda runtime=runtime: self._on_runtime_exit_requested(runtime)
+            )
         window = runtime.window
         window.setColor(QColor("#080b14"))
 
@@ -301,7 +322,7 @@ class _SmokeRunner(QObject):
         if self._args.hide_show_cycles > 0 and not self._errors:
             self._begin_hide_show_cycle(token)
             return
-        self._retire_generation(token)
+        self._finish_presentation_sequence(token)
 
     def _begin_hide_show_cycle(self, token: int) -> None:
         if token != self._cycle_token:
@@ -427,7 +448,118 @@ class _SmokeRunner(QObject):
         if self._hide_show_cycle < self._args.hide_show_cycles:
             QTimer.singleShot(0, lambda token=token: self._begin_hide_show_cycle(token))
             return
+        self._finish_presentation_sequence(token)
+
+    def _finish_presentation_sequence(self, token: int) -> None:
+        if token != self._cycle_token:
+            return
+        if self._args.exit_via_input:
+            self._request_exit_via_input(token)
+            return
         self._retire_generation(token)
+
+    def _request_exit_via_input(self, token: int) -> None:
+        if token != self._cycle_token:
+            return
+        if not self._probes:
+            self._errors.append("input exit requested without an active runtime")
+            self._retire_generation(token)
+            return
+
+        source = self._probes[0]
+        event = QKeyEvent(
+            QEvent.Type.KeyPress,
+            Qt.Key.Key_Escape,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        try:
+            QCoreApplication.sendEvent(source.window, event)
+        except Exception as exc:
+            self._errors.append(
+                f"input exit dispatch failed: {type(exc).__name__}: {exc}"
+            )
+            QTimer.singleShot(0, lambda token=token: self._retire_generation(token))
+            return
+
+        if self._exit_sequence is not None:
+            self._exit_sequence["source_event_accepted"] = event.isAccepted()
+        if self._exit_request_count != 1:
+            self._errors.append(
+                f"input exit emitted {self._exit_request_count} requests instead of one"
+            )
+            if not self._exit_retirement_scheduled:
+                QTimer.singleShot(0, lambda token=token: self._retire_generation(token))
+
+    def _on_runtime_exit_requested(self, runtime: QuickDisplayRuntime) -> None:
+        self._exit_request_count += 1
+        if all(probe.runtime is not runtime for probe in self._probes):
+            self._errors.append("exit request came from a runtime outside the active set")
+            return
+        if runtime.runtime_generation != self._generation:
+            self._errors.append(
+                f"stale exit request generation={runtime.runtime_generation} "
+                f"current={self._generation}"
+            )
+            return
+
+        if self._exit_sequence is None:
+            self._exit_sequence = {
+                "source_screen_index": runtime.screen_index,
+                "source_runtime_generation": runtime.runtime_generation,
+                "source_event_accepted": False,
+                "request_count": self._exit_request_count,
+                "runtime_state_at_request": runtime.describe_runtime_state(),
+                "runtime_phases_at_request": [
+                    probe.runtime.phase.value for probe in self._probes
+                ],
+                "retirement_deferred": True,
+            }
+        else:
+            self._exit_sequence["request_count"] = self._exit_request_count
+
+        if self._exit_retirement_scheduled:
+            return
+        self._exit_retirement_scheduled = True
+        token = self._cycle_token
+        # Leave the QQuickWindow keyPressEvent stack before beginning teardown.
+        QTimer.singleShot(0, lambda token=token: self._begin_exit_retirement(token))
+
+    def _begin_exit_retirement(self, token: int) -> None:
+        if token != self._cycle_token:
+            return
+        self._retire_generation(token)
+        sequence = self._exit_sequence
+        if sequence is None or not self._probes:
+            return
+
+        target = self._probes[-1]
+        post_close_event = QKeyEvent(
+            QEvent.Type.KeyPress,
+            Qt.Key.Key_Escape,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        try:
+            QCoreApplication.sendEvent(target.window, post_close_event)
+        except Exception as exc:
+            self._errors.append(
+                f"post-close input fence dispatch failed: {type(exc).__name__}: {exc}"
+            )
+            return
+        sequence.update(
+            {
+                "coordinated_runtime_count": len(self._probes),
+                "post_close_event_screen_index": target.index,
+                "post_close_event_accepted": post_close_event.isAccepted(),
+                "request_count_after_post_close_event": self._exit_request_count,
+                "runtime_states_after_admission_close": [
+                    probe.runtime.describe_runtime_state() for probe in self._probes
+                ],
+            }
+        )
+        if self._exit_request_count != 1:
+            self._errors.append(
+                "closed Quick input admitted a duplicate exit request"
+            )
 
     def _visibility_timeout_deadline(self) -> float:
         timeout_ms = max(1500, self._args.phase_delay_ms * 8)
@@ -436,17 +568,21 @@ class _SmokeRunner(QObject):
     def _retire_generation(self, token: int) -> None:
         if token != self._cycle_token:
             return
-        try:
-            for probe in self._probes:
+        if self._retirement_started:
+            return
+        self._retirement_started = True
+        for probe in self._probes:
+            try:
                 if not probe.runtime.close_runtime():
                     self._errors.append(
                         f"generation{probe.generation} screen{probe.index} "
                         "runtime retirement was not admitted"
                     )
-        except Exception as exc:
-            self._errors.append(
-                f"runtime retirement failed: {type(exc).__name__}: {exc}"
-            )
+            except Exception as exc:
+                self._errors.append(
+                    f"generation{probe.generation} screen{probe.index} "
+                    f"runtime retirement failed: {type(exc).__name__}: {exc}"
+                )
         QTimer.singleShot(
             max(1500, self._args.phase_delay_ms * 8),
             lambda token=token: self._retirement_timeout(token),
@@ -530,11 +666,17 @@ class _SmokeRunner(QObject):
         QTimer.singleShot(0, self._start_generation)
 
     def _finish_report(self) -> None:
+        if self._report_finished:
+            return
+        self._report_finished = True
+        self._errors.extend(self._validate_exit_sequence())
         report = {
             "valid": not self._errors,
             "requested_windows": self._args.windows,
             "requested_generations": self._args.generations,
             "requested_hide_show_cycles": self._args.hide_show_cycles,
+            "requested_exit_via_input": self._args.exit_via_input,
+            "exit_sequence": self._exit_sequence,
             "completed_generations": self._completed_generations,
             "physical_screens": len(QGuiApplication.screens()),
             "created_windows": len(self._reports),
@@ -552,6 +694,55 @@ class _SmokeRunner(QObject):
             self._args.output.parent.mkdir(parents=True, exist_ok=True)
             self._args.output.write_text(rendered + "\n", encoding="utf-8")
         self._app.exit(0 if report["valid"] else 1)
+
+    def _validate_exit_sequence(self) -> list[str]:
+        if not self._args.exit_via_input:
+            if self._exit_sequence is not None or self._exit_request_count:
+                return ["unexpected input exit occurred during lifecycle smoke"]
+            return []
+
+        sequence = self._exit_sequence
+        if sequence is None:
+            return ["Quick runtime input exit was not observed"]
+
+        errors: list[str] = []
+        if sequence.get("request_count") != 1 or self._exit_request_count != 1:
+            errors.append("Quick runtime input exit was not emitted exactly once")
+        if not sequence.get("source_event_accepted"):
+            errors.append("Quick window did not accept the exit key event")
+        if sequence.get("source_runtime_generation") != self._generation:
+            errors.append("Quick runtime exit used the wrong generation")
+        runtime_at_request = sequence.get("runtime_state_at_request", {})
+        input_at_request = runtime_at_request.get("input", {})
+        if runtime_at_request.get("phase") != "visible":
+            errors.append("Quick runtime exit was not observed from a visible runtime")
+        if not input_at_request.get("admission_open") or not input_at_request.get(
+            "exiting"
+        ):
+            errors.append("Quick input state did not publish the admitted exit")
+        if sequence.get("runtime_phases_at_request") != [
+            "visible"
+        ] * self._window_count:
+            errors.append("Quick runtime teardown began reentrantly inside keyPressEvent")
+        if not sequence.get("retirement_deferred"):
+            errors.append("Quick runtime exit retirement was not deferred")
+        if sequence.get("coordinated_runtime_count") != self._window_count:
+            errors.append("Quick input exit did not coordinate the complete runtime set")
+        if not sequence.get("post_close_event_accepted"):
+            errors.append("closed Quick input did not consume a stale exit event")
+        if sequence.get("request_count_after_post_close_event") != 1:
+            errors.append("closed Quick input emitted a stale exit request")
+        states_after_close = sequence.get("runtime_states_after_admission_close", [])
+        if len(states_after_close) != self._window_count:
+            errors.append("Quick input exit did not capture every retiring runtime")
+        for state in states_after_close:
+            if state.get("phase") != "retiring":
+                errors.append("Quick input exit left a runtime outside retirement")
+            if state.get("input", {}).get("admission_open"):
+                errors.append("Quick input remained open after coordinated exit")
+            if not state.get("close_meta_calls_queued"):
+                errors.append("Quick input exit bypassed queued window teardown")
+        return errors
 
     def _validate_probe(
         self,

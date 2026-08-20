@@ -376,7 +376,6 @@ Keep engine/provider/settings behaviour unchanged.
 
 Prove in a migration harness:
 
-- exit;
 - topology recreate.
 
 **Checkpoint after each meaningful owner extraction. Push each checkpoint.**
