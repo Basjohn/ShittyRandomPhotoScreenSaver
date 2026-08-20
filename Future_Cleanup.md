@@ -112,9 +112,13 @@ them.
       itself is no longer deferred and must not be ported to Quick;
 - [ ] add lightweight repository-hygiene checks.
 
-## 10. Unrelated/product backlog
+## 10. New feature / implementation backlog
 
-Keep unrelated feature/product work here rather than interrupting the presentation migration.
+New features and deliberately deferred new implementations belong in `Future_Work.md`, not this
+cleanup ledger.
+
+`Future_Work.md` must not interrupt active `Current_Plan.md` or important `Future_Cleanup.md` work
+unless the operator explicitly selects one of its items.
 
 ## 11. Documentation hygiene
 
