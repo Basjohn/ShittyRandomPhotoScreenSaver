@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -65,15 +66,14 @@ def test_preferences_round_trip_and_corrupt_fallback(tmp_path):
     assert build_runner.load_preferences(target) == build_runner.Preferences()
 
 
-def test_foundry_uses_large_image_backed_checkbox_indicators():
-    source = (build_runner.REPO_ROOT / "tools" / "build_runner.py").read_text(
-        encoding="utf-8"
-    )
+def test_foundry_uses_large_dpi_aware_vector_checkbox_indicators():
+    source = inspect.getsource(build_runner.FoundryCheckbutton)
+    signature = inspect.signature(build_runner.FoundryCheckbutton.__init__)
 
-    assert build_runner.BuildRunnerApp.CHECKBOX_INDICATOR_DIP >= 26
-    assert '"Foundry.Checkbox.indicator"' in source
-    assert "style.element_create(" in source
-    assert "self._checkbox_indicator_images" in source
+    assert signature.parameters["indicator_size"].default >= 24
+    assert "tk.Canvas(" in source
+    assert "create_rectangle(" in source
+    assert "create_line(" in source
 
 
 def test_helper_fingerprint_dechecks_only_after_matching_successful_build(tmp_path):

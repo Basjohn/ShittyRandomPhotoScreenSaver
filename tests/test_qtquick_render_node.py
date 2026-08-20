@@ -108,6 +108,8 @@ def test_script_smoke_proves_threaded_draw_resize_dpr_and_invalidation():
     assert report["valid"] is True
     assert report["render_loop"] == "threaded"
     assert report["graphics_api"] == "OpenGL"
+    assert report["qml_loaded"] is True
+    assert report["qml_url"].endswith("DisplayScene.qml")
     assert report["created_windows"] == 1
     window = report["windows"][0]
     assert window["initial"]["render_thread_id"] != window["initial"]["gui_thread_id"]
