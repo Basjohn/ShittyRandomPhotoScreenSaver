@@ -106,6 +106,14 @@ def test_threaded_runtime_teardown_recreates_generation_zero_to_one():
     assert report["created_windows"] == 2
     assert report["requested_hide_show_cycles"] == 1
     assert [window["generation"] for window in report["windows"]] == [0, 1]
+    barriers = report["runtime_root_destruction_barriers"]
+    assert [barrier["generation"] for barrier in barriers] == [0, 1]
+    assert all(barrier["crossed"] is True for barrier in barriers)
+    assert all(barrier["expected_runtime_roots"] == 1 for barrier in barriers)
+    assert all(barrier["destroyed_runtime_roots"] == 1 for barrier in barriers)
+    assert barriers[0]["next_generation_started"] is True
+    assert barriers[0]["next_generation_started_after_crossing"] is True
+    assert barriers[1]["next_generation_started"] is False
 
     object_names = []
     for generation, window in enumerate(report["windows"]):
@@ -184,6 +192,12 @@ def test_threaded_runtime_input_exit_retires_complete_display_set():
     assert report["requested_exit_via_input"] is True
     assert report["completed_generations"] == 1
     assert report["created_windows"] == report["concurrent_windows"]
+    barriers = report["runtime_root_destruction_barriers"]
+    assert len(barriers) == 1
+    assert barriers[0]["crossed"] is True
+    assert barriers[0]["expected_runtime_roots"] == report["concurrent_windows"]
+    assert barriers[0]["destroyed_runtime_roots"] == report["concurrent_windows"]
+    assert barriers[0]["next_generation_started"] is False
 
     exit_sequence = report["exit_sequence"]
     assert exit_sequence["source_screen_index"] == 0
