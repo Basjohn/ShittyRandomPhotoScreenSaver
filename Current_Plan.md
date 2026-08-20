@@ -367,12 +367,6 @@ The explicit operator-run executable validation remains required before producti
 
 Read `01_Runtime_Host_Lifecycle.md`.
 
-Create:
-
-- presentation state types;
-- generic runtime input owner;
-- lifecycle/resource ownership hooks.
-
 Refactor without a compatibility facade.
 
 `DisplayManager` continues to own topology, but the future display type becomes `QuickDisplayRuntime`,
@@ -382,13 +376,8 @@ Keep engine/provider/settings behaviour unchanged.
 
 Prove in a migration harness:
 
-- selected monitor placement;
-- multi-display creation;
-- display-local DPR/refresh identity;
 - hide/show;
 - exit;
-- generation identity including `0`;
-- teardown and scene-graph invalidation;
 - topology recreate.
 
 **Checkpoint after each meaningful owner extraction. Push each checkpoint.**

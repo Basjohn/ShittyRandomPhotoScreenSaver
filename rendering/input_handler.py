@@ -14,12 +14,13 @@ import logging
 import time
 from typing import Optional, TYPE_CHECKING
 
-from PySide6.QtCore import Qt, Signal, QObject, QPoint
+from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QKeyEvent, QMouseEvent, QCursor, QGuiApplication
 from PySide6.QtWidgets import QApplication
 
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
+from rendering.runtime_input import RuntimeInputOwner
 
 if TYPE_CHECKING:
     from rendering.display_widget import DisplayWidget
@@ -30,7 +31,7 @@ logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
 
 
-class InputHandler(QObject):
+class InputHandler(RuntimeInputOwner):
     """
     Handles all user input for DisplayWidget.
     
@@ -45,28 +46,6 @@ class InputHandler(QObject):
         This class provides a single choke point for context menu triggers,
         enabling deterministic effect invalidation ordering when menus open/close.
     """
-    
-    # Signals emitted for DisplayWidget to handle
-    exit_requested = Signal()
-    settings_requested = Signal()
-    next_image_requested = Signal()
-    previous_image_requested = Signal()
-    cycle_transition_requested = Signal()
-    play_pause_requested = Signal()
-    home_play_pause_requested = Signal()
-    previous_track_requested = Signal()
-    next_track_requested = Signal()
-    slider_volume_up_requested = Signal()
-    slider_volume_down_requested = Signal()
-    global_volume_up_requested = Signal()
-    global_volume_down_requested = Signal()
-    global_mute_toggle_requested = Signal()
-    context_menu_requested = Signal(QPoint)  # Global position for menu popup
-    layout_slot_load_requested = Signal(str)
-    layout_slot_save_requested = Signal(str)
-    
-    # Exit threshold for mouse movement (pixels)
-    MOUSE_EXIT_THRESHOLD = 10
     
     def __init__(
         self,
@@ -86,22 +65,6 @@ class InputHandler(QObject):
         self._parent = parent
         self._settings_manager = settings_manager
         self._widget_manager = widget_manager
-        
-        # Mouse state tracking
-        self._mouse_press_pos: Optional[QPoint] = None
-        self._mouse_press_time: float = 0.0
-        self._last_mouse_pos: Optional[QPoint] = None
-        self._initial_mouse_pos: Optional[QPoint] = None
-        
-        # Ctrl-held interaction mode
-        self._ctrl_held: bool = False
-        
-        # Exit gesture state
-        self._exit_gesture_active: bool = False
-        self._exiting: bool = False
-        
-        # Context menu state
-        self._context_menu_active: bool = False
         self._defer_focus_restore_after_widget_click: bool = False
         
         logger.debug("[INPUT_HANDLER] Initialized")
@@ -127,191 +90,6 @@ class InputHandler(QObject):
             logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
             return False
     
-    def set_ctrl_held(self, held: bool) -> None:
-        """Set Ctrl-held interaction mode."""
-        self._ctrl_held = held
-    
-    def is_ctrl_held(self) -> bool:
-        """Check if Ctrl is held (interaction mode)."""
-        return self._ctrl_held
-    
-    def set_context_menu_active(self, active: bool) -> None:
-        """Set context menu active state.
-        """
-        self._context_menu_active = active
-    
-    def is_context_menu_active(self) -> bool:
-        """Check if context menu is currently active."""
-        return self._context_menu_active
-    
-    # =========================================================================
-    # Keyboard Event Handling
-    # =========================================================================
-    
-    def handle_key_press(self, event: QKeyEvent) -> bool:
-        """
-        Handle a key press event.
-        
-        Args:
-            event: The key event
-            
-        Returns:
-            True if the event was consumed, False otherwise
-        """
-        key = event.key()
-        try:
-            key_text = event.text().lower() if event.text() else ""
-        except Exception as e:
-            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
-            key_text = ""
-
-        native_vk = 0
-        try:
-            if hasattr(event, "nativeVirtualKey"):
-                native_vk = int(event.nativeVirtualKey() or 0)
-        except Exception as e:
-            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
-            native_vk = 0
-        
-        # Log ALL key presses for diagnostics
-        logger.debug("[INPUT_HANDLER] Key press: key=%s text=%s native_vk=%s", key, key_text, native_vk)
-        
-        # Ctrl key handling is done by DisplayWidget for halo management
-        if key == Qt.Key.Key_Control:
-            return False  # Let DisplayWidget handle Ctrl
-        if key == Qt.Key.Key_Shift:
-            logger.debug("[INPUT_HANDLER] Shift key consumed for layout slot chords")
-            return True
-        
-        # Media keys should never cause exit, but we still mirror feedback
-        if self._is_media_key(event):
-            self._handle_media_key_feedback(event)
-            logger.debug("Media key pressed - ignoring (passthrough) (key=%s)", key)
-            return False
-        
-        # Determine current interaction mode
-        ctrl_mode_active = self._ctrl_held
-        interaction_mode_enabled = self.is_interaction_mode_enabled()
-        
-        # Hotkeys (always available regardless of Interaction Mode/Ctrl state)
-        slot_id = self._layout_slot_id_for_key_event(event)
-        if slot_id is not None:
-            modifiers = event.modifiers()
-            if bool(modifiers & Qt.KeyboardModifier.ShiftModifier):
-                logger.info("Shift+%s pressed - layout slot save requested", slot_id)
-                self.layout_slot_save_requested.emit(slot_id)
-            else:
-                logger.info("%s key pressed - layout slot load requested", slot_id)
-                self.layout_slot_load_requested.emit(slot_id)
-            return True
-        if key_text == 'z' or key == Qt.Key.Key_Z or native_vk == 0x5A:
-            logger.info("Z key pressed - previous image requested")
-            self.previous_image_requested.emit()
-            return True
-        if key == Qt.Key.Key_Left:
-            logger.info("Left key pressed - previous track requested")
-            self.previous_track_requested.emit()
-            return True
-        if key_text == 'x' or key == Qt.Key.Key_X or native_vk == 0x58:
-            logger.info("X key pressed - next image requested")
-            self.next_image_requested.emit()
-            return True
-        if key == Qt.Key.Key_Right:
-            logger.info("Right key pressed - next track requested")
-            self.next_track_requested.emit()
-            return True
-        if key_text == 'c' or key == Qt.Key.Key_C or native_vk == 0x43:
-            logger.info("C key pressed - cycle transition requested")
-            self.cycle_transition_requested.emit()
-            return True
-        if key_text == 's' or key == Qt.Key.Key_S or native_vk == 0x53:
-            logger.info("S key pressed - settings requested")
-            self.settings_requested.emit()
-            return True
-        if key == Qt.Key.Key_Space:
-            logger.info("Space key pressed - play/pause requested")
-            self.play_pause_requested.emit()
-            return True
-        if key == Qt.Key.Key_Up:
-            logger.info("Up key pressed - slider volume up requested")
-            self.slider_volume_up_requested.emit()
-            return True
-        if key == Qt.Key.Key_Down:
-            logger.info("Down key pressed - slider volume down requested")
-            self.slider_volume_down_requested.emit()
-            return True
-        if key == Qt.Key.Key_PageUp:
-            logger.info("Page Up key pressed - global volume up requested")
-            self.global_volume_up_requested.emit()
-            return True
-        if key == Qt.Key.Key_PageDown:
-            logger.info("Page Down key pressed - global volume down requested")
-            self.global_volume_down_requested.emit()
-            return True
-        if key == Qt.Key.Key_Home:
-            logger.info("Home key pressed - play/pause requested")
-            self.home_play_pause_requested.emit()
-            return True
-        if key == Qt.Key.Key_End:
-            logger.info("End key pressed - global mute toggle requested")
-            self.global_mute_toggle_requested.emit()
-            return True
-        
-        # Exit keys (Esc/Q) should always be honoured
-        if key in (Qt.Key.Key_Escape, Qt.Key.Key_Q):
-            logger.info("Exit key pressed (%s), requesting exit", key)
-            self._exiting = True
-            self.exit_requested.emit()
-            return True
-        
-        # In Interaction Mode or Ctrl interaction mode, non-hotkey keys are ignored
-        if interaction_mode_enabled or ctrl_mode_active:
-            logger.debug("Key %s ignored due to interaction-mode/Ctrl interaction mode", key)
-            return False
-        
-        # Normal mode: any other key exits
-        logger.info("Non-hotkey key pressed (%s) in normal mode - requesting exit", key)
-        self._exiting = True
-        self.exit_requested.emit()
-        return True
-
-    def _layout_slot_id_for_key_event(self, event: QKeyEvent) -> str | None:
-        key = event.key()
-        key_map = {
-            Qt.Key.Key_1: "1",
-            Qt.Key.Key_2: "2",
-            Qt.Key.Key_3: "3",
-            Qt.Key.Key_4: "4",
-            Qt.Key.Key_5: "5",
-            Qt.Key.Key_6: "6",
-            Qt.Key.Key_7: "7",
-            Qt.Key.Key_8: "8",
-            Qt.Key.Key_9: "9",
-            Qt.Key.Key_0: "0",
-            Qt.Key.Key_Exclam: "1",
-            Qt.Key.Key_At: "2",
-            Qt.Key.Key_NumberSign: "3",
-            Qt.Key.Key_Dollar: "4",
-            Qt.Key.Key_Percent: "5",
-            Qt.Key.Key_AsciiCircum: "6",
-            Qt.Key.Key_Ampersand: "7",
-            Qt.Key.Key_Asterisk: "8",
-            Qt.Key.Key_ParenLeft: "9",
-            Qt.Key.Key_ParenRight: "0",
-        }
-        slot_id = key_map.get(key)
-        if slot_id is not None:
-            return slot_id
-
-        try:
-            native_vk = int(event.nativeVirtualKey() or 0) if hasattr(event, "nativeVirtualKey") else 0
-        except Exception as e:
-            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
-            native_vk = 0
-        if 0x30 <= native_vk <= 0x39:
-            return chr(native_vk)
-        return None
-
     def _resolve_media_widget(self):
         """Return the best media widget candidate across the active display set."""
         media_widget = None
@@ -332,153 +110,6 @@ class InputHandler(QObject):
                 logger.debug("[INPUT_HANDLER] Exception searching for media widget: %s", e)
         return media_widget
 
-    def _is_media_key(self, event: QKeyEvent) -> bool:
-        """Check if the key event is a media key."""
-        key = event.key()
-        
-        media_keys = {
-            Qt.Key.Key_MediaPlay,
-            Qt.Key.Key_MediaPause,
-            Qt.Key.Key_MediaTogglePlayPause,
-            Qt.Key.Key_MediaNext,
-            Qt.Key.Key_MediaPrevious,
-            Qt.Key.Key_VolumeUp,
-            Qt.Key.Key_VolumeDown,
-            Qt.Key.Key_VolumeMute,
-        }
-        
-        if key in media_keys:
-            return True
-        
-        # Windows VK codes for media keys
-        try:
-            if hasattr(event, "nativeVirtualKey"):
-                native_vk = int(event.nativeVirtualKey() or 0)
-                media_vk_codes = {
-                    0xAD,  # VK_VOLUME_MUTE
-                    0xAE,  # VK_VOLUME_DOWN
-                    0xAF,  # VK_VOLUME_UP
-                    0xB0,  # VK_MEDIA_NEXT_TRACK
-                    0xB1,  # VK_MEDIA_PREV_TRACK
-                    0xB2,  # VK_MEDIA_STOP
-                    0xB3,  # VK_MEDIA_PLAY_PAUSE
-                }
-                if native_vk in media_vk_codes:
-                    return True
-        except Exception as e:
-            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
-        
-        return False
-    
-    # =========================================================================
-    # Mouse Event Handling
-    # =========================================================================
-    
-    def handle_mouse_press(self, event: QMouseEvent, global_ctrl_held: bool = False) -> bool:
-        """
-        Handle a mouse press event.
-        
-        Args:
-            event: The mouse event
-            global_ctrl_held: Whether Ctrl is held globally across displays
-            
-        Returns:
-            True if the event was consumed, False otherwise
-        """
-        ctrl_mode_active = self._ctrl_held or global_ctrl_held
-        
-        # Track mouse press for gesture detection
-        self._mouse_press_pos = event.pos()
-        self._mouse_press_time = time.time()
-        
-        # Right-click context menu handling
-        if event.button() == Qt.MouseButton.RightButton:
-            interaction_mode_enabled = self.is_interaction_mode_enabled()
-            
-            # Context menu available in Interaction Mode or with Ctrl held
-            if interaction_mode_enabled or ctrl_mode_active:
-                global_pos = event.globalPos()
-                self.context_menu_requested.emit(global_pos)
-                return True
-        
-        # Left-click handling
-        if event.button() == Qt.MouseButton.LeftButton:
-            # In interaction mode, let widgets handle clicks
-            if ctrl_mode_active or self.is_interaction_mode_enabled():
-                return False  # Let DisplayWidget handle widget interaction
-            
-            # Normal mode: exit on click
-            if not self._context_menu_active:
-                logger.info("Left click in normal mode - requesting exit")
-                self._exiting = True
-                self.exit_requested.emit()
-                return True
-        
-        return False
-    
-    def handle_mouse_move(self, event: QMouseEvent, global_ctrl_held: bool = False) -> bool:
-        """
-        Handle a mouse move event.
-        
-        Args:
-            event: The mouse event
-            global_ctrl_held: Whether Ctrl is held globally across displays
-            
-        Returns:
-            True if the event was consumed (exit triggered), False otherwise
-        """
-        # Don't exit while context menu is active
-        if self._context_menu_active:
-            return False
-        
-        ctrl_mode_active = self._ctrl_held or global_ctrl_held
-        interaction_mode_enabled = self.is_interaction_mode_enabled()
-        
-        # In Interaction Mode or Ctrl interaction mode, mouse movement doesn't exit
-        if interaction_mode_enabled or ctrl_mode_active:
-            return False
-        
-        # Track initial position for exit threshold
-        current_pos = event.pos()
-        if self._initial_mouse_pos is None:
-            self._initial_mouse_pos = current_pos
-            return False
-        
-        # Check if we've moved beyond the exit threshold
-        try:
-            delta = current_pos - self._initial_mouse_pos
-            distance = (delta.x() ** 2 + delta.y() ** 2) ** 0.5
-            
-            if distance > self.MOUSE_EXIT_THRESHOLD:
-                logger.info(
-                    "Mouse moved beyond threshold (%.1f > %d) - requesting exit",
-                    distance, self.MOUSE_EXIT_THRESHOLD
-                )
-                self._exiting = True
-                self.exit_requested.emit()
-                return True
-        except Exception as e:
-            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
-        
-        return False
-    
-    def handle_mouse_release(self, event: QMouseEvent, global_ctrl_held: bool = False) -> bool:
-        """
-        Handle a mouse release event.
-        
-        Args:
-            event: The mouse event
-            global_ctrl_held: Whether Ctrl is held globally across displays
-            
-        Returns:
-            True if the event was consumed, False otherwise
-        """
-        # Reset press tracking
-        self._mouse_press_pos = None
-        self._mouse_press_time = 0.0
-        
-        return False
-    
     def handle_mouse_double_click(self, event: QMouseEvent) -> bool:
         """
         Handle a mouse double click event.
@@ -505,34 +136,16 @@ class InputHandler(QObject):
         self.next_image_requested.emit()
         return True
     
-    # =========================================================================
-    # State Management
-    # =========================================================================
-    
-    def reset_initial_position(self) -> None:
-        """Reset the initial mouse position for exit threshold tracking."""
-        self._initial_mouse_pos = None
-    
-    def is_exiting(self) -> bool:
-        """Check if exit has been triggered."""
-        return self._exiting
-    
-    def set_exiting(self, exiting: bool) -> None:
-        """Set the exiting state."""
-        self._exiting = exiting
-    
     def cleanup(self) -> None:
         """Clean up input handler state."""
-        self._mouse_press_pos = None
-        self._last_mouse_pos = None
-        self._initial_mouse_pos = None
-        self._ctrl_held = False
-        self._exit_gesture_active = False
-        self._context_menu_active = False
+        super().cleanup()
         self._settings_manager = None
         self._widget_manager = None
         self._parent = None
         logger.debug("[INPUT_HANDLER] Cleanup complete")
+
+    def _handle_media_key_passthrough(self, event: QKeyEvent) -> None:
+        self._handle_media_key_feedback(event)
 
     # =========================================================================
     # Ctrl Halo Management (Phase 2c)

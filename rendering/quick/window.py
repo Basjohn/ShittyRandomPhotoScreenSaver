@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtCore import QMetaObject, Signal, Qt
-from PySide6.QtGui import QColor, QScreen
+from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QScreen
 from PySide6.QtQuick import QQuickWindow
 
 from .state import (
@@ -13,6 +13,7 @@ from .state import (
     QuickWindowPolicy,
     capture_display_identity,
 )
+from .input_controller import QuickInputController
 
 
 class QuickDisplayWindow(QQuickWindow):
@@ -50,6 +51,7 @@ class QuickDisplayWindow(QQuickWindow):
         self._policy = policy
         self._bound_screen: QScreen | None = None
         self._display_identity: QuickDisplayIdentity | None = None
+        self._input_controller: QuickInputController | None = None
         self._close_queued = False
 
         generation_label = (
@@ -92,6 +94,18 @@ class QuickDisplayWindow(QQuickWindow):
     @property
     def is_close_queued(self) -> bool:
         return self._close_queued
+
+    def bind_input_controller(self, controller: QuickInputController) -> None:
+        """Bind the exact generation-scoped event owner before first show."""
+
+        if self._input_controller is not None:
+            raise RuntimeError("Quick display input controller is already bound")
+        if (
+            controller.screen_index != self._screen_index
+            or controller.runtime_generation != self._runtime_generation
+        ):
+            raise ValueError("Quick input identity does not match its display window")
+        self._input_controller = controller
 
     def show_on_screen(self) -> None:
         """Commit exact physical-screen placement before making the window visible."""
@@ -153,9 +167,52 @@ class QuickDisplayWindow(QQuickWindow):
             "visible": bool(self.isVisible()),
             "active": bool(self.isActive()),
             "close_queued": self._close_queued,
+            "input_controller_bound": self._input_controller is not None,
             "geometry": [rect.x(), rect.y(), rect.width(), rect.height()],
             "display_identity": self.display_identity.as_dict(),
         }
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        controller = self._input_controller
+        if controller is not None and controller.handle_key_press(event):
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event: QKeyEvent) -> None:
+        controller = self._input_controller
+        if controller is not None and controller.handle_key_release(event):
+            event.accept()
+            return
+        super().keyReleaseEvent(event)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        controller = self._input_controller
+        if controller is not None and controller.handle_mouse_press(event):
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        controller = self._input_controller
+        if controller is not None and controller.handle_mouse_move(event):
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        controller = self._input_controller
+        if controller is not None and controller.handle_mouse_release(event):
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        controller = self._input_controller
+        if controller is not None and controller.handle_mouse_double_click(event):
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
     def _bind_screen(self, screen: QScreen, *, apply_geometry: bool) -> None:
         if screen is self._bound_screen:

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QPoint, Signal
 from PySide6.QtGui import QScreen
 
 from .frame_pacer import QuickFramePacer
+from .input_controller import QuickInputController
 from .render import RenderNodeTelemetry
 from .scene_controller import QuickSceneController, QuickSceneFactory
 from .state import (
@@ -26,6 +28,24 @@ class QuickDisplayRuntime(QObject):
     display_identity_changed = Signal(object)
     visibility_changed = Signal(bool)
     retirement_completed = Signal(int)
+    input_state_changed = Signal(object)
+    exit_requested = Signal()
+    previous_requested = Signal()
+    next_requested = Signal()
+    cycle_transition_requested = Signal()
+    settings_requested = Signal()
+    play_pause_requested = Signal()
+    home_play_pause_requested = Signal()
+    previous_track_requested = Signal()
+    next_track_requested = Signal()
+    slider_volume_up_requested = Signal()
+    slider_volume_down_requested = Signal()
+    global_volume_up_requested = Signal()
+    global_volume_down_requested = Signal()
+    global_mute_toggle_requested = Signal()
+    context_menu_requested = Signal(QPoint)
+    layout_slot_load_requested = Signal(str)
+    layout_slot_save_requested = Signal(str)
 
     def __init__(
         self,
@@ -36,6 +56,9 @@ class QuickDisplayRuntime(QObject):
         scene_factory: QuickSceneFactory,
         window_policy: QuickWindowPolicy,
         telemetry: RenderNodeTelemetry | None = None,
+        interaction_mode_provider: Callable[[], bool] | None = None,
+        global_ctrl_held_provider: Callable[[], bool] | None = None,
+        ctrl_state_publisher: Callable[[bool], None] | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -50,6 +73,15 @@ class QuickDisplayRuntime(QObject):
             policy=window_policy,
         )
         self._display_identity = self._window.display_identity
+        self._input: QuickInputController | None = QuickInputController(
+            screen_index=self._screen_index,
+            runtime_generation=self._runtime_generation,
+            interaction_mode_provider=interaction_mode_provider,
+            global_ctrl_held_provider=global_ctrl_held_provider,
+            ctrl_state_publisher=ctrl_state_publisher,
+            parent=self,
+        )
+        self._window.bind_input_controller(self._input)
         refresh_rate = float(self._display_identity.refresh_rate_hz)
         if refresh_rate <= 0.0:
             raise RuntimeError(
@@ -71,6 +103,7 @@ class QuickDisplayRuntime(QObject):
         self._retired_window_state: dict[str, Any] | None = None
         self._retired_scene_state: dict[str, Any] | None = None
         self._retired_pacer_state: dict[str, Any] | None = None
+        self._retired_input_state: dict[str, Any] | None = None
 
         self._window.display_identity_changed.connect(
             self._on_display_identity_changed
@@ -78,6 +111,44 @@ class QuickDisplayRuntime(QObject):
         self._window.visibleChanged.connect(self._on_visibility_changed)
         self._window.destroyed.connect(self._on_window_destroyed)
         self._scene.readiness_changed.connect(self._on_scene_readiness_changed)
+        self._input.input_state_changed.connect(self.input_state_changed.emit)
+        self._input.exit_requested.connect(self.exit_requested.emit)
+        self._input.previous_image_requested.connect(self.previous_requested.emit)
+        self._input.next_image_requested.connect(self.next_requested.emit)
+        self._input.cycle_transition_requested.connect(
+            self.cycle_transition_requested.emit
+        )
+        self._input.settings_requested.connect(self.settings_requested.emit)
+        self._input.play_pause_requested.connect(self.play_pause_requested.emit)
+        self._input.home_play_pause_requested.connect(
+            self.home_play_pause_requested.emit
+        )
+        self._input.previous_track_requested.connect(
+            self.previous_track_requested.emit
+        )
+        self._input.next_track_requested.connect(self.next_track_requested.emit)
+        self._input.slider_volume_up_requested.connect(
+            self.slider_volume_up_requested.emit
+        )
+        self._input.slider_volume_down_requested.connect(
+            self.slider_volume_down_requested.emit
+        )
+        self._input.global_volume_up_requested.connect(
+            self.global_volume_up_requested.emit
+        )
+        self._input.global_volume_down_requested.connect(
+            self.global_volume_down_requested.emit
+        )
+        self._input.global_mute_toggle_requested.connect(
+            self.global_mute_toggle_requested.emit
+        )
+        self._input.context_menu_requested.connect(self.context_menu_requested.emit)
+        self._input.layout_slot_load_requested.connect(
+            self.layout_slot_load_requested.emit
+        )
+        self._input.layout_slot_save_requested.connect(
+            self.layout_slot_save_requested.emit
+        )
 
     @property
     def screen_index(self) -> int:
@@ -124,15 +195,24 @@ class QuickDisplayRuntime(QObject):
             raise RuntimeError("Quick frame pacer has retired")
         return pacer
 
+    @property
+    def input_controller(self) -> QuickInputController:
+        controller = self._input
+        if controller is None:
+            raise RuntimeError("Quick input controller has retired")
+        return controller
+
     def show_on_screen(self) -> None:
         if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
             raise RuntimeError("cannot show a retiring Quick display runtime")
+        self.input_controller.reset_initial_position()
         self.window.show_on_screen()
 
     def hide(self) -> None:
         if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
             return
         self.frame_pacer.stop()
+        self.input_controller.reset_initial_position()
         self.window.queue_hide()
         self._set_phase(QuickRuntimePhase.PAUSED)
 
@@ -146,6 +226,7 @@ class QuickDisplayRuntime(QObject):
             return False
 
         self._set_phase(QuickRuntimePhase.RETIRING)
+        self.input_controller.close_input()
         self.frame_pacer.close()
         self.scene_controller.quiesce_for_retirement()
         # This is the only legal window retirement entry: QuickDisplayWindow
@@ -166,6 +247,9 @@ class QuickDisplayRuntime(QObject):
         pacer_state = self._retired_pacer_state
         if pacer_state is None and self._pacer is not None:
             pacer_state = self._pacer.describe()
+        input_state = self._retired_input_state
+        if input_state is None and self._input is not None:
+            input_state = self._input.describe_input_state()
         return {
             "screen_index": self._screen_index,
             "runtime_generation": self._runtime_generation,
@@ -175,6 +259,7 @@ class QuickDisplayRuntime(QObject):
             "window": window_state,
             "scene": scene_state,
             "frame_pacer": pacer_state,
+            "input": input_state,
             "close_meta_calls_queued": self._close_meta_calls_queued,
             "window_delete_queued": self._window_delete_queued,
             "retirement_completed": self._retirement_emitted,
@@ -219,6 +304,8 @@ class QuickDisplayRuntime(QObject):
         self._retired_window_state = window.describe_window_state()
         if self._pacer is not None:
             self._retired_pacer_state = self._pacer.describe()
+        if self._input is not None:
+            self._retired_input_state = self._input.describe_input_state()
         self._window_delete_queued = True
         window.deleteLater()
 
@@ -228,6 +315,10 @@ class QuickDisplayRuntime(QObject):
         self._window = None
         self._scene = None
         self._pacer = None
+        if self._input is not None:
+            self._retired_input_state = self._input.describe_input_state()
+            self._input.deleteLater()
+            self._input = None
         self._set_phase(QuickRuntimePhase.RETIRED)
         if not self._retirement_emitted:
             self._retirement_emitted = True
