@@ -96,6 +96,7 @@ class QuickFramePacer(QObject):
         self._timer.timeout.connect(self._service_deadline)
         self._state = QuickPacerState(float(target_hz))
         self._demands = QuickFrameDemand.NONE
+        self._paused = False
         self._closed = False
 
     @property
@@ -107,7 +108,7 @@ class QuickFramePacer(QObject):
         return self._demands
 
     def is_active(self) -> bool:
-        return bool(self._demands) and not self._closed
+        return bool(self._demands) and not self._paused and not self._closed
 
     def set_demand(self, reason: QuickFrameDemand, active: bool) -> None:
         """Add or remove one continuous-frame reason.
@@ -133,7 +134,7 @@ class QuickFramePacer(QObject):
         if self._demands == previous:
             return
 
-        if previous == QuickFrameDemand.NONE and self._demands:
+        if previous == QuickFrameDemand.NONE and self._demands and not self._paused:
             self._state.start(self._clock_ns())
             self._service_deadline()
         elif previous and self._demands == QuickFrameDemand.NONE:
@@ -176,8 +177,30 @@ class QuickFramePacer(QObject):
         if self._closed:
             return
         self._demands = QuickFrameDemand.NONE
+        self._paused = False
         self._timer.stop()
         self._state.stop()
+
+    def pause(self) -> bool:
+        """Suspend delivery while preserving active presentation reasons."""
+
+        if self._closed or self._paused:
+            return False
+        self._paused = True
+        self._timer.stop()
+        self._state.stop()
+        return True
+
+    def resume(self) -> bool:
+        """Resume preserved demand from now without replaying hidden-time debt."""
+
+        if self._closed or not self._paused:
+            return False
+        self._paused = False
+        if self._demands:
+            self._state.start(self._clock_ns())
+            self._service_deadline()
+        return True
 
     def close(self) -> None:
         """Permanently close demand admission for display-runtime teardown."""
@@ -192,6 +215,7 @@ class QuickFramePacer(QObject):
             "target_hz": self._state.target_hz,
             "interval_ns": self._state.interval_ns,
             "active": self.is_active(),
+            "paused": self._paused,
             "closed": self._closed,
             "demands": [
                 demand.name.lower()

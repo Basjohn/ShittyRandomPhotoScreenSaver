@@ -211,10 +211,12 @@ class QuickDisplayRuntime(QObject):
     def hide(self) -> None:
         if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
             return
-        self.frame_pacer.stop()
+        was_visible = self.window.isVisible()
+        self.frame_pacer.pause()
         self.input_controller.reset_initial_position()
         self.window.queue_hide()
-        self._set_phase(QuickRuntimePhase.PAUSED)
+        if not was_visible:
+            self._set_phase(QuickRuntimePhase.PAUSED)
 
     def quiesce_for_runtime_pause(self) -> None:
         self.hide()
@@ -275,6 +277,11 @@ class QuickDisplayRuntime(QObject):
 
     def _on_visibility_changed(self, visible: bool) -> None:
         if self._phase not in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
+            if visible:
+                self.frame_pacer.resume()
+            else:
+                self.frame_pacer.pause()
+                self.input_controller.reset_initial_position()
             self._set_phase(
                 QuickRuntimePhase.VISIBLE if visible else QuickRuntimePhase.PAUSED
             )

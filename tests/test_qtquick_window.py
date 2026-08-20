@@ -97,10 +97,12 @@ def test_quick_display_window_is_a_narrow_standalone_qwindow_owner():
     } <= methods
     assert "setPersistentGraphics(False)" in source
     assert "setPersistentSceneGraph(False)" in source
-    assert source.index("self.setScreen(screen)") < source.index("self.show()")
+    assert source.index("self.setScreen(screen)") < source.index(
+        'self._queue_meta_call("show")'
+    )
     assert "self._bind_screen(screen, apply_geometry=False)" in source
     assert source.index("self._apply_screen_geometry(screen)") < source.index(
-        "self.show()"
+        'self._queue_meta_call("show")'
     )
     for forbidden in (
         "QWidget",

@@ -84,6 +84,8 @@ def test_threaded_runtime_teardown_recreates_generation_zero_to_one():
             "1",
             "--generations",
             "2",
+            "--hide-show-cycles",
+            "1",
             "--size",
             "240x135",
             "--phase-delay-ms",
@@ -102,6 +104,7 @@ def test_threaded_runtime_teardown_recreates_generation_zero_to_one():
     assert report["valid"] is True
     assert report["completed_generations"] == 2
     assert report["created_windows"] == 2
+    assert report["requested_hide_show_cycles"] == 1
     assert [window["generation"] for window in report["windows"]] == [0, 1]
 
     object_names = []
@@ -117,8 +120,29 @@ def test_threaded_runtime_teardown_recreates_generation_zero_to_one():
         assert runtime["frame_pacer"]["closed"] is True
         assert runtime["input"]["admission_open"] is False
         assert runtime["input"]["runtime_generation"] == generation
+        assert len(window["hide_show_cycles"]) == 1
+        cycle = window["hide_show_cycles"][0]
+        assert cycle["hidden_runtime_state"]["phase"] == "paused"
+        assert cycle["hidden_runtime_state"]["window"]["visible"] is False
+        assert cycle["hidden_runtime_state"]["frame_pacer"]["paused"] is True
+        assert cycle["hidden_runtime_state"]["frame_pacer"]["demands"] == [
+            "visualizer"
+        ]
+        assert cycle["hidden_runtime_state"]["scene_readiness"][
+            "qml_objects_retired"
+        ] is False
+        assert cycle["resumed_runtime_state"]["phase"] == "visible"
+        assert cycle["resumed_runtime_state"]["window"]["visible"] is True
+        assert cycle["resumed_runtime_state"]["frame_pacer"]["active"] is True
+        assert cycle["resumed_runtime_state"]["scene_readiness"][
+            "ready_for_reveal"
+        ] is True
+        assert cycle["qml_root_preserved_while_hidden"] is True
+        assert cycle["qml_root_preserved_after_resume"] is True
+        assert cycle["resumed_runtime_state"]["runtime_generation"] == generation
         assert window["final_scene_state"]["readiness"]["qml_objects_retired"] is True
-        assert window["final"]["release_count"] == 1
+        assert window["final"]["initialize_count"] == 2
+        assert window["final"]["release_count"] == 2
         assert window["final"]["release_thread_id"] == window["final"]["render_thread_id"]
         assert window["final"]["invalidation_count"] >= 1
 
@@ -171,6 +195,7 @@ def test_threaded_runtime_uses_exact_identity_for_two_physical_displays(qt_app):
     assert report["concurrent_windows"] == 2
     assert report["created_windows"] == 2
     assert report["physical_screens"] >= 2
+    assert report["requested_hide_show_cycles"] == 0
 
     for index, (window, identity) in enumerate(zip(report["windows"], expected)):
         actual = window["display_identity"]
@@ -188,7 +213,10 @@ def test_threaded_runtime_uses_exact_identity_for_two_physical_displays(qt_app):
             identity.refresh_rate_hz,
             abs=0.1,
         )
+        assert window["hide_show_cycles"] == []
         assert window["runtime_state"]["phase"] == "retired"
+        assert window["final"]["initialize_count"] == 1
+        assert window["final"]["release_count"] == 1
         assert window["final"]["release_thread_id"] == window["final"][
             "render_thread_id"
         ]
