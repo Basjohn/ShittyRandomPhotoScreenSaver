@@ -40,6 +40,12 @@ class RenderNodeSnapshot:
     last_transition_id: str | None = None
     last_transition_linear_progress: float | None = None
     last_transition_eased_progress: float | None = None
+    transition_draw_count: int = 0
+    last_transition_renderer_id: str | None = None
+    transition_midpoint_run_id: int | None = None
+    transition_midpoint_linear_progress: float | None = None
+    transition_midpoint_eased_progress: float | None = None
+    transition_midpoint_colors: tuple[str, ...] = ()
     gl_version: str = ""
     error: str | None = None
 
@@ -126,13 +132,14 @@ class RenderNodeTelemetry:
         self,
         *,
         identity: str,
+        active_identity: str | None,
         byte_count: int,
         pending_release_count: int,
     ) -> None:
         with self._lock:
             self._snapshot = replace(
                 self._snapshot,
-                active_image_identity=str(identity),
+                active_image_identity=active_identity,
                 image_upload_thread_id=threading.get_ident(),
                 image_upload_count=self._snapshot.image_upload_count + 1,
                 image_upload_bytes=(
@@ -190,6 +197,42 @@ class RenderNodeTelemetry:
                 last_transition_id=run.request.transition_id,
                 last_transition_linear_progress=sample.linear_progress,
                 last_transition_eased_progress=sample.eased_progress,
+            )
+
+    def note_transition_drawn(self, *, transition_id: str) -> None:
+        with self._lock:
+            self._snapshot = replace(
+                self._snapshot,
+                transition_draw_count=self._snapshot.transition_draw_count + 1,
+                last_transition_renderer_id=str(transition_id),
+            )
+
+    def wants_transition_midpoint_sample(
+        self,
+        sample: TransitionSample,
+    ) -> bool:
+        with self._lock:
+            return bool(
+                self._capture_pixels
+                and self._snapshot.transition_midpoint_run_id != sample.run_id
+                and 0.35 <= sample.linear_progress <= 0.75
+            )
+
+    def note_transition_midpoint_sample(
+        self,
+        *,
+        sample: TransitionSample,
+        colors: tuple[str, ...],
+    ) -> None:
+        with self._lock:
+            if self._snapshot.transition_midpoint_run_id == sample.run_id:
+                return
+            self._snapshot = replace(
+                self._snapshot,
+                transition_midpoint_run_id=sample.run_id,
+                transition_midpoint_linear_progress=sample.linear_progress,
+                transition_midpoint_eased_progress=sample.eased_progress,
+                transition_midpoint_colors=tuple(str(color) for color in colors),
             )
 
     def note_released(self, *, release_thread_id: int) -> None:

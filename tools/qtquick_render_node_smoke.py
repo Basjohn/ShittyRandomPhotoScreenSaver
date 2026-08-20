@@ -144,10 +144,56 @@ def _capture_from_snapshot(snapshot: RenderNodeSnapshot) -> dict[str, Any]:
         "device_pixel_ratio": float(snapshot.device_pixel_ratio),
         "sample_count": int(snapshot.pixel_sample_count),
         "colors": sorted(set(snapshot.sample_colors)),
+        "ordered_colors": list(snapshot.sample_colors),
         "active_image_identity": snapshot.active_image_identity,
         "image_upload_count": int(snapshot.image_upload_count),
         "image_release_count": int(snapshot.image_release_count),
     }
+
+
+def _argb_components(color: object) -> tuple[int, int, int, int]:
+    text = str(color)
+    if len(text) != 9 or not text.startswith("#"):
+        raise ValueError(f"invalid ARGB sample: {text!r}")
+    return tuple(int(text[index : index + 2], 16) for index in (1, 3, 5, 7))
+
+
+def _matches_crossfade_samples(
+    source: object,
+    destination: object,
+    midpoint: object,
+    progress: float,
+    *,
+    tolerance: int = 4,
+) -> bool:
+    if not all(isinstance(value, (tuple, list)) for value in (
+        source,
+        destination,
+        midpoint,
+    )):
+        return False
+    if not source or len(source) != len(destination) or len(source) != len(midpoint):
+        return False
+    amount = max(0.0, min(1.0, float(progress)))
+    for old_color, new_color, mixed_color in zip(
+        source,
+        destination,
+        midpoint,
+        strict=True,
+    ):
+        old = _argb_components(old_color)
+        new = _argb_components(new_color)
+        mixed = _argb_components(mixed_color)
+        expected = tuple(
+            round(old_channel * (1.0 - amount) + new_channel * amount)
+            for old_channel, new_channel in zip(old, new, strict=True)
+        )
+        if any(
+            abs(actual - target) > tolerance
+            for actual, target in zip(mixed, expected, strict=True)
+        ):
+            return False
+    return True
 
 
 def _presentation_image(
@@ -177,8 +223,9 @@ def _presentation_image(
     colors = palettes[variant]
     image = QImage(12, 8, QImage.Format.Format_RGBA8888)
     for x in range(image.width()):
-        color = colors[min(len(colors) - 1, x // 2)]
+        base = colors[min(len(colors) - 1, x // 2)]
         for y in range(image.height()):
+            color = base if y >= image.height() // 2 else base.lighter(145)
             image.setPixelColor(x, y, color)
     return capture_qimage(
         image,
@@ -598,6 +645,8 @@ class _SmokeRunner(QObject):
             == probe.replacement_image.identity
             and probe.telemetry.snapshot().pixel_sample_count
             > int(probe.resized_capture["sample_count"])
+            and probe.telemetry.snapshot().sampled_sync_count
+            == probe.telemetry.snapshot().sync_count
             and probe.telemetry.snapshot().transition_sample_count >= 1
             and probe.telemetry.snapshot().last_transition_run_id
             == probe.transition_run_id
@@ -1654,6 +1703,27 @@ class _SmokeRunner(QObject):
             or final.last_transition_id != "crossfade"
         ):
             errors.append(f"{prefix} render node did not sample the transition run")
+        if (
+            final.transition_draw_count < 1
+            or final.last_transition_renderer_id != "crossfade"
+        ):
+            errors.append(f"{prefix} Crossfade renderer did not draw the run")
+        midpoint_progress = final.transition_midpoint_eased_progress
+        if (
+            final.transition_midpoint_run_id != probe.transition_run_id
+            or midpoint_progress is None
+            or not final.transition_midpoint_colors
+        ):
+            errors.append(f"{prefix} Crossfade midpoint was not captured")
+        elif not _matches_crossfade_samples(
+            resized_capture.get("ordered_colors"),
+            replacement_capture.get("ordered_colors"),
+            final.transition_midpoint_colors,
+            midpoint_progress,
+        ):
+            errors.append(
+                f"{prefix} Crossfade midpoint did not blend the authored images"
+            )
         if final_scene.get("transition_run") is not None:
             errors.append(f"{prefix} scene retained a finalized transition run")
         if final_scene.get("last_transition_run_id") != probe.transition_run_id:
