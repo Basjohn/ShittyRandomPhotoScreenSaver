@@ -40,7 +40,7 @@ They are never a second task list or owner map.
 | Visualizer subsystem | `Docs/Visualizer_Reference.md`, `Docs/Visualizer_Change_Checklist.md` |
 | Current P2 installed evidence | `Docs/P2_Installed_Acceptance_Findings_2026-08-19.md` |
 | Current P2 gates | `Docs/P2_Behavioral_Gates.md` |
-| Active physical-presentation benchmark | `tools/presentation_benchmark_core.py`, `tools/worker_push_presentation_benchmark.py`; execution/evidence requirements remain in `Current_Plan.md` |
+| Active physical-presentation benchmark | `tools/presentation_benchmark_core.py`, `tools/worker_push_presentation_benchmark.py`, `tools/qtquick_p0_presentation_benchmark.py`; current comparison: `Docs/Performance_Evidence/QtQuick-P0-Comparison-2026-08-20.md` |
 | Monitor lifecycle / wake | `Current_Plan.md` P5 boundary; current topology docs only |
 | Tests | `Docs/TestSuite.md` |
 | Recurring harnesses | `Docs/Harness_Index.md` |

@@ -1,0 +1,755 @@
+{
+  "candidate": "qtquick_threaded",
+  "cleanup_errors": [],
+  "displays": [
+    {
+      "candidate": "qtquick_threaded",
+      "completion_semantics": {
+        "physical_presentation_evidence": false,
+        "stage": "queued_for_presentation"
+      },
+      "completion_signal": "qquickwindow.frameSwapped",
+      "counts": {
+        "accepted_requests": null,
+        "completed_physical_frames": null,
+        "completion_signal_frames": 2305,
+        "failures": 0,
+        "gui_callbacks": 1214,
+        "logical_steps": 0,
+        "requested_opportunities": 2478,
+        "skipped_deadlines": 0,
+        "slow_steps": 0
+      },
+      "display": "screen0:MSI G321Q:1707x960",
+      "issued_update_requests": 2335,
+      "large_completion_gaps": [
+        {
+          "completed_ns": 235805000,
+          "gap_ms": 198.9848,
+          "nearest_marker": "first_intentional_visible_frame",
+          "phase": "startup",
+          "request_age_ms": 0.1164,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 1523431700,
+          "gap_ms": 90.6897,
+          "nearest_marker": "slide_bubble_start",
+          "phase": "slide_bubble",
+          "request_age_ms": 1.7191,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 2566223800,
+          "gap_ms": 43.4641,
+          "nearest_marker": "slide_bubble_start",
+          "phase": "slide_bubble",
+          "request_age_ms": 26.7225,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 3608712500,
+          "gap_ms": 48.7688,
+          "nearest_marker": "slide_end",
+          "phase": "slide_bubble",
+          "request_age_ms": 0.1246,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 4664470000,
+          "gap_ms": 61.7859,
+          "nearest_marker": "slide_end",
+          "phase": "slide_bubble",
+          "request_age_ms": 0.41,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 5719607300,
+          "gap_ms": 63.3854,
+          "nearest_marker": "slide_end",
+          "phase": "slide_bubble",
+          "request_age_ms": 0.3104,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 6763623800,
+          "gap_ms": 50.1743,
+          "nearest_marker": "slide_end",
+          "phase": "settled_bubble",
+          "request_age_ms": 3.3774,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 7803348200,
+          "gap_ms": 43.3189,
+          "nearest_marker": "slide_end",
+          "phase": "settled_bubble",
+          "request_age_ms": 1.924,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 8842868300,
+          "gap_ms": 40.8579,
+          "nearest_marker": "synthetic_pause",
+          "phase": "settled_bubble",
+          "request_age_ms": 1.2297,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 9886233600,
+          "gap_ms": 50.8506,
+          "nearest_marker": "synthetic_pause",
+          "phase": "settled_bubble",
+          "request_age_ms": 2.4987,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 10931797400,
+          "gap_ms": 50.3839,
+          "nearest_marker": "synthetic_pause",
+          "phase": "settled_bubble",
+          "request_age_ms": 0.1741,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 11976038200,
+          "gap_ms": 52.9483,
+          "nearest_marker": "synthetic_pause",
+          "phase": "paused_hold",
+          "request_age_ms": 1.9971,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 13017926800,
+          "gap_ms": 49.8179,
+          "nearest_marker": "synthetic_resume",
+          "phase": "resumed_bubble",
+          "request_age_ms": 1.7799,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 14089297600,
+          "gap_ms": 74.2528,
+          "nearest_marker": "stop_report",
+          "phase": "resumed_bubble",
+          "request_age_ms": 1.5566,
+          "source_age_ms": null
+        }
+      ],
+      "missing_observed_phases": [
+        "bubble_first_logical_frame",
+        "bubble_first_physical_frame"
+      ],
+      "missing_required_resource_metrics": [
+        "gpu_frame_ms"
+      ],
+      "observed_phase_timestamps_ns": {
+        "first_intentional_visible_frame": 7900,
+        "slide_end": 6002568700,
+        "slide_start": 1015054600,
+        "stop_report": 15014141600,
+        "synthetic_pause": 11005242900,
+        "synthetic_resume": 13012318400
+      },
+      "pacing_skipped_deadlines": 143,
+      "physical_evidence_valid": false,
+      "planned_phase_timestamps_ns": {
+        "first_intentional_visible_frame": 0,
+        "slide_bubble_start": 1000000000,
+        "slide_end": 6000000000,
+        "stop_report": 15000000000,
+        "synthetic_pause": 11000000000,
+        "synthetic_resume": 13000000000
+      },
+      "population": "P0",
+      "rates": {
+        "completed_physical_fps": null,
+        "completion_signal_fps": 153.49726606052715,
+        "request_acceptance_pct": null
+      },
+      "request_semantics": "target opportunities and issued QQuickWindow.update calls; QQuickWindow exposes no acceptance callback",
+      "resources": {
+        "gpu_busy_pct": {
+          "count": 13,
+          "max": 0.3838815011003165,
+          "p50": 0.3289063915023504,
+          "p90": 0.3565311809826283,
+          "p95": 0.3565311809826283,
+          "p99": 0.3838815011003165,
+          "status": "recorded",
+          "unit": "percent"
+        },
+        "gpu_frame_ms": {
+          "count": 0,
+          "max": 0.0,
+          "p50": 0.0,
+          "p90": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "status": "missing",
+          "unit": "milliseconds"
+        },
+        "memory_mb": {
+          "count": 14,
+          "max": 239.3984375,
+          "p50": 235.9296875,
+          "p90": 239.04296875,
+          "p95": 239.04296875,
+          "p99": 239.3984375,
+          "status": "recorded",
+          "unit": "megabytes"
+        },
+        "process_cpu_pct": {
+          "count": 14,
+          "max": 109.1,
+          "p50": 86.7,
+          "p90": 104.4,
+          "p95": 104.4,
+          "p99": 109.1,
+          "status": "recorded",
+          "unit": "percent"
+        },
+        "system_cpu_pct": {
+          "count": 14,
+          "max": 80.2,
+          "p50": 65.0,
+          "p90": 76.7,
+          "p95": 76.7,
+          "p99": 80.2,
+          "status": "recorded",
+          "unit": "percent"
+        },
+        "vram_mb": {
+          "count": 13,
+          "max": 301.96875,
+          "p50": 301.96875,
+          "p90": 301.96875,
+          "p95": 301.96875,
+          "p99": 301.96875,
+          "status": "recorded",
+          "unit": "megabytes"
+        }
+      },
+      "schema_version": 1,
+      "screen_index": 0,
+      "source_components": {
+        "bubble_rect_fractions": [
+          0.1,
+          0.62,
+          0.8,
+          0.28
+        ],
+        "bubble_source_sha256": "2f6de6a911a555ec243e806bb6c76469bc9352faee691f2c83a55f892641336d",
+        "slide_source_sha256": "4b51e306c64fb3b8836a7c866ce5bcf515efbaa83ee1ebd3394b5feff809583d",
+        "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c"
+      },
+      "source_sha256": "0881aa60ea36cc67a50d2a7ae7cee688c36b8557a86a2aa81661704da9184cf8",
+      "target_hz": 165.0,
+      "thread_identity": {
+        "gui_thread_id": 2608,
+        "relationship": "distinct",
+        "render_thread_id": 14076
+      },
+      "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c",
+      "timing_ms": {
+        "completion_dt": {
+          "count": 2304,
+          "counts_gte_ms": {
+            "100": 1,
+            "12": 49,
+            "16": 15,
+            "25": 14,
+            "33": 14,
+            "50": 9
+          },
+          "max": 198.9848,
+          "p50": 6.69,
+          "p90": 10.4968,
+          "p95": 11.2572,
+          "p99": 12.6534
+        },
+        "logical_publication_to_render_consume_age": {
+          "count": 0,
+          "max": 0.0,
+          "p50": 0.0,
+          "p90": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "longest_logical_hole": 0.0,
+        "paint": {
+          "count": 2305,
+          "max": 198.262,
+          "p50": 0.4596,
+          "p90": 3.6613,
+          "p95": 5.0652,
+          "p99": 6.8511
+        },
+        "request_age": {
+          "count": 2280,
+          "max": 156.0498,
+          "p50": 1.2972,
+          "p90": 3.3097,
+          "p95": 4.3412,
+          "p99": 5.8415
+        }
+      }
+    },
+    {
+      "candidate": "qtquick_threaded",
+      "completion_semantics": {
+        "physical_presentation_evidence": false,
+        "stage": "queued_for_presentation"
+      },
+      "completion_signal": "qquickwindow.frameSwapped",
+      "counts": {
+        "accepted_requests": null,
+        "completed_physical_frames": null,
+        "completion_signal_frames": 866,
+        "failures": 0,
+        "gui_callbacks": 1214,
+        "logical_steps": 1236,
+        "requested_opportunities": 901,
+        "skipped_deadlines": 24,
+        "slow_steps": 4
+      },
+      "display": "screen1:LG TV:2560x1440",
+      "issued_update_requests": 868,
+      "large_completion_gaps": [
+        {
+          "completed_ns": 238381700,
+          "gap_ms": 196.8284,
+          "nearest_marker": "first_intentional_visible_frame",
+          "phase": "startup",
+          "request_age_ms": 0.0795,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 1057647300,
+          "gap_ms": 33.502,
+          "nearest_marker": "slide_bubble_start",
+          "phase": "slide_bubble",
+          "request_age_ms": 5.9978,
+          "source_age_ms": 9.6214
+        },
+        {
+          "completed_ns": 1525733300,
+          "gap_ms": 99.7832,
+          "nearest_marker": "slide_bubble_start",
+          "phase": "slide_bubble",
+          "request_age_ms": 5.2242,
+          "source_age_ms": 11.966
+        },
+        {
+          "completed_ns": 2567190700,
+          "gap_ms": 53.6179,
+          "nearest_marker": "slide_bubble_start",
+          "phase": "slide_bubble",
+          "request_age_ms": 17.1307,
+          "source_age_ms": 26.623
+        },
+        {
+          "completed_ns": 3610675300,
+          "gap_ms": 65.799,
+          "nearest_marker": "slide_end",
+          "phase": "slide_bubble",
+          "request_age_ms": 6.3254,
+          "source_age_ms": 11.7641
+        },
+        {
+          "completed_ns": 4665545200,
+          "gap_ms": 72.8648,
+          "nearest_marker": "slide_end",
+          "phase": "slide_bubble",
+          "request_age_ms": 30.9951,
+          "source_age_ms": 26.5326
+        },
+        {
+          "completed_ns": 5720865100,
+          "gap_ms": 62.9408,
+          "nearest_marker": "slide_end",
+          "phase": "slide_bubble",
+          "request_age_ms": 28.5484,
+          "source_age_ms": 28.0014
+        },
+        {
+          "completed_ns": 6022251300,
+          "gap_ms": 29.2205,
+          "nearest_marker": "slide_end",
+          "phase": "settled_bubble",
+          "request_age_ms": 8.916,
+          "source_age_ms": 15.2653
+        },
+        {
+          "completed_ns": 6236360500,
+          "gap_ms": 25.2775,
+          "nearest_marker": "slide_end",
+          "phase": "settled_bubble",
+          "request_age_ms": 5.79,
+          "source_age_ms": 10.4254
+        },
+        {
+          "completed_ns": 6765778600,
+          "gap_ms": 51.3528,
+          "nearest_marker": "slide_end",
+          "phase": "settled_bubble",
+          "request_age_ms": 0.2241,
+          "source_age_ms": 30.8381
+        },
+        {
+          "completed_ns": 7808326500,
+          "gap_ms": 49.774,
+          "nearest_marker": "slide_end",
+          "phase": "settled_bubble",
+          "request_age_ms": 17.3796,
+          "source_age_ms": 6.3344
+        },
+        {
+          "completed_ns": 8846321800,
+          "gap_ms": 53.1805,
+          "nearest_marker": "synthetic_pause",
+          "phase": "settled_bubble",
+          "request_age_ms": 15.19,
+          "source_age_ms": 22.9146
+        },
+        {
+          "completed_ns": 9887166500,
+          "gap_ms": 52.1257,
+          "nearest_marker": "synthetic_pause",
+          "phase": "settled_bubble",
+          "request_age_ms": 7.0127,
+          "source_age_ms": 13.9063
+        },
+        {
+          "completed_ns": 10932359100,
+          "gap_ms": 53.0465,
+          "nearest_marker": "synthetic_pause",
+          "phase": "settled_bubble",
+          "request_age_ms": 0.1236,
+          "source_age_ms": 46.3498
+        },
+        {
+          "completed_ns": 11975944600,
+          "gap_ms": 64.1653,
+          "nearest_marker": "synthetic_pause",
+          "phase": "paused_hold",
+          "request_age_ms": 5.2525,
+          "source_age_ms": 10.6008
+        },
+        {
+          "completed_ns": 13019809300,
+          "gap_ms": 61.2964,
+          "nearest_marker": "synthetic_resume",
+          "phase": "resumed_bubble",
+          "request_age_ms": 7.5261,
+          "source_age_ms": 13.2452
+        },
+        {
+          "completed_ns": 14098430900,
+          "gap_ms": 85.394,
+          "nearest_marker": "stop_report",
+          "phase": "resumed_bubble",
+          "request_age_ms": 5.1905,
+          "source_age_ms": 10.6848
+        }
+      ],
+      "missing_observed_phases": [],
+      "missing_required_resource_metrics": [
+        "gpu_frame_ms"
+      ],
+      "observed_phase_timestamps_ns": {
+        "bubble_first_logical_frame": 1025379400,
+        "bubble_first_physical_frame": 1048987200,
+        "first_intentional_visible_frame": 7900,
+        "slide_end": 6009345800,
+        "slide_start": 1015054600,
+        "stop_report": 15014141600,
+        "synthetic_pause": 11005242900,
+        "synthetic_resume": 13012318400
+      },
+      "pacing_skipped_deadlines": 33,
+      "physical_evidence_valid": false,
+      "planned_phase_timestamps_ns": {
+        "first_intentional_visible_frame": 0,
+        "slide_bubble_start": 1000000000,
+        "slide_end": 6000000000,
+        "stop_report": 15000000000,
+        "synthetic_pause": 11000000000,
+        "synthetic_resume": 13000000000
+      },
+      "population": "P0",
+      "rates": {
+        "completed_physical_fps": null,
+        "completion_signal_fps": 57.660693160898475,
+        "request_acceptance_pct": null
+      },
+      "request_semantics": "target opportunities and issued QQuickWindow.update calls; QQuickWindow exposes no acceptance callback",
+      "resources": {
+        "gpu_busy_pct": {
+          "count": 13,
+          "max": 0.3838815011003165,
+          "p50": 0.3289063915023504,
+          "p90": 0.3565311809826283,
+          "p95": 0.3565311809826283,
+          "p99": 0.3838815011003165,
+          "status": "recorded",
+          "unit": "percent"
+        },
+        "gpu_frame_ms": {
+          "count": 0,
+          "max": 0.0,
+          "p50": 0.0,
+          "p90": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "status": "missing",
+          "unit": "milliseconds"
+        },
+        "memory_mb": {
+          "count": 14,
+          "max": 239.3984375,
+          "p50": 235.9296875,
+          "p90": 239.04296875,
+          "p95": 239.04296875,
+          "p99": 239.3984375,
+          "status": "recorded",
+          "unit": "megabytes"
+        },
+        "process_cpu_pct": {
+          "count": 14,
+          "max": 109.1,
+          "p50": 86.7,
+          "p90": 104.4,
+          "p95": 104.4,
+          "p99": 109.1,
+          "status": "recorded",
+          "unit": "percent"
+        },
+        "system_cpu_pct": {
+          "count": 14,
+          "max": 80.2,
+          "p50": 65.0,
+          "p90": 76.7,
+          "p95": 76.7,
+          "p99": 80.2,
+          "status": "recorded",
+          "unit": "percent"
+        },
+        "vram_mb": {
+          "count": 13,
+          "max": 301.96875,
+          "p50": 301.96875,
+          "p90": 301.96875,
+          "p95": 301.96875,
+          "p99": 301.96875,
+          "status": "recorded",
+          "unit": "megabytes"
+        }
+      },
+      "schema_version": 1,
+      "screen_index": 1,
+      "source_components": {
+        "bubble_rect_fractions": [
+          0.1,
+          0.62,
+          0.8,
+          0.28
+        ],
+        "bubble_source_sha256": "2f6de6a911a555ec243e806bb6c76469bc9352faee691f2c83a55f892641336d",
+        "slide_source_sha256": "4b51e306c64fb3b8836a7c866ce5bcf515efbaa83ee1ebd3394b5feff809583d",
+        "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c"
+      },
+      "source_sha256": "0881aa60ea36cc67a50d2a7ae7cee688c36b8557a86a2aa81661704da9184cf8",
+      "target_hz": 60.0,
+      "thread_identity": {
+        "gui_thread_id": 2608,
+        "relationship": "distinct",
+        "render_thread_id": 2620
+      },
+      "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c",
+      "timing_ms": {
+        "completion_dt": {
+          "count": 865,
+          "counts_gte_ms": {
+            "100": 1,
+            "12": 712,
+            "16": 438,
+            "25": 17,
+            "33": 15,
+            "50": 13
+          },
+          "max": 196.8284,
+          "p50": 16.4223,
+          "p90": 22.2357,
+          "p95": 23.113,
+          "p99": 53.1805
+        },
+        "logical_publication_to_render_consume_age": {
+          "count": 815,
+          "max": 87.2213,
+          "p50": 9.1728,
+          "p90": 13.883,
+          "p95": 14.328,
+          "p99": 22.9146
+        },
+        "longest_logical_hole": 79.4121,
+        "paint": {
+          "count": 866,
+          "max": 86.2771,
+          "p50": 2.4766,
+          "p90": 7.1541,
+          "p95": 7.9876,
+          "p99": 10.321
+        },
+        "request_age": {
+          "count": 863,
+          "max": 58.6632,
+          "p50": 5.77,
+          "p90": 9.4173,
+          "p95": 9.9401,
+          "p99": 12.3406
+        }
+      }
+    }
+  ],
+  "elapsed_ns": 15024356600,
+  "external_physical_evidence": {
+    "accepted_signal": "external.presentmon.displayed",
+    "correlate_by": {
+      "pid": 22256,
+      "run_id": "qtquick-p0-external-heavy-02",
+      "window_titles": [
+        "SRPSS Benchmark qtquick_threaded P0 qtquick-p0-external-heavy-02 screen0",
+        "SRPSS Benchmark qtquick_threaded P0 qtquick-p0-external-heavy-02 screen1"
+      ]
+    },
+    "frame_swapped_stage": "swap_completed_not_monitor_scanout",
+    "required": true
+  },
+  "finished_utc": "2026-08-20T15:20:36.875+00:00",
+  "invalid_reason": null,
+  "load_label": "external-heavy",
+  "logical_runtime": {
+    "generation": 1,
+    "interval_ms": 11.111,
+    "running": false,
+    "skipped_deadlines": 24,
+    "slow_steps": 4,
+    "step_failures": 0,
+    "steps": 1236
+  },
+  "phase_wall_utc": {
+    "bubble_first_logical_frame": "2026-08-20T15:20:22.875+00:00",
+    "bubble_first_physical_frame": "2026-08-20T15:20:22.908+00:00",
+    "first_intentional_visible_frame": "2026-08-20T15:20:21.850+00:00",
+    "slide_end_screen0": "2026-08-20T15:20:27.853+00:00",
+    "slide_end_screen1": "2026-08-20T15:20:27.864+00:00",
+    "slide_start": "2026-08-20T15:20:22.865+00:00",
+    "stop_report": "2026-08-20T15:20:36.864+00:00",
+    "synthetic_pause": "2026-08-20T15:20:32.855+00:00",
+    "synthetic_resume": "2026-08-20T15:20:34.862+00:00"
+  },
+  "phases_ns": {
+    "bubble_first_logical_frame": 1025379400,
+    "bubble_first_physical_frame": 1048987200,
+    "first_intentional_visible_frame": 7900,
+    "slide_end_screen0": 6002568700,
+    "slide_end_screen1": 6009345800,
+    "slide_start": 1015054600,
+    "stop_report": 15014141600,
+    "synthetic_pause": 11005242900,
+    "synthetic_resume": 13012318400
+  },
+  "pid": 22256,
+  "population": "P0",
+  "quick_scene_graph": {
+    "actual_graphics_apis": [
+      "OpenGL",
+      "OpenGL"
+    ],
+    "all_render_threads_distinct_from_gui": true,
+    "gui_thread_id": 2608,
+    "hidden_logical_widget_native_window_created": false,
+    "presented_window_type": "QQuickWindow",
+    "render_thread_ids": [
+      14076,
+      2620
+    ],
+    "requested_graphics_api": "OpenGL",
+    "requested_render_loop": "threaded",
+    "top_level_presented_windows": 2
+  },
+  "resources": {
+    "gpu_statuses": [
+      "warming",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok"
+    ],
+    "sample_counts": {
+      "gpu_busy_pct": 13,
+      "memory_mb": 14,
+      "process_cpu_pct": 14,
+      "system_cpu_pct": 14,
+      "vram_mb": 13
+    }
+  },
+  "run_id": "qtquick-p0-external-heavy-02",
+  "schema_version": 1,
+  "screens": [
+    {
+      "device_pixel_ratio": 1.5,
+      "geometry": [
+        0,
+        0,
+        1707,
+        960
+      ],
+      "index": 0,
+      "name": "MSI G321Q",
+      "reported_refresh_hz": 164.835,
+      "surface": "QQuickWindow",
+      "target_hz": 165.0,
+      "window_title": "SRPSS Benchmark qtquick_threaded P0 qtquick-p0-external-heavy-02 screen0"
+    },
+    {
+      "device_pixel_ratio": 1.5,
+      "geometry": [
+        2560,
+        0,
+        2560,
+        1440
+      ],
+      "index": 1,
+      "name": "LG TV",
+      "reported_refresh_hz": 60.0,
+      "surface": "QQuickWindow",
+      "target_hz": 60.0,
+      "window_title": "SRPSS Benchmark qtquick_threaded P0 qtquick-p0-external-heavy-02 screen1"
+    }
+  ],
+  "started_utc": "2026-08-20T15:20:21.850+00:00",
+  "valid_internal_run": true,
+  "workload": {
+    "bubble_rect_fractions": [
+      0.1,
+      0.62,
+      0.8,
+      0.28
+    ],
+    "bubble_source_sha256": "2f6de6a911a555ec243e806bb6c76469bc9352faee691f2c83a55f892641336d",
+    "slide_source_sha256": "4b51e306c64fb3b8836a7c866ce5bcf515efbaa83ee1ebd3394b5feff809583d",
+    "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c",
+    "workload_sha256": "0881aa60ea36cc67a50d2a7ae7cee688c36b8557a86a2aa81661704da9184cf8"
+  }
+}

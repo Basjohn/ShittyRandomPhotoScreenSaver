@@ -273,6 +273,10 @@ Separate source age, logical cadence, GUI dispatch age, state-to-paint and physi
 Qt render/submission callbacks are not physical-display evidence. Physical-tail decisions require
 an OS/display-boundary capture (currently PresentMon) correlated to the bounded run identity.
 
+A presentation candidate is comparable only when it reuses the same deterministic workload and
+records the actual operator load. `QQuickWindow.frameSwapped` is a queued-for-presentation proxy,
+not proof that a frame reached scanout.
+
 No single average FPS value closes a timing/fidelity change.
 
 ## 13. Validation

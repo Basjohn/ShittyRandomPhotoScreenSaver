@@ -1,0 +1,660 @@
+{
+  "candidate": "qtquick_threaded",
+  "cleanup_errors": [],
+  "displays": [
+    {
+      "candidate": "qtquick_threaded",
+      "completion_semantics": {
+        "physical_presentation_evidence": false,
+        "stage": "queued_for_presentation"
+      },
+      "completion_signal": "qquickwindow.frameSwapped",
+      "counts": {
+        "accepted_requests": null,
+        "completed_physical_frames": null,
+        "completion_signal_frames": 2439,
+        "failures": 0,
+        "gui_callbacks": 1251,
+        "logical_steps": 0,
+        "requested_opportunities": 2476,
+        "skipped_deadlines": 0,
+        "slow_steps": 0
+      },
+      "display": "screen0:MSI G321Q:1707x960",
+      "issued_update_requests": 2441,
+      "large_completion_gaps": [
+        {
+          "completed_ns": 83479300,
+          "gap_ms": 65.0006,
+          "nearest_marker": "first_intentional_visible_frame",
+          "phase": "startup",
+          "request_age_ms": 0.0982,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 136417000,
+          "gap_ms": 51.9494,
+          "nearest_marker": "first_intentional_visible_frame",
+          "phase": "startup",
+          "request_age_ms": 25.8013,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 1312249000,
+          "gap_ms": 25.2173,
+          "nearest_marker": "slide_bubble_start",
+          "phase": "slide_bubble",
+          "request_age_ms": 4.4749,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 4367012100,
+          "gap_ms": 25.2954,
+          "nearest_marker": "slide_end",
+          "phase": "slide_bubble",
+          "request_age_ms": 2.2856,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 11501474400,
+          "gap_ms": 25.8833,
+          "nearest_marker": "synthetic_pause",
+          "phase": "paused_hold",
+          "request_age_ms": 1.2632,
+          "source_age_ms": null
+        }
+      ],
+      "missing_observed_phases": [
+        "bubble_first_logical_frame",
+        "bubble_first_physical_frame"
+      ],
+      "missing_required_resource_metrics": [
+        "gpu_frame_ms"
+      ],
+      "observed_phase_timestamps_ns": {
+        "first_intentional_visible_frame": 5600,
+        "slide_end": 6001814800,
+        "slide_start": 1001705000,
+        "stop_report": 15001692000,
+        "synthetic_pause": 11002733200,
+        "synthetic_resume": 13002429900
+      },
+      "pacing_skipped_deadlines": 35,
+      "physical_evidence_valid": false,
+      "planned_phase_timestamps_ns": {
+        "first_intentional_visible_frame": 0,
+        "slide_bubble_start": 1000000000,
+        "slide_end": 6000000000,
+        "stop_report": 15000000000,
+        "synthetic_pause": 11000000000,
+        "synthetic_resume": 13000000000
+      },
+      "population": "P0",
+      "rates": {
+        "completed_physical_fps": null,
+        "completion_signal_fps": 162.56831326816652,
+        "request_acceptance_pct": null
+      },
+      "request_semantics": "target opportunities and issued QQuickWindow.update calls; QQuickWindow exposes no acceptance callback",
+      "resources": {
+        "gpu_busy_pct": {
+          "count": 14,
+          "max": 5.705948296015276,
+          "p50": 2.112132152907964,
+          "p90": 4.761052759722794,
+          "p95": 4.761052759722794,
+          "p99": 5.705948296015276,
+          "status": "recorded",
+          "unit": "percent"
+        },
+        "gpu_frame_ms": {
+          "count": 0,
+          "max": 0.0,
+          "p50": 0.0,
+          "p90": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "status": "missing",
+          "unit": "milliseconds"
+        },
+        "memory_mb": {
+          "count": 15,
+          "max": 242.234375,
+          "p50": 236.7734375,
+          "p90": 242.109375,
+          "p95": 242.109375,
+          "p99": 242.234375,
+          "status": "recorded",
+          "unit": "megabytes"
+        },
+        "process_cpu_pct": {
+          "count": 15,
+          "max": 112.7,
+          "p50": 47.7,
+          "p90": 68.3,
+          "p95": 68.3,
+          "p99": 112.7,
+          "status": "recorded",
+          "unit": "percent"
+        },
+        "system_cpu_pct": {
+          "count": 15,
+          "max": 14.5,
+          "p50": 10.2,
+          "p90": 14.0,
+          "p95": 14.0,
+          "p99": 14.5,
+          "status": "recorded",
+          "unit": "percent"
+        },
+        "vram_mb": {
+          "count": 14,
+          "max": 301.9765625,
+          "p50": 301.9765625,
+          "p90": 301.9765625,
+          "p95": 301.9765625,
+          "p99": 301.9765625,
+          "status": "recorded",
+          "unit": "megabytes"
+        }
+      },
+      "schema_version": 1,
+      "screen_index": 0,
+      "source_components": {
+        "bubble_rect_fractions": [
+          0.1,
+          0.62,
+          0.8,
+          0.28
+        ],
+        "bubble_source_sha256": "2f6de6a911a555ec243e806bb6c76469bc9352faee691f2c83a55f892641336d",
+        "slide_source_sha256": "4b51e306c64fb3b8836a7c866ce5bcf515efbaa83ee1ebd3394b5feff809583d",
+        "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c"
+      },
+      "source_sha256": "0881aa60ea36cc67a50d2a7ae7cee688c36b8557a86a2aa81661704da9184cf8",
+      "target_hz": 165.0,
+      "thread_identity": {
+        "gui_thread_id": 25512,
+        "relationship": "distinct",
+        "render_thread_id": 31424
+      },
+      "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c",
+      "timing_ms": {
+        "completion_dt": {
+          "count": 2438,
+          "counts_gte_ms": {
+            "100": 0,
+            "12": 16,
+            "16": 16,
+            "25": 5,
+            "33": 2,
+            "50": 2
+          },
+          "max": 65.0006,
+          "p50": 6.0561,
+          "p90": 8.2141,
+          "p95": 9.0143,
+          "p99": 10.108
+        },
+        "logical_publication_to_render_consume_age": {
+          "count": 0,
+          "max": 0.0,
+          "p50": 0.0,
+          "p90": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "longest_logical_hole": 0.0,
+        "paint": {
+          "count": 2439,
+          "max": 64.1631,
+          "p50": 0.1401,
+          "p90": 0.6802,
+          "p95": 2.5567,
+          "p99": 2.9484
+        },
+        "request_age": {
+          "count": 2434,
+          "max": 25.8013,
+          "p50": 1.1632,
+          "p90": 2.2561,
+          "p95": 2.7153,
+          "p99": 3.4989
+        }
+      }
+    },
+    {
+      "candidate": "qtquick_threaded",
+      "completion_semantics": {
+        "physical_presentation_evidence": false,
+        "stage": "queued_for_presentation"
+      },
+      "completion_signal": "qquickwindow.frameSwapped",
+      "counts": {
+        "accepted_requests": null,
+        "completed_physical_frames": null,
+        "completion_signal_frames": 894,
+        "failures": 0,
+        "gui_callbacks": 1251,
+        "logical_steps": 1259,
+        "requested_opportunities": 901,
+        "skipped_deadlines": 1,
+        "slow_steps": 0
+      },
+      "display": "screen1:LG TV:2560x1440",
+      "issued_update_requests": 897,
+      "large_completion_gaps": [
+        {
+          "completed_ns": 136361500,
+          "gap_ms": 51.9188,
+          "nearest_marker": "first_intentional_visible_frame",
+          "phase": "startup",
+          "request_age_ms": 24.9728,
+          "source_age_ms": null
+        },
+        {
+          "completed_ns": 2333969800,
+          "gap_ms": 26.4984,
+          "nearest_marker": "slide_bubble_start",
+          "phase": "slide_bubble",
+          "request_age_ms": 4.2192,
+          "source_age_ms": 4.5296
+        },
+        {
+          "completed_ns": 3354097900,
+          "gap_ms": 30.4356,
+          "nearest_marker": "slide_bubble_start",
+          "phase": "slide_bubble",
+          "request_age_ms": 1.5521,
+          "source_age_ms": 4.4715
+        },
+        {
+          "completed_ns": 4370448500,
+          "gap_ms": 30.5594,
+          "nearest_marker": "slide_end",
+          "phase": "slide_bubble",
+          "request_age_ms": 10.361,
+          "source_age_ms": 19.7791
+        },
+        {
+          "completed_ns": 5386561000,
+          "gap_ms": 29.971,
+          "nearest_marker": "slide_end",
+          "phase": "slide_bubble",
+          "request_age_ms": 0.0455,
+          "source_age_ms": 3.1642
+        },
+        {
+          "completed_ns": 6405703300,
+          "gap_ms": 31.5587,
+          "nearest_marker": "slide_end",
+          "phase": "settled_bubble",
+          "request_age_ms": 15.3687,
+          "source_age_ms": 19.3028
+        },
+        {
+          "completed_ns": 7428801700,
+          "gap_ms": 33.7124,
+          "nearest_marker": "slide_end",
+          "phase": "settled_bubble",
+          "request_age_ms": 8.4523,
+          "source_age_ms": 17.1411
+        },
+        {
+          "completed_ns": 8450465600,
+          "gap_ms": 26.7245,
+          "nearest_marker": "slide_end",
+          "phase": "settled_bubble",
+          "request_age_ms": 6.3503,
+          "source_age_ms": 2.7913
+        },
+        {
+          "completed_ns": 9468481400,
+          "gap_ms": 26.9188,
+          "nearest_marker": "synthetic_pause",
+          "phase": "settled_bubble",
+          "request_age_ms": 5.684,
+          "source_age_ms": 5.8984
+        },
+        {
+          "completed_ns": 10485464900,
+          "gap_ms": 28.0476,
+          "nearest_marker": "synthetic_pause",
+          "phase": "settled_bubble",
+          "request_age_ms": 1.4382,
+          "source_age_ms": 4.6717
+        },
+        {
+          "completed_ns": 11502097500,
+          "gap_ms": 29.2124,
+          "nearest_marker": "synthetic_pause",
+          "phase": "paused_hold",
+          "request_age_ms": 11.2057,
+          "source_age_ms": 3.5638
+        },
+        {
+          "completed_ns": 12524217100,
+          "gap_ms": 35.1053,
+          "nearest_marker": "synthetic_resume",
+          "phase": "paused_hold",
+          "request_age_ms": 20.8926,
+          "source_age_ms": 29.8788
+        },
+        {
+          "completed_ns": 13540892900,
+          "gap_ms": 34.1626,
+          "nearest_marker": "synthetic_resume",
+          "phase": "resumed_bubble",
+          "request_age_ms": 5.5521,
+          "source_age_ms": 9.4658
+        },
+        {
+          "completed_ns": 14566507500,
+          "gap_ms": 26.9266,
+          "nearest_marker": "stop_report",
+          "phase": "resumed_bubble",
+          "request_age_ms": 4.5462,
+          "source_age_ms": 7.5998
+        }
+      ],
+      "missing_observed_phases": [],
+      "missing_required_resource_metrics": [
+        "gpu_frame_ms"
+      ],
+      "observed_phase_timestamps_ns": {
+        "bubble_first_logical_frame": 1008277500,
+        "bubble_first_physical_frame": 1026581700,
+        "first_intentional_visible_frame": 5600,
+        "slide_end": 6006294500,
+        "slide_start": 1001705000,
+        "stop_report": 15001692000,
+        "synthetic_pause": 11002733200,
+        "synthetic_resume": 13002429900
+      },
+      "pacing_skipped_deadlines": 4,
+      "physical_evidence_valid": false,
+      "planned_phase_timestamps_ns": {
+        "first_intentional_visible_frame": 0,
+        "slide_bubble_start": 1000000000,
+        "slide_end": 6000000000,
+        "stop_report": 15000000000,
+        "synthetic_pause": 11000000000,
+        "synthetic_resume": 13000000000
+      },
+      "population": "P0",
+      "rates": {
+        "completed_physical_fps": null,
+        "completion_signal_fps": 59.58120649863815,
+        "request_acceptance_pct": null
+      },
+      "request_semantics": "target opportunities and issued QQuickWindow.update calls; QQuickWindow exposes no acceptance callback",
+      "resources": {
+        "gpu_busy_pct": {
+          "count": 14,
+          "max": 5.705948296015276,
+          "p50": 2.112132152907964,
+          "p90": 4.761052759722794,
+          "p95": 4.761052759722794,
+          "p99": 5.705948296015276,
+          "status": "recorded",
+          "unit": "percent"
+        },
+        "gpu_frame_ms": {
+          "count": 0,
+          "max": 0.0,
+          "p50": 0.0,
+          "p90": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "status": "missing",
+          "unit": "milliseconds"
+        },
+        "memory_mb": {
+          "count": 15,
+          "max": 242.234375,
+          "p50": 236.7734375,
+          "p90": 242.109375,
+          "p95": 242.109375,
+          "p99": 242.234375,
+          "status": "recorded",
+          "unit": "megabytes"
+        },
+        "process_cpu_pct": {
+          "count": 15,
+          "max": 112.7,
+          "p50": 47.7,
+          "p90": 68.3,
+          "p95": 68.3,
+          "p99": 112.7,
+          "status": "recorded",
+          "unit": "percent"
+        },
+        "system_cpu_pct": {
+          "count": 15,
+          "max": 14.5,
+          "p50": 10.2,
+          "p90": 14.0,
+          "p95": 14.0,
+          "p99": 14.5,
+          "status": "recorded",
+          "unit": "percent"
+        },
+        "vram_mb": {
+          "count": 14,
+          "max": 301.9765625,
+          "p50": 301.9765625,
+          "p90": 301.9765625,
+          "p95": 301.9765625,
+          "p99": 301.9765625,
+          "status": "recorded",
+          "unit": "megabytes"
+        }
+      },
+      "schema_version": 1,
+      "screen_index": 1,
+      "source_components": {
+        "bubble_rect_fractions": [
+          0.1,
+          0.62,
+          0.8,
+          0.28
+        ],
+        "bubble_source_sha256": "2f6de6a911a555ec243e806bb6c76469bc9352faee691f2c83a55f892641336d",
+        "slide_source_sha256": "4b51e306c64fb3b8836a7c866ce5bcf515efbaa83ee1ebd3394b5feff809583d",
+        "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c"
+      },
+      "source_sha256": "0881aa60ea36cc67a50d2a7ae7cee688c36b8557a86a2aa81661704da9184cf8",
+      "target_hz": 60.0,
+      "thread_identity": {
+        "gui_thread_id": 25512,
+        "relationship": "distinct",
+        "render_thread_id": 12152
+      },
+      "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c",
+      "timing_ms": {
+        "completion_dt": {
+          "count": 893,
+          "counts_gte_ms": {
+            "100": 0,
+            "12": 872,
+            "16": 714,
+            "25": 14,
+            "33": 4,
+            "50": 1
+          },
+          "max": 51.9188,
+          "p50": 16.6159,
+          "p90": 17.7616,
+          "p95": 18.2261,
+          "p99": 28.0476
+        },
+        "logical_publication_to_render_consume_age": {
+          "count": 837,
+          "max": 29.8788,
+          "p50": 5.0061,
+          "p90": 9.5556,
+          "p95": 9.9738,
+          "p99": 10.5307
+        },
+        "longest_logical_hole": 28.0352,
+        "paint": {
+          "count": 894,
+          "max": 65.3751,
+          "p50": 0.5027,
+          "p90": 0.7791,
+          "p95": 0.8664,
+          "p99": 4.2022
+        },
+        "request_age": {
+          "count": 893,
+          "max": 65.4256,
+          "p50": 5.1601,
+          "p90": 5.6735,
+          "p95": 6.0243,
+          "p99": 7.352
+        }
+      }
+    }
+  ],
+  "elapsed_ns": 15007141500,
+  "external_physical_evidence": {
+    "accepted_signal": "external.presentmon.displayed",
+    "correlate_by": {
+      "pid": 31548,
+      "run_id": "qtquick-p0-light-02",
+      "window_titles": [
+        "SRPSS Benchmark qtquick_threaded P0 qtquick-p0-light-02 screen0",
+        "SRPSS Benchmark qtquick_threaded P0 qtquick-p0-light-02 screen1"
+      ]
+    },
+    "frame_swapped_stage": "swap_completed_not_monitor_scanout",
+    "required": true
+  },
+  "finished_utc": "2026-08-20T15:22:06.244+00:00",
+  "invalid_reason": null,
+  "load_label": "light",
+  "logical_runtime": {
+    "generation": 1,
+    "interval_ms": 11.111,
+    "running": false,
+    "skipped_deadlines": 1,
+    "slow_steps": 0,
+    "step_failures": 0,
+    "steps": 1259
+  },
+  "phase_wall_utc": {
+    "bubble_first_logical_frame": "2026-08-20T15:21:52.245+00:00",
+    "bubble_first_physical_frame": "2026-08-20T15:21:52.267+00:00",
+    "first_intentional_visible_frame": "2026-08-20T15:21:51.237+00:00",
+    "slide_end_screen0": "2026-08-20T15:21:57.239+00:00",
+    "slide_end_screen1": "2026-08-20T15:21:57.244+00:00",
+    "slide_start": "2026-08-20T15:21:52.239+00:00",
+    "stop_report": "2026-08-20T15:22:06.239+00:00",
+    "synthetic_pause": "2026-08-20T15:22:02.240+00:00",
+    "synthetic_resume": "2026-08-20T15:22:04.240+00:00"
+  },
+  "phases_ns": {
+    "bubble_first_logical_frame": 1008277500,
+    "bubble_first_physical_frame": 1026581700,
+    "first_intentional_visible_frame": 5600,
+    "slide_end_screen0": 6001814800,
+    "slide_end_screen1": 6006294500,
+    "slide_start": 1001705000,
+    "stop_report": 15001692000,
+    "synthetic_pause": 11002733200,
+    "synthetic_resume": 13002429900
+  },
+  "pid": 31548,
+  "population": "P0",
+  "quick_scene_graph": {
+    "actual_graphics_apis": [
+      "OpenGL",
+      "OpenGL"
+    ],
+    "all_render_threads_distinct_from_gui": true,
+    "gui_thread_id": 25512,
+    "hidden_logical_widget_native_window_created": false,
+    "presented_window_type": "QQuickWindow",
+    "render_thread_ids": [
+      31424,
+      12152
+    ],
+    "requested_graphics_api": "OpenGL",
+    "requested_render_loop": "threaded",
+    "top_level_presented_windows": 2
+  },
+  "resources": {
+    "gpu_statuses": [
+      "warming",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok"
+    ],
+    "sample_counts": {
+      "gpu_busy_pct": 14,
+      "memory_mb": 15,
+      "process_cpu_pct": 15,
+      "system_cpu_pct": 15,
+      "vram_mb": 14
+    }
+  },
+  "run_id": "qtquick-p0-light-02",
+  "schema_version": 1,
+  "screens": [
+    {
+      "device_pixel_ratio": 1.5,
+      "geometry": [
+        0,
+        0,
+        1707,
+        960
+      ],
+      "index": 0,
+      "name": "MSI G321Q",
+      "reported_refresh_hz": 164.835,
+      "surface": "QQuickWindow",
+      "target_hz": 165.0,
+      "window_title": "SRPSS Benchmark qtquick_threaded P0 qtquick-p0-light-02 screen0"
+    },
+    {
+      "device_pixel_ratio": 1.5,
+      "geometry": [
+        2560,
+        0,
+        2560,
+        1440
+      ],
+      "index": 1,
+      "name": "LG TV",
+      "reported_refresh_hz": 60.0,
+      "surface": "QQuickWindow",
+      "target_hz": 60.0,
+      "window_title": "SRPSS Benchmark qtquick_threaded P0 qtquick-p0-light-02 screen1"
+    }
+  ],
+  "started_utc": "2026-08-20T15:21:51.237+00:00",
+  "valid_internal_run": true,
+  "workload": {
+    "bubble_rect_fractions": [
+      0.1,
+      0.62,
+      0.8,
+      0.28
+    ],
+    "bubble_source_sha256": "2f6de6a911a555ec243e806bb6c76469bc9352faee691f2c83a55f892641336d",
+    "slide_source_sha256": "4b51e306c64fb3b8836a7c866ce5bcf515efbaa83ee1ebd3394b5feff809583d",
+    "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c",
+    "workload_sha256": "0881aa60ea36cc67a50d2a7ae7cee688c36b8557a86a2aa81661704da9184cf8"
+  }
+}

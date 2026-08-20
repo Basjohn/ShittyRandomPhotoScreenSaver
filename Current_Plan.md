@@ -1,6 +1,6 @@
-# Current Plan — Worker+Push Harness Ready; Record the Physical Presentation Reference
+# Current Plan — Qt Quick P0 Recorded; Finish the Eyes-On Architecture Decision
 
-Last updated: 2026-08-20 16:05 SAST
+Last updated: 2026-08-20 17:26 SAST
 
 ## Behavioral source checkpoint reviewed
 
@@ -90,18 +90,22 @@ physical presentation still loses opportunities / develops visible tail gaps,
 especially under contention and mixed-refresh production conditions
 ```
 
-Therefore the active direction is:
+The worker arm is now accepted as the reference. Do not ask the operator to
+rerun its manual heavy-load capture or continue polishing its harness.
+
+The comparable Quick P0 arm now exists and has three lower-load plus two
+higher-load PresentMon captures using the same workload identity. The first
+repeated result materially improves p95/p99 and severe-gap frequency on both
+display paths, although the 165 Hz maximum tail remains poor.
+
+Therefore the active direction is now:
 
 ```text
-finish one bounded playback-state correctness prerequisite
+obtain the operator eyes-on note for the recorded Quick runs
         ->
-build the common production-shaped benchmark
+make the Stage-1 keep/reject decision
         ->
-record worker+push reference runs
-        ->
-run the same core workload through standalone threaded QQuickWindow presentation
-        ->
-keep or reject Quick based on repeated physical-tail evidence
+only after an accepted Quick win, define the bounded Stage-2 composition proof
 ```
 
 Do not start another broad optimization campaign on the current QWidget/QRhi path before this comparison exists.
@@ -660,26 +664,15 @@ Metrics explain perception. They do not overrule it.
 
 ---
 
-# 6. Establish the worker+push reference
+# 6. Worker+push reference — accepted; do not rerun
 
-Once the bounded playback correction and benchmark harness are ready:
+The operator-provided P0 lower-load and manual higher-load JSON + PresentMon
+pairs are the accepted control arm. They use the same common workload SHA-256
+as the Quick candidate.
 
-Run the current architecture at least three times for each required environment:
-
-```text
-P0 minimal / light
-P0 minimal / external-heavy
-P1 production population / light
-P1 production population / external-heavy
-```
-
-If external-heavy is not available for every iteration, do not manufacture load inside the benchmark. Record what was actually run.
-
-The core P0 repeated runs are the strict architecture reference.
-
-Save immutable evidence before deciding Quick.
-
-Do not keep polishing worker+push indefinitely to make it beat the candidate before the candidate is measured.
+Do not request another manual worker heavy-load run. Do not make worker P1 or
+additional worker harness instrumentation a prerequisite for the P0
+architecture decision.
 
 ---
 
@@ -698,6 +691,16 @@ Required:
 - render thread proven distinct from GUI thread through Qt logging/thread IDs;
 - same P0 Slide/Bubble deterministic workload;
 - same pacing and metrics as current reference.
+
+The P0 candidate and its evidence are now recorded in:
+
+```text
+Docs/Performance_Evidence/QtQuick-P0-Comparison-2026-08-20.md
+```
+
+Five internally valid Quick runs prove OpenGL, the forced threaded render loop,
+and render-thread IDs distinct from the GUI thread. Three are operator-classed
+lower load and two are operator-classed higher load.
 
 Invalid architecture proof:
 - `QQuickWidget`;
@@ -751,6 +754,11 @@ while preserving:
 A slightly lower average FPS with dramatically cleaner visible tails may be the better architecture.
 
 At least three identical P0 runs per candidate in light conditions are required; use repeated external-heavy runs when the operator can provide the environment.
+
+The current structured evidence clears the numerical bar to continue Quick:
+its repeated p95/p99 and severe-gap frequency are materially better than the
+preserved worker reference under both load classes. This remains provisional
+until the operator supplies the eyes-on Slide/Bubble/startup result.
 
 ## If Quick wins P0
 
@@ -851,16 +859,12 @@ Historical commits may be inspected in a separate worktree/read-only comparison.
 
 # 12. Live execution checklist
 
-- [ ] Complete the three-run worker+push P0/light reference set with an external PresentMon capture for each run.
-  - [ ] Repeat with run IDs/output suffixes `02` and `03`; do not overwrite any JSON or CSV.
-  - [ ] Return each JSON + PresentMon CSV, actual monitor/refresh topology, and a short visible-tail note for each display.
-- [ ] Record worker+push P1/light references with the same capture procedure; use `--population P1` and matching `worker-p1-light-*` identities to characterize static production-card composition coupling.
-- [ ] Repeat P0/P1 under genuinely operator-provided external-heavy load when available; label the actual environment and do not synthesize load in the harness.
-- [ ] Finish the standalone threaded `QQuickWindow` P0 path using the same common workload identity and external physical evidence contract.
-- [ ] Prove Quick render-loop/thread ownership through Qt evidence.
-- [ ] Run at least three current-vs-Quick P0/light comparisons and repeated external-heavy comparisons when available; judge physical tails first.
-- [ ] **Stop and decide architecture.**
-- [ ] Only after a Quick win: production-presentation population, Blockspin, primitive comparison, parity/lifecycle/soak migration gates.
+- [ ] Record the operator eyes-on result from the Quick captures:
+  - [ ] 165 Hz Slide continuity and any visible long pause;
+  - [ ] 60 Hz Slide + Bubble continuity under higher and lower load;
+  - [ ] startup black/white flash, flicker, or cross-display reveal skew.
+- [ ] Combine that note with `QtQuick-P0-Comparison-2026-08-20.md` and make the explicit Stage-1 keep/reject decision.
+- [ ] **Stop after the decision.** Only after an accepted Quick win may a new plan define the bounded production-composition proof. Do not begin P1, Blockspin, widget migration, provider migration, or QML conversion in this step.
 
 Do not let cleanup work, historical archaeology, wake monitoring, memory retention, or transition-specific tuning jump ahead of step 12.
 
@@ -882,13 +886,9 @@ When sources conflict:
 The immediate milestone is:
 
 ```text
-bounded correctness prerequisite closed
+operator eyes-on note recorded
 +
-same production-shaped P0 benchmark exists on worker+push and threaded QQuickWindow
+Stage-1 Quick keep/reject decision written
 +
-reference runs are repeatable
-+
-physical tail gaps can be compared directly
-+
-architecture decision is made before scope expands
+no migration scope begins before that decision
 ```
