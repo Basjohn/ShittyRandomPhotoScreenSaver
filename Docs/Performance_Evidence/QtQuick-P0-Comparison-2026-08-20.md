@@ -1,92 +1,134 @@
 # Qt Quick P0 common-workload comparison — 2026-08-20
 
+## Status
+
+**Architecture decision: ACCEPT Qt Quick as the runtime presentation destination.**
+
+This report preserves the P0 evidence. It is not an active task list.
+
 ## Scope
 
-This record covers the first comparable standalone threaded `QQuickWindow` P0
-candidate. It uses the same deterministic 15-second Slide + Bubble workload as
-the preserved worker+push P0 references.
+The Quick candidate used the same deterministic 15-second Slide + Bubble workload as the preserved
+worker+push/QRhiWidget reference.
 
-Common workload SHA-256 for every worker and Quick run in this record:
+The Quick arm used standalone top-level `QQuickWindow` instances, forced threaded scene-graph
+rendering, OpenGL, and render-thread identities distinct from the GUI thread.
+
+No worker heavy reference rerun is required.
+
+## Load classification
+
+The retained Quick evidence contains three lower-load runs and two externally heavy runs. Passive
+CPU samples support the operator's corrected labels.
+
+The heavy Quick runs were approximately mid-60s to high-70s percent system CPU at their sampled
+median/p95 range.
+
+## Whole-capture PresentMon summary
+
+The raw whole-capture table remains useful for broad comparison, but maximum `DisplayedTime` values
+must be phase-correlated before being described as active-animation holes.
+
+| Candidate / load | Display path | p95 | p99 | raw max |
+|---|---|---:|---:|---:|
+| worker light | 165 Hz / GDI | 25.55 ms | 124.46 ms | 1358.86 ms |
+| Quick light | 165 Hz / GDI | 9.47–9.97 ms | 17.45–23.30 ms | 236.59–236.60 ms |
+| worker heavy | 165 Hz / GDI | 58.31 ms | 253.76 ms | 2280.88 ms |
+| Quick heavy | 165 Hz / GDI | 12.15–12.16 ms | 41.38–53.46 ms | 418.57–451.44 ms |
+| worker light | 60 Hz / legacy flip | 19.21 ms | 27.76 ms | 55.73 ms |
+| Quick light | 60 Hz / legacy flip | 17.62–17.69 ms | 18.25–19.72 ms | 26.17–33.82 ms |
+| worker heavy | 60 Hz / legacy flip | 21.67 ms | 58.87 ms | 69.50 ms |
+| Quick heavy | 60 Hz / legacy flip | 19.38–19.72 ms | 20.95–21.68 ms | 61.59–62.87 ms |
+
+## Important phase-correlation correction
+
+The extreme raw 165 Hz maxima are **not valid descriptions of active Slide/Bubble cadence**.
+
+The largest Quick GDI `DisplayedTime` values occur before the benchmark's first intentional visible
+frame, while PresentMon capture is already active.
+
+Representative correlation:
 
 ```text
-0881aa60ea36cc67a50d2a7ae7cee688c36b8557a86a2aa81661704da9184cf8
+Quick Light:
+    ~236.6 ms rows occur ~0.48 s before first intentional presentation
+
+Quick Heavy:
+    ~419–451 ms rows occur before first intentional presentation
 ```
 
-No worker+push baseline was rerun.
+The worker reference raw maxima are contaminated by the same capture/startup region.
 
-## Operator load classification
+Therefore do not write:
 
-Two captures were launched before the operator clarified the actual load. The
-operator explicitly authorized correcting their embedded load labels. The raw
-executed run IDs and window titles remain unchanged for PresentMon correlation.
+> Quick has 237 ms light and 451 ms heavy active-animation stalls.
 
-| Evidence pair | Actual load | System CPU p50 / p95 | Label provenance |
-|---|---:|---:|---|
-| `QtQuick-P0-External-Heavy-01.*` | external-heavy | 68.3% / 72.0% | operator correction from `light` |
-| `QtQuick-P0-External-Heavy-02.*` | external-heavy | 65.0% / 76.7% | captured correctly |
-| `QtQuick-P0-Light-01.*` | light | 9.8% / 13.5% | operator correction from `external-heavy` |
-| `QtQuick-P0-Light-02.*` | light | 10.2% / 14.0% | captured correctly |
-| `QtQuick-P0-Light-03.*` | light | 9.7% / 11.5% | captured correctly |
+That is not what the phase-correlated evidence shows.
 
-The passive CPU samples independently support the operator classification.
+## Active-motion comparison
 
-The preserved worker heavy reference had the same metadata problem. Its
-embedded `load_label` is corrected to `external-heavy` in
-`WorkerPush-P0-Heavymanual-01.json`; its executed run ID remains unchanged.
+When evaluation is restricted to the active Slide/Bubble interval before the intentional synthetic
+pause, the 165 Hz result is approximately:
 
-## Quick architecture proof
+```text
+worker light:
+    p95  ~13.9 ms
+    p99  ~33.5 ms
+    max  ~89.9 ms
+    >=25 ms holes: 5
 
-All five Quick runs report:
+Quick light:
+    p95  ~8.7–9.9 ms
+    p99  ~12.0–12.2 ms
+    max  ~16.6–23.3 ms
+    >=25 ms holes: 0
 
-- `valid_internal_run=true`;
-- exactly two top-level presented `QQuickWindow` surfaces;
-- actual scene-graph API `OpenGL` for both windows;
-- `QSG_RENDER_LOOP=threaded`;
-- one render-thread ID per window, each distinct from the GUI thread;
-- no native window created by the logic-only replay `QWidget`;
-- `completed_physical_frames=null` internally because `frameSwapped` is only a
-  queued-for-presentation proxy.
+worker heavy:
+    p95  ~37.3 ms
+    p99  ~76.5 ms
+    max  ~253.8 ms
+    >=25 ms holes: 19
 
-External physical evidence is the paired PresentMon CSV. PresentMon defines
-`DisplayedTime` as how long a frame remained displayed; `NA` means the frame
-was not displayed. See the official
-[PresentMon console CSV contract](https://github.com/GameTechDev/PresentMon/blob/main/README-ConsoleApplication.md#comma-separated-value-csv-file-output).
+Quick heavy:
+    p95  ~12.1–12.2 ms
+    p99  ~36.0–47.3 ms
+    max  ~70.9–80.3 ms
+    >=25 ms holes: 8–10
+```
 
-## Physical-tail result
+This is the central architecture result.
 
-`Composed: Copy with GPU GDI` row counts match the internal 165 Hz screen-0
-proxy counts. `Hardware: Legacy Flip` row counts match the internal 60 Hz
-screen-1 proxy counts. This is the available display mapping because installed
-PresentMon 2.5.1 reports `SwapChainAddress=0x0` and does not expose the newer
-display-metadata option. One light run put both windows in the GDI mode and is
-therefore retained only as a combined physical-tail sample.
+Under heavy external CPU load, Quick remains approximately in the same presentation class as the old
+architecture under light load, and is better on several tail measures.
 
-Displayed-time values below are milliseconds. Counts are displayed frames with
-`DisplayedTime >= 25 ms`.
+The 60 Hz path also remains healthy; heavy Quick stays near refresh-limited delivery and materially
+improves the old heavy p99 behaviour.
 
-| Candidate / load | Display path | runs | p95 | p99 | max | >=25 ms |
-|---|---|---:|---:|---:|---:|---:|
-| worker light | 165 Hz / GDI | 1 | 25.55 | 124.46 | 1358.86 | 12 / 221 |
-| Quick light | 165 Hz / GDI | 2 separable | 9.47–9.97 | 17.45–23.30 | 236.59–236.60 | 3–4 / 489–582 |
-| worker heavy | 165 Hz / GDI | 1 | 58.31 | 253.76 | 2280.88 | 26 / 185 |
-| Quick heavy | 165 Hz / GDI | 2 | 12.15–12.16 | 41.38–53.46 | 418.57–451.44 | 16–18 / 617–711 |
-| worker light | 60 Hz / legacy flip | 1 | 19.21 | 27.76 | 55.73 | 9 / 799 |
-| Quick light | 60 Hz / legacy flip | 2 separable | 17.62–17.69 | 18.25–19.72 | 26.17–33.82 | 2 / 892–893 |
-| worker heavy | 60 Hz / legacy flip | 1 | 21.67 | 58.87 | 69.50 | 15 / 697 |
-| Quick heavy | 60 Hz / legacy flip | 2 | 19.38–19.72 | 20.95–21.68 | 61.59–62.87 | 1–3 / 864–865 |
+## 165 Hz GDI row-count caution
 
-The non-separable third Quick light run recorded combined p95 `12.14 ms`, p99
-`16.84 ms`, max `248.73 ms`, and four displayed durations at or above 25 ms.
+Do not naively calculate continuous "physical FPS" as:
 
-## Current conclusion
+```text
+non-NA DisplayedTime rows / capture seconds
+```
 
-The experimental arm now exists and the first repeated physical evidence says
-that moving presentation ownership to standalone threaded `QQuickWindow`
-materially improves p95/p99 and severe-gap frequency under both lower and
-higher system load. The 165 Hz maximum tail is still poor (roughly 237 ms light
-and 419–451 ms heavy), so this is evidence for continuing the Quick path, not a
-claim that presentation is solved.
+for the 165 Hz GDI path when those rows do not represent continuous display occupancy over the phase.
 
-The remaining acceptance input is the operator's eyes-on note for Slide
-continuity, Bubble continuity, and startup flash/flicker. Do not rerun the
-worker heavy reference.
+For that path, phase-correlated `DisplayedTime` tails/severe-gap distribution is the safer
+discriminator.
+
+## Conclusion
+
+The experiment answered its architecture question.
+
+Standalone threaded `QQuickWindow` materially improves physical presentation cadence and resilience
+for the representative workload while still using Python/PySide and representative existing
+rendering work.
+
+Therefore:
+
+- proceed with one Qt Quick runtime-presentation migration;
+- do not continue broad QRhiWidget optimization as an alternative architecture programme;
+- do not schedule a second native/C++ presenter migration;
+- retain C++ only as a possible localized renderer optimization if future profiling earns it;
+- preserve the raw P0 evidence as the architecture-selection record.

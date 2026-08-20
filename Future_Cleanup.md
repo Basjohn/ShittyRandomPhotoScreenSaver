@@ -2,140 +2,76 @@
 
 Last updated: 2026-08-20
 
-Deferred debt only. `Current_Plan.md` owns active work.
+Deferred debt only. `Current_Plan.md` owns active migration work.
 
-The dedicated mode-general visualizer logical runtime is **landed architecture**, not future cleanup
-and not an unfinished future proposal.
+## 1. Post-Quick-cutover presentation cleanup
 
-## 1. Presentation / QRhi diagnostic retirement
+After the Qt Quick production presenter passes cutover gates:
 
-After P2 and P5 are accepted:
+- [ ] remove retired QRhiWidget physical presentation ownership;
+- [ ] remove old `GLCompositorWidget` scheduling/admission paths with no remaining caller;
+- [ ] remove QRhiWidget-only lifecycle compatibility;
+- [ ] remove obsolete GUI `present_tick`/presentation callbacks after caller proof;
+- [ ] retire benchmark-only control plumbing that no longer has regression value;
+- [ ] retain the P0 evidence report and raw evidence as architecture history;
+- [ ] keep cheap architecture-neutral timing diagnostics;
+- [ ] remove dead context/resource helpers that belonged only to the old presenter.
 
-- [ ] retire QOpenGLWidget-only compositor lifecycle compatibility with no caller;
-- [ ] retire obsolete compose/frame-swapped forensic observers;
-- [ ] retire old DWM/present scaffolding after evidence is preserved;
-- [ ] keep cheap architecture-neutral request-age/dispatch/state-to-paint summaries;
-- [ ] retire old presentation counters with no comparison value;
-- [ ] keep bounded sampled `--gpu-timing`.
+Do not perform this deletion ahead of migration parity/cutover.
 
-Diagnostics remain passive.
+## 2. Visualizer legacy cleanup
 
-## 2. Visualizer single-surface legacy cleanup
+After visualizer pixels are fully Quick-owned:
 
-After active P2 edge/delivery work is accepted:
+- [ ] retire obsolete `SpotifyBarsGLOverlay` presentation/resource-host plumbing with no caller;
+- [ ] remove compositor-only visualizer layer code;
+- [ ] remove old card-texture ownership if the Quick implementation supersedes it;
+- [ ] remove obsolete QWidget/QRhi reveal/fade plumbing;
+- [ ] preserve logical runtime, source ownership, BTF, presets, and authored behaviour.
 
-- [ ] retire vestigial historical `SpotifyBarsGLOverlay` visibility plumbing after caller proof;
-- [ ] retire old visualizer ShadowFade compatibility readers once compositor fade is sole owner;
-- [ ] narrow whole-surface edit capture where possible;
-- [ ] shrink old paused-visualizer compatibility state after explicit edit seams are canonical;
-- [ ] retire stale one-update-per-publication counters;
-- [ ] remove dead old Spectrum-only compositor paths;
-- [ ] remove redundant QOpenGLWidget/QRhiWidget compatibility imports/helpers;
-- [ ] keep one canonical card-pixel cache identity;
-- [ ] keep resource deletion independent from visibility.
+## 3. Runtime widget migration cleanup
 
-No cosmetic rename project while correctness/performance is active.
+After each runtime widget family cuts over:
 
-## 3. Post-worker compute efficiency / historical FFT debris
+- [ ] delete old QWidget runtime-pixel implementation only when no longer used;
+- [ ] retain Python provider/model/settings logic where still canonical;
+- [ ] remove dual-presentation bridges;
+- [ ] remove temporary raster/adaptor layers that were migration-only.
 
-Only after P2 shared GUI/presentation delivery is stable, profile the landed worker architecture.
+## 4. Native code
 
-The old dedicated FFT process is retired architecture and must not be resurrected without new measurement. Current visualizer audio analysis uses bounded ThreadManager compute work with newest-pending/latest-result semantics.
+There is no deferred "rewrite presenter in C++" task.
 
-Cleanup-only debris identified in current source:
+If later profiling finds a specific Quick renderer Python bottleneck:
 
-- [ ] remove stale `ProcessSupervisor` ancestry in visualizer runtime configuration after caller proof;
-- [ ] remove the `beat_engine.set_process_supervisor()` delegation that currently targets a nonexistent audio-worker setter;
-- [ ] remove the unused `ProcessSupervisor` import/constructor parameter in `SpotifyVisualizerAudioWorker` if no real caller remains;
-- [ ] do **not** treat this cleanup as a performance experiment — the failing delegation is caught and is not a steady-state FFT worker.
+- [ ] document measured ownership/cost;
+- [ ] compare local native renderer vs other Quick primitives;
+- [ ] preserve the same QQuickWindow topology;
+- [ ] preserve state/lifecycle/fidelity contracts.
 
-If task/Future/executor scaffolding later remains materially expensive:
+## 5. Logical-runtime cleanup
 
-- [ ] design a **mode-general** bounded visualizer compute service only if evidence justifies it;
-- [ ] preserve one-in-flight/latest-fresh semantics;
-- [ ] preserve exact dt/events/transients;
-- [ ] preserve generation/activation fencing including valid zero;
-- [ ] require all-mode temporal/fidelity goldens.
+After active migration/correctness work:
 
-If the Python logical runtime later proves materially GIL-starved after shared waste is controlled:
+- [ ] remove dead GUI visualizer timer helpers;
+- [ ] remove comments calling GUI recurring timing the normal logical owner;
+- [ ] audit monotonic-clock semantics;
+- [ ] remove stale one-update-per-publication assumptions.
 
-- [ ] compare helper process vs native extension from fresh evidence;
-- [ ] preserve the current logical/render-state ownership boundary;
-- [ ] do not pre-emptively rewrite visualizer maths in C/C++.
+## 6. Test / harness debt
 
-## 4. Logical runtime cleanup
+- [ ] retire tests that protect only the removed QRhiWidget presentation architecture;
+- [ ] retain one-clock, generation-zero, BTF, source-freshness, and lifecycle gates;
+- [ ] keep the Qt Quick P0 evidence as historical architecture selection;
+- [ ] maintain production-shaped Quick presentation regression coverage;
+- [ ] fix unrelated known shared-state/order flakes separately.
 
-After current P2 correctness closes:
+## 7. Long-run resources
 
-- [ ] reconcile/remove any remaining dead GUI visualizer timer helpers;
-- [ ] remove misleading comments that still call GUI recurring timing the normal visualizer owner;
-- [ ] audit remaining wall-clock use where a monotonic clock is semantically required.
+Repeat long-soak resource work on the final Quick architecture.
 
-These are cleanup only if the active plan has not promoted a specific defect.
-
-## 5. Test / harness debt
-
-- [ ] stabilize host-sensitive Bubble worker-budget oracle without deleting its budget;
-- [ ] establish one shared frame-timing harness contract;
-- [ ] make long Qt/GL harnesses more isolated;
-- [ ] keep generation-zero and one-clock gates permanent;
-- [ ] retire tests that only protect GUI-timer/separate-surface architecture;
-- [ ] fix combined-run contamination flakes that pass in isolation but fail in the
-  full suite: `test_media_command_ingress` (one-command-before-lookup),
-  `test_visualizer_settings_plumbing::TestCreateTimeRefreshParity`, the
-  `test_visualizer_doc_references` trio, and `test_sine_line4_builder_integration`
-  (`TestTab` harness missing `media_enabled`); these are shared-state/ordering
-  leaks, not product defects;
-- [ ] fix the `tools/recovery_evidence_parser.py` `analyze_evidence_source`
-  infinite self-recursion that fails `test_recovery_evidence_parser` even in
-  isolation.
-- [ ] reconcile the isolated unknown-mode fallback failure in
-  `TestVisualizerModeBinding::test_load_visualizer_mode_selection_falls_back_when_saved_mode_is_unknown`:
-  the test expects canonical `bubble`, while the current binding selects the first
-  registry item (`devcurve`); confirm the intended default owner, then align the
-  binding and oracle.
-
-A stub-call assertion is not sufficient for a visible/lifecycle seam.
-
-## 6. CUSTOM / Edit cleanup
-
-After active Media Cancel/visualizer edit paths pass:
-
-- [ ] weakify edit-shell callbacks where retention remains;
-- [ ] retire duplicate teardown/replay helpers;
-- [ ] split large managers only by real ownership;
-- [ ] tighten broad exception suppression.
-
-## 7. Whole-process resources / long-soak retention
-
-The 2026-08-20 Full Telemetry Diagnostic soak is preserved in:
-
-```text
-Docs/Performance_Evidence/Acceptance-08_20-13_03-Diagnostic-Long-Soak.md
-```
-
-After startup/warmup, that diagnostic shape showed approximate slopes of:
-
-```text
-main USS             +29 MB/hour
-main private commit  +90 MB/hour
-app handles          +15/hour
-```
-
-while threads and GL-resource counts remained essentially flat and pre-wake 60 Hz cadence did not degrade with age.
-
-Do **not** call this a production leak from one Full Telemetry run.
-
-Deferred sequence:
-
-- [ ] repeat a long soak with ordinary/light telemetry;
-- [ ] compare directly against Full Telemetry Diagnostic;
-- [ ] only if the slope survives, separate cache/allocator/native/Python ownership;
-- [ ] distinguish cache high-water from monotonic ownership growth;
-- [ ] attribute native/driver memory gaps only after the lighter control;
-- [ ] keep memory retention separate from the physical-presentation architecture decision unless evidence correlates them.
-
-Monitor-off/wake itself is no longer a cleanup target from this run; it remains a parity/regression gate for any future presenter.
+Keep memory/handle retention separate from the physical-presentation decision unless evidence connects
+them.
 
 ## 8. Repository / compatibility debris
 
@@ -144,25 +80,14 @@ Monitor-off/wake itself is no longer a cleanup target from this run; it remains 
 - [ ] retire deprecated Imgur;
 - [ ] add lightweight repository-hygiene checks.
 
-## 9. Unrelated backlog
+## 9. Unrelated/product backlog
 
-- [ ] Browser GSMTC resolver work;
-- [ ] low-pressure Gmail relative timestamp freshness;
-- [ ] Steam settings-hydration/cache consolidation;
-- [ ] Steam artwork scaling after measured DPR/ownership comparison;
-- [ ] Steam credential/privacy validation.
+Keep unrelated product work here rather than allowing it to interrupt the presentation migration.
 
-## 10. Product backlog
+## 10. Documentation hygiene
 
-- [ ] true eight-direction widget shadows;
-- [ ] first-run source onboarding;
-- [ ] remaining real-runtime CUSTOM edit-shell oracle;
-- [ ] curated Spectrum source/release mirror reconciliation.
-
-## 11. Documentation hygiene
-
-- [ ] keep `Current_Plan.md` active-only;
-- [ ] keep current owner docs synchronized with landed architecture;
-- [ ] keep phase reports/Historical_Bugs evidence-scoped;
-- [ ] retain named baselines as rollback evidence until genuinely superseded;
-- [ ] do not create another live roadmap hierarchy.
+- [ ] `Current_Plan.md` remains active-only;
+- [ ] current owner docs match the migration/cutover state;
+- [ ] phase reports/Historical_Bugs remain evidence-scoped;
+- [ ] delete temporary migration doctrine once fully absorbed;
+- [ ] never create a second live roadmap hierarchy.

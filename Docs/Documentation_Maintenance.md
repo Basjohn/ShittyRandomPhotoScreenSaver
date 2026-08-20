@@ -1,155 +1,105 @@
 # Documentation Maintenance
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
-Rules for keeping SRPSS docs useful to coding agents instead of preserving obsolete architecture by
-accident.
+Rules for keeping SRPSS documentation useful to coding agents during and after architecture changes.
 
-## 1. Stable paths
+## 1. Canonical roles
 
-Edit canonical files in place.
-
-Do not create `v2/new/proposed` duplicates or rename/move canonical paths without explicit user
-instruction.
-
-Focused guardrails may exist only when they own distinct durable policy. Current examples:
-
-- visualizer presentation;
-- runtime efficiency/change safety;
-- Bubble Temporal Fidelity (**BTF**).
-
-## 2. Roles / authority
-
-| Document | Owns |
+| Document | Role |
 |---|---|
-| `Current_Plan.md` | active unfinished execution order |
-| `Spec.md` | durable stable architecture/product behaviour |
-| `Docs/Guardrails.md` + focused guardrails | durable prohibitions/stop rules |
-| `Index.md`, `Docs/Contracts.md` | current owner/navigation map |
-| focused architecture/reference docs | current subsystem design |
-| current installed evidence checkpoint | current volatile measurements/evidence |
-| old phase reports | frozen checkpoint evidence |
-| specialized audit references | optional detail only; never task order |
-| `Future_Cleanup.md` | deferred cleanup |
-| Historical_Bugs | incident evidence / negative controls |
+| `Current_Plan.md` | active unfinished execution |
+| `Spec.md` | durable product/architecture contracts |
+| `Docs/Compositor_Architecture.md` | accepted runtime presentation design |
+| `Docs/Guardrails.md` + focused guardrails | durable stop rules |
+| `Index.md`, `Docs/Contracts.md` | routing/owner map |
+| current evidence reports | measurements |
+| phase reports/Historical_Bugs | historical evidence |
+| `Future_Cleanup.md` | deferred debt |
 
-Exact current `main` is implementation truth.
+## 2. Migration-epoch truth
 
-## 3. Architecture epoch reconciliation
+During an architecture migration, docs must distinguish:
 
-After a major owner migration reconcile this small current-authority set in the same sweep:
-
-- `Current_Plan.md`
-- `Spec.md`
-- `Index.md`
-- `Docs/Contracts.md`
-- `Docs/Guardrails.md`
-- relevant focused guardrails
-- `Docs/Compositor_Architecture.md`
-- visualizer/reference/checklist where relevant
-- `Docs/TestSuite.md`
-- `Docs/Harness_Index.md`
-- any “stable architecture/reference” audit that directly names the changed owner
-- `Future_Cleanup.md` if a former future target landed
-
-Do not leave “future target” prose after the target has landed.
-
-## 4. Reorientation documents
-
-A reorientation file is handoff/orientation doctrine only.
-
-It is not a second `Current_Plan.md`.
-
-Prefer keeping reorientation files outside the repository or in an explicit handoff package unless
-the user asks to store one in-repo.
-
-Do not add root clutter merely to make an agent read it.
-
-## 5. Evidence is not an owner map
-
-Phase reports and Historical_Bugs preserve old implementation names intentionally.
-
-Do not rewrite them merely to use current class names.
-
-Do not infer current ownership from old:
-
-- QOpenGLWidget;
-- separate overlay;
-- GUI timer;
-- old scheduler;
-- old context owner.
-
-Current owner questions route to `Index.md`, `Docs/Contracts.md` and source.
-
-## 6. Volatile measurements
-
-Do not duplicate current FPS/gap/raw-log counts across stable docs.
-
-Keep detailed volatile numbers in:
-
-- `Current_Plan.md` while actively relevant;
-- current installed evidence checkpoint.
-
-Stable docs keep durable conclusions and routes.
-
-## 7. Mandatory drift search after visualizer/presentation changes
-
-Search current docs for architecture fossils:
-
-```powershell
-rg -n "GUI-QTimer|gui timer|schedule_recurring|_bars_timer|VisualizerLogicalRuntime|Event\.wait|dedicated logical runtime|future logical runtime|presentation_ready|reactive_source_ready|fresh.frame|source generation|source activation|SpotifyBarsGLOverlay|QOpenGLWidget|QRhiWidget|pending.*paint|paint acknowledgement|AdaptiveTimerStrategy" `
-  Index.md Spec.md Current_Plan.md Future_Cleanup.md Docs
+```text
+current implementation
+from
+accepted destination
 ```
 
-Interpret by document role.
+Exact source answers what runs today.
+
+Canonical architecture docs answer what new work must converge toward.
+
+`Current_Plan.md` controls which migration step is currently allowed.
+
+Do not let temporary old implementation names silently redefine the destination.
+
+## 3. Major owner migration sweep
+
+When a major presenter/owner changes, reconcile together:
+
+- `Current_Plan.md`;
+- `Spec.md`;
+- `Index.md`;
+- `Docs/Contracts.md`;
+- `Docs/Guardrails.md`;
+- relevant focused guardrails;
+- `Docs/Compositor_Architecture.md`;
+- visualizer/reference/checklists where affected;
+- `Docs/TestSuite.md`;
+- `Docs/Harness_Index.md`;
+- `Future_Cleanup.md`.
+
+Do not leave a future/spike document competing with a closed decision.
+
+## 4. Evidence
+
+Do not delete evidence reports merely because their architecture is old.
+
+Evidence may preserve old class names and mechanisms.
+
+Current owner questions route to current canonical docs and source.
+
+## 5. Architecture fossils
+
+After presentation changes search current-authority docs for:
+
+```text
+QOpenGLWidget
+QRhiWidget
+GLCompositorWidget
+QQuickWidget
+QQuickWindow
+GUI timer
+present_tick
+paint acknowledgement
+pending until paint
+separate visualizer surface
+C++
+native presenter
+```
+
+Interpret matches by document role.
 
 Historical evidence may legitimately match.
 
-Current-authority docs may not contradict exact `main`.
+Current authority may mention old mechanisms only as explicit migration/reference/history.
 
-### Generation identity drift
+## 6. Deleting completed planning docs
 
-Also search identity code/docs when generation ownership changes:
+When a research/spike/planning document's decision has been absorbed into canonical architecture,
+delete it rather than maintain a competing task list.
 
-```powershell
-rg -n "runtime_generation|generation.*or -1|activation.*or -1|int\(.*or -1" widgets rendering engine tests Docs
-```
+Do not delete the evidence that supported the decision.
 
-Do not global-replace blindly. The purpose is to catch identity fields where valid zero can be lost.
+## 7. Closure
 
-## 8. Avoid mechanism fossils
+Before calling a migration epoch complete:
 
-Keep the proven lesson at the correct owner level.
-
-Examples:
-
-- failed adaptive timer on a separate visualizer surface does **not** ban adaptive physical display
-  presentation;
-- failed GUI-QTimer logical cadence does **not** mean all Qt timers are forbidden;
-- successful dedicated visualizer worker does **not** mean all work belongs on workers;
-- failed non-zero Spectrum test means “non-zero data is not visible-output proof,” not “all test
-  doubles are useless”;
-- Bubble exposing a timing defect does not make Bubble the cause.
-
-## 9. Closure
-
-Before marking a large architecture task done:
-
-- current core docs agree on current owner/type;
-- no current doc says landed architecture is future/deferred;
-- no current navigation routes to a retired owner as current evidence;
-- active plan contains only unfinished work;
-- Future_Cleanup contains only deferred work;
-- focused guardrails capture durable lessons;
-- historical reports remain evidence-scoped;
-- current test/harness guides describe the current runtime owner.
-
-## 10. Retiring duplicate planning docs
-
-When a live-plan/audit document has been fully absorbed into current canonical owners, deletion is
-preferable to maintaining a second current task list.
-
-Do not delete evidence reports.
-
-If a specialized audit is retained as “stable architecture/reference,” it must be reconciled when
-the owner it describes changes.
+- current core docs agree on the landed owner/type;
+- no current doc calls landed architecture "future";
+- no route points agents to retired owners as current;
+- active plan contains unfinished work only;
+- Future_Cleanup contains deferred cleanup only;
+- evidence remains evidence-scoped.

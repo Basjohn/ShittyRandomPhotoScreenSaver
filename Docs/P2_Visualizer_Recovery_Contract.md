@@ -1,91 +1,65 @@
-# P2 Visualizer Recovery Contract
+# Visualizer Recovery / Migration Contract
 
-Status: **binding current P2 ownership contract after the logical-runtime landing**  
-Date: 2026-08-19
-
-This document defines the architecture that must be preserved while the remaining P2 delivery
-failures are closed.
-
-`Current_Plan.md` owns active slice order.
+Status: binding visualizer ownership contract during Qt Quick presentation migration
+Date: 2026-08-20
 
 ## 1. Product invariant
 
-The visualizer must be smooth **and** reactive.
+The visualizer must remain both smooth and reactive.
 
-Smooth:
-
-- continuous authored motion;
-- no visible freeze/jump/flicker from timing holes.
-
-Reactive:
-
-- low source-to-visible latency;
-- preserved transient/attack strength.
-
-Do not obtain smoothness by delaying/averaging source data.
+Do not obtain smoothness by lowering cadence, delaying source data, averaging away transients, or
+masking missing physical frames.
 
 For Bubble, BTF is binding.
 
-## 2. Current ownership table
+## 2. Ownership
 
-| Concern | Logical runtime | Audio/analysis | GUI/compositor |
+| Concern | Logical runtime | Source/audio | Quick presentation side |
 |---|---:|---:|---:|
 | authored logical deadline/dt | YES | NO | NO |
 | mode simulation | YES | NO | NO |
-| logical envelopes/events | YES | publishes inputs | NO |
-| idle logical evolution | YES | NO | NO |
+| logical envelopes/events | YES | inputs | NO |
 | latest logical publication | YES | NO | consumes |
-| source/capture production | consumes snapshot | YES | NO |
-| capture keepalive | NO | YES | NO |
-| QWidget visibility/update | NO | NO | YES |
-| QPixmap/QPainter | NO | NO | YES |
-| layout/geometry mutation | NO | NO | YES |
-| reveal/fade execution | decision only | NO | YES |
-| GL/QRhi mutation | NO | NO | YES |
-| physical presentation cadence | NO | NO | YES |
+| capture/source production | consumes | YES | NO |
+| runtime pixels | NO | NO | YES |
+| physical presentation | NO | NO | YES |
+| QWidget/QQuick/GPU mutation | NO | NO | legal owner only |
 
-The logical worker must have no GUI/GL backdoor.
+The logical worker has no GUI/Quick/GPU backdoor.
 
-## 3. Current logical runtime
+## 3. Logical runtime
 
-`VisualizerLogicalRuntime` is landed and is the sole logical cadence owner.
+`VisualizerLogicalRuntime` remains landed and authoritative.
 
-The old GUI recurring visualizer timer no longer advances simulation.
+Keep:
 
-AnimationManager no longer advances simulation.
-
-Scheduler current contract:
-
-- high-resolution monotonic deadline clock;
-- bounded real sleeping, not busy spin;
-- no coarse timed-wait regression;
+- high-resolution monotonic deadlines;
+- bounded sleeping;
 - skip genuinely missed deadlines;
-- no catch-up replay;
-- stop/join with runtime generation.
+- no catch-up;
+- generation-owned stop/join;
+- one logical clock.
 
-The old ~64 Hz / ~29% skipped coarse-wait class is now a negative control, not current architecture.
+The old ~64 Hz coarse-wait class remains a negative control.
 
-## 4. Plain-data handoff
+## 4. Publication / presentation bridge
 
-Logical runtime publishes one latest state/intention through the mailbox.
+Logical publication is latest-state.
 
-Conceptually:
+The migration replaces the old QRhiWidget/GUI physical consumer with a bounded Quick presentation
+bridge.
 
-```text
-logical timestamp
-runtime generation
-mode activation
-mode
-changed/revision state
-mode-reveal intent
-source identity/freshness
-```
+Required properties:
 
-Exact packing is implementation-owned.
+- latest wins;
+- current generation only;
+- no FIFO;
+- no paint acknowledgement;
+- no one-callback-per-logical-tick requirement;
+- no stale state after recreation;
+- render-thread-safe immutable/synchronized state.
 
-Required GUI handoffs are explicit and fail loudly in tests/development when missing.
-
-## 5. Readiness distinction
+## 5. Readiness
 
 At minimum:
 
@@ -94,137 +68,72 @@ presentation_ready
 reactive_source_ready
 ```
 
-Do not overload source freshness into presentation permission.
+Paused Spectrum may show presentation-owned idle bars while source identity is absent.
 
-Mode capability matrix:
+On Play, fresh real current-generation data replaces idle state in place.
 
-| Mode | Idle reveal | Idle self-animation | Presentation-owned idle scene | Fresh real source for reactive playback |
-|---|---:|---:|---:|---:|
-| Bubble | yes | yes | no | no |
-| Spectrum | yes | no | yes | yes |
-| Sine | yes | yes | no | no |
-| Oscilloscope | yes | yes | no | no |
-| DevCurve | yes | yes | no | no |
-
-Paused Spectrum may reveal its presentation-owned idle scene while source identity remains absent.
-
-On Play, real current-generation/current-activation Spectrum data replaces idle bars in place.
-
-## 6. One-clock contract
-
-Exactly one visualizer logical clock:
-
-```text
-VisualizerLogicalRuntime = yes
-GUI recurring visualizer timer = no logical ownership
-AnimationManager = no logical ownership
-per-mode timer/thread = none
-physical compositor timer = presentation only
-```
-
-Physical display refresh is independent from logical simulation cadence.
-
-## 7. Latest-state contract
-
-One slot, latest wins.
-
-No:
-
-- FIFO;
-- backlog;
-- catch-up;
-- one GUI callback per logical tick;
-- paint backpressure.
-
-Every authored event integrates before its state may be replaced.
-
-## 8. Generation / activation fencing
-
-Generation/activation are real ownership boundaries.
-
-Valid generation `0` must remain `0`.
-
-None/missing may map to invalid sentinel.
-
-Never use `value or -1` for identity where zero is valid.
-
-Retired generation state cannot:
-
-- enter replacement mailbox;
-- trigger reveal;
-- mutate current GUI/GL presentation.
-
-## 9. Pause / Play
-
-Playback state and capture lifetime are separate.
+## 6. Pause / Play
 
 Pause:
 
 - logical runtime remains alive;
-- card/GL/mode identity remains;
-- authored idle state begins promptly;
-- capture may remain warm.
+- authored idle state starts promptly;
+- capture lifetime follows source owner policy.
 
 Warm Play:
 
 - same logical runtime continues;
-- same card/GL owner continues;
-- no cold startup;
+- no cold-start lifecycle;
 - fresh source becomes authoritative promptly.
 
-Do not reintroduce visualizer pause debounce.
+The pixel owner may migrate to Quick without changing these semantics.
 
-Identity continuity is a narrow gate only. It does not prove no-hitch physical delivery.
+## 7. Generation / activation
 
-## 10. Current remaining P2 failures
+`0` is valid identity.
 
-Current installed evidence owns volatile measurements, but the durable failure classes are:
+Retired generation state cannot:
 
-1. Pause/Play still visibly hitches despite identity continuity.
-2. Spectrum idle scene is reachable but current bar magnitude is effectively invisible.
-3. valid generation 0 is mishandled by part of the fence.
-4. shared GUI/compositor delivery remains weak even on a non-visualizer high-refresh display.
-5. Bubble logical/presentation long tails remain BTF alarms despite healthy average cadence.
+- enter the replacement state bridge;
+- trigger reveal;
+- mutate the current Quick scene/render state.
 
-Do not fix these by reverting the logical-runtime architecture.
+## 8. Error visibility
 
-## 11. Pause/Play feedback ownership
+- worker thread-affinity violations fail loudly in tests/development;
+- required handoffs fail loudly;
+- production may fail safe, but tests must expose architecture violations.
 
-A small control-feedback animation must not use a large stable MediaWidget as its full-card
-per-animation-frame paint owner when a smaller equivalent owner can preserve the visual effect.
+## 9. Lifecycle
 
-The current plan treats this as the first bounded edge-specific target before speculative
-wake/source-handoff changes.
-
-## 12. Error visibility
-
-- GUI-only methods assert thread affinity in tests/debug.
-- required handoffs fail loudly.
-- worker ownership violations cannot disappear into broad exception handlers and a green suite.
-- production may fail safe, but tests must expose architecture violation.
-
-## 13. Lifecycle
-
-Retirement order includes:
+Retirement order conceptually:
 
 ```text
 close logical admission
--> quiesce source producers as required
+-> quiesce generation-owned producers
 -> join logical runtime
--> clear/reject stale publication
--> retire GUI/GL generation
+-> reject stale publication
+-> retire presentation/render resources
+-> destroy retired runtime window/scene
 ```
 
-Settings/Edit/shutdown/P5 topology rebuild use the same ownership model.
+Replacement authority starts only afterward.
 
-## 14. Validation
+## 10. Migration acceptance
 
-Binding behavioral gates:
+Preserve:
 
-`Docs/P2_Behavioral_Gates.md`
+- all five modes;
+- BTF;
+- source freshness;
+- mode switching;
+- Pause/Play;
+- CUSTOM/Edit semantics;
+- first-frame/reveal behaviour;
+- Settings/recreate;
+- topology recreation;
+- compiled build;
+- bounded resources.
 
-Current installed checkpoint:
-
-`Docs/P2_Installed_Acceptance_Findings_2026-08-19.md`
-
-Do not call P2 complete from unit counts.
+The completed P0 benchmark selects Quick as the presentation destination. The remaining work is
+migration correctness and parity, not another presenter bake-off.

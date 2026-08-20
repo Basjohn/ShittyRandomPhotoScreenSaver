@@ -1,170 +1,224 @@
-# Compositor Architecture
+# Runtime Presentation Architecture
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
-Current accelerated presentation architecture for `main`.
+## 1. Decision
 
-## 1. Non-negotiable surface shape
+SRPSS's accepted runtime presentation architecture is:
 
-Each physical display owns one accelerated Qt presentation surface:
+```text
+one physical display
+        ↓
+one standalone top-level QQuickWindow
+        ↓
+threaded Qt Quick scene graph
+        ↓
+one composed runtime scene
+        ↓
+physical presentation
+```
+
+The 2026-08-20 P0 experiment materially beat the QWidget/QRhiWidget reference under both light and
+heavy external load.
+
+This decision is closed unless new production evidence contradicts it.
+
+## 2. Migration status
+
+The production source may still contain the previous presenter:
 
 ```text
 DisplayWidget
    └── GLCompositorWidget
-          └── OpenGL QRhi surface
+          └── OpenGL QRhiWidget path
 ```
 
-The visualizer is not a second surface.
+During migration that code is a **reference/rollback implementation**, not the destination.
 
-Do not add a visualizer QOpenGLWidget/QRhiWidget/CPU compatibility renderer.
+Do not:
 
-## 2. QRhi / raw OpenGL boundary
+- expand the old presenter to avoid migration work;
+- create new QRhiWidget-specific architecture;
+- treat current class names as permanent product contracts.
 
-- QRhi backend is OpenGL.
-- Qt owns QRhi and its QOpenGLContext.
-- SRPSS borrows that context.
-- PyOpenGL draw code runs inside legal QRhi external-content boundaries.
-- SRPSS does not own `swapBuffers()`.
-- top-level no-vsync policy remains intentional.
+Do not delete the reference path until the active migration plan has established the replacement and
+passed the required cutover gates.
 
-Resize alone is not resource-lifetime reset.
+## 3. One-surface invariant
 
-## 3. Scene ownership
+Each physical display owns one independently presented accelerated runtime surface.
 
-The compositor owns display-local draw order:
+Allowed inside that surface:
 
-1. retained base image / active transition;
-2. compositor-owned card/visual layers;
-3. visualizer shader layer;
-4. later explicitly compositor-owned GL layers.
+- retained base image;
+- transition rendering;
+- visualizer/card;
+- runtime overlays;
+- compositor-equivalent custom render items.
 
-Ordinary QWidget overlays remain separate UI where appropriate.
+Forbidden:
 
-## 4. Visualizer integration
+- separate native visualizer window;
+- transparent accelerated overlay window;
+- per-widget accelerated top-level surface;
+- `QQuickWidget` as the runtime presenter.
 
-Current flow:
+## 4. Threading model
+
+The destination presenter requires the Qt Quick **threaded** scene-graph render loop on the supported
+Windows path.
+
+The GUI thread remains responsible for GUI/event-loop work and may prepare/publish state.
+
+The Quick render thread owns the rendering phase according to the selected Qt Quick primitive.
+
+Do not move visualizer logical simulation onto the render thread merely because a render thread now
+exists.
+
+`VisualizerLogicalRuntime` remains independent and authoritative for authored visualizer time.
+
+## 5. State flow
+
+Conceptual flow:
 
 ```text
-BeatEngine / source analysis
+models / providers / logical runtimes
         ↓
-VisualizerLogicalRuntime
-        ↓ latest plain-data publication
-GUI presentation handoff
+bounded immutable/latest render state
         ↓
-CompositorVisualizerLayer
+Quick scene synchronization boundary
         ↓
-display compositor framebuffer
+render-thread scene consumption
+        ↓
+physical presentation
 ```
 
-`SpotifyBarsGLOverlay` remains historically named state/GL-resource host code. It is not a
-presented surface.
+Properties:
 
-The logical runtime never mutates compositor/GL state.
+- latest-state semantics;
+- no FIFO/catch-up;
+- no producer wait for paint/present;
+- no paint acknowledgement;
+- no callback-per-logical-frame requirement;
+- generation fencing;
+- stale-state rejection.
 
-The compositor never advances visualizer simulation.
+The exact bridge may use Qt properties/models, explicit synchronization objects, custom item
+`synchronize()` state, or another bounded mechanism chosen by the migration plan.
 
-## 5. Card
+## 6. Renderer primitives
 
-The authored card may be prepared with QPainter/QPixmap at state/geometry/style invalidation
-boundaries.
+Do not lock the product to one primitive before the migrated scene requires it.
 
-Steady presentation uses a retained compositor-owned GL texture.
+Possible shapes include:
 
-Card texture and visualizer shader use one authoritative presentation geometry:
+- ordinary retained Quick items;
+- shader/effect items;
+- `QQuickRhiItem`;
+- `QSGRenderNode`;
+- custom render-stage integration.
 
-- logical rect;
-- compositor/display DPR;
-- framebuffer origin/size;
-- viewport/scissor/mask alignment.
+Prefer the simplest primitive that:
 
-## 6. Presentation liveness
+- preserves exact visual fidelity;
+- keeps one top-level presentation surface;
+- respects thread/resource ownership;
+- meets physical cadence requirements.
 
-One display presentation strategy owns physical frame opportunities.
+A local native/C++ renderer may be considered only after profiling proves Python callback/render
+cost is material. It must remain inside the accepted Quick window architecture.
 
-Active reasons are additive. Transition end cannot stop presentation while another compositor-owned
-animation still needs frames.
+## 7. Visualizer
 
-There is no second visualizer presentation timer.
+The visualizer remains split:
 
-There is no compositor-owned visualizer simulation clock.
+```text
+source/audio
+   ↓
+VisualizerLogicalRuntime
+   ↓
+latest logical/render state
+   ↓
+Quick scene presentation
+```
 
-## 7. Admission
+The logical runtime never mutates Quick scene objects or GPU resources.
 
-Cross-thread callback coalescing may keep one queued GUI callback outstanding.
+The presenter never advances authored visualizer simulation.
 
-That guard ends when the callback executes.
+Card and visualizer pixels share one scene/fade authority where they must appear as one authored
+visual object.
 
-Paint completion is not an admission token.
+## 8. Runtime overlays
 
-No:
+Providers/models/settings do not migrate merely because pixels migrate.
 
-- pending-until-paint;
-- paint acknowledgement;
-- render self-requeue;
-- repaint rescue;
-- producer/display divisor gate.
+Target pattern:
 
-## 8. Visualizer readiness / fade
+```text
+existing Python data/model owner
+        ↓
+small presentation state
+        ↓
+Quick runtime item/layer
+```
 
-Visible presentation requires the current compositor/card/geometry/resources to be ready.
+Avoid reimplementing network/provider/business logic in QML.
 
-Do **not** universally require real audio/source identity before every visible scene.
+The one Quick scene should own runtime pixels that visually coexist over the screensaver.
 
-At minimum distinguish:
+## 9. Readiness / first frame
+
+A runtime window must not be visibly exposed until it can show intentional current-generation
+content.
+
+Eventually preserve:
+
+- no white/default flash;
+- no black placeholder;
+- no stale image/texture pop;
+- no visualizer/card flash;
+- coordinated multi-display reveal.
+
+Separate:
 
 ```text
 presentation_ready
 reactive_source_ready
 ```
 
-A presentation-owned idle scene may reveal while reactive source remains unavailable.
+Do not make real audio/source freshness a universal prerequisite for an intentional idle scene.
 
-Paused Spectrum is the canonical case.
+## 10. Lifecycle
 
-The compositor owns card + visualizer pixels for the entire fade. One fade authority applies to both.
+Topology, Settings/recreate, Edit, and shutdown remain generation-owned.
 
-## 9. GL resource ownership
+Old generation must retire before replacement gains authority.
 
-- Qt-owned context is borrowed;
-- one numeric handle has one deletion owner;
-- visualizer programs/VBO/VAO/mask/card texture are tied to compositor QRhi generation;
-- hidden/no-published visualizer state does not erase destruction authority;
-- runtime cleanup and QRhi resource release converge on one owner contract;
-- failed deletion retains ownership and fails closed;
-- ResourceManager accounting releases only after deletion succeeds.
+Quick scene/render resources must be destroyed on the legal owner/thread for the selected primitive.
 
-## 10. QPainter fallback
-
-Main compositor may use its explicit base-image QPainter fallback where acceleration is unavailable
-for that base path.
-
-This does not generalize to visualizer rendering.
+Do not copy QRhiWidget-specific context assumptions into Quick without verifying the new ownership
+contract.
 
 ## 11. Transition model
 
-Transition progress is display-local monotonic elapsed time with exactly-once completion.
+Transition logical/progress semantics remain display-local and monotonic with exactly-once completion.
 
-A bad transition window does not automatically prove transition-shader cost. Shared GUI/dispatch
-starvation must be excluded before per-transition optimization.
+The migration should preserve existing transition shaders/behaviour where practical.
 
-The 165 Hz non-visualizer display is a useful shared-presentation control.
+Do not individually retune transitions to hide physical frame holes.
 
-## 12. CUSTOM / Edit
+## 12. Evidence bar
 
-Visualizer pixels belong to the compositor while logical geometry/editor anchor may remain
-QWidget-based.
+Physical presentation is judged primarily by:
 
-Edit preview comes from compositor-owned scene state, not an obsolete visualizer framebuffer.
+- p95/p99/max physical gaps;
+- severe-gap counts;
+- continuity;
+- load resilience;
+- correct per-display refresh behaviour.
 
-Drag/resize may use preview state. Save publishes one new authoritative rect; Cancel restores/resumes
-the prior owner.
+Internal render callbacks are not physical-display proof.
 
-## 13. P5 boundary
-
-Presentation architecture does not replace monitor topology lifecycle.
-
-P5 still owns settled topology authority, immutable transaction snapshot, retire/barrier/rebuild/
-reveal and sticky configured-monitor semantics.
-
-The visualizer logical runtime is another generation-owned producer that must quiesce/join during
-runtime retirement.
+The P0 result justifies migration. Future evidence is for implementation/cutover quality, not for
+re-litigating Quick versus the old presenter on every step.

@@ -1,25 +1,20 @@
 # Visualizer Reference
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
-Current Spotify visualizer architecture/settings reference.
+Current visualizer behaviour and accepted presentation destination.
 
 ## 1. Modes
 
-Canonical ids come from `core/settings/visualizer_mode_registry.py`:
+Canonical mode ids remain owned by the settings/mode registry:
 
 - `spectrum`
 - `oscilloscope`
 - `sine_wave`
 - `bubble`
-- `devcurve` (user-facing Spline Curve)
+- `devcurve`
 
-Retired Blob identities remain migration/history only.
-
-## 2. Canonical idle capability model
-
-Use the canonical mode capability owner. Do not recreate hard-coded subsets in startup, mode switch,
-tick, reveal or settings code.
+## 2. Capability model
 
 | Mode | Idle reveal | Idle self-animation | Presentation-owned idle scene | Fresh real source required for reactive playback |
 |---|---:|---:|---:|---:|
@@ -29,211 +24,132 @@ tick, reveal or settings code.
 | Oscilloscope | yes | yes | no | no |
 | DevCurve | yes | yes | no | no |
 
-Paused Spectrum is intentionally mixed:
+Paused Spectrum remains intentionally mixed:
 
 ```text
 presentation_ready = true
 reactive_source_ready = false
-waiting_for_fresh_engine_frame = true
-source generation/activation = absent
+source identity = absent
 ```
 
-Its idle bars are presentation state, not fake audio.
-
-## 3. Settings / presets
-
-Primary owners:
-
-- model: `core/settings/models/_spotify_visualizer.py`
-- mode identity: `core/settings/visualizer_mode_registry.py`
-- preset resolution: `core/settings/visualizer_presets.py`
-- activation/runtime/config helpers under `widgets/spotify_visualizer/`
-
-One activation consumes one resolved target payload.
-
-Curated preset selection, same-mode preset cycling and identical settings refresh are different
-operations. Do not globally cache solely by mode id.
-
-## 4. Logical cadence runtime
+## 3. Logical cadence
 
 Primary owner:
 
-`widgets/spotify_visualizer/logical_runtime.py::VisualizerLogicalRuntime`
+`VisualizerLogicalRuntime`
 
-Supporting owners include:
+Supporting logical/source modules remain Python.
 
-- `widgets/spotify_visualizer/tick_helpers.py`
-- `widgets/spotify_visualizer/tick_pipeline.py`
-- `widgets/spotify_visualizer/mode_transition.py`
-- `widgets/spotify_visualizer/thread_affinity.py`
-- `widgets/spotify_visualizer/beat_engine.py`
-- `widgets/spotify_visualizer/audio_worker.py`
-
-Current production shape:
+Current durable flow:
 
 ```text
-VisualizerLogicalRuntime
-    -> worker-callable logical_tick()
-    -> LatestStateMailbox
-    -> GUI run_on_ui_thread handoff
-    -> present_tick()
+source/audio
+    -> VisualizerLogicalRuntime
+    -> latest plain-data state
+    -> presentation bridge
+    -> Quick scene/render owner
 ```
 
-The old GUI visualizer recurring timer is not the logical clock.
+During migration, old GUI `present_tick`/compositor code may still be the current implementation.
+It is not the destination contract.
 
-`AnimationManager` is not the logical clock.
+## 4. Presentation ownership
 
-## 5. Logical / GUI ownership split
+Destination:
 
-Logical worker owns plain-data decisions/state evolution.
+- visualizer pixels live inside the display's sole `QQuickWindow`;
+- no separately presented visualizer surface;
+- no `QQuickWidget`;
+- no independent swap/vsync owner;
+- no self-driven visualizer repaint loop.
 
-GUI owns:
+The historical `SpotifyBarsGLOverlay` name may temporarily survive as state/resource code while
+migration occurs. It is not a presentation-surface contract.
 
-- QWidget visibility;
-- presentation geometry mutation;
-- layout/shadow/card raster work;
-- fade/reveal execution;
-- compositor publication;
-- GL/QRhi mutation.
+## 5. Logical / presentation split
 
-Required cross-boundary handoffs are explicit and test-covered.
+Logical worker owns plain-data evolution.
 
-## 6. Latest-state handoff
+Presentation side owns:
 
-The mailbox is single-slot/latest-wins.
+- current scene state;
+- presentation geometry;
+- card/pixel representation;
+- fade/reveal;
+- GPU resource use;
+- physical presentation.
 
-No FIFO.
+The worker does not mutate Quick items or GPU resources.
 
-No catch-up.
+## 6. Latest-state semantics
 
-No one-GUI-callback-per-logical-tick contract.
+One slot/latest wins.
 
-Every authored event must integrate before later logical state may supersede it.
+No FIFO, catch-up, or paint acknowledgement.
 
-## 7. `SpotifyBarsGLOverlay` means resource/state host, not surface
+Every authored event integrates before later state may supersede it.
 
-The historical class/path remains for visualizer render state and GL-resource code used by the
-compositor.
+## 7. Presentation geometry
 
-It is not an independently presented GL overlay.
+One authoritative display-local geometry snapshot must feed all visual parts that need alignment:
 
-Do not add:
+- card;
+- shader/render item;
+- viewport/scissor equivalent;
+- DPR;
+- mask/border;
+- CUSTOM geometry.
 
-- its own QOpenGLWidget/QRhiWidget presentation;
-- swap/vsync ownership;
-- self-driven repaint stream;
-- framebuffer-grab assumptions.
+Do not create separate QWidget and Quick pixel geometry authorities.
 
-Actual pixels are rendered through:
+## 8. Card
 
-`rendering/gl_compositor_pkg/visualizer_layer.py`
+Card visual fidelity must be preserved.
 
-inside the display's sole compositor.
+Implementation may reuse existing raster output initially or migrate the card to retained Quick
+primitives, but steady presentation must not rebuild expensive stable pixels every visualizer frame.
 
-## 8. Presentation geometry
+Choose based on parity and measured cost.
 
-One authoritative geometry snapshot feeds:
+## 9. Bubble / BTF
 
-- card texture;
-- viewport;
-- scissor;
-- shader resolution;
-- framebuffer origin;
-- stencil/mask;
-- border.
+`Docs/Guardrails/Bubble_Temporal_Fidelity.md` is binding.
 
-Compositor/display DPR is presentation DPR authority.
+Bubble is a canary for shared timing and must not receive mode-specific cadence hacks to hide
+presentation defects.
 
-## 9. Card visual
+## 10. Playback
 
-The QPainter-authored card source may be rasterized/cached on GUI at a known size/DPR/style revision.
+Pause/Play preserves:
 
-Steady visualizer presentation reuses the uploaded GL texture.
-
-Do not rebuild QPainter/card pixels every visualizer frame.
-
-## 10. Spectrum idle presentation
-
-The paused Spectrum idle scene is static presentation state.
-
-It must:
-
-- be perceptibly visible;
-- remain low/resting rather than reactive;
-- not create fake BeatEngine data;
-- not fabricate source generation/activation;
-- remain visible until real current-generation data is ready on Play;
-- be replaced in place.
-
-“bar float > 0” is not sufficient proof of perceptible visibility.
-
-Use actual GL/pixel output or renderer-aware pixel-height geometry.
-
-## 11. Bubble / BTF
-
-Canonical contract:
-
-`Docs/Guardrails/Bubble_Temporal_Fidelity.md`
-
-BTF protects:
-
-- trajectories;
-- elasticity;
-- attack/decay/overshoot/settling;
-- source freshness;
-- logical cadence/gaps;
-- protected edge survival;
-- state-to-screen timing;
-- final perceptual continuity.
-
-Bubble is a canary for shared timing; do not create Bubble-specific cadence fixes without Bubble-owned
-evidence.
-
-## 12. Playback
-
-Pause/Play should preserve:
-
-- logical runtime;
+- logical runtime identity;
 - mode identity;
-- card/GL resources;
-- warm capture ownership.
+- source/capture policy;
+- no visualizer pause debounce;
+- prompt visible authored state change.
 
-The visualizer-owned 700 ms pause debounce is retired.
+The migration must not turn normal Pause/Play into renderer/window recreation.
 
-Identity continuity does not prove no-hitch continuity.
+## 11. CUSTOM / Edit
 
-Current Pause/Play work must also account for GUI/presentation cost such as Media control feedback.
+CUSTOM/Edit must preserve one authoritative committed geometry.
 
-## 13. Generation / activation
+Control UI may remain QWidget if appropriate.
 
-Generation and activation are ownership identities.
+Live runtime pixels belong to the Quick scene after migration; edit plumbing must not recreate a
+second accelerated presentation surface.
 
-- `0` is a valid integer generation;
-- None/missing is invalid/unassigned;
-- do not use `value or -1` where zero is meaningful;
-- stale retired identities cannot reveal/publish.
-
-## 14. CUSTOM / Edit
-
-Edit snapshot comes from compositor-owned visualizer scene, not
-`SpotifyBarsGLOverlay.grabFramebuffer()`.
-
-Drag/resize is preview-first.
-
-Save publishes new authoritative geometry once.
-
-Cancel restores/resumes the prior live owner rather than broadly replaying unrelated settings.
-
-## 15. Validation
+## 12. Validation
 
 Use:
 
-- deterministic replay/goldens for authored behaviour;
-- current P2 behavioral gates for worker/readiness/generation/edge ownership;
-- BTF for Bubble timing/feel;
-- real GL tests for card/viewport/idle visibility;
-- runtime-shaped 60 Hz + high-refresh delivery;
+- deterministic authored-behaviour goldens;
+- logical scheduler tests;
+- BTF;
+- source freshness tests;
+- real renderer/output tests where visibility matters;
+- Quick runtime-shaped presentation checks;
 - lifecycle generation tests;
 - installed manual review.
 
-A test's name does not prove it exercises the real output path.
+A test name does not prove it exercises the real output path.

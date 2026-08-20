@@ -1,96 +1,91 @@
 # Project Overview
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
 ## What SRPSS is
 
 SRPSS is a Windows screensaver/media runtime with multi-display image presentation, accelerated
-transitions, a high-fidelity multi-mode Spotify visualizer, configurable overlay widgets, durable
-settings/profiles and Normal/Media Center runtime variants.
+transitions, a high-fidelity multi-mode visualizer, configurable runtime overlays, durable settings,
+and Normal/Media Center variants.
+
+## Architecture epoch
+
+The physical-presentation experiment is complete.
+
+Standalone threaded `QQuickWindow` materially improved presentation cadence and load resilience over
+the QWidget/QRhiWidget reference path. Qt Quick is therefore the accepted destination for runtime
+presentation.
+
+This is not a whole-application QML rewrite.
+
+Keep Python/QWidget ownership for:
+
+- Settings/configuration UI;
+- persistence;
+- providers;
+- media/GSMTC integration;
+- orchestration;
+- logical runtimes;
+- data models.
+
+Move the runtime **pixel scene/presentation owner** to one standalone `QQuickWindow` per display.
+
+## Current implementation vs accepted target
+
+During migration, current `main` may still run through `DisplayWidget`/`GLCompositorWidget`/
+QRhiWidget.
+
+That is the current implementation and rollback/reference path.
+
+It is not the long-term architecture target.
+
+Do not spend migration time broadening or micro-optimizing that presenter unless the active plan
+requires a bounded compatibility fix.
+
+## Visualizer cadence
+
+`VisualizerLogicalRuntime` remains the one mode-general authored visualizer clock.
+
+Logical state is produced independently of GUI/physical presentation and published with latest-state
+semantics.
+
+The migration changes the presentation consumer, not the authored logical clock.
+
+For Bubble feel/timing, read:
+
+`Docs/Guardrails/Bubble_Temporal_Fidelity.md`
+
+## Core engineering priorities
+
+1. visualizer fidelity/reactivity;
+2. lifecycle/resource safety;
+3. physical frame pacing/perceived smoothness;
+4. multi-display correctness;
+5. bounded resources;
+6. CPU/task efficiency;
+7. average FPS;
+8. elegance.
+
+## C++ status
+
+A separate native/C++ presenter is not an active or expected migration phase.
+
+The Quick benchmark already achieved the architectural gain while retaining Python/PySide and
+representative existing rendering work.
+
+Native code may be introduced only for a specifically measured renderer hot path, inside the accepted
+Quick presentation architecture.
 
 ## Read order
-
-Do **not** read the whole documentation tree.
 
 For active work:
 
 1. user instruction + exact current `main`;
 2. `Current_Plan.md`;
-3. `Index.md` / `Docs/Contracts.md`;
-4. `Docs/Guardrails.md` + one focused guardrail;
-5. `Spec.md` / focused architecture reference;
-6. current installed evidence when the task needs measurements;
-7. older phase/Historical_Bug evidence only for a named mechanism.
+3. `Spec.md`;
+4. `Docs/Compositor_Architecture.md`;
+5. `Docs/Contracts.md`;
+6. relevant guardrail/reference;
+7. current evidence if measurements matter.
 
-Historical owner maps do not become current architecture because they are detailed.
-
-## Current presentation architecture
-
-- one accelerated OpenGL QRhi compositor surface per physical display;
-- visualizer card + shader are layers inside that compositor;
-- no separate presented visualizer QOpenGLWidget/QRhiWidget;
-- physical display presentation is owned by the display compositor;
-- no producer-to-paint acknowledgement/backpressure.
-
-## Current visualizer cadence architecture
-
-- `VisualizerLogicalRuntime` is the one mode-general logical visualizer clock;
-- it is a standard Python thread, independent from Qt event-loop timing;
-- logical code publishes latest plain-data state;
-- GUI presentation code consumes that state and owns reveal/layout/card/GL work;
-- the former GUI visualizer timer does not advance simulation;
-- `AnimationManager` does not advance visualizer simulation.
-
-This worker architecture is **landed**, not a future proposal.
-
-## Current readiness rule
-
-Presentation permission and reactive source authority are different.
-
-Paused Spectrum may reveal its presentation-owned idle scene while still waiting for real
-current-generation source data for reactive playback.
-
-## Bubble / BTF
-
-For “Bubble feel”, Bubble stutter/flicker/latency/elasticity or shared timing changes that affect
-Bubble, read:
-
-`Docs/Guardrails/Bubble_Temporal_Fidelity.md`
-
-BTF protects both authored Bubble behaviour and temporal delivery.
-
-## Current P2 truth
-
-The dedicated logical scheduler fixed the old ~64 Hz cadence collapse, but P2 remains open because:
-
-- Pause/Play still visibly hitches;
-- paused Spectrum's card reveals but its current idle bars are effectively invisible;
-- valid runtime generation 0 is mishandled in part of the logical/presentation fence;
-- shared GUI/compositor delivery remains weak even on the 165 Hz display without a visualizer;
-- Bubble still sees unacceptable long-tail logical/presentation gaps.
-
-Use `Current_Plan.md` for exact active order and
-`Docs/P2_Installed_Acceptance_Findings_2026-08-19.md` for the current evidence checkpoint.
-
-## Core engineering priorities
-
-1. visualizer fidelity/reactivity;
-2. lifecycle/GL safety;
-3. frame pacing/perceived smoothness;
-4. multi-display correctness;
-5. bounded RAM/VRAM;
-6. CPU/task efficiency;
-7. average FPS;
-8. elegance.
-
-Efficiency means removing technical waste, not reducing authored content.
-
-## Repository/document stability
-
-Current `main` is implementation authority.
-
-Existing canonical documents are updated in place. Do not rename/move paths without explicit user
-instruction.
-
-Old phase reports and Historical_Bugs remain evidence-scoped and may intentionally describe retired
-architectures.
+Do not read the whole history tree by default.
