@@ -12,7 +12,9 @@ from PySide6.QtGui import QOpenGLContext
 from PySide6.QtQuick import QSGRenderNode
 
 from core.logging.logger import get_logger
+from ..image_state import PresentationImage
 from .gl_resources import compile_program
+from .image_textures import ImageTextureOwner
 from .telemetry import RenderNodeTelemetry
 
 
@@ -39,6 +41,8 @@ in vec2 vUv;
 out vec4 fragColor;
 
 uniform float uProgress;
+uniform bool uHasImage;
+uniform sampler2D uImage;
 
 vec3 oldPalette(float band) {
     if (band < 1.0) return vec3(0.055, 0.180, 0.420);
@@ -59,6 +63,10 @@ vec3 newPalette(float band) {
 }
 
 void main() {
+    if (uHasImage) {
+        fragColor = texture(uImage, vUv);
+        return;
+    }
     float progress = clamp(uProgress, 0.0, 1.0);
     bool newRegion = vUv.x < progress;
     float sourceX = newRegion
@@ -122,12 +130,16 @@ class BackgroundRenderNode(QSGRenderNode):
         self._logical_size = (0.0, 0.0)
         self._device_pixel_ratio = 1.0
         self._state = SlideProofState()
+        self._presentation_image: PresentationImage | None = None
+        self._image_textures = ImageTextureOwner(self._telemetry)
         self._program = 0
         self._vao = 0
         self._vbo = 0
         self._matrix_location = -1
         self._item_size_location = -1
         self._progress_location = -1
+        self._has_image_location = -1
+        self._image_location = -1
 
     def __del__(self) -> None:
         # Some scene-graph backends may skip the virtual releaseResources()
@@ -145,6 +157,7 @@ class BackgroundRenderNode(QSGRenderNode):
         logical_size: tuple[float, float],
         device_pixel_ratio: float,
         state: SlideProofState,
+        presentation_image: PresentationImage | None,
     ) -> None:
         """Accept immutable values during the Quick sync/updatePaintNode phase."""
 
@@ -154,6 +167,7 @@ class BackgroundRenderNode(QSGRenderNode):
         )
         self._device_pixel_ratio = max(0.01, float(device_pixel_ratio))
         self._state = state.normalized()
+        self._presentation_image = presentation_image
         self._telemetry.note_sync(
             logical_size=self._logical_size,
             device_pixel_ratio=self._device_pixel_ratio,
@@ -190,7 +204,12 @@ class BackgroundRenderNode(QSGRenderNode):
     def releaseResources(self) -> None:
         """Delete node-owned GL names on Qt Quick's legal render/context owner."""
 
-        if not (self._program or self._vao or self._vbo):
+        if not (
+            self._program
+            or self._vao
+            or self._vbo
+            or self._image_textures.has_resources
+        ):
             return
         context = QOpenGLContext.currentContext()
         if context is None:
@@ -200,6 +219,7 @@ class BackgroundRenderNode(QSGRenderNode):
             return
 
         try:
+            self._image_textures.release()
             if self._program:
                 gl.glDeleteProgram(self._program)
             if self._vbo:
@@ -265,12 +285,20 @@ class BackgroundRenderNode(QSGRenderNode):
         self._progress_location = int(
             gl.glGetUniformLocation(self._program, "uProgress")
         )
+        self._has_image_location = int(
+            gl.glGetUniformLocation(self._program, "uHasImage")
+        )
+        self._image_location = int(
+            gl.glGetUniformLocation(self._program, "uImage")
+        )
         if min(
             self._matrix_location,
             self._item_size_location,
             self._progress_location,
+            self._has_image_location,
+            self._image_location,
         ) < 0:
-            raise RuntimeError("Quick Slide proof uniforms are incomplete")
+            raise RuntimeError("Quick background uniforms are incomplete")
 
         self._telemetry.note_initialized(
             render_thread_id=threading.get_ident(),
@@ -278,6 +306,9 @@ class BackgroundRenderNode(QSGRenderNode):
         )
 
     def _draw(self) -> None:
+        texture_id = self._image_textures.ensure_uploaded(
+            self._presentation_image
+        )
         prior_viewport_value = gl.glGetIntegerv(gl.GL_VIEWPORT)
         prior_viewport = tuple(int(value) for value in prior_viewport_value)
         if len(prior_viewport) != 4:
@@ -296,6 +327,9 @@ class BackgroundRenderNode(QSGRenderNode):
         prior_program = _int_state(gl.GL_CURRENT_PROGRAM)
         prior_vao = _int_state(gl.GL_VERTEX_ARRAY_BINDING)
         prior_array_buffer = _int_state(gl.GL_ARRAY_BUFFER_BINDING)
+        prior_active_texture = _int_state(gl.GL_ACTIVE_TEXTURE)
+        gl.glActiveTexture(gl.GL_TEXTURE0)
+        prior_texture = _int_state(gl.GL_TEXTURE_BINDING_2D)
         prior_blend = bool(gl.glIsEnabled(gl.GL_BLEND))
         prior_cull = bool(gl.glIsEnabled(gl.GL_CULL_FACE))
         prior_depth = bool(gl.glIsEnabled(gl.GL_DEPTH_TEST))
@@ -309,6 +343,7 @@ class BackgroundRenderNode(QSGRenderNode):
             gl.glViewport(*viewport)
             gl.glUseProgram(self._program)
             gl.glBindVertexArray(self._vao)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
 
             matrix = self.projectionMatrix() * self.matrix()
             gl.glUniformMatrix4fv(
@@ -323,6 +358,8 @@ class BackgroundRenderNode(QSGRenderNode):
                 float(self._logical_size[1]),
             )
             gl.glUniform1f(self._progress_location, float(self._state.progress))
+            gl.glUniform1i(self._has_image_location, 1 if texture_id else 0)
+            gl.glUniform1i(self._image_location, 0)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
             if self._telemetry.wants_pixel_sample():
                 physical_width = max(
@@ -356,6 +393,8 @@ class BackgroundRenderNode(QSGRenderNode):
                 )
                 self._telemetry.note_pixel_sample(colors)
         finally:
+            gl.glBindTexture(gl.GL_TEXTURE_2D, prior_texture)
+            gl.glActiveTexture(prior_active_texture)
             gl.glBindVertexArray(prior_vao)
             gl.glBindBuffer(gl.GL_ARRAY_BUFFER, prior_array_buffer)
             gl.glUseProgram(prior_program)

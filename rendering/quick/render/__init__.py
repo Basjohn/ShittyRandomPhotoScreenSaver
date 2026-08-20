@@ -2,11 +2,13 @@
 
 from .background_item import BackgroundRenderItem
 from .background_node import BackgroundRenderNode, SlideProofState
+from .image_textures import ImageTextureOwner
 from .telemetry import RenderNodeSnapshot, RenderNodeTelemetry
 
 __all__ = [
     "BackgroundRenderItem",
     "BackgroundRenderNode",
+    "ImageTextureOwner",
     "RenderNodeSnapshot",
     "RenderNodeTelemetry",
     "SlideProofState",

@@ -367,13 +367,6 @@ The explicit operator-run executable validation remains required before producti
 
 Read `02_Scene_Renderer_Transitions.md`.
 
-## C1 — image boundary
-
-Refactor presentation image state so render-thread code consumes immutable image bytes/state, never
-live `QPixmap`/QWidget state.
-
-Do not rewrite source/image queue/provider logic.
-
 ## C2 — transition-neutral run controller
 
 Refactor QWidget/compositor coupling out of transition timing/parameter ownership.

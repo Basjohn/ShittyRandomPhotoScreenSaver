@@ -24,6 +24,14 @@ class RenderNodeSnapshot:
     pixel_sample_count: int = 0
     sampled_sync_count: int = 0
     sample_colors: tuple[str, ...] = ()
+    active_image_identity: str | None = None
+    image_upload_thread_id: int | None = None
+    image_release_thread_id: int | None = None
+    image_upload_count: int = 0
+    image_upload_bytes: int = 0
+    image_release_count: int = 0
+    image_release_bytes: int = 0
+    pending_image_release_count: int = 0
     gl_version: str = ""
     error: str | None = None
 
@@ -104,6 +112,57 @@ class RenderNodeTelemetry:
                 pixel_sample_count=self._snapshot.pixel_sample_count + 1,
                 sampled_sync_count=self._snapshot.sync_count,
                 sample_colors=tuple(str(color) for color in colors),
+            )
+
+    def note_image_uploaded(
+        self,
+        *,
+        identity: str,
+        byte_count: int,
+        pending_release_count: int,
+    ) -> None:
+        with self._lock:
+            self._snapshot = replace(
+                self._snapshot,
+                active_image_identity=str(identity),
+                image_upload_thread_id=threading.get_ident(),
+                image_upload_count=self._snapshot.image_upload_count + 1,
+                image_upload_bytes=(
+                    self._snapshot.image_upload_bytes + int(byte_count)
+                ),
+                pending_image_release_count=int(pending_release_count),
+            )
+
+    def note_image_released(
+        self,
+        *,
+        active_identity: str | None,
+        byte_count: int,
+        pending_release_count: int,
+    ) -> None:
+        with self._lock:
+            self._snapshot = replace(
+                self._snapshot,
+                active_image_identity=active_identity,
+                image_release_thread_id=threading.get_ident(),
+                image_release_count=self._snapshot.image_release_count + 1,
+                image_release_bytes=(
+                    self._snapshot.image_release_bytes + int(byte_count)
+                ),
+                pending_image_release_count=int(pending_release_count),
+            )
+
+    def note_image_release_pending(
+        self,
+        *,
+        active_identity: str | None,
+        pending_release_count: int,
+    ) -> None:
+        with self._lock:
+            self._snapshot = replace(
+                self._snapshot,
+                active_image_identity=active_identity,
+                pending_image_release_count=int(pending_release_count),
             )
 
     def note_released(self, *, release_thread_id: int) -> None:

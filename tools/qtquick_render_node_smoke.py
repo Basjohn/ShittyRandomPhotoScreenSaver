@@ -29,9 +29,17 @@ from PySide6.QtCore import (  # noqa: E402
     Qt,
     QTimer,
 )
-from PySide6.QtGui import QColor, QGuiApplication, QKeyEvent, QScreen  # noqa: E402
+from PySide6.QtGui import (  # noqa: E402
+    QColor,
+    QGuiApplication,
+    QImage,
+    QKeyEvent,
+    QScreen,
+)
 from PySide6.QtQuick import QQuickWindow, QSGRendererInterface  # noqa: E402
 
+from rendering.quick.image_boundary import capture_qimage  # noqa: E402
+from rendering.quick.image_state import PresentationImage  # noqa: E402
 from rendering.quick.render import RenderNodeSnapshot, RenderNodeTelemetry  # noqa: E402
 from rendering.quick.runtime import QuickDisplayRuntime  # noqa: E402
 from rendering.quick.scene_controller import (  # noqa: E402
@@ -60,9 +68,12 @@ class _WindowProbe:
     proof_progress_on_construction: float
     presentation_state_replayed: bool
     replayed_from_generation: int | None
+    presentation_image: PresentationImage
+    replacement_image: PresentationImage
     retired_proof_progress: float | None = None
     initial_capture: dict[str, Any] | None = None
     resized_capture: dict[str, Any] | None = None
+    replacement_capture: dict[str, Any] | None = None
     initial_scene_state: dict[str, object] | None = None
     hide_show_cycles: list[dict[str, Any]] = field(default_factory=list)
 
@@ -120,7 +131,49 @@ def _capture_from_snapshot(snapshot: RenderNodeSnapshot) -> dict[str, Any]:
         "device_pixel_ratio": float(snapshot.device_pixel_ratio),
         "sample_count": int(snapshot.pixel_sample_count),
         "colors": sorted(set(snapshot.sample_colors)),
+        "active_image_identity": snapshot.active_image_identity,
+        "image_upload_count": int(snapshot.image_upload_count),
+        "image_release_count": int(snapshot.image_release_count),
     }
+
+
+def _presentation_image(
+    *,
+    screen_index: int,
+    generation: int,
+    variant: str,
+) -> PresentationImage:
+    palettes = {
+        "initial": (
+            QColor(16, 52, 120),
+            QColor(22, 108, 184),
+            QColor(28, 168, 192),
+            QColor(64, 188, 128),
+            QColor(154, 206, 72),
+            QColor(230, 220, 54),
+        ),
+        "replacement": (
+            QColor(212, 40, 52),
+            QColor(230, 82, 42),
+            QColor(236, 132, 36),
+            QColor(206, 66, 132),
+            QColor(150, 54, 176),
+            QColor(92, 60, 188),
+        ),
+    }
+    colors = palettes[variant]
+    image = QImage(12, 8, QImage.Format.Format_RGBA8888)
+    for x in range(image.width()):
+        color = colors[min(len(colors) - 1, x // 2)]
+        for y in range(image.height()):
+            image.setPixelColor(x, y, color)
+    return capture_qimage(
+        image,
+        identity=(
+            f"quick-smoke:g{generation}:screen{screen_index}:variant:{variant}"
+        ),
+        source_path=f"synthetic://quick-smoke/{variant}",
+    )
 
 
 def _snapshot_dict(snapshot: RenderNodeSnapshot) -> dict[str, Any]:
@@ -302,6 +355,17 @@ class _SmokeRunner(QObject):
             proof_progress = float(saved_state["proof_progress"])
             replayed_from_generation = int(saved_state["generation"])
         scene.set_background_proof_progress(proof_progress)
+        presentation_image = _presentation_image(
+            screen_index=index,
+            generation=generation,
+            variant="initial",
+        )
+        replacement_image = _presentation_image(
+            screen_index=index,
+            generation=generation,
+            variant="replacement",
+        )
+        runtime.set_presentation_image(presentation_image)
         scene_root = scene.scene_root
         return _WindowProbe(
             index=index,
@@ -320,6 +384,8 @@ class _SmokeRunner(QObject):
             proof_progress_on_construction=proof_progress,
             presentation_state_replayed=saved_state is not None,
             replayed_from_generation=replayed_from_generation,
+            presentation_image=presentation_image,
+            replacement_image=replacement_image,
         )
 
     def _selected_screen_indices(self) -> list[int]:
@@ -398,6 +464,9 @@ class _SmokeRunner(QObject):
             probe.runtime.scene_readiness.ready_for_reveal
             and probe.telemetry.snapshot().render_count >= 1
             and probe.telemetry.snapshot().pixel_sample_count >= 1
+            and probe.telemetry.snapshot().image_upload_count == 1
+            and probe.telemetry.snapshot().active_image_identity
+            == probe.presentation_image.identity
             for probe in self._probes
         )
         if not initial_ready and time.monotonic() < self._visibility_deadline:
@@ -413,6 +482,9 @@ class _SmokeRunner(QObject):
                 probe.initial_capture = _capture_from_snapshot(snapshot)
                 probe.initial_scene_state = probe.scene.describe_scene_state()
                 self._initial_snapshots.append(snapshot)
+                # Re-admit the same immutable identity and force further frames;
+                # the render owner must not upload it again.
+                probe.runtime.set_presentation_image(probe.presentation_image)
                 probe.scene.set_background_proof_progress(0.68)
                 probe.window.resize(
                     probe.window.width() + 80,
@@ -433,6 +505,10 @@ class _SmokeRunner(QObject):
                 != self._initial_snapshots[position].render_target_size
                 and probe.telemetry.snapshot().pixel_sample_count
                 > self._initial_snapshots[position].pixel_sample_count
+                and probe.telemetry.snapshot().image_upload_count
+                == self._initial_snapshots[position].image_upload_count
+                and probe.telemetry.snapshot().active_image_identity
+                == probe.presentation_image.identity
                 and probe.runtime.scene_readiness.ready_for_reveal
             )
             for position, probe in enumerate(self._probes)
@@ -449,8 +525,46 @@ class _SmokeRunner(QObject):
                 probe.resized_capture = _capture_from_snapshot(
                     probe.telemetry.snapshot()
                 )
+                probe.runtime.set_presentation_image(probe.replacement_image)
+                probe.window.update()
         except Exception as exc:
             self._errors.append(f"resized capture failed: {type(exc).__name__}: {exc}")
+        self._visibility_deadline = self._visibility_timeout_deadline()
+        QTimer.singleShot(10, lambda token=token: self._capture_replacement(token))
+
+    def _capture_replacement(self, token: int) -> None:
+        if token != self._cycle_token:
+            return
+        replacement_ready = all(
+            probe.resized_capture is not None
+            and probe.telemetry.snapshot().image_upload_count
+            == int(probe.resized_capture["image_upload_count"]) + 1
+            and probe.telemetry.snapshot().active_image_identity
+            == probe.replacement_image.identity
+            and probe.telemetry.snapshot().pixel_sample_count
+            > int(probe.resized_capture["sample_count"])
+            and probe.runtime.scene_readiness.ready_for_reveal
+            for probe in self._probes
+        )
+        if not replacement_ready and time.monotonic() < self._visibility_deadline:
+            QTimer.singleShot(
+                10,
+                lambda token=token: self._capture_replacement(token),
+            )
+            return
+        if not replacement_ready:
+            self._errors.append(
+                f"generation{self._generation} replacement image timed out"
+            )
+        try:
+            for probe in self._probes:
+                probe.replacement_capture = _capture_from_snapshot(
+                    probe.telemetry.snapshot()
+                )
+        except Exception as exc:
+            self._errors.append(
+                f"replacement capture failed: {type(exc).__name__}: {exc}"
+            )
         if self._args.topology_recreate and not self._errors:
             self._advance_topology_presentation_state()
         if self._args.hide_show_cycles > 0 and not self._errors:
@@ -498,6 +612,9 @@ class _SmokeRunner(QObject):
                 or not readiness.scene_graph_invalidated
                 or snapshot.invalidation_count <= before["invalidation_count"]
                 or snapshot.release_count <= before["release_count"]
+                or snapshot.image_release_count <= before["image_release_count"]
+                or snapshot.active_image_identity is not None
+                or snapshot.pending_image_release_count != 0
             ):
                 hidden_ready = False
                 break
@@ -550,6 +667,9 @@ class _SmokeRunner(QObject):
                 or not probe.runtime.scene_readiness.ready_for_reveal
                 or snapshot.initialize_count <= before["initialize_count"]
                 or snapshot.render_count <= before["render_count"]
+                or snapshot.image_upload_count <= before["image_upload_count"]
+                or snapshot.active_image_identity
+                != probe.replacement_image.identity
                 or not probe.runtime.frame_pacer.is_active()
             ):
                 resumed_ready = False
@@ -801,6 +921,7 @@ class _SmokeRunner(QObject):
             final = probe.telemetry.snapshot()
             initial_capture = probe.initial_capture or {}
             resized_capture = probe.resized_capture or {}
+            replacement_capture = probe.replacement_capture or {}
             runtime_state = probe.runtime.describe_runtime_state()
             errors = self._validate_probe(
                 probe,
@@ -808,6 +929,7 @@ class _SmokeRunner(QObject):
                 final,
                 initial_capture,
                 resized_capture,
+                replacement_capture,
                 runtime_state,
             )
             self._errors.extend(errors)
@@ -827,6 +949,7 @@ class _SmokeRunner(QObject):
                     "final": _snapshot_dict(final),
                     "initial_capture": initial_capture,
                     "resized_capture": resized_capture,
+                    "replacement_capture": replacement_capture,
                     "hide_show_cycles": probe.hide_show_cycles,
                     "proof_progress_on_construction": (
                         probe.proof_progress_on_construction
@@ -1148,6 +1271,7 @@ class _SmokeRunner(QObject):
         final: RenderNodeSnapshot,
         initial_capture: dict[str, Any],
         resized_capture: dict[str, Any],
+        replacement_capture: dict[str, Any],
         runtime_state: dict[str, Any],
     ) -> list[str]:
         prefix = f"generation{probe.generation}.screen{probe.index}"
@@ -1168,6 +1292,14 @@ class _SmokeRunner(QObject):
             "ready_for_reveal"
         ):
             errors.append(f"{prefix} scene never reached explicit reveal readiness")
+        initial_image_state = initial_scene.get("presentation_image")
+        if (
+            not isinstance(initial_image_state, dict)
+            or initial_image_state.get("identity")
+            != probe.presentation_image.identity
+            or "rgba8" in initial_image_state
+        ):
+            errors.append(f"{prefix} scene did not expose detached image metadata")
         final_scene = runtime_state.get("scene", {})
         if not isinstance(final_scene, dict):
             final_scene = {}
@@ -1213,6 +1345,29 @@ class _SmokeRunner(QObject):
             )
         if final.release_thread_id != final.render_thread_id:
             errors.append(f"{prefix} GL release did not run on its render thread")
+        expected_image_cycles = 2 + self._args.hide_show_cycles
+        if final.image_upload_count != expected_image_cycles:
+            errors.append(
+                f"{prefix} image uploaded {final.image_upload_count} times; "
+                f"expected {expected_image_cycles}"
+            )
+        if final.image_release_count != expected_image_cycles:
+            errors.append(
+                f"{prefix} image released {final.image_release_count} times; "
+                f"expected {expected_image_cycles}"
+            )
+        if final.image_upload_thread_id != final.render_thread_id:
+            errors.append(f"{prefix} image upload did not run on its render thread")
+        if final.image_release_thread_id != final.render_thread_id:
+            errors.append(f"{prefix} image release did not run on its render thread")
+        if final.active_image_identity is not None:
+            errors.append(f"{prefix} retained an active image after retirement")
+        if final.pending_image_release_count:
+            errors.append(f"{prefix} retained pending image texture deletion")
+        if final.image_upload_bytes <= 0:
+            errors.append(f"{prefix} did not account uploaded image bytes")
+        if final.image_upload_bytes != final.image_release_bytes:
+            errors.append(f"{prefix} image byte ownership did not balance")
         if final.invalidation_count < expected_resource_cycles:
             errors.append(
                 f"{prefix} scene graph invalidated {final.invalidation_count} times; "
@@ -1230,10 +1385,29 @@ class _SmokeRunner(QObject):
             errors.append(f"{prefix} initial render-thread pixel sample was missing")
         if resized_capture.get("sample_count", 0) < 2:
             errors.append(f"{prefix} resized render-thread pixel sample was missing")
+        if replacement_capture.get("sample_count", 0) < 3:
+            errors.append(f"{prefix} replacement image pixel sample was missing")
+        if initial_capture.get("image_upload_count") != 1:
+            errors.append(f"{prefix} initial image was not uploaded exactly once")
+        if resized_capture.get("image_upload_count") != 1:
+            errors.append(f"{prefix} stable image was re-uploaded during resize")
+        if replacement_capture.get("image_upload_count") != 2:
+            errors.append(f"{prefix} replacement identity did not upload once")
+        if (
+            replacement_capture.get("active_image_identity")
+            != probe.replacement_image.identity
+        ):
+            errors.append(f"{prefix} replacement identity did not reach render state")
         if len(initial_capture.get("colors", ())) < 2:
             errors.append(f"{prefix} initial capture did not contain deterministic bands")
         if len(resized_capture.get("colors", ())) < 2:
             errors.append(f"{prefix} resized capture did not contain deterministic bands")
+        if len(replacement_capture.get("colors", ())) < 2:
+            errors.append(
+                f"{prefix} replacement capture did not contain deterministic bands"
+            )
+        if initial_capture.get("colors") == replacement_capture.get("colors"):
+            errors.append(f"{prefix} replacement image did not change rendered pixels")
         if initial_capture.get("size") == resized_capture.get("size"):
             errors.append(f"{prefix} physical capture size did not change after resize")
         if len(probe.hide_show_cycles) != self._args.hide_show_cycles:
@@ -1277,6 +1451,10 @@ class _SmokeRunner(QObject):
                 "render_thread_id"
             ):
                 errors.append(f"{cycle_prefix} released off its render thread")
+            if hidden_snapshot.get("active_image_identity") is not None:
+                errors.append(f"{cycle_prefix} retained an image while invalidated")
+            if hidden_snapshot.get("pending_image_release_count"):
+                errors.append(f"{cycle_prefix} left image deletion pending")
             if resumed_runtime.get("phase") != "visible" or not resumed_window.get(
                 "visible"
             ):
@@ -1291,6 +1469,12 @@ class _SmokeRunner(QObject):
                 errors.append(f"{cycle_prefix} did not resume frame demand")
             if not cycle.get("qml_root_preserved_after_resume"):
                 errors.append(f"{cycle_prefix} replaced its QML root on resume")
+            resumed_snapshot = cycle.get("resumed", {})
+            if (
+                resumed_snapshot.get("active_image_identity")
+                != probe.replacement_image.identity
+            ):
+                errors.append(f"{cycle_prefix} did not recreate its image texture")
             if cycle.get("resumed_capture", {}).get("sample_count", 0) < 3:
                 errors.append(f"{cycle_prefix} did not render resumed pixels")
         viewport_size = list(final.viewport[2:])
