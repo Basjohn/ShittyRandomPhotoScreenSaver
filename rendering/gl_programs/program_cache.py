@@ -21,6 +21,7 @@ from typing import Dict, Optional, Set, TYPE_CHECKING
 
 from core.logging.logger import get_logger
 from core.logging.tags import LOG_FAMILY_CACHE
+from . import keys
 
 if TYPE_CHECKING:
     from rendering.gl_programs.base_program import BaseGLProgram
@@ -45,17 +46,17 @@ class GLProgramCache:
     """
     
     # Program name constants
-    CROSSFADE = "crossfade"
-    SLIDE = "slide"
-    WIPE = "wipe"
-    BLOCK_FLIP = "blockflip"
-    BLINDS = "blinds"
-    DIFFUSE = "diffuse"
-    WARP = "warp"
-    RAINDROPS = "raindrops"
-    CRUMBLE = "crumble"
-    PARTICLE = "particle"
-    BURN = "burn"
+    CROSSFADE = keys.CROSSFADE
+    SLIDE = keys.SLIDE
+    WIPE = keys.WIPE
+    BLOCK_FLIP = keys.BLOCK_FLIP
+    BLINDS = keys.BLINDS
+    DIFFUSE = keys.DIFFUSE
+    WARP = keys.WARP
+    RAINDROPS = keys.RAINDROPS
+    CRUMBLE = keys.CRUMBLE
+    PARTICLE = keys.PARTICLE
+    BURN = keys.BURN
     
     def __init__(self):
         # Program instances (BaseGLProgram subclasses)
