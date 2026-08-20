@@ -35,7 +35,7 @@ class GLCompositorWipeTransition(BaseTransition):
         self,
         duration_ms: int = 1000,
         direction: WipeDirection = WipeDirection.LEFT_TO_RIGHT,
-        easing: str = "Auto",
+        easing: str | EasingCurve = "Auto",
     ) -> None:
         super().__init__(duration_ms)
         self._uses_deferred_start_telemetry = True
@@ -43,7 +43,7 @@ class GLCompositorWipeTransition(BaseTransition):
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None
         self._direction: WipeDirection = direction
-        self._easing_str: str = easing
+        self._easing_str: str | EasingCurve = easing
 
     # ------------------------------------------------------------------
     # BaseTransition API

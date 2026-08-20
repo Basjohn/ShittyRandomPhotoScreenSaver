@@ -32,7 +32,7 @@ class GLCompositorRainDropsTransition(BaseTransition):
     def __init__(
         self,
         duration_ms: int = 1400,
-        easing: str = "Auto",
+        easing: str | EasingCurve = "Auto",
         ripple_count: int = 3,
     ) -> None:
         super().__init__(duration_ms)
@@ -40,7 +40,7 @@ class GLCompositorRainDropsTransition(BaseTransition):
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None
-        self._easing_str: str = easing
+        self._easing_str: str | EasingCurve = easing
         self._ripple_count: int = max(1, min(8, int(ripple_count)))
 
     # ------------------------------------------------------------------

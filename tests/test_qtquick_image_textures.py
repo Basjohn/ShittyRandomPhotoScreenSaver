@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from core.animation.types import EasingCurve
 from rendering.quick.image_state import PresentationImage
 from rendering.quick.render import image_textures
 from rendering.quick.render.image_textures import PresentationTextureHost
@@ -99,8 +98,6 @@ def _run(
         requested_name="Crossfade",
         selected_from_random=False,
         duration_ms=1000,
-        easing_name="Linear",
-        easing_curve=EasingCurve.LINEAR,
         direction=None,
         parameters={},
         source_image=source,

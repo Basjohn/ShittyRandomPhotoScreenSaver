@@ -102,7 +102,6 @@
             "Warp Dissolve": 6000,
             "Wipe": 4000
         },
-        "easing": "Auto",
         "last_random_choice": "Ripple",
         "particle": {
             "direction": "Random",

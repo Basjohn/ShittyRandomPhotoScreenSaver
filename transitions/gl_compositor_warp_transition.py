@@ -23,13 +23,17 @@ logger = get_logger(__name__)
 class GLCompositorWarpTransition(BaseTransition):
     """GPU-backed Warp Dissolve using the shared GL compositor widget."""
 
-    def __init__(self, duration_ms: int = 1500, easing: str = "Auto") -> None:
+    def __init__(
+        self,
+        duration_ms: int = 1500,
+        easing: str | EasingCurve = "Auto",
+    ) -> None:
         super().__init__(duration_ms)
         self._uses_deferred_start_telemetry = True
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None
-        self._easing_str: str = easing
+        self._easing_str: str | EasingCurve = easing
 
     # ------------------------------------------------------------------
     # BaseTransition API

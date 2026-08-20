@@ -1,10 +1,9 @@
-"""Quick Slide renderer using the canonical production fragment shader."""
+"""Quick Slide renderer with one seam-proof cardinal coverage partition."""
 
 from __future__ import annotations
 
 from OpenGL import GL as gl
 
-from rendering.gl_programs.slide_program import slide_program
 from rendering.quick.render.gl_resources import compile_program
 from ..render_contract import (
     QUICK_TRANSITION_VERTEX_SOURCE,
@@ -17,29 +16,69 @@ _DIRECTION_VECTORS = {
     "right": (1.0, 0.0),
     "up": (0.0, -1.0),
     "down": (0.0, 1.0),
-    "diag_tl_br": (-1.0, -1.0),
-    "diag_tr_bl": (1.0, -1.0),
 }
 
 
-def _slide_rects(
-    direction: object,
-    progress: float,
-) -> tuple[
-    tuple[float, float, float, float],
-    tuple[float, float, float, float],
-]:
-    """Return old/new normalized rects for one canonical Slide direction."""
+_SLIDE_FRAGMENT_SOURCE = """#version 410 core
+in vec2 vUv;
+out vec4 FragColor;
+
+uniform sampler2D uOldTex;
+uniform sampler2D uNewTex;
+uniform float u_progress;
+uniform vec2 u_direction;
+
+void main() {
+    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    float t = clamp(u_progress, 0.0, 1.0);
+
+    // Both images use this one immutable sample. Wrapping the shared shifted
+    // coordinate and selecting exactly one owner leaves no background branch
+    // and therefore no cadence- or rounding-dependent seam.
+    vec2 localUv = fract(uv - u_direction * t);
+    float axis = abs(u_direction.x) > 0.5 ? uv.x : uv.y;
+    float signedDirection = u_direction.x + u_direction.y;
+    float destinationOwns = signedDirection < 0.0
+        ? step(1.0 - t, axis)
+        : 1.0 - step(t, axis);
+
+    vec4 oldColor = texture(uOldTex, localUv);
+    vec4 newColor = texture(uNewTex, localUv);
+    FragColor = mix(oldColor, newColor, destinationOwns);
+}
+"""
+
+
+def _slide_direction_vector(direction: object) -> tuple[float, float]:
+    """Resolve one of Slide's four product-supported cardinal directions."""
 
     value = "left" if direction is None else str(direction).strip().lower()
     vector = _DIRECTION_VECTORS.get(value)
     if vector is None:
         raise ValueError(f"unknown canonical Slide direction: {direction!r}")
+    return vector
+
+
+def _slide_partition_sample(
+    direction: object,
+    progress: float,
+    coordinate: tuple[float, float],
+) -> tuple[str, tuple[float, float]]:
+    """Return the sole image owner and shared local UV for one output point."""
+
     amount = max(0.0, min(1.0, float(progress)))
-    dx, dy = vector
-    old_rect = (dx * amount, dy * amount, 1.0, 1.0)
-    new_rect = (dx * (amount - 1.0), dy * (amount - 1.0), 1.0, 1.0)
-    return old_rect, new_rect
+    x, y = (float(value) for value in coordinate)
+    if not 0.0 <= x < 1.0 or not 0.0 <= y < 1.0:
+        raise ValueError("Slide coverage coordinates must be normalized pixel centres")
+    dx, dy = _slide_direction_vector(direction)
+    axis = x if dx else y
+    signed_direction = dx + dy
+    if signed_direction < 0.0:
+        destination_owns = axis >= 1.0 - amount
+    else:
+        destination_owns = axis < amount
+    local_uv = ((x - dx * amount) % 1.0, (y - dy * amount) % 1.0)
+    return ("destination" if destination_owns else "source"), local_uv
 
 
 class QuickSlideRenderer:
@@ -58,10 +97,7 @@ class QuickSlideRenderer:
             self._initialize()
         uniforms = self._uniforms
         progress = float(frame.sample.eased_progress)
-        old_rect, new_rect = _slide_rects(
-            frame.run.request.direction,
-            progress,
-        )
+        direction = _slide_direction_vector(frame.run.request.direction)
 
         gl.glUseProgram(self._program)
         gl.glUniformMatrix4fv(
@@ -71,11 +107,8 @@ class QuickSlideRenderer:
             frame.matrix_values,
         )
         gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
-        progress_location = uniforms["u_progress"]
-        if progress_location >= 0:
-            gl.glUniform1f(progress_location, progress)
-        gl.glUniform4f(uniforms["u_oldRect"], *old_rect)
-        gl.glUniform4f(uniforms["u_newRect"], *new_rect)
+        gl.glUniform1f(uniforms["u_progress"], progress)
+        gl.glUniform2f(uniforms["u_direction"], *direction)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)
         gl.glUniform1i(uniforms["uOldTex"], 0)
@@ -95,7 +128,7 @@ class QuickSlideRenderer:
     def _initialize(self) -> None:
         program = compile_program(
             QUICK_TRANSITION_VERTEX_SOURCE,
-            slide_program.fragment_source,
+            _SLIDE_FRAGMENT_SOURCE,
             label="Quick Slide",
         )
         self._program = program
@@ -104,10 +137,9 @@ class QuickSlideRenderer:
                 "uMatrix",
                 "uItemSize",
                 "u_progress",
+                "u_direction",
                 "uOldTex",
                 "uNewTex",
-                "u_oldRect",
-                "u_newRect",
             )
             uniforms = {
                 name: int(gl.glGetUniformLocation(program, name))
@@ -116,10 +148,10 @@ class QuickSlideRenderer:
             required = (
                 "uMatrix",
                 "uItemSize",
+                "u_progress",
+                "u_direction",
                 "uOldTex",
                 "uNewTex",
-                "u_oldRect",
-                "u_newRect",
             )
             missing = [name for name in required if uniforms[name] < 0]
             if missing:

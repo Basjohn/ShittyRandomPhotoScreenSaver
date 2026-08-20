@@ -99,7 +99,9 @@ class GLCompositorCrumbleTransition(BaseTransition):
             logger.debug("[GL COMPOSITOR] Failed to configure compositor geometry/visibility (crumble)", exc_info=True)
 
         # Drive via shared AnimationManager.
-        easing_curve = EasingCurve.CUBIC_IN_OUT
+        # Piece staggering, cubic fall acceleration, and crack/shadow timing
+        # are authored in the shader; feed that renderer a linear timeline.
+        easing_curve = EasingCurve.LINEAR
         am = self._get_animation_manager(widget)
 
         def _on_finished() -> None:

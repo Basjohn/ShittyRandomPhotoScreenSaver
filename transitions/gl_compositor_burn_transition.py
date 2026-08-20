@@ -53,7 +53,7 @@ class GLCompositorBurnTransition(BaseTransition):
     ash_density:
         Ash particle density (0.0–1.0).
     easing:
-        Easing curve name string (e.g. "Auto", "Linear", "InOutCubic").
+        Internal authored curve or a legacy direct-constructor name.
     """
 
     def __init__(
@@ -68,7 +68,7 @@ class GLCompositorBurnTransition(BaseTransition):
         smoke_density: float = 0.5,
         ash_enabled: bool = True,
         ash_density: float = 0.5,
-        easing: str = "Auto",
+        easing: str | EasingCurve = "Auto",
     ) -> None:
         super().__init__(duration_ms)
         self._uses_deferred_start_telemetry = True
@@ -85,7 +85,7 @@ class GLCompositorBurnTransition(BaseTransition):
         self._smoke_density: float = max(0.0, min(1.0, float(smoke_density)))
         self._ash_enabled: bool = bool(ash_enabled)
         self._ash_density: float = max(0.0, min(1.0, float(ash_density)))
-        self._easing_str: str = easing
+        self._easing_str: str | EasingCurve = easing
         self._seed: float = random.random() * 1000.0
 
     # ------------------------------------------------------------------

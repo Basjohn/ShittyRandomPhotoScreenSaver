@@ -152,6 +152,8 @@ class TestDefaultsArtifactParity:
         canonical_transitions = get_default_settings()["transitions"]
         snapshot_transitions = _build_snapshot()["transitions"]
         assert snapshot_transitions["pool"]["Burn"] == canonical_transitions["pool"]["Burn"]
+        assert "easing" not in canonical_transitions
+        assert "easing" not in snapshot_transitions
 
     @pytest.mark.parametrize(
         "key",

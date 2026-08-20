@@ -181,30 +181,28 @@ def test_slide_easing_curves(qapp, test_widget, test_pixmap, test_pixmap2, qtbot
 
 def test_slide_position_calculation():
     """Test position calculation for different directions."""
-    transition = SlideTransition(duration_ms=100, direction=SlideDirection.LEFT)
-    
     width, height = 400, 300
     
     # Test LEFT
-    transition.set_direction(SlideDirection.LEFT)
+    transition = SlideTransition(duration_ms=100, direction=SlideDirection.LEFT)
     old_start, old_end, new_start, new_end = transition._calculate_positions(width, height)
     assert old_start.x() == 0 and old_end.x() == -width
     assert new_start.x() == width and new_end.x() == 0
     
     # Test RIGHT
-    transition.set_direction(SlideDirection.RIGHT)
+    transition = SlideTransition(duration_ms=100, direction=SlideDirection.RIGHT)
     old_start, old_end, new_start, new_end = transition._calculate_positions(width, height)
     assert old_start.x() == 0 and old_end.x() == width
     assert new_start.x() == -width and new_end.x() == 0
     
     # Test UP
-    transition.set_direction(SlideDirection.UP)
+    transition = SlideTransition(duration_ms=100, direction=SlideDirection.UP)
     old_start, old_end, new_start, new_end = transition._calculate_positions(width, height)
     assert old_start.y() == 0 and old_end.y() == -height
     assert new_start.y() == height and new_end.y() == 0
     
     # Test DOWN
-    transition.set_direction(SlideDirection.DOWN)
+    transition = SlideTransition(duration_ms=100, direction=SlideDirection.DOWN)
     old_start, old_end, new_start, new_end = transition._calculate_positions(width, height)
     assert old_start.y() == 0 and old_end.y() == height
     assert new_start.y() == -height and new_end.y() == 0

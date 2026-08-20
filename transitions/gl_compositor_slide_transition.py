@@ -37,7 +37,7 @@ class GLCompositorSlideTransition(BaseTransition):
         self,
         duration_ms: int = 1000,
         direction: SlideDirection = SlideDirection.LEFT,
-        easing: str = "Auto",
+        easing: str | EasingCurve = "Auto",
     ) -> None:
         super().__init__(duration_ms)
         self._uses_deferred_start_telemetry = True
@@ -45,7 +45,7 @@ class GLCompositorSlideTransition(BaseTransition):
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None
         self._direction: SlideDirection = direction
-        self._easing_str: str = easing
+        self._easing_str: str | EasingCurve = easing
 
     # ------------------------------------------------------------------
     # BaseTransition API

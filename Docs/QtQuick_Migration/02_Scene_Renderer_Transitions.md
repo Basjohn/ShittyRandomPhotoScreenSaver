@@ -173,7 +173,7 @@ Destination:
 TransitionRequest
     canonical transition id
     duration
-    easing
+    canonical descriptor-authored easing curve
     direction/parameters
     old/new PresentationImage identities
 
@@ -193,6 +193,24 @@ QuickTransitionRenderer
 The controller owns lifecycle/time.
 
 The render node samples current monotonic time and computes render progress.
+
+### Authored transition timing
+
+User-selectable transition easing is deliberately retired during this migration. Transition
+Settings has no Easing control or hidden Auto preference; legacy configurations containing an
+easing value remain loadable, but that value is ignored and removed from current persistence.
+
+The lightweight canonical descriptor specifies each transition's immutable progress curve. This is
+an authored visual characteristic, not a global preference. Preserve an implementation's intended
+timing rather than forcing every effect through one curve: Slide uses `SINE_IN_OUT`, while effects
+whose shader or physics already stages and shapes time receive a linear timeline so they are not
+double-eased. The resolved `EasingCurve` may remain on the immutable request/run state.
+
+Easing is never a remedy for renderer coverage or cadence defects. Quick Slide supports the four
+cardinal directions. Its old/new image coordinates and sole pixel owner must be derived from the
+same `TransitionSample.eased_progress` in one render operation, so their union covers the entire
+viewport at endpoints, midpoint, arbitrary fractional samples, and jumps caused by missed physical
+frames. Do not independently accumulate or round the two image positions.
 
 ### Static internal transition implementation boundary
 
@@ -336,7 +354,9 @@ Per active transition:
 - midpoint;
 - end image;
 - direction variants;
-- easing;
+- canonical authored curve and absence of a user/callsite override;
+- for Slide, seam-free cardinal coverage at endpoints, midpoint, dense fractions, and irregular or
+  missed presentation intervals;
 - DPR 1 and non-1 where practical;
 - non-zero display origin where geometry can matter;
 - cancel/interruption;
