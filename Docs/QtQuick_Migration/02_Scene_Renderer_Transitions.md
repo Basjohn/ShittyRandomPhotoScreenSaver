@@ -203,10 +203,18 @@ Keep transition rendering internally plugin-shaped but statically registered:
 - each implementation owns its transition-specific shader, math, uniforms, and resource behaviour;
 - the common host/controller owns shared old/new image textures, lifecycle, pacing, progress,
   completion, and cancellation plumbing;
-- a small static mapping from canonical transition identity to implementation is the intended
-  dispatch boundary;
+- the lightweight catalog/descriptor remains usable by Settings without importing or constructing
+  every renderer implementation;
+- a small static mapping from canonical transition identity to a lazy internal implementation/factory
+  resolver is the intended dispatch boundary;
 - adding or removing a transition should primarily change its implementation/resources,
   registration, and focused tests.
+
+A disabled transition remains representable in Settings/catalog metadata, but is excluded from
+Random/Cycle selection and is not resolved into a renderer. Its transition-specific module, shaders,
+GPU resources, and runtime state therefore remain dormant; re-enabling it makes the same registered
+implementation available again. Do not eagerly import every implementation merely to build the
+catalog.
 
 Do not accumulate a per-transition `if`/`elif`/switch tree in `QuickSceneController`,
 `TransitionRequest`/`TransitionRun`, the general controller, or another central dispatcher. This is
