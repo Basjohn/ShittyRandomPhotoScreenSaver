@@ -38,6 +38,12 @@ _IMPLEMENTATIONS = (
         transition_id="warp_dissolve",
         module_name="rendering.quick.transitions.implementations.warp",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="block_flip",
+        module_name=(
+            "rendering.quick.transitions.implementations.block_flip"
+        ),
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

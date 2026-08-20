@@ -111,3 +111,20 @@ def test_transition_easing_control_and_saved_preference_are_retired(
 
     assert not hasattr(tab, "easing_combo")
     assert "easing" not in settings_manager.get("transitions", {})
+
+
+def test_block_flip_grid_saves_the_canonical_rows_and_cols_contract(
+    qapp,
+    settings_manager,
+    qtbot,
+):
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    tab.grid_rows_spin.setValue(7)
+    tab.grid_cols_spin.setValue(9)
+    tab._save_settings()
+
+    block_flip = settings_manager.get("transitions", {})["block_flip"]
+    assert block_flip["rows"] == 7
+    assert block_flip["cols"] == 9
+    assert "columns" not in block_flip
