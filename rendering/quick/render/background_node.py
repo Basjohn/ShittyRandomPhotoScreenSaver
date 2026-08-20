@@ -278,10 +278,20 @@ class BackgroundRenderNode(QSGRenderNode):
         )
 
     def _draw(self) -> None:
-        viewport_value = gl.glGetIntegerv(gl.GL_VIEWPORT)
-        viewport = tuple(int(value) for value in viewport_value)
-        if len(viewport) != 4:
-            raise RuntimeError(f"invalid Quick GL viewport: {viewport}")
+        prior_viewport_value = gl.glGetIntegerv(gl.GL_VIEWPORT)
+        prior_viewport = tuple(int(value) for value in prior_viewport_value)
+        if len(prior_viewport) != 4:
+            raise RuntimeError(f"invalid inherited Quick GL viewport: {prior_viewport}")
+        render_target = self.renderTarget()
+        if render_target is None:
+            raise RuntimeError("Quick render node has no active render target")
+        target_size = render_target.pixelSize()
+        render_target_size = (int(target_size.width()), int(target_size.height()))
+        if render_target_size[0] <= 0 or render_target_size[1] <= 0:
+            raise RuntimeError(
+                f"Quick render node has invalid render target: {render_target_size}"
+            )
+        viewport = (0, 0, *render_target_size)
 
         prior_program = _int_state(gl.GL_CURRENT_PROGRAM)
         prior_vao = _int_state(gl.GL_VERTEX_ARRAY_BINDING)
@@ -296,6 +306,7 @@ class BackgroundRenderNode(QSGRenderNode):
             gl.glDisable(gl.GL_CULL_FACE)
             gl.glDisable(gl.GL_DEPTH_TEST)
             gl.glDisable(gl.GL_STENCIL_TEST)
+            gl.glViewport(*viewport)
             gl.glUseProgram(self._program)
             gl.glBindVertexArray(self._vao)
 
@@ -348,6 +359,7 @@ class BackgroundRenderNode(QSGRenderNode):
             gl.glBindVertexArray(prior_vao)
             gl.glBindBuffer(gl.GL_ARRAY_BUFFER, prior_array_buffer)
             gl.glUseProgram(prior_program)
+            gl.glViewport(*prior_viewport)
             _set_enabled(gl.GL_BLEND, prior_blend)
             _set_enabled(gl.GL_CULL_FACE, prior_cull)
             _set_enabled(gl.GL_DEPTH_TEST, prior_depth)
@@ -356,4 +368,5 @@ class BackgroundRenderNode(QSGRenderNode):
         self._telemetry.note_render(
             render_thread_id=threading.get_ident(),
             viewport=viewport,
+            render_target_size=render_target_size,
         )

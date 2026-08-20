@@ -48,6 +48,9 @@ def test_render_node_owns_direct_gl_and_render_thread_cleanup():
     assert {"render", "releaseResources", "changedStates", "rect"} <= methods
     assert "glDrawArrays" in source
     assert "QOpenGLContext.currentContext" in source
+    assert "self.renderTarget()" in source
+    assert "gl.glViewport(*viewport)" in source
+    assert "gl.glViewport(*prior_viewport)" in source
     assert "beginExternalCommands" not in source
     assert "endExternalCommands" not in source
 
@@ -76,7 +79,11 @@ def test_quick_render_node_path_has_no_prohibited_surface_or_compatibility_owner
     smoke_source = (ROOT / "tools" / "qtquick_render_node_smoke.py").read_text(
         encoding="utf-8"
     )
-    assert "QMetaObject.invokeMethod" in smoke_source
+    window_source = (ROOT / "rendering" / "quick" / "window.py").read_text(
+        encoding="utf-8"
+    )
+    assert "QMetaObject.invokeMethod" in window_source
+    assert "probe.window.queue_close()" in smoke_source
     assert "probe.window.close()" not in smoke_source
     assert "probe.window.releaseResources()" not in smoke_source
 
@@ -112,8 +119,13 @@ def test_script_smoke_proves_threaded_draw_resize_dpr_and_invalidation():
     assert report["qml_url"].endswith("DisplayScene.qml")
     assert report["created_windows"] == 1
     window = report["windows"][0]
+    assert window["window_type"] == "QuickDisplayWindow"
+    assert window["display_identity"]["screen_index"] == 0
+    assert window["display_identity"]["runtime_generation"] == 0
     assert window["initial"]["render_thread_id"] != window["initial"]["gui_thread_id"]
     assert window["final"]["release_count"] == 1
     assert window["final"]["invalidation_count"] >= 1
     assert window["initial"]["logical_size"] != window["final"]["logical_size"]
+    assert window["initial"]["viewport"][2:] == window["initial"]["render_target_size"]
+    assert window["final"]["viewport"][2:] == window["final"]["render_target_size"]
     assert window["initial_capture"]["size"] != window["resized_capture"]["size"]
