@@ -32,6 +32,22 @@ class QuickRuntimePhase(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class QuickInputState:
+    """Primitive generation-scoped input admission and interaction facts."""
+
+    screen_index: int
+    runtime_generation: int | None
+    admission_open: bool = True
+    interaction_mode_enabled: bool = False
+    ctrl_held: bool = False
+    context_menu_active: bool = False
+    exiting: bool = False
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
 class QuickWindowPolicy:
     """Explicit top-level policy; cross-display focus selection lives elsewhere."""
 
