@@ -152,6 +152,74 @@ def test_threaded_runtime_teardown_recreates_generation_zero_to_one():
     ]
 
 
+def test_threaded_runtime_input_exit_retires_complete_display_set():
+    env = os.environ.copy()
+    env["QSG_RENDER_LOOP"] = "basic"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.qtquick_render_node_smoke",
+            "--windows",
+            "2",
+            "--generations",
+            "1",
+            "--exit-via-input",
+            "--size",
+            "240x135",
+            "--phase-delay-ms",
+            "250",
+        ],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    report = json.loads(completed.stdout[completed.stdout.index("{") :])
+    assert report["valid"] is True
+    assert report["requested_exit_via_input"] is True
+    assert report["completed_generations"] == 1
+    assert report["created_windows"] == report["concurrent_windows"]
+
+    exit_sequence = report["exit_sequence"]
+    assert exit_sequence["source_screen_index"] == 0
+    assert exit_sequence["source_runtime_generation"] == 0
+    assert exit_sequence["source_event_accepted"] is True
+    assert exit_sequence["request_count"] == 1
+    assert exit_sequence["retirement_deferred"] is True
+    assert exit_sequence["runtime_phases_at_request"] == [
+        "visible"
+    ] * report["concurrent_windows"]
+    assert exit_sequence["runtime_state_at_request"]["input"]["exiting"] is True
+    assert (
+        exit_sequence["runtime_state_at_request"]["input"]["admission_open"]
+        is True
+    )
+    assert exit_sequence["coordinated_runtime_count"] == report["concurrent_windows"]
+    assert exit_sequence["post_close_event_accepted"] is True
+    assert exit_sequence["request_count_after_post_close_event"] == 1
+
+    retiring_states = exit_sequence["runtime_states_after_admission_close"]
+    assert len(retiring_states) == report["concurrent_windows"]
+    for state in retiring_states:
+        assert state["phase"] == "retiring"
+        assert state["input"]["admission_open"] is False
+        assert state["close_meta_calls_queued"] is True
+
+    for window in report["windows"]:
+        runtime = window["runtime_state"]
+        assert runtime["phase"] == "retired"
+        assert runtime["retirement_completed"] is True
+        assert runtime["input"]["admission_open"] is False
+        assert window["final"]["release_thread_id"] == window["final"][
+            "render_thread_id"
+        ]
+
+
 def test_threaded_runtime_uses_exact_identity_for_two_physical_displays(qt_app):
     screens = list(qt_app.screens())
     if len(screens) < 2:
