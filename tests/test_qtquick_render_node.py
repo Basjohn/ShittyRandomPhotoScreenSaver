@@ -162,5 +162,16 @@ def test_script_smoke_proves_threaded_draw_resize_dpr_and_invalidation():
     assert window["final"]["last_transition_run_id"] == 1
     assert window["final"]["last_transition_generation"] == 0
     assert window["final"]["last_transition_id"] == "crossfade"
+    assert window["final"]["transition_draw_count"] >= 1
+    assert window["final"]["last_transition_renderer_id"] == "crossfade"
+    assert window["final"]["transition_midpoint_run_id"] == 1
+    assert 0.0 < window["final"]["transition_midpoint_eased_progress"] < 1.0
+    assert window["final"]["transition_midpoint_colors"]
+    assert window["final"]["transition_midpoint_colors"] != window[
+        "resized_capture"
+    ]["ordered_colors"]
+    assert window["final"]["transition_midpoint_colors"] != window[
+        "replacement_capture"
+    ]["ordered_colors"]
     assert window["final"]["pending_image_release_count"] == 0
     assert window["final"]["active_image_identity"] is None

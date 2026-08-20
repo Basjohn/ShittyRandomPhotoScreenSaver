@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import pytest
 
+from core.animation.types import EasingCurve
 from rendering.quick.image_state import PresentationImage
 from rendering.quick.render import image_textures
-from rendering.quick.render.image_textures import ImageTextureOwner
+from rendering.quick.render.image_textures import PresentationTextureHost
 from rendering.quick.render.telemetry import RenderNodeTelemetry
+from rendering.quick.transitions import TransitionRequest, TransitionRun
 
 
 class _FakeGl:
@@ -87,21 +89,47 @@ def _image(identity: str, rgba8: bytes = b"\x01\x02\x03\xff") -> PresentationIma
     )
 
 
+def _run(
+    source: PresentationImage,
+    destination: PresentationImage,
+) -> TransitionRun:
+    request = TransitionRequest(
+        runtime_generation=3,
+        transition_id="crossfade",
+        requested_name="Crossfade",
+        selected_from_random=False,
+        duration_ms=1000,
+        easing_name="Linear",
+        easing_curve=EasingCurve.LINEAR,
+        direction=None,
+        parameters={},
+        source_image=source,
+        destination_image=destination,
+    )
+    return TransitionRun.start(run_id=1, request=request, start_ns=10)
+
+
 def test_texture_owner_uploads_by_identity_and_restores_all_unpack_state(monkeypatch):
     fake_gl = _FakeGl()
     monkeypatch.setattr(image_textures, "gl", fake_gl)
     telemetry = RenderNodeTelemetry(gui_thread_id=1)
-    owner = ImageTextureOwner(telemetry)
+    owner = PresentationTextureHost(telemetry)
     inherited_state = dict(fake_gl.state)
 
-    assert owner.ensure_uploaded(_image("first")) == 1
-    assert owner.ensure_uploaded(_image("first")) == 1
+    assert owner.synchronize(_image("first"), None).base_texture_id == 1
+    assert owner.synchronize(_image("first"), None).base_texture_id == 1
     assert fake_gl.generated == 1
     assert len(fake_gl.uploads) == 1
     assert fake_gl.uploads[0][-1] == b"\x01\x02\x03\xff"
     assert fake_gl.state == inherited_state
 
-    assert owner.ensure_uploaded(_image("second", b"\x05\x06\x07\xff")) == 2
+    assert (
+        owner.synchronize(
+            _image("second", b"\x05\x06\x07\xff"),
+            None,
+        ).base_texture_id
+        == 2
+    )
     assert fake_gl.generated == 2
     assert fake_gl.deleted == [1]
     owner.release()
@@ -123,10 +151,10 @@ def test_failed_upload_cleanup_remains_owned_when_deletion_also_fails(monkeypatc
     inherited_state = dict(fake_gl.state)
     monkeypatch.setattr(image_textures, "gl", fake_gl)
     telemetry = RenderNodeTelemetry(gui_thread_id=1)
-    owner = ImageTextureOwner(telemetry)
+    owner = PresentationTextureHost(telemetry)
 
     with pytest.raises(RuntimeError, match="synthetic upload failure"):
-        owner.ensure_uploaded(_image("failed"))
+        owner.synchronize(_image("failed"), None)
 
     failed = telemetry.snapshot()
     assert owner.has_resources
@@ -142,3 +170,38 @@ def test_failed_upload_cleanup_remains_owned_when_deletion_also_fails(monkeypatc
     assert recovered.image_upload_count == 0
     assert recovered.image_release_count == 0
     assert recovered.pending_image_release_count == 0
+
+
+def test_transition_pair_reuses_base_and_promotes_destination_without_reupload(
+    monkeypatch,
+):
+    fake_gl = _FakeGl()
+    monkeypatch.setattr(image_textures, "gl", fake_gl)
+    telemetry = RenderNodeTelemetry(gui_thread_id=1)
+    owner = PresentationTextureHost(telemetry)
+    source = _image("source")
+    destination = _image("destination", b"\x08\x09\x0a\xff")
+
+    assert owner.synchronize(source, None).base_texture_id == 1
+    binding = owner.synchronize(source, _run(source, destination))
+
+    assert binding.transition_run_id == 1
+    assert binding.source_texture_id == binding.base_texture_id == 1
+    assert binding.destination_texture_id == 2
+    assert binding.has_transition_pair is True
+    assert fake_gl.deleted == []
+    during = telemetry.snapshot()
+    assert during.image_upload_count == 2
+    assert during.active_image_identity == "source"
+
+    terminal = owner.synchronize(destination, None)
+
+    assert terminal.base_texture_id == 2
+    assert terminal.has_transition_pair is False
+    assert fake_gl.generated == 2
+    assert fake_gl.deleted == [1]
+    assert telemetry.snapshot().active_image_identity == "destination"
+
+    owner.release()
+    assert fake_gl.deleted == [1, 2]
+    assert telemetry.snapshot().image_release_count == 2

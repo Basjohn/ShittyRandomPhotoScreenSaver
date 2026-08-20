@@ -387,9 +387,8 @@ Phase C guardrails that remain active through the renderer port:
 
 Reuse existing shader sources/program math wherever possible.
 
-Port and prove every active compositor transition:
+Port and prove every remaining active compositor transition:
 
-- Crossfade;
 - Slide;
 - Wipe;
 - Warp;

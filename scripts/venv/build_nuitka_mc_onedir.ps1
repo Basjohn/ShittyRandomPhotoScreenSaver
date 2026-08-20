@@ -295,6 +295,7 @@ $argsList = @(
     "--include-data-files=resources/tutuogg.ogg=resources/tutuogg.ogg",
     "--include-data-dir=widgets/spotify_visualizer/shaders=widgets/spotify_visualizer/shaders",
     "--include-data-dir=rendering/quick/qml=rendering/quick/qml",
+    "--include-package=rendering.quick",
     "--include-package=ui.tabs",
     "--include-package=widgets.spotify_visualizer",
     "--include-package=widgets.spotify_visualizer.renderers",

@@ -14,9 +14,11 @@ from PySide6.QtQuick import QSGRenderNode
 
 from core.logging.logger import get_logger
 from ..image_state import PresentationImage
-from ..transitions.state import TransitionRun
+from ..transitions.render_contract import QuickTransitionRenderFrame
+from ..transitions.render_host import QuickTransitionRenderHost
+from ..transitions.state import TransitionRun, TransitionSample
 from .gl_resources import compile_program
-from .image_textures import ImageTextureOwner
+from .image_textures import PresentationTextureHost
 from .telemetry import RenderNodeTelemetry
 
 
@@ -134,7 +136,8 @@ class BackgroundRenderNode(QSGRenderNode):
         self._state = SlideProofState()
         self._presentation_image: PresentationImage | None = None
         self._transition_run: TransitionRun | None = None
-        self._image_textures = ImageTextureOwner(self._telemetry)
+        self._image_textures = PresentationTextureHost(self._telemetry)
+        self._transition_renderer = QuickTransitionRenderHost()
         self._program = 0
         self._vao = 0
         self._vbo = 0
@@ -202,12 +205,14 @@ class BackgroundRenderNode(QSGRenderNode):
             if not self._program:
                 self._initialize_gl()
             run = self._transition_run
+            sample = None
             if run is not None:
+                sample = run.sample(time.monotonic_ns())
                 self._telemetry.note_transition_sample(
                     run=run,
-                    sample=run.sample(time.monotonic_ns()),
+                    sample=sample,
                 )
-            self._draw()
+            self._draw(run=run, sample=sample)
         except Exception as exc:
             self._telemetry.note_error(f"{type(exc).__name__}: {exc}")
             logger.exception("[QUICK] Background render node failed: %s", exc)
@@ -220,6 +225,7 @@ class BackgroundRenderNode(QSGRenderNode):
             or self._vao
             or self._vbo
             or self._image_textures.has_resources
+            or self._transition_renderer.has_resources
         ):
             return
         context = QOpenGLContext.currentContext()
@@ -230,6 +236,7 @@ class BackgroundRenderNode(QSGRenderNode):
             return
 
         try:
+            self._transition_renderer.release_resources()
             self._image_textures.release()
             if self._program:
                 gl.glDeleteProgram(self._program)
@@ -316,14 +323,16 @@ class BackgroundRenderNode(QSGRenderNode):
             gl_version=_gl_string(gl.GL_VERSION),
         )
 
-    def _draw(self) -> None:
-        texture_id = self._image_textures.ensure_uploaded(
-            self._presentation_image
+    def _draw(
+        self,
+        *,
+        run: TransitionRun | None,
+        sample: TransitionSample | None,
+    ) -> None:
+        textures = self._image_textures.synchronize(
+            self._presentation_image,
+            run,
         )
-        prior_viewport_value = gl.glGetIntegerv(gl.GL_VIEWPORT)
-        prior_viewport = tuple(int(value) for value in prior_viewport_value)
-        if len(prior_viewport) != 4:
-            raise RuntimeError(f"invalid inherited Quick GL viewport: {prior_viewport}")
         render_target = self.renderTarget()
         if render_target is None:
             raise RuntimeError("Quick render node has no active render target")
@@ -334,6 +343,50 @@ class BackgroundRenderNode(QSGRenderNode):
                 f"Quick render node has invalid render target: {render_target_size}"
             )
         viewport = (0, 0, *render_target_size)
+        matrix = self.projectionMatrix() * self.matrix()
+        matrix_values = tuple(float(value) for value in matrix.data())
+
+        if run is not None:
+            if sample is None or not textures.has_transition_pair:
+                raise RuntimeError("Quick transition render state is incomplete")
+            renderer_id = self._transition_renderer.render(
+                QuickTransitionRenderFrame(
+                    run=run,
+                    sample=sample,
+                    viewport=viewport,
+                    logical_size=self._logical_size,
+                    matrix_values=matrix_values,
+                    quad_vao=self._vao,
+                    source_texture_id=textures.source_texture_id,
+                    destination_texture_id=textures.destination_texture_id,
+                )
+            )
+            self._telemetry.note_transition_drawn(transition_id=renderer_id)
+        else:
+            self._draw_base(
+                texture_id=textures.base_texture_id,
+                viewport=viewport,
+                matrix_values=matrix_values,
+            )
+
+        self._sample_pixels(viewport, sample=sample)
+        self._telemetry.note_render(
+            render_thread_id=threading.get_ident(),
+            viewport=viewport,
+            render_target_size=render_target_size,
+        )
+
+    def _draw_base(
+        self,
+        *,
+        texture_id: int,
+        viewport: tuple[int, int, int, int],
+        matrix_values: tuple[float, ...],
+    ) -> None:
+        prior_viewport_value = gl.glGetIntegerv(gl.GL_VIEWPORT)
+        prior_viewport = tuple(int(value) for value in prior_viewport_value)
+        if len(prior_viewport) != 4:
+            raise RuntimeError(f"invalid inherited Quick GL viewport: {prior_viewport}")
 
         prior_program = _int_state(gl.GL_CURRENT_PROGRAM)
         prior_vao = _int_state(gl.GL_VERTEX_ARRAY_BINDING)
@@ -356,12 +409,11 @@ class BackgroundRenderNode(QSGRenderNode):
             gl.glBindVertexArray(self._vao)
             gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
 
-            matrix = self.projectionMatrix() * self.matrix()
             gl.glUniformMatrix4fv(
                 self._matrix_location,
                 1,
                 gl.GL_FALSE,
-                list(matrix.data()),
+                matrix_values,
             )
             gl.glUniform2f(
                 self._item_size_location,
@@ -372,37 +424,6 @@ class BackgroundRenderNode(QSGRenderNode):
             gl.glUniform1i(self._has_image_location, 1 if texture_id else 0)
             gl.glUniform1i(self._image_location, 0)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-            if self._telemetry.wants_pixel_sample():
-                physical_width = max(
-                    1,
-                    round(self._logical_size[0] * self._device_pixel_ratio),
-                )
-                physical_height = max(
-                    1,
-                    round(self._logical_size[1] * self._device_pixel_ratio),
-                )
-                sample_y = viewport[1] + max(0, physical_height // 4)
-                sample_xs = (
-                    viewport[0] + max(0, physical_width // 12),
-                    viewport[0] + max(0, physical_width // 4),
-                    viewport[0] + max(0, physical_width // 2),
-                    viewport[0] + max(0, (physical_width * 3) // 4),
-                    viewport[0] + max(0, (physical_width * 11) // 12),
-                )
-                colors = tuple(
-                    _pixel_hex(
-                        gl.glReadPixels(
-                            min(viewport[0] + viewport[2] - 1, sample_x),
-                            min(viewport[1] + viewport[3] - 1, sample_y),
-                            1,
-                            1,
-                            gl.GL_RGBA,
-                            gl.GL_UNSIGNED_BYTE,
-                        )
-                    )
-                    for sample_x in sample_xs
-                )
-                self._telemetry.note_pixel_sample(colors)
         finally:
             gl.glBindTexture(gl.GL_TEXTURE_2D, prior_texture)
             gl.glActiveTexture(prior_active_texture)
@@ -415,8 +436,52 @@ class BackgroundRenderNode(QSGRenderNode):
             _set_enabled(gl.GL_DEPTH_TEST, prior_depth)
             _set_enabled(gl.GL_STENCIL_TEST, prior_stencil)
 
-        self._telemetry.note_render(
-            render_thread_id=threading.get_ident(),
-            viewport=viewport,
-            render_target_size=render_target_size,
+    def _sample_pixels(
+        self,
+        viewport: tuple[int, int, int, int],
+        *,
+        sample: TransitionSample | None,
+    ) -> None:
+        wants_sync_sample = self._telemetry.wants_pixel_sample()
+        wants_midpoint = bool(
+            sample is not None
+            and self._telemetry.wants_transition_midpoint_sample(sample)
         )
+        if not wants_sync_sample and not wants_midpoint:
+            return
+        physical_width = max(
+            1,
+            round(self._logical_size[0] * self._device_pixel_ratio),
+        )
+        physical_height = max(
+            1,
+            round(self._logical_size[1] * self._device_pixel_ratio),
+        )
+        sample_y = viewport[1] + max(0, physical_height // 4)
+        sample_xs = (
+            viewport[0] + max(0, physical_width // 12),
+            viewport[0] + max(0, physical_width // 4),
+            viewport[0] + max(0, physical_width // 2),
+            viewport[0] + max(0, (physical_width * 3) // 4),
+            viewport[0] + max(0, (physical_width * 11) // 12),
+        )
+        colors = tuple(
+            _pixel_hex(
+                gl.glReadPixels(
+                    min(viewport[0] + viewport[2] - 1, sample_x),
+                    min(viewport[1] + viewport[3] - 1, sample_y),
+                    1,
+                    1,
+                    gl.GL_RGBA,
+                    gl.GL_UNSIGNED_BYTE,
+                )
+            )
+            for sample_x in sample_xs
+        )
+        if wants_sync_sample:
+            self._telemetry.note_pixel_sample(colors)
+        if wants_midpoint and sample is not None:
+            self._telemetry.note_transition_midpoint_sample(
+                sample=sample,
+                colors=colors,
+            )
