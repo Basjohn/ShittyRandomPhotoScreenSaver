@@ -369,6 +369,70 @@ def test_threaded_runtime_recreates_removed_and_added_physical_topology(qt_app):
     assert all(record["render_resources_released"] is True for record in topology)
     assert all(record["runtime_root_barrier_crossed"] is True for record in topology)
 
+    displacement = report["topology_displacement"]
+    expected_original = expected[(0, 0)].as_dict()
+    expected_original["geometry"] = list(expected_original["geometry"])
+    expected_original["available_geometry"] = list(
+        expected_original["available_geometry"]
+    )
+    expected_fallback = expected[(0, 1)].as_dict()
+    expected_fallback["geometry"] = list(expected_fallback["geometry"])
+    expected_fallback["available_geometry"] = list(
+        expected_fallback["available_geometry"]
+    )
+    assert displacement["generation"] == 0
+    assert displacement["displaced_screen_index"] == 0
+    assert displacement["fallback_screen_index"] == 1
+    assert displacement["topology_loss_signal_count"] == 1
+    assert displacement["identity_change_signal_count"] == 0
+    assert displacement["duplicate_callbacks_ignored"] is True
+    assert displacement["expected_identity_before"] == expected_original
+    assert displacement["identity_after_loss"] == expected_original
+    assert displacement["topology_loss"] == {
+        "screen_index": 0,
+        "runtime_generation": 0,
+        "expected_screen_key": expected_original["screen_key"],
+        "observed_screen_key": expected_fallback["screen_key"],
+        "observed_screen_name": expected_fallback["name"],
+    }
+    assert displacement["pacer_before"]["target_hz"] == pytest.approx(
+        expected_original["refresh_rate_hz"],
+        abs=0.1,
+    )
+    assert displacement["pacer_after_loss"]["target_hz"] == pytest.approx(
+        displacement["pacer_before"]["target_hz"],
+        abs=1e-6,
+    )
+    assert displacement["fallback_refresh_rate_hz"] == pytest.approx(
+        expected_fallback["refresh_rate_hz"],
+        abs=0.1,
+    )
+    assert displacement["pacer_after_loss"]["paused"] is True
+    assert displacement["pacer_after_loss"]["active"] is False
+    assert displacement["pacer_after_loss"]["demands"] == ["visualizer"]
+    assert displacement["runtime_state_after_loss"]["phase"] == "paused"
+    assert displacement["runtime_state_after_loss"]["window"]["visible"] is False
+    assert displacement["runtime_state_after_loss"]["binding_loss"] == displacement[
+        "topology_loss"
+    ]
+    assert (
+        displacement["runtime_state_after_loss"]["input"]["admission_open"]
+        is False
+    )
+    assert displacement["runtime_state_after_loss"]["close_meta_calls_queued"] is False
+    assert displacement["runtime_state_after_loss"]["window_delete_queued"] is False
+    assert displacement["runtime_state_after_loss"]["retirement_completed"] is False
+    assert (
+        displacement["runtime_state_after_loss"]["scene_readiness"][
+            "qml_objects_retired"
+        ]
+        is False
+    )
+    assert displacement["displaced_presenter_active"] is False
+    assert displacement["visible_presenters_on_fallback"] == [
+        displacement["fallback_window_object_name"]
+    ]
+
     screen_records: dict[tuple[int, int], dict[str, object]] = {}
     window_names: list[str] = []
     for generation_record in topology:
@@ -400,6 +464,7 @@ def test_threaded_runtime_recreates_removed_and_added_physical_topology(qt_app):
     generation1_screen1 = screen_records[(1, 1)]
     generation2_screen0 = screen_records[(2, 0)]
     generation2_screen1 = screen_records[(2, 1)]
+    assert topology[0]["unexpected_screen_displacement"] == displacement
     assert generation1_screen1["replayed_from_generation"] == 0
     assert generation1_screen1["proof_progress_on_construction"] == pytest.approx(
         generation0_screen1["retired_proof_progress"]
@@ -443,3 +508,14 @@ def test_threaded_runtime_recreates_removed_and_added_physical_topology(qt_app):
         assert window["final"]["release_thread_id"] == window["final"][
             "render_thread_id"
         ]
+    displaced_final = next(
+        window
+        for window in report["windows"]
+        if window["generation"] == 0 and window["index"] == 0
+    )
+    assert displaced_final["runtime_state"]["binding_loss"] == displacement[
+        "topology_loss"
+    ]
+    assert displaced_final["runtime_state"]["close_meta_calls_queued"] is True
+    assert displaced_final["runtime_state"]["window_delete_queued"] is True
+    assert displaced_final["runtime_state"]["retirement_completed"] is True

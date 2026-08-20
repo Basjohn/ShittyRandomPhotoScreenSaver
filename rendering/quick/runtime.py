@@ -14,6 +14,7 @@ from .input_controller import QuickInputController
 from .render import RenderNodeTelemetry
 from .scene_controller import QuickSceneController, QuickSceneFactory
 from .state import (
+    QuickDisplayBindingLoss,
     QuickDisplayIdentity,
     QuickRuntimePhase,
     QuickSceneReadiness,
@@ -27,6 +28,7 @@ class QuickDisplayRuntime(QObject):
 
     readiness_changed = Signal(object)
     display_identity_changed = Signal(object)
+    topology_loss_detected = Signal(object)
     visibility_changed = Signal(bool)
     retirement_completed = Signal(int)
     input_state_changed = Signal(object)
@@ -74,6 +76,7 @@ class QuickDisplayRuntime(QObject):
             policy=window_policy,
         )
         self._display_identity = self._window.display_identity
+        self._binding_loss: QuickDisplayBindingLoss | None = None
         self._input: QuickInputController | None = QuickInputController(
             screen_index=self._screen_index,
             runtime_generation=self._runtime_generation,
@@ -109,6 +112,7 @@ class QuickDisplayRuntime(QObject):
         self._window.display_identity_changed.connect(
             self._on_display_identity_changed
         )
+        self._window.binding_lost.connect(self._on_window_binding_lost)
         self._window.visibleChanged.connect(self._on_visibility_changed)
         self._window.destroyed.connect(self._on_window_destroyed)
         self._scene.readiness_changed.connect(self._on_scene_readiness_changed)
@@ -168,6 +172,10 @@ class QuickDisplayRuntime(QObject):
         return self._display_identity
 
     @property
+    def binding_loss(self) -> QuickDisplayBindingLoss | None:
+        return self._binding_loss
+
+    @property
     def scene_readiness(self) -> QuickSceneReadiness:
         return self._scene_readiness
 
@@ -206,6 +214,8 @@ class QuickDisplayRuntime(QObject):
     def show_on_screen(self) -> None:
         if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
             raise RuntimeError("cannot show a retiring Quick display runtime")
+        if self._binding_loss is not None:
+            raise RuntimeError("cannot show a topology-displaced Quick display runtime")
         self.input_controller.reset_initial_position()
         self.window.show_on_screen()
 
@@ -265,6 +275,9 @@ class QuickDisplayRuntime(QObject):
             "runtime_generation": self._runtime_generation,
             "phase": self._phase.value,
             "display_identity": self._display_identity.as_dict(),
+            "binding_loss": (
+                None if self._binding_loss is None else self._binding_loss.as_dict()
+            ),
             "scene_readiness": self._scene_readiness.as_dict(),
             "window": window_state,
             "scene": scene_state,
@@ -276,23 +289,51 @@ class QuickDisplayRuntime(QObject):
         }
 
     def _on_display_identity_changed(self, identity: QuickDisplayIdentity) -> None:
-        if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
+        if (
+            self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED)
+            or self._binding_loss is not None
+        ):
             return
         self._display_identity = identity
         if self._pacer is not None:
             self._pacer.set_target_hz(identity.refresh_rate_hz)
         self.display_identity_changed.emit(identity)
 
+    def _on_window_binding_lost(self, loss: QuickDisplayBindingLoss) -> None:
+        if (
+            self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED)
+            or self._binding_loss is not None
+        ):
+            return
+        if (
+            loss.screen_index != self._screen_index
+            or loss.runtime_generation != self._runtime_generation
+            or loss.expected_screen_key != self._display_identity.screen_key
+        ):
+            raise RuntimeError("Quick display binding-loss identity mismatch")
+
+        self._binding_loss = loss
+        self.frame_pacer.pause()
+        self.input_controller.close_input()
+        self._set_phase(QuickRuntimePhase.PAUSED)
+        self.topology_loss_detected.emit(loss)
+
     def _on_visibility_changed(self, visible: bool) -> None:
         if self._phase not in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
-            if visible:
+            if self._binding_loss is not None:
+                self.frame_pacer.pause()
+                self._set_phase(QuickRuntimePhase.PAUSED)
+                if visible:
+                    self.window.queue_hide()
+            elif visible:
                 self.frame_pacer.resume()
             else:
                 self.frame_pacer.pause()
                 self.input_controller.reset_initial_position()
-            self._set_phase(
-                QuickRuntimePhase.VISIBLE if visible else QuickRuntimePhase.PAUSED
-            )
+            if self._binding_loss is None:
+                self._set_phase(
+                    QuickRuntimePhase.VISIBLE if visible else QuickRuntimePhase.PAUSED
+                )
         self.visibility_changed.emit(bool(visible))
 
     def _on_scene_readiness_changed(self, readiness: QuickSceneReadiness) -> None:

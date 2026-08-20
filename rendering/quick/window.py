@@ -9,6 +9,7 @@ from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QScreen
 from PySide6.QtQuick import QQuickWindow
 
 from .state import (
+    QuickDisplayBindingLoss,
     QuickDisplayIdentity,
     QuickWindowPolicy,
     capture_display_identity,
@@ -20,6 +21,7 @@ class QuickDisplayWindow(QQuickWindow):
     """QWindow-only owner for a selected display's single accelerated surface."""
 
     display_identity_changed = Signal(object)
+    binding_lost = Signal(object)
     close_queued = Signal()
 
     _SCREEN_SIGNAL_NAMES = (
@@ -51,6 +53,7 @@ class QuickDisplayWindow(QQuickWindow):
         self._policy = policy
         self._bound_screen: QScreen | None = None
         self._display_identity: QuickDisplayIdentity | None = None
+        self._binding_loss: QuickDisplayBindingLoss | None = None
         self._input_controller: QuickInputController | None = None
         self._desired_visible = False
         self._close_queued = False
@@ -94,6 +97,10 @@ class QuickDisplayWindow(QQuickWindow):
         return identity
 
     @property
+    def binding_loss(self) -> QuickDisplayBindingLoss | None:
+        return self._binding_loss
+
+    @property
     def is_close_queued(self) -> bool:
         return self._close_queued
 
@@ -114,6 +121,8 @@ class QuickDisplayWindow(QQuickWindow):
 
         if self._close_queued:
             raise RuntimeError("cannot show a retiring Quick display window")
+        if self._binding_loss is not None:
+            raise RuntimeError("cannot show a topology-displaced Quick display window")
         screen = self._bound_screen
         if screen is None:
             raise RuntimeError("Quick display window has no bound screen")
@@ -147,6 +156,8 @@ class QuickDisplayWindow(QQuickWindow):
     def refresh_display_identity(self) -> QuickDisplayIdentity:
         """Refresh primitive display facts after a QScreen metric change."""
 
+        if self._binding_loss is not None:
+            return self.display_identity
         screen = self._bound_screen
         if screen is None:
             raise RuntimeError("Quick display window has no bound screen")
@@ -170,6 +181,9 @@ class QuickDisplayWindow(QQuickWindow):
             "active": bool(self.isActive()),
             "desired_visible": self._desired_visible,
             "close_queued": self._close_queued,
+            "binding_loss": (
+                None if self._binding_loss is None else self._binding_loss.as_dict()
+            ),
             "input_controller_bound": self._input_controller is not None,
             "geometry": [rect.x(), rect.y(), rect.width(), rect.height()],
             "display_identity": self.display_identity.as_dict(),
@@ -243,13 +257,49 @@ class QuickDisplayWindow(QQuickWindow):
                 pass
 
     def _on_window_screen_changed(self, screen: QScreen | None) -> None:
-        if screen is None or screen is self._bound_screen:
+        if (
+            screen is self._bound_screen
+            or self._close_queued
+            or self._binding_loss is not None
+        ):
             return
-        self._bind_screen(screen, apply_geometry=self.isVisible())
+
+        observed_screen_key: str | None = None
+        observed_screen_name: str | None = None
+        if screen is not None:
+            try:
+                observed = capture_display_identity(
+                    screen_index=self._screen_index,
+                    runtime_generation=self._runtime_generation,
+                    screen=screen,
+                )
+                observed_screen_key = observed.screen_key
+                observed_screen_name = observed.name
+            except (RuntimeError, TypeError):
+                # Topology loss must still quiesce the old generation even if
+                # Qt is already invalidating the replacement QScreen wrapper.
+                try:
+                    observed_screen_name = str(screen.name() or "")
+                except RuntimeError:
+                    pass
+
+        loss = QuickDisplayBindingLoss(
+            screen_index=self._screen_index,
+            runtime_generation=self._runtime_generation,
+            expected_screen_key=self.display_identity.screen_key,
+            observed_screen_key=observed_screen_key,
+            observed_screen_name=observed_screen_name,
+        )
+        self._binding_loss = loss
+        self._disconnect_screen_signals()
+        # Never rebind a live generation. Queueing the hide keeps Python out
+        # of blocking threaded-render-loop window teardown paths.
+        self.queue_hide()
+        self.binding_lost.emit(loss)
 
     def _on_screen_metrics_changed(self, *_args: object) -> None:
         screen = self._bound_screen
-        if screen is None or self._close_queued:
+        if screen is None or self._close_queued or self._binding_loss is not None:
             return
         self._apply_screen_geometry(screen)
         self.refresh_display_identity()

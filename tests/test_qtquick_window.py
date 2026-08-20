@@ -9,6 +9,7 @@ from PySide6.QtCore import QRect, Qt
 from PySide6.QtQuick import QQuickWindow
 
 from rendering.quick.state import (
+    QuickDisplayBindingLoss,
     QuickWindowPolicy,
     QuickWindowRole,
     capture_display_identity,
@@ -61,6 +62,24 @@ def test_display_identity_is_immutable_primitive_state_and_preserves_generation_
     assert identity.screen_key.startswith("serial:ABC123|")
 
 
+def test_binding_loss_is_immutable_primitive_generation_state():
+    loss = QuickDisplayBindingLoss(
+        screen_index=1,
+        runtime_generation=0,
+        expected_screen_key="serial:expected",
+        observed_screen_key="serial:fallback",
+        observed_screen_name="DISPLAY1",
+    )
+
+    assert loss.as_dict() == {
+        "screen_index": 1,
+        "runtime_generation": 0,
+        "expected_screen_key": "serial:expected",
+        "observed_screen_key": "serial:fallback",
+        "observed_screen_name": "DISPLAY1",
+    }
+
+
 def test_window_policy_keeps_native_roles_explicit():
     standard = QuickWindowPolicy().flags()
     secondary = QuickWindowPolicy(accepts_focus=False).flags()
@@ -101,6 +120,16 @@ def test_quick_display_window_is_a_narrow_standalone_qwindow_owner():
         'self._queue_meta_call("show")'
     )
     assert "self._bind_screen(screen, apply_geometry=False)" in source
+    screen_changed = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_on_window_screen_changed"
+    )
+    screen_changed_source = ast.unparse(screen_changed)
+    assert "_bind_screen" not in screen_changed_source
+    assert "binding_lost.emit" in screen_changed_source
+    assert 'queue_hide()' in screen_changed_source
     assert source.index("self._apply_screen_geometry(screen)") < source.index(
         'self._queue_meta_call("show")'
     )
