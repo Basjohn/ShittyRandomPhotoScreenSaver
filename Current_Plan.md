@@ -409,7 +409,6 @@ Reuse existing shader sources/program math wherever possible.
 
 Port and prove every remaining active compositor transition:
 
-- Slide;
 - Wipe;
 - Warp;
 - BlockFlip;

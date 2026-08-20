@@ -7,9 +7,12 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 from rendering.quick.transitions.implementation_registry import (
     resolve_quick_transition_renderer,
 )
+from rendering.quick.transitions.implementations.slide import _slide_rects
 from rendering.quick.transitions.render_host import QuickTransitionRenderHost
 
 
@@ -56,7 +59,7 @@ print(json.dumps({
     )
 
     assert report == {
-        "ids": ["crossfade"],
+        "ids": ["crossfade", "slide"],
         "loaded": [],
         "shader_modules": [],
     }
@@ -92,7 +95,7 @@ print(json.dumps({
     }
 
 
-def test_disabled_resolution_keeps_crossfade_implementation_dormant():
+def test_disabled_resolution_keeps_transition_implementations_dormant():
     report = _probe(
         """
 import json
@@ -105,11 +108,18 @@ renderer = resolve_quick_transition_renderer(
     "crossfade",
     enabled_transition_ids=frozenset(),
 )
+slide = resolve_quick_transition_renderer(
+    "slide",
+    enabled_transition_ids=frozenset(),
+)
 loaded = sorted(
     name for name in sys.modules
     if name.startswith("rendering.quick.transitions.implementations.")
 )
-print(json.dumps({"resolved": renderer is not None, "loaded": loaded}))
+print(json.dumps({
+    "resolved": renderer is not None or slide is not None,
+    "loaded": loaded,
+}))
 """
     )
 
@@ -155,6 +165,82 @@ print(json.dumps({
             "rendering.gl_programs.crossfade_program",
         ],
     }
+
+
+def test_enabled_resolution_imports_only_slide_surface():
+    report = _probe(
+        """
+import json
+import sys
+from rendering.quick.transitions.implementation_registry import (
+    resolve_quick_transition_renderer,
+)
+
+renderer = resolve_quick_transition_renderer(
+    "slide",
+    enabled_transition_ids=frozenset({"slide"}),
+)
+implementation_modules = sorted(
+    name for name in sys.modules
+    if name.startswith("rendering.quick.transitions.implementations.")
+)
+shader_modules = sorted(
+    name for name in sys.modules
+    if name.startswith("rendering.gl_programs.") and name.endswith("_program")
+)
+print(json.dumps({
+    "renderer": type(renderer).__name__,
+    "implementation_modules": implementation_modules,
+    "shader_modules": shader_modules,
+}))
+"""
+    )
+
+    assert report == {
+        "renderer": "QuickSlideRenderer",
+        "implementation_modules": [
+            "rendering.quick.transitions.implementations.slide"
+        ],
+        "shader_modules": [
+            "rendering.gl_programs.base_program",
+            "rendering.gl_programs.slide_program",
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("direction", "old_xy", "new_xy"),
+    (
+        ("left", (-0.25, 0.0), (0.75, 0.0)),
+        ("right", (0.25, 0.0), (-0.75, 0.0)),
+        ("up", (0.0, -0.25), (0.0, 0.75)),
+        ("down", (0.0, 0.25), (0.0, -0.75)),
+        ("diag_tl_br", (-0.25, -0.25), (0.75, 0.75)),
+        ("diag_tr_bl", (0.25, -0.25), (-0.75, 0.75)),
+    ),
+)
+def test_slide_rects_preserve_all_canonical_direction_semantics(
+    direction,
+    old_xy,
+    new_xy,
+):
+    old_rect, new_rect = _slide_rects(direction, 0.25)
+
+    assert old_rect == (*old_xy, 1.0, 1.0)
+    assert new_rect == (*new_xy, 1.0, 1.0)
+
+
+def test_slide_rects_default_left_clamp_progress_and_reject_unknown_direction():
+    assert _slide_rects(None, -2.0) == (
+        (-0.0, 0.0, 1.0, 1.0),
+        (1.0, -0.0, 1.0, 1.0),
+    )
+    assert _slide_rects("LEFT", 2.0) == (
+        (-1.0, 0.0, 1.0, 1.0),
+        (-0.0, -0.0, 1.0, 1.0),
+    )
+    with pytest.raises(ValueError, match="unknown canonical Slide direction"):
+        _slide_rects("Random", 0.5)
 
 
 def test_common_runtime_owners_have_no_transition_specific_dispatch_tree():
