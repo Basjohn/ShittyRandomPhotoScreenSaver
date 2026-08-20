@@ -1,10 +1,8 @@
 # Test Suite Guide
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
-Testing strategy and routing for current architecture.
-
-Tests are necessary but not sufficient for visual/timing/lifecycle work.
+Testing strategy during the Qt Quick runtime presentation migration.
 
 ## 1. Standard commands
 
@@ -14,268 +12,144 @@ Full bounded suite:
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900
 ```
 
-Do not use one monolithic long-lived `pytest -q` process for the full repository.
-
 Targeted:
 
 ```powershell
 pytest path\to\test_file.py -q --tb=short
 ```
 
-Discover current tests by owner/defect rather than trusting an old filename inventory:
-
-```powershell
-rg -n "VisualizerLogicalRuntime|logical runtime|generation 0|Spectrum|Bubble|mode switch|pause|feedback|compositor" tests
-```
+Discover current tests by owner/defect, not by stale phase numbering.
 
 ## 2. Validation levels
 
 ### A — pure/unit
 
-Use for:
-
-- settings normalization;
-- registries;
-- pure geometry;
-- cache keys;
-- visualizer numerical helpers;
-- generation identity helpers.
+Settings, registries, geometry, cache keys, numerical visualizer helpers, generation helpers.
 
 ### B — component/integration
 
-Use for:
-
-- visualizer activation;
-- logical mailbox handoff;
-- GUI reveal/presentation handoff;
-- renderer transport;
-- widget lifecycle;
-- compositor scene assembly.
+Logical mailbox/state bridge, widget models, Quick presentation-state mapping, render-state transport,
+lifecycle ownership.
 
 ### C — runtime-shaped
 
-Required for:
-
-- real worker-thread logical execution;
-- scheduler actual cadence;
-- mode switching;
-- Pause/Play;
-- Settings/Edit lifecycle;
-- stale generation fencing;
-- high-refresh/60 Hz delivery;
-- feedback paint ownership.
+Real logical worker, Quick window creation, threaded scene graph, mode switching, Pause/Play,
+Settings/recreate, stale-generation fencing.
 
 ### D — real Windows/driver
 
 Required for:
 
-- real QRhi/OpenGL context;
-- fullscreen/multi-display;
-- actual refresh/DPR;
-- installed scheduler timing;
-- frame pacing;
-- VRAM/native resource behaviour.
+- real standalone QQuickWindow;
+- actual threaded scene graph;
+- multi-display/refresh/DPR;
+- GPU/resource ownership;
+- physical frame pacing;
+- compiled/frozen build.
 
 ### E — manual visual
 
 Required for:
 
-- BTF/Bubble feel;
+- Bubble feel/BTF;
+- transition continuity;
 - Spectrum idle visibility;
 - Pause/Play hitch;
-- transition smoothness;
-- first-frame/flicker;
-- image quality.
+- startup/reveal;
+- widget visual parity.
 
-## 3. Current P2 gate router
+## 3. Permanent visualizer gates
 
-Binding contract:
+Preserve tests for:
 
-`Docs/P2_Behavioral_Gates.md`
+- one `VisualizerLogicalRuntime`;
+- actual authored scheduler cadence;
+- logical worker cannot mutate GUI/Quick/GPU state;
+- valid generation `0`;
+- all five modes;
+- source freshness;
+- protected visible edges;
+- Pause/Play identity;
+- BTF.
 
-Current required families include:
+Do not regenerate behavioural goldens merely because the presentation architecture changed.
 
-1. real paused-Spectrum visible pixels/height;
-2. all-five-mode actual reveal;
-3. scheduler cadence;
-4. worker cannot mutate GUI/GL;
-5. required handoff fail-loud;
-6. one logical clock;
-7A. Pause/Play identity;
-7B. Pause/Play feedback does not full-card repaint every animation frame;
-8. BTF;
-9. valid generation-0 fencing;
-10. known-bad validation;
-11. high-refresh shared presentation;
-12. 60 Hz visualizer presentation tails;
-13. Pause/Play no-hitch perceptual end condition;
-14. stale source/activation cannot gain visible authority;
-15. lifecycle/recreation join/fencing.
+## 4. Quick presentation gates
 
-A green suite that never renders a pixel cannot certify visible Spectrum output.
+Add/retain runtime-shaped proof for:
 
-A generation test that begins at `1` cannot certify generation-zero fencing.
+- one standalone top-level `QQuickWindow` per physical display;
+- threaded render loop active;
+- render-thread identity distinct from GUI thread on supported Windows path;
+- no `QQuickWidget`;
+- no second accelerated runtime surface;
+- bounded latest-state synchronization;
+- stale generation rejected;
+- intentional first frame;
+- Settings/recreate;
+- topology recreation;
+- clean shutdown.
 
-## 4. Visualizer deterministic fidelity
+## 5. Physical frame-pacing gate
 
-Before shared audio/timing/render changes:
+Report separately per display:
 
-```powershell
-.\.venv\Scripts\python.exe tools\visualizer_replay.py verify
-```
-
-Protect existing replay/goldens.
-
-Infrastructure work does not regenerate expected behaviour merely because architecture changed.
-
-For Bubble timing/feel also apply:
-
-`Docs/Guardrails/Bubble_Temporal_Fidelity.md`
-
-BTF requires logical cadence/gap, source freshness, edge survival and state-to-screen evidence in
-addition to deterministic behavioural goldens.
-
-## 5. Logical scheduler gate
-
-The old “callbacks happened eventually” test class is insufficient.
-
-At approximately 11.11 ms authored interval over a meaningful scheduler-only window require:
-
-```text
-achieved cadence            >= 88 Hz
-skipped deadlines           <= 2%
-recurring >33 ms gaps       none
-catch-up                    none
-step failures               0
-join                        succeeds
-```
-
-The gate must reject independently:
-
-- coarse deadline clock;
-- coarse timed wait reproducing the old ~64 Hz class.
-
-Do not reintroduce timed `Event.wait()` as a scheduler fix without proving it does not recreate the
-known platform failure.
-
-## 6. Visualizer ownership gate
-
-Production worker path must prove:
-
-```text
-logical_tick() on worker
-    -> no QWidget/QPixmap/QPainter/GL mutation
-    -> latest publication
-    -> GUI present handoff
-```
-
-GUI-only methods should assert thread affinity in test/debug.
-
-One-clock tests must prove no GUI recurring visualizer timer or AnimationManager logical listener is
-active.
-
-## 7. Spectrum visible-output gate
-
-Preferred: real renderer/compositor GL output readback/image comparison.
-
-If deterministic geometry is used instead, include real upload scale and shader/bar-height contract.
-
-`max(bars) > 0` alone is invalid.
-
-Test:
-
-- normal + expanded card;
-- representative DPRs;
-- relevant segmented/single-piece paths;
-- paused source identity absent;
-- Play transfers authority only after fresh real source arrives.
-
-## 8. Pause/Play gate
-
-Split into:
-
-### Identity
-
-- same logical runtime;
-- no cold card/GL recreation;
-- no visualizer playback debounce;
-- warm capture remains engine policy.
-
-### Delivery
-
-- no full MediaWidget repaint stream per feedback animation frame;
-- logical gap tails remain healthy;
-- state-to-paint/GUI dispatch remain healthy;
-- installed visualizer does not visibly hitch.
-
-Identity alone is not a product pass.
-
-## 9. Frame-pacing gate
-
-Report separately:
-
-- physical display completed-paint FPS;
-- p50/p90/p95/p99/max gaps;
-- request acceptance;
-- GUI dispatch/request age;
-- state-to-paint;
+- physical p50/p90/p95/p99/max;
+- severe-gap counts;
+- request/synchronization age where meaningful;
 - logical cadence;
-- source age.
+- source age;
+- CPU/GPU context.
 
-Higher average FPS with worse tails is a failure.
+Average FPS is secondary.
 
-Use the 165 Hz display without a visualizer as a shared-presentation control.
+Internal `frameSwapped`/render callbacks are proxies, not physical-display proof.
 
-Do not write per-transition fixes merely because one transition exposes the shared problem more.
+Use OS/display-boundary evidence when deciding physical delivery.
 
-## 10. Lifecycle gate
+## 6. Heavy-load interpretation
 
-Run repeated:
+The completed P0 experiment showed Quick remains approximately in the old light-load presentation
+class even under substantial external CPU load.
 
-- Settings;
-- Edit;
-- mixed lifecycle;
+Do not require every heavy-load outlier to disappear before migration.
+
+Heavy load is a resilience gate, not permission to reopen the old architecture.
+
+## 7. Lifecycle gate
+
+Repeatedly exercise:
+
+- normal startup/shutdown;
+- Settings/recreate;
+- Edit/CUSTOM;
 - visualizer active;
 - transitions active;
-- cleanup/shutdown.
+- monitor topology changes;
+- display off/wake where relevant.
 
 Require:
 
 - logical runtime joins;
-- stale mailbox publication rejected;
-- valid generation 0 preserved before first recreation;
-- retired generation cannot reveal/publish;
-- GL ownership/accounting returns to baseline;
+- stale state rejected;
+- generation zero preserved;
+- retired scene cannot reveal;
+- render resources return to expected baseline;
 - no old-generation callback survives destruction.
 
-P5 will extend this to monitor topology/wake.
+## 8. Migration parity
 
-## 11. Performance observer discipline
+For each migrated presentation family, require the relevant combination of:
 
-`--perf` is ordinary CPU/frame/delivery evidence.
+- visual parity;
+- behaviour parity;
+- input parity;
+- geometry/DPR parity;
+- lifecycle parity;
+- performance not regressing the Quick architecture win.
 
-`--gpu-timing` is heavier sampled GPU timing.
+## 9. Completion rule
 
-`--viz` is visualizer diagnostics.
+Green tests are necessary, not sufficient.
 
-Do not compare observer profiles as if identical.
-
-Current installed P2 evidence is recorded in:
-
-`Docs/P2_Installed_Acceptance_Findings_2026-08-19.md`
-
-## 12. Completion rule
-
-A change is not complete because tests are green.
-
-Completion requires the relevant combination of:
-
-- focused tests;
-- runtime-shaped scenario;
-- tail metrics;
-- real-driver validation where needed;
-- manual visual review;
-- lifecycle result;
-- source/owner-chain verification.
-
-Known user-visible failure overrides adjacent green tests.
+Completion requires the relevant runtime and visual evidence for the migrated slice.

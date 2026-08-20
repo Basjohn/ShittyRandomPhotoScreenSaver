@@ -1,261 +1,164 @@
 # Visualizer Presentation Guardrails
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
-Read after `Docs/Presentation_Change_Preflight.md` for any visualizer cadence, source freshness,
-render-state, fade/readiness or presentation work.
+Read for visualizer cadence, source freshness, render state, fade/readiness, and presentation work.
 
-For Bubble timing/feel also read `Docs/Guardrails/Bubble_Temporal_Fidelity.md` (**BTF**).
+For Bubble also read `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
 
-## 1. Current owner boundary
+## 1. Ownership
 
-There are separate authorities with one-way handoffs:
+Accepted direction:
 
 ```text
-audio / analysis owner
-        ↓ source snapshots
+audio / analysis
+        ↓
 VisualizerLogicalRuntime
-        ↓ latest logical publication
-GUI presentation owner
-        ↓ current scene state
-display compositor
+        ↓ latest logical/render state
+Quick presentation bridge
+        ↓
+display QQuickWindow scene/render owner
         ↓
 physical presentation
 ```
 
-### Logical runtime
+`VisualizerLogicalRuntime` remains the sole authored visualizer clock.
 
-`VisualizerLogicalRuntime` is the one mode-general authored visualizer clock.
+It owns:
 
-It is current architecture, not a future proposal.
-
-Worker-callable code owns:
-
-- authored logical deadline/dt;
+- authored deadline/dt;
 - source snapshot consumption;
 - mode simulation;
 - envelopes/events/transients;
-- visual-only motion state;
-- latest plain-data logical publication;
-- readiness decisions that do not mutate GUI state.
+- visual-only logical motion;
+- latest plain-data publication.
 
-It does **not** own:
+It does **not** mutate:
 
-- QWidget show/hide/update;
-- presentation geometry mutation;
+- QWidget;
+- QQuickItem/QObject scene state directly from the worker;
 - QPixmap/QPainter;
-- fade execution;
-- card/shadow raster;
-- compositor/GL mutation.
-
-### GUI/compositor
-
-The GUI half consumes the latest publication and owns reveal/layout/card/GL-facing commit.
-
-The display compositor owns physical presentation opportunity and pixels.
+- GPU/GL/RHI resources.
 
 ## 2. One logical clock
-
-The production visualizer logical clock is the dedicated runtime.
 
 Forbidden logical owners:
 
 - recurring GUI visualizer timer;
 - AnimationManager visualizer listener;
-- per-mode logical timers;
-- hidden fallback logical timer;
-- physical compositor timer.
+- per-mode logical timer/thread;
+- physical compositor/render timer;
+- Quick animation driver as simulation authority.
 
-Qt timers may remain for real UI/lifecycle/fade deadlines.
+Qt Quick may present at display cadence while logical simulation remains independently authored.
 
-## 3. Logical cadence rules
+## 3. Latest-state rule
 
-- preserve authored source/logical cadence;
-- integrate every logical input before presentation coalescing;
-- never derive logical dt/event consumption from paint;
-- never pause simulation until paint;
-- never catch up by replaying stale deadlines;
-- never mutate logical arrays in compositor render callbacks;
-- measure scheduler health by achieved cadence and gap tails, not callback body time alone.
+Latest wins after authored integration.
 
-## 4. Latest-state publication
+No:
 
-The logical-to-GUI handoff is one-slot/latest-wins.
+- FIFO;
+- backlog;
+- catch-up;
+- one GUI callback per logical publication as a requirement;
+- paint/present acknowledgement.
 
-Allowed:
+Protected short-lived visible edges require explicit survival tests.
 
-```text
-N published
-N+1 supersedes N before GUI consumes
-GUI consumes N+1
-```
+## 4. Quick presentation bridge
 
-Forbidden:
+The GUI/Quick boundary is an implementation detail but must be:
 
-- FIFO render queue;
-- callback posted to GUI for every logical publication;
-- paint acknowledgement/backpressure;
-- catch-up replay.
+- bounded;
+- latest-state oriented;
+- generation-fenced;
+- safe for Quick scene/render-thread ownership;
+- independent of physical paint completion.
 
-Every authored event must integrate before its state may be superseded.
-
-Protected short-lived visible edges require explicit edge-survival tests.
+The migration should remove obsolete GUI `present_tick`/QRhiWidget ownership as those pixels move to
+Quick, rather than wrapping it permanently inside another layer.
 
 ## 5. Physical presentation
 
-The display compositor's existing render strategy is the sole physical presentation strategy for
-that display.
+The display's standalone `QQuickWindow` is the sole accelerated runtime presentation surface.
 
-It may stay active for transition, visualizer or other scene reasons.
+No:
 
-It is not the logical visualizer clock.
+- visualizer native overlay window;
+- visualizer `QQuickWidget`;
+- second accelerated surface;
+- separate visualizer swap/vsync owner.
 
-R-61/R-62 remain negative controls against transition-scoped/paint-coupled pacing of a separate
-visualizer surface. They do not ban the current display compositor's physical adaptive strategy.
+## 6. Readiness
 
-## 6. Dispatch / admission
-
-A queued-GUI dispatch guard may prevent duplicate queued Python callbacks only until the callback
-actually executes.
-
-Paint completion does not release the next producer or display deadline.
-
-Forbidden:
-
-- pending-until-paint;
-- paint/swap acknowledgement;
-- producer timestamp/display-rate gate;
-- repaint rescue/retry;
-- render self-requeue;
-- source/event decimation.
-
-## 7. Readiness: presentation vs reactive source
-
-Never overload “fresh source” to mean “allowed to display anything.”
-
-At minimum:
+Distinguish:
 
 ```text
 presentation_ready
 reactive_source_ready
 ```
 
-Presentation readiness may include:
+Paused Spectrum may reveal presentation-owned idle state while source identity remains absent.
 
-- current runtime/QRhi generation;
-- renderer GL resources;
-- card texture;
-- authoritative geometry;
-- valid presentation owner.
+On Play, fresh current-generation/current-activation data replaces idle state in place.
 
-Reactive-source readiness concerns current real analysis/source identity.
+## 7. Fade
 
-### Paused Spectrum
+One authored fade authority applies to the visualizer/card visual.
 
-Paused Spectrum may be:
+Do not create competing QWidget and Quick opacity owners for the same visible pixels.
 
-```text
-presentation_ready = true
-reactive_source_ready = false
-waiting_for_fresh_engine_frame = true
-source generation/activation = absent
-```
+During migration, temporary old/new paths must never both present the same visualizer simultaneously.
 
-Its idle baseline is presentation-owned state.
-
-Do not fabricate source identity.
-
-When Play occurs, fresh current-generation/current-activation real data replaces the idle scene in
-place.
-
-## 8. Fade authority
-
-The compositor owns visualizer/card pixels from fade zero through completion.
-
-One scalar/easing authority applies to both card and shader.
-
-No midway QWidget/compositor opacity handoff.
-
-A presentation-owned idle scene may fade in when presentation-ready even while reactive source
-authority remains false.
-
-## 9. Source freshness
+## 8. Source freshness
 
 Measure separately:
 
-```text
-capture/source age
-logical integration
-logical publication
-GUI dispatch age
-state-to-paint age
-physical display delivery
-```
+- capture/source age;
+- logical integration;
+- logical publication;
+- presentation synchronization;
+- render consumption;
+- physical delivery.
 
 Smooth motion over stale audio is not healthy.
 
-Do not retune shader/Bubble smoothing to compensate for source staleness.
+Do not retune Bubble/shader smoothing to conceal source staleness.
 
-## 10. Pause / Play
+## 9. Pause / Play
 
-Ordinary Pause/Play:
+Ordinary Pause/Play preserves:
 
-- keeps the logical runtime alive;
-- preserves mode/card/GL identity;
-- changes authored logical playback/idle state promptly;
-- keeps capture lifetime under BeatEngine policy;
-- does not enter cold startup on warm resume;
-- does not reintroduce a visualizer pause debounce.
+- logical runtime;
+- mode identity;
+- warm source/capture policy;
+- render identity where practical;
+- no cold-start detour.
 
-Identity continuity is necessary but does not prove perceptual continuity.
+The migration may change the pixel owner; it must not reintroduce playback debounce or recreate the
+logical runtime on ordinary Pause/Play.
 
-If the edge still hitches, inspect edge-owned GUI/presentation work with current evidence.
+## 10. Fidelity
 
-## 11. Fidelity
+Preserve all mode personality and current behavioural goldens.
 
-Preserve all mode personality and current goldens.
+BTF additionally binds Bubble trajectory, elasticity, transients, source freshness, logical cadence,
+edge survival, state-to-screen timing, and final continuity.
 
-For Bubble, BTF additionally binds:
-
-- authored shape;
-- logical cadence/gap tails;
-- source freshness;
-- protected event/positional-edge survival;
-- state-to-screen timing;
-- final perceptual result.
-
-Average FPS or a green deterministic replay cannot overrule a BTF failure.
-
-## 12. Generation fencing
+## 11. Generation fencing
 
 Generation/activation are ownership identity.
 
-Valid `0` stays valid `0`.
+`0` is valid.
 
-Never use truthiness conversion that turns zero into an invalid sentinel.
+Retired state cannot enter a replacement Quick scene, trigger reveal, or mutate current render state.
 
-Retired generation state cannot:
+## 12. Native renderer rule
 
-- enter replacement mailbox/presentation;
-- trigger reveal;
-- mutate current GUI/GL state.
+A native/C++ visualizer renderer is not a migration phase.
 
-## 13. Validation
+Only consider localized native code if profiling of the migrated Quick implementation proves a
+specific Python render callback materially limits the result.
 
-Runtime-shaped tests must cover:
-
-- scheduler actual cadence;
-- one logical clock;
-- worker thread cannot reach GUI/GL;
-- all five modes actually reveal;
-- paused Spectrum actual rendered idle visibility;
-- source authority remains separate;
-- quick Pause/Play identity **and** no-hitch/delivery behavior;
-- valid generation 0 fencing;
-- 60 Hz and high-refresh physical presentation;
-- injected GUI stalls;
-- Settings/Edit recreation;
-- short-lived Bubble visible edge;
-- BTF.
-
-Installed manual review remains required for visual/timing changes.
+Keep the same logical contract and the same display `QQuickWindow`.

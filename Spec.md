@@ -1,157 +1,184 @@
-# Spec
+# SRPSS Specification
 
 Last updated: 2026-08-20
 
-Canonical stable architecture and product-behaviour contracts for SRPSS. Active sequencing belongs
-in `Current_Plan.md`; benchmark narratives belong in evidence reports.
+Canonical durable architecture and product-behaviour contracts for SRPSS.
 
-## 1. Product intent and priority
+`Current_Plan.md` owns active sequencing. Evidence reports own volatile measurements. Exact current
+source remains implementation truth while a migration is in progress, but the accepted architecture
+decision below is the design target and must not be reopened without new contradictory evidence.
 
-SRPSS provides smooth multi-display image presentation, responsive/high-fidelity visualizers,
-configurable overlays, durable settings and bounded/diagnosable resource use.
-
-Priority order:
+## 1. Product priorities
 
 1. visualizer fidelity/reactivity;
-2. lifecycle/GL safety;
-3. frame pacing/perceived smoothness;
+2. lifecycle and resource safety;
+3. frame pacing / perceived continuity;
 4. correct multi-display behaviour;
 5. bounded resources;
 6. CPU/task efficiency;
 7. average FPS;
 8. elegance.
 
-## 2. Runtime topology
+Never improve counters by lowering authored visualizer cadence, transition quality, image quality,
+overlay behaviour, or supported display topology.
+
+## 2. Accepted presentation architecture
+
+The accepted destination architecture is:
+
+```text
+Python / QWidget application shell
+        |
+        +-- Settings / persistence / providers / media / orchestration
+        |
+        +-- logical runtimes and models
+                 |
+                 v
+        immutable/latest render state
+                 |
+        one standalone QQuickWindow per physical display
+        with Qt Quick threaded scene-graph rendering
+                 |
+                 v
+        OS physical presentation
+```
+
+This is a **runtime presentation migration**, not a wholesale QML rewrite.
+
+Durable rules:
+
+- one independently presented accelerated top-level runtime surface per physical display;
+- the runtime presentation owner is standalone `QQuickWindow`, not `QQuickWidget`;
+- the Qt Quick threaded scene-graph render loop is required on the supported Windows path;
+- Settings/configuration UI may remain QWidget-based;
+- providers, persistence, GSMTC/media integration, logical runtimes, orchestration, and data models
+  remain Python unless a separate measured reason justifies changing them;
+- runtime overlay **presentation** moves into the one Quick scene where required;
+- overlay/provider/model logic does not automatically migrate to QML;
+- no second independently presented accelerated visualizer/overlay surface.
+
+### Migration-epoch rule
+
+Until cutover is complete, current `main` may still contain the QRhiWidget reference presenter.
+That makes it the current implementation, not the accepted long-term design.
+
+Do not deepen the QRhiWidget path merely because it still exists during migration.
+
+Do not remove the old presenter until the replacement has passed the required fidelity, lifecycle,
+startup, multi-display, and resource gates.
+
+## 3. Native/C++ boundary
+
+A native/C++ physical-presenter migration is **not planned**.
+
+The Qt Quick P0 experiment materially improved presentation cadence while still using Python/PySide
+and existing representative OpenGL work. Therefore the evidence does not justify treating Python or
+the GIL as a fundamental reason to replace the accepted Quick presenter.
+
+Native code remains permissible only as a **localized measured implementation optimization** inside
+the accepted Quick architecture, for example a specific render node or renderer whose Python cost is
+proven material.
+
+Do not plan:
+
+```text
+QRhiWidget -> Qt Quick -> second native-window/C++ presenter migration
+```
+
+If native code is ever earned, preserve the one-`QQuickWindow`-per-display presentation topology.
+
+## 4. Runtime topology and ownership
 
 - `ScreensaverEngine` owns high-level runtime sequencing.
-- `DisplayManager` owns active display instances and authoritative topology decisions.
-- Every active physical display owns one `DisplayWidget` and one accelerated presentation surface.
-- Display 0 is never implicit global geometry/DPR/presentation authority.
-- `WidgetManager` owns ordinary overlay-widget lifecycle.
-- Visualizer audio analysis, logical simulation and physical presentation are separate owners.
-- Settings/Edit/topology recreation use ordered runtime generations/lifetimes.
+- `DisplayManager` owns active-display/topology decisions.
+- every physical display owns one runtime presentation window;
+- display 0 is never implicit global geometry/DPR/presentation authority;
+- `WidgetManager` and related model/provider owners may continue to own non-pixel widget lifecycle
+  during migration;
+- Settings/Edit/topology recreation use ordered generations/lifetimes;
+- visualizer audio analysis, logical simulation, render-state publication, and physical presentation
+  remain separate concerns.
 
-## 3. Stable ownership rules
+## 5. Visualizer logical contract
 
-- one mutable concern has one authority;
-- generations represent real lifetime/activation boundaries, not ordinary frames;
-- valid integer generation `0` remains valid identity;
-- cross-thread payloads are immutable/plain-data or explicitly synchronized;
-- ResourceManager/accounting never substitutes for resource-deletion ownership;
-- historical implementation shapes are not compatibility requirements;
-- fallbacks that change quality/owner/display/render path are loud.
+`VisualizerLogicalRuntime` remains the sole mode-general authored visualizer clock.
 
-## 4. Accelerated presentation contract
+It:
 
-### 4.1 Hardware acceleration
-
-The modern compositor/visualizer runtime requires hardware acceleration. A CPU/QPainter visualizer
-replacement is not a supported compatibility contract.
-
-### 4.2 One surface per display
-
-Each display owns one `GLCompositorWidget`, implemented with the OpenGL QRhi surface.
-
-The top-level QRhi owns the presenting context/swapchain. SRPSS uses existing PyOpenGL renderers
-inside legal QRhi external-content boundaries and does not call `swapBuffers()` itself.
-
-The display scene may contain:
-
-- retained base image;
-- active image transition;
-- visualizer card;
-- visualizer shader layer;
-- other explicitly compositor-owned layers.
-
-There is no independently presented Spotify visualizer `QOpenGLWidget`/`QRhiWidget`.
-
-### 4.3 Producer / consumer
-
-Logical/state producers publish current state and return.
-
-Physical presentation consumes the latest valid current-generation state.
-
-A missed paint may skip intermediate **render snapshots after authored logical integration**. It may
-not:
-
-- drop source/events before integration;
-- redefine simulation dt;
-- pause a producer until paint;
-- request catch-up replay;
-- acknowledge paint/swap back to the producer.
-
-### 4.4 Physical presentation cadence
-
-Each display has one physical presentation strategy targeting the display's presentation needs.
-
-It may remain live for multiple reasons such as transition and visualizer animation.
-
-It is not a visualizer simulation clock.
-
-A queued-GUI dispatch guard may coalesce duplicate callbacks until the queued callback executes.
-Paint completion is not admission.
-
-## 5. Visualizer contract
-
-### 5.1 One authoritative logical clock
-
-`VisualizerLogicalRuntime` is the current mode-general authored logical cadence owner.
-
-The production visualizer GUI recurring timer and `AnimationManager` do not advance visualizer
-simulation.
-
-The logical runtime:
-
-- runs off the GUI thread;
-- owns one monotonic authored deadline sequence;
+- runs independently of Qt GUI event-loop timing;
+- owns monotonic authored deadlines/dt;
 - integrates all five modes;
-- publishes latest plain-data logical result;
-- does not mutate QWidget/QPixmap/QPainter/GL state;
-- stops/joins with its runtime generation;
+- consumes source snapshots;
+- publishes latest plain-data logical state;
+- does not mutate QWidget/QPixmap/QPainter/Quick scene objects/GL resources;
+- stops and joins with its runtime generation;
 - skips genuinely missed deadlines rather than replaying backlog.
 
-No second/per-mode/fallback logical clock may coexist.
+Do not restore:
 
-### 5.2 Logical -> GUI boundary
+- GUI recurring timer as simulation owner;
+- `AnimationManager` as simulation owner;
+- per-mode logical clocks;
+- FIFO/catch-up replay;
+- paint/present acknowledgement;
+- source/event decimation.
 
-Worker-callable logical code may decide readiness and publish intent.
+For Bubble timing and feel, `Docs/Guardrails/Bubble_Temporal_Fidelity.md` remains binding.
 
-GUI-owned code performs:
+## 6. Logical-to-presentation contract
 
-- widget visibility;
-- layout/geometry mutation;
-- card/shadow raster work;
-- fade/reveal execution;
-- compositor publication;
-- GL/QRhi mutation/presentation.
+Producers integrate authored work first, then publish current state.
 
-Required handoffs are explicit. Missing required interfaces fail loudly in tests/development.
+The presentation side samples the freshest valid state for the current runtime generation.
 
-### 5.3 Latest-state semantics
+Allowed:
 
-The logical/publication handoff is one-slot/latest-wins.
+```text
+logical state N published
+logical state N+1 supersedes N before presentation consumes
+presenter consumes N+1
+```
 
-No FIFO, backlog or catch-up replay.
+Forbidden:
 
-Every authored source/event reaction integrates before its logical state may be superseded.
+- producer waits for paint/present;
+- paint completion releases producer admission;
+- one queued callback per logical tick as a required contract;
+- FIFO render queues;
+- catch-up bursts;
+- display-rate division of authored logical cadence.
 
-Protected short-lived visible edges require a production-shaped edge-survival contract.
+The exact bridge from Python state into Quick scene/render state is implementation-owned by the
+migration plan, but it must remain bounded, latest-state-oriented, generation-fenced, and free of
+paint acknowledgement.
 
-### 5.4 Mode fidelity
+## 7. Quick scene / renderer contract
 
-Protect:
+The one Quick window may contain:
 
-- Bubble trajectory/elasticity/transients/settling;
-- Spectrum reactive source behaviour and presentation behaviour;
-- Sine/Oscilloscope waveform/ghost/transient personality;
-- DevCurve state;
-- mode reset isolation;
-- source freshness;
-- low-energy/idle personality.
+- retained base image;
+- active transition;
+- visualizer/card;
+- runtime overlay presentation;
+- other explicitly scene-owned layers.
 
-For Bubble timing/feel, `Docs/Guardrails/Bubble_Temporal_Fidelity.md` (**BTF**) is binding.
+The exact primitive may differ by content:
 
-### 5.5 Presentation readiness is not source authority
+- ordinary retained Quick items where appropriate;
+- custom scene-graph rendering;
+- `QSGRenderNode`;
+- `QQuickRhiItem`;
+- other measured Qt Quick-compatible custom rendering.
+
+Choose the primitive by correctness, fidelity, and measured cost. Do not choose a native rewrite by
+aesthetics.
+
+No `QQuickWidget` architecture proof or production presenter.
+
+No transparent accelerated child/top-level window used to avoid integrating pixels into the one
+runtime scene.
+
+## 8. Readiness and reveal
 
 At minimum distinguish:
 
@@ -160,150 +187,123 @@ presentation_ready
 reactive_source_ready
 ```
 
-A mode may be allowed to reveal presentation-owned idle state while reactive source authority is
-still unavailable.
+Presentation readiness covers the current runtime window/scene/resources/geometry needed to show an
+intentional frame.
 
-Paused Spectrum is the canonical mixed state:
+Reactive-source readiness covers current authoritative source identity/data.
 
-- card/renderer/geometry may be presentation-ready;
-- static idle bars may be presentation-owned;
-- fresh source generation/activation remains absent;
-- reactive-source wait remains armed for Play.
+A presentation-owned idle scene may reveal without fabricating reactive source identity.
 
-Do not fabricate source identity to permit idle presentation.
+Paused Spectrum is the canonical case.
 
-When playback requires real source authority, current-generation/current-activation source state
-must be fresh before reactive data replaces idle state.
+Startup/recreation must eventually preserve:
 
-### 5.6 Fade
+- no white/default window flash;
+- no black placeholder frame;
+- no stale texture/content pop;
+- no visualizer/card flash;
+- coordinated multi-display reveal;
+- intentional first visible content.
 
-The compositor owns visualizer/card pixels from fade zero through completion.
+## 9. Generation / lifecycle contract
 
-One authored fade authority applies to card and shader.
-
-A hidden logical QWidget/QGraphicsOpacityEffect may carry lifecycle state but cannot become a
-competing visible-opacity owner.
-
-## 6. QRhi / GL lifecycle
-
-- Qt owns QRhi and its OpenGL context; SRPSS borrows them.
-- SRPSS never destroys the borrowed context or calls `doneCurrent()` as its owner.
-- GL creation/deletion occurs on the correct GUI/context owner.
-- one numeric handle has one deletion owner.
-- ResourceManager accounting releases only after successful owner deletion.
-- failed deletion retains ownership and fails closed.
-- resize does not masquerade as context destruction.
-- true QRhi/context generation replacement retires old-generation resources before reinit.
-- `releaseResources()` and explicit runtime cleanup converge on one ownership contract.
-- no `glFinish()`, `DwmFlush()`, GUI sleep, nested event pumping or fence polling as a repair.
-- no SRPSS-owned `swapBuffers()`.
-
-Main-compositor QPainter may remain a bounded base-image fallback/capability path. It does not
-authorize a visualizer QPainter renderer.
-
-## 7. Runtime teardown / recreation
-
-Settings, Edit, topology replacement and exit retire old generation before a new one can publish.
+Settings, Edit, topology replacement, and exit retire old generation before replacement can publish.
 
 Required shape:
 
 1. close old-generation admission;
-2. stop/cancel producers and delayed work;
-3. join the visualizer logical runtime;
-4. reject/clear stale publications;
-5. delete GL resources on the correct context;
-6. destroy retired Qt roots and pass the destruction barrier;
+2. stop/cancel generation-owned producers and delayed work;
+3. join `VisualizerLogicalRuntime`;
+4. reject/clear stale state;
+5. retire render resources on their legal owner/thread;
+6. destroy retired runtime presentation roots and cross the destruction barrier;
 7. construct/register replacement;
-8. reveal only current-generation authoritative content.
+8. prepare intentional first content;
+9. reveal current-generation content only.
 
-Generation identity must preserve valid zero.
+Generation `0` is valid identity. Do not use truthiness conversions that turn valid zero into an
+invalid sentinel.
 
-## 8. CPU / threading
+## 10. GPU/resource ownership
 
-- ThreadManager owns general async work; it is not the visualizer logical clock.
-- `VisualizerLogicalRuntime` is the dedicated visualizer logical clock.
-- workers may prepare detached data and bounded measured compute.
-- QWidget/QPixmap/GL mutation remains on legal GUI/context owners.
-- no busy-spin timing.
-- no worker-to-paint handshake.
-- no unbounded visualizer frame queue.
-- no source/event decimation to reduce work.
-- moving work off GUI is justified only when it creates a cleaner owner and removes shared pressure.
+Qt owns the runtime window and Qt Quick scene-graph graphics infrastructure.
 
-GUI availability remains a shared product resource for presentation, widgets, input, Settings/Edit,
-lifecycle and legal image/card/GL commits even though logical visualizer cadence is no longer
-GUI-QTimer serviced.
+SRPSS-owned GPU resources must have:
 
-## 9. Image / memory / GPU resources
+- one explicit owner;
+- legal creation/use/destruction on the required render/context owner;
+- generation-scoped lifetime;
+- failed deletion retaining ownership/failing closed;
+- accounting released only after actual ownership is released.
 
-- CPU image caches and GPU texture/PBO stores are byte-accounted and bounded.
-- context-local GL objects remain context-local unless an explicit lease/share contract exists.
-- workers do not create QPixmap or call GL.
-- transition completion/cancel releases pins/temp ownership.
-- normal cycling and repeated lifecycle use reach a stable plateau.
+Do not carry QRhiWidget-specific borrowed-context rules forward as universal Quick rules. Re-establish
+the exact legal resource boundary for the chosen Quick rendering primitive.
 
-## 10. Settings / persistence
+No `glFinish()`, `DwmFlush()`, GUI sleeps, nested event pumping, or fence polling as cadence repairs.
 
-- SettingsManager owns normalization/read/write semantics.
-- persistence has one ordered writer/store authority per normalized path.
-- canonical defaults remain single-source.
-- visualizer mode-owned values remain mode-owned.
-- one preset/mode activation resolves one canonical target payload.
-- identical same-activation replay must not create duplicate technical work.
+## 11. Widgets and runtime overlays
 
-## 11. Widgets / CUSTOM
+Widget provider/model/settings logic is not required to migrate merely because runtime pixels do.
 
-- widget family metadata is descriptor-owned;
-- committed CUSTOM geometry and authored/default geometry are distinct;
-- live content refresh cannot overwrite committed CUSTOM geometry;
-- drag/resize preview need not mutate live accelerated rendering at mouse-event cadence;
-- compositor-owned visualizer edit preview comes from the compositor scene, not a retired overlay framebuffer;
-- Cancel and Save are distinct lifecycle actions.
+During the migration, separate:
 
-Tiny feedback/decoration animations should not repaint an expensive whole parent card every frame
-when a smaller cached/dirty-region/presentation owner can preserve the same authored result.
+```text
+widget data/model/provider authority
+from
+runtime pixel/presentation authority
+```
 
-## 12. Diagnostics
+The accepted destination is that runtime pixels which coexist over the screensaver scene are
+composed inside the one Quick window.
 
-Diagnostics are CLI-scoped where applicable, passive, sampled, bounded and never cadence/admission
-control.
+Settings controls may remain QWidget.
 
-Separate source age, logical cadence, GUI dispatch age, state-to-paint and physical delivery.
+CUSTOM/Edit control UI may remain QWidget where appropriate, but it must not create a competing
+accelerated runtime presentation surface or a second live pixel authority.
 
-Qt render/submission callbacks are not physical-display evidence. Physical-tail decisions require
-an OS/display-boundary capture (currently PresentMon) correlated to the bounded run identity.
+## 12. Performance contract
 
-A presentation candidate is comparable only when it reuses the same deterministic workload and
-records the actual operator load. `QQuickWindow.frameSwapped` is a queued-for-presentation proxy,
-not proof that a frame reached scanout.
+Physical presentation quality is judged by:
 
-No single average FPS value closes a timing/fidelity change.
+- visible continuity;
+- physical p95/p99/max gaps;
+- severe-gap frequency;
+- load resilience;
+- run-to-run variance;
+- correct refresh behaviour per display.
+
+Average FPS is secondary.
+
+Internal Qt render/submission callbacks are not proof that frames reached physical display.
+OS/display-boundary evidence such as PresentMon is used when physical-delivery attribution matters.
+
+The accepted Qt Quick architecture decision is grounded in the 2026-08-20 P0 comparison. Do not
+reopen the architecture choice because one later local optimization opportunity exists.
 
 ## 13. Validation
 
 Tests are necessary but insufficient for:
 
 - visualizer feel;
-- presentation smoothness;
-- lifecycle;
+- presentation continuity;
+- startup/reveal;
 - multi-display behaviour;
+- lifecycle;
 - resource behaviour.
 
-High-risk changes require focused automation plus installed/runtime-shaped validation and manual
-visual review where appropriate.
+Migration gates must include focused automation plus runtime-shaped Windows validation and manual
+visual review where perception is part of the requirement.
 
 A gate must be structurally capable of failing on the defect it claims to guard.
 
 ## 14. Documentation authority
 
-- `Current_Plan.md`: unfinished execution only.
-- this Spec + Guardrails/focused docs: durable contracts.
-- `Index.md` / `Docs/Contracts.md`: current routing/owner map.
-- current installed evidence document: current checkpoint evidence.
-- phase reports: older checkpoint evidence scoped to named source.
-- Historical_Bugs: mechanism/regression evidence only.
-- specialized audit references: optional detail, never active task order.
+- `Current_Plan.md`: unfinished migration execution only;
+- this file + Guardrails/focused docs: durable contracts;
+- `Index.md` / `Docs/Contracts.md`: current routing and migration owner map;
+- current evidence reports: measurements and checkpoint evidence;
+- phase reports / Historical_Bugs: historical evidence only;
 - `Future_Cleanup.md`: deferred debt only.
 
-Old evidence may legitimately describe QOpenGLWidget, GUI-timer or pre-worker architecture. Those
-names are historical context, not current compatibility requirements.
+Old evidence may describe QOpenGLWidget, QRhiWidget, separate overlays, or GUI-timer cadence.
+Those are historical mechanisms, not current design targets.
