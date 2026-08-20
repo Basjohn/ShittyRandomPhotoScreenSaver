@@ -29,6 +29,7 @@ def test_runtime_is_a_narrow_qobject_owner_with_queued_window_retirement():
     assert "QuickDisplayWindow(" in source
     assert "QuickSceneController(" in source
     assert "QuickFramePacer(" in source
+    assert "QuickTransitionController(" in source
     assert "self.window.queue_close()" in source
     assert "self.window.close(" not in source
     assert "self.window.releaseResources(" not in source
@@ -47,7 +48,13 @@ def test_runtime_is_a_narrow_qobject_owner_with_queued_window_retirement():
         and node.func.attr == "close"
     ]
     assert direct_release_calls == []
-    assert close_calls == ["self.frame_pacer.close"]
+    assert close_calls == [
+        "self.transition_controller.close",
+        "self.frame_pacer.close",
+    ]
+    assert source.index("self.transition_controller.close()") < source.index(
+        "self.frame_pacer.close()"
+    )
     assert source.index("self.frame_pacer.close()") < source.index(
         "self.scene_controller.quiesce_for_retirement()"
     )
@@ -126,6 +133,8 @@ def test_threaded_runtime_teardown_recreates_generation_zero_to_one():
         assert runtime["window_delete_queued"] is True
         assert runtime["retirement_completed"] is True
         assert runtime["frame_pacer"]["closed"] is True
+        assert runtime["transition"]["closed"] is True
+        assert runtime["transition"]["completion_count"] == 1
         assert runtime["input"]["admission_open"] is False
         assert runtime["input"]["runtime_generation"] == generation
         assert len(window["hide_show_cycles"]) == 1
@@ -228,6 +237,8 @@ def test_threaded_runtime_input_exit_retires_complete_display_set():
         runtime = window["runtime_state"]
         assert runtime["phase"] == "retired"
         assert runtime["retirement_completed"] is True
+        assert runtime["transition"]["closed"] is True
+        assert runtime["transition"]["completion_count"] == 1
         assert runtime["input"]["admission_open"] is False
         assert window["final"]["release_thread_id"] == window["final"][
             "render_thread_id"

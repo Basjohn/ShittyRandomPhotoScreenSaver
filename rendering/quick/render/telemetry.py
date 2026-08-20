@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import threading
 
+from ..transitions.state import TransitionRun, TransitionSample
+
 
 @dataclass(frozen=True)
 class RenderNodeSnapshot:
@@ -32,6 +34,12 @@ class RenderNodeSnapshot:
     image_release_count: int = 0
     image_release_bytes: int = 0
     pending_image_release_count: int = 0
+    transition_sample_count: int = 0
+    last_transition_run_id: int | None = None
+    last_transition_generation: int | None = None
+    last_transition_id: str | None = None
+    last_transition_linear_progress: float | None = None
+    last_transition_eased_progress: float | None = None
     gl_version: str = ""
     error: str | None = None
 
@@ -163,6 +171,25 @@ class RenderNodeTelemetry:
                 self._snapshot,
                 active_image_identity=active_identity,
                 pending_image_release_count=int(pending_release_count),
+            )
+
+    def note_transition_sample(
+        self,
+        *,
+        run: TransitionRun,
+        sample: TransitionSample,
+    ) -> None:
+        with self._lock:
+            self._snapshot = replace(
+                self._snapshot,
+                transition_sample_count=(
+                    self._snapshot.transition_sample_count + 1
+                ),
+                last_transition_run_id=sample.run_id,
+                last_transition_generation=sample.runtime_generation,
+                last_transition_id=run.request.transition_id,
+                last_transition_linear_progress=sample.linear_progress,
+                last_transition_eased_progress=sample.eased_progress,
             )
 
     def note_released(self, *, release_thread_id: int) -> None:

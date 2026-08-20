@@ -144,11 +144,23 @@ def test_script_smoke_proves_threaded_draw_resize_dpr_and_invalidation():
     assert window["initial_capture"]["image_upload_count"] == 1
     assert window["resized_capture"]["image_upload_count"] == 1
     assert window["replacement_capture"]["image_upload_count"] == 2
+    assert window["transition_run_id"] == 1
+    assert window["transition_state_at_start"]["active"] is True
+    assert window["transition_state_at_start"]["active_transition_id"] == "crossfade"
+    assert window["transition_completion"]["outcome"] == "completed"
+    assert window["transition_completion"]["destination_image_identity"] == (
+        window["replacement_capture"]["active_image_identity"]
+    )
+    assert window["stale_transition_rejected"] is True
     assert (
         window["initial_capture"]["colors"]
         != window["replacement_capture"]["colors"]
     )
     assert window["final"]["image_upload_count"] == 2
     assert window["final"]["image_release_count"] == 2
+    assert window["final"]["transition_sample_count"] >= 1
+    assert window["final"]["last_transition_run_id"] == 1
+    assert window["final"]["last_transition_generation"] == 0
+    assert window["final"]["last_transition_id"] == "crossfade"
     assert window["final"]["pending_image_release_count"] == 0
     assert window["final"]["active_image_identity"] is None

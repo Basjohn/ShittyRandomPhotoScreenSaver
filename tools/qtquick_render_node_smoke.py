@@ -38,6 +38,7 @@ from PySide6.QtGui import (  # noqa: E402
 )
 from PySide6.QtQuick import QQuickWindow, QSGRendererInterface  # noqa: E402
 
+from core.animation.types import EasingCurve  # noqa: E402
 from rendering.quick.image_boundary import capture_qimage  # noqa: E402
 from rendering.quick.image_state import PresentationImage  # noqa: E402
 from rendering.quick.render import RenderNodeSnapshot, RenderNodeTelemetry  # noqa: E402
@@ -47,6 +48,11 @@ from rendering.quick.scene_controller import (  # noqa: E402
     QuickSceneFactory,
 )
 from rendering.quick.state import QuickWindowPolicy  # noqa: E402
+from rendering.quick.transitions import (  # noqa: E402
+    TransitionCompletion,
+    TransitionRequest,
+    TransitionRun,
+)
 from rendering.quick.window import QuickDisplayWindow  # noqa: E402
 
 
@@ -78,6 +84,11 @@ class _WindowProbe:
     hide_show_cycles: list[dict[str, Any]] = field(default_factory=list)
     topology_loss_events: list[dict[str, Any]] = field(default_factory=list)
     display_identity_events: list[dict[str, Any]] = field(default_factory=list)
+    transition_run_id: int | None = None
+    transition_run: TransitionRun | None = None
+    transition_state_at_start: dict[str, object] | None = None
+    transition_completion: dict[str, object] | None = None
+    stale_transition_rejected: bool = False
 
 
 def _parse_size(value: str) -> QSize:
@@ -539,8 +550,38 @@ class _SmokeRunner(QObject):
                 probe.resized_capture = _capture_from_snapshot(
                     probe.telemetry.snapshot()
                 )
-                probe.runtime.set_presentation_image(probe.replacement_image)
-                probe.window.update()
+                request = TransitionRequest(
+                    runtime_generation=probe.generation,
+                    transition_id="crossfade",
+                    requested_name="Random",
+                    selected_from_random=True,
+                    duration_ms=max(
+                        80,
+                        min(250, self._args.phase_delay_ms // 2),
+                    ),
+                    easing_name="InOutQuad",
+                    easing_curve=EasingCurve.QUAD_IN_OUT,
+                    direction=None,
+                    parameters={"smoke": "c2-runtime-controller"},
+                    source_image=probe.presentation_image,
+                    destination_image=probe.replacement_image,
+                )
+                run = probe.runtime.start_transition(
+                    request,
+                    on_finalized=(
+                        lambda completion, probe=probe: (
+                            self._on_probe_transition_finalized(
+                                probe,
+                                completion,
+                            )
+                        )
+                    ),
+                )
+                probe.transition_run_id = run.run_id
+                probe.transition_run = run
+                probe.transition_state_at_start = (
+                    probe.runtime.transition_controller.describe()
+                )
         except Exception as exc:
             self._errors.append(f"resized capture failed: {type(exc).__name__}: {exc}")
         self._visibility_deadline = self._visibility_timeout_deadline()
@@ -557,6 +598,16 @@ class _SmokeRunner(QObject):
             == probe.replacement_image.identity
             and probe.telemetry.snapshot().pixel_sample_count
             > int(probe.resized_capture["sample_count"])
+            and probe.telemetry.snapshot().transition_sample_count >= 1
+            and probe.telemetry.snapshot().last_transition_run_id
+            == probe.transition_run_id
+            and probe.telemetry.snapshot().last_transition_generation
+            == probe.generation
+            and probe.telemetry.snapshot().last_transition_id == "crossfade"
+            and probe.transition_completion is not None
+            and not probe.runtime.transition_controller.is_active
+            and probe.scene.background_item.transition_run is None
+            and probe.scene.presentation_image == probe.replacement_image
             and probe.runtime.scene_readiness.ready_for_reveal
             for probe in self._probes
         )
@@ -572,6 +623,12 @@ class _SmokeRunner(QObject):
             )
         try:
             for probe in self._probes:
+                run = probe.transition_run
+                probe.stale_transition_rejected = bool(
+                    run is not None
+                    and not probe.scene.set_transition_run(run)
+                    and probe.scene.background_item.transition_run is None
+                )
                 probe.replacement_capture = _capture_from_snapshot(
                     probe.telemetry.snapshot()
                 )
@@ -588,6 +645,28 @@ class _SmokeRunner(QObject):
             self._begin_hide_show_cycle(token)
             return
         self._finish_presentation_sequence(token)
+
+    def _on_probe_transition_finalized(
+        self,
+        probe: _WindowProbe,
+        completion: TransitionCompletion,
+    ) -> None:
+        if probe.transition_completion is not None:
+            self._errors.append(
+                f"generation{probe.generation} screen{probe.index} "
+                "transition finalized more than once"
+            )
+            return
+        probe.transition_completion = {
+            "run_id": completion.run_id,
+            "runtime_generation": completion.runtime_generation,
+            "outcome": completion.outcome.value,
+            "destination_image_identity": (
+                completion.destination_image_identity
+            ),
+            "finalized_at_ns": completion.finalized_at_ns,
+            "reason": completion.reason,
+        }
 
     def _begin_hide_show_cycle(self, token: int) -> None:
         if token != self._cycle_token:
@@ -1093,6 +1172,12 @@ class _SmokeRunner(QObject):
                     "initial_capture": initial_capture,
                     "resized_capture": resized_capture,
                     "replacement_capture": replacement_capture,
+                    "transition_run_id": probe.transition_run_id,
+                    "transition_state_at_start": probe.transition_state_at_start,
+                    "transition_completion": probe.transition_completion,
+                    "stale_transition_rejected": (
+                        probe.stale_transition_rejected
+                    ),
                     "hide_show_cycles": probe.hide_show_cycles,
                     "proof_progress_on_construction": (
                         probe.proof_progress_on_construction
@@ -1524,6 +1609,57 @@ class _SmokeRunner(QObject):
             errors.append(f"{prefix} window deletion was not queued")
         if not runtime_state.get("retirement_completed"):
             errors.append(f"{prefix} window destruction was not observed")
+        transition_at_start = probe.transition_state_at_start or {}
+        transition_completion = probe.transition_completion or {}
+        final_transition = runtime_state.get("transition", {})
+        final_completion = (
+            final_transition.get("last_completion", {})
+            if isinstance(final_transition, dict)
+            else {}
+        )
+        if not isinstance(final_completion, dict):
+            final_completion = {}
+        if (
+            not transition_at_start.get("active")
+            or transition_at_start.get("active_run_id")
+            != probe.transition_run_id
+            or transition_at_start.get("active_transition_id") != "crossfade"
+            or transition_at_start.get("active_source_identity")
+            != probe.presentation_image.identity
+            or transition_at_start.get("active_destination_identity")
+            != probe.replacement_image.identity
+        ):
+            errors.append(f"{prefix} transition controller did not admit the run")
+        if (
+            transition_completion.get("run_id") != probe.transition_run_id
+            or transition_completion.get("runtime_generation") != probe.generation
+            or transition_completion.get("outcome") != "completed"
+            or transition_completion.get("reason") != "deadline"
+            or transition_completion.get("destination_image_identity")
+            != probe.replacement_image.identity
+        ):
+            errors.append(f"{prefix} transition did not finalize its destination once")
+        if (
+            not isinstance(final_transition, dict)
+            or final_transition.get("active")
+            or not final_transition.get("closed")
+            or final_transition.get("completion_count") != 1
+            or final_completion.get("run_id") != probe.transition_run_id
+        ):
+            errors.append(f"{prefix} transition controller did not retire cleanly")
+        if (
+            final.transition_sample_count < 1
+            or final.last_transition_run_id != probe.transition_run_id
+            or final.last_transition_generation != probe.generation
+            or final.last_transition_id != "crossfade"
+        ):
+            errors.append(f"{prefix} render node did not sample the transition run")
+        if final_scene.get("transition_run") is not None:
+            errors.append(f"{prefix} scene retained a finalized transition run")
+        if final_scene.get("last_transition_run_id") != probe.transition_run_id:
+            errors.append(f"{prefix} scene lost its stale-run fence")
+        if not probe.stale_transition_rejected:
+            errors.append(f"{prefix} scene re-admitted a stale transition run")
         if initial.render_thread_id is None:
             errors.append(f"{prefix} never rendered")
         elif initial.render_thread_id == initial.gui_thread_id:
