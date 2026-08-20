@@ -1,6 +1,6 @@
 # Future Cleanup
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
 Deferred debt only. `Current_Plan.md` owns active work.
 
@@ -36,18 +36,26 @@ After active P2 edge/delivery work is accepted:
 
 No cosmetic rename project while correctness/performance is active.
 
-## 3. Post-worker compute efficiency
+## 3. Post-worker compute efficiency / historical FFT debris
 
 Only after P2 shared GUI/presentation delivery is stable, profile the landed worker architecture.
 
-If task/Future/executor scaffolding remains materially expensive:
+The old dedicated FFT process is retired architecture and must not be resurrected without new measurement. Current visualizer audio analysis uses bounded ThreadManager compute work with newest-pending/latest-result semantics.
 
-- [ ] design a **mode-general** bounded visualizer compute service if evidence justifies it;
+Cleanup-only debris identified in current source:
+
+- [ ] remove stale `ProcessSupervisor` ancestry in visualizer runtime configuration after caller proof;
+- [ ] remove the `beat_engine.set_process_supervisor()` delegation that currently targets a nonexistent audio-worker setter;
+- [ ] remove the unused `ProcessSupervisor` import/constructor parameter in `SpotifyVisualizerAudioWorker` if no real caller remains;
+- [ ] do **not** treat this cleanup as a performance experiment — the failing delegation is caught and is not a steady-state FFT worker.
+
+If task/Future/executor scaffolding later remains materially expensive:
+
+- [ ] design a **mode-general** bounded visualizer compute service only if evidence justifies it;
 - [ ] preserve one-in-flight/latest-fresh semantics;
 - [ ] preserve exact dt/events/transients;
 - [ ] preserve generation/activation fencing including valid zero;
-- [ ] require all-mode temporal/fidelity goldens;
-- [ ] do not resurrect the rejected persistent Bubble lane.
+- [ ] require all-mode temporal/fidelity goldens.
 
 If the Python logical runtime later proves materially GIL-starved after shared waste is controlled:
 
@@ -93,14 +101,36 @@ After active Media Cancel/visualizer edit paths pass:
 - [ ] split large managers only by real ownership;
 - [ ] tighten broad exception suppression.
 
-## 7. Whole-process resources
+## 7. Whole-process resources / long-soak retention
 
-After P5:
+The 2026-08-20 Full Telemetry Diagnostic soak is preserved in:
 
-- [ ] long warm RAM/private-commit/VRAM slopes;
-- [ ] separate cache high-water from monotonic ownership growth;
-- [ ] attribute native/driver memory gaps;
-- [ ] repeatable refresh/DPR/display-route/mode comparisons.
+```text
+Docs/Performance_Evidence/Acceptance-08_20-13_03-Diagnostic-Long-Soak.md
+```
+
+After startup/warmup, that diagnostic shape showed approximate slopes of:
+
+```text
+main USS             +29 MB/hour
+main private commit  +90 MB/hour
+app handles          +15/hour
+```
+
+while threads and GL-resource counts remained essentially flat and pre-wake 60 Hz cadence did not degrade with age.
+
+Do **not** call this a production leak from one Full Telemetry run.
+
+Deferred sequence:
+
+- [ ] repeat a long soak with ordinary/light telemetry;
+- [ ] compare directly against Full Telemetry Diagnostic;
+- [ ] only if the slope survives, separate cache/allocator/native/Python ownership;
+- [ ] distinguish cache high-water from monotonic ownership growth;
+- [ ] attribute native/driver memory gaps only after the lighter control;
+- [ ] keep memory retention separate from the physical-presentation architecture decision unless evidence correlates them.
+
+Monitor-off/wake itself is no longer a cleanup target from this run; it remains a parity/regression gate for any future presenter.
 
 ## 8. Repository / compatibility debris
 
