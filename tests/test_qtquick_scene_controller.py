@@ -54,6 +54,8 @@ def test_scene_controller_is_the_narrow_quick_item_owner():
     assert "sceneGraphInvalidated.connect(" in source
     assert "self._retire_qml_objects()" in source
     assert "isSceneGraphInitialized()" in source
+    assert "set_transition_run" in source
+    assert "self._last_transition_run_id" in source
     assert "window.update" not in source
     assert "afterRendering" not in source
     assert "afterFrameEnd" not in source

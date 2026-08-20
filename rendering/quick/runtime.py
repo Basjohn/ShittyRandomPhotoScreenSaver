@@ -20,6 +20,12 @@ from .state import (
     QuickSceneReadiness,
     QuickWindowPolicy,
 )
+from .transitions import (
+    QuickTransitionController,
+    TransitionCompletion,
+    TransitionRequest,
+    TransitionRun,
+)
 from .window import QuickDisplayWindow
 
 
@@ -29,6 +35,8 @@ class QuickDisplayRuntime(QObject):
     readiness_changed = Signal(object)
     display_identity_changed = Signal(object)
     topology_loss_detected = Signal(object)
+    transition_started = Signal(object)
+    transition_finalized = Signal(object)
     visibility_changed = Signal(bool)
     retirement_completed = Signal(int)
     input_state_changed = Signal(object)
@@ -101,6 +109,13 @@ class QuickDisplayRuntime(QObject):
             self._window,
             refresh_rate,
         )
+        self._transition: QuickTransitionController | None = (
+            QuickTransitionController(
+                runtime_generation=self._runtime_generation,
+                frame_pacer=self._pacer,
+                parent=self,
+            )
+        )
         self._close_meta_calls_queued = False
         self._window_delete_queued = False
         self._retirement_emitted = False
@@ -108,6 +123,7 @@ class QuickDisplayRuntime(QObject):
         self._retired_scene_state: dict[str, Any] | None = None
         self._retired_pacer_state: dict[str, Any] | None = None
         self._retired_input_state: dict[str, Any] | None = None
+        self._retired_transition_state: dict[str, Any] | None = None
 
         self._window.display_identity_changed.connect(
             self._on_display_identity_changed
@@ -116,6 +132,7 @@ class QuickDisplayRuntime(QObject):
         self._window.visibleChanged.connect(self._on_visibility_changed)
         self._window.destroyed.connect(self._on_window_destroyed)
         self._scene.readiness_changed.connect(self._on_scene_readiness_changed)
+        self._transition.run_changed.connect(self._scene.set_transition_run)
         self._input.input_state_changed.connect(self.input_state_changed.emit)
         self._input.exit_requested.connect(self.exit_requested.emit)
         self._input.previous_image_requested.connect(self.previous_requested.emit)
@@ -211,6 +228,13 @@ class QuickDisplayRuntime(QObject):
             raise RuntimeError("Quick input controller has retired")
         return controller
 
+    @property
+    def transition_controller(self) -> QuickTransitionController:
+        controller = self._transition
+        if controller is None:
+            raise RuntimeError("Quick transition controller has retired")
+        return controller
+
     def show_on_screen(self) -> None:
         if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
             raise RuntimeError("cannot show a retiring Quick display runtime")
@@ -237,7 +261,47 @@ class QuickDisplayRuntime(QObject):
 
         if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
             raise RuntimeError("cannot update a retiring Quick display runtime")
+        if self.transition_controller.is_active:
+            raise RuntimeError("cannot replace the base image during a transition run")
         self.scene_controller.set_presentation_image(image)
+
+    def start_transition(
+        self,
+        request: TransitionRequest,
+        *,
+        on_finalized: Callable[[TransitionCompletion], None] | None = None,
+    ) -> TransitionRun:
+        """Start one presentation-neutral run against the current base image."""
+
+        if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
+            raise RuntimeError("cannot transition a retiring Quick display runtime")
+        if self._binding_loss is not None:
+            raise RuntimeError("cannot transition a topology-displaced Quick runtime")
+        current = self.scene_controller.presentation_image
+        if current != request.source_image:
+            raise ValueError("transition source does not match the current base image")
+
+        def _finalize_destination(completion: TransitionCompletion) -> None:
+            try:
+                scene = self._scene
+                if scene is not None and scene.readiness.admission_open:
+                    scene.set_presentation_image(request.destination_image)
+            finally:
+                self.transition_finalized.emit(completion)
+                if on_finalized is not None:
+                    on_finalized(completion)
+
+        run = self.transition_controller.start(
+            request,
+            on_finalized=_finalize_destination,
+        )
+        self.transition_started.emit(run)
+        return run
+
+    def cancel_transition(self, *, reason: str) -> bool:
+        if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
+            return False
+        return self.transition_controller.cancel_current(reason=reason)
 
     def close_runtime(self) -> bool:
         """Begin exact retirement without blocking Python on the render thread."""
@@ -247,6 +311,7 @@ class QuickDisplayRuntime(QObject):
 
         self._set_phase(QuickRuntimePhase.RETIRING)
         self.input_controller.close_input()
+        self.transition_controller.close()
         self.frame_pacer.close()
         self.scene_controller.quiesce_for_retirement()
         # This is the only legal window retirement entry: QuickDisplayWindow
@@ -270,6 +335,9 @@ class QuickDisplayRuntime(QObject):
         input_state = self._retired_input_state
         if input_state is None and self._input is not None:
             input_state = self._input.describe_input_state()
+        transition_state = self._retired_transition_state
+        if transition_state is None and self._transition is not None:
+            transition_state = self._transition.describe()
         return {
             "screen_index": self._screen_index,
             "runtime_generation": self._runtime_generation,
@@ -283,6 +351,7 @@ class QuickDisplayRuntime(QObject):
             "scene": scene_state,
             "frame_pacer": pacer_state,
             "input": input_state,
+            "transition": transition_state,
             "close_meta_calls_queued": self._close_meta_calls_queued,
             "window_delete_queued": self._window_delete_queued,
             "retirement_completed": self._retirement_emitted,
@@ -313,6 +382,7 @@ class QuickDisplayRuntime(QObject):
             raise RuntimeError("Quick display binding-loss identity mismatch")
 
         self._binding_loss = loss
+        self.transition_controller.cancel_current(reason="topology-loss")
         self.frame_pacer.pause()
         self.input_controller.close_input()
         self._set_phase(QuickRuntimePhase.PAUSED)
@@ -362,6 +432,8 @@ class QuickDisplayRuntime(QObject):
             self._retired_pacer_state = self._pacer.describe()
         if self._input is not None:
             self._retired_input_state = self._input.describe_input_state()
+        if self._transition is not None:
+            self._retired_transition_state = self._transition.describe()
         self._window_delete_queued = True
         window.deleteLater()
 
@@ -371,6 +443,7 @@ class QuickDisplayRuntime(QObject):
         self._window = None
         self._scene = None
         self._pacer = None
+        self._transition = None
         if self._input is not None:
             self._retired_input_state = self._input.describe_input_state()
             self._input.deleteLater()

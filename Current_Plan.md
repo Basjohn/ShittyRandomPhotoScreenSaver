@@ -371,24 +371,17 @@ admission gate for Phases C–G.
 
 Read `02_Scene_Renderer_Transitions.md`.
 
-## C2 — transition-neutral run controller
+Phase C guardrails that remain active through the renderer port:
 
-Refactor QWidget/compositor coupling out of transition timing/parameter ownership.
-
-Preserve:
-
-- registry identity;
-- random/cycle participation;
-- duration;
-- easing;
-- direction;
-- transition-specific authored parameters;
-- exactly-once completion.
-
-Use the statically registered internal transition-implementation boundary in the migration doc.
-Do not create a central per-transition dispatcher or a dynamic/external plugin system.
-Keep catalog metadata lightweight: disabled transitions remain settings-visible but are excluded
-from Random/Cycle and do not resolve implementations, shaders, or transition-specific resources.
+- preserve the completed transition-neutral `TransitionRequest` / `TransitionRun` lifecycle,
+  monotonic timing, generation/run fencing, and exactly-once completion/cancellation;
+- resolve statically registered transition implementations lazily from lightweight canonical
+  catalog metadata;
+- keep disabled transitions Settings-visible but out of Random/Cycle selection and do not resolve
+  their implementations, shaders, or transition-specific resources;
+- keep transition-specific shader/math/resource behaviour in each implementation and out of the
+  common host/controller;
+- do not create a central per-transition dispatcher or a dynamic/external plugin system.
 
 ## C3 — renderer port
 

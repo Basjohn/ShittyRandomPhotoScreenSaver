@@ -8,6 +8,7 @@ from PySide6.QtCore import Property, Signal, Qt
 from PySide6.QtQuick import QQuickItem, QSGNode
 
 from ..image_state import PresentationImage
+from ..transitions.state import TransitionRun
 from .background_node import BackgroundRenderNode, SlideProofState
 from .telemetry import RenderNodeTelemetry
 
@@ -50,6 +51,7 @@ class BackgroundRenderItem(QQuickItem):
         self.setFlag(QQuickItem.Flag.ItemHasContents, True)
         self._proof_state = SlideProofState()
         self._presentation_image: PresentationImage | None = None
+        self._transition_run: TransitionRun | None = None
         self._telemetry = telemetry or RenderNodeTelemetry(
             gui_thread_id=threading.get_ident()
         )
@@ -84,6 +86,10 @@ class BackgroundRenderItem(QQuickItem):
     def presentation_image(self) -> PresentationImage | None:
         return self._presentation_image
 
+    @property
+    def transition_run(self) -> TransitionRun | None:
+        return self._transition_run
+
     def set_presentation_image(self, image: PresentationImage | None) -> None:
         """Publish detached image state for the next render-thread sync."""
 
@@ -102,6 +108,16 @@ class BackgroundRenderItem(QQuickItem):
                 )
             return
         self._presentation_image = image
+        self.update()
+
+    def set_transition_run(self, run: TransitionRun | None) -> None:
+        """Publish one immutable run for render-thread monotonic sampling."""
+
+        if run is not None and not isinstance(run, TransitionRun):
+            raise TypeError("Quick transition presentation requires a TransitionRun")
+        if run == self._transition_run:
+            return
+        self._transition_run = run
         self.update()
 
     def _bind_window_invalidation(self, window) -> None:
@@ -140,6 +156,7 @@ class BackgroundRenderItem(QQuickItem):
             device_pixel_ratio=device_pixel_ratio,
             state=self._proof_state,
             presentation_image=self._presentation_image,
+            transition_run=self._transition_run,
         )
         self._retirement.set_node(node)
         return node

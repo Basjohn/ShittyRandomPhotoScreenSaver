@@ -13,6 +13,7 @@ from .bootstrap import quick_qml_root
 from .image_state import PresentationImage
 from .render import BackgroundRenderItem, RenderNodeTelemetry
 from .state import QuickSceneReadiness
+from .transitions.state import TransitionRun
 from .window import QuickDisplayWindow
 
 
@@ -97,6 +98,7 @@ class QuickSceneController(QObject):
         self._context: QQmlContext | None = None
         self._scene_root: QQuickItem | None = None
         self._background_item: BackgroundRenderItem | None = None
+        self._last_transition_run_id = 0
         self._readiness = QuickSceneReadiness(
             screen_index=window.screen_index,
             runtime_generation=window.runtime_generation,
@@ -174,6 +176,30 @@ class QuickSceneController(QObject):
             raise RuntimeError("Quick scene admission is closed")
         self.background_item.set_presentation_image(image)
 
+    @property
+    def presentation_image(self) -> PresentationImage | None:
+        return self.background_item.presentation_image
+
+    def set_transition_run(self, run: TransitionRun | None) -> bool:
+        """Publish the current generation-fenced run into the Quick sync path."""
+
+        if not self._readiness.admission_open:
+            raise RuntimeError("Quick scene admission is closed")
+        if (
+            run is not None
+            and run.request.runtime_generation != self._readiness.runtime_generation
+        ):
+            raise ValueError("transition run generation does not match Quick scene")
+        current = self.background_item.transition_run
+        if run is not None:
+            if run.run_id < self._last_transition_run_id:
+                return False
+            if run.run_id == self._last_transition_run_id and current != run:
+                return False
+            self._last_transition_run_id = run.run_id
+        self.background_item.set_transition_run(run)
+        return True
+
     def quiesce_for_retirement(self) -> None:
         """Close state admission; item deletion waits for legal invalidation."""
 
@@ -214,6 +240,21 @@ class QuickSceneController(QObject):
                 or self._background_item.presentation_image is None
                 else self._background_item.presentation_image.describe()
             ),
+            "transition_run": (
+                None
+                if self._background_item is None
+                or self._background_item.transition_run is None
+                else {
+                    "run_id": self._background_item.transition_run.run_id,
+                    "runtime_generation": (
+                        self._background_item.transition_run.request.runtime_generation
+                    ),
+                    "transition_id": (
+                        self._background_item.transition_run.request.transition_id
+                    ),
+                }
+            ),
+            "last_transition_run_id": self._last_transition_run_id,
         }
 
     def _sync_root_width(self) -> None:

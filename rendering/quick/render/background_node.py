@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 from dataclasses import dataclass
 import threading
+import time
 
 from OpenGL import GL as gl
 from PySide6.QtCore import QRectF
@@ -13,6 +14,7 @@ from PySide6.QtQuick import QSGRenderNode
 
 from core.logging.logger import get_logger
 from ..image_state import PresentationImage
+from ..transitions.state import TransitionRun
 from .gl_resources import compile_program
 from .image_textures import ImageTextureOwner
 from .telemetry import RenderNodeTelemetry
@@ -131,6 +133,7 @@ class BackgroundRenderNode(QSGRenderNode):
         self._device_pixel_ratio = 1.0
         self._state = SlideProofState()
         self._presentation_image: PresentationImage | None = None
+        self._transition_run: TransitionRun | None = None
         self._image_textures = ImageTextureOwner(self._telemetry)
         self._program = 0
         self._vao = 0
@@ -158,6 +161,7 @@ class BackgroundRenderNode(QSGRenderNode):
         device_pixel_ratio: float,
         state: SlideProofState,
         presentation_image: PresentationImage | None,
+        transition_run: TransitionRun | None,
     ) -> None:
         """Accept immutable values during the Quick sync/updatePaintNode phase."""
 
@@ -168,6 +172,7 @@ class BackgroundRenderNode(QSGRenderNode):
         self._device_pixel_ratio = max(0.01, float(device_pixel_ratio))
         self._state = state.normalized()
         self._presentation_image = presentation_image
+        self._transition_run = transition_run
         self._telemetry.note_sync(
             logical_size=self._logical_size,
             device_pixel_ratio=self._device_pixel_ratio,
@@ -196,6 +201,12 @@ class BackgroundRenderNode(QSGRenderNode):
                 return
             if not self._program:
                 self._initialize_gl()
+            run = self._transition_run
+            if run is not None:
+                self._telemetry.note_transition_sample(
+                    run=run,
+                    sample=run.sample(time.monotonic_ns()),
+                )
             self._draw()
         except Exception as exc:
             self._telemetry.note_error(f"{type(exc).__name__}: {exc}")
