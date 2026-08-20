@@ -345,21 +345,6 @@ Read:
 
 Land in small commits:
 
-### A1 — Quick bootstrap
-
-Create the production `rendering/quick/` package.
-
-Add deterministic bootstrap for:
-
-- threaded render loop;
-- OpenGL Quick backend;
-- surface format;
-- QML import/data root.
-
-Do not activate Quick as the production DisplayManager path yet.
-
-**Checkpoint + push.**
-
 ### A2 — inline render-node proof
 
 Implement the minimum production-shaped custom render item/node.

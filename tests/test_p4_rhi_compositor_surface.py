@@ -477,16 +477,16 @@ class TestRenderingPolicyUnchanged:
 
     def test_global_interval_zero_surface_format_policy_survives(self):
         """Qt derives the top-level NoVSync swapchain from the global format."""
-        import main as main_module
+        from rendering.quick import bootstrap as quick_bootstrap
 
-        tree = ast.parse(inspect.getsource(main_module))
+        tree = ast.parse(inspect.getsource(quick_bootstrap))
         sets_default = any(
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
             and node.func.attr == "setDefaultFormat"
             for node in ast.walk(tree)
         )
-        assert sets_default, "global QSurfaceFormat policy must remain in startup"
+        assert sets_default, "global QSurfaceFormat policy must remain in Quick bootstrap"
 
         from rendering.gl_format import build_surface_format
 

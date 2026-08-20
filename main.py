@@ -11,9 +11,18 @@ import ctypes
 import time
 from pathlib import Path
 from enum import Enum
+
+from rendering.quick.bootstrap import (
+    configure_quick_environment,
+    configure_quick_graphics,
+)
+
+# The render loop and QML import root must be fixed before importing Qt.
+configure_quick_environment()
+
 from PySide6.QtWidgets import QApplication, QMessageBox
-from PySide6.QtCore import Qt, QCoreApplication
-from PySide6.QtGui import QSurfaceFormat, QImageReader, QIcon
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QImageReader, QIcon
 from core.logging.logger import (
     clear_logs_for_fresh_start,
     flush_and_close_logging,
@@ -36,7 +45,6 @@ from core.settings.persistence import flush_and_close_settings_persistence
 from core.animation import AnimationManager
 from engine.screensaver_engine import ScreensaverEngine
 from ui.settings_dialog import SettingsDialog
-from rendering.gl_format import build_surface_format
 from ui.system_tray import ScreensaverTrayIcon
 from versioning import APP_VERSION, APP_EXE_NAME
 
@@ -683,23 +691,27 @@ def main(*, entrypoint: str = "main"):
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
 
-    # Configure OpenGL globally BEFORE creating QApplication
+    # Configure Qt Quick/OpenGL globally BEFORE creating QApplication.
     try:
-        # Prefer desktop OpenGL and share contexts across widgets
-        QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_UseDesktopOpenGL, True)
-        QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
-
-        fmt, prefs = build_surface_format(reason="startup")
-        QSurfaceFormat.setDefaultFormat(fmt)
+        quick_bootstrap = configure_quick_graphics(reason="startup")
+        fmt = quick_bootstrap.surface_format
         logger.info(
-            "Global QSurfaceFormat configured (swap=%s, interval=%s, depth=%s, stencil=%s)",
+            "Qt Quick bootstrap configured (loop=%s, api=%s, gl=%s.%s, "
+            "profile=%s, swap=%s, interval=%s, depth=%s, stencil=%s, qml=%s)",
+            quick_bootstrap.render_loop,
+            quick_bootstrap.graphics_api,
+            fmt.majorVersion(),
+            fmt.minorVersion(),
+            fmt.profile(),
             fmt.swapBehavior(),
             fmt.swapInterval(),
             fmt.depthBufferSize(),
             fmt.stencilBufferSize(),
+            quick_bootstrap.qml_root,
         )
     except Exception as e:
-        logger.warning(f"Failed to configure global OpenGL format: {e}")
+        logger.exception("Failed to configure Qt Quick graphics bootstrap: %s", e)
+        raise
     
     # Create Qt application
     app = QApplication(sys.argv)
