@@ -21,6 +21,16 @@ class QuickWindowRole(str, Enum):
     MEDIA_CENTER_TOOL = "media-center-tool"
 
 
+class QuickRuntimePhase(str, Enum):
+    """Lifecycle phase for one generation-scoped physical-display runtime."""
+
+    CONSTRUCTED = "constructed"
+    VISIBLE = "visible"
+    PAUSED = "paused"
+    RETIRING = "retiring"
+    RETIRED = "retired"
+
+
 @dataclass(frozen=True, slots=True)
 class QuickWindowPolicy:
     """Explicit top-level policy; cross-display focus selection lives elsewhere."""
