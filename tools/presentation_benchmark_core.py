@@ -51,8 +51,8 @@ OBSERVED_PHASE_NAMES = (
 )
 COMPLETION_SIGNAL_SEMANTICS = {
     "qquickwindow.frameSwapped": {
-        "stage": "swap_completed",
-        "physical_presentation_evidence": True,
+        "stage": "queued_for_presentation",
+        "physical_presentation_evidence": False,
     },
     "external.presentmon.displayed": {
         "stage": "displayed",

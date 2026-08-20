@@ -128,7 +128,7 @@ def test_metrics_recorder_emits_the_shared_tail_first_schema():
         population="P0",
         display="screen1_60hz",
         target_hz=60.0,
-        completion_signal="qquickwindow.frameSwapped",
+        completion_signal="external.presentmon.displayed",
         source_sha256=source_sha256,
         source_components={"bubble_source_sha256": source_sha256},
     )
@@ -282,6 +282,24 @@ def test_completion_signal_and_observed_phase_semantics_are_strict():
         "memory_mb",
         "vram_mb",
     }
+
+    quick_recorder = BenchmarkMetricsRecorder(
+        candidate="quick",
+        population="P0",
+        display="screen0",
+        target_hz=165.0,
+        completion_signal="qquickwindow.frameSwapped",
+        source_sha256=source_sha256,
+    )
+    quick_recorder.record_completed_frame(consumed_ns=1, completed_ns=2)
+    quick_report = quick_recorder.report()
+    assert quick_report["completion_semantics"] == {
+        "stage": "queued_for_presentation",
+        "physical_presentation_evidence": False,
+    }
+    assert quick_report["physical_evidence_valid"] is False
+    assert quick_report["counts"]["completed_physical_frames"] is None
+    assert quick_report["rates"]["completed_physical_fps"] is None
 
 
 def test_consume_and_completion_boundaries_cannot_be_conflated():

@@ -1,0 +1,1535 @@
+{
+  "candidate": "worker_push",
+  "cleanup_errors": [],
+  "displays": [
+    {
+      "common_metrics": {
+        "candidate": "worker_push",
+        "completion_semantics": {
+          "physical_presentation_evidence": false,
+          "stage": "graphics_submission"
+        },
+        "completion_signal": "qrhiwidget.frameSubmitted",
+        "counts": {
+          "accepted_requests": 0,
+          "completed_physical_frames": null,
+          "completion_signal_frames": 435,
+          "failures": 0,
+          "gui_callbacks": 1427,
+          "logical_steps": 0,
+          "requested_opportunities": 0,
+          "skipped_deadlines": 0,
+          "slow_steps": 0
+        },
+        "display": "screen0:MSI G321Q:1707x960",
+        "large_completion_gaps": [
+          {
+            "completed_ns": 601545400,
+            "gap_ms": 149.5559,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "startup",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 1751001000,
+            "gap_ms": 1149.4556,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2059080700,
+            "gap_ms": 287.8178,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2103887000,
+            "gap_ms": 44.8063,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2237098000,
+            "gap_ms": 133.211,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2318016200,
+            "gap_ms": 80.9182,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2395779500,
+            "gap_ms": 30.0814,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2518789500,
+            "gap_ms": 30.6587,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2650627800,
+            "gap_ms": 33.1794,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2700486600,
+            "gap_ms": 49.8588,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2753130900,
+            "gap_ms": 52.6443,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2785685000,
+            "gap_ms": 32.5541,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2819956500,
+            "gap_ms": 34.2715,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2852516800,
+            "gap_ms": 32.5603,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2926181700,
+            "gap_ms": 55.8085,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2968183400,
+            "gap_ms": 42.0017,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3017874100,
+            "gap_ms": 49.6907,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3083978700,
+            "gap_ms": 57.8533,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3119260800,
+            "gap_ms": 35.2821,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3157651500,
+            "gap_ms": 38.3907,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3275743200,
+            "gap_ms": 118.0917,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3328463000,
+            "gap_ms": 52.7198,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3366822500,
+            "gap_ms": 38.3595,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3412253200,
+            "gap_ms": 45.4307,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3475727800,
+            "gap_ms": 63.4746,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3528577100,
+            "gap_ms": 48.3545,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3596247400,
+            "gap_ms": 52.5302,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3637174700,
+            "gap_ms": 31.0901,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3678211000,
+            "gap_ms": 37.5767,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3734355700,
+            "gap_ms": 50.2679,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3793556400,
+            "gap_ms": 42.151,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3852528800,
+            "gap_ms": 58.9724,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 4306068800,
+            "gap_ms": 67.0065,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 5214103700,
+            "gap_ms": 30.6821,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 5322690900,
+            "gap_ms": 32.3561,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 5365421100,
+            "gap_ms": 42.7302,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 6290063200,
+            "gap_ms": 28.2498,
+            "nearest_marker": "slide_end",
+            "phase": "settled_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 6427807700,
+            "gap_ms": 78.3418,
+            "nearest_marker": "slide_end",
+            "phase": "settled_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 6559117700,
+            "gap_ms": 31.5915,
+            "nearest_marker": "slide_end",
+            "phase": "settled_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          }
+        ],
+        "missing_observed_phases": [
+          "bubble_first_logical_frame",
+          "bubble_first_physical_frame"
+        ],
+        "missing_required_resource_metrics": [
+          "gpu_frame_ms"
+        ],
+        "observed_phase_timestamps_ns": {
+          "first_intentional_visible_frame": 3800,
+          "slide_end": 6659823200,
+          "slide_start": 1607643700,
+          "stop_report": 15605944400,
+          "synthetic_pause": 11000585400,
+          "synthetic_resume": 13000837600
+        },
+        "physical_evidence_valid": false,
+        "planned_phase_timestamps_ns": {
+          "first_intentional_visible_frame": 0,
+          "slide_bubble_start": 1000000000,
+          "slide_end": 6000000000,
+          "stop_report": 15000000000,
+          "synthetic_pause": 11000000000,
+          "synthetic_resume": 13000000000
+        },
+        "population": "P0",
+        "rates": {
+          "completed_physical_fps": null,
+          "completion_signal_fps": 27.86604159612074,
+          "request_acceptance_pct": 0.0
+        },
+        "resources": {
+          "gpu_busy_pct": {
+            "count": 13,
+            "max": 12.431889088391145,
+            "p50": 5.0488460695601285,
+            "p90": 11.04945592325803,
+            "p95": 11.04945592325803,
+            "p99": 12.431889088391145,
+            "status": "recorded",
+            "unit": "percent"
+          },
+          "gpu_frame_ms": {
+            "count": 0,
+            "max": 0.0,
+            "p50": 0.0,
+            "p90": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "status": "missing",
+            "unit": "milliseconds"
+          },
+          "memory_mb": {
+            "count": 14,
+            "max": 508.578125,
+            "p50": 438.94921875,
+            "p90": 477.41796875,
+            "p95": 477.41796875,
+            "p99": 508.578125,
+            "status": "recorded",
+            "unit": "megabytes"
+          },
+          "process_cpu_pct": {
+            "count": 14,
+            "max": 128.3,
+            "p50": 57.4,
+            "p90": 119.2,
+            "p95": 119.2,
+            "p99": 128.3,
+            "status": "recorded",
+            "unit": "percent"
+          },
+          "system_cpu_pct": {
+            "count": 14,
+            "max": 68.6,
+            "p50": 63.6,
+            "p90": 68.5,
+            "p95": 68.5,
+            "p99": 68.6,
+            "status": "recorded",
+            "unit": "percent"
+          },
+          "vram_mb": {
+            "count": 13,
+            "max": 510.96484375,
+            "p50": 510.953125,
+            "p90": 510.953125,
+            "p95": 510.953125,
+            "p99": 510.96484375,
+            "status": "recorded",
+            "unit": "megabytes"
+          }
+        },
+        "schema_version": 1,
+        "source_components": {
+          "bubble_rect_fractions": [
+            0.1,
+            0.62,
+            0.8,
+            0.28
+          ],
+          "bubble_source_sha256": "2f6de6a911a555ec243e806bb6c76469bc9352faee691f2c83a55f892641336d",
+          "slide_source_sha256": "4b51e306c64fb3b8836a7c866ce5bcf515efbaa83ee1ebd3394b5feff809583d",
+          "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c"
+        },
+        "source_sha256": "0881aa60ea36cc67a50d2a7ae7cee688c36b8557a86a2aa81661704da9184cf8",
+        "target_hz": 165.0,
+        "thread_identity": {
+          "gui_thread_id": null,
+          "relationship": "not_recorded",
+          "render_thread_id": null
+        },
+        "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c",
+        "timing_ms": {
+          "completion_dt": {
+            "count": 434,
+            "counts_gte_ms": {
+              "100": 5,
+              "12": 81,
+              "16": 66,
+              "25": 39,
+              "33": 30,
+              "50": 16
+            },
+            "max": 1149.4556,
+            "p50": 6.4785,
+            "p90": 24.3272,
+            "p95": 42.151,
+            "p99": 118.0917
+          },
+          "logical_publication_to_render_consume_age": {
+            "count": 0,
+            "max": 0.0,
+            "p50": 0.0,
+            "p90": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "longest_logical_hole": 0.0,
+          "paint": {
+            "count": 433,
+            "max": 52.98800000309711,
+            "p50": 0.5263999992166646,
+            "p90": 3.8160999974934384,
+            "p95": 5.665399999998044,
+            "p99": 9.994299995014444
+          },
+          "request_age": {
+            "count": 419,
+            "max": 112.07070000091335,
+            "p50": 1.3092000008327886,
+            "p90": 9.684899996500462,
+            "p95": 22.454400001151953,
+            "p99": 51.190599995607045
+          }
+        }
+      },
+      "frame_submitted": {
+        "callback_thread_ids": [
+          29560
+        ],
+        "frames": 435,
+        "gap_ms": {
+          "count": 434,
+          "counts_gte_ms": {
+            "100": 5,
+            "12": 81,
+            "16": 66,
+            "25": 39,
+            "33": 30,
+            "50": 16
+          },
+          "max": 1149.4556,
+          "p50": 6.4785,
+          "p90": 24.3272,
+          "p95": 42.151,
+          "p99": 118.0917
+        },
+        "physical_presentation_evidence": false,
+        "stage": "graphics_submission"
+      },
+      "gpu_timer_window": {
+        "by_label": {
+          "benchmark_hold": {
+            "collected": 0,
+            "discarded": 0,
+            "dropped_pending": 0,
+            "max_ms": null,
+            "observed": 1,
+            "p50_ms": null,
+            "p95_ms": null,
+            "pending": 1,
+            "poll_attempts": 1,
+            "sample_stride": 8,
+            "sampled_out": 0,
+            "samples": 0,
+            "submitted": 1
+          },
+          "slide": {
+            "collected": 54,
+            "discarded": 0,
+            "dropped_pending": 0,
+            "max_ms": 46.920704,
+            "observed": 432,
+            "p50_ms": 0.031744,
+            "p95_ms": 1.142784,
+            "pending": 0,
+            "poll_attempts": 54,
+            "sample_stride": 8,
+            "sampled_out": 378,
+            "samples": 54,
+            "submitted": 54
+          },
+          "steady": {
+            "collected": 1,
+            "discarded": 0,
+            "dropped_pending": 0,
+            "max_ms": 11.005952,
+            "observed": 2,
+            "p50_ms": 11.005952,
+            "p95_ms": 11.005952,
+            "pending": 0,
+            "poll_attempts": 1,
+            "sample_stride": 8,
+            "sampled_out": 1,
+            "samples": 1,
+            "submitted": 1
+          }
+        },
+        "errors": 0,
+        "pending": 1,
+        "reason": "supported",
+        "supported": true
+      },
+      "production_paint_metrics": {
+        "frames": 433,
+        "interval_ms": {
+          "count": 431,
+          "counts_gte_ms": {
+            "100": 3,
+            "12": 74,
+            "16": 62,
+            "25": 40,
+            "33": 28,
+            "50": 16
+          },
+          "max": 282.1990999946138,
+          "p50": 6.506400000944268,
+          "p90": 24.52130000165198,
+          "p95": 39.41350000241073,
+          "p99": 70.6821999992826
+        },
+        "paint_ms": {
+          "count": 433,
+          "max": 52.98800000309711,
+          "p50": 0.5263999992166646,
+          "p90": 3.8160999974934384,
+          "p95": 5.665399999998044,
+          "p99": 9.994299995014444
+        },
+        "request_age_ms": {
+          "count": 419,
+          "max": 112.07070000091335,
+          "p50": 1.3092000008327886,
+          "p90": 9.684899996500462,
+          "p95": 22.454400001151953,
+          "p99": 51.190599995607045
+        }
+      },
+      "production_render_timer": null,
+      "screen": 0,
+      "target_hz": 165.0
+    },
+    {
+      "common_metrics": {
+        "candidate": "worker_push",
+        "completion_semantics": {
+          "physical_presentation_evidence": false,
+          "stage": "graphics_submission"
+        },
+        "completion_signal": "qrhiwidget.frameSubmitted",
+        "counts": {
+          "accepted_requests": 721,
+          "completed_physical_frames": null,
+          "completion_signal_frames": 701,
+          "failures": 0,
+          "gui_callbacks": 1427,
+          "logical_steps": 1230,
+          "requested_opportunities": 817,
+          "skipped_deadlines": 23,
+          "slow_steps": 2
+        },
+        "display": "screen1:LG TV:2560x1440",
+        "large_completion_gaps": [
+          {
+            "completed_ns": 2029838100,
+            "gap_ms": 1290.0178,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2097095300,
+            "gap_ms": 67.2572,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2268084500,
+            "gap_ms": 157.1917,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2315083300,
+            "gap_ms": 46.9988,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2388440400,
+            "gap_ms": 39.3769,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2514967400,
+            "gap_ms": 30.477,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2642637500,
+            "gap_ms": 46.9617,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2695275700,
+            "gap_ms": 52.6382,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2736783100,
+            "gap_ms": 41.5074,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2782368700,
+            "gap_ms": 45.5856,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2816257000,
+            "gap_ms": 33.8883,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2848195000,
+            "gap_ms": 31.938,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2919079100,
+            "gap_ms": 59.9571,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 2963098700,
+            "gap_ms": 44.0196,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3008492900,
+            "gap_ms": 33.2503,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3077475300,
+            "gap_ms": 68.9824,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3114848500,
+            "gap_ms": 37.3732,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3149691600,
+            "gap_ms": 34.8431,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3262450900,
+            "gap_ms": 112.7593,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3321557200,
+            "gap_ms": 59.1063,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3361888200,
+            "gap_ms": 40.331,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3400010000,
+            "gap_ms": 38.1218,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3439968300,
+            "gap_ms": 39.9583,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3472741800,
+            "gap_ms": 32.7735,
+            "nearest_marker": "slide_bubble_start",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3514852300,
+            "gap_ms": 42.1105,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3589220500,
+            "gap_ms": 51.5551,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3728926800,
+            "gap_ms": 60.9473,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3781624900,
+            "gap_ms": 36.9335,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3848901100,
+            "gap_ms": 49.2346,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 3960619200,
+            "gap_ms": 30.9077,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 4088724000,
+            "gap_ms": 26.233,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 4212371000,
+            "gap_ms": 33.3699,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 4310881900,
+            "gap_ms": 70.0971,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 4336784900,
+            "gap_ms": 25.903,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 4594084500,
+            "gap_ms": 31.5918,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 4674153800,
+            "gap_ms": 31.6879,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 4707285000,
+            "gap_ms": 29.1278,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 4806555600,
+            "gap_ms": 32.4625,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 4841285600,
+            "gap_ms": 30.8727,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 5091467900,
+            "gap_ms": 29.2755,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 5207230500,
+            "gap_ms": 30.1616,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 5358925200,
+            "gap_ms": 81.629,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 5481543300,
+            "gap_ms": 37.49,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 5611140700,
+            "gap_ms": 35.4614,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 5672138200,
+            "gap_ms": 31.1589,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 5747095900,
+            "gap_ms": 38.6984,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 5878711900,
+            "gap_ms": 37.5172,
+            "nearest_marker": "slide_end",
+            "phase": "slide_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 6012725500,
+            "gap_ms": 37.6367,
+            "nearest_marker": "slide_end",
+            "phase": "settled_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 6141042600,
+            "gap_ms": 31.9614,
+            "nearest_marker": "slide_end",
+            "phase": "settled_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 6280436800,
+            "gap_ms": 39.2215,
+            "nearest_marker": "slide_end",
+            "phase": "settled_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 6418394400,
+            "gap_ms": 77.3531,
+            "nearest_marker": "slide_end",
+            "phase": "settled_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 6545659400,
+            "gap_ms": 34.812,
+            "nearest_marker": "slide_end",
+            "phase": "settled_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 6682716700,
+            "gap_ms": 39.6502,
+            "nearest_marker": "slide_end",
+            "phase": "settled_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 7453547200,
+            "gap_ms": 59.0329,
+            "nearest_marker": "slide_end",
+            "phase": "settled_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 8506787600,
+            "gap_ms": 65.3168,
+            "nearest_marker": "synthetic_pause",
+            "phase": "settled_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 9559929400,
+            "gap_ms": 64.6356,
+            "nearest_marker": "synthetic_pause",
+            "phase": "settled_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 10604482400,
+            "gap_ms": 62.1984,
+            "nearest_marker": "synthetic_pause",
+            "phase": "settled_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 11651848300,
+            "gap_ms": 56.538,
+            "nearest_marker": "synthetic_pause",
+            "phase": "paused_hold",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 12708808900,
+            "gap_ms": 67.5219,
+            "nearest_marker": "synthetic_resume",
+            "phase": "paused_hold",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 13760786600,
+            "gap_ms": 66.5691,
+            "nearest_marker": "synthetic_resume",
+            "phase": "resumed_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          },
+          {
+            "completed_ns": 14806955600,
+            "gap_ms": 65.7742,
+            "nearest_marker": "stop_report",
+            "phase": "resumed_bubble",
+            "request_age_ms": null,
+            "source_age_ms": null
+          }
+        ],
+        "missing_observed_phases": [
+          "bubble_first_physical_frame"
+        ],
+        "missing_required_resource_metrics": [
+          "gpu_frame_ms"
+        ],
+        "observed_phase_timestamps_ns": {
+          "bubble_first_logical_frame": 1700480100,
+          "first_intentional_visible_frame": 3800,
+          "slide_end": 6684235900,
+          "slide_start": 1607643700,
+          "stop_report": 15605944400,
+          "synthetic_pause": 11000585400,
+          "synthetic_resume": 13000837600
+        },
+        "physical_evidence_valid": false,
+        "planned_phase_timestamps_ns": {
+          "first_intentional_visible_frame": 0,
+          "slide_bubble_start": 1000000000,
+          "slide_end": 6000000000,
+          "stop_report": 15000000000,
+          "synthetic_pause": 11000000000,
+          "synthetic_resume": 13000000000
+        },
+        "population": "P0",
+        "rates": {
+          "completed_physical_fps": null,
+          "completion_signal_fps": 44.898765005987094,
+          "request_acceptance_pct": 88.24969400244798
+        },
+        "resources": {
+          "gpu_busy_pct": {
+            "count": 13,
+            "max": 12.431889088391145,
+            "p50": 5.0488460695601285,
+            "p90": 11.04945592325803,
+            "p95": 11.04945592325803,
+            "p99": 12.431889088391145,
+            "status": "recorded",
+            "unit": "percent"
+          },
+          "gpu_frame_ms": {
+            "count": 0,
+            "max": 0.0,
+            "p50": 0.0,
+            "p90": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "status": "missing",
+            "unit": "milliseconds"
+          },
+          "memory_mb": {
+            "count": 14,
+            "max": 508.578125,
+            "p50": 438.94921875,
+            "p90": 477.41796875,
+            "p95": 477.41796875,
+            "p99": 508.578125,
+            "status": "recorded",
+            "unit": "megabytes"
+          },
+          "process_cpu_pct": {
+            "count": 14,
+            "max": 128.3,
+            "p50": 57.4,
+            "p90": 119.2,
+            "p95": 119.2,
+            "p99": 128.3,
+            "status": "recorded",
+            "unit": "percent"
+          },
+          "system_cpu_pct": {
+            "count": 14,
+            "max": 68.6,
+            "p50": 63.6,
+            "p90": 68.5,
+            "p95": 68.5,
+            "p99": 68.6,
+            "status": "recorded",
+            "unit": "percent"
+          },
+          "vram_mb": {
+            "count": 13,
+            "max": 510.96484375,
+            "p50": 510.953125,
+            "p90": 510.953125,
+            "p95": 510.953125,
+            "p99": 510.96484375,
+            "status": "recorded",
+            "unit": "megabytes"
+          }
+        },
+        "schema_version": 1,
+        "source_components": {
+          "bubble_rect_fractions": [
+            0.1,
+            0.62,
+            0.8,
+            0.28
+          ],
+          "bubble_source_sha256": "2f6de6a911a555ec243e806bb6c76469bc9352faee691f2c83a55f892641336d",
+          "slide_source_sha256": "4b51e306c64fb3b8836a7c866ce5bcf515efbaa83ee1ebd3394b5feff809583d",
+          "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c"
+        },
+        "source_sha256": "0881aa60ea36cc67a50d2a7ae7cee688c36b8557a86a2aa81661704da9184cf8",
+        "target_hz": 60.0,
+        "thread_identity": {
+          "gui_thread_id": null,
+          "relationship": "not_recorded",
+          "render_thread_id": null
+        },
+        "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c",
+        "timing_ms": {
+          "completion_dt": {
+            "count": 700,
+            "counts_gte_ms": {
+              "100": 3,
+              "12": 599,
+              "16": 352,
+              "25": 61,
+              "33": 46,
+              "50": 21
+            },
+            "max": 1290.0178,
+            "p50": 16.3794,
+            "p90": 22.8131,
+            "p95": 37.6367,
+            "p99": 67.5219
+          },
+          "logical_publication_to_render_consume_age": {
+            "count": 0,
+            "max": 0.0,
+            "p50": 0.0,
+            "p90": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "longest_logical_hole": 53.3379,
+          "paint": {
+            "count": 698,
+            "max": 254.24200000270503,
+            "p50": 1.4058999950066209,
+            "p90": 4.767999998875894,
+            "p95": 13.183899995055981,
+            "p99": 22.864999999001157
+          },
+          "request_age": {
+            "count": 690,
+            "max": 51.45910000283038,
+            "p50": 0.923999999940861,
+            "p90": 5.786800000350922,
+            "p95": 10.037000000011176,
+            "p99": 32.18820000620326
+          }
+        }
+      },
+      "frame_submitted": {
+        "callback_thread_ids": [
+          29560
+        ],
+        "frames": 701,
+        "gap_ms": {
+          "count": 700,
+          "counts_gte_ms": {
+            "100": 3,
+            "12": 599,
+            "16": 352,
+            "25": 61,
+            "33": 46,
+            "50": 21
+          },
+          "max": 1290.0178,
+          "p50": 16.3794,
+          "p90": 22.8131,
+          "p95": 37.6367,
+          "p99": 67.5219
+        },
+        "physical_presentation_evidence": false,
+        "stage": "graphics_submission"
+      },
+      "gpu_timer_window": {
+        "by_label": {
+          "benchmark_hold": {
+            "collected": 38,
+            "discarded": 0,
+            "dropped_pending": 0,
+            "max_ms": 0.90112,
+            "observed": 304,
+            "p50_ms": 0.78336,
+            "p95_ms": 0.883712,
+            "pending": 1,
+            "poll_attempts": 38,
+            "sample_stride": 8,
+            "sampled_out": 266,
+            "samples": 38,
+            "submitted": 38
+          }
+        },
+        "errors": 0,
+        "pending": 1,
+        "reason": "supported",
+        "supported": true
+      },
+      "production_paint_metrics": {
+        "frames": 698,
+        "interval_ms": {
+          "count": 696,
+          "counts_gte_ms": {
+            "100": 3,
+            "12": 629,
+            "16": 479,
+            "25": 53,
+            "33": 38,
+            "50": 17
+          },
+          "max": 295.8247999995365,
+          "p50": 16.73830000072485,
+          "p90": 22.81510000466369,
+          "p95": 34.294300006877165,
+          "p99": 64.42450000031386
+        },
+        "paint_ms": {
+          "count": 698,
+          "max": 254.24200000270503,
+          "p50": 1.4058999950066209,
+          "p90": 4.767999998875894,
+          "p95": 13.183899995055981,
+          "p99": 22.864999999001157
+        },
+        "request_age_ms": {
+          "count": 690,
+          "max": 51.45910000283038,
+          "p50": 0.923999999940861,
+          "p90": 5.786800000350922,
+          "p95": 10.037000000011176,
+          "p99": 32.18820000620326
+        }
+      },
+      "production_render_timer": {
+        "accepted_updates": 721,
+        "max_dt_ms": 250.14257431030273,
+        "pending_skips": 96,
+        "stall_count": 1,
+        "wakeup_count": 817
+      },
+      "screen": 1,
+      "target_hz": 60.0
+    }
+  ],
+  "elapsed_ns": 15715463900,
+  "external_physical_evidence": {
+    "accepted_signal": "external.presentmon.displayed",
+    "correlate_by": {
+      "pid": 12184,
+      "run_id": "worker-p0-light-01",
+      "window_titles": [
+        "SRPSS Benchmark worker_push P0 worker-p0-light-01 screen0",
+        "SRPSS Benchmark worker_push P0 worker-p0-light-01 screen1"
+      ]
+    },
+    "internal_frame_submitted_is_physical": false,
+    "required": true
+  },
+  "finished_utc": "2026-08-20T14:39:54.374+00:00",
+  "gui_thread_id": 29560,
+  "invalid_reason": null,
+  "load_label": "external-heavy",
+  "operator_load_label_correction": {
+    "corrected_on": "2026-08-20",
+    "original_load_label": "light",
+    "reason": "Operator identified this preserved manual run as the higher-load worker reference"
+  },
+  "logical_runtime": {
+    "generation": 1,
+    "interval_ms": 11.111,
+    "running": false,
+    "skipped_deadlines": 23,
+    "slow_steps": 2,
+    "step_failures": 0,
+    "steps": 1230
+  },
+  "p1_population": {
+    "policy": "enabled production factory widgets, initialized/static, providers not activated",
+    "settings_sha256": null,
+    "widgets": []
+  },
+  "phase_wall_utc": {
+    "bubble_first_logical_frame": "2026-08-20T14:39:40.359+00:00",
+    "first_intentional_visible_frame": "2026-08-20T14:39:38.659+00:00",
+    "slide_end_screen0": "2026-08-20T14:39:45.319+00:00",
+    "slide_end_screen1": "2026-08-20T14:39:45.342+00:00",
+    "slide_start": "2026-08-20T14:39:40.266+00:00",
+    "stop_report": "2026-08-20T14:39:54.265+00:00",
+    "synthetic_pause": "2026-08-20T14:39:49.659+00:00",
+    "synthetic_resume": "2026-08-20T14:39:51.660+00:00"
+  },
+  "phases_ns": {
+    "bubble_first_logical_frame": 1700480100,
+    "first_intentional_visible_frame": 3800,
+    "slide_end_screen0": 6659823200,
+    "slide_end_screen1": 6684235900,
+    "slide_start": 1607643700,
+    "stop_report": 15605944400,
+    "synthetic_pause": 11000585400,
+    "synthetic_resume": 13000837600
+  },
+  "pid": 12184,
+  "population": "P0",
+  "resources": {
+    "gpu_statuses": [
+      "warming",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok"
+    ],
+    "samples": {
+      "gpu_busy_pct": {
+        "count": 13,
+        "max": 12.431889088391145,
+        "p50": 5.0488460695601285,
+        "p90": 11.04945592325803,
+        "p95": 11.04945592325803,
+        "p99": 12.431889088391145
+      },
+      "memory_mb": {
+        "count": 14,
+        "max": 508.578125,
+        "p50": 438.94921875,
+        "p90": 477.41796875,
+        "p95": 477.41796875,
+        "p99": 508.578125
+      },
+      "process_cpu_pct": {
+        "count": 14,
+        "max": 128.3,
+        "p50": 57.4,
+        "p90": 119.2,
+        "p95": 119.2,
+        "p99": 128.3
+      },
+      "system_cpu_pct": {
+        "count": 14,
+        "max": 68.6,
+        "p50": 63.6,
+        "p90": 68.5,
+        "p95": 68.5,
+        "p99": 68.6
+      },
+      "vram_mb": {
+        "count": 13,
+        "max": 510.96484375,
+        "p50": 510.953125,
+        "p90": 510.953125,
+        "p95": 510.953125,
+        "p99": 510.96484375
+      }
+    }
+  },
+  "run_id": "worker-p0-light-01",
+  "schema_version": 1,
+  "screens": [
+    {
+      "device_pixel_ratio": 1.5,
+      "geometry": [
+        0,
+        0,
+        1707,
+        960
+      ],
+      "index": 0,
+      "name": "MSI G321Q",
+      "reported_refresh_hz": 164.835,
+      "target_hz": 165.0,
+      "window_title": "SRPSS Benchmark worker_push P0 worker-p0-light-01 screen0"
+    },
+    {
+      "device_pixel_ratio": 1.5,
+      "geometry": [
+        2560,
+        0,
+        2560,
+        1440
+      ],
+      "index": 1,
+      "name": "LG TV",
+      "reported_refresh_hz": 60.0,
+      "target_hz": 60.0,
+      "window_title": "SRPSS Benchmark worker_push P0 worker-p0-light-01 screen1"
+    }
+  ],
+  "started_utc": "2026-08-20T14:39:38.659+00:00",
+  "valid_internal_run": true,
+  "workload": {
+    "bubble_rect_fractions": [
+      0.1,
+      0.62,
+      0.8,
+      0.28
+    ],
+    "bubble_source_sha256": "2f6de6a911a555ec243e806bb6c76469bc9352faee691f2c83a55f892641336d",
+    "slide_source_sha256": "4b51e306c64fb3b8836a7c866ce5bcf515efbaa83ee1ebd3394b5feff809583d",
+    "timeline_sha256": "957625004b1ebc0ab9123602f46501be97c4723fb5ecfd18cb99d0c030d1248c",
+    "workload_sha256": "0881aa60ea36cc67a50d2a7ae7cee688c36b8557a86a2aa81661704da9184cf8"
+  }
+}
