@@ -73,10 +73,14 @@ def test_runtime_smoke_delegates_qml_and_items_to_scene_owner():
     source = (ROOT / "tools" / "qtquick_render_node_smoke.py").read_text(
         encoding="utf-8"
     )
+    runtime_source = (ROOT / "rendering" / "quick" / "runtime.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "QuickSceneFactory(self)" in source
-    assert "QuickSceneController(" in source
-    assert "probe.scene.quiesce_for_retirement()" in source
+    assert "QuickDisplayRuntime(" in source
+    assert "probe.runtime.close_runtime()" in source
+    assert "QuickSceneController(" in runtime_source
     assert "QQmlEngine(" not in source
     assert "QQmlComponent(" not in source
     assert "BackgroundRenderItem(" not in source

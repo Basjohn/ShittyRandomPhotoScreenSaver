@@ -146,6 +146,30 @@ class QuickFramePacer(QObject):
     def set_visualizer_active(self, active: bool) -> None:
         self.set_demand(QuickFrameDemand.VISUALIZER, active)
 
+    def set_target_hz(self, target_hz: float) -> None:
+        """Retarget this display after its bound QScreen refresh changes."""
+
+        if self._closed:
+            raise RuntimeError("Quick frame pacer is closed")
+        replacement = QuickPacerState(float(target_hz))
+        if math.isclose(
+            replacement.target_hz,
+            self._state.target_hz,
+            rel_tol=0.0,
+            abs_tol=0.001,
+        ):
+            return
+
+        replacement.requested_opportunities = self._state.requested_opportunities
+        replacement.paced_requests = self._state.paced_requests
+        replacement.skipped_deadlines = self._state.skipped_deadlines
+        was_active = self.is_active()
+        self._timer.stop()
+        self._state = replacement
+        if was_active:
+            self._state.start(self._clock_ns())
+            self._service_deadline()
+
     def stop(self) -> None:
         """Stop current presentation demand without permanently closing."""
 

@@ -203,6 +203,18 @@ def test_stop_allows_reuse_but_close_rejects_stale_runtime_admission():
         pacer.set_transition_active(True)
 
 
+def test_refresh_retarget_starts_fresh_without_replaying_old_deadlines():
+    pacer, window, _timer, clock = _pacer(60.0)
+    pacer.set_transition_active(True)
+    clock.now_ns = 4_000_000
+
+    pacer.set_target_hz(120.0)
+
+    assert pacer.target_hz == 120.0
+    assert window.update_count == 2
+    assert pacer.describe()["skipped_deadlines"] == 0
+
+
 def test_only_supported_nonzero_demand_bits_are_accepted():
     pacer, _window, _timer, _clock = _pacer()
 
