@@ -134,6 +134,10 @@ class _SmokeRunner(QObject):
         self._exit_retirement_scheduled = False
         self._exit_sequence: dict[str, Any] | None = None
         self._report_finished = False
+        self._pending_runtime_root_ids: set[int] = set()
+        self._destroyed_runtime_root_ids: set[int] = set()
+        self._runtime_root_destruction_barriers: list[dict[str, Any]] = []
+        self._active_runtime_root_barrier: dict[str, Any] | None = None
 
     def start(self) -> None:
         screens = QGuiApplication.screens()
@@ -151,6 +155,12 @@ class _SmokeRunner(QObject):
         self._start_generation()
 
     def _start_generation(self) -> None:
+        if self._generation > 0 and self._runtime_root_destruction_barriers:
+            previous_barrier = self._runtime_root_destruction_barriers[-1]
+            previous_barrier["next_generation_started"] = True
+            previous_barrier["next_generation_started_after_crossing"] = bool(
+                previous_barrier.get("crossed")
+            )
         self._cycle_token += 1
         token = self._cycle_token
         self._probes = []
@@ -160,6 +170,9 @@ class _SmokeRunner(QObject):
         self._active_hide_records = {}
         self._retirement_started = False
         self._exit_retirement_scheduled = False
+        self._pending_runtime_root_ids = set()
+        self._destroyed_runtime_root_ids = set()
+        self._active_runtime_root_barrier = None
         current_screens = list(QGuiApplication.screens())
         if len(current_screens) < self._window_count:
             self._errors.append(
@@ -656,7 +669,74 @@ class _SmokeRunner(QObject):
                     "errors": errors,
                 }
             )
+        self._pending_runtime_root_ids = {
+            id(probe.runtime) for probe in self._probes
+        }
+        self._destroyed_runtime_root_ids = set()
+        barrier = {
+            "generation": self._generation,
+            "expected_runtime_roots": len(self._pending_runtime_root_ids),
+            "destroyed_runtime_roots": 0,
+            "crossed": False,
+            "next_generation_started": False,
+            "next_generation_started_after_crossing": False,
+        }
+        self._active_runtime_root_barrier = barrier
+        self._runtime_root_destruction_barriers.append(barrier)
+        for probe in self._probes:
+            runtime_root_id = id(probe.runtime)
+            probe.runtime.destroyed.connect(
+                lambda *_args, runtime_root_id=runtime_root_id, token=token: (
+                    self._on_runtime_root_destroyed(runtime_root_id, token)
+                )
+            )
             probe.runtime.deleteLater()
+        QTimer.singleShot(
+            max(1500, self._args.phase_delay_ms * 8),
+            lambda token=token: self._runtime_root_destruction_timeout(token),
+        )
+
+    def _on_runtime_root_destroyed(self, runtime_root_id: int, token: int) -> None:
+        if token != self._cycle_token:
+            return
+        if runtime_root_id not in self._pending_runtime_root_ids:
+            self._errors.append(
+                f"generation{self._generation} destroyed an untracked runtime root"
+            )
+            return
+        self._destroyed_runtime_root_ids.add(runtime_root_id)
+        barrier = self._active_runtime_root_barrier
+        if barrier is not None:
+            barrier["destroyed_runtime_roots"] = len(
+                self._destroyed_runtime_root_ids
+            )
+        if self._destroyed_runtime_root_ids == self._pending_runtime_root_ids:
+            if barrier is not None:
+                barrier["crossed"] = True
+            QTimer.singleShot(0, lambda token=token: self._complete_generation(token))
+
+    def _runtime_root_destruction_timeout(self, token: int) -> None:
+        if token != self._cycle_token:
+            return
+        pending = self._pending_runtime_root_ids - self._destroyed_runtime_root_ids
+        if not pending:
+            return
+        self._errors.append(
+            f"generation{self._generation} runtime-root destruction timed out: "
+            f"{len(pending)} pending"
+        )
+        self._finish_report()
+
+    def _complete_generation(self, token: int) -> None:
+        if token != self._cycle_token:
+            return
+        barrier = self._active_runtime_root_barrier
+        if barrier is None or not barrier.get("crossed"):
+            self._errors.append(
+                f"generation{self._generation} completed before its runtime-root barrier"
+            )
+            self._finish_report()
+            return
 
         self._completed_generations += 1
         if self._errors or self._completed_generations >= self._args.generations:
@@ -670,6 +750,7 @@ class _SmokeRunner(QObject):
             return
         self._report_finished = True
         self._errors.extend(self._validate_exit_sequence())
+        self._errors.extend(self._validate_runtime_root_barriers())
         report = {
             "valid": not self._errors,
             "requested_windows": self._args.windows,
@@ -677,6 +758,9 @@ class _SmokeRunner(QObject):
             "requested_hide_show_cycles": self._args.hide_show_cycles,
             "requested_exit_via_input": self._args.exit_via_input,
             "exit_sequence": self._exit_sequence,
+            "runtime_root_destruction_barriers": (
+                self._runtime_root_destruction_barriers
+            ),
             "completed_generations": self._completed_generations,
             "physical_screens": len(QGuiApplication.screens()),
             "created_windows": len(self._reports),
@@ -694,6 +778,31 @@ class _SmokeRunner(QObject):
             self._args.output.parent.mkdir(parents=True, exist_ok=True)
             self._args.output.write_text(rendered + "\n", encoding="utf-8")
         self._app.exit(0 if report["valid"] else 1)
+
+    def _validate_runtime_root_barriers(self) -> list[str]:
+        barriers = self._runtime_root_destruction_barriers
+        if len(barriers) != self._completed_generations:
+            return ["not every completed generation crossed a runtime-root barrier"]
+
+        errors: list[str] = []
+        for position, barrier in enumerate(barriers):
+            if not barrier.get("crossed"):
+                errors.append(
+                    f"generation{barrier.get('generation')} runtime-root barrier was not crossed"
+                )
+            if barrier.get("destroyed_runtime_roots") != barrier.get(
+                "expected_runtime_roots"
+            ):
+                errors.append(
+                    f"generation{barrier.get('generation')} retained runtime roots"
+                )
+            if position < len(barriers) - 1 and not barrier.get(
+                "next_generation_started_after_crossing"
+            ):
+                errors.append(
+                    f"generation{barrier.get('generation')} replacement started before destruction"
+                )
+        return errors
 
     def _validate_exit_sequence(self) -> list[str]:
         if not self._args.exit_via_input:
