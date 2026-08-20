@@ -18,7 +18,13 @@ current evidence
 phase reports / Historical_Bugs
         ↓
 Future_Cleanup.md
+        ↓
+Future_Work.md
 ```
+
+`Future_Work.md` is a long-horizon new-feature/new-implementation backlog, not active sequencing. An
+agent may implement from it only when the operator explicitly selects an item or when
+`Current_Plan.md` and `Future_Cleanup.md` contain no remaining important active work.
 
 During the Qt Quick migration, exact source tells you what is **currently implemented** while
 `Spec.md` and `Docs/Compositor_Architecture.md` define the **accepted destination architecture**.
@@ -44,6 +50,7 @@ Do not mistake the temporary QRhiWidget reference implementation for the long-te
 | Recurring harnesses | `Docs/Harness_Index.md` |
 | Prior regressions | `Docs/Historical_Bugs/README.md` |
 | Cutover deletion / deferred cleanup | `Future_Cleanup.md` |
+| Explicitly deferred new features / experiments | `Future_Work.md` (only when its activation rule is satisfied) |
 
 Do not read every document by default.
 
