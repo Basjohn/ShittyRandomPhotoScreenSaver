@@ -198,13 +198,78 @@ card shadow enable/color/opacity/blur/offset/spread
 text shadow enable/color/opacity/blur/offset
 header shadow if distinct
 overall widget opacity/fade
+global shadow direction
 ```
 
 Family-specific style remains family-specific.
 
 Do not collapse controls merely because Quick offers fewer convenient properties.
 
-## 8. Shadow history and Quick rule
+## 17. Global eight-direction shadow authority
+
+The abandoned 4.6.9 shadow-direction feature is restored as part of this migration.
+
+Use one canonical direction token:
+
+```text
+NW  N  NE
+ W     E
+SW  S  SE
+```
+
+Default: `SE`.
+
+Preferred canonical state:
+
+```text
+ShadowDirection.NW / N / NE / W / E / SW / S / SE
+```
+
+Do not retain the old ineffective `widgets.shadows.offset` as a second user-facing authority.
+
+Each shadow class keeps its own authored magnitude. Direction supplies only the sign/axis:
+
+```text
+resolved_x = direction.x_sign * authored_x_magnitude
+resolved_y = direction.y_sign * authored_y_magnitude
+```
+
+Axis-only directions zero the perpendicular component.
+
+This preserves the existing character of:
+
+- card shadows;
+- small and large text shadows;
+- header shadows;
+- icon/artwork shadows;
+- rounded control shadows;
+- Spotify volume;
+- visualizer card;
+- analogue Clock details.
+
+`shadowtuning.json` or its Quick-era replacement remains magnitude/tuning authority. The General
+direction setting is orientation authority. There must not be two competing magnitude sources.
+
+All shared shadow primitives must be signed-offset safe and reserve visual padding on the actual
+affected side(s), not right/bottom only.
+
+### General Settings UI
+
+Add the intended inset 3×3 selector to the existing General / Appearance bucket after runtime support
+exists.
+
+- eight outer buttons/cells;
+- selected direction visibly inset/pressed;
+- center inert/unselectable;
+- changing direction previews/saves through the canonical settings path;
+- default SE;
+- no new Settings backend architecture.
+
+A direction-only change must not change widget geometry, font sizing, content layout, blur/spread,
+opacity, or per-shadow magnitude.
+
+
+## 17. Shadow history and Quick rule
 
 Historical bug:
 
@@ -254,7 +319,7 @@ Use the smallest representation that matches current appearance:
 
 No global `QGraphicsEffect` cache-busting equivalent should exist.
 
-## 9. Required old-corruption regression gate
+## 17. Required old-corruption regression gate
 
 The Quick widget gallery must repeatedly exercise:
 
@@ -283,7 +348,7 @@ Visually inspect:
 
 A corruption failure blocks the affected shared primitive, not the whole architecture.
 
-## 10. Opacity/fades
+## 17. Opacity/fades
 
 Distinguish:
 
@@ -296,7 +361,7 @@ Use parent/root Quick `opacity` for authored fade when appropriate.
 
 Do not animate by repeatedly enabling/disabling shadow/effect nodes.
 
-## 11. Stacking
+## 17. Stacking
 
 Keep current stacking policy/math in Python.
 
@@ -306,7 +371,7 @@ Do not make QML anchors a second stacking algorithm.
 
 CUSTOM position overrides authored stack placement according to existing contract.
 
-## 12. Pixel shift
+## 17. Pixel shift
 
 Keep pixel-shift scheduling/intent outside QML if already product-owned.
 
@@ -314,7 +379,21 @@ Apply resulting offset as a retained transform/property on the presentation item
 
 Do not rebuild widget content for pixel shift.
 
-## 13. Family migration matrix
+## Deprecated Imgur: remove, do not migrate
+
+The prior repository cleanup plan already classified Imgur as deprecated.
+
+When the widget registry/family migration reaches it:
+
+- remove its descriptor/settings/runtime/provider/CUSTOM/build/test surface;
+- do not create a Quick component;
+- do not repair its provider;
+- do not retain a QWidget-to-Quick compatibility presentation;
+- let stale persisted keys be stripped/ignored by the canonical settings cleanup path.
+
+This is migration scope because porting it would be wasted work.
+
+## 17. Family migration matrix
 
 ### Clock / Clock2 / Clock3
 
@@ -399,7 +478,7 @@ Preserve each card's current:
 If still canonical/enabled when reached, port them or deliberately retire them as a separate product
 decision before cutover. Do not silently lose them because the migration ignored dev-gated runtime.
 
-## 14. No screenshot-wrapper final implementation
+## 17. No screenshot-wrapper final implementation
 
 A temporary development capture can be used for visual comparison.
 
@@ -411,7 +490,7 @@ old QWidget -> grab() -> texture -> Quick
 
 as the final widget presenter.
 
-## 15. Tests
+## 17. Tests
 
 Per family:
 
@@ -429,7 +508,7 @@ Per family:
 
 Shared primitives receive stronger regression tests because every widget depends on them.
 
-## 16. Commit cadence
+## 17. Commit cadence
 
 Push:
 
