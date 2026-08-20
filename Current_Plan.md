@@ -370,7 +370,6 @@ Read `01_Runtime_Host_Lifecycle.md`.
 Create:
 
 - `QuickDisplayRuntime`;
-- `QuickSceneController`;
 - presentation state types;
 - generic runtime input owner;
 - lifecycle/resource ownership hooks.
@@ -391,6 +390,8 @@ Prove in a migration harness:
 - exit;
 - generation identity including `0`;
 - teardown and scene-graph invalidation;
+- threaded Python render-node teardown/recreate through queued Qt meta-calls only, never direct
+  blocking Python `QQuickWindow.close()` / `releaseResources()`;
 - topology recreate.
 
 **Checkpoint after each meaningful owner extraction. Push each checkpoint.**

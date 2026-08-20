@@ -71,10 +71,14 @@ def test_display_scene_is_real_packaged_qml_loaded_by_the_runtime_smoke():
     smoke = (ROOT / "tools" / "qtquick_render_node_smoke.py").read_text(
         encoding="utf-8"
     )
+    scene_owner = (
+        ROOT / "rendering" / "quick" / "scene_controller.py"
+    ).read_text(encoding="utf-8")
 
     assert "import QtQuick" in source
     assert 'objectName: "displaySceneRoot"' in source
-    assert "QQmlEngine" in smoke
-    assert "QQmlComponent" in smoke
-    assert 'quick_qml_root()' in smoke
-    assert '"DisplayScene.qml"' in smoke
+    assert "QuickSceneFactory(self)" in smoke
+    assert "QQmlEngine" in scene_owner
+    assert "QQmlComponent" in scene_owner
+    assert "quick_qml_root()" in scene_owner
+    assert '"DisplayScene.qml"' in scene_owner

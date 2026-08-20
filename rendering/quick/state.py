@@ -65,6 +65,40 @@ class QuickDisplayIdentity:
         return asdict(self)
 
 
+@dataclass(frozen=True, slots=True)
+class QuickSceneReadiness:
+    """Explicit generation-scoped presentation readiness and retirement facts."""
+
+    screen_index: int
+    runtime_generation: int | None
+    qml_root_created: bool = False
+    scene_graph_initialized: bool = False
+    background_renderer_ready: bool = False
+    intentional_base_frame_ready: bool = False
+    scene_graph_invalidated: bool = False
+    admission_open: bool = True
+    qml_objects_retired: bool = False
+    error: str | None = None
+
+    @property
+    def ready_for_reveal(self) -> bool:
+        return bool(
+            self.qml_root_created
+            and self.scene_graph_initialized
+            and self.background_renderer_ready
+            and self.intentional_base_frame_ready
+            and self.admission_open
+            and not self.scene_graph_invalidated
+            and not self.qml_objects_retired
+            and self.error is None
+        )
+
+    def as_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload["ready_for_reveal"] = self.ready_for_reveal
+        return payload
+
+
 def _rect_tuple(rect: QRect) -> RectTuple:
     return (
         int(rect.x()),
