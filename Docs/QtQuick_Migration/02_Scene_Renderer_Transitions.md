@@ -194,6 +194,25 @@ The controller owns lifecycle/time.
 
 The render node samples current monotonic time and computes render progress.
 
+### Static internal transition implementation boundary
+
+Keep transition rendering internally plugin-shaped but statically registered:
+
+- canonical identity remains owned by the transition registry;
+- every implementation conforms to one small common renderer/state contract;
+- each implementation owns its transition-specific shader, math, uniforms, and resource behaviour;
+- the common host/controller owns shared old/new image textures, lifecycle, pacing, progress,
+  completion, and cancellation plumbing;
+- a small static mapping from canonical transition identity to implementation is the intended
+  dispatch boundary;
+- adding or removing a transition should primarily change its implementation/resources,
+  registration, and focused tests.
+
+Do not accumulate a per-transition `if`/`elif`/switch tree in `QuickSceneController`,
+`TransitionRequest`/`TransitionRun`, the general controller, or another central dispatcher. This is
+internal modularity only: do not add dynamic discovery, manifests, hot loading, dependency
+resolution, API versioning, or a third-party plugin SDK.
+
 ## 8. Transition completion
 
 Transition completion must be exactly once and not admission-coupled to paint.

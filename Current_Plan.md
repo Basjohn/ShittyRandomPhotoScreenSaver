@@ -308,8 +308,9 @@ Reasons:
 - PySide exposes `QSGRenderNode`;
 - the P0 benchmark already proved Python render-thread OpenGL inside `QQuickWindow`.
 
-**First code slice must prove this primitive** with pinned PySide 6.9.1, script mode, two real displays
-when available, and an early compiled smoke.
+**First code slice must prove this primitive** with pinned PySide 6.9.1, script mode, and two real
+displays when available. Build-script and packaging inputs must be ready for the later
+operator-scheduled compiled smoke; the migration agent does not run that build early.
 
 If this primitive itself is an actual binding/runtime blocker, stop and revise the **single chosen
 Quick custom-render primitive** before migrating transitions/widgets. Do not keep two product
@@ -345,13 +346,15 @@ Read:
 
 Land in small commits:
 
-### A4 — operator-scheduled compiled smoke
+### A4 — deferred operator-only compiled smoke
 
-- [ ] When the operator explicitly schedules a build window, run
-  `scripts/build_qtquick_smoke.ps1 -Run` and retain the executable result.
+- [ ] After migration implementation is complete, and only when the operator explicitly schedules
+  a build window, run `scripts/build_qtquick_smoke.ps1 -Run` and retain the executable result.
 
-Do not launch the full build autonomously. This external validation does not block continued
-migration implementation; a failure reopens only the focused A4 packaging/runtime issue.
+During Phases C–G, keep build scripts, packaging inputs, and `build_runner.py` compatible and use
+focused static/script tests, but do not initiate a compiled or full build. This deferred external
+validation does not block migration implementation; a later failure reopens only the focused A4
+packaging/runtime issue.
 
 Exit gate:
 
@@ -359,7 +362,8 @@ Exit gate:
 threaded standalone Quick + inline GL render node + clean teardown + compiled-smoke inputs accepted
 ```
 
-The explicit operator-run executable validation remains required before production cutover.
+The explicit operator-run executable validation remains a final scheduled validation, not an
+admission gate for Phases C–G.
 
 ---
 
@@ -380,6 +384,9 @@ Preserve:
 - direction;
 - transition-specific authored parameters;
 - exactly-once completion.
+
+Use the statically registered internal transition-implementation boundary in the migration doc.
+Do not create a central per-transition dispatcher or a dynamic/external plugin system.
 
 ## C3 — renderer port
 
@@ -743,7 +750,10 @@ No cutover until the Quick migration harness has:
 - dimming/pixel shift/halo;
 - multi-display;
 - lifecycle;
-- early compiled smoke.
+- build/packaging inputs ready for deferred compiled validation.
+
+Compiled/installed product validation is not a cutover admission item unless the operator explicitly
+schedules it; by default it remains deferred to the final validation phase.
 
 Then make one explicit production-owner switch:
 
@@ -759,7 +769,8 @@ Do **not** preserve a `DisplayWidget` compatibility facade.
 
 Do **not** keep a production flag to return to QRhiWidget.
 
-Run focused + chunked tests and an installed smoke.
+Run focused + chunked tests. Do not initiate an installed or compiled smoke from this phase unless
+the operator explicitly schedules it.
 
 **Commit + push the cutover immediately when green.**
 
@@ -801,6 +812,9 @@ Do not leave both presenter architectures "for safety."
 # 13. Phase J — final build, lifecycle, performance and beyond-parity close
 
 Read `06_Build_Tooling_Validation.md`.
+
+The compiled/full-build items below are operator-scheduled after migration implementation is
+complete. Reaching this phase alone does not authorize an agent to initiate them.
 
 Required:
 

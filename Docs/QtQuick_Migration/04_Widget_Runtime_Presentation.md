@@ -108,6 +108,15 @@ It owns:
 - opacity/fade;
 - edit overlay participation.
 
+### Static family extensibility guardrail
+
+`WidgetRuntimeManager` operates generically through the presentation-neutral descriptor,
+family, and model contracts. Family-specific model and retained-presentation behaviour stays in
+each family implementation, selected through the existing static `family_id` to Quick presentation
+registry. Do not grow `WidgetRuntimeManager` or `QuickSceneController` into a per-widget
+`if`/`elif` dispatcher. This is an internal modular boundary, not dynamic discovery, manifests, hot
+loading, or an external widget plugin framework.
+
 ## 5. Widget model contract
 
 Each family exposes only the state its visual needs.
