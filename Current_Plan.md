@@ -418,7 +418,6 @@ Reuse existing shader sources/program math wherever possible.
 
 Port and prove every remaining active compositor transition:
 
-- BlockFlip;
 - BlockSpin;
 - Blinds;
 - Diffuse;

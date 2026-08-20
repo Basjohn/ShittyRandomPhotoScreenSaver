@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict, dataclass, field
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -55,7 +56,13 @@ from rendering.quick.transitions import (  # noqa: E402
 from rendering.quick.window import QuickDisplayWindow  # noqa: E402
 
 
-_TRANSITION_IDS = ("crossfade", "slide", "wipe", "warp_dissolve")
+_TRANSITION_IDS = (
+    "crossfade",
+    "slide",
+    "wipe",
+    "warp_dissolve",
+    "block_flip",
+)
 _TRANSITION_SMOKE_DIRECTIONS = {
     "crossfade": (None,),
     "slide": ("left", "right", "up", "down"),
@@ -68,6 +75,14 @@ _TRANSITION_SMOKE_DIRECTIONS = {
         "diag_tr_bl",
     ),
     "warp_dissolve": (None,),
+    "block_flip": (
+        "left",
+        "right",
+        "up",
+        "down",
+        "diag_tl_br",
+        "diag_tr_bl",
+    ),
 }
 _TRANSITION_DIRECTION_CHOICES = tuple(
     sorted(
@@ -125,6 +140,12 @@ _TRANSITION_PALETTE_RGB = {
     "slide": _DIRECTIONAL_PALETTE_RGB,
     "wipe": _DIRECTIONAL_PALETTE_RGB,
     "warp_dissolve": _DIRECTIONAL_PALETTE_RGB,
+    "block_flip": _DIRECTIONAL_PALETTE_RGB,
+}
+_TRANSITION_SMOKE_PARAMETERS = {
+    # Thirteen strips place the fixed 5x5 sample grid on both projected faces
+    # and exposed voids during the first eligible midpoint frame.
+    "block_flip": {"cols": 13, "rows": 13},
 }
 
 
@@ -452,11 +473,182 @@ def _matches_warp_samples(
     return materially_non_crossfade >= 8 and largest_error >= 48
 
 
+def _block_flip_expected_sample(
+    direction: object,
+    progress: float,
+    coordinate: tuple[float, float],
+) -> tuple[str, tuple[float, float] | None] | None:
+    """Mirror the slab projection far from anti-aliased face boundaries."""
+
+    x, y = coordinate
+    direction_text = str(direction)
+    cols = float(_TRANSITION_SMOKE_PARAMETERS["block_flip"]["cols"])
+    rows = float(_TRANSITION_SMOKE_PARAMETERS["block_flip"]["rows"])
+    if direction_text == "left":
+        strip_axis, strip_count = x, cols
+        strip_basis = (1.0, 0.0)
+    elif direction_text == "right":
+        strip_axis, strip_count = 1.0 - x, cols
+        strip_basis = (-1.0, 0.0)
+    elif direction_text == "down":
+        strip_axis, strip_count = y, rows
+        strip_basis = (0.0, 1.0)
+    elif direction_text == "up":
+        strip_axis, strip_count = 1.0 - y, rows
+        strip_basis = (0.0, -1.0)
+    elif direction_text == "diag_tl_br":
+        strip_axis = (x + y) * 0.5
+        strip_count = max(cols, rows)
+        strip_basis = (1.0, 1.0)
+    elif direction_text == "diag_tr_bl":
+        strip_axis = ((1.0 - x) + y) * 0.5
+        strip_count = max(cols, rows)
+        strip_basis = (-1.0, 1.0)
+    else:
+        return None
+
+    scaled_axis = min(max(strip_axis, 0.0), 0.999999) * strip_count
+    strip_index = math.floor(scaled_axis)
+    strip_local = scaled_axis - strip_index
+    order = strip_index / max(1.0, strip_count - 1.0)
+    start = 0.03 + order * 0.64
+    local_linear = max(0.0, min(1.0, (progress - start) / 0.33))
+    if local_linear <= 0.0:
+        return "source", coordinate
+    if local_linear >= 1.0:
+        return "destination", coordinate
+
+    local_turn = 0.5 - 0.5 * math.cos(local_linear * math.pi)
+    face_scale = abs(math.cos(local_turn * math.pi))
+    distance = abs(strip_local - 0.5)
+    half_width = 0.5 * face_scale
+    boundary_margin = 0.04
+    if distance > half_width + boundary_margin:
+        return "void", None
+    if distance < max(0.0, half_width - boundary_margin):
+        shows_destination = local_turn >= 0.5
+        face_local = (strip_local - 0.5) / max(face_scale, 0.0001) + 0.5
+        if shows_destination:
+            face_local = 1.0 - face_local
+        axis_delta = (face_local - strip_local) / strip_count
+        sample_uv = (
+            min(1.0, max(0.0, x + strip_basis[0] * axis_delta)),
+            min(1.0, max(0.0, y + strip_basis[1] * axis_delta)),
+        )
+        return (
+            "destination" if shows_destination else "source",
+            sample_uv,
+        )
+    return None
+
+
+def _block_flip_color_domain(color: object) -> str | None:
+    _alpha, red, green, blue = _argb_components(color)
+    if max(red, green, blue) <= 14:
+        return "void"
+    if blue - red >= 16:
+        return "source"
+    if red - blue >= 16:
+        return "destination"
+    return None
+
+
+def _block_flip_decoded_uv(
+    color: object,
+    domain: str,
+) -> tuple[float, float] | None:
+    """Decode the 2D coordinate fixture independently of slab lighting."""
+
+    _alpha, red, green, blue = _argb_components(color)
+    if domain == "source" and blue > 0:
+        return (
+            ((red / blue) * 220.0 - 32.0) / 96.0,
+            ((green / blue) * 220.0 - 32.0) / 96.0,
+        )
+    if domain == "destination" and red > 0:
+        return (
+            ((green / red) * 220.0 - 32.0) / 96.0,
+            ((blue / red) * 220.0 - 32.0) / 96.0,
+        )
+    return None
+
+
+def _matches_block_flip_samples(
+    source: object,
+    destination: object,
+    midpoint: object,
+    progress: float,
+    direction: object,
+) -> bool:
+    if not all(
+        isinstance(value, (tuple, list))
+        for value in (source, destination, midpoint)
+    ):
+        return False
+    if (
+        not source
+        or len(source) != len(destination)
+        or len(source) != len(midpoint)
+        or len(midpoint) != len(_TRANSITION_SAMPLE_COORDINATES)
+        or not 0.35 <= progress <= 0.75
+    ):
+        return False
+    if {_slide_color_domain(color) for color in source} != {"source"}:
+        return False
+    if {_slide_color_domain(color) for color in destination} != {"destination"}:
+        return False
+
+    counts = {"source": 0, "destination": 0, "void": 0}
+    compared = 0
+    projected_faces = 0
+    for color, coordinate in zip(
+        midpoint,
+        _TRANSITION_SAMPLE_COORDINATES,
+        strict=True,
+    ):
+        expected = _block_flip_expected_sample(
+            direction,
+            progress,
+            coordinate,
+        )
+        if expected is None:
+            continue
+        expected_domain, expected_uv = expected
+        if _block_flip_color_domain(color) != expected_domain:
+            return False
+        if expected_uv is not None:
+            actual_uv = _block_flip_decoded_uv(color, expected_domain)
+            if actual_uv is None or any(
+                abs(actual - target) > 0.11
+                for actual, target in zip(actual_uv, expected_uv, strict=True)
+            ):
+                return False
+            if any(
+                abs(target - original) >= 0.035
+                for target, original in zip(
+                    expected_uv,
+                    coordinate,
+                    strict=True,
+                )
+            ):
+                projected_faces += 1
+        counts[expected_domain] += 1
+        compared += 1
+    return bool(
+        compared >= 12
+        and counts["source"] >= 2
+        and counts["destination"] >= 2
+        and counts["void"] >= 1
+        and projected_faces >= 2
+    )
+
+
 _TRANSITION_MIDPOINT_ORACLES = {
     "crossfade": _matches_crossfade_samples,
     "slide": _matches_slide_samples,
     "wipe": _matches_wipe_samples,
     "warp_dissolve": _matches_warp_samples,
+    "block_flip": _matches_block_flip_samples,
 }
 
 
@@ -467,6 +659,33 @@ def _presentation_image(
     variant: str,
     transition_id: str,
 ) -> PresentationImage:
+    if transition_id == "block_flip":
+        image = QImage(32, 24, QImage.Format.Format_RGBA8888)
+        for x in range(image.width()):
+            normalized_x = x / max(1, image.width() - 1)
+            for y in range(image.height()):
+                normalized_y = y / max(1, image.height() - 1)
+                if variant == "initial":
+                    color = QColor(
+                        round(32 + 96 * normalized_x),
+                        round(32 + 96 * normalized_y),
+                        220,
+                    )
+                else:
+                    color = QColor(
+                        220,
+                        round(32 + 96 * normalized_x),
+                        round(32 + 96 * normalized_y),
+                    )
+                image.setPixelColor(x, y, color)
+        return capture_qimage(
+            image,
+            identity=(
+                f"quick-smoke:g{generation}:screen{screen_index}:variant:{variant}"
+            ),
+            source_path=f"synthetic://quick-smoke/{variant}",
+        )
+
     colors = tuple(
         QColor(*rgb)
         for rgb in _TRANSITION_PALETTE_RGB[transition_id][variant]
@@ -859,7 +1078,13 @@ class _SmokeRunner(QObject):
                         min(250, self._args.phase_delay_ms // 2),
                     ),
                     direction=self._args.transition_direction,
-                    parameters={"smoke": "c3-transition-renderer"},
+                    parameters={
+                        "smoke": "c3-transition-renderer",
+                        **_TRANSITION_SMOKE_PARAMETERS.get(
+                            self._args.transition_id,
+                            {},
+                        ),
+                    },
                     source_image=probe.presentation_image,
                     destination_image=probe.replacement_image,
                 )

@@ -1102,7 +1102,7 @@ class TransitionsTab(QWidget):
             'duration_ms': cur_duration,
             'block_flip': {
                 'rows': self.grid_rows_spin.value(),
-                'columns': self.grid_cols_spin.value(),
+                'cols': self.grid_cols_spin.value(),
                 'direction': self.blockflip_direction_combo.currentText(),
             },
             'blinds': {

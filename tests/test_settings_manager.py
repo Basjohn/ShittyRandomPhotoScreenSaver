@@ -529,14 +529,17 @@ class TestSettingsManagerDefaults:
         assert "obsolete_custom_key" not in vis
 
     def test_fresh_defaults_keep_visualizer_enabled_without_repair(self, tmp_path: Path) -> None:
+        from core.settings.defaults import get_default_settings
+
         manager = _make_manager(tmp_path)
 
         widgets = manager.get("widgets")
         vis = widgets["spotify_visualizer"]
+        canonical = get_default_settings()["widgets"]["spotify_visualizer"]
 
-        assert vis["enabled"] is True
-        assert vis["mode"] == "bubble"
-        assert vis["preset_spectrum"] == 0
+        assert vis["enabled"] is canonical["enabled"]
+        assert vis["mode"] == canonical["mode"]
+        assert vis["preset_spectrum"] == canonical["preset_spectrum"]
 
         repairs = manager.validate_and_repair()
         assert "widgets.spotify_visualizer" not in repairs
@@ -599,6 +602,40 @@ class TestSettingsManagerDefaults:
         assert persisted["type"] == "Slide"
         assert "easing" not in persisted
         assert reloaded.contains("transitions.easing") is False
+
+    def test_startup_migrates_block_flip_columns_to_canonical_cols(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        storage_root = tmp_path / "legacy_block_flip_columns"
+        app_name = f"TestApp_{uuid.uuid4().hex}"
+        manager = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+        transitions = manager.get("transitions", {})
+        transitions["block_flip"] = {
+            "rows": 7,
+            "cols": 24,
+            "columns": 9,
+            "direction": "Diagonal TL to BR",
+        }
+        manager.set("transitions", transitions)
+        manager.save()
+
+        reloaded = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+
+        block_flip = reloaded.get("transitions", {})["block_flip"]
+        assert block_flip == {
+            "rows": 7,
+            "cols": 9,
+            "direction": "Diagonal TL to BR",
+        }
 
     def test_visualizer_schema_migration_runs_once_for_legacy_persisted_payload(self, tmp_path: Path) -> None:
         storage_root = tmp_path / "legacy_visualizer_schema"

@@ -428,6 +428,16 @@ class SettingsManager(QObject):
             else:
                 transitions = {}
 
+            changed = False
+            block_flip = transitions.get('block_flip')
+            if isinstance(block_flip, Mapping) and 'columns' in block_flip:
+                normalized_block_flip = dict(block_flip)
+                normalized_block_flip['cols'] = normalized_block_flip.pop(
+                    'columns'
+                )
+                transitions['block_flip'] = normalized_block_flip
+                changed = True
+
             def merge(existing: Dict[str, Any], defaults_map: Mapping[str, Any]) -> bool:
                 changed = False
                 for k, v in defaults_map.items():
@@ -442,7 +452,7 @@ class SettingsManager(QObject):
                             changed = True
                 return changed
 
-            changed = merge(transitions, default_transitions)
+            changed = merge(transitions, default_transitions) or changed
             if changed or not isinstance(raw_transitions, Mapping):
                 self._store_transitions_root_locked(transitions)
                 self._settings.sync()

@@ -212,6 +212,13 @@ same `TransitionSample.eased_progress` in one render operation, so their union c
 viewport at endpoints, midpoint, arbitrary fractional samples, and jumps caused by missed physical
 frames. Do not independently accumulate or round the two image positions.
 
+Block Puzzle Flip remains shader-authoritative, but its final Quick visual contract is row/column
+3D strip slabs rather than the legacy per-cell centre-bias/jitter wave. Cardinal directions flip
+column or row slabs, the two saved diagonal directions remain diagonal slab waves, and exact start
+and end samples remain unshaded full images without a whole-screen dark/soft-lined startup wash.
+Resolve the Settings-owned `rows`/`cols` values before request admission; do not restore CPU-region
+or per-block presentation work.
+
 ### Static internal transition implementation boundary
 
 Keep transition rendering internally plugin-shaped but statically registered:
