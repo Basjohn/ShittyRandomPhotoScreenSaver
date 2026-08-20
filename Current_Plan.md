@@ -217,6 +217,26 @@ They explain **how** to perform a named slice. They may not:
 
 Deferred post-cutover deletion is cross-linked to `Future_Cleanup.md`.
 
+## 1.7 Developer documentation migrates with proven contracts
+
+Do not rewrite presentation-feature authoring/development guidance before its owning implementation
+phase has proved the final contract. During pre-cutover rewrites, label the new guidance as the Qt
+Quick target architecture while the old production presenter still exists.
+
+- [ ] After Phase C exits, rewrite transition-authoring guidance for the canonical registry and lazy
+  Quick renderer contract.
+- [ ] After Phase D exits, update visualizer/preset-authoring guidance for the final Quick visualizer
+  boundary while preserving preset and logical-runtime instructions that remain valid.
+- [ ] After Phase F exits, rewrite widget-authoring guidance for the presentation-neutral
+  descriptor/model/family registry and retained Quick component contract.
+- [ ] After Phase H cutover and Phase I deletion, remove or archive obsolete QWidget, QRhiWidget and
+  compositor authoring instructions and make the Quick guides the sole current authority.
+- [ ] In Phase J, audit README/project overview, architecture docs, contracts, indexes, cross-links,
+  examples, troubleshooting/build guidance, and references to deleted presentation code.
+
+Preserve historical bug/evidence documents as history; only repair links or add context needed to
+keep that history intelligible.
+
 ---
 
 # 2. Destination architecture
