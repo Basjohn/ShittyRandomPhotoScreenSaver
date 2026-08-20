@@ -122,6 +122,12 @@ def test_script_smoke_proves_threaded_draw_resize_dpr_and_invalidation():
     assert window["window_type"] == "QuickDisplayWindow"
     assert window["display_identity"]["screen_index"] == 0
     assert window["display_identity"]["runtime_generation"] == 0
+    assert window["initial_scene_state"]["readiness"]["ready_for_reveal"] is True
+    assert (
+        window["final_scene_state"]["readiness"]["scene_graph_invalidated"]
+        is True
+    )
+    assert window["final_scene_state"]["readiness"]["qml_objects_retired"] is True
     assert window["initial"]["render_thread_id"] != window["initial"]["gui_thread_id"]
     assert window["final"]["release_count"] == 1
     assert window["final"]["invalidation_count"] >= 1

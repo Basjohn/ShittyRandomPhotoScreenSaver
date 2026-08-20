@@ -14,22 +14,20 @@ from typing import Any
 from rendering.quick.bootstrap import (
     configure_quick_environment,
     configure_quick_graphics,
-    quick_qml_root,
 )
 
 
 # Fix process-owned Quick environment before importing Qt.
 configure_quick_environment()
 
-from PySide6.QtCore import QObject, QSize, QTimer, QUrl  # noqa: E402
+from PySide6.QtCore import QObject, QSize, QTimer  # noqa: E402
 from PySide6.QtGui import QColor, QGuiApplication, QScreen  # noqa: E402
-from PySide6.QtQml import QQmlComponent, QQmlEngine  # noqa: E402
-from PySide6.QtQuick import QQuickItem, QQuickWindow, QSGRendererInterface  # noqa: E402
+from PySide6.QtQuick import QQuickWindow, QSGRendererInterface  # noqa: E402
 
-from rendering.quick.render import (  # noqa: E402
-    BackgroundRenderItem,
-    RenderNodeSnapshot,
-    RenderNodeTelemetry,
+from rendering.quick.render import RenderNodeSnapshot, RenderNodeTelemetry  # noqa: E402
+from rendering.quick.scene_controller import (  # noqa: E402
+    QuickSceneController,
+    QuickSceneFactory,
 )
 from rendering.quick.state import QuickWindowPolicy  # noqa: E402
 from rendering.quick.window import QuickDisplayWindow  # noqa: E402
@@ -40,11 +38,15 @@ class _WindowProbe:
     index: int
     screen_name: str
     window: QuickDisplayWindow
-    scene_root: QQuickItem
-    item: BackgroundRenderItem
+    scene: QuickSceneController
     telemetry: RenderNodeTelemetry
+    qml_object_name: str
+    qml_runtime_role: str
+    qml_screen_index: int
+    qml_runtime_generation: int | None
     initial_capture: dict[str, Any] | None = None
     resized_capture: dict[str, Any] | None = None
+    initial_scene_state: dict[str, object] | None = None
 
 
 def _parse_size(value: str) -> QSize:
@@ -95,18 +97,7 @@ class _SmokeRunner(QObject):
         self._probes: list[_WindowProbe] = []
         self._initial_snapshots: list[RenderNodeSnapshot] = []
         self._errors: list[str] = []
-        self._qml_root = quick_qml_root()
-        self._qml_url = QUrl.fromLocalFile(
-            str(self._qml_root / "DisplayScene.qml")
-        )
-        self._qml_engine = QQmlEngine(self)
-        self._qml_engine.addImportPath(str(self._qml_root))
-        self._qml_component = QQmlComponent(self._qml_engine, self._qml_url)
-        if self._qml_component.status() != QQmlComponent.Status.Ready:
-            errors = "; ".join(
-                error.toString() for error in self._qml_component.errors()
-            )
-            raise RuntimeError(f"DisplayScene.qml failed to load: {errors}")
+        self._scene_factory = QuickSceneFactory(self)
 
     def start(self) -> None:
         screens = QGuiApplication.screens()
@@ -147,32 +138,13 @@ class _SmokeRunner(QObject):
             gui_thread_id=threading.get_ident(),
             capture_pixels=True,
         )
-        content = window.contentItem()
-        scene_root = self._qml_component.create()
-        if not isinstance(scene_root, QQuickItem):
-            raise RuntimeError("DisplayScene.qml did not create a QQuickItem root")
-        scene_root.setParent(content)
-        scene_root.setParentItem(content)
-        scene_root.setSize(content.size())
-        item = BackgroundRenderItem(scene_root, telemetry=telemetry)
-        item.setSize(scene_root.size())
-        content.widthChanged.connect(
-            lambda scene_root=scene_root, content=content: scene_root.setWidth(
-                content.width()
-            )
+        scene = QuickSceneController(
+            window=window,
+            factory=self._scene_factory,
+            telemetry=telemetry,
         )
-        content.heightChanged.connect(
-            lambda scene_root=scene_root, content=content: scene_root.setHeight(
-                content.height()
-            )
-        )
-        scene_root.widthChanged.connect(
-            lambda item=item, scene_root=scene_root: item.setWidth(scene_root.width())
-        )
-        scene_root.heightChanged.connect(
-            lambda item=item, scene_root=scene_root: item.setHeight(scene_root.height())
-        )
-        item.setProofProgress(0.36 + (0.08 * index))
+        scene.set_background_proof_progress(0.36 + (0.08 * index))
+        scene_root = scene.scene_root
 
         if window.screen() is not screen:
             self._errors.append(f"screen{index} was not bound before show")
@@ -183,9 +155,12 @@ class _SmokeRunner(QObject):
             index=index,
             screen_name=screen.name(),
             window=window,
-            scene_root=scene_root,
-            item=item,
+            scene=scene,
             telemetry=telemetry,
+            qml_object_name=scene_root.objectName(),
+            qml_runtime_role=str(scene_root.property("runtimeRole")),
+            qml_screen_index=int(scene_root.property("screenIndex")),
+            qml_runtime_generation=scene_root.property("runtimeGeneration"),
         )
 
     def _capture_initial(self) -> None:
@@ -193,8 +168,9 @@ class _SmokeRunner(QObject):
             for probe in self._probes:
                 snapshot = probe.telemetry.snapshot()
                 probe.initial_capture = _capture_from_snapshot(snapshot)
+                probe.initial_scene_state = probe.scene.describe_scene_state()
                 self._initial_snapshots.append(snapshot)
-                probe.item.setProofProgress(0.68)
+                probe.scene.set_background_proof_progress(0.68)
                 probe.window.resize(
                     probe.window.width() + 80,
                     probe.window.height() + 45,
@@ -210,6 +186,7 @@ class _SmokeRunner(QObject):
                 probe.resized_capture = _capture_from_snapshot(
                     probe.telemetry.snapshot()
                 )
+                probe.scene.quiesce_for_retirement()
                 probe.window.queue_close()
         except Exception as exc:
             self._errors.append(f"resized capture failed: {type(exc).__name__}: {exc}")
@@ -237,6 +214,8 @@ class _SmokeRunner(QObject):
                     "window_type": type(probe.window).__name__,
                     "display_identity": probe.window.display_identity.as_dict(),
                     "window_state": probe.window.describe_window_state(),
+                    "initial_scene_state": probe.initial_scene_state,
+                    "final_scene_state": probe.scene.describe_scene_state(),
                     "initial": _snapshot_dict(initial),
                     "final": _snapshot_dict(final),
                     "initial_capture": initial_capture,
@@ -252,9 +231,8 @@ class _SmokeRunner(QObject):
             "created_windows": len(self._probes),
             "render_loop": os.environ.get("QSG_RENDER_LOOP"),
             "graphics_api": QQuickWindow.graphicsApi().name,
-            "qml_url": self._qml_url.toLocalFile(),
-            "qml_loaded": self._qml_component.status()
-            == QQmlComponent.Status.Ready,
+            "qml_url": self._scene_factory.qml_url.toLocalFile(),
+            "qml_loaded": self._scene_factory.is_ready,
             "windows": reports,
             "errors": self._errors,
         }
@@ -277,10 +255,29 @@ class _SmokeRunner(QObject):
         errors: list[str] = []
         if final.error:
             errors.append(f"{prefix} render error: {final.error}")
-        if probe.scene_root.objectName() != "displaySceneRoot":
+        if probe.qml_object_name != "displaySceneRoot":
             errors.append(f"{prefix} did not instantiate DisplayScene.qml")
-        if probe.scene_root.property("runtimeRole") != "display-scene":
+        if probe.qml_runtime_role != "display-scene":
             errors.append(f"{prefix} QML runtime role is incorrect")
+        if probe.qml_screen_index != probe.index:
+            errors.append(f"{prefix} QML screen identity is incorrect")
+        if probe.qml_runtime_generation != 0:
+            errors.append(f"{prefix} QML lost valid runtime generation 0")
+        initial_scene = probe.initial_scene_state or {}
+        initial_readiness = initial_scene.get("readiness", {})
+        if not isinstance(initial_readiness, dict) or not initial_readiness.get(
+            "ready_for_reveal"
+        ):
+            errors.append(f"{prefix} scene never reached explicit reveal readiness")
+        final_scene = probe.scene.describe_scene_state()
+        final_readiness = final_scene.get("readiness", {})
+        if not isinstance(final_readiness, dict):
+            errors.append(f"{prefix} final scene readiness is unavailable")
+        else:
+            if not final_readiness.get("scene_graph_invalidated"):
+                errors.append(f"{prefix} scene controller missed invalidation")
+            if not final_readiness.get("qml_objects_retired"):
+                errors.append(f"{prefix} scene controller retained QML objects")
         identity = probe.window.display_identity
         if identity.screen_index != probe.index:
             errors.append(f"{prefix} display identity index is incorrect")
