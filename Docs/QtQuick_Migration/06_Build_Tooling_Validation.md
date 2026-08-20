@@ -10,7 +10,12 @@ Cross-links:
 - `Docs/Harness_Index.md`
 - `Future_Cleanup.md`
 
-## 1. Build risk is an early migration concern
+## 1. Build risk is handled early; build execution is deferred
+
+During Phases C–G, update build scripts, packaging declarations, and `build_runner.py` as required,
+and validate them with focused static/script tests. Do not initiate a compiled or full product build.
+Executable/product validation runs only after migration implementation is complete and the operator
+explicitly schedules it.
 
 Current Nuitka build scripts include:
 
@@ -81,11 +86,11 @@ Also inspect any shared build runner/job definitions that duplicate expected ass
 
 Keep build layout/publishing behaviour unchanged unless Quick packaging actually requires a change.
 
-## 5. Early compiled smoke
+## 5. Deferred operator-scheduled compiled smoke
 
-After the first production Quick render-node foundation exists:
-
-Build the smallest normal/diagnostic target that exercises:
+Land the required packaging/script support when the production Quick render-node foundation exists,
+but defer execution until migration implementation is complete and the operator schedules a build
+window. At that point, build the smallest normal/diagnostic target that exercises:
 
 - QQuickWindow;
 - QtQml;
@@ -95,7 +100,7 @@ Build the smallest normal/diagnostic target that exercises:
 - custom render node;
 - clean exit.
 
-This gate occurs **before** mass widget migration.
+This is not an implementation gate for transition, visualizer, widget, or CUSTOM migration work.
 
 If QML plugin/data packaging fails, fix packaging then continue. That is not a reason to return to
 QRhiWidget.
