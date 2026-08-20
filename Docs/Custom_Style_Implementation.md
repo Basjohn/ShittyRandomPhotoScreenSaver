@@ -49,7 +49,11 @@ Quick runtime must preserve:
 - card shadows;
 - text/header shadows;
 - per-widget/global opacity/fade;
-- artwork/progress/special family styling.
+- artwork/progress/special family styling;
+- one global eight-direction shadow orientation in General, defaulting to SE.
+
+The direction setting rotates each shadow type's existing authored magnitude rather than replacing
+its blur/spread/opacity/color or forcing every shadow to the same offset.
 
 Do not remove a control because the exact QWidget implementation no longer exists.
 
@@ -69,6 +73,9 @@ Qt Quick must **not** reintroduce `QGraphicsEffect`.
 
 For the Quick runtime:
 
+- use one canonical `ShadowDirection` (`NW/N/NE/W/E/SW/S/SE`) and signed-offset resolver;
+- preserve each surface's existing authored shadow magnitude;
+- reserve four-sided visual padding so top/left directions cannot clip;
 - prefer a retained rectangular/card shadow shader/item for rounded cards;
 - use bounded Quick effects only where an arbitrary-shaped source requires them;
 - do not use broad focus/menu/display cache-busting;

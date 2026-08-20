@@ -108,7 +108,8 @@ them.
 
 - [ ] remove generated preview debris after clean-checkout proof;
 - [ ] collapse deprecated class-global input authority after Quick input owner lands;
-- [ ] retire deprecated Imgur only through an explicit product decision;
+- [ ] remove only any caller-proven Imgur debris missed by the active Phase F removal; Imgur
+      itself is no longer deferred and must not be ported to Quick;
 - [ ] add lightweight repository-hygiene checks.
 
 ## 10. Unrelated/product backlog

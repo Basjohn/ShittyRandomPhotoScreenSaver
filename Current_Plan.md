@@ -602,6 +602,72 @@ Build small reusable Quick components/primitives for:
 - fade/visibility;
 - click targets.
 
+## E4 — land the recovered eight-direction shadow feature
+
+This is an **active migration deliverable**, not Future Cleanup.
+
+The abandoned 4.6.9 General-settings feature is restored here because the Quick style/shadow
+unification removes the architectural reason it previously stalled.
+
+Add a global General-setting selector with the intended UX:
+
+```text
+NW   N   NE
+ W   ·    E
+SW   S   SE
+```
+
+- eight selectable outer directions;
+- inset/pressed indication for the selected direction;
+- default `SE`, matching current authored appearance;
+- center is not a ninth shadow mode unless a separate product decision explicitly adds one.
+
+Use one canonical presentation-neutral direction authority, preferably a `ShadowDirection` enum/token
+(`nw`, `n`, `ne`, `w`, `e`, `sw`, `s`, `se`).
+
+Do **not** keep the currently ineffective `widgets.shadows.offset` as a competing legacy authority.
+During this slice, migrate/remove that unused setting cleanly rather than adding compatibility glue.
+
+Resolve direction as signs applied to each shadow class's existing authored magnitude:
+
+```text
+card magnitude (4, 6), SE -> (+4, +6)
+card magnitude (4, 6), NW -> (-4, -6)
+text magnitude (3, 3), N  -> ( 0, -3)
+icon magnitude (3, 4), W  -> (-3,  0)
+```
+
+Changing direction must **not** flatten per-shadow tuning. Preserve the distinct card/text/header/
+icon/control/volume/visualizer magnitudes, blur, spread, opacity and color.
+
+The unified Quick shadow primitives must support signed offsets and sufficient four-sided visual
+padding so top/left directions cannot clip.
+
+Required coverage:
+
+- all eight directions + default SE;
+- cards;
+- text;
+- headers;
+- icons/artwork;
+- controls;
+- volume slider;
+- visualizer card;
+- digital and analogue Clock shadow details;
+- Weather;
+- Media;
+- Reddit/Gmail;
+- Steam families;
+- multiple DPRs;
+- CUSTOM geometry;
+- no content/outer-rect drift when only direction changes.
+
+The General selector should be implemented only after the shared Quick shadow primitives can actually
+honour it; do not ship a UI control that only updates settings.
+
+**Checkpoint + push the unified direction authority, then checkpoint + push the General UI once the
+runtime gallery proves it.**
+
 ### Shadow-specific rule
 
 The old multi-monitor corruption was associated with QWidget `QGraphicsDropShadowEffect` /
@@ -622,6 +688,9 @@ For Qt Quick:
 Exit gate:
 
 - shared style can represent all current shadow/opacity/border/radius requirements;
+- the eight-direction General selector drives every migrated shadow family correctly;
+- default SE is visually equivalent to the current authored direction;
+- all signed directions have correct four-sided padding and no clipping;
 - no focus/menu/display corruption in the Quick gallery stress;
 - no whole-screen effect layer for ordinary cards.
 
@@ -633,7 +702,29 @@ Port runtime pixels, not the settings GUI/backends.
 
 Each family is its own landed checkpoint unless very small and inseparable.
 
-Recommended order:
+## F0 — remove deprecated Imgur instead of porting it
+
+A prior cleanup decision explicitly classified Imgur as deprecated and not worth repairing. Do not
+spend Qt Quick migration work recreating it.
+
+Remove its live product surface end to end at this point (or earlier if descriptor work naturally
+makes it cleaner):
+
+- dev/runtime gate;
+- defaults/settings model and Settings controls;
+- descriptor/factory/runtime widget;
+- provider/direct-network fallback;
+- CUSTOM payload/support;
+- tests whose only purpose is keeping Imgur alive;
+- build/package references;
+- current documentation references.
+
+Unknown stale persisted Imgur keys may be ignored/stripped by the normal settings cleanup path; do
+not build a compatibility widget or fallback provider.
+
+**Checkpoint + push the Imgur removal.**
+
+Recommended port order after that:
 
 1. Clock / Clock2 / Clock3
 2. Weather
@@ -645,8 +736,7 @@ Recommended order:
 8. Achievement Pulse
 9. Abandonment Issues
 10. Friend Pulse
-11. enabled development widget families still present in the canonical runtime (including Imgur if
-    still supported when reached)
+11. other enabled development widget families still deliberately supported by the canonical runtime
 
 Per family:
 
