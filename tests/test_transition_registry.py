@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.animation.types import EasingCurve
 from rendering.transition_registry import (
     canonicalize_transition_name,
     get_cycle_transition_names,
@@ -9,6 +10,7 @@ from rendering.transition_registry import (
     get_transition_program_specs,
     get_transition_setting_names,
     is_transition_available_for_hw,
+    iter_transition_descriptors,
 )
 from engine.screensaver_engine import ScreensaverEngine
 from rendering.transition_factory import TransitionFactory
@@ -103,3 +105,54 @@ def test_transition_registry_runtime_identity_resolves_internal_labels_and_class
         get_transition_descriptor_for_runtime_identity("GLCompositorBurnTransition").stable_id
         == "burn"
     )
+
+
+def test_transition_registry_owns_each_authored_progress_curve() -> None:
+    assert {
+        descriptor.stable_id: descriptor.easing_curve
+        for descriptor in iter_transition_descriptors()
+    } == {
+        "ripple": EasingCurve.LINEAR,
+        "wipe": EasingCurve.QUAD_IN_OUT,
+        "block_spins": EasingCurve.LINEAR,
+        "diffuse": EasingCurve.LINEAR,
+        "slide": EasingCurve.SINE_IN_OUT,
+        "crossfade": EasingCurve.QUAD_IN_OUT,
+        "block_flip": EasingCurve.LINEAR,
+        "warp_dissolve": EasingCurve.LINEAR,
+        "blinds": EasingCurve.LINEAR,
+        "crumble": EasingCurve.LINEAR,
+        "particle": EasingCurve.LINEAR,
+        "burn": EasingCurve.LINEAR,
+    }
+
+
+def test_transition_factory_ignores_retired_easing_setting() -> None:
+    captured: dict[str, object] = {}
+    factory = object.__new__(TransitionFactory)
+    factory._resources = None
+    factory._settings = _FactorySettings(hw_accel=True)
+    factory._settings.get = lambda key, default=None: (
+        {
+            "type": "Slide",
+            "duration_ms": 1000,
+            "easing": "InOutBack",
+        }
+        if key == "transitions"
+        else default
+    )
+
+    def capture(transition_type, settings, duration_ms, easing_curve):
+        captured.update(
+            transition_type=transition_type,
+            settings=settings,
+            duration_ms=duration_ms,
+            easing_curve=easing_curve,
+        )
+        return None
+
+    factory._create_by_type = capture
+
+    assert factory._create_transition_impl() is None
+    assert captured["transition_type"] == "Slide"
+    assert captured["easing_curve"] is EasingCurve.SINE_IN_OUT

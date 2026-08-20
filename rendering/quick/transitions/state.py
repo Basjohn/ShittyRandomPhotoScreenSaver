@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 import math
 from typing import TypeAlias
@@ -71,12 +71,11 @@ class TransitionRequest:
     requested_name: str
     selected_from_random: bool
     duration_ms: int
-    easing_name: str
-    easing_curve: EasingCurve
     direction: TransitionValue
     parameters: TransitionParameters
     source_image: PresentationImage
     destination_image: PresentationImage
+    easing_curve: EasingCurve = field(init=False)
 
     def __post_init__(self) -> None:
         generation = int(self.runtime_generation)
@@ -90,8 +89,6 @@ class TransitionRequest:
         duration_ms = int(self.duration_ms)
         if duration_ms <= 0:
             raise ValueError("transition duration must be positive")
-        if not isinstance(self.easing_curve, EasingCurve):
-            raise TypeError("transition easing_curve must be an EasingCurve")
         if not isinstance(self.source_image, PresentationImage) or not isinstance(
             self.destination_image,
             PresentationImage,
@@ -111,7 +108,7 @@ class TransitionRequest:
             "selected_from_random",
             bool(self.selected_from_random),
         )
-        object.__setattr__(self, "easing_name", str(self.easing_name or "Auto"))
+        object.__setattr__(self, "easing_curve", descriptor.easing_curve)
         object.__setattr__(self, "direction", _freeze_value(self.direction))
         object.__setattr__(
             self,

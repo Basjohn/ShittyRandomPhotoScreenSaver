@@ -38,7 +38,6 @@ from PySide6.QtGui import (  # noqa: E402
 )
 from PySide6.QtQuick import QQuickWindow, QSGRendererInterface  # noqa: E402
 
-from core.animation.types import EasingCurve  # noqa: E402
 from rendering.quick.image_boundary import capture_qimage  # noqa: E402
 from rendering.quick.image_state import PresentationImage  # noqa: E402
 from rendering.quick.render import RenderNodeSnapshot, RenderNodeTelemetry  # noqa: E402
@@ -59,7 +58,7 @@ from rendering.quick.window import QuickDisplayWindow  # noqa: E402
 _TRANSITION_IDS = ("crossfade", "slide", "wipe")
 _TRANSITION_SMOKE_DIRECTIONS = {
     "crossfade": (None,),
-    "slide": ("left", "right"),
+    "slide": ("left", "right", "up", "down"),
     "wipe": (
         "left_to_right",
         "right_to_left",
@@ -308,30 +307,37 @@ def _matches_slide_samples(
         return False
     if not source or not destination or not midpoint or not 0.0 < progress < 1.0:
         return False
-    source_labels = [_slide_color_domain(color) for color in source]
-    destination_labels = [_slide_color_domain(color) for color in destination]
-    midpoint_labels = [_slide_color_domain(color) for color in midpoint]
-    if set(source_labels) != {"source"}:
+    if len(midpoint) != len(_TRANSITION_SAMPLE_COORDINATES):
         return False
-    if set(destination_labels) != {"destination"}:
+    if {_slide_color_domain(color) for color in source} != {"source"}:
         return False
-    expected_order = {
-        "left": ("source", "destination"),
-        "right": ("destination", "source"),
-    }.get(str(direction))
-    if expected_order is None or set(midpoint_labels) != set(expected_order):
+    if {_slide_color_domain(color) for color in destination} != {"destination"}:
         return False
-    rank = {label: index for index, label in enumerate(expected_order)}
-    width = len(_SAMPLE_FRACTIONS)
-    rows = (
-        midpoint_labels[index : index + width]
-        for index in range(0, len(midpoint_labels), width)
-    )
-    return all(
-        set(row) == set(expected_order)
-        and row == sorted(row, key=rank.__getitem__)
-        for row in rows
-    )
+    direction_text = str(direction)
+    if direction_text not in {"left", "right", "up", "down"}:
+        return False
+
+    compared = 0
+    expected_domains: set[str] = set()
+    for color, (sample_x, sample_y) in zip(
+        midpoint,
+        _TRANSITION_SAMPLE_COORDINATES,
+        strict=True,
+    ):
+        axis = sample_x if direction_text in {"left", "right"} else sample_y
+        boundary = 1.0 - progress if direction_text in {"left", "up"} else progress
+        if abs(axis - boundary) <= 0.025:
+            continue
+        if direction_text in {"left", "up"}:
+            destination_owns = axis >= boundary
+        else:
+            destination_owns = axis < boundary
+        expected = "destination" if destination_owns else "source"
+        expected_domains.add(expected)
+        if _slide_color_domain(color) != expected:
+            return False
+        compared += 1
+    return compared >= 16 and expected_domains == {"source", "destination"}
 
 
 _WIPE_AXES = {
@@ -791,8 +797,6 @@ class _SmokeRunner(QObject):
                         80,
                         min(250, self._args.phase_delay_ms // 2),
                     ),
-                    easing_name="InOutQuad",
-                    easing_curve=EasingCurve.QUAD_IN_OUT,
                     direction=self._args.transition_direction,
                     parameters={"smoke": "c3-transition-renderer"},
                     source_image=probe.presentation_image,

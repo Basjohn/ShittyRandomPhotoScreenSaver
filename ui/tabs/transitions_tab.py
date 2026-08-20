@@ -219,32 +219,6 @@ class TransitionsTab(QWidget):
         
         layout.addWidget(self.direction_group)
         
-        # Easing group
-        easing_group = QGroupBox("Easing Curve")
-        _style_group_box(easing_group)
-        easing_layout = QVBoxLayout(easing_group)
-        easing_layout.setContentsMargins(0, 12, 0, 0)
-        easing_layout.setSpacing(12)
-        
-        easing_row = _aligned_row(easing_layout, "Easing:")
-        self.easing_combo = StyledComboBox()
-        self.easing_combo.addItems([
-            "Auto",
-            "Linear",
-            "InQuad", "OutQuad", "InOutQuad",
-            "InCubic", "OutCubic", "InOutCubic",
-            "InQuart", "OutQuart", "InOutQuart",
-            "InExpo", "OutExpo", "InOutExpo",
-            "InSine", "OutSine", "InOutSine",
-            "InCirc", "OutCirc", "InOutCirc",
-            "InBack", "OutBack", "InOutBack"
-        ])
-        self.easing_combo.currentTextChanged.connect(self._save_settings)
-        easing_row.addWidget(self.easing_combo)
-        easing_row.addStretch()
-        
-        layout.addWidget(easing_group)
-        
         # Block flip specific settings
         self.flip_group = QGroupBox("Block Flip Settings")
         _style_group_box(self.flip_group)
@@ -720,7 +694,6 @@ class TransitionsTab(QWidget):
             getattr(self, 'pool_checkbox', None),
             getattr(self, 'duration_slider', None),
             getattr(self, 'direction_combo', None),
-            getattr(self, 'easing_combo', None),
             getattr(self, 'grid_rows_spin', None),
             getattr(self, 'grid_cols_spin', None),
             getattr(self, 'blockflip_direction_combo', None),
@@ -796,12 +769,6 @@ class TransitionsTab(QWidget):
             self._dir_wipe = wipe_dir
             self._dir_blockspin = blockspin_dir
             
-            # Load easing
-            easing = transitions_config.get('easing', 'Auto')
-            index = self.easing_combo.findText(easing)
-            if index >= 0:
-                self.easing_combo.setCurrentIndex(index)
-
             # Note: GPU acceleration is controlled globally in Display tab
             
             # Load block flip settings - use canonical defaults from defaults.py
@@ -1133,7 +1100,6 @@ class TransitionsTab(QWidget):
         config = {
             'type': cur_type,
             'duration_ms': cur_duration,
-            'easing': self.easing_combo.currentText(),
             'block_flip': {
                 'rows': self.grid_rows_spin.value(),
                 'columns': self.grid_cols_spin.value(),

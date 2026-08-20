@@ -682,6 +682,7 @@ class SettingsManager(QObject):
     _OBSOLETE_KEYS = frozenset({
         'display.vsync_enabled',
         'display.fps_cap',
+        'transitions.easing',
     })
 
     def cleanup_legacy_global_preset_state(self) -> List[str]:
@@ -710,7 +711,11 @@ class SettingsManager(QObject):
         removed = []
         with self._lock:
             for key in self._OBSOLETE_KEYS | self._RETIRED_WIDGET_SHADOW_DOTTED_KEYS:
-                if self._settings.contains(key):
+                removed_structured = self._remove_structured_key_locked(key)
+                if removed_structured:
+                    removed.append(key)
+                    logger.debug("Removed obsolete structured setting: %s", key)
+                elif self._settings.contains(key):
                     self._settings.remove(key)
                     removed.append(key)
                     logger.debug("Removed obsolete setting: %s", key)

@@ -4,6 +4,7 @@ import uuid
 from PySide6.QtWidgets import QApplication
 
 from ui.tabs.transitions_tab import TransitionsTab
+from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
 from rendering.transition_registry import get_transition_setting_names
 
@@ -33,9 +34,10 @@ def test_slide_and_wipe_directions_are_independent(qapp, settings_manager, qtbot
     transitions_cfg = settings_manager.get('transitions', {}) or {}
     slide_cfg = transitions_cfg.get('slide', {}) if isinstance(transitions_cfg.get('slide', {}), dict) else {}
     wipe_cfg = transitions_cfg.get('wipe', {}) if isinstance(transitions_cfg.get('wipe', {}), dict) else {}
+    canonical_wipe_direction = get_default_settings()["transitions"]["wipe"]["direction"]
 
     assert slide_cfg.get('direction', 'Random') == 'Random'
-    assert wipe_cfg.get('direction', 'Diagonal TL-BR') == 'Diagonal TL-BR'
+    assert wipe_cfg.get('direction') == canonical_wipe_direction
 
     # Set Slide to Left to Right, keep Wipe at its default
     tab.transition_combo.setCurrentText("Slide")
@@ -51,7 +53,7 @@ def test_slide_and_wipe_directions_are_independent(qapp, settings_manager, qtbot
 
     assert slide_cfg.get('direction') == 'Left to Right'
     # Wipe direction should remain unchanged
-    assert wipe_cfg.get('direction', 'Diagonal TL-BR') == 'Diagonal TL-BR'
+    assert wipe_cfg.get('direction') == canonical_wipe_direction
 
     # Now set Wipe to Top to Bottom, ensuring Slide stays as previously chosen
     tab.transition_combo.setCurrentText("Wipe")
@@ -70,19 +72,20 @@ def test_slide_and_wipe_directions_are_independent(qapp, settings_manager, qtbot
 
 
 def test_default_transition_type_and_direction(qapp, settings_manager, qtbot):
-    """Verify defaults match spec: type=Random, Slide=Left to Right, Wipe=Diagonal TR-BL."""
+    """Verify the tab loads the authoritative transition defaults."""
     tab = TransitionsTab(settings_manager)
     qtbot.addWidget(tab)
 
     transitions_cfg = settings_manager.get('transitions', {}) or {}
-    assert transitions_cfg.get('type') == 'Particle'
-    assert transitions_cfg.get('duration_ms') == 10524
+    canonical = get_default_settings()["transitions"]
+    assert transitions_cfg.get('type') == canonical['type']
+    assert transitions_cfg.get('duration_ms') == canonical['duration_ms']
 
     slide_cfg = transitions_cfg.get('slide', {}) if isinstance(transitions_cfg.get('slide', {}), dict) else {}
     wipe_cfg = transitions_cfg.get('wipe', {}) if isinstance(transitions_cfg.get('wipe', {}), dict) else {}
 
-    assert slide_cfg.get('direction') == 'Random'
-    assert wipe_cfg.get('direction') == 'Diagonal TL-BR'
+    assert slide_cfg.get('direction') == canonical['slide']['direction']
+    assert wipe_cfg.get('direction') == canonical['wipe']['direction']
 
 
 def test_transition_combo_uses_registry_order(qapp, settings_manager, qtbot):
@@ -91,3 +94,20 @@ def test_transition_combo_uses_registry_order(qapp, settings_manager, qtbot):
 
     combo_items = [tab.transition_combo.itemText(i) for i in range(tab.transition_combo.count())]
     assert combo_items == get_transition_setting_names()
+
+
+def test_transition_easing_control_and_saved_preference_are_retired(
+    qapp,
+    settings_manager,
+    qtbot,
+):
+    transitions = settings_manager.get("transitions", {})
+    transitions["easing"] = "InOutBack"
+    settings_manager.set("transitions", transitions)
+
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    tab._save_settings()
+
+    assert not hasattr(tab, "easing_combo")
+    assert "easing" not in settings_manager.get("transitions", {})

@@ -181,7 +181,6 @@ PRESET_DEFINITIONS: Dict[str, PresetDefinition] = {
             "transitions.type": "Ripple",
             "transitions.duration_ms": 7200,
             "transitions.direction": "Random",
-            "transitions.easing": "Auto",
             "transitions.random_always": False,
             "transitions.ripple.ripple_count": 1,
             # Transition pool

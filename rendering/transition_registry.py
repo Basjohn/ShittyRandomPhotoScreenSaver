@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Optional
 
+from core.animation.types import EasingCurve
 from rendering.gl_programs.keys import (
     BLINDS,
     BLOCK_FLIP,
@@ -30,6 +31,7 @@ class TransitionDescriptor:
 
     setting_name: str
     stable_id: str
+    easing_curve: EasingCurve
     gl_program_key: Optional[str] = None
     program_attr: Optional[str] = None
     uniforms_attr: Optional[str] = None
@@ -45,6 +47,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Ripple",
         stable_id="ripple",
+        easing_curve=EasingCurve.LINEAR,
         gl_program_key=RAINDROPS,
         program_attr="raindrops_program",
         uniforms_attr="raindrops_uniforms",
@@ -56,6 +59,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Wipe",
         stable_id="wipe",
+        easing_curve=EasingCurve.QUAD_IN_OUT,
         gl_program_key=WIPE,
         program_attr="wipe_program",
         uniforms_attr="wipe_uniforms",
@@ -64,6 +68,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="3D Block Spins",
         stable_id="block_spins",
+        easing_curve=EasingCurve.LINEAR,
         gl_program_key=WARP,
         compositor_transition_class="GLCompositorBlockSpinTransition",
         requires_hw_accel=True,
@@ -71,6 +76,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Diffuse",
         stable_id="diffuse",
+        easing_curve=EasingCurve.LINEAR,
         gl_program_key=DIFFUSE,
         program_attr="diffuse_program",
         uniforms_attr="diffuse_uniforms",
@@ -79,6 +85,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Slide",
         stable_id="slide",
+        easing_curve=EasingCurve.SINE_IN_OUT,
         gl_program_key=SLIDE,
         program_attr="slide_program",
         uniforms_attr="slide_uniforms",
@@ -87,6 +94,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Crossfade",
         stable_id="crossfade",
+        easing_curve=EasingCurve.QUAD_IN_OUT,
         gl_program_key=CROSSFADE,
         program_attr="crossfade_program",
         uniforms_attr="crossfade_uniforms",
@@ -96,6 +104,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Block Puzzle Flip",
         stable_id="block_flip",
+        easing_curve=EasingCurve.LINEAR,
         gl_program_key=BLOCK_FLIP,
         program_attr="blockflip_program",
         uniforms_attr="blockflip_uniforms",
@@ -104,6 +113,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Warp Dissolve",
         stable_id="warp_dissolve",
+        easing_curve=EasingCurve.LINEAR,
         gl_program_key=WARP,
         program_attr="warp_program",
         uniforms_attr="warp_uniforms",
@@ -113,6 +123,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Blinds",
         stable_id="blinds",
+        easing_curve=EasingCurve.LINEAR,
         gl_program_key=BLINDS,
         program_attr="blinds_program",
         uniforms_attr="blinds_uniforms",
@@ -122,6 +133,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Crumble",
         stable_id="crumble",
+        easing_curve=EasingCurve.LINEAR,
         gl_program_key=CRUMBLE,
         program_attr="crumble_program",
         uniforms_attr="crumble_uniforms",
@@ -131,6 +143,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Particle",
         stable_id="particle",
+        easing_curve=EasingCurve.LINEAR,
         gl_program_key=PARTICLE,
         program_attr="particle_program",
         uniforms_attr="particle_uniforms",
@@ -140,6 +153,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Burn",
         stable_id="burn",
+        easing_curve=EasingCurve.LINEAR,
         gl_program_key=BURN,
         program_attr="burn_program",
         uniforms_attr="burn_uniforms",

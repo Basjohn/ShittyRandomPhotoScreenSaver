@@ -172,16 +172,21 @@ _EASING_NAME_MAP: dict[str, EasingCurve] = {
 }
 
 
-def resolve_easing(name: str | None, auto_default: EasingCurve = EasingCurve.QUAD_IN_OUT) -> EasingCurve:
-    """Map a UI easing name string to an EasingCurve enum value.
+def resolve_easing(
+    name: str | EasingCurve | None,
+    auto_default: EasingCurve = EasingCurve.QUAD_IN_OUT,
+) -> EasingCurve:
+    """Resolve a legacy easing name or an already-authored curve.
 
     Args:
-        name: Raw easing string from settings (e.g. "InOutCubic", "Auto", None).
+        name: Legacy easing name or an internal authored curve.
         auto_default: The EasingCurve to return when *name* is ``"Auto"`` or empty.
 
     Returns:
         Resolved EasingCurve; falls back to *auto_default* for unknown names.
     """
+    if isinstance(name, EasingCurve):
+        return name
     cleaned = (name or "Auto").strip()
     if cleaned == "Auto":
         return auto_default

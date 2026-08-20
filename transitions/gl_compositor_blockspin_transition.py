@@ -37,7 +37,7 @@ class GLCompositorBlockSpinTransition(BaseTransition):
     def __init__(
         self,
         duration_ms: int = 3000,
-        easing: str = "Auto",
+        easing: str | EasingCurve = "Auto",
         direction: SlideDirection = SlideDirection.LEFT,
     ) -> None:
         super().__init__(duration_ms)
@@ -46,7 +46,7 @@ class GLCompositorBlockSpinTransition(BaseTransition):
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None
-        self._easing_str: str = easing
+        self._easing_str: str | EasingCurve = easing
 
     # ------------------------------------------------------------------
     # BaseTransition API

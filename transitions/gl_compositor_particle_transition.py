@@ -159,7 +159,9 @@ class GLCompositorParticleTransition(BaseTransition):
             logger.debug("[GL COMPOSITOR] Failed to configure compositor geometry/visibility (particle)", exc_info=True)
 
         # Drive via shared AnimationManager.
-        easing_curve = EasingCurve.CUBIC_IN_OUT
+        # Per-particle arrival, movement, fades, and final blending are already
+        # shaped in the shader; a second global curve would double-ease them.
+        easing_curve = EasingCurve.LINEAR
         am = self._get_animation_manager(widget)
 
         def _on_finished() -> None:

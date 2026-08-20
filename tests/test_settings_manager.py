@@ -572,6 +572,34 @@ class TestSettingsManagerDefaults:
         assert "widgets.weather.intense_shadow" in removed
         assert "widgets.gmail.intense_shadow" in removed
 
+    def test_startup_removes_retired_transition_easing_without_losing_config(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        storage_root = tmp_path / "retired_transition_easing"
+        app_name = f"TestApp_{uuid.uuid4().hex}"
+        manager = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+        transitions = manager.get("transitions", {})
+        transitions["type"] = "Slide"
+        transitions["easing"] = "InOutBack"
+        manager.set("transitions", transitions)
+        manager.save()
+
+        reloaded = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+
+        persisted = reloaded.get("transitions", {})
+        assert persisted["type"] == "Slide"
+        assert "easing" not in persisted
+        assert reloaded.contains("transitions.easing") is False
+
     def test_visualizer_schema_migration_runs_once_for_legacy_persisted_payload(self, tmp_path: Path) -> None:
         storage_root = tmp_path / "legacy_visualizer_schema"
         app_name = f"TestApp_{uuid.uuid4().hex}"

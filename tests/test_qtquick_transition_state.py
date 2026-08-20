@@ -34,8 +34,6 @@ def _request(**changes) -> TransitionRequest:
         "requested_name": "Slide",
         "selected_from_random": False,
         "duration_ms": 1000,
-        "easing_name": "InQuad",
-        "easing_curve": EasingCurve.QUAD_IN,
         "direction": "left",
         "parameters": {"grid": [4, 6], "strength": 0.75},
         "source_image": _image("old"),
@@ -58,6 +56,7 @@ def test_request_uses_registry_identity_and_deep_freezes_authored_parameters():
     assert request.setting_name == "Ripple"
     assert request.requested_name == "Random"
     assert request.selected_from_random is True
+    assert request.easing_curve is EasingCurve.LINEAR
     assert request.include_in_cycle is True
     assert request.source_image_identity == "old"
     assert request.destination_image_identity == "new"
@@ -75,7 +74,6 @@ def test_request_uses_registry_identity_and_deep_freezes_authored_parameters():
         ({"runtime_generation": -1}, ValueError),
         ({"transition_id": "not-a-transition"}, ValueError),
         ({"duration_ms": 0}, ValueError),
-        ({"easing_curve": "Linear"}, TypeError),
         ({"source_image": object()}, TypeError),
         ({"parameters": {"bad": float("nan")}}, ValueError),
         ({"parameters": {"bad": object()}}, TypeError),
@@ -101,7 +99,7 @@ def test_run_samples_monotonic_time_and_authored_easing_without_mutation():
     assert before.linear_progress == before.eased_progress == 0.0
     assert before.complete is False
     assert halfway.linear_progress == 0.5
-    assert halfway.eased_progress == 0.25
+    assert halfway.eased_progress == pytest.approx(0.5)
     assert halfway.complete is False
     assert terminal.linear_progress == terminal.eased_progress == 1.0
     assert terminal.complete is True
@@ -132,3 +130,11 @@ def test_every_canonical_transition_identity_is_lightweight_request_state():
     assert [request.transition_id for request in requests] == [
         descriptor.stable_id for descriptor in iter_transition_descriptors()
     ]
+    assert [request.easing_curve for request in requests] == [
+        descriptor.easing_curve for descriptor in iter_transition_descriptors()
+    ]
+
+
+def test_request_does_not_admit_a_user_or_callsite_easing_override():
+    with pytest.raises(TypeError, match="easing"):
+        _request(easing_curve=EasingCurve.BACK_IN_OUT)

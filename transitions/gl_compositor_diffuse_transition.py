@@ -45,7 +45,7 @@ class GLCompositorDiffuseTransition(BaseTransition):
         duration_ms: int = 1000,
         block_size: int = 50,
         shape: str = "Rectangle",
-        easing: str = "Auto",
+        easing: str | EasingCurve = "Auto",
     ) -> None:
         super().__init__(duration_ms)
         self._uses_deferred_start_telemetry = True
@@ -56,7 +56,7 @@ class GLCompositorDiffuseTransition(BaseTransition):
         if shape not in _VALID_SHAPES:
             shape = "Rectangle"
         self._shape = shape
-        self._easing_str = easing
+        self._easing_str: str | EasingCurve = easing
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
         self._cells: List[_DiffuseCell] = []

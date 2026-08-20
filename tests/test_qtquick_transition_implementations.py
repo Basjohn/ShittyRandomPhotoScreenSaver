@@ -12,7 +12,11 @@ import pytest
 from rendering.quick.transitions.implementation_registry import (
     resolve_quick_transition_renderer,
 )
-from rendering.quick.transitions.implementations.slide import _slide_rects
+from rendering.quick.transitions.implementations.slide import (
+    _SLIDE_FRAGMENT_SOURCE,
+    _slide_direction_vector,
+    _slide_partition_sample,
+)
 from rendering.quick.transitions.implementations.wipe import _wipe_mode
 from rendering.quick.transitions.render_host import QuickTransitionRenderHost
 
@@ -206,10 +210,7 @@ print(json.dumps({
         "implementation_modules": [
             "rendering.quick.transitions.implementations.slide"
         ],
-        "shader_modules": [
-            "rendering.gl_programs.base_program",
-            "rendering.gl_programs.slide_program",
-        ],
+        "shader_modules": [],
     }
 
 
@@ -255,38 +256,71 @@ print(json.dumps({
 
 
 @pytest.mark.parametrize(
-    ("direction", "old_xy", "new_xy"),
+    ("direction", "vector"),
     (
-        ("left", (-0.25, 0.0), (0.75, 0.0)),
-        ("right", (0.25, 0.0), (-0.75, 0.0)),
-        ("up", (0.0, -0.25), (0.0, 0.75)),
-        ("down", (0.0, 0.25), (0.0, -0.75)),
-        ("diag_tl_br", (-0.25, -0.25), (0.75, 0.75)),
-        ("diag_tr_bl", (0.25, -0.25), (-0.75, 0.75)),
+        ("left", (-1.0, 0.0)),
+        ("right", (1.0, 0.0)),
+        ("up", (0.0, -1.0)),
+        ("down", (0.0, 1.0)),
     ),
 )
-def test_slide_rects_preserve_all_canonical_direction_semantics(
-    direction,
-    old_xy,
-    new_xy,
-):
-    old_rect, new_rect = _slide_rects(direction, 0.25)
-
-    assert old_rect == (*old_xy, 1.0, 1.0)
-    assert new_rect == (*new_xy, 1.0, 1.0)
+def test_slide_supports_the_four_product_cardinal_directions(direction, vector):
+    assert _slide_direction_vector(direction) == vector
 
 
-def test_slide_rects_default_left_clamp_progress_and_reject_unknown_direction():
-    assert _slide_rects(None, -2.0) == (
-        (-0.0, 0.0, 1.0, 1.0),
-        (1.0, -0.0, 1.0, 1.0),
-    )
-    assert _slide_rects("LEFT", 2.0) == (
-        (-1.0, 0.0, 1.0, 1.0),
-        (-0.0, -0.0, 1.0, 1.0),
-    )
+def test_slide_defaults_left_and_rejects_non_cardinal_directions():
+    assert _slide_direction_vector(None) == (-1.0, 0.0)
+    assert _slide_direction_vector("LEFT") == (-1.0, 0.0)
     with pytest.raises(ValueError, match="unknown canonical Slide direction"):
-        _slide_rects("Random", 0.5)
+        _slide_direction_vector("Random")
+
+
+@pytest.mark.parametrize("direction", ("left", "right", "up", "down"))
+def test_slide_partition_has_full_coverage_at_authored_and_missed_frame_samples(
+    direction,
+):
+    progress_values = {
+        0.0,
+        1.0,
+        0.5,
+        0.017,
+        0.113,
+        0.347,
+        0.511,
+        0.829,
+        0.997,
+        *(index / 257.0 for index in range(1, 257)),
+    }
+    horizontal = direction in {"left", "right"}
+    for progress in sorted(progress_values):
+        owners: list[str] = []
+        for pixel in range(257):
+            axis = (pixel + 0.5) / 257.0
+            coordinate = (axis, 0.371) if horizontal else (0.371, axis)
+            owner, local_uv = _slide_partition_sample(
+                direction,
+                progress,
+                coordinate,
+            )
+            owners.append(owner)
+            assert owner in {"source", "destination"}
+            assert all(0.0 <= component < 1.0 for component in local_uv)
+
+        assert len(owners) == 257
+        if progress == 0.0:
+            assert set(owners) == {"source"}
+        elif progress == 1.0:
+            assert set(owners) == {"destination"}
+
+
+def test_slide_shader_uses_one_shared_sample_without_a_background_branch():
+    assert "vec2 localUv = fract(uv - u_direction * t);" in _SLIDE_FRAGMENT_SOURCE
+    assert "texture(uOldTex, localUv)" in _SLIDE_FRAGMENT_SOURCE
+    assert "texture(uNewTex, localUv)" in _SLIDE_FRAGMENT_SOURCE
+    assert "FragColor = mix(oldColor, newColor, destinationOwns);" in (
+        _SLIDE_FRAGMENT_SOURCE
+    )
+    assert "vec4(0.0" not in _SLIDE_FRAGMENT_SOURCE
 
 
 @pytest.mark.parametrize(

@@ -178,7 +178,7 @@ def test_script_smoke_proves_threaded_draw_resize_dpr_and_invalidation():
     assert window["final"]["active_image_identity"] is None
 
 
-@pytest.mark.parametrize("direction", ("left", "right"))
+@pytest.mark.parametrize("direction", ("left", "right", "up", "down"))
 def test_script_smoke_proves_lazy_slide_direction_pixels_and_teardown(direction):
     env = os.environ.copy()
     env["QSG_RENDER_LOOP"] = "basic"

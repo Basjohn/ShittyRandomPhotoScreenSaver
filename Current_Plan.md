@@ -402,6 +402,15 @@ Phase C guardrails that remain active through the renderer port:
 - keep transition-specific shader/math/resource behaviour in each implementation and out of the
   common host/controller;
 - do not create a central per-transition dispatcher or a dynamic/external plugin system.
+- retire user-selectable transition easing: Settings and persistence expose no easing preference,
+  old persisted values are ignored and removed, and each canonical descriptor owns the immutable
+  curve supplied to its run;
+- use linear timeline input for staged/physics/shader effects that already author their own timing,
+  while Slide uses `SINE_IN_OUT`; easing must never compensate for coverage or presentation-cadence
+  defects;
+- keep Slide to the four cardinal product directions and derive both image samples and their sole
+  viewport owner from the same immutable eased progress in one draw, with deterministic no-gap
+  coverage at endpoints, fractional progress, and skipped presentation intervals.
 
 ## C3 — renderer port
 

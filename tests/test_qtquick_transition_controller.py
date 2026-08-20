@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from core.animation.types import EasingCurve
 from rendering.quick.image_state import PresentationImage
 from rendering.quick.transitions import (
     QuickTransitionController,
@@ -89,8 +88,6 @@ def _request(*, generation: int = 7, duration_ms: int = 100) -> TransitionReques
         requested_name="Crossfade",
         selected_from_random=False,
         duration_ms=duration_ms,
-        easing_name="Linear",
-        easing_curve=EasingCurve.LINEAR,
         direction=None,
         parameters={},
         source_image=_image("old"),
