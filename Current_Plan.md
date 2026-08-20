@@ -345,24 +345,6 @@ Read:
 
 Land in small commits:
 
-### A2 — inline render-node proof
-
-Implement the minimum production-shaped custom render item/node.
-
-Prove:
-
-- `QQuickWindow`;
-- render thread != GUI thread;
-- direct GL draw;
-- correct resize/DPR;
-- clean scene-graph invalidation;
-- no `QQuickWidget`;
-- no offscreen QWidget/native helper.
-
-Use deterministic Slide-like content.
-
-**Checkpoint + push.**
-
 ### A3 — production frame pacer
 
 Move/generalize target-pacing logic into production code with unit tests.
