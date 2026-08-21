@@ -39,6 +39,20 @@ from rendering.quick.transitions.render_host import QuickTransitionRenderHost
 
 
 ROOT = Path(__file__).resolve().parents[1]
+_ALL_QUICK_TRANSITION_IDS = (
+    "crossfade",
+    "slide",
+    "wipe",
+    "warp_dissolve",
+    "block_flip",
+    "block_spins",
+    "blinds",
+    "diffuse",
+    "ripple",
+    "crumble",
+    "particle",
+    "burn",
+)
 
 
 def _probe(source: str) -> dict[str, object]:
@@ -81,15 +95,7 @@ print(json.dumps({
     )
 
     assert report == {
-        "ids": [
-            "crossfade",
-            "slide",
-            "wipe",
-            "warp_dissolve",
-            "block_flip",
-            "block_spins",
-            "blinds",
-        ],
+        "ids": list(_ALL_QUICK_TRANSITION_IDS),
         "loaded": [],
         "shader_modules": [],
     }
@@ -134,45 +140,33 @@ from rendering.quick.transitions.implementation_registry import (
     resolve_quick_transition_renderer,
 )
 
-renderer = resolve_quick_transition_renderer(
+transition_ids = (
     "crossfade",
-    enabled_transition_ids=frozenset(),
-)
-slide = resolve_quick_transition_renderer(
     "slide",
-    enabled_transition_ids=frozenset(),
-)
-wipe = resolve_quick_transition_renderer(
     "wipe",
-    enabled_transition_ids=frozenset(),
-)
-warp = resolve_quick_transition_renderer(
     "warp_dissolve",
-    enabled_transition_ids=frozenset(),
-)
-block_flip = resolve_quick_transition_renderer(
     "block_flip",
-    enabled_transition_ids=frozenset(),
-)
-block_spins = resolve_quick_transition_renderer(
     "block_spins",
-    enabled_transition_ids=frozenset(),
+    "blinds",
+    "diffuse",
+    "ripple",
+    "crumble",
+    "particle",
+    "burn",
 )
+resolved = [
+    resolve_quick_transition_renderer(
+        transition_id,
+        enabled_transition_ids=frozenset(),
+    )
+    for transition_id in transition_ids
+]
 loaded = sorted(
     name for name in sys.modules
     if name.startswith("rendering.quick.transitions.implementations.")
 )
 print(json.dumps({
-    "resolved": any(
-        item is not None for item in (
-            renderer,
-            slide,
-            wipe,
-            warp,
-            block_flip,
-            block_spins,
-        )
-    ),
+    "resolved": any(item is not None for item in resolved),
     "loaded": loaded,
 }))
 """
