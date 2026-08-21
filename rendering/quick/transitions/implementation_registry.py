@@ -58,6 +58,10 @@ _IMPLEMENTATIONS = (
         transition_id="diffuse",
         module_name="rendering.quick.transitions.implementations.diffuse",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="ripple",
+        module_name="rendering.quick.transitions.implementations.ripple",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 
