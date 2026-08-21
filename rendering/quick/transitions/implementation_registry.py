@@ -22,9 +22,7 @@ class QuickTransitionImplementationDescriptor:
 _IMPLEMENTATIONS = (
     QuickTransitionImplementationDescriptor(
         transition_id="crossfade",
-        module_name=(
-            "rendering.quick.transitions.implementations.crossfade"
-        ),
+        module_name="rendering.quick.transitions.implementations.crossfade",
     ),
     QuickTransitionImplementationDescriptor(
         transition_id="slide",
@@ -40,15 +38,11 @@ _IMPLEMENTATIONS = (
     ),
     QuickTransitionImplementationDescriptor(
         transition_id="block_flip",
-        module_name=(
-            "rendering.quick.transitions.implementations.block_flip"
-        ),
+        module_name="rendering.quick.transitions.implementations.block_flip",
     ),
     QuickTransitionImplementationDescriptor(
         transition_id="block_spins",
-        module_name=(
-            "rendering.quick.transitions.implementations.block_spins"
-        ),
+        module_name="rendering.quick.transitions.implementations.block_spins",
     ),
     QuickTransitionImplementationDescriptor(
         transition_id="blinds",
@@ -61,6 +55,10 @@ _IMPLEMENTATIONS = (
     QuickTransitionImplementationDescriptor(
         transition_id="ripple",
         module_name="rendering.quick.transitions.implementations.ripple",
+    ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="crumble",
+        module_name="rendering.quick.transitions.implementations.crumble",
     ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
