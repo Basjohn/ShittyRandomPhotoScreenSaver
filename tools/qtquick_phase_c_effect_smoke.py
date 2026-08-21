@@ -188,7 +188,7 @@ def _looks_like_plain_wipe(midpoint: object) -> bool:
 
     if not isinstance(midpoint, (tuple, list)):
         return False
-    coords = smoke._TRANSITION_SAMPLE_COORDINATES
+    coords = smoke._TRANSITION_DENSE_SAMPLE_COORDINATES
     if len(midpoint) != len(coords):
         return False
     domains = [_domain(color) for color in midpoint]
@@ -217,12 +217,16 @@ def _basic_effect_midpoint(
     progress: float,
     _case: object,
 ) -> bool:
+    # Source/destination fixtures are captured on the shared sparse grid; the
+    # midpoint is captured on the dense grid (effect oracles only).
+    sparse = smoke._TRANSITION_SAMPLE_COORDINATES
+    dense = smoke._TRANSITION_DENSE_SAMPLE_COORDINATES
     if not all(isinstance(value, (tuple, list)) for value in (source, destination, midpoint)):
         return False
     if (
-        len(source) != len(smoke._TRANSITION_SAMPLE_COORDINATES)
-        or len(destination) != len(smoke._TRANSITION_SAMPLE_COORDINATES)
-        or len(midpoint) != len(smoke._TRANSITION_SAMPLE_COORDINATES)
+        len(source) != len(sparse)
+        or len(destination) != len(sparse)
+        or len(midpoint) != len(dense)
         or not 0.20 <= float(progress) <= 0.80
     ):
         return False
@@ -233,12 +237,9 @@ def _basic_effect_midpoint(
     counts = _domain_counts(midpoint)
     if counts is None:
         return False
-    return bool(
-        counts["source"] >= 2
-        and counts["destination"] >= 2
-        and tuple(midpoint) != tuple(source)
-        and tuple(midpoint) != tuple(destination)
-    )
+    # Both endpoints must be present at midpoint (so it is neither pure source
+    # nor pure destination) with margin appropriate to the dense grid.
+    return bool(counts["source"] >= 2 and counts["destination"] >= 2)
 
 
 def _matches_diffuse(
@@ -276,7 +277,7 @@ def _matches_ripple(
     # The first authored ripple is always centred. At a controlled midpoint
     # the centre should be in the arriving-image domain while outer samples
     # still prove old-image ownership.
-    centre = len(smoke._TRANSITION_SAMPLE_COORDINATES) // 2
+    centre = len(smoke._TRANSITION_DENSE_SAMPLE_COORDINATES) // 2
     if _domain(midpoint[centre]) != "destination":
         return False
     # Radial arrival from the centre is not a monotonic linear wipe.
@@ -312,12 +313,36 @@ def _matches_particle(
         return False
     if _looks_like_crossfade(midpoint):
         return False
-    # 3D shading/trails create non-endpoint pixels. Do not require a fixed count
-    # because direction/mode changes spatial arrival order, but a plain wipe has
-    # no such pixels.
-    if not _has_effect_pixels(midpoint):
-        return False
-    return not _looks_like_plain_wipe(midpoint)
+    # Particles displace image pixels across the front, producing scattered
+    # (non-monotonic) ownership that no single-axis wipe can, plus occasional
+    # shaded/trail blend pixels. Either is a valid particle signature; a plain
+    # wipe reduces to a monotonic reveal with neither.
+    return (not _looks_like_plain_wipe(midpoint)) or _has_effect_pixels(midpoint)
+
+
+def _burn_effect_signature_count(midpoint: object) -> int:
+    """Count authored Burn fire-front / char pixels in the sampled grid.
+
+    The Burn fire glow is saturated fire-red (``red`` at/near 255), brighter and
+    more saturated than the destination fixture whose reds cap at 235; the char
+    front is darker than either fixture's minimum brightness (~120). Both are
+    therefore impossible under a plain wipe/crossfade of the fixtures, so they
+    are a genuine Burn signature rather than mere source/destination ownership.
+    The generic ``_domain`` classifier cannot see them because fire is
+    red-dominant (reads as ``destination``) and char stays above its dark cap.
+    """
+
+    if not isinstance(midpoint, (tuple, list)):
+        return 0
+    fire = 0
+    char = 0
+    for color in midpoint:
+        _alpha, red, green, blue = smoke._argb_components(color)
+        if red >= 245:
+            fire += 1
+        elif max(red, green, blue) <= 60:
+            char += 1
+    return fire + char
 
 
 def _matches_burn(
@@ -332,10 +357,9 @@ def _matches_burn(
     if _looks_like_crossfade(midpoint):
         return False
     # Char/core survives even when smoke/ash are disabled, so every Burn case
-    # remains distinguishable from a plain two-domain wipe by its effect pixels.
-    if not _has_effect_pixels(midpoint):
-        return False
-    return not _looks_like_plain_wipe(midpoint)
+    # remains distinguishable from a plain two-domain wipe by its authored fire
+    # front and char pixels (observed >= 7 across every direction/toggle case).
+    return _burn_effect_signature_count(midpoint) >= 3
 
 
 _ORACLES = {
@@ -358,6 +382,9 @@ def _install_contract(effect: str, case: str) -> None:
     smoke._TRANSITION_SMOKE_PARAMETERS[effect] = _parameters(effect, case)
     smoke._TRANSITION_SMOKE_DURATIONS_MS[effect] = 900
     smoke._TRANSITION_MIDPOINT_ORACLES[effect] = _ORACLES[effect]
+    # The effect oracles consume the dense midpoint grid, not the shared sparse
+    # grid the geometry oracles depend on.
+    smoke._DENSE_MIDPOINT_TRANSITION_IDS.add(effect)
 
 
 def _arguments(argv: list[str]) -> argparse.Namespace:

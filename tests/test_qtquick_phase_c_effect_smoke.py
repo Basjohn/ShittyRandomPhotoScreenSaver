@@ -15,49 +15,70 @@ from tools import qtquick_render_node_smoke as smoke
 # effect-specific spatial signature.
 _SRC = "#ff0c2078"   # blue-dominant  -> "source"
 _DST = "#ff78180c"   # red-dominant   -> "destination"
-_DARK = "#ff101010"  # near-black     -> "dark-effect"
+_DARK = "#ff101010"  # near-black     -> "dark-effect" / burn char (max<=60)
 _MIX = "#ff643c64"   # red==blue, not dark -> "mixed-effect"
-_COORDS = smoke._TRANSITION_SAMPLE_COORDINATES
-_N = len(_COORDS)
+_FIRE = "#ffff5712"  # saturated fire red (255) -> burn fire front (red>=245)
+# Source/destination fixtures are captured on the shared sparse grid; the
+# midpoint is captured on the dense grid (effect oracles only). The synthetic
+# fixtures mirror that split so they exercise the real oracle length contract.
+_SPARSE_COORDS = smoke._TRANSITION_SAMPLE_COORDINATES
+_DENSE_COORDS = smoke._TRANSITION_DENSE_SAMPLE_COORDINATES
+_SPARSE_N = len(_SPARSE_COORDS)
+_DENSE_N = len(_DENSE_COORDS)
+_DENSE_AXIS = smoke.TRANSITION_DENSE_SAMPLE_AXIS_COUNT
 
 
 def _pure_source() -> list[str]:
-    return [_SRC] * _N
+    return [_SRC] * _SPARSE_N
 
 
 def _pure_destination() -> list[str]:
-    return [_DST] * _N
+    return [_DST] * _SPARSE_N
 
 
 def _wipe_midpoint(axis_name: str, progress: float = 0.5) -> list[str]:
     axis_for = smoke._WIPE_AXES[axis_name]
-    return [_DST if axis_for(x, y) < progress else _SRC for (x, y) in _COORDS]
+    return [_DST if axis_for(x, y) < progress else _SRC for (x, y) in _DENSE_COORDS]
 
 
 def _crossfade_midpoint() -> list[str]:
-    return [_MIX] * _N
+    return [_MIX] * _DENSE_N
 
 
 def _scattered_blocks() -> list[str]:
     # Interleaved per-block ownership that no single wipe axis can separate.
-    return [_SRC if (i % 5 + i // 5) % 2 == 0 else _DST for i in range(_N)]
+    return [
+        _SRC if (i % _DENSE_AXIS + i // _DENSE_AXIS) % 2 == 0 else _DST
+        for i in range(_DENSE_N)
+    ]
 
 
 def _radial_ripple() -> list[str]:
     # Centre and its immediate neighbours in the arriving domain, outer ring in
     # the old domain: radial arrival, not a monotonic linear reveal.
-    samples = _pure_source()
-    for idx in (12, 7, 11, 13, 17):
+    samples = [_SRC] * _DENSE_N
+    centre = _DENSE_N // 2
+    for idx in (centre, centre - 1, centre + 1, centre - _DENSE_AXIS, centre + _DENSE_AXIS):
         samples[idx] = _DST
     return samples
 
 
 def _effect_scatter_with_dark() -> list[str]:
-    # Scattered ownership plus effect-colored pixels (cracks/char/shading).
+    # Scattered ownership plus effect-colored (dark/mixed) pixels.
     samples = _scattered_blocks()
     samples[6] = _DARK
     samples[18] = _DARK
     samples[8] = _MIX
+    return samples
+
+
+def _burn_signature_scatter() -> list[str]:
+    # Scattered ownership plus authored burn fire-front and char pixels.
+    samples = _scattered_blocks()
+    for idx in (3, 7, 11, 15, 19):
+        samples[idx] = _FIRE
+    for idx in (23, 27, 31):
+        samples[idx] = _DARK
     return samples
 
 
@@ -135,6 +156,8 @@ def test_phase_c_smoke_install_is_scoped_to_requested_effect_and_case():
     assert phase_c_smoke.smoke._TRANSITION_SMOKE_PARAMETERS["burn"]["direction"] == 4
     assert phase_c_smoke.smoke._TRANSITION_SMOKE_DURATIONS_MS["burn"] == 900
     assert phase_c_smoke.smoke._TRANSITION_MIDPOINT_ORACLES["burn"] is phase_c_smoke._matches_burn
+    # Effect oracles consume the dense midpoint grid.
+    assert "burn" in phase_c_smoke.smoke._DENSE_MIDPOINT_TRANSITION_IDS
 
 
 def test_phase_c_smoke_rejects_unknown_effect_parameters():
@@ -188,25 +211,35 @@ def test_ripple_oracle_accepts_radial_centre_arrival_only():
     assert _run("ripple", ripple, "count3") is True
     # A radial pattern whose centre is still the old image is not a valid
     # ripple midpoint (the first authored ripple is centred).
-    old_centre = _pure_source()
-    old_centre[7] = _DST
-    old_centre[11] = _DST
-    old_centre[13] = _DST
-    old_centre[17] = _DST
-    assert _run("ripple", old_centre, "count3") is False
+    off_centre = _scattered_blocks()
+    off_centre[_DENSE_N // 2] = _SRC
+    assert _run("ripple", off_centre, "count3") is False
 
 
-@pytest.mark.parametrize("effect", ("crumble", "particle", "burn"))
-def test_effect_oracles_accept_effect_colored_scatter(effect):
-    # Cracks / shaded particles / char produce effect-colored pixels that a
-    # plain two-domain wipe never shows.
+def test_particle_oracle_accepts_scattered_displacement():
+    # Particles displace image pixels across the front, so scattered (non-wipe)
+    # ownership is a valid particle signature even without shaded blend pixels.
+    assert _run("particle", _scattered_blocks(), "converge") is True
+
+
+@pytest.mark.parametrize("effect", ("crumble", "particle"))
+def test_crumble_particle_accept_effect_colored_scatter(effect):
+    # Cracks / shaded particles produce effect-colored pixels that a plain
+    # two-domain wipe never shows.
     assert _run(effect, _effect_scatter_with_dark(), "top") is True
 
 
-@pytest.mark.parametrize("effect", ("crumble", "particle", "burn"))
+def test_burn_oracle_accepts_fire_and_char_signature():
+    # Burn's authored fire front (saturated red) and char (dark) are its
+    # signature; the destination fixture never reaches either.
+    assert _run("burn", _burn_signature_scatter(), "left-to-right") is True
+
+
+@pytest.mark.parametrize("effect", ("crumble", "burn"))
 def test_effect_oracles_reject_two_domain_scatter_without_effect_pixels(effect):
-    # Even a scattered (non-wipe) two-domain reveal must be rejected by
-    # Crumble/Particle/Burn because they require effect-colored pixels.
+    # A scattered (non-wipe) two-domain reveal with no effect-colored pixels
+    # must still be rejected by Crumble (needs cracks) and Burn (needs fire or
+    # char), which cannot be satisfied by mere source/destination ownership.
     assert _run(effect, _scattered_blocks(), "top") is False
 
 
