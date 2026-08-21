@@ -171,7 +171,7 @@ Do not run Nuitka/full installed builds merely as routine migration validation. 
 
 ---
 
-# 2. Git / agent / connector workflow
+# 2. Git / agent workflow
 
 ## 2.1 Checkpoints are mandatory
 
@@ -192,32 +192,7 @@ Do not stop after a successful checkpoint merely to ask permission to continue.
 
 High-risk effects/owners such as BlockSpin, Burn, Particle, Bubble, settings epoch, and production cutover deserve dedicated checkpoints.
 
-## 2.2 Connector/API write discipline
-
-Repository connector writes are allowed when practical, but their editing ergonomics are weaker than a local worktree.
-
-**High-level repository file create/update/delete operations are forbidden for SRPSS. Every proposed file mutation must be represented in an unattached candidate commit and diffed before the intended branch ref may move, regardless of file size.**
-
-Required connector sequence:
-
-```text
-fetch authoritative parent
--> build candidate blob(s)/tree
--> create UNATTACHED candidate commit
--> compare parent..candidate
--> inspect every changed path and its diff
--> for whole/chunked reconstruction, re-fetch beginning/end and changed/suspicious sections
--> move branch ref only after candidate audit
--> fetch/compare the branch-reachable commit again
-```
-
-Creating a blob/tree is not a checkpoint. A checkpoint must be a commit reachable from the intended pushed branch.
-
-If any API edit produces an unexpectedly broad, malformed, truncated, or unintended diff, abandon the unattached candidate. Do not let corruption become branch history and repair it afterward.
-
-For changes where direct connector reconstruction becomes unreliable, fall back to whole replacement files or a narrow paste-ready coding-agent prompt, then audit the actual pushed result.
-
-## 2.3 Trust evidence, not agent prose
+## 2.2 Trust evidence, not agent prose
 
 An agent saying tests passed or code was implemented is not evidence. Inspect current repository state, pushed commit, diff, relevant source, and independent test/harness evidence from the environment appropriate to the claim.
 
@@ -226,8 +201,6 @@ Repository state outranks stale orientation prose.
 ---
 
 # 3. Test execution and evidence rules
-
-SRPSS tests are not run through repository-hosted automation. Do not add a hosted test workflow unless the operator explicitly reverses this policy.
 
 Use the environment appropriate to the claim:
 

@@ -51,21 +51,3 @@ If exact current source invalidates a technical assumption, update the smallest 
 Do not create another migration roadmap document.
 
 Do not use a later-phase decomposition to smuggle later-phase work into the active phase.
-
-## Repository/API checkpoint rule
-
-When edits are made through a connector/API rather than a normal local Git worktree, a created blob/tree is not a checkpoint.
-
-For risky whole-file reconstruction use:
-
-```text
-authoritative parent
--> candidate blobs/tree
--> UNATTACHED candidate commit
--> compare parent..candidate
--> spot-fetch reconstructed boundaries/suspicious sections
--> move branch ref only when clean
--> verify pushed commit/diff
-```
-
-Abandon malformed candidate commits before they become branch-reachable.

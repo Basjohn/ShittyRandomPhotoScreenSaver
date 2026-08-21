@@ -152,25 +152,6 @@ focused gate
 -> independent audit
 ```
 
-For connector/API edits, **every proposed file mutation must be diffed before publication, regardless of file size**. High-level repository file create/update/delete operations are not an allowed SRPSS write path.
-
-Required connector write sequence:
-
-```text
-fetch authoritative parent
--> create candidate blob(s)/tree
--> create UNATTACHED candidate commit
--> compare parent..candidate
--> inspect every changed path and its diff
--> for whole/chunked reconstruction, re-fetch boundaries and changed/suspicious sections
--> only then move the intended branch ref
--> fetch/compare the branch-reachable commit again
-```
-
-Creating a blob or tree is not a checkpoint. A checkpoint is not usable until a commit is reachable from the intended branch and pushed.
-
-If any candidate diff is unexpectedly broad, malformed, truncated, or contains an unintended path, abandon the unattached commit instead of publishing it and repairing afterward.
-
 ## 11. Migration closure
 
 Phase C **implementation** is structurally complete once the canonical registry and Quick implementation registry are in exact parity and each renderer is isolated from the old compositor.
