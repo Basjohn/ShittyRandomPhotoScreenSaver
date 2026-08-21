@@ -1,6 +1,6 @@
 """Focused real-GL wrapper for the remaining parameterized Phase-C effects.
 
-The preserved qtquick_render_node_smoke lifecycle harness stays generic.  This
+The preserved qtquick_render_node_smoke lifecycle harness stays generic. This
 wrapper admits Diffuse, Ripple, Crumble, Particle, and Burn with deterministic
 resolved request parameters plus effect-shaped midpoint pixel gates.
 """
@@ -15,6 +15,27 @@ try:
 except ModuleNotFoundError:  # direct ``python tools/qtquick_phase_c_effect_smoke.py``
     import qtquick_render_node_smoke as smoke
 
+
+_PARTICLE_DIRECTIONS = {
+    "left-to-right": 0,
+    "right-to-left": 1,
+    "top-to-bottom": 2,
+    "bottom-to-top": 3,
+    "diag-tl-br": 4,
+    "diag-tr-bl": 5,
+    "diag-bl-tr": 6,
+    "diag-br-tl": 7,
+    "random-direction": 8,
+    "random-placement": 9,
+}
+_BURN_DIRECTIONS = {
+    "left-to-right": 0,
+    "right-to-left": 1,
+    "top-to-bottom": 2,
+    "bottom-to-top": 3,
+    "diag-tl-br": 4,
+    "diag-tr-bl": 5,
+}
 
 _CASES = {
     "diffuse": (
@@ -33,14 +54,12 @@ _CASES = {
         "random-choice",
         "age-weighted",
     ),
-    "particle": ("directional", "swirl", "converge"),
+    "particle": (*_PARTICLE_DIRECTIONS, "swirl", "converge"),
     "burn": (
-        "left-to-right",
-        "right-to-left",
-        "top-to-bottom",
-        "bottom-to-top",
-        "diag-tl-br",
-        "diag-tr-bl",
+        *_BURN_DIRECTIONS,
+        "no-smoke",
+        "no-ash",
+        "no-smoke-or-ash",
     ),
 }
 
@@ -68,11 +87,16 @@ def _parameters(effect: str, case: str) -> dict[str, object]:
             "weight_mode": weight_mode,
         }
     if effect == "particle":
-        mode = {"directional": 0, "swirl": 1, "converge": 2}[case]
+        if case in _PARTICLE_DIRECTIONS:
+            mode = 0
+            direction = _PARTICLE_DIRECTIONS[case]
+        else:
+            mode = {"swirl": 1, "converge": 2}[case]
+            direction = 0
         return {
             "seed": 12.5,
             "mode": mode,
-            "direction": 0,
+            "direction": direction,
             "particle_radius": 16.0,
             "overlap": 4.0,
             "trail_length": 0.15,
@@ -87,16 +111,18 @@ def _parameters(effect: str, case: str) -> dict[str, object]:
             "swirl_order": 0,
         }
     if effect == "burn":
-        direction = _CASES["burn"].index(case)
+        direction = _BURN_DIRECTIONS.get(case, 0)
+        smoke_enabled = case not in {"no-smoke", "no-smoke-or-ash"}
+        ash_enabled = case not in {"no-ash", "no-smoke-or-ash"}
         return {
             "direction": direction,
             "jaggedness": 0.55,
             "glow_intensity": 0.72,
             "glow_color": (1.0, 140.0 / 255.0, 30.0 / 255.0, 1.0),
             "char_width": 0.5,
-            "smoke_enabled": True,
+            "smoke_enabled": smoke_enabled,
             "smoke_density": 0.5,
-            "ash_enabled": True,
+            "ash_enabled": ash_enabled,
             "ash_density": 0.5,
             "seed": 321.25,
         }
@@ -169,8 +195,8 @@ def _matches_diffuse(
 ) -> bool:
     if not _basic_effect_midpoint(source, destination, midpoint, progress, case):
         return False
-    # Diffuse must be spatial rather than a uniform crossfade.  A 5x5 sample
-    # set at midpoint should contain at least three distinct ownership/effect domains.
+    # Diffuse must be spatial rather than a uniform crossfade. A 5x5 sample
+    # set must contain more than one ownership/effect domain at midpoint.
     return len({_domain(color) for color in midpoint}) >= 2
 
 
@@ -183,7 +209,7 @@ def _matches_ripple(
 ) -> bool:
     if not _basic_effect_midpoint(source, destination, midpoint, progress, case):
         return False
-    # The first authored ripple is always centred.  At a controlled midpoint
+    # The first authored ripple is always centred. At a controlled midpoint
     # the centre should be in the arriving-image domain while outer samples
     # still prove old-image ownership.
     centre = len(smoke._TRANSITION_SAMPLE_COORDINATES) // 2
@@ -212,8 +238,8 @@ def _matches_particle(
 ) -> bool:
     if not _basic_effect_midpoint(source, destination, midpoint, progress, case):
         return False
-    # 3D shading/trails usually create non-endpoint pixels.  Do not require a
-    # fixed count because the mode changes spatial arrival order.
+    # 3D shading/trails usually create non-endpoint pixels. Do not require a
+    # fixed count because direction/mode changes spatial arrival order.
     counts = _domain_counts(midpoint)
     return bool(counts and (counts["mixed-effect"] + counts["dark-effect"] >= 1))
 
@@ -230,8 +256,8 @@ def _matches_burn(
     counts = _domain_counts(midpoint)
     if counts is None:
         return False
-    # Char/core/smoke/ash should ensure the authored transition is not merely
-    # a two-domain wipe.  The exact spatial front depends on direction/noise.
+    # Char/core survives even when smoke/ash are disabled, so every Burn case
+    # remains distinguishable from a plain two-domain wipe.
     return (counts["dark-effect"] + counts["mixed-effect"]) >= 1
 
 
