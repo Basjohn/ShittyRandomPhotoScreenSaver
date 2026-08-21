@@ -19,6 +19,7 @@ from rendering.gl_programs.blockspin_program import (
     block_spin_specular_band_center,
 )
 from rendering.quick.transitions.implementation_registry import (
+    iter_quick_transition_implementations,
     resolve_quick_transition_renderer,
 )
 from rendering.quick.transitions.implementations.block_flip import (
@@ -39,19 +40,14 @@ from rendering.quick.transitions.render_host import QuickTransitionRenderHost
 
 
 ROOT = Path(__file__).resolve().parents[1]
-_ALL_QUICK_TRANSITION_IDS = (
-    "crossfade",
-    "slide",
-    "wipe",
-    "warp_dissolve",
-    "block_flip",
-    "block_spins",
-    "blinds",
-    "diffuse",
-    "ripple",
-    "crumble",
-    "particle",
-    "burn",
+# Derived from the cheap catalog metadata rather than a second hard-coded
+# inventory. Registry parity (test_qtquick_phase_c_registry_parity.py) is the
+# independent canonical-vs-Quick inventory gate; deriving here keeps future
+# canonical additions/removals from having to update two authoritative lists.
+# The catalog iteration is deliberately renderer-import-free (proven by
+# test_quick_implementation_catalog_does_not_import_renderer_modules).
+_ALL_QUICK_TRANSITION_IDS = tuple(
+    entry.transition_id for entry in iter_quick_transition_implementations()
 )
 
 
@@ -132,6 +128,10 @@ print(json.dumps({
 
 
 def test_disabled_resolution_keeps_transition_implementations_dormant():
+    # Inject the derived inventory instead of hard-coding a second copy.
+    # `%` formatting is safe here because the subprocess body contains no
+    # literal `%` characters (unlike f-strings, which would collide with the
+    # json.dumps({...}) braces).
     report = _probe(
         """
 import json
@@ -140,20 +140,7 @@ from rendering.quick.transitions.implementation_registry import (
     resolve_quick_transition_renderer,
 )
 
-transition_ids = (
-    "crossfade",
-    "slide",
-    "wipe",
-    "warp_dissolve",
-    "block_flip",
-    "block_spins",
-    "blinds",
-    "diffuse",
-    "ripple",
-    "crumble",
-    "particle",
-    "burn",
-)
+transition_ids = %r
 resolved = [
     resolve_quick_transition_renderer(
         transition_id,
@@ -169,7 +156,7 @@ print(json.dumps({
     "resolved": any(item is not None for item in resolved),
     "loaded": loaded,
 }))
-"""
+""" % (list(_ALL_QUICK_TRANSITION_IDS),)
     )
 
     assert report == {"resolved": False, "loaded": []}
