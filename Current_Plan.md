@@ -61,7 +61,7 @@ This file owns migration sequence and work admission. Technical decompositions u
 | --- | --- | --- |
 | A — bootstrap/render-node proof | Structurally complete | Do not reopen; compiled smoke remains operator-scheduled later |
 | B — runtime-host decomposition | Structurally complete | Do not reopen without contradictory evidence |
-| C — base image + transitions | **IMPLEMENTATION COMPLETE; test-hardening/sign-off debt explicit** | Test/harness hardening may be explicitly selected; transition implementation changes only when stronger evidence exposes a real defect |
+| C — base image + transitions | **IMPLEMENTATION COMPLETE; deterministic test-hardening (C-T1..C-T8) landed; only operator real-GL/eyes-on sign-off remains** | Transition implementation changes only when stronger evidence exposes a real defect |
 | **D — visualizer** | **ACTIVE** | **Normal implementation work belongs here now** |
 | E — widget presentation + capability setup foundation | Waiting for D implementation exit | Reference only |
 | F — widget families | Waiting for E | Reference only |
@@ -396,7 +396,8 @@ Production `DisplayManager -> QuickDisplayRuntime` ownership still waits for Pha
 
 # 7. Phase C — base image + transitions
 
-**Implementation status: complete. Test-hardening and sign-off debt remain open.**
+**Implementation status: complete. Deterministic test-hardening (Section 7.5,
+C-T1..C-T8) landed; only operator-scheduled real-GL/eyes-on sign-off remains.**
 
 Read:
 
@@ -483,7 +484,40 @@ Phase D may proceed while these remain open.
 
 ## 7.5 Phase-C test/harness strengthening — explicit test-only debt
 
-**If the operator says "continue from Phase C tests", begin here.**
+**STATUS (2026-08-21): deterministic test-hardening C-T1..C-T8 LANDED and pushed. No implementation
+defect was exposed; no transition implementation was changed. Remaining Phase-C debt is only the
+operator-scheduled real-GL/eyes-on sign-off in Section 7.4 (rerun the strengthened
+`tools/qtquick_phase_c_effect_smoke.py` oracles on a real Windows/Qt/OpenGL display). The C-T subsections
+below are retained as the durable rationale for that rerun and for future transition-test changes.**
+
+Landed evidence (focused gate, capable Windows worktree, HEAD after the C-T checkpoints):
+
+```text
+python -m pytest tests/test_qtquick_transition_controller.py \
+  tests/test_qtquick_transition_parameter_defaults.py \
+  tests/test_qtquick_transition_implementations.py \
+  tests/test_qtquick_transition_uniform_wiring.py \
+  tests/test_qtquick_transition_state_fence.py \
+  tests/test_qtquick_phase_c_registry_parity.py \
+  tests/test_qtquick_phase_c_effect_smoke.py
+```
+
+- C-T1: real-GL midpoint oracles now reject a plain wipe (all six axes) and a uniform crossfade
+  fallback; discriminators proven with deterministic synthetic fixtures.
+  (`tools/qtquick_phase_c_effect_smoke.py`, `tests/test_qtquick_phase_c_effect_smoke.py`)
+- C-T2: selected smoke cases proven to resolve to materially different request parameters
+  (Ripple counts, Crumble weighting, Particle direction/mode, Burn smoke/ash). Pixel-level pairwise
+  contrast remains the operator real-GL rerun.
+- C-T3: request-parameter → shader-uniform wiring matrix (`tests/test_qtquick_transition_uniform_wiring.py`).
+- C-T4: common GL-state fence + exception restoration (`tests/test_qtquick_transition_state_fence.py`).
+- C-T5: Blinds + Ripple sparse canonical-default coverage (`tests/test_qtquick_transition_parameter_defaults.py`).
+- C-T6: controller false-pass fixed (`tests/test_qtquick_transition_controller.py`).
+- C-T8: `_ALL_QUICK_TRANSITION_IDS` derived from the catalog (`tests/test_qtquick_transition_implementations.py`).
+- C-T7/C-T9: honoured (Crumble mosaic tested only as the optional uniform-upload contract; real-GL
+  harnesses kept real, fakes used only for wiring/state-contract level evidence).
+
+**If the operator says "continue from Phase C tests", the discrete C-T work is done; run the Section 7.4
+real-GL sign-off, or proceed to Phase D.**
 
 The Phase-C test audit found real coverage holes. Improve the tests/harnesses first. Do **not**
 redesign transition implementation merely to satisfy the audit. If a stronger test exposes a real
@@ -1323,8 +1357,9 @@ mode ports, with Bubble dedicated
 -> Phase-D docs closure
 ```
 
-If the operator instead explicitly says **continue from Phase C tests**, execute Section 7.5 test-only
-hardening first and return to D afterward.
+The Section 7.5 test-only hardening (C-T1..C-T8) is already landed; if the operator says **continue
+from Phase C tests**, the remaining Phase-C item is the Section 7.4 operator-scheduled real-GL/eyes-on
+sign-off, after which return to D.
 
 Do not wait for Phase-C eyes-on/hardware sign-off unless the Phase-D change directly depends on that
 unresolved evidence.
