@@ -64,6 +64,10 @@ _IMPLEMENTATIONS = (
         transition_id="particle",
         module_name="rendering.quick.transitions.implementations.particle",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="burn",
+        module_name="rendering.quick.transitions.implementations.burn",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 
