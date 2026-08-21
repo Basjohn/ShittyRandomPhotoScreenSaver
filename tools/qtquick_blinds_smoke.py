@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from tools import qtquick_render_node_smoke as smoke
+import qtquick_render_node_smoke as smoke
 
 
 _DIRECTIONS = ("horizontal", "vertical", "diagonal")
