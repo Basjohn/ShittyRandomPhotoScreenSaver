@@ -136,7 +136,7 @@ Use the smallest gate that can falsify the change:
 - GL-state restoration;
 - focused real-GL smoke where useful.
 
-A deterministic source/contract test is not a visual-parity claim. A hosted CI VM is not authoritative evidence for physical-display cadence, mixed-refresh behavior, subjective motion feel, GPU utilization, or real multi-monitor topology.
+A deterministic source/contract test is not a visual-parity claim. Physical-display cadence, mixed-refresh behavior, subjective motion feel, GPU utilization, and real multi-monitor topology require the proper Windows/Qt/OpenGL/hardware environment.
 
 Manual/agent sign-off commands belong in `Docs/Harness_Index.md` and the Phase-C closure ledger in `Current_Plan.md`.
 
@@ -152,27 +152,30 @@ focused gate
 -> independent audit
 ```
 
-For connector/API edits, especially whole-file reconstruction:
+For connector/API edits, **every proposed file mutation must be diffed before publication, regardless of file size**. High-level repository file create/update/delete operations are not an allowed SRPSS write path.
+
+Required connector write sequence:
 
 ```text
 fetch authoritative parent
--> create candidate blobs/tree
+-> create candidate blob(s)/tree
 -> create UNATTACHED candidate commit
 -> compare parent..candidate
--> spot-fetch reconstructed file boundaries/suspicious sections
--> only then move branch ref
--> fetch/compare pushed commit again
+-> inspect every changed path and its diff
+-> for whole/chunked reconstruction, re-fetch boundaries and changed/suspicious sections
+-> only then move the intended branch ref
+-> fetch/compare the branch-reachable commit again
 ```
 
 Creating a blob or tree is not a checkpoint. A checkpoint is not usable until a commit is reachable from the intended branch and pushed.
 
-If a candidate diff is unexpectedly broad or malformed, abandon the unattached commit instead of repairing it in place on the branch.
+If any candidate diff is unexpectedly broad, malformed, truncated, or contains an unintended path, abandon the unattached commit instead of publishing it and repairing afterward.
 
 ## 11. Migration closure
 
 Phase C **implementation** is structurally complete once the canonical registry and Quick implementation registry are in exact parity and each renderer is isolated from the old compositor.
 
-Phase-C **acceptance/sign-off is a separate state and must remain open until its listed tests and sign-off gates have actually been executed and their results recorded**. Before any agent marks Phase-C acceptance closed, it must run the focused deterministic Phase-C tests and the applicable real-GL commands listed in `Docs/Harness_Index.md`, record the exact command/result/commit/environment, and leave any genuinely hardware/eyes-on-only gate unchecked until that gate is actually performed. Source review, an absent CI result, or "should pass" is never a substitute for execution evidence.
+Phase-C **acceptance/sign-off is a separate state and must remain open until its listed tests and sign-off gates have actually been executed and their results recorded**. Before any agent marks Phase-C acceptance closed, it must run the focused deterministic Phase-C tests and the applicable real-GL commands listed in `Docs/Harness_Index.md`, record the exact command/result/commit/environment, and leave any genuinely hardware/eyes-on-only gate unchecked until that gate is actually performed. Source review, a missing execution result, or "should pass" is never a substitute for execution evidence.
 
 Later implementation phases may proceed while explicit Phase-C acceptance items remain open when they are not dependencies of the later work. Failing deferred evidence reopens only the smallest demonstrated transition/runtime defect; it does not authorize a second presentation architecture.
 

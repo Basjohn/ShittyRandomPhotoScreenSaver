@@ -355,7 +355,7 @@ Quick-specific coverage should include:
 - Settings recreation where presentation state is involved;
 - physical cadence/eyes-on only on suitable hardware.
 
-Hosted Windows CI is useful for deterministic Phase-D tests but currently has known full-suite noise/hang problems documented in `Docs/Harness_Index.md`. Do not use a red unrelated full-suite job as a substitute for focused Phase-D evidence.
+Run deterministic Phase-D tests on a capable Windows checkout and run Quick/OpenGL/physical-display gates only in the environment appropriate to those claims. Do not substitute a broad unrelated suite result for the focused Phase-D evidence assigned to the current checkpoint.
 
 ## 19. Checkpoint cadence
 

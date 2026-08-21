@@ -340,7 +340,7 @@ Permanent deterministic gates should cover:
 
 Focused real-GL wrappers exist for the remaining parameterized effects and Blinds. `tools/qtquick_phase_c_effect_smoke.py` includes Diffuse shapes, Ripple counts, Crumble weighting modes, Particle modes/directions, and Burn directions/toggle cases.
 
-Physical/eyes-on acceptance remains deferred and must not be inferred from hosted CI:
+Physical/eyes-on acceptance remains deferred and must not be inferred from deterministic/source-contract tests alone:
 
 - one-window real OpenGL smoke;
 - two physical display smoke where requested;
