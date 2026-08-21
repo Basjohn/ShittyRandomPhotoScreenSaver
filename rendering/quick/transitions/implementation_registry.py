@@ -54,6 +54,10 @@ _IMPLEMENTATIONS = (
         transition_id="blinds",
         module_name="rendering.quick.transitions.implementations.blinds",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="diffuse",
+        module_name="rendering.quick.transitions.implementations.diffuse",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 
