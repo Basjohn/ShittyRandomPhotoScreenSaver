@@ -1,7 +1,7 @@
 # 06 — Build, Tooling, Tests, Installed Validation and Cutover Evidence
 
-Status: technical decomposition only
-Last updated: 2026-08-20
+Status: technical decomposition only  
+Last updated: 2026-08-21
 
 Cross-links:
 
@@ -12,25 +12,33 @@ Cross-links:
 
 ## 1. Build risk is handled early; build execution is deferred
 
-During Phases C–G, update build scripts, packaging declarations, and `build_runner.py` as required,
-and validate them with focused static/script tests. Do not initiate a compiled or full product build.
-Executable/product validation runs only after migration implementation is complete and the operator
-explicitly schedules it.
+During Phases C–G, update build scripts, packaging declarations, and `build_runner.py` as required and
+validate with focused static/script tests.
 
-Current Nuitka build scripts include:
+Do not initiate a compiled/full product build merely as routine migration validation.
 
-- shaders;
-- images;
-- themes;
-- multimedia plugins/modules.
+Executable/product validation runs after migration implementation is complete and the operator
+explicitly schedules it, unless the operator explicitly asks for an earlier build.
 
-They do not yet explicitly package SRPSS QML files or select QML plugins.
+## 2. Test/workflow environment
 
-Do not discover this only after production cutover.
+SRPSS source/document mutation occurs in the real local Git worktree.
 
-## 2. QML source packaging
+Repository connectors/APIs are read/audit tools for this project, not normal file mutation.
 
-Recommended simple repository shape:
+SRPSS does not use GitHub Actions or another repository-hosted CI workflow as the normal migration
+test path. Do not add hosted CI unless the operator explicitly requests it.
+
+Use:
+
+- current capable Windows worktree for ordinary deterministic tests;
+- clean checkout when reproduction/isolation benefits from it;
+- proper Windows/Qt/OpenGL environment for real Quick/GL;
+- operator hardware for physical displays, refresh/DPR, GPU, PresentMon and eyes-on acceptance.
+
+## 3. QML source packaging
+
+Preferred repository shape:
 
 ```text
 rendering/quick/qml/
@@ -40,39 +48,35 @@ rendering/quick/qml/
 
 Load relative to package/runtime source location, not current working directory.
 
-For Nuitka onefile/standalone, include the directory explicitly, e.g. conceptually:
+For Nuitka onefile/standalone include the QML directory explicitly, conceptually:
 
 ```text
 --include-data-dir=rendering/quick/qml=rendering/quick/qml
 ```
 
-Do not generate paths that only work from the repository root.
+Do not generate paths that only work from repository root.
 
-A Qt resource `.qrc` is optional, not required unless file packaging proves fragile.
+A Qt resource `.qrc` is optional unless file packaging proves fragile.
 
-Choose one packaging method and remove the abandoned one.
+Choose one packaging method and remove abandoned duplicates.
 
-## 3. Nuitka Qt QML plugin
+## 4. Nuitka Qt QML plugin
 
-Nuitka's PySide6 plugin supports the `qml` Qt plugin family and detects QtQuick/QtQml usage, but SRPSS
-should make the requirement explicit for deterministic builds.
-
-Update the relevant build scripts with:
+Make the required QML plugin family explicit:
 
 ```text
 --include-qt-plugins=qml
 ```
 
-while preserving existing required multimedia plugins.
+while preserving required multimedia plugins.
 
 Ensure Python imports make QtQml/QtQuick dependencies visible.
 
-Do not use `--include-qt-plugins=all` unless a focused packaging failure proves necessary; it can add
-large unrelated dependencies.
+Do not use `--include-qt-plugins=all` unless a focused packaging failure earns it.
 
-## 4. Build scripts to reconcile
+## 5. Build scripts to reconcile
 
-Audit/update together:
+Audit/update together as applicable:
 
 ```text
 scripts/build_nuitka.ps1
@@ -82,15 +86,14 @@ scripts/build_nuitka_mc_onedir.ps1
 scripts/venv/build_nuitka_mc_onedir.ps1
 ```
 
-Also inspect any shared build runner/job definitions that duplicate expected assets/modules.
+Also inspect shared build-runner/job definitions that duplicate expected assets/modules.
 
-Keep build layout/publishing behaviour unchanged unless Quick packaging actually requires a change.
+Keep publishing/layout behavior unchanged unless Quick packaging requires a change.
 
-## 5. Deferred operator-scheduled compiled smoke
+## 6. Deferred operator-scheduled compiled smoke
 
-Land the required packaging/script support when the production Quick render-node foundation exists,
-but defer execution until migration implementation is complete and the operator schedules a build
-window. At that point, build the smallest normal/diagnostic target that exercises:
+After migration implementation is complete and the operator schedules a build window, build the
+smallest normal/diagnostic target that exercises:
 
 - QQuickWindow;
 - QtQml;
@@ -102,64 +105,38 @@ window. At that point, build the smallest normal/diagnostic target that exercise
 
 This is not an implementation gate for transition, visualizer, widget, or CUSTOM migration work.
 
-If QML plugin/data packaging fails, fix packaging then continue. That is not a reason to return to
-QRhiWidget.
+A QML plugin/data packaging failure is a packaging defect, not a reason to return to QRhiWidget.
 
-## 6. New production-shaped tools
+## 7. Production-shaped tools
 
 Create only tools that directly reduce migration risk.
 
-### `tools/quick_runtime_smoke.py`
+### Quick runtime smoke
 
-Uses production Quick classes.
+Use production Quick classes to prove one/two windows, render-thread identity, base image, simple
+transition, scene teardown and generation recreation.
 
-Proves:
+### Quick widget gallery
 
-- one/two windows;
-- render-thread identity;
-- base image;
-- simple transition;
-- scene teardown;
-- generation recreation.
+Synthetic/offline models for widget families showing normal/extreme valid styling, shadows, borders,
+artwork, controls, visualizer card and two-display focus stress.
 
-No provider/network dependency.
+After E2, include activated/deactivated family navigation/runtime cases without eagerly constructing
+all settings pages.
 
-### `tools/quick_widget_gallery.py`
+### Lifecycle harness
 
-Synthetic/offline models for all widget families.
+Prefer adapting existing lifecycle harnesses rather than creating another lifecycle framework.
 
-Shows:
-
-- ordinary positions;
-- custom styles;
-- extreme but valid opacity;
-- shadows;
-- text/header shadows;
-- borders/radii;
-- artwork;
-- progress controls;
-- visualizer card placeholder/real deterministic mode;
-- two-display focus stress.
-
-Supports deterministic screenshot capture where practical.
-
-### lifecycle harness
-
-Prefer adapting an existing lifecycle harness to instantiate the production Quick runtime rather than
-creating another unrelated lifecycle framework.
-
-## 7. Existing P0 benchmark
+## 8. Existing P0 benchmark
 
 Preserve P0 as architecture evidence.
 
-Do not keep expanding it.
+Do not keep expanding it merely to reconfirm Quick.
 
-It may be left unchanged even if equivalent pacing code moves into production; evidence
-reproducibility is more important than eliminating a small tool duplicate.
+Use production-shaped harnesses for migration regression.
 
-Use new production-shaped harnesses for migration regression.
-
-## 8. Automated tests
+## 9. Automated/focused tests
 
 Add/update focused tests for:
 
@@ -181,15 +158,18 @@ Add/update focused tests for:
 - immutable sync state;
 - resource lifecycle;
 - transition parameters;
+- GL-state restoration;
 - no live QWidget access.
 
-### widgets
+### widgets/settings
 
 - model mapping;
 - QML component load;
-- visual style mapping;
+- visual style;
 - CUSTOM;
-- actions.
+- actions;
+- E2 capability activation;
+- lazy settings-page hydration safety.
 
 ### visualizer
 
@@ -198,10 +178,10 @@ Add/update focused tests for:
 ### build
 
 - QML directory exists;
-- build scripts include the required data/plugin contract;
+- build scripts include required data/plugin contract;
 - build runner knows expected payload.
 
-## 9. Test cadence
+## 10. Test cadence
 
 Every slice:
 
@@ -209,29 +189,27 @@ Every slice:
 focused pytest
 ```
 
-At major phase boundaries:
+At major phase boundaries, when useful:
 
 ```text
-python tests/run_chunked.py --chunks 4 --timeout-seconds 900
+python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
 ```
 
-Do not run the entire suite after every three-line edit.
+Do not run the entire suite after every small edit.
 
-Do run the full bounded suite before:
+Do run the bounded suite before production cutover, major legacy deletion, and final migration closure
+when the environment is appropriate.
 
-- production cutover;
-- major legacy deletion;
-- final migration closure.
-
-## 10. Manual/installed gates
+## 11. Manual/installed gates
 
 ### Renderer/transition
 
 - 60 Hz;
-- 165 Hz/high refresh;
+- high refresh;
 - mixed refresh;
 - all transitions;
-- transition interruption/cycle.
+- interruption/cycle;
+- authored visual parity.
 
 ### visualizer
 
@@ -241,15 +219,13 @@ Do run the full bounded suite before:
 - Spectrum idle;
 - CUSTOM.
 
-### widgets
+### widgets/settings
 
 - full widget composition;
-- shadows;
-- opacities;
-- borders;
-- sizing;
-- stacking;
-- interaction.
+- shadows/opacities/borders/sizing/stacking;
+- interaction;
+- E2 activation and pill navigation;
+- no hidden family runtime work.
 
 ### lifecycle
 
@@ -268,63 +244,47 @@ Do run the full bounded suite before:
 - context menu;
 - shadow-corruption stress.
 
-## 11. Physical cadence
+## 12. Physical cadence
 
 Do not use internal frame callbacks as sole physical proof.
 
-Final production Quick evidence:
+Final production Quick evidence may include:
 
 - PresentMon phase-correlated;
 - p95/p99/max;
 - severe-gap counts;
 - both displays;
-- light;
-- external heavy load.
+- light/external heavy load.
 
 Use the existing worker baseline from preserved evidence.
 
-Do not ask for another manual worker-heavy run.
+Do not ask for another manual worker-heavy baseline.
 
-## 12. Heavy-load success
+## 13. Heavy-load success
 
-The architecture was selected because Quick heavy already landed near the old-light performance
-class.
+Quick was selected because heavy-load behavior already landed near the old-light presentation class.
 
-Final migrated production should not throw that away.
+If full feature parity adds load, attribute GUI sync, render-node cost, widget scene cost,
+source/provider cost and texture upload before blaming the architecture.
 
-If full feature parity adds load:
+Do not reduce authored visualizer cadence or widget fidelity to meet a benchmark.
 
-- attribute GUI sync;
-- render-node cost;
-- widget scene cost;
-- source/provider cost;
-- texture upload;
-
-before blaming the architecture.
-
-Do not reduce authored visualizer cadence or widget fidelity to meet the benchmark.
-
-## 13. Long soak
+## 14. Long soak
 
 After final Quick architecture:
 
 - ordinary/light telemetry;
 - optional diagnostic comparison;
-- memory;
-- private commit;
+- memory/private commit;
 - handles;
 - threads;
 - GL/render resources;
 - topology wake;
 - clean shutdown.
 
-The old retention signal remains separate until reproduced on final architecture.
+## 15. Git checkpoint discipline
 
-## 14. Git checkpoint discipline
-
-Every successful slice is pushed.
-
-Before each push:
+Before local push:
 
 ```text
 git status
@@ -340,12 +300,13 @@ git commit -m "<specific landed slice>"
 git push
 ```
 
-Never use destructive git to make the tree convenient.
+Never use destructive Git to make the tree convenient.
 
-Do not wait for operator approval after a green checkpoint unless the next step requires a genuinely
-unavailable manual observation.
+Low-risk work may continue after green push.
 
-## 15. Final cutover checklist
+High-risk/audit-required work stops after push for independent review.
+
+## 16. Final cutover checklist
 
 Production owner is Quick only.
 
@@ -364,14 +325,15 @@ Historical evidence/tests may still name them.
 
 After caller proof, remove dead production files through `Future_Cleanup.md`.
 
-## 16. Documentation/tool closure
+## 17. Documentation/tool closure
 
 Update:
 
 - `Docs/TestSuite.md`;
 - `Docs/Harness_Index.md`;
 - `Index.md`;
-- build documentation if any;
+- build documentation;
+- `Docs/Defaults_Guide.md`;
 - `Future_Cleanup.md`.
 
 Delete migration-only tools that no longer guard a live risk.
