@@ -170,8 +170,10 @@ If a candidate diff is unexpectedly broad or malformed, abandon the unattached c
 
 ## 11. Migration closure
 
-Phase C implementation is structurally complete once the canonical registry and Quick implementation registry are in exact parity and each renderer is isolated from the old compositor.
+Phase C **implementation** is structurally complete once the canonical registry and Quick implementation registry are in exact parity and each renderer is isolated from the old compositor.
 
-Physical/eyes-on acceptance may remain as explicit deferred sign-off while later migration phases proceed. Failing deferred evidence reopens only the smallest demonstrated transition/runtime defect; it does not authorize a second presentation architecture.
+Phase-C **acceptance/sign-off is a separate state and must remain open until its listed tests and sign-off gates have actually been executed and their results recorded**. Before any agent marks Phase-C acceptance closed, it must run the focused deterministic Phase-C tests and the applicable real-GL commands listed in `Docs/Harness_Index.md`, record the exact command/result/commit/environment, and leave any genuinely hardware/eyes-on-only gate unchecked until that gate is actually performed. Source review, an absent CI result, or "should pass" is never a substitute for execution evidence.
+
+Later implementation phases may proceed while explicit Phase-C acceptance items remain open when they are not dependencies of the later work. Failing deferred evidence reopens only the smallest demonstrated transition/runtime defect; it does not authorize a second presentation architecture.
 
 Old compositor-only transition classes are removed after production cutover through Phase I / `Future_Cleanup.md`.

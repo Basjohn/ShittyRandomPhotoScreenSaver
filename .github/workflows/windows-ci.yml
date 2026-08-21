@@ -55,4 +55,4 @@ jobs:
           name: pytest-chunk-logs
           path: logs/pytest_chunk_*.log
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 1
