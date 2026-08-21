@@ -1,412 +1,359 @@
 # 02 — Quick Scene Renderer, Images, Transitions and Pacing
 
-Status: technical decomposition only
-Last updated: 2026-08-20
+Status: Phase-C landed architecture / current transition-authoring authority
+Last updated: 2026-08-21
 
 Cross-links:
 
-- sequence: `Current_Plan.md`
-- cleanup: `Future_Cleanup.md`
-- transition checklist: `Docs/Transition_Change_Checklist.md`
+- sequence and phase admission: `Current_Plan.md`
+- transition authoring/checklist: `Docs/Transition_Change_Checklist.md`
+- runtime/lifecycle: `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md`
+- validation routing: `Docs/Harness_Index.md`
+- deferred deletion: `Future_Cleanup.md`
 
-## 1. Why not QQuickRhiItem as the default SRPSS custom renderer
+## 1. Selected scene/render architecture
 
-`QQuickRhiItem` is the Quick counterpart of QRhiWidget: render to an offscreen color texture, then
-composite that texture into the scene.
-
-SRPSS is migrating specifically to avoid unnecessary presentation layers.
-
-Preferred first production proof:
+The production destination remains one standalone threaded `QQuickWindow` per selected physical display with custom OpenGL rendered inline in the Quick scene.
 
 ```text
-QQuickItem(ItemHasContents)
-    -> QSGRenderNode
-    -> inline OpenGL commands
+QQuickWindow
+  -> Quick scene
+      -> full-screen background/transition QQuickItem
+          -> QSGRenderNode
+              -> direct OpenGL
+      -> visualizer QQuickItem/QSGRenderNode
+      -> retained Quick widgets/overlays
 ```
 
-This keeps custom content in the main Quick scene render ordering without an extra item-sized
-offscreen render target.
+`QQuickWidget` is prohibited. `QQuickRhiItem`/offscreen-composite presentation is not the normal SRPSS custom-render path. A second accelerated visualizer/transition window is prohibited.
 
-The choice is not irrevocable until the first primitive proof passes pinned PySide 6.9.1 + compiled
-smoke. If it is fundamentally blocked, revise the single chosen primitive before porting the product.
-Do not keep two runtime renderers.
+Qt Quick bootstrap remains explicit before the first Quick scene graph exists:
 
-## 2. Proposed renderer structure
+- threaded render loop;
+- OpenGL graphics API;
+- current OpenGL 4.1/core requirements unless exact source proves otherwise.
 
-```text
-rendering/quick/
-    render/
-        background_item.py
-        background_node.py
-        visualizer_item.py
-        visualizer_node.py
-        gl_resources.py
-        image_textures.py
-        transition_renderer.py
-        transition_state.py
-```
+The P0 evidence already selected this architecture. Do not reopen presenter comparison without contradictory implementation evidence.
 
-### Full-screen background node
+## 2. Render-thread ownership
 
-Draws:
-
-- stable base image;
-- active old/new transition;
-- transition-specific overlays/particles.
-
-### Visualizer node
-
-A separate scene-graph item/node at the visualizer card geometry/z position.
-
-It is still inside the same `QQuickWindow`.
-
-This lets ordinary retained Quick widgets participate naturally above/below it without a second
-window or offscreen QWidget surface.
-
-## 3. Render-thread ownership
-
-Render node owns:
+A custom render node may own, when needed:
 
 - GL programs;
-- VAO/VBO;
-- textures;
-- per-transition GPU buffers;
-- visualizer GPU resources used by that node.
+- VAOs/VBOs/meshes;
+- image textures;
+- transition-specific buffers;
+- depth state/resources;
+- later visualizer-specific GPU resources.
 
-GUI/runtime state must be synchronized into immutable render-node state.
+GUI/runtime state crossing into render ownership must be immutable/synchronized. The render thread must not read live QWidget/QPixmap, SettingsManager, provider objects, `SpotifyVisualizerWidget`, or arbitrary QObject state.
 
-The render thread must not read live:
+Create/use/delete context-local GL resources on the legal render owner. Failed deletion remains accounted/loud until ownership is actually released.
 
-- `QPixmap`;
-- QWidget;
-- `QQuickItem` properties outside the permitted sync/updatePaintNode phase;
-- `SpotifyVisualizerWidget`;
-- provider objects;
-- SettingsManager.
+## 3. Common GL state fence
 
-## 4. OpenGL state
+Transition rendering must leave the Quick scene graph safe for later nodes.
 
-Inside `QSGRenderNode::render()`:
+The common transition host is responsible for preserving/restoring every state touched by an implementation, including at least:
 
-- use the scene graph's active OpenGL context;
-- do not call `beginExternalCommands()`/`endExternalCommands()` from inside the render node unless
-  Qt documentation for the exact binding requires it; render nodes are already the integration seam;
-- accurately declare changed render states;
-- restore/leave GL state according to QSGRenderNode contract;
-- do not assume the old QRhiWidget FBO/context shape.
-
-Audit state touched by existing renderer:
-
-- viewport;
-- scissor;
-- blend enable/function;
-- stencil;
-- depth;
+- viewport/scissor;
 - program;
-- VAO/VBO;
-- active texture/bindings;
-- clear state.
+- VAO/VBO bindings;
+- active texture and texture bindings;
+- blend enable/function;
+- cull state;
+- depth enable/write/function/clear state;
+- stencil state;
+- any later state introduced by a migrated effect.
 
-No state leak into later Quick nodes.
+A complex implementation may use depth or custom meshes. It may not leak those settings into the next Quick node.
 
-## 5. Image boundary
+## 4. Immutable image boundary
 
-Current engine/image pipeline may continue to produce `QPixmap`.
+The existing engine/image pipeline may continue to produce `QPixmap` on its legal side. Presentation converts/captures detached immutable image content before render-thread ownership.
 
-The presentation boundary must convert/capture immutable image content on the GUI-safe side.
-
-Preferred model:
+Conceptually:
 
 ```text
 PresentationImage
-    id / path / cache identity
-    logical QSize
+    identity/path/cache key
+    logical size
     DPR intent
-    QImage or immutable RGBA bytes
+    immutable QImage/RGBA payload
 ```
 
-Render node uploads only when image identity changes.
+Per-display render ownership keeps the current base texture and, during a transition, the source/destination pair required by the active run.
 
-Do not:
+Do not repeatedly convert/upload stable images each frame. Do not perform QWidget grabs/painting from the render thread.
 
-- call QWidget screen-grab/paint from render thread;
-- repeatedly convert QPixmap every frame;
-- upload stable image textures every frame.
+## 5. Transition lifecycle
 
-Keep old/new image textures alive for exactly the active transition + resulting base ownership.
-
-## 6. Texture ownership
-
-Per display render node/context generation owns its textures.
-
-No cross-window numeric GL-handle sharing unless a later explicit proven shared-context contract
-requires it.
-
-Account:
-
-- current base texture;
-- transition destination texture;
-- transition scratch/particle buffers;
-- visualizer resources.
-
-On scene invalidation, delete on the legal render/context owner.
-
-Failed deletion is loud and ownership remains accounted until actually released.
-
-## 7. Transition control refactor
-
-Current `gl_compositor_*_transition.py` classes are presentation-coupled:
+The landed transition-neutral boundary is:
 
 ```text
-BaseTransition
--> parent DisplayWidget
--> find _gl_compositor
--> call compositor start_*
--> AnimationManager/compositor completion
-```
-
-Do not make Quick pretend to expose `_gl_compositor`.
-
-Destination:
-
-```text
+canonical transition descriptor
+        ↓
+GUI/runtime-side settings + random resolution
+        ↓
 TransitionRequest
-    canonical transition id
-    duration
-    canonical descriptor-authored easing curve
-    direction/parameters
-    old/new PresentationImage identities
-
         ↓
-
 TransitionRun
-    immutable start identity
-    monotonic start time
-    monotonic end time
-    transition-specific immutable parameters
-
         ↓
-
-QuickTransitionRenderer
+monotonic TransitionSample
+        ↓
+lazy Quick transition renderer
 ```
 
-The controller owns lifecycle/time.
+`TransitionRequest`/`TransitionRun` own presentation-neutral lifecycle and immutable values. Completion/cancellation are exactly once and generation/run-id fenced.
 
-The render node samples current monotonic time and computes render progress.
+The controller does not wait for a "last frame painted" acknowledgement. A missed display opportunity advances to the current monotonic sample; it is not replayed.
 
-### Authored transition timing
+Explicit cancellation snaps/finalizes according to the authored destination policy once. Stale render snapshots/completions are rejected by identity/generation.
 
-User-selectable transition easing is deliberately retired during this migration. Transition
-Settings has no Easing control or hidden Auto preference; legacy configurations containing an
-easing value remain loadable, but that value is ignored and removed from current persistence.
+## 6. Canonical authored timing
 
-The lightweight canonical descriptor specifies each transition's immutable progress curve. This is
-an authored visual characteristic, not a global preference. Preserve an implementation's intended
-timing rather than forcing every effect through one curve: Slide uses `SINE_IN_OUT`, while effects
-whose shader or physics already stages and shapes time receive a linear timeline so they are not
-double-eased. The resolved `EasingCurve` may remain on the immutable request/run state.
+User-selectable transition easing is retired for the final architecture. Legacy persisted easing may remain loadable during migration but is not a runtime-authoring authority.
 
-Easing is never a remedy for renderer coverage or cadence defects. Quick Slide supports the four
-cardinal directions. Its old/new image coordinates and sole pixel owner must be derived from the
-same `TransitionSample.eased_progress` in one render operation, so their union covers the entire
-viewport at endpoints, midpoint, arbitrary fractional samples, and jumps caused by missed physical
-frames. Do not independently accumulate or round the two image positions.
+The canonical descriptor/effect owns timing:
 
-Block Puzzle Flip remains shader-authoritative, but its final Quick visual contract is row/column
-3D strip slabs rather than the legacy per-cell centre-bias/jitter wave. Cardinal directions flip
-column or row slabs, the two saved diagonal directions remain diagonal slab waves, and exact start
-and end samples remain unshaded full images without a whole-screen dark/soft-lined startup wash.
-Resolve the Settings-owned `rows`/`cols` values before request admission; do not restore CPU-region
-or per-block presentation work.
+- Slide uses `SINE_IN_OUT`.
+- Shader/physics effects that already stage their own motion normally receive a linear outer timeline.
+- 3D Block Spins receives a linear outer timeline and applies its authored cubic spin internally.
 
-### Static internal transition implementation boundary
+Never add easing to conceal seam/cadence defects.
 
-Keep transition rendering internally plugin-shaped but statically registered:
+## 7. Static lazy implementation registry
 
-- canonical identity remains owned by the transition registry;
-- every implementation conforms to one small common renderer/state contract;
-- each implementation owns its transition-specific shader, math, uniforms, and resource behaviour;
-- the common host/controller owns shared old/new image textures, lifecycle, pacing, progress,
-  completion, and cancellation plumbing;
-- the lightweight catalog/descriptor remains usable by Settings without importing or constructing
-  every renderer implementation;
-- a small static mapping from canonical transition identity to a lazy internal implementation/factory
-  resolver is the intended dispatch boundary;
-- adding or removing a transition should primarily change its implementation/resources,
-  registration, and focused tests.
+Transition rendering is internally plugin-shaped but statically registered.
 
-A disabled transition remains representable in Settings/catalog metadata, but is excluded from
-Random/Cycle selection and is not resolved into a renderer. Its transition-specific module, shaders,
-GPU resources, and runtime state therefore remain dormant; re-enabling it makes the same registered
-implementation available again. Do not eagerly import every implementation merely to build the
-catalog.
+Canonical identity remains in `rendering/transition_registry.py`. The Quick implementation registry contains only lightweight module/factory references until an enabled transition is actually resolved.
 
-Do not accumulate a per-transition `if`/`elif`/switch tree in `QuickSceneController`,
-`TransitionRequest`/`TransitionRun`, the general controller, or another central dispatcher. This is
-internal modularity only: do not add dynamic discovery, manifests, hot loading, dependency
-resolution, API versioning, or a third-party plugin SDK.
+Disabled transitions may remain discoverable in Settings, but disabled runtime selection must not cause:
 
-## 8. Transition completion
+- implementation-module import;
+- transition shader import/compile;
+- GPU allocation;
+- transition-specific timers/state/resources.
 
-Transition completion must be exactly once and not admission-coupled to paint.
+No central transition `if/elif` dispatcher belongs in `QuickSceneController`, `TransitionRequest`, or `TransitionRun`.
 
-Preferred:
+Do not turn this internal modularity into dynamic discovery, manifests, hot loading, dependency resolution, API versioning, or a third-party SDK.
 
-- controller knows monotonic end deadline;
-- one bounded GUI-side completion deadline finalizes base image/state;
-- render node samples state while run is active;
-- stale completion is generation/run-id fenced.
+A permanent registry-parity test now makes the Phase-C inventory self-checking: canonical production ids and Quick implementation ids must match exactly and remain unique.
 
-Do not require "last frame painted" acknowledgement to release the next image rotation.
+## 8. GUI-side parameter resolution
 
-Interruption:
+Parameterized effects resolve Settings spelling, canonical defaults, random choices, clamping, color normalization, and legacy fall-through semantics before request admission.
 
-- explicit cancel policy snaps to the authored destination state exactly once;
-- stale render snapshots are rejected by run id/generation.
+Canonical Settings defaults are the fallback authority. Do not duplicate stale constructor defaults in the Quick resolver.
 
-## 9. Existing shader reuse
+The renderers are intentionally strict: required resolved values must be present and valid instead of being silently invented in the renderer.
 
-Do not rewrite working GLSL for architectural aesthetics.
+Per-run seeds/random values are selected once and frozen into the request/run.
 
-Extract the rendering helpers from `GLCompositorWidget` coupling.
+## 9. Landed canonical transition inventory
 
-Likely reusable:
+Phase C now has Quick implementations for all 12 canonical production transitions:
 
-- `rendering/gl_programs/*`;
-- transition shaders;
-- transition state dataclasses;
-- `GLTransitionRenderer` math after its compositor callbacks are removed;
-- visualizer shader sources/render upload helpers.
+1. Crossfade
+2. Slide
+3. Wipe
+4. Warp Dissolve
+5. Block Puzzle Flip
+6. 3D Block Spins
+7. Blinds
+8. Diffuse
+9. Ripple / Raindrops
+10. Crumble
+11. Particle
+12. Burn
 
-Refactor them toward explicit inputs:
+If the canonical registry changes later, registry parity must fail until the Quick implementation surface changes with it.
 
-```text
-program/resource owner
-viewport
-old/new textures
-progress
-transition state
-```
+No final Quick transition depends on `GLCompositorWidget`.
 
-rather than callbacks into the old compositor object.
+## 10. Slide preservation contract
 
-## 10. Active transition inventory gate
+Quick Slide supports the four product directions only:
 
-At execution time, query the canonical transition registry.
+- left;
+- right;
+- up;
+- down.
 
-The plan currently expects at least:
+Source and destination coordinates plus the sole pixel owner come from the same immutable eased sample in one draw. Their union must cover the complete viewport at endpoints, midpoint, arbitrary fractions, and discontinuous progress jumps caused by missed presentation intervals.
 
-- Crossfade
-- Slide
-- Wipe
-- Warp
-- BlockFlip
-- BlockSpin
-- Blinds
-- Diffuse
-- Raindrops
-- Crumble
-- Particle
-- Burn
+Do not independently accumulate or round source/destination positions.
 
-Port the canonical active set, not a stale hard-coded list.
+Do not restore diagonal full-frame Slide unless a newly authored effect also solves the exposed-corner coverage problem.
 
-No migration fallback to old compositor for "the difficult transition."
+## 11. Block Puzzle Flip preservation contract
 
-BlockSpin's Quick renderer remains a single thin 3D slab over an opaque black void. Its lazy
-`block_spins` implementation owns the context-local 36-vertex box mesh and shader programs, uses
-the shared old/new image textures, and releases those resources through the render-node teardown
-barrier. The canonical run stays linear while the implementation applies the effect's authored
-cubic spin timing. Horizontal, vertical and both diagonal axes preserve their authored back-face
-UV transforms and moving side treatment; the common transition host restores inherited depth
-write/function/clear state after the draw.
+Block Puzzle Flip remains shader-authoritative with resolved Settings-owned rows/columns. Its Quick visual contract is 3D strip/slab behavior rather than CPU region/per-block QWidget work.
 
-## 11. Presentation frame pacer
+Preserve cardinal and the saved diagonal direction semantics, exact endpoints, and authored visual character. Do not reintroduce CPU-region presentation ownership.
 
-Create a production class, e.g.:
+## 12. 3D Block Spins preservation contract
 
-```text
-QuickFramePacer
-QuickFrameDemand
-```
+3D Block Spins is a real 3D effect, not a flat narrowing approximation.
 
-Inputs:
+Preserve:
 
-- display target refresh;
-- active transition reason;
-- visible custom-GL visualizer reason;
-- any other custom render-node reason that genuinely requires continuous frames.
+- one thin 36-vertex rectangular-prism slab;
+- front/back/side faces and thickness;
+- depth-tested face ordering over opaque black void;
+- horizontal, vertical, and both diagonal axes;
+- opposite direction spin signs;
+- destination/back-face UV transforms that keep the arriving image upright;
+- cubic internal spin timing;
+- dark side core;
+- direction-sensitive moving specular band;
+- edge-on white rim;
+- exact source/destination endpoints;
+- context-local mesh/program ownership and teardown.
+
+No flat-quad fallback.
+
+## 13. Blinds preservation contract
+
+Preserve the existing authored Blinds fragment shader rather than a lookalike rewrite.
+
+The Quick implementation keeps:
+
+- linear outer timeline;
+- existing effective slat grid;
+- Horizontal, Vertical, and Diagonal modes;
+- resolved shader-space feather;
+- authored centre-out band growth;
+- late global destination tail;
+- lazy implementation/resource ownership.
+
+`Random` is resolved before renderer admission.
+
+## 14. Diffuse / Ripple / Crumble
+
+These effects reuse the existing canonical shader/math surface through isolated Quick renderers.
+
+### Diffuse
+
+Preserve block-size/grid semantics and authored shape modes: Rectangle, Membrane, Lines, Diamonds, Amorph, Random.
+
+### Ripple / Raindrops
+
+Preserve ripple-count bounds, per-run ripple seed, existing raindrop shader behavior, and exact endpoints.
+
+### Crumble
+
+Preserve piece count, crack complexity, per-run seed, mosaic flag contract, and canonical numeric weighting modes. Current legacy Settings/factory fall-through quirks are migration evidence; do not silently reinterpret labels during renderer migration. H0 may deliberately reset/repair presentation settings later.
+
+## 15. Particle preservation contract
+
+Particle reuses the authored canonical particle shader.
+
+Preserve:
+
+- Directional, Swirl, and Converge modes;
+- all eight directional vectors;
+- Random Direction / Random Placement shader semantics;
+- particle radius and overlap;
+- trail length/strength;
+- swirl strength/turns/order;
+- 3D shading;
+- texture mapping;
+- wobble;
+- gloss size;
+- light direction;
+- per-run seed;
+- physical-framebuffer `u_resolution` semantics used by the old compositor.
+
+Settings label/index oddities are not permission to retune the effect during migration.
+
+## 16. Burn preservation contract
+
+Burn is an authored-rich effect and must use the actual canonical Burn shader/math.
+
+Preserve:
+
+- exact source/destination endpoints;
+- four cardinal plus two diagonal directions;
+- 5% ignition phase before front movement;
+- four-octave noise and domain-warped FBM;
+- jagged paper-like front displacement;
+- heat distortion;
+- warm glow bleed;
+- white-hot/thermite core;
+- char width;
+- hot ember -> cooling ember -> dark char -> destination progression;
+- char crackle/detail;
+- smouldering pulse;
+- glow intensity/color;
+- sparks/embers;
+- smoke wisps;
+- falling ash;
+- smoke/ash enablement and density;
+- per-run seed;
+- animated effect time derived from the immutable run clock;
+- delayed near-completion destination tail fade.
+
+Do not reduce Burn to a noisy wipe.
+
+## 17. Presentation frame pacer
+
+One presentation pacer exists per display/window.
+
+Inputs include active transition demand and later visible custom-GL visualizer demand.
 
 Properties:
 
-- one precise single-shot timer/pacer per window;
-- next deadline derived monotonically;
-- skip missed opportunities;
-- call `QQuickWindow.update()` only for due opportunities;
-- no render-completion self-requeue;
-- no FIFO;
-- no physical-to-logical cadence feedback.
+- target follows the owning display refresh;
+- single-shot/monotonic deadline behavior;
+- missed opportunities are skipped;
+- `QQuickWindow.update()` only when continuous custom rendering needs a frame;
+- no `afterRendering -> update()` loop;
+- no FIFO/catch-up;
+- no paint acknowledgement;
+- no feedback into visualizer logical cadence.
 
-Static retained widgets do not keep this pacer running merely because they exist.
+Static retained widgets do not keep the custom GL pacer alive merely because they exist.
 
-## 12. Quick-native animations
+## 18. Quick-native ordinary animations
 
-For fades/ordinary retained UI animation, prefer Quick scene properties/animations.
+Use retained Quick properties/animations for ordinary opacity/geometry/hover behavior where appropriate.
 
-Do not use a Python callback every rendered frame to animate:
+Do not introduce a Python callback for every physical frame of simple UI animation. Quick animation never becomes visualizer simulation authority.
 
-- opacity;
-- simple geometry;
-- hover feedback.
+## 19. Evidence and deferred Phase-C sign-off
 
-Do not let a Quick animation become visualizer logical-time authority.
+Implementation/source closure and physical acceptance are separate evidence classes.
 
-## 13. Transition parity tests
+Permanent deterministic gates should cover:
 
-Per active transition:
+- registry parity and lazy dormancy;
+- request/settings resolution;
+- strict parameter admission;
+- exact shader/math reuse where required;
+- endpoints/midpoints/directions/modes;
+- interruption/exactly-once completion;
+- generation fencing;
+- resource release;
+- GL-state restoration.
 
-- start image;
-- midpoint;
-- end image;
-- direction variants;
-- canonical authored curve and absence of a user/callsite override;
-- for Slide, seam-free cardinal coverage at endpoints, midpoint, dense fractions, and irregular or
-  missed presentation intervals;
-- DPR 1 and non-1 where practical;
-- non-zero display origin where geometry can matter;
-- cancel/interruption;
-- exactly-once completion.
+Focused real-GL wrappers exist for the remaining parameterized effects and Blinds. `tools/qtquick_phase_c_effect_smoke.py` includes Diffuse shapes, Ripple counts, Crumble weighting modes, Particle modes/directions, and Burn directions/toggle cases.
 
-Use image/pixel or deterministic renderer-state tests when possible.
+Physical/eyes-on acceptance remains deferred and must not be inferred from hosted CI:
 
-Manual installed review remains required for motion feel.
+- one-window real OpenGL smoke;
+- two physical display smoke where requested;
+- normal/high-refresh continuity;
+- old-vs-Quick eyes-on authored-effect comparison;
+- physical cadence/PresentMon only when it answers a new question.
 
-## 14. Performance acceptance
+A failure in deferred evidence reopens the smallest demonstrated defect. It does not reopen the selected presenter architecture by default.
 
-Check:
+## 20. Phase-C closure status
 
-- 60 Hz;
-- high refresh;
-- mixed refresh;
-- light;
-- external heavy load;
-- p95/p99/max physical gaps;
-- severe gap counts;
-- render-thread cost;
-- texture upload frequency;
-- GUI callback count.
+Phase-C implementation is structurally complete and Phase D may proceed.
 
-Do not optimize individual transition shaders because Slide reveals shared cadence issues.
+Remaining Phase-C work is acceptance/sign-off only unless new evidence demonstrates an implementation defect.
 
-## 15. Commit cadence
-
-Recommended pushed checkpoints:
-
-1. render-node foundation;
-2. image texture owner;
-3. transition run controller;
-4. Crossfade + Slide;
-5. simple transition batch;
-6. complex transition batch;
-7. all-registry transition parity;
-8. presentation pacing/perf closure.
+Production cutover remains Phase H; old compositor-only presentation code remains until Phase I deletion. Shared authored shader/math assets may survive when the Quick renderer is their real consumer.

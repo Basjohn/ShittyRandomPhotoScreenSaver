@@ -25,6 +25,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          # Some permanent regression guards inspect historical source via
+          # `git show <old-sha>:<path>`. The default depth=1 checkout cannot
+          # satisfy those tests.
+          fetch-depth: 0
 
       - name: Set up Python 3.11.9
         uses: actions/setup-python@v5

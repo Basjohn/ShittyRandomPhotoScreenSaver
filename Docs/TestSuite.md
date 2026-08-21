@@ -1,26 +1,61 @@
 # Test Suite Guide
 
-Last updated: 2026-08-20
+Last updated: 2026-08-21
 
 Testing strategy during the Qt Quick runtime presentation migration.
 
 ## 1. Standard commands
 
-Full bounded suite:
-
-```powershell
-python tests/run_chunked.py --chunks 4 --timeout-seconds 900
-```
-
-Targeted:
+Targeted tests are the normal per-slice gate:
 
 ```powershell
 pytest path\to\test_file.py -q --tb=short
 ```
 
+The bounded full-suite diagnostic is:
+
+```powershell
+python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
+```
+
 Discover current tests by owner/defect, not by stale phase numbering.
 
-## 2. Validation levels
+Do not use a red broad-suite run as the only evidence that the active migration slice failed. Inspect
+its exact failures/timeouts and run the smallest focused gate that can falsify the changed contract.
+
+## 2. Current GitHub Actions caveat — 2026-08-21
+
+Windows Actions run `32436553793` proved that the current broad chunked suite is useful diagnostic
+evidence but is not yet a clean pass/fail migration gate.
+
+Observed:
+
+- chunks 1 and 4 completed and reported ordinary test failures from several unrelated existing areas;
+- chunk 2 completed pytest itself (`3 failed, 1219 passed, 67 skipped`) in about 25 seconds but the
+  Python process remained alive until `tests/run_chunked.py` applied its own 900-second timeout;
+- chunk 3 stopped around 50% test execution progress and reached the same wrapper timeout without a
+  pytest summary;
+- the outer GitHub Actions job was **not** killed early; its 70-minute job timeout was not reached;
+- the workflow uploaded all four chunk logs successfully.
+
+The workflow also used `actions/checkout` with the default shallow history. At least one existing
+Bubble guardrail executes `git show 510520e:...`, which cannot succeed when that historical commit is
+not present in the checkout.
+
+Interpretation rules:
+
+- a pytest summary followed by a wrapper timeout strongly suggests shutdown/background ownership
+  remains alive; identify the actual owner rather than increasing the timeout;
+- a chunk that stops during test execution requires verbose/smaller isolation to identify the
+  hanging test/owner;
+- a history-dependent test requires the workflow to fetch sufficient history;
+- unrelated legacy/default/UI/doc failures are not evidence that a new Quick renderer failed;
+- conversely, an uninspected timed-out chunk must not be assumed clean merely because focused source
+  review looked good.
+
+See `Docs/Harness_Index.md` for the exact current CI evidence and Phase-C sign-off commands.
+
+## 3. Validation levels
 
 ### A — pure/unit
 
@@ -52,35 +87,55 @@ Required for:
 Required for:
 
 - Bubble feel/BTF;
-- transition continuity;
+- transition continuity/authored visual parity;
 - Spectrum idle visibility;
 - Pause/Play hitch;
 - startup/reveal;
 - widget visual parity.
 
-## 3. Permanent visualizer gates
+## 4. Permanent transition gates
+
+Preserve tests for:
+
+- canonical registry ↔ Quick implementation registry parity;
+- lazy/dormant implementation resolution;
+- Settings/default/random parameter resolution before render admission;
+- immutable transition request/run state;
+- exact endpoints and authored direction/mode variants;
+- transition-specific shader/math preservation where contractually required;
+- interruption/exactly-once completion;
+- generation fencing;
+- GL state restoration;
+- resource teardown.
+
+Real-GL and physical-display transition sign-off is routed through `Docs/Harness_Index.md`.
+
+## 5. Permanent visualizer gates
 
 Preserve tests for:
 
 - one `VisualizerLogicalRuntime`;
 - actual authored scheduler cadence;
+- every authored logical step integrated before presentation coalescing;
 - logical worker cannot mutate GUI/Quick/GPU state;
 - valid generation `0`;
 - all five modes;
 - source freshness;
 - protected visible edges;
 - Pause/Play identity;
+- clean worker join;
 - BTF.
 
 Do not regenerate behavioural goldens merely because the presentation architecture changed.
 
-## 4. Quick presentation gates
+## 6. Quick presentation gates
 
 Add/retain runtime-shaped proof for:
 
 - one standalone top-level `QQuickWindow` per physical display;
 - threaded render loop active;
 - render-thread identity distinct from GUI thread on supported Windows path;
+- inline custom GL through the selected `QSGRenderNode` seam;
 - no `QQuickWidget`;
 - no second accelerated runtime surface;
 - bounded latest-state synchronization;
@@ -90,7 +145,7 @@ Add/retain runtime-shaped proof for:
 - topology recreation;
 - clean shutdown.
 
-## 5. Physical frame-pacing gate
+## 7. Physical frame-pacing gate
 
 Report separately per display:
 
@@ -107,7 +162,7 @@ Internal `frameSwapped`/render callbacks are proxies, not physical-display proof
 
 Use OS/display-boundary evidence when deciding physical delivery.
 
-## 6. Heavy-load interpretation
+## 8. Heavy-load interpretation
 
 The completed P0 experiment showed Quick remains approximately in the old light-load presentation
 class even under substantial external CPU load.
@@ -116,7 +171,7 @@ Do not require every heavy-load outlier to disappear before migration.
 
 Heavy load is a resilience gate, not permission to reopen the old architecture.
 
-## 7. Lifecycle gate
+## 9. Lifecycle gate
 
 Repeatedly exercise:
 
@@ -135,9 +190,10 @@ Require:
 - generation zero preserved;
 - retired scene cannot reveal;
 - render resources return to expected baseline;
-- no old-generation callback survives destruction.
+- no old-generation callback survives destruction;
+- no background owner prevents process/test shutdown.
 
-## 8. Migration parity
+## 10. Migration parity
 
 For each migrated presentation family, require the relevant combination of:
 
@@ -148,8 +204,12 @@ For each migrated presentation family, require the relevant combination of:
 - lifecycle parity;
 - performance not regressing the Quick architecture win.
 
-## 9. Completion rule
+## 11. Completion rule
 
-Green tests are necessary, not sufficient.
+Green focused tests are necessary but not sufficient.
 
-Completion requires the relevant runtime and visual evidence for the migrated slice.
+Completion requires the relevant runtime/physical/manual evidence for the claim being made.
+
+Implementation may advance to the next phase while explicitly listed hardware/eyes-on acceptance
+remains deferred, provided the next phase does not depend on that unresolved evidence. A later failed
+sign-off reopens the smallest demonstrated defect.
