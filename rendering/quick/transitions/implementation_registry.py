@@ -50,6 +50,10 @@ _IMPLEMENTATIONS = (
             "rendering.quick.transitions.implementations.block_spins"
         ),
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="blinds",
+        module_name="rendering.quick.transitions.implementations.blinds",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 
