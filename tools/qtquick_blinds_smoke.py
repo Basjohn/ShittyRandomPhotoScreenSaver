@@ -10,7 +10,10 @@ from __future__ import annotations
 import argparse
 import sys
 
-import qtquick_render_node_smoke as smoke
+try:
+    from tools import qtquick_render_node_smoke as smoke
+except ModuleNotFoundError:  # direct ``python tools/qtquick_blinds_smoke.py``
+    import qtquick_render_node_smoke as smoke
 
 
 _DIRECTIONS = ("horizontal", "vertical", "diagonal")
