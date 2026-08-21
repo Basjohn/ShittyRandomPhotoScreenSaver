@@ -61,7 +61,7 @@ This file owns migration sequence and work admission. Technical decompositions u
 | --- | --- | --- |
 | A — bootstrap/render-node proof | Structurally complete | Do not reopen; compiled smoke remains operator-scheduled later |
 | B — runtime-host decomposition | Structurally complete | Do not reopen without contradictory evidence |
-| C — base image + transitions | **IMPLEMENTATION COMPLETE; deterministic test-hardening (C-T1..C-T8) landed; only operator real-GL/eyes-on sign-off remains** | Transition implementation changes only when stronger evidence exposes a real defect |
+| C — base image + transitions | **IMPLEMENTATION COMPLETE; test-hardening (C-T1..C-T8) landed; real-GL effect sign-off DRIVEN GREEN (35/35); only Blinds real-GL, multi-display, and eyes-on remain** | Transition implementation changes only when stronger evidence exposes a real defect |
 | **D — visualizer** | **ACTIVE** | **Normal implementation work belongs here now** |
 | E — widget presentation + capability setup foundation | Waiting for D implementation exit | Reference only |
 | F — widget families | Waiting for E | Reference only |
@@ -471,24 +471,36 @@ densities/toggles, per-run seed, run-clock animation time, delayed destination t
 
 ## 7.4 Existing Phase-C acceptance debt
 
-The following remain sign-off rather than missing architecture:
+Real-GL sign-off DRIVEN on real hardware 2026-08-21 (MSI G321Q, OpenGL threaded, `--size 480x270`):
 
-- execute focused deterministic Phase-C tests in the capable Windows worktree;
+- ✅ focused deterministic Phase-C tests execute green in the capable Windows worktree;
+- ✅ `tools/qtquick_phase_c_effect_smoke.py` — all 35 effect×case cases (Diffuse 6, Ripple 3, Crumble
+  5, Particle 12, Burn 9) report `valid=True` after the effect midpoint oracles were made reliable via
+  an isolated dense (15×15) midpoint grid + burn fire/char and particle-scatter signatures;
+- ✅ mature transitions re-verified unaffected on real GL (Crossfade, Slide, Wipe, Warp, Block Flip,
+  and all six Block Spins directions) — the shared sparse 5×5 grid was left byte-identical.
+
+Remaining sign-off (needs operator's own display/topology, not modelable here):
+
 - run Blinds real-GL directions;
-- run `tools/qtquick_phase_c_effect_smoke.py` cases for Diffuse/Ripple/Crumble/Particle/Burn;
 - scheduled physical two-display variants where required;
-- eyes-on old-vs-Quick authored-effect comparison;
+- eyes-on old-vs-Quick authored-effect comparison (operator has confirmed Burn looks correct);
 - normal/high-refresh continuity and physical cadence only where it answers an unresolved question.
 
 Phase D may proceed while these remain open.
 
 ## 7.5 Phase-C test/harness strengthening — explicit test-only debt
 
-**STATUS (2026-08-21): deterministic test-hardening C-T1..C-T8 LANDED and pushed. No implementation
-defect was exposed; no transition implementation was changed. Remaining Phase-C debt is only the
-operator-scheduled real-GL/eyes-on sign-off in Section 7.4 (rerun the strengthened
-`tools/qtquick_phase_c_effect_smoke.py` oracles on a real Windows/Qt/OpenGL display). The C-T subsections
-below are retained as the durable rationale for that rerun and for future transition-test changes.**
+**STATUS (2026-08-21): deterministic test-hardening C-T1..C-T8 LANDED and pushed, AND the real-GL
+effect sign-off has been DRIVEN GREEN on real hardware — all 35 effect×case cases report valid=True
+(see Section 7.4). No transition implementation was changed. The real-GL run first exposed that the
+shared 5×5 diagnostic grid was too sparse to sample thin authored effect regions; this was fixed as
+test/harness strengthening only (an isolated dense 15×15 midpoint grid for the effect oracles, plus
+burn fire/char and particle-scatter signatures), leaving the geometry oracles' sparse grid untouched.
+The C-T subsections below are retained as the durable rationale for future transition-test changes.
+NOTE: broad single-process real-GL runs (600+ window-spawning tests) show contention flakiness in the
+`test_script_smoke_*` and runtime-teardown tests; these pass in isolation — chunk such runs
+(`tests/run_chunked.py`) rather than attributing the flakiness to a slice.**
 
 Landed evidence (focused gate, capable Windows worktree, HEAD after the C-T checkpoints):
 
