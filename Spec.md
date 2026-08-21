@@ -1,6 +1,6 @@
 # SRPSS Specification
 
-Last updated: 2026-08-20
+Last updated: 2026-08-21
 
 Canonical durable architecture and product-behaviour contracts for SRPSS.
 
@@ -162,21 +162,29 @@ The one Quick window may contain:
 - runtime overlay presentation;
 - other explicitly scene-owned layers.
 
-The exact primitive may differ by content:
+The custom-GL primitive was selected and proved during the Qt Quick foundation work:
 
-- ordinary retained Quick items where appropriate;
-- custom scene-graph rendering;
-- `QSGRenderNode`;
-- `QQuickRhiItem`;
-- other measured Qt Quick-compatible custom rendering.
+```text
+QQuickItem(ItemHasContents)
+    -> updatePaintNode()
+    -> QSGRenderNode
+    -> direct OpenGL inside the owning Quick scene
+```
 
-Choose the primitive by correctness, fidelity, and measured cost. Do not choose a native rewrite by
-aesthetics.
+Use ordinary retained Quick items/components for normal UI/widget/card presentation.
+Use the inline `QSGRenderNode` boundary for custom OpenGL transition/visualizer rendering that needs
+existing shader/math/mesh ownership.
 
-No `QQuickWidget` architecture proof or production presenter.
+`QQuickRhiItem` is not the accepted normal custom-render path for SRPSS because it introduces an
+offscreen texture/composite layer that this migration is deliberately avoiding. `QQuickWidget` is
+prohibited as the runtime presenter.
 
-No transparent accelerated child/top-level window used to avoid integrating pixels into the one
-runtime scene.
+If the selected `QSGRenderNode` primitive itself is proven fundamentally unusable by the pinned
+PySide/compiled product, stop and revise the **single** custom-render primitive deliberately. Do not
+ship two competing custom-render architectures or a per-effect fallback.
+
+No transparent accelerated child/top-level window may be used to avoid integrating pixels into the
+one runtime scene.
 
 ## 8. Readiness and reveal
 
@@ -236,8 +244,8 @@ SRPSS-owned GPU resources must have:
 - failed deletion retaining ownership/failing closed;
 - accounting released only after actual ownership is released.
 
-Do not carry QRhiWidget-specific borrowed-context rules forward as universal Quick rules. Re-establish
-the exact legal resource boundary for the chosen Quick rendering primitive.
+Do not carry QRhiWidget-specific borrowed-context rules forward as universal Quick rules. The
+selected inline `QSGRenderNode` contract defines the custom GL render/context seam.
 
 No `glFinish()`, `DwmFlush()`, GUI sleeps, nested event pumping, or fence polling as cadence repairs.
 
