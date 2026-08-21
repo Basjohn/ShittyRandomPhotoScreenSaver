@@ -208,8 +208,8 @@ For each migrated presentation family, require the relevant combination of:
 
 Green focused tests are necessary but not sufficient.
 
-Completion requires the relevant runtime/physical/manual evidence for the claim being made.
+**Implementation closure and acceptance closure are distinct.** Implementation may advance to the next phase while explicitly listed hardware/eyes-on acceptance remains deferred, provided the next phase does not depend on that unresolved evidence.
 
-Implementation may advance to the next phase while explicitly listed hardware/eyes-on acceptance
-remains deferred, provided the next phase does not depend on that unresolved evidence. A later failed
-sign-off reopens the smallest demonstrated defect.
+A phase's acceptance/sign-off ledger must remain open until the tests and gates assigned to that ledger have actually been executed and the result is recorded against the tested commit/environment. Do not turn an unchecked gate into a pass because source review looks good, CI produced no result, another agent says it should pass, or later implementation work has already begun.
+
+For Phase C specifically, the focused deterministic transition tests and applicable real-GL sign-off commands in `Docs/Harness_Index.md` must be run before Phase-C acceptance is marked closed. Hardware/eyes-on-only items remain explicitly unchecked until they are actually performed. A later failed sign-off reopens the smallest demonstrated defect.
