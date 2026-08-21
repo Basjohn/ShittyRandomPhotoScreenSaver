@@ -196,82 +196,54 @@ High-risk effects/owners such as BlockSpin, Burn, Particle, Bubble, settings epo
 
 Repository connector writes are allowed when practical, but their editing ergonomics are weaker than a local worktree.
 
-For risky whole-file/chunk reconstruction:
+**High-level repository file create/update/delete operations are forbidden for SRPSS. Every proposed file mutation must be represented in an unattached candidate commit and diffed before the intended branch ref may move, regardless of file size.**
+
+Required connector sequence:
 
 ```text
 fetch authoritative parent
--> build candidate blobs/tree
+-> build candidate blob(s)/tree
 -> create UNATTACHED candidate commit
 -> compare parent..candidate
--> confirm only intended files changed
--> spot-fetch beginning/end and suspicious reconstructed sections
+-> inspect every changed path and its diff
+-> for whole/chunked reconstruction, re-fetch beginning/end and changed/suspicious sections
 -> move branch ref only after candidate audit
 -> fetch/compare the branch-reachable commit again
 ```
 
 Creating a blob/tree is not a checkpoint. A checkpoint must be a commit reachable from the intended pushed branch.
 
-If an API/chunk edit produces an unexpectedly broad/malformed diff, abandon the unattached candidate. Do not let corruption become branch history and repair it afterward.
+If any API edit produces an unexpectedly broad, malformed, truncated, or unintended diff, abandon the unattached candidate. Do not let corruption become branch history and repair it afterward.
 
-For large changes where direct connector reconstruction becomes unreliable, fall back to whole replacement files or a narrow paste-ready coding-agent prompt, then audit the actual pushed result.
+For changes where direct connector reconstruction becomes unreliable, fall back to whole replacement files or a narrow paste-ready coding-agent prompt, then audit the actual pushed result.
 
 ## 2.3 Trust evidence, not agent prose
 
-An agent saying tests passed or code was implemented is not evidence. Inspect current repository state, pushed commit, diff, relevant source, and independent CI/harness evidence when available.
+An agent saying tests passed or code was implemented is not evidence. Inspect current repository state, pushed commit, diff, relevant source, and independent test/harness evidence from the environment appropriate to the claim.
 
 Repository state outranks stale orientation prose.
 
 ---
 
-# 3. CI evidence rules and known 2026-08-21 failure
+# 3. Test execution and evidence rules
 
-GitHub Actions is an independent execution environment, not ChatGPT's runtime and not the operator's physical RTX/multi-display environment.
+SRPSS tests are not run through repository-hosted automation. Do not add a hosted test workflow unless the operator explicitly reverses this policy.
 
-Good hosted-CI evidence:
+Use the environment appropriate to the claim:
 
-- deterministic Python/unit/source contracts;
-- registry/settings tests;
-- lifecycle logic where headless execution is representative;
-- import/dormancy tests;
-- shader/source contract tests;
-- later packaging sanity when build policy permits it.
+- deterministic Python/source/settings/registry tests: capable clean Windows checkout;
+- Quick/OpenGL/runtime-shaped tests: proper Windows/Qt/OpenGL environment;
+- multi-display, mixed-refresh, DPR, GPU/resource, physical cadence, and eyes-on claims: the corresponding real hardware/display environment.
 
-Hosted CI is not authoritative for:
+The broad chunk wrapper remains a deliberate local diagnostic tool only:
 
-- actual 165 Hz/60 Hz physical cadence;
-- PresentMon/display occupancy;
-- subjective Bubble/effect smoothness;
-- physical multi-monitor topology;
-- real GPU utilization/performance.
+```text
+python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
+```
 
-### Windows CI run `32436553793`
+A broad-suite failure must be isolated before attributing it to the active migration slice. A completed pytest summary followed by a process that never exits is a shutdown/lifecycle ownership defect to isolate, not a reason to increase the timeout. A chunk that stalls during execution likewise requires smaller/verbose local isolation.
 
-The email saying "all jobs failed" did **not** mean GitHub abruptly killed the hosted runner.
-
-Observed facts from the archived Actions logs:
-
-- setup/dependency installation completed;
-- chunk 1 ran ~130 s and returned ordinary test failures;
-- chunk 2 printed a complete pytest summary (`3 failed, 1219 passed, 67 skipped`) in ~24.76 s but the Python process did not exit; `tests/run_chunked.py` killed the still-live process at its own 900-second timeout (`exit 124`);
-- chunk 3 stopped around 50% test execution progress with no pytest summary and hit the same wrapper timeout;
-- chunk 4 ran ~180 s and returned ordinary test failures;
-- the outer Actions job had `timeout-minutes: 70` and completed normally after the wrapper returned failure;
-- logs/artifacts uploaded successfully.
-
-Interpretation:
-
-- chunk 2 strongly suggests leaked shutdown ownership/non-daemon thread/background process after pytest finished, rather than a 15-minute test body; the exact owner remains to be isolated;
-- chunk 3 requires verbose/smaller isolation because it appears to hang during test execution;
-- completed chunks contain several failures in old/default/UI/doc/visualizer areas, so broad-suite red status is currently noisy and must be inspected rather than attributed wholesale to the active migration slice;
-- an uncompleted/timed-out chunk is **not** assumed clean; Phase-C focused tests still require explicit sign-off.
-
-That CI run also exposed a deterministic workflow configuration defect: `actions/checkout` used its default `fetch-depth: 1`, while an existing Bubble guardrail executes `git show 510520e:...` and therefore cannot see the historical object.
-
-The Phase-C documentation closure changes the workflow to `fetch-depth: 0`. That removes the known shallow-history failure on future runs, but it does not claim to fix the separate shutdown/hang or unrelated test failures.
-
-Do not fix the remaining timeout behavior by merely increasing 900 seconds. Isolate the actual owner/test with smaller/verbose chunks or explicit thread/process diagnostics.
-
-This broad-suite CI debt does not block Phase-D implementation by itself.
+No unexecuted test or gate is assumed green. Acceptance records must name the exact command, tested commit, environment, and result.
 
 ---
 
@@ -418,8 +390,7 @@ Canonical rich shader preserved: ignition, six directions, 4-octave/domain-warpe
 
 The following are **sign-off**, not missing architecture/implementation:
 
-- execute focused deterministic Phase-C tests on a capable clean checkout;
-- isolate current CI shutdown/hang behavior enough to obtain meaningful independent broad-suite evidence;
+- execute focused deterministic Phase-C tests on a capable clean Windows checkout;
 - run Blinds real-GL directions;
 - run `tools/qtquick_phase_c_effect_smoke.py` cases for Diffuse/Ripple/Crumble/Particle/Burn;
 - scheduled physical two-display variants where required;
@@ -532,7 +503,7 @@ Prefer pushed/audited checkpoints for:
 
 All five modes use the Quick visualizer boundary with the authored logical runtime intact, immutable latest-state publication, clean lifecycle/resources, and no old compositor/QWidget presentation dependency inside the new renderer.
 
-After implementation exit, rewrite visualizer/preset authoring guidance against the landed Quick contract. Explicit physical/eyes-on items may remain as scheduled acceptance debt if they cannot be meaningfully executed by hosted agents.
+After implementation exit, rewrite visualizer/preset authoring guidance against the landed Quick contract. Explicit physical/eyes-on items may remain as scheduled acceptance debt if they require the operator's actual display/GPU environment.
 
 ---
 

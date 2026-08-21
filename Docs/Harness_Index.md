@@ -4,7 +4,7 @@ Last updated: 2026-08-21
 
 Compact routing for recurring investigation and migration sign-off commands.
 
-Harness success is evidence, not final visual/timing/lifecycle sign-off. Hosted CI is especially useful for deterministic source/runtime contracts; it is not authoritative for physical display cadence, GPU utilization, subjective motion feel, or real multi-monitor topology.
+Harness success is evidence, not final visual/timing/lifecycle sign-off. Run each harness in the environment appropriate to the claim it makes; physical display cadence, GPU utilization, subjective motion feel, and real multi-monitor topology require the corresponding real Windows/Qt/OpenGL/hardware environment.
 
 ## 1. Targeted tests first
 
@@ -16,25 +16,13 @@ pytest path\to\test_file.py -q --tb=short
 
 Use `Docs/TestSuite.md` for broader suite guidance.
 
-The repository also has the chunk wrapper:
+The repository also has the chunk wrapper for deliberate local diagnostics:
 
 ```powershell
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
 ```
 
-Do not treat a red full-suite chunk run as proof the active migration slice failed until the uploaded per-chunk log is inspected.
-
-### Current GitHub Actions caveat — 2026-08-21
-
-Windows CI run `32436553793` exposed distinct failure modes:
-
-1. `actions/checkout` used its default shallow history (`fetch-depth: 1`). At least one existing Bubble guardrail calls `git show 510520e:...`, so that test deterministically fails in a shallow checkout even though the historical commit exists in the real repository.
-2. Chunk 2 printed a complete pytest summary (`3 failed, 1219 passed, 67 skipped`) in about 25 seconds but the Python process did not exit. `tests/run_chunked.py` therefore killed the still-live process at its own 900-second timeout. That shape strongly suggests interpreter-shutdown/background-owner leakage rather than a 15-minute test body; the exact surviving owner still requires isolation.
-3. Chunk 3 is different: its log stops around 50% test execution progress with no pytest summary, so it requires test-level isolation to determine the actual hanging test/owner.
-
-The outer GitHub job itself was not cut off: its job timeout was 70 minutes and it completed normally after the wrapper returned failure.
-
-When CI is repaired, make history available for history-dependent tests (`fetch-depth: 0` or an intentionally sufficient fetch) and isolate hangs with smaller/verbose chunks or explicit thread/process diagnostics. Do not merely increase the 900-second timeout.
+Do not treat a red full-suite chunk run as proof the active migration slice failed until the relevant per-chunk log is inspected. A pytest summary followed by a process that never exits should be diagnosed as shutdown/lifecycle ownership rather than hidden with a larger timeout. A chunk that stops during test execution requires smaller/verbose local isolation to identify the actual hanging test/owner.
 
 ## 2. Phase-C Quick transition sign-off
 
@@ -42,8 +30,8 @@ When CI is repaired, make history available for history-dependent tests (`fetch-
 
 ```powershell
 python tools\qtquick_blinds_smoke.py --direction horizontal --windows 1
-python tools\qtquick_blinds_smoke.py --direction vertical --windows 1
-python tools\qtquick_blinds_smoke.py --direction diagonal --windows 1
+python tools\qtquick_blinds_smoke.py --direction vertical   --windows 1
+python tools\qtquick_blinds_smoke.py --direction diagonal   --windows 1
 ```
 
 Repeat with `--windows 2` on the physical dual-display system when that sign-off is scheduled.
