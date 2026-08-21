@@ -13,27 +13,18 @@ The documentation/decision checkpoint reviewed for this migration remains:
 
 This SHA is an orientation anchor, **not** a required current HEAD.
 
-The latest migration-implementation checkpoint explicitly reviewed while producing this revision is:
+The latest Phase-C implementation checkpoint explicitly reviewed while producing this revision is:
 
 ```text
-9c09e86276b2718163df1673b3d388fe8af664a1
-5.0.0 - Phase C Migrations In Progress Work
+6ced08b2431d6e8995b402b1e2431833cdaf9da0
+Make Blinds smoke wrapper import-safe
 ```
 
-That SHA is also an orientation checkpoint, not a command to reset the repository to it.
+The Blinds slice spans the immediately preceding small commits that added the renderer, focused tests,
+lazy registry entry, catalog expectation update, and real-GL smoke wrapper. Those commits are a landed
+implementation checkpoint; this plan revision may itself be one documentation commit later.
 
-Current repository HEAD inspected for this revision is:
-
-```text
-3d9a67939e0e952125979768a9ea22f4f1bb00f5
-Add Windows CI test workflow
-```
-
-The commits after `9c09e862` contain documentation/versioning work plus the CI workflow, not a later
-transition implementation checkpoint. Phase C therefore remains the active implementation phase at
-this revision.
-
-At the reviewed migration checkpoint:
+At this reviewed checkpoint:
 
 - Phase A/B foundation and topology work are complete enough for migration to remain in Phase C;
 - the Phase-B topology-displacement audit issue is closed;
@@ -44,8 +35,8 @@ At the reviewed migration checkpoint:
   - Warp Dissolve;
   - Block Puzzle Flip;
   - 3D Block Spins;
-- the remaining canonical transition set is:
   - Blinds;
+- the remaining canonical transition set is:
   - Diffuse;
   - Ripple / Raindrops;
   - Crumble;
@@ -565,7 +556,7 @@ must not cross the render-thread boundary.
 
 ## C3 — renderer port
 
-At reviewed checkpoint `9c09e862`, Quick implementations are landed for:
+Quick implementations landed through the Blinds checkpoint `6ced08b2`:
 
 - [x] Crossfade
 - [x] Slide
@@ -573,10 +564,10 @@ At reviewed checkpoint `9c09e862`, Quick implementations are landed for:
 - [x] Warp Dissolve
 - [x] Block Puzzle Flip
 - [x] 3D Block Spins
+- [x] Blinds
 
-Remaining at that checkpoint:
+Remaining after that checkpoint:
 
-- [ ] Blinds
 - [ ] Diffuse
 - [ ] Ripple / Raindrops
 - [ ] Crumble
@@ -635,7 +626,48 @@ Preserve:
 
 Do not add a flat-quad fallback.
 
-### C3c — Burn preservation contract
+### C3c — Blinds landed; execution/physical acceptance remains
+
+The Blinds Quick renderer is implemented and registered. Do not treat the unchecked validation items
+below as permission to rewrite the effect before running them; reopen implementation only if evidence
+fails.
+
+Preserved implementation contract:
+
+- exact existing `blinds_program.fragment_source` rather than a replacement lookalike shader;
+- canonical linear transition timeline;
+- old effective slat grid: default seven authored columns doubled to fourteen, with rows derived from
+  target aspect ratio;
+- Horizontal, Vertical, and Diagonal shader modes;
+- resolved shader-space feather rather than raw UI-scale values or renderer-side defaults;
+- authored centre-out band growth and the existing late global destination tail;
+- lazy implementation/shader resolution and release through the common Quick transition host.
+
+Renderer admission is intentionally strict: `Random` must already be resolved to one of the three
+canonical Blinds directions and `feather` must already be converted to the finite shader-space value
+before the immutable request reaches render ownership.
+
+Implementation/test assets landed:
+
+- [x] `rendering/quick/transitions/implementations/blinds.py`;
+- [x] lazy registry/catalog admission;
+- [x] focused Blinds contract tests covering dormancy, isolated lazy resolution, authored directions,
+  resolved feather validation, old effective grid mapping, and exact legacy shader reuse;
+- [x] `tools/qtquick_blinds_smoke.py` real-GL wrapper with a shader-math midpoint oracle for all three
+  authored directions.
+
+Validation still to execute on a capable checkout/runtime:
+
+- [ ] run `pytest tests/test_qtquick_blinds_transition.py tests/test_qtquick_transition_implementations.py -q --tb=short`;
+- [ ] confirm the GitHub Actions Windows CI run for the Blinds checkpoint is green; the connected
+  Actions status did not surface a run/check during the authoring session, so this is not claimed;
+- [ ] on real Windows/OpenGL run `python tools/qtquick_blinds_smoke.py --direction horizontal --windows 1`;
+- [ ] repeat the real-GL smoke for `--direction vertical` and `--direction diagonal`;
+- [ ] on a physical two-display system repeat the three smoke directions with `--windows 2`;
+- [ ] eyes-on compare Blinds against the authored old effect and check continuity at normal and high
+  refresh before Phase C final acceptance.
+
+### C3d — Burn preservation contract
 
 Burn is a high-risk visual-preservation transition. Treat it as a BlockSpin-class authored effect,
 even though it is implemented primarily as a full-screen shader.
