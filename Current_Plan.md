@@ -1,6 +1,6 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-20
+Last updated: 2026-08-21
 
 ## Source / decision checkpoint
 
@@ -13,7 +13,7 @@ The documentation/decision checkpoint reviewed for this migration remains:
 
 This SHA is an orientation anchor, **not** a required current HEAD.
 
-The latest execution checkpoint explicitly reviewed while producing this revision is:
+The latest migration-implementation checkpoint explicitly reviewed while producing this revision is:
 
 ```text
 9c09e86276b2718163df1673b3d388fe8af664a1
@@ -22,7 +22,18 @@ The latest execution checkpoint explicitly reviewed while producing this revisio
 
 That SHA is also an orientation checkpoint, not a command to reset the repository to it.
 
-At that reviewed checkpoint:
+Current repository HEAD inspected for this revision is:
+
+```text
+3d9a67939e0e952125979768a9ea22f4f1bb00f5
+Add Windows CI test workflow
+```
+
+The commits after `9c09e862` contain documentation/versioning work plus the CI workflow, not a later
+transition implementation checkpoint. Phase C therefore remains the active implementation phase at
+this revision.
+
+At the reviewed migration checkpoint:
 
 - Phase A/B foundation and topology work are complete enough for migration to remain in Phase C;
 - the Phase-B topology-displacement audit issue is closed;
@@ -50,6 +61,46 @@ Before active work:
 5. trust repository state and focused tests over an agent's prose claim about what it completed.
 
 The Qt Quick architecture decision is closed by the P0 evidence. Do not reopen the presenter comparison.
+
+## Active execution window — read before the roadmap
+
+This file deliberately contains the **entire migration** so later contracts remain visible. That does
+not make every phase below simultaneously active. Treat later phases as reference material until the
+active phase exits.
+
+| Phase | Current status | Implementation permission |
+| --- | --- | --- |
+| A — bootstrap/render-node proof | Structurally complete | Do not reopen; A4 compiled smoke remains operator-scheduled later |
+| B — runtime-host decomposition | Structurally complete | Do not reopen without concrete contradictory evidence |
+| **C — base image + transitions** | **ACTIVE** | **Normal implementation work belongs here now** |
+| D — visualizer | Waiting for Phase C exit | Reference only |
+| E — widget presentation foundation | Waiting for earlier phase exits | Reference only |
+| F — widget families | Waiting for earlier phase exits | Reference only |
+| G — CUSTOM/input/auxiliary pixels | Waiting for earlier phase exits | Reference only |
+| H — settings epoch/cutover | Waiting for earlier phase exits | Reference only |
+| I — legacy removal | Waiting for production cutover | Reference only |
+| J — final tooling/validation/closure | Waiting for migration implementation | Reference only |
+
+While Phase C is active:
+
+1. refresh the exact remaining transition list from current `HEAD` and the canonical registry;
+2. implement/audit **one remaining transition slice at a time** through the existing lazy Quick
+   transition boundary;
+3. inspect the old authored implementation/settings before porting a transition and preserve its real
+   visual/timing/resource contract rather than producing a merely similar effect;
+4. use focused tests and the appropriate Quick/GL smoke for the slice, then commit + push it before
+   moving on;
+5. if a transition exposes a defect in already-landed A/B/C infrastructure, repair only the smallest
+   prerequisite needed to restore the active Phase-C contract, then return to the transition sequence;
+6. do **not** opportunistically start Phase D–J work, `Future_Work.md`, broad cleanup, H0 settings
+   migration, Defaults Foundry retargeting, or production cutover merely because those details are
+   visible later in this file;
+7. after the last canonical transition is accepted, run the Phase C exit gate and then perform the
+   specifically scheduled post-C transition-authoring documentation update.
+
+**Phase promotion is explicit.** A later phase becomes normal implementation work only after the
+current phase's exit gate is satisfied and this active-status section is updated, or the operator
+explicitly overrides the sequence. Reading a later phase is never permission to begin it.
 
 ---
 
