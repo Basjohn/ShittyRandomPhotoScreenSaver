@@ -46,6 +46,7 @@ class RenderNodeSnapshot:
     transition_midpoint_linear_progress: float | None = None
     transition_midpoint_eased_progress: float | None = None
     transition_midpoint_colors: tuple[str, ...] = ()
+    transition_midpoint_dense_colors: tuple[str, ...] = ()
     transition_probe_run_id: int | None = None
     transition_probe_linear_progresses: tuple[float, ...] = ()
     transition_probe_eased_progresses: tuple[float, ...] = ()
@@ -240,6 +241,7 @@ class RenderNodeTelemetry:
         *,
         sample: TransitionSample,
         colors: tuple[str, ...],
+        dense_colors: tuple[str, ...] = (),
     ) -> None:
         with self._lock:
             if self._snapshot.transition_midpoint_run_id == sample.run_id:
@@ -250,6 +252,9 @@ class RenderNodeTelemetry:
                 transition_midpoint_linear_progress=sample.linear_progress,
                 transition_midpoint_eased_progress=sample.eased_progress,
                 transition_midpoint_colors=tuple(str(color) for color in colors),
+                transition_midpoint_dense_colors=tuple(
+                    str(color) for color in dense_colors
+                ),
             )
 
     def wants_transition_probe_sample(

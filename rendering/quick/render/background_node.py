@@ -25,6 +25,40 @@ from .telemetry import RenderNodeTelemetry
 logger = get_logger(__name__)
 
 
+# Diagnostic pixel-readback grids, used only when telemetry pixel capture is
+# enabled (tests/harnesses); capture_pixels defaults to False so there is no
+# production cost. The sparse 5x5 grid is the long-standing shared grid that the
+# geometry-precise transition oracles (slide/wipe/warp/block_flip/block_spins)
+# are tuned to; it must not change. The dense grid is an ADDITIONAL midpoint-only
+# readback that reliably samples thin authored effect regions (burn fire front,
+# crumble cracks, particle displacement) so the Phase-C effect oracles are not
+# decided by sampling luck. The smoke harness mirrors both constants so its
+# sample coordinates stay in lock-step with the readback.
+TRANSITION_DENSE_SAMPLE_AXIS_COUNT = 15
+
+
+def transition_sample_offsets(extent: int) -> tuple[int, ...]:
+    """The original shared 5-point-per-axis diagnostic offsets."""
+
+    return (
+        max(0, extent // 12),
+        max(0, extent // 4),
+        max(0, extent // 2),
+        max(0, (extent * 3) // 4),
+        max(0, (extent * 11) // 12),
+    )
+
+
+def transition_dense_sample_offsets(extent: int) -> tuple[int, ...]:
+    """Evenly spaced dense pixel offsets across ``extent`` (effect oracles)."""
+
+    limit = max(0, int(extent) - 1)
+    return tuple(
+        min(limit, max(0, round((index + 0.5) / TRANSITION_DENSE_SAMPLE_AXIS_COUNT * extent)))
+        for index in range(TRANSITION_DENSE_SAMPLE_AXIS_COUNT)
+    )
+
+
 _VERTEX_SOURCE = """#version 410 core
 layout(location = 0) in vec2 aPosition;
 
@@ -461,41 +495,42 @@ class BackgroundRenderNode(QSGRenderNode):
             1,
             round(self._logical_size[1] * self._device_pixel_ratio),
         )
-        def _sample_offsets(extent: int) -> tuple[int, ...]:
-            return (
-                max(0, extent // 12),
-                max(0, extent // 4),
-                max(0, extent // 2),
-                max(0, (extent * 3) // 4),
-                max(0, (extent * 11) // 12),
+        def _read_grid(x_offsets: tuple[int, ...], y_offsets: tuple[int, ...]):
+            sample_xs = tuple(viewport[0] + offset for offset in x_offsets)
+            sample_ys = tuple(viewport[1] + offset for offset in y_offsets)
+            return tuple(
+                _pixel_hex(
+                    gl.glReadPixels(
+                        min(viewport[0] + viewport[2] - 1, sample_x),
+                        min(viewport[1] + viewport[3] - 1, sample_y),
+                        1,
+                        1,
+                        gl.GL_RGBA,
+                        gl.GL_UNSIGNED_BYTE,
+                    )
+                )
+                for sample_y in sample_ys
+                for sample_x in sample_xs
             )
 
-        sample_xs = tuple(
-            viewport[0] + offset for offset in _sample_offsets(physical_width)
-        )
-        sample_ys = tuple(
-            viewport[1] + offset for offset in _sample_offsets(physical_height)
-        )
-        colors = tuple(
-            _pixel_hex(
-                gl.glReadPixels(
-                    min(viewport[0] + viewport[2] - 1, sample_x),
-                    min(viewport[1] + viewport[3] - 1, sample_y),
-                    1,
-                    1,
-                    gl.GL_RGBA,
-                    gl.GL_UNSIGNED_BYTE,
-                )
-            )
-            for sample_y in sample_ys
-            for sample_x in sample_xs
+        colors = _read_grid(
+            transition_sample_offsets(physical_width),
+            transition_sample_offsets(physical_height),
         )
         if wants_sync_sample:
             self._telemetry.note_pixel_sample(colors)
         if wants_midpoint and sample is not None:
+            # Additionally read a dense grid so the Phase-C effect oracles can
+            # reliably see thin authored effect regions. Sparse ``colors`` stay
+            # the shared midpoint sample the geometry oracles depend on.
+            dense_colors = _read_grid(
+                transition_dense_sample_offsets(physical_width),
+                transition_dense_sample_offsets(physical_height),
+            )
             self._telemetry.note_transition_midpoint_sample(
                 sample=sample,
                 colors=colors,
+                dense_colors=dense_colors,
             )
         if wants_transition_probe and sample is not None:
             self._telemetry.note_transition_probe_sample(

@@ -42,6 +42,9 @@ from PySide6.QtQuick import QQuickWindow, QSGRendererInterface  # noqa: E402
 from rendering.quick.image_boundary import capture_qimage  # noqa: E402
 from rendering.quick.image_state import PresentationImage  # noqa: E402
 from rendering.quick.render import RenderNodeSnapshot, RenderNodeTelemetry  # noqa: E402
+from rendering.quick.render.background_node import (  # noqa: E402
+    TRANSITION_DENSE_SAMPLE_AXIS_COUNT,
+)
 from rendering.quick.runtime import QuickDisplayRuntime  # noqa: E402
 from rendering.quick.scene_controller import (  # noqa: E402
     QuickSceneController,
@@ -103,12 +106,30 @@ _TRANSITION_DIRECTION_CHOICES = tuple(
         }
     )
 )
+# The shared sparse grid the geometry-precise transition oracles are tuned to.
+# Do not change: block_spins/block_flip encode 5x5 geometry (divmod(index, 5)).
 _SAMPLE_FRACTIONS = (1.0 / 12.0, 0.25, 0.5, 0.75, 11.0 / 12.0)
 _TRANSITION_SAMPLE_COORDINATES = tuple(
     (sample_x, 1.0 - readback_y)
     for readback_y in _SAMPLE_FRACTIONS
     for sample_x in _SAMPLE_FRACTIONS
 )
+# The dense midpoint grid, mirroring the render node's dense readback exactly so
+# each dense colour lines up with its coordinate. Consumed only by the Phase-C
+# effect oracles (see qtquick_phase_c_effect_smoke), never by the geometry
+# oracles above.
+_DENSE_SAMPLE_FRACTIONS = tuple(
+    (index + 0.5) / TRANSITION_DENSE_SAMPLE_AXIS_COUNT
+    for index in range(TRANSITION_DENSE_SAMPLE_AXIS_COUNT)
+)
+_TRANSITION_DENSE_SAMPLE_COORDINATES = tuple(
+    (sample_x, 1.0 - readback_y)
+    for readback_y in _DENSE_SAMPLE_FRACTIONS
+    for sample_x in _DENSE_SAMPLE_FRACTIONS
+)
+# Transition ids whose midpoint oracle consumes the dense grid. Populated by the
+# Phase-C effect smoke wrapper via _install_contract.
+_DENSE_MIDPOINT_TRANSITION_IDS: set[str] = set()
 _DIRECTIONAL_PALETTE_RGB = {
     "initial": (
         (12, 32, 120),
@@ -2508,10 +2529,19 @@ class _SmokeRunner(QObject):
                 f"{prefix} {self._args.transition_id} renderer did not draw the run"
             )
         midpoint_progress = final.transition_midpoint_eased_progress
+        uses_dense_midpoint = (
+            self._args.transition_id in _DENSE_MIDPOINT_TRANSITION_IDS
+        )
+        midpoint_colors_for_oracle = (
+            final.transition_midpoint_dense_colors
+            if uses_dense_midpoint
+            else final.transition_midpoint_colors
+        )
         if (
             final.transition_midpoint_run_id != probe.transition_run_id
             or midpoint_progress is None
             or not final.transition_midpoint_colors
+            or (uses_dense_midpoint and not final.transition_midpoint_dense_colors)
         ):
             errors.append(
                 f"{prefix} {self._args.transition_id} midpoint was not captured"
@@ -2519,7 +2549,7 @@ class _SmokeRunner(QObject):
         elif not _TRANSITION_MIDPOINT_ORACLES[self._args.transition_id](
             resized_capture.get("ordered_colors"),
             replacement_capture.get("ordered_colors"),
-            final.transition_midpoint_colors,
+            midpoint_colors_for_oracle,
             midpoint_progress,
             self._args.transition_direction,
         ):
