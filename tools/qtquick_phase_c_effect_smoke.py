@@ -155,6 +155,61 @@ def _domain_counts(colors: object) -> dict[str, int] | None:
     return counts
 
 
+def _has_effect_pixels(midpoint: object) -> bool:
+    """True when at least one sample is effect-colored (dark or blended).
+
+    A plain hard wipe/slide never produces effect-colored pixels, so requiring
+    them is a discriminator against a monotonic reveal fallback.
+    """
+
+    counts = _domain_counts(midpoint)
+    return bool(counts and (counts["dark-effect"] + counts["mixed-effect"]) >= 1)
+
+
+def _looks_like_crossfade(midpoint: object) -> bool:
+    """A uniform crossfade blends every pixel, so no pure ownership survives."""
+
+    counts = _domain_counts(midpoint)
+    return bool(
+        counts is not None
+        and counts["source"] == 0
+        and counts["destination"] == 0
+    )
+
+
+def _looks_like_plain_wipe(midpoint: object) -> bool:
+    """True when ownership is a monotonic single-axis reveal of pure domains.
+
+    A plain wipe/slide shows only pure source and destination, separable by one
+    of the canonical wipe axes. Effects that scatter ownership (Diffuse) or add
+    effect-colored pixels (Ripple/Crumble/Particle/Burn) must not satisfy this,
+    so the effect oracles can reject a generic wipe-style fallback.
+    """
+
+    if not isinstance(midpoint, (tuple, list)):
+        return False
+    coords = smoke._TRANSITION_SAMPLE_COORDINATES
+    if len(midpoint) != len(coords):
+        return False
+    domains = [_domain(color) for color in midpoint]
+    # A plain wipe carries no effect-colored pixels.
+    if any(domain not in {"source", "destination"} for domain in domains):
+        return False
+    labelled = list(zip(domains, coords, strict=True))
+    for axis_for in smoke._WIPE_AXES.values():
+        dest_axis = [axis_for(x, y) for domain, (x, y) in labelled if domain == "destination"]
+        src_axis = [axis_for(x, y) for domain, (x, y) in labelled if domain == "source"]
+        if not dest_axis or not src_axis:
+            # A single-domain / degenerate reveal is trivially wipe-like.
+            return True
+        if (
+            max(dest_axis) < min(src_axis) + 1e-9
+            or max(src_axis) < min(dest_axis) + 1e-9
+        ):
+            return True
+    return False
+
+
 def _basic_effect_midpoint(
     source: object,
     destination: object,
@@ -195,9 +250,16 @@ def _matches_diffuse(
 ) -> bool:
     if not _basic_effect_midpoint(source, destination, midpoint, progress, case):
         return False
+    if _looks_like_crossfade(midpoint):
+        return False
     # Diffuse must be spatial rather than a uniform crossfade. A 5x5 sample
     # set must contain more than one ownership/effect domain at midpoint.
-    return len({_domain(color) for color in midpoint}) >= 2
+    if len({_domain(color) for color in midpoint}) < 2:
+        return False
+    # And it must not reduce to a monotonic single-axis wipe: a scattered block
+    # dissolve is either spatially non-separable or carries feathered edge
+    # pixels a plain wipe never produces.
+    return (not _looks_like_plain_wipe(midpoint)) or _has_effect_pixels(midpoint)
 
 
 def _matches_ripple(
@@ -209,11 +271,16 @@ def _matches_ripple(
 ) -> bool:
     if not _basic_effect_midpoint(source, destination, midpoint, progress, case):
         return False
+    if _looks_like_crossfade(midpoint):
+        return False
     # The first authored ripple is always centred. At a controlled midpoint
     # the centre should be in the arriving-image domain while outer samples
     # still prove old-image ownership.
     centre = len(smoke._TRANSITION_SAMPLE_COORDINATES) // 2
-    return _domain(midpoint[centre]) == "destination"
+    if _domain(midpoint[centre]) != "destination":
+        return False
+    # Radial arrival from the centre is not a monotonic linear wipe.
+    return (not _looks_like_plain_wipe(midpoint)) or _has_effect_pixels(midpoint)
 
 
 def _matches_crumble(
@@ -225,8 +292,13 @@ def _matches_crumble(
 ) -> bool:
     if not _basic_effect_midpoint(source, destination, midpoint, progress, case):
         return False
-    counts = _domain_counts(midpoint)
-    return bool(counts and (counts["dark-effect"] + counts["mixed-effect"] >= 1))
+    if _looks_like_crossfade(midpoint):
+        return False
+    # Falling pieces and their cracks produce effect-colored pixels a plain
+    # two-domain wipe never shows.
+    if not _has_effect_pixels(midpoint):
+        return False
+    return not _looks_like_plain_wipe(midpoint)
 
 
 def _matches_particle(
@@ -238,10 +310,14 @@ def _matches_particle(
 ) -> bool:
     if not _basic_effect_midpoint(source, destination, midpoint, progress, case):
         return False
-    # 3D shading/trails usually create non-endpoint pixels. Do not require a
-    # fixed count because direction/mode changes spatial arrival order.
-    counts = _domain_counts(midpoint)
-    return bool(counts and (counts["mixed-effect"] + counts["dark-effect"] >= 1))
+    if _looks_like_crossfade(midpoint):
+        return False
+    # 3D shading/trails create non-endpoint pixels. Do not require a fixed count
+    # because direction/mode changes spatial arrival order, but a plain wipe has
+    # no such pixels.
+    if not _has_effect_pixels(midpoint):
+        return False
+    return not _looks_like_plain_wipe(midpoint)
 
 
 def _matches_burn(
@@ -253,12 +329,13 @@ def _matches_burn(
 ) -> bool:
     if not _basic_effect_midpoint(source, destination, midpoint, progress, case):
         return False
-    counts = _domain_counts(midpoint)
-    if counts is None:
+    if _looks_like_crossfade(midpoint):
         return False
     # Char/core survives even when smoke/ash are disabled, so every Burn case
-    # remains distinguishable from a plain two-domain wipe.
-    return (counts["dark-effect"] + counts["mixed-effect"]) >= 1
+    # remains distinguishable from a plain two-domain wipe by its effect pixels.
+    if not _has_effect_pixels(midpoint):
+        return False
+    return not _looks_like_plain_wipe(midpoint)
 
 
 _ORACLES = {
