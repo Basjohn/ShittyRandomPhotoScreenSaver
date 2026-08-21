@@ -60,6 +60,10 @@ _IMPLEMENTATIONS = (
         transition_id="crumble",
         module_name="rendering.quick.transitions.implementations.crumble",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="particle",
+        module_name="rendering.quick.transitions.implementations.particle",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 
