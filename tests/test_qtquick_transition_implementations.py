@@ -88,6 +88,7 @@ print(json.dumps({
             "warp_dissolve",
             "block_flip",
             "block_spins",
+            "blinds",
         ],
         "loaded": [],
         "shader_modules": [],
