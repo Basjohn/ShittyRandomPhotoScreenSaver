@@ -73,7 +73,10 @@ print(json.dumps({
     assert report == {
         "renderer": "QuickParticleRenderer",
         "mods": ["rendering.quick.transitions.implementations.particle"],
-        "shader_mods": ["rendering.gl_programs.particle_program"],
+        "shader_mods": [
+            "rendering.gl_programs.base_program",
+            "rendering.gl_programs.particle_program",
+        ],
     }
 
 

@@ -63,7 +63,10 @@ print(json.dumps({
     assert report == {
         "renderer": "QuickCrumbleRenderer",
         "mods": ["rendering.quick.transitions.implementations.crumble"],
-        "shader_mods": ["rendering.gl_programs.crumble_program"],
+        "shader_mods": [
+            "rendering.gl_programs.base_program",
+            "rendering.gl_programs.crumble_program",
+        ],
     }
 
 

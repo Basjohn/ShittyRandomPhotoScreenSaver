@@ -55,7 +55,10 @@ print(json.dumps({
     assert report == {
         "renderer": "QuickDiffuseRenderer",
         "mods": ["rendering.quick.transitions.implementations.diffuse"],
-        "shader_mods": ["rendering.gl_programs.diffuse_program"],
+        "shader_mods": [
+            "rendering.gl_programs.base_program",
+            "rendering.gl_programs.diffuse_program",
+        ],
     }
 
 

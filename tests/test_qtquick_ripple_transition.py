@@ -54,7 +54,10 @@ print(json.dumps({
     assert report == {
         "renderer": "QuickRippleRenderer",
         "mods": ["rendering.quick.transitions.implementations.ripple"],
-        "shader_mods": ["rendering.gl_programs.raindrops_program"],
+        "shader_mods": [
+            "rendering.gl_programs.base_program",
+            "rendering.gl_programs.raindrops_program",
+        ],
     }
 
 
