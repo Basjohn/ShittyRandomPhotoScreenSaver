@@ -1,6 +1,6 @@
 # SRPSS Index
 
-Last updated: 2026-08-20
+Last updated: 2026-08-21
 
 Navigation and architecture-epoch routing.
 
@@ -27,8 +27,7 @@ agent may implement from it only when the operator explicitly selects an item or
 `Current_Plan.md` and `Future_Cleanup.md` contain no remaining important active work.
 
 During the Qt Quick migration, exact source tells you what is **currently implemented** while
-`Spec.md` and `Docs/Compositor_Architecture.md` define the **accepted destination architecture**.
-Do not mistake the temporary QRhiWidget reference implementation for the long-term target.
+`Spec.md` and `Docs/Compositor_Architecture.md` define the accepted destination architecture.
 
 ## Start here
 
@@ -45,12 +44,13 @@ Do not mistake the temporary QRhiWidget reference implementation for the long-te
 | Visualizer subsystem | `Docs/Visualizer_Reference.md`, `Docs/Visualizer_Change_Checklist.md` |
 | Transition changes | `Docs/Transition_Change_Checklist.md` |
 | Widget/runtime presentation | `Docs/10_WIDGET_GUIDELINES.md` |
+| Transition/widget application-level activation + Settings SETUP UI | `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md` |
 | Qt Quick architecture evidence | `Docs/Performance_Evidence/QtQuick-P0-Comparison-2026-08-20.md` |
 | Tests | `Docs/TestSuite.md` |
 | Recurring harnesses | `Docs/Harness_Index.md` |
 | Prior regressions | `Docs/Historical_Bugs/README.md` |
 | Cutover deletion / deferred cleanup | `Future_Cleanup.md` |
-| Explicitly deferred new features / experiments | `Future_Work.md` (only when its activation rule is satisfied) |
+| Explicitly deferred new features / experiments | `Future_Work.md` (only when activation rule is satisfied) |
 
 Do not read every document by default.
 
@@ -64,8 +64,9 @@ These are subordinate decompositions, not parallel plans:
 - `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`
 - `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`
 - `Docs/QtQuick_Migration/06_Build_Tooling_Validation.md`
+- `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
 
-`Current_Plan.md` owns their sequence.
+`Current_Plan.md` owns sequence.
 
 ## Accepted presentation destination
 
@@ -81,21 +82,21 @@ base image + transitions + visualizer + runtime overlays
 OS presentation
 ```
 
-`QQuickWidget` is not an acceptable substitute.
+`QQuickWidget` is not acceptable.
 
 There is no planned second migration to a native/C++ presenter. Native code is allowed only as a
 localized measured renderer optimization inside this architecture.
 
 ## Current implementation during migration
 
-Until production cutover, `main` may still contain and run:
+Until production cutover, `main` may still contain/run:
 
 - `DisplayWidget`;
 - `GLCompositorWidget`;
 - QRhiWidget/OpenGL presenter code;
 - GUI-side presentation handoffs.
 
-Those files are migration source/reference code, not permission to expand the old architecture.
+Those files are migration source/reference code, not permission to expand old architecture.
 
 No production runtime switch/fallback between old and Quick is to be introduced.
 
@@ -109,11 +110,12 @@ No production runtime switch/fallback between old and Quick is to be introduced.
 | Runtime scene pixels | destination: retained Quick + Quick render-thread custom nodes |
 | Visualizer logical cadence | `VisualizerLogicalRuntime` |
 | Visualizer source/audio | BeatEngine/audio worker/backend |
-| Settings | existing QWidget/settings owners |
-| Providers / service logic | existing Python owners |
+| Settings/config UI | existing QWidget/settings owners |
+| Capability activation | canonical Settings + cheap descriptor catalogs; E2 |
+| Providers / service logic | existing/refactored Python owners |
 | Persistence | existing settings/store owners |
 | Widget models/providers | existing/refactored Python owners |
-| Runtime widget pixels | destination: inside display Quick scene |
+| Runtime widget pixels | destination: display Quick scene |
 | Thread/task ownership | `ThreadManager` for general async work |
 | Resource accounting | `ResourceManager`; never deletion fallback |
 
@@ -135,16 +137,23 @@ physical presentation
 
 ## Migration execution rule
 
-After every landed slice:
+Local mutation:
 
 ```text
 focused gate
+-> inspect diff/status
 -> commit
 -> push
--> continue
 ```
 
-Do not stop merely because a slice exposed a fixable bug.
+High-risk/audit-required slice adds:
+
+```text
+-> independent audit before continuation
+```
+
+Repository connectors are read/audit only for SRPSS. Hosted CI is not added unless the operator
+explicitly requests it.
 
 Do not use destructive Git operations to force checkpoint state.
 
