@@ -1,0 +1,53 @@
+name: Windows CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Bounded pytest suite
+    runs-on: windows-latest
+    timeout-minutes: 70
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.9'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run bounded test suite
+        shell: pwsh
+        run: python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
+
+      - name: Upload pytest chunk logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-chunk-logs
+          path: logs/pytest_chunk_*.log
+          if-no-files-found: ignore
+          retention-days: 14
