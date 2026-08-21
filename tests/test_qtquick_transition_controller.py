@@ -177,9 +177,14 @@ def test_runs_require_explicit_interruption_and_are_generation_fenced(qt_app):
         now_ns=first.end_ns,
     ) is False
 
+    # The cancellation must execute and be asserted on its own so a premature
+    # exception cannot let the generation-fence check falsely pass. Only the
+    # generation-mismatched start is expected to raise.
+    assert controller.cancel_current(reason="test-cleanup") is True
+    assert controller.is_active is False
     with pytest.raises(ValueError, match="generation"):
-        controller.cancel_current(reason="test-cleanup")
         controller.start(_request(generation=8))
+    assert controller.is_active is False
 
 
 def test_close_finalizes_active_destination_and_closes_admission(qt_app):
