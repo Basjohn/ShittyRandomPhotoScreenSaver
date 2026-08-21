@@ -1,6 +1,6 @@
 # Runtime Presentation Architecture
 
-Last updated: 2026-08-20
+Last updated: 2026-08-21
 
 ## 1. Decision
 
@@ -33,16 +33,17 @@ DisplayWidget
           └── OpenGL QRhiWidget path
 ```
 
-During migration that code is a **reference/rollback implementation**, not the destination.
+Until Phase H cutover that code may remain the current production/reference implementation. It is
+not the destination and is not a permanent fallback architecture.
 
 Do not:
 
 - expand the old presenter to avoid migration work;
 - create new QRhiWidget-specific architecture;
-- treat current class names as permanent product contracts.
+- treat current old class names as permanent product contracts;
+- add a production runtime switch between old and Quick presenters.
 
-Do not delete the reference path until the active migration plan has established the replacement and
-passed the required cutover gates.
+Do not delete the reference path until the active migration plan reaches the cutover/deletion phases.
 
 ## 3. One-surface invariant
 
@@ -54,26 +55,27 @@ Allowed inside that surface:
 - transition rendering;
 - visualizer/card;
 - runtime overlays;
-- compositor-equivalent custom render items.
+- retained Quick widgets;
+- inline custom render nodes.
 
 Forbidden:
 
 - separate native visualizer window;
 - transparent accelerated overlay window;
 - per-widget accelerated top-level surface;
-- `QQuickWidget` as the runtime presenter.
+- `QQuickWidget` as the runtime presenter;
+- per-effect fallback to an independently presented old surface.
 
 ## 4. Threading model
 
 The destination presenter requires the Qt Quick **threaded** scene-graph render loop on the supported
 Windows path.
 
-The GUI thread remains responsible for GUI/event-loop work and may prepare/publish state.
+The GUI thread remains responsible for GUI/event-loop work and may prepare/publish synchronized state.
 
-The Quick render thread owns the rendering phase according to the selected Qt Quick primitive.
+The Quick render thread owns custom rendering according to the selected inline scene-graph primitive.
 
-Do not move visualizer logical simulation onto the render thread merely because a render thread now
-exists.
+Do not move visualizer logical simulation onto the render thread merely because a render thread exists.
 
 `VisualizerLogicalRuntime` remains independent and authoritative for authored visualizer time.
 
@@ -103,30 +105,41 @@ Properties:
 - generation fencing;
 - stale-state rejection.
 
-The exact bridge may use Qt properties/models, explicit synchronization objects, custom item
-`synchronize()` state, or another bounded mechanism chosen by the migration plan.
+The exact bounded GUI→Quick synchronization object may vary by owner, but those semantics may not.
 
-## 6. Renderer primitives
+## 6. Selected renderer primitives
 
-Do not lock the product to one primitive before the migrated scene requires it.
+The ordinary retained-presentation primitive is normal Qt Quick items/components.
 
-Possible shapes include:
+The selected SRPSS custom-OpenGL primitive is:
 
-- ordinary retained Quick items;
-- shader/effect items;
-- `QQuickRhiItem`;
-- `QSGRenderNode`;
-- custom render-stage integration.
+```text
+QQuickItem(ItemHasContents)
+    -> updatePaintNode()
+    -> QSGRenderNode
+    -> direct OpenGL inside the owning QQuickWindow scene
+```
 
-Prefer the simplest primitive that:
+This choice was proved during the Qt Quick foundation and is the current custom-render contract for
+transitions and the visualizer migration.
 
-- preserves exact visual fidelity;
-- keeps one top-level presentation surface;
-- respects thread/resource ownership;
-- meets physical cadence requirements.
+Why this is the selected path:
 
-A local native/C++ renderer may be considered only after profiling proves Python callback/render
-cost is material. It must remain inside the accepted Quick window architecture.
+- custom rendering stays inline in the one scene;
+- correct stacking with retained Quick content;
+- no extra offscreen texture/composite pass solely to reinsert the effect;
+- supports existing shaders, meshes, depth, VAOs/VBOs, and context-local resources;
+- preserves one physical presentation surface.
+
+`QQuickRhiItem` is not the normal/final SRPSS custom-render path. `QQuickWidget` is prohibited.
+
+If pinned PySide/compiled-product evidence proves the selected `QSGRenderNode` seam fundamentally
+unusable, stop and deliberately revise the **single** custom-render primitive. Do not keep multiple
+product primitives as compatibility fallbacks.
+
+A localized native/C++ renderer may be considered only if profiling of the migrated implementation
+proves a specific Python render callback materially limits the result. It must stay inside the same
+QQuickWindow/scene ownership.
 
 ## 7. Visualizer
 
@@ -137,17 +150,19 @@ source/audio
    ↓
 VisualizerLogicalRuntime
    ↓
-latest logical/render state
+latest immutable logical/render state
    ↓
-Quick scene presentation
+Quick visualizer item synchronization
+   ↓
+QSGRenderNode custom GL
 ```
 
 The logical runtime never mutates Quick scene objects or GPU resources.
 
 The presenter never advances authored visualizer simulation.
 
-Card and visualizer pixels share one scene/fade authority where they must appear as one authored
-visual object.
+Card and visualizer pixels share one scene/fade/geometry authority where they must appear as one
+authored visual object.
 
 ## 8. Runtime overlays
 
@@ -160,19 +175,18 @@ existing Python data/model owner
         ↓
 small presentation state
         ↓
-Quick runtime item/layer
+retained Quick runtime item/layer
 ```
 
 Avoid reimplementing network/provider/business logic in QML.
 
-The one Quick scene should own runtime pixels that visually coexist over the screensaver.
+The one Quick scene owns runtime pixels that visually coexist over the screensaver.
 
 ## 9. Readiness / first frame
 
-A runtime window must not be visibly exposed until it can show intentional current-generation
-content.
+A runtime window must not be visibly exposed until it can show intentional current-generation content.
 
-Eventually preserve:
+Preserve:
 
 - no white/default flash;
 - no black placeholder;
@@ -193,18 +207,22 @@ Do not make real audio/source freshness a universal prerequisite for an intentio
 
 Topology, Settings/recreate, Edit, and shutdown remain generation-owned.
 
-Old generation must retire before replacement gains authority.
+Old generation retires before replacement gains authority.
 
-Quick scene/render resources must be destroyed on the legal owner/thread for the selected primitive.
+Quick scene/render resources are destroyed on the legal render/context owner for the selected
+`QSGRenderNode` contract.
 
-Do not copy QRhiWidget-specific context assumptions into Quick without verifying the new ownership
-contract.
+Do not copy QRhiWidget-specific context assumptions into Quick.
+
+Generation `0` remains valid.
 
 ## 11. Transition model
 
-Transition logical/progress semantics remain display-local and monotonic with exactly-once completion.
+Transition request/run semantics are display-local, immutable, monotonic, and exactly-once for
+completion/cancellation.
 
-The migration should preserve existing transition shaders/behaviour where practical.
+Canonical transition implementations resolve lazily and render through the display's inline Quick
+custom-render owner. Existing authored shader/math is preserved where valid.
 
 Do not individually retune transitions to hide physical frame holes.
 
@@ -220,5 +238,5 @@ Physical presentation is judged primarily by:
 
 Internal render callbacks are not physical-display proof.
 
-The P0 result justifies migration. Future evidence is for implementation/cutover quality, not for
+The P0 result justifies migration. Later evidence is for implementation/cutover quality, not for
 re-litigating Quick versus the old presenter on every step.

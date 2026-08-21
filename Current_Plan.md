@@ -2,338 +2,280 @@
 
 Last updated: 2026-08-21
 
-## Source / decision checkpoint
+## Source / reviewed checkpoints
 
-The documentation/decision checkpoint reviewed for this migration remains:
+Original architecture/decision orientation anchor:
 
 ```text
 18c8f26756df83bd0d8828becc740c72d5526b21
 4.7.2 - Pre-Quick Migration Docs v1
 ```
 
-This SHA is an orientation anchor, **not** a required current HEAD.
+That SHA is historical orientation, not a required current HEAD.
 
-The latest Phase-C implementation checkpoint explicitly reviewed while producing this revision is:
+Latest Phase-C implementation checkpoint reviewed for this revision:
 
 ```text
-6ced08b2431d6e8995b402b1e2431833cdaf9da0
-Make Blinds smoke wrapper import-safe
+7c4871016464c4a82cf19af6f113bcb21153a483
+Expand Phase C real-GL sign-off matrix
 ```
 
-The Blinds slice spans the immediately preceding small commits that added the renderer, focused tests,
-lazy registry entry, catalog expectation update, and real-GL smoke wrapper. Those commits are a landed
-implementation checkpoint; this plan revision may itself be one documentation commit later.
+Immediately preceding closure checkpoints include registry parity and canonical Settings-to-request parameter resolution. Documentation closure commits follow that implementation checkpoint.
 
-At this reviewed checkpoint:
+The Qt Quick presenter decision and inline custom-GL primitive are closed by the P0/Phase-A evidence. Do not reopen the presenter or `QSGRenderNode` selection without concrete contradictory implementation evidence.
 
-- Phase A/B foundation and topology work are complete enough for migration to remain in Phase C;
-- the Phase-B topology-displacement audit issue is closed;
-- Quick transition implementations exist for:
-  - Crossfade;
-  - Slide;
-  - Wipe;
-  - Warp Dissolve;
-  - Block Puzzle Flip;
-  - 3D Block Spins;
-  - Blinds;
-- the remaining canonical transition set is:
-  - Diffuse;
-  - Ripple / Raindrops;
-  - Crumble;
-  - Particle;
-  - Burn.
+## Required routing before active work
 
-Before active work:
+Do not treat this plan as a substitute for durable architecture/guardrail docs. For a migration slice use:
 
-1. inspect current `HEAD` and the working tree;
-2. preserve unrelated user work;
-3. inspect code changes after the relevant checkpoint only far enough to update assumptions they actually invalidate;
-4. never reset, clean, checkout, stash, or revert merely to manufacture equality with an orientation SHA;
-5. trust repository state and focused tests over an agent's prose claim about what it completed.
+```text
+exact current source / pushed diff
+        ↓
+Current_Plan.md
+        ↓
+Spec.md + Docs/Compositor_Architecture.md + Docs/Contracts.md
+        ↓
+Docs/Guardrails.md + relevant focused guardrail
+        ↓
+ONLY the active Docs/QtQuick_Migration decomposition
+        ↓
+focused tests / current evidence
+```
 
-The Qt Quick architecture decision is closed by the P0 evidence. Do not reopen the presenter comparison.
+`Index.md` is the routing authority when unsure where a contract lives.
 
-## Active execution window — read before the roadmap
+`Future_Work.md` is deferred new-feature/experiment scope, not migration work admission. Do not implement from it while the active plan or `Future_Cleanup.md` contains important work unless the operator explicitly selects an item.
 
-This file deliberately contains the **entire migration** so later contracts remain visible. That does
-not make every phase below simultaneously active. Treat later phases as reference material until the
-active phase exits.
+---
+
+# Active execution window
+
+This file owns migration sequence and work admission. The technical decompositions under `Docs/QtQuick_Migration/` explain how to execute admitted work; they do not create parallel phases.
 
 | Phase | Current status | Implementation permission |
 | --- | --- | --- |
-| A — bootstrap/render-node proof | Structurally complete | Do not reopen; A4 compiled smoke remains operator-scheduled later |
-| B — runtime-host decomposition | Structurally complete | Do not reopen without concrete contradictory evidence |
-| **C — base image + transitions** | **ACTIVE** | **Normal implementation work belongs here now** |
-| D — visualizer | Waiting for Phase C exit | Reference only |
-| E — widget presentation foundation | Waiting for earlier phase exits | Reference only |
-| F — widget families | Waiting for earlier phase exits | Reference only |
-| G — CUSTOM/input/auxiliary pixels | Waiting for earlier phase exits | Reference only |
-| H — settings epoch/cutover | Waiting for earlier phase exits | Reference only |
-| I — legacy removal | Waiting for production cutover | Reference only |
-| J — final tooling/validation/closure | Waiting for migration implementation | Reference only |
+| A — bootstrap/render-node proof | Structurally complete | Do not reopen; compiled smoke remains operator-scheduled later |
+| B — runtime-host decomposition | Structurally complete | Do not reopen without contradictory evidence |
+| C — base image + transitions | **IMPLEMENTATION COMPLETE; acceptance debt explicit** | No new C code unless deferred evidence demonstrates a defect |
+| **D — visualizer** | **ACTIVE** | **Normal implementation work belongs here now** |
+| E — widget presentation foundation | Waiting for D implementation exit | Reference only |
+| F — widget families | Waiting for E | Reference only |
+| G — CUSTOM/input/auxiliary pixels | Waiting for F | Reference only |
+| H — settings epoch + production cutover | Waiting for A–G implementation | Reference only |
+| I — legacy presenter deletion | Waiting for H cutover | Reference only |
+| J — tooling/final validation/docs closure | Waiting for migration implementation | Reference only |
 
-While Phase C is active:
+## Phase promotion rule
 
-1. refresh the exact remaining transition list from current `HEAD` and the canonical registry;
-2. implement/audit **one remaining transition slice at a time** through the existing lazy Quick
-   transition boundary;
-3. inspect the old authored implementation/settings before porting a transition and preserve its real
-   visual/timing/resource contract rather than producing a merely similar effect;
-4. use focused tests and the appropriate Quick/GL smoke for the slice, then commit + push it before
-   moving on;
-5. if a transition exposes a defect in already-landed A/B/C infrastructure, repair only the smallest
-   prerequisite needed to restore the active Phase-C contract, then return to the transition sequence;
-6. do **not** opportunistically start Phase D–J work, `Future_Work.md`, broad cleanup, H0 settings
-   migration, Defaults Foundry retargeting, or production cutover merely because those details are
-   visible later in this file;
-7. after the last canonical transition is accepted, run the Phase C exit gate and then perform the
-   specifically scheduled post-C transition-authoring documentation update.
+A phase may move forward when its **implementation dependencies** are structurally closed even if hardware-dependent/eyes-on acceptance remains explicitly deferred.
 
-**Phase promotion is explicit.** A later phase becomes normal implementation work only after the
-current phase's exit gate is satisfied and this active-status section is updated, or the operator
-explicitly overrides the sequence. Reading a later phase is never permission to begin it.
+Deferred evidence must be listed with runnable commands/criteria. A later failure reopens the smallest demonstrated owner/phase defect; it does not automatically roll the migration sequence backward or authorize a compatibility architecture.
+
+Production cutover in Phase H still requires the full Quick implementation surface to exist. Final release acceptance in Phase J still requires the scheduled physical/compiled evidence.
 
 ---
 
 # 0. Mission
 
-Perform **one** production presentation migration:
+Perform one production presentation migration:
 
 ```text
 current QWidget / QRhiWidget runtime presentation
                     ↓
 one standalone threaded QQuickWindow per physical display
                     ↓
-Qt Quick scene + inline custom GL render nodes
+Qt Quick retained scene + inline custom GL render nodes
 ```
 
 Do not plan a second presenter migration afterward.
 
-Do not rewrite unaffected product systems.
+Keep unaffected product systems unless a later phase explicitly replaces a presentation-coupled part:
 
-Keep, unless a later phase explicitly replaces a presentation-coupled part:
-
-- `ScreensaverEngine` orchestration except where display-runtime calls must change;
+- `ScreensaverEngine` orchestration except display-runtime calls that must change;
 - image source/provider backends;
 - SettingsManager and persistence infrastructure;
 - source/account/credential ownership;
 - QWidget Settings UI;
 - RSS/folder/media/GSMTC/provider logic;
-- ProcessSupervisor / ThreadManager ownership where still appropriate;
+- ProcessSupervisor / ThreadManager where still appropriate;
 - `VisualizerLogicalRuntime`;
-- visualizer authored algorithms and mode personality;
-- custom-layout math/behavior contracts;
+- authored visualizer algorithms/mode personality;
+- useful CUSTOM layout math/behavior;
 - transition registry/settings identity;
-- product features and customization.
+- product features/customization.
 
-Important distinction:
-
-- keeping SettingsManager/persistence infrastructure does **not** require preserving old presentation-setting values through cutover;
-- keeping custom-layout math/behavior does **not** require translating pre-Quick widget geometry;
-- Phase H0 intentionally creates a new Qt Quick settings epoch and resets migration-sensitive state.
-
-Replace/refactor what is coupled to the old runtime-pixel owner.
+Backward compatibility with pre-Quick **presentation state** is deliberately not a migration goal; Phase H0 creates a new settings epoch.
 
 ---
 
-# 1. Hard operating rules
+# 1. Hard architecture rules
 
-## 1.1 No runtime compatibility architecture
+## 1.1 One production presenter
 
-Do **not** add:
+Do not add or preserve as final architecture:
 
-- a production setting/env switch selecting QRhiWidget vs Quick;
-- a permanent facade that makes `QQuickWindow` pretend to be `DisplayWidget`;
-- a QWidget presenter embedded over/under the Quick runtime;
-- a second accelerated visualizer/widget surface;
+- a QRhiWidget-vs-Quick runtime setting/env switch;
 - `QQuickWidget`;
-- a QRhiWidget fallback if Quick rendering fails;
-- a transition-by-transition fallback to the old compositor;
+- a permanent facade making QQuickWindow pretend to be DisplayWidget;
+- QWidget presentation embedded above/below the Quick runtime;
+- a second accelerated visualizer/transition window;
+- QRhiWidget fallback when Quick rendering fails;
+- transition-by-transition fallback to the old compositor;
+- screenshot-to-texture QWidget wrappers as final widgets;
 - duplicated legacy and Quick widget presentation pipelines after cutover.
 
-During development, the old production runtime and the not-yet-active Quick implementation may coexist
-in the repository. Only one is the normal production path at a time. Migration harnesses may exercise
-the Quick path before cutover.
+During migration, old production code may coexist in the repository as reference/current production until Phase H. Once production cuts over, Phase I deletion begins immediately.
 
-Once production cuts over, legacy presentation removal begins immediately.
+The selected custom-GL seam is:
 
-## 1.2 Refactor overloaded presentation modules while migrating
+```text
+QQuickItem(ItemHasContents)
+-> updatePaintNode()
+-> QSGRenderNode
+-> direct OpenGL inside the owning Quick scene
+```
 
-Refactor when overload is directly caused by the old presentation boundary.
+`QQuickRhiItem` is not the normal SRPSS custom-render path. If the selected `QSGRenderNode` seam is proven fundamentally unusable in pinned PySide/compiled product, stop and revise the **single** primitive deliberately; do not keep competing product primitives.
 
-Required examples:
+## 1.2 Refactor only presentation overload that migration exposes
+
+Expected decomposition:
 
 ```text
 DisplayWidget
-    -> runtime/window owner
-    -> input owner
-    -> scene/presentation owner
-    -> widget/model owner
-    -> CUSTOM/edit owner
-
-WidgetManager
-    -> widget/provider/model lifecycle owner
-    -> layout/visibility owner
-    -> Quick presentation item owner
+    -> QuickDisplayRuntime/window owner
+    -> RuntimeInputController
+    -> QuickSceneController
+    -> WidgetRuntimeManager
+    -> CustomLayoutSession
 
 GLCompositorWidget
-    -> transition renderer/resource owner
-    -> visualizer renderer/resource owner
-    -> presentation pacing owner
+    -> transition renderer/resource implementations
+    -> visualizer renderer/resources
+    -> presentation pacer ownership
 ```
 
-Do **not** use the migration as permission to refactor unrelated source/provider/backend systems.
+Do not use the migration to rewrite unrelated provider/backend systems.
 
-## 1.3 Preserve full runtime visual capability
+## 1.3 Preserve visual capability
 
-Migration parity includes, where currently supported:
+Migration parity includes current supported presentation capabilities such as opacity, backgrounds/cards, borders/radius, fonts/colors, shadows, artwork, separators/icons, progress controls, stacking, monitor routing, pixel shift, dimming, CUSTOM geometry/edit, context interaction, visualizer all five modes, transitions, and Media Center interaction.
 
-- per-widget opacity;
-- card/background opacity;
-- text opacity/color;
-- shadows;
-- text/header shadows;
-- borders and border opacity;
-- rounded corners;
-- fonts and font sizes;
-- margins;
-- artwork sizes/shapes/rounding;
-- separators/icons/header chrome;
-- progress bars/glow/shadow;
-- widget fades;
-- stacking;
-- monitor routing;
-- pixel shift;
-- dimming;
-- CUSTOM position/resize;
-- multi-monitor transfer during edit;
-- context interaction;
-- visualizer card + all five visualizer modes;
-- all supported transitions;
-- Media Center interaction behaviour.
+Do not solve migration defects by flattening/removing authored effects.
 
-Do not solve a migration bug by deleting or flattening a visual feature.
+## 1.4 No premature full/compiled builds
 
-Where an existing effect is unusually authored or visually rich, preserve its real effect contract rather
-than replacing it with a conceptually similar but cheaper-looking approximation.
+During Phases C–G, normal gates are focused Python/static/runtime harnesses.
 
-## 1.4 Frequent Git checkpoints are mandatory
-
-After **every landed slice**:
-
-1. run the focused gate for the slice;
-2. inspect `git diff` / `git status`;
-3. commit only the intended slice;
-4. `git push`;
-5. continue immediately to the next slice when gates pass.
-
-A normal migration session should produce many small pushed commits, not one giant migration commit.
-
-Good checkpoint scale:
-
-```text
-Quick bootstrap + first render node
-frame pacer extraction
-Quick runtime host
-one transition or tightly related transition batch
-visualizer immutable bridge
-Bubble render node
-shared Quick card/shadow primitive
-clock family
-weather
-media
-reddit
-gmail
-Steam family
-CUSTOM session
-settings epoch reset
-production cutover
-legacy deletion batch
-Defaults Foundry retarget
-build/tooling closure
-```
-
-Do not pause after a successful checkpoint to ask permission to continue.
-
-For a high-risk effect such as BlockSpin, Burn, Particle, or Bubble, prefer one effect per checkpoint.
-
-## 1.5 Do not stop unless an actual blocker is hit
-
-A failing test, compile error, visual bug, missing import, wrong geometry, or one difficult widget is
-not by itself a blocker. Diagnose, correct, re-run, checkpoint, continue.
-
-An **actual blocker** is something such as:
-
-- the selected Quick custom-render primitive is fundamentally unusable in pinned PySide 6.9.1 or
-  the compiled product after a focused proof;
-- required one-window-per-display semantics cannot be preserved;
-- a required product visual/interaction capability cannot be represented without a prohibited
-  second presentation architecture;
-- lifecycle/resource ownership cannot be made deterministic after focused correction;
-- essential external information/credential/device access genuinely unavailable to the agent is
-  required to proceed.
-
-If a blocker is hit:
-
-- stop broad code churn;
-- record exact evidence;
-- name the blocked owner and smallest decision required;
-- do not invent a compatibility layer to go around it.
-
-## 1.6 Support docs do not own sequence
-
-The technical decomposition docs under:
-
-```text
-Docs/QtQuick_Migration/
-```
-
-are subordinate to this file.
-
-They explain **how** to perform a named slice. They may not:
-
-- reorder the phases;
-- create a parallel roadmap;
-- authorize work not admitted by this plan;
-- keep completed work active after this plan removes it.
-
-Deferred post-cutover deletion is cross-linked to `Future_Cleanup.md`.
-
-## 1.7 Developer documentation migrates with proven contracts
-
-Do not rewrite presentation-feature authoring/development guidance before its owning implementation
-phase has proved the final contract.
-
-During pre-cutover rewrites, label new guidance as the Qt Quick target architecture while the old
-production presenter still exists.
-
-- [ ] After Phase C exits, rewrite transition-authoring guidance for the canonical registry and lazy
-  Quick renderer contract.
-- [ ] After Phase D exits, update visualizer/preset-authoring guidance for the final Quick visualizer
-  boundary while preserving preset and logical-runtime instructions that remain valid.
-- [ ] After Phase F exits, rewrite widget-authoring guidance for the presentation-neutral
-  descriptor/model/family registry and retained Quick component contract.
-- [ ] After Phase H cutover and Phase I deletion, remove or archive obsolete QWidget, QRhiWidget and
-  compositor authoring instructions and make the Quick guides the sole current authority.
-- [ ] In Phase J, audit README/project overview, architecture docs, contracts, indexes, cross-links,
-  examples, troubleshooting/build guidance, Defaults Foundry guidance, and references to deleted
-  presentation code.
-
-Preserve historical bug/evidence documents as history; only repair links or add context needed to
-keep that history intelligible.
-
-## 1.8 No premature compiled/full builds
-
-During migration implementation, do not run compiled/full builds merely as routine validation.
-
-Keep build scripts and packaging inputs compatible, but compiled/installed validation is operator
-scheduled after implementation is complete unless the operator explicitly requests an earlier build.
-
-Focused script/static/runtime harness tests are the normal migration gates.
+Do not run Nuitka/full installed builds merely as routine migration validation. Keep packaging inputs current. Compiled/installed validation remains operator-scheduled unless the operator explicitly requests it earlier.
 
 ---
 
-# 2. Destination architecture
+# 2. Git / agent / connector workflow
+
+## 2.1 Checkpoints are mandatory
+
+For normal local-agent work:
+
+```text
+inspect exact current source
+-> implement narrow slice
+-> focused gate
+-> inspect diff/status
+-> commit intended paths only
+-> push
+-> independent audit of actual pushed source/diff
+-> continue
+```
+
+Do not stop after a successful checkpoint merely to ask permission to continue.
+
+High-risk effects/owners such as BlockSpin, Burn, Particle, Bubble, settings epoch, and production cutover deserve dedicated checkpoints.
+
+## 2.2 Connector/API write discipline
+
+Repository connector writes are allowed when practical, but their editing ergonomics are weaker than a local worktree.
+
+For risky whole-file/chunk reconstruction:
+
+```text
+fetch authoritative parent
+-> build candidate blobs/tree
+-> create UNATTACHED candidate commit
+-> compare parent..candidate
+-> confirm only intended files changed
+-> spot-fetch beginning/end and suspicious reconstructed sections
+-> move branch ref only after candidate audit
+-> fetch/compare the branch-reachable commit again
+```
+
+Creating a blob/tree is not a checkpoint. A checkpoint must be a commit reachable from the intended pushed branch.
+
+If an API/chunk edit produces an unexpectedly broad/malformed diff, abandon the unattached candidate. Do not let corruption become branch history and repair it afterward.
+
+For large changes where direct connector reconstruction becomes unreliable, fall back to whole replacement files or a narrow paste-ready coding-agent prompt, then audit the actual pushed result.
+
+## 2.3 Trust evidence, not agent prose
+
+An agent saying tests passed or code was implemented is not evidence. Inspect current repository state, pushed commit, diff, relevant source, and independent CI/harness evidence when available.
+
+Repository state outranks stale orientation prose.
+
+---
+
+# 3. CI evidence rules and known 2026-08-21 failure
+
+GitHub Actions is an independent execution environment, not ChatGPT's runtime and not the operator's physical RTX/multi-display environment.
+
+Good hosted-CI evidence:
+
+- deterministic Python/unit/source contracts;
+- registry/settings tests;
+- lifecycle logic where headless execution is representative;
+- import/dormancy tests;
+- shader/source contract tests;
+- later packaging sanity when build policy permits it.
+
+Hosted CI is not authoritative for:
+
+- actual 165 Hz/60 Hz physical cadence;
+- PresentMon/display occupancy;
+- subjective Bubble/effect smoothness;
+- physical multi-monitor topology;
+- real GPU utilization/performance.
+
+### Windows CI run `32436553793`
+
+The email saying "all jobs failed" did **not** mean GitHub abruptly killed the hosted runner.
+
+Observed facts from the archived Actions logs:
+
+- setup/dependency installation completed;
+- chunk 1 ran ~130 s and returned ordinary test failures;
+- chunk 2 printed a complete pytest summary (`3 failed, 1219 passed, 67 skipped`) in ~24.76 s but the Python process did not exit; `tests/run_chunked.py` killed the still-live process at its own 900-second timeout (`exit 124`);
+- chunk 3 stopped around 50% test execution progress with no pytest summary and hit the same wrapper timeout;
+- chunk 4 ran ~180 s and returned ordinary test failures;
+- the outer Actions job had `timeout-minutes: 70` and completed normally after the wrapper returned failure;
+- logs/artifacts uploaded successfully.
+
+Interpretation:
+
+- chunk 2 strongly suggests leaked shutdown ownership/non-daemon thread/background process after pytest finished, rather than a 15-minute test body; the exact owner remains to be isolated;
+- chunk 3 requires verbose/smaller isolation because it appears to hang during test execution;
+- completed chunks contain several failures in old/default/UI/doc/visualizer areas, so broad-suite red status is currently noisy and must be inspected rather than attributed wholesale to the active migration slice;
+- an uncompleted/timed-out chunk is **not** assumed clean; Phase-C focused tests still require explicit sign-off.
+
+That CI run also exposed a deterministic workflow configuration defect: `actions/checkout` used its default `fetch-depth: 1`, while an existing Bubble guardrail executes `git show 510520e:...` and therefore cannot see the historical object.
+
+The Phase-C documentation closure changes the workflow to `fetch-depth: 0`. That removes the known shallow-history failure on future runs, but it does not claim to fix the separate shutdown/hang or unrelated test failures.
+
+Do not fix the remaining timeout behavior by merely increasing 900 seconds. Isolate the actual owner/test with smaller/verbose chunks or explicit thread/process diagnostics.
+
+This broad-suite CI debt does not block Phase-D implementation by itself.
+
+---
+
+# 4. Destination runtime architecture
 
 ```text
 ScreensaverEngine
@@ -355,524 +297,266 @@ ScreensaverEngine
                     |
                     +-- RuntimeInputController
                     +-- WidgetRuntimeManager
-                    +-- CustomLayoutSession (when active)
+                    +-- CustomLayoutSession
 ```
 
-Visualizer:
+Feature activation target:
 
 ```text
-audio / analysis
-    -> VisualizerLogicalRuntime
-    -> immutable latest visualizer snapshot
-    -> Quick visualizer item sync
-    -> render-thread GL node
-```
-
-Transition:
-
-```text
-image pipeline
-    -> presentation image state
-    -> TransitionRun (monotonic time + parameters)
-    -> display presentation pacer
-    -> full-screen Quick render node
-```
-
-Ordinary widget:
-
-```text
-existing provider/business logic
-    -> small Python runtime model
-    -> retained Quick component
-```
-
-Feature activation:
-
-```text
-cheap catalog metadata
+cheap descriptor/catalog metadata
         ↓
 enabled?
   yes         no
    ↓           ↓
-resolve        implementation stays dormant
-runtime        no provider/model/resource solely for feature
+resolve        implementation/provider/resources stay dormant
+runtime
 ```
 
 ---
 
-# 3. Selected technical direction
+# 5. Phase A — bootstrap/render-node proof
 
-## 3.1 Graphics API
+Structurally complete for forward migration.
 
-Keep the successful P0 conditions:
+Settled:
 
-- `QSG_RENDER_LOOP=threaded`;
-- Qt Quick graphics API explicitly OpenGL;
-- current OpenGL 4.1/core profile requirements unless source proves a transition/visualizer requires
-  another exact format;
-- one top-level `QQuickWindow` per physical display.
+- standalone QQuickWindow path;
+- threaded scene graph;
+- explicit OpenGL bootstrap;
+- inline Python QSGRenderNode OpenGL proof;
+- presentation pacer foundation;
+- lifecycle/teardown proof.
 
-Bootstrap must happen before the first Quick window/scene graph is created.
+Deferred A4 compiled smoke remains operator-scheduled after implementation unless explicitly requested earlier.
 
-## 3.2 Custom GL integration
-
-Preferred production primitive:
-
-```text
-QQuickItem(ItemHasContents)
-    -> updatePaintNode()
-    -> QSGRenderNode
-    -> direct OpenGL inside the Quick scene
-```
-
-Reasons:
-
-- inline in the scene;
-- correct stacking relative to retained Quick items;
-- no extra offscreen texture pass solely to re-composite custom rendering;
-- matches the one-physical-surface target;
-- PySide exposes `QSGRenderNode`;
-- the P0 benchmark proved Python render-thread OpenGL inside `QQuickWindow`.
-
-The selected primitive is not limited to flat fragment-shader effects. A transition/visualizer renderer
-may own context-local meshes, VAOs/VBOs, depth state, textures, shader programs, and other GL
-resources when its visual contract requires them, provided all state/resource ownership remains
-properly fenced and restored.
-
-If this primitive itself becomes an actual binding/runtime blocker, stop and revise the **single
-chosen Quick custom-render primitive**. Do not keep two product primitives as fallbacks.
-
-## 3.3 Presentation pacing
-
-Use the production presentation-only frame pacer derived from the proven P0 target-pacing semantics.
-
-Properties:
-
-- one pacer per display;
-- target based on that display's refresh;
-- starts only while custom dynamic content requires continuous presentation;
-- transition and visible visualizer are independent frame-demand reasons;
-- missed deadlines are skipped, not replayed;
-- no `afterRendering -> update()` self-loop;
-- no paint acknowledgement;
-- no logical visualizer cadence ownership.
-
-Retained Quick animations may dirty the scene normally. The custom GL pacer exists for
-transition/visualizer content that needs continuous render opportunities.
+Do not reopen Phase A merely to reconfirm the already selected architecture.
 
 ---
 
-# 4. Phase A — bootstrap and render-node proof
+# 6. Phase B — runtime-host decomposition
 
-Read:
+Structurally complete for forward migration.
 
-- `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md`
-- `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`
-- `Docs/QtQuick_Migration/06_Build_Tooling_Validation.md`
-
-Phase A/B foundation has already produced the standalone Quick runtime, inline render-node proof,
-presentation pacing/lifecycle work, safe queued teardown, and topology reconstruction proofs.
-
-### A4 — deferred operator-only compiled smoke
-
-- [ ] After migration implementation is complete, and only when the operator explicitly schedules
-  a build window, run the focused compiled smoke and retain the executable result.
-
-During Phases C–G, keep build scripts, packaging inputs, and `build_runner.py` compatible and use
-focused static/script tests, but do not initiate a compiled or full build.
-
-Exit concept:
-
-```text
-threaded standalone Quick
-+ inline GL render node
-+ clean teardown
-+ production-shaped lifecycle
-+ compiled-smoke inputs ready
-```
-
-The explicit operator-run executable validation remains a final scheduled validation, not an
-admission gate for Phases C–G.
-
----
-
-# 5. Phase B — runtime-host decomposition
-
-Phase B is considered structurally complete for forward migration.
-
-Settled properties include:
+Settled properties:
 
 - one `QuickDisplayRuntime` per selected physical display;
-- per-runtime scene/window/pacer/input ownership;
-- generation-scoped lifecycle;
-- queued Qt/C++ meta-call teardown for `hide`, `releaseResources`, and `close`;
-- no blocking Python close/release path that can invert the GIL against the render thread;
-- hide/wake preserves the runtime where intended;
-- coordinated exit is one-shot;
-- runtime-root/window destruction barriers complete deterministically;
-- topology replacement is proven through migration harnesses;
-- unexpected QWindow screen displacement does **not** silently adopt the fallback screen;
-- displacement quiesces presentation and emits one-shot topology/binding loss while preserving the
-  runtime's original physical-display identity and pacer target.
-
-Do not reopen Phase B merely because later phases exercise these owners.
+- per-runtime window/scene/pacer/input ownership;
+- generation-scoped lifecycle including generation 0;
+- queued Qt/C++ meta-call teardown for hide/release/close rather than blocking Python render-thread inversion;
+- hide/wake behavior;
+- coordinated one-shot exit;
+- deterministic destruction barriers;
+- topology replacement harnesses;
+- unexpected QWindow screen displacement does not silently adopt a fallback display;
+- binding loss preserves original physical identity/pacer target, quiesces presentation/input, and emits one-shot topology/binding loss.
 
 Production `DisplayManager -> QuickDisplayRuntime` ownership still waits for Phase H.
 
 ---
 
-# 6. Phase C — base image and all transitions
+# 7. Phase C — base image + transitions
 
-Read `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`.
+**Implementation status: complete.**
 
-Phase C guardrails that remain active through the renderer port:
+Read `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md` and `Docs/Transition_Change_Checklist.md` for the landed authoring/runtime contract.
 
-- preserve the completed transition-neutral `TransitionRequest` / `TransitionRun` lifecycle,
-  monotonic timing, generation/run fencing, and exactly-once completion/cancellation;
-- resolve statically registered transition implementations lazily from lightweight canonical
-  catalog metadata;
-- keep disabled transitions Settings-visible but out of Random/Cycle selection and do not resolve
-  their implementations, shaders, or transition-specific resources;
-- keep transition-specific shader/math/resource behaviour in each implementation and out of the
-  common host/controller;
-- do not create a central per-transition dispatcher or a dynamic/external plugin system;
-- retire user-selectable transition easing: each canonical descriptor owns the internal authored
-  curve/timing authority;
-- use linear timeline input for staged/physics/shader effects that already author their own timing;
-- Slide uses `SINE_IN_OUT`;
-- easing must never compensate for coverage or presentation-cadence defects;
-- keep Slide to the four cardinal product directions and derive both image samples and their sole
-  viewport owner from the same immutable eased progress in one draw;
-- preserve the common GL-state fence: viewport, program, VAO/VBO bindings, active texture/bindings,
-  blend, cull, depth enable/write/function/clear state, stencil, and any later state introduced by
-  migrated effects must not leak into subsequent Quick scene rendering.
+## 7.1 Transition-neutral foundation
 
-## C1/C2 — completed foundation
+Completed:
 
-The Quick image boundary and transition-neutral run/controller work are already landed.
+- immutable/detached presentation image boundary;
+- `TransitionRequest` / `TransitionRun` lifecycle;
+- monotonic progress sampling;
+- generation/run fencing;
+- exactly-once completion/cancel;
+- shared image texture ownership;
+- common GL-state fence;
+- lazy static implementation registry;
+- GUI/runtime-side parameter/random/default resolution;
+- permanent canonical-registry ↔ Quick-registry parity gate.
 
-Presentation images crossing into render ownership are immutable/detached; live QPixmap/QWidget state
-must not cross the render-thread boundary.
+## 7.2 Canonical renderer inventory
 
-## C3 — renderer port
+All 12 canonical production transitions have Quick renderers:
 
-Quick implementations landed through the Blinds checkpoint `6ced08b2`:
+- Crossfade
+- Slide
+- Wipe
+- Warp Dissolve
+- Block Puzzle Flip
+- 3D Block Spins
+- Blinds
+- Diffuse
+- Ripple / Raindrops
+- Crumble
+- Particle
+- Burn
 
-- [x] Crossfade
-- [x] Slide
-- [x] Wipe
-- [x] Warp Dissolve
-- [x] Block Puzzle Flip
-- [x] 3D Block Spins
-- [x] Blinds
+No Quick renderer depends on `GLCompositorWidget`.
 
-Remaining after that checkpoint:
+Disabled transitions remain Settings/catalog-visible as appropriate while implementation/shader/resource ownership stays dormant.
 
-- [ ] Diffuse
-- [ ] Ripple / Raindrops
-- [ ] Crumble
-- [ ] Particle
-- [ ] Burn
-- [ ] any additional transition still active in the canonical registry when this phase is executed
+## 7.3 Critical preserved contracts
 
-Always inspect current HEAD before using the checklist; a later pushed checkpoint may have advanced it.
+### Slide
 
-Reuse existing shader sources/program math wherever possible.
+Four cardinal product directions only. Source/destination sampling and pixel ownership derive from one immutable eased sample in one draw, so missed physical frames may cause a larger positional jump but never a seam/gap.
 
-Commit/push in small transition batches; use one transition per checkpoint for visually complex
-effects.
+### 3D Block Spins
 
-Do not tune transitions individually to compensate for presentation cadence.
+Real thin 36-vertex rectangular-prism slab, depth-tested front/back/sides, black void, four axes/directions, correct destination UV orientation, cubic internal spin, dark sides, moving specular band, white edge rim, context-local resource teardown. No flat fallback.
 
-Use deterministic captures/tests where practical, but do not mistake a weak pixel-change assertion
-for proof of a visually authored effect.
+### Particle
 
-### C3a — Slide contract
+Canonical shader preserved with Directional/Swirl/Converge, directional/random-placement modes, trails, swirl settings/order, wobble, texture mapping, 3D shading, gloss/light controls, seed, and physical-framebuffer resolution semantics.
 
-Quick Slide is cardinal only:
+### Burn
 
-- left;
-- right;
-- up;
-- down.
+Canonical rich shader preserved: ignition, six directions, 4-octave/domain-warped noise, jagged front, heat distortion, glow, white-hot core, char/crackle/smoulder progression, sparks, smoke, ash, densities/toggles, per-run seed, run-clock animation time, delayed destination tail.
 
-Both source and destination coverage must be derived from the same immutable sample so the viewport
-has exactly one owner at every pixel. Missed presentation intervals may advance motion farther on the
-next rendered frame but must never expose a seam/microgap.
+## 7.4 Phase-C acceptance debt
 
-Do not re-add diagonal Slide merely because the underlying renderer could draw it. A diagonal
-full-frame translation creates exposed corner space unless a deliberately authored effect fills or
-deforms that space.
+The following are **sign-off**, not missing architecture/implementation:
 
-### C3b — 3D Block Spins preservation contract
+- execute focused deterministic Phase-C tests on a capable clean checkout;
+- isolate current CI shutdown/hang behavior enough to obtain meaningful independent broad-suite evidence;
+- run Blinds real-GL directions;
+- run `tools/qtquick_phase_c_effect_smoke.py` cases for Diffuse/Ripple/Crumble/Particle/Burn;
+- scheduled physical two-display variants where required;
+- eyes-on old-vs-Quick authored-effect comparison;
+- normal/high-refresh continuity and physical cadence only where it answers an unresolved question.
 
-3D Block Spins is a real 3D transition, not a 2D narrowing approximation.
+Phase D may proceed while these remain open.
 
-Preserve:
+If sign-off later fails, repair the smallest demonstrated Phase-C defect, checkpoint/push/audit it, then continue the active migration phase.
 
-- one thin 36-vertex rectangular-prism slab;
-- front/back/side geometry with thickness;
-- depth-tested face ordering over an opaque black void;
-- horizontal, vertical, and both diagonal rotation axes;
-- correct spin sign for opposite directions;
-- correct back-face UV orientation for each axis so the arriving image is upright rather than
-  mirrored/rotated;
-- authored cubic internal spin timing fed from the canonical linear outer run;
-- dark side-face core;
-- moving direction-sensitive specular band;
-- edge-on white rim treatment;
-- exact source/destination endpoints;
-- context-local mesh/program ownership and render-thread teardown.
-
-Do not add a flat-quad fallback.
-
-### C3c — Blinds landed; execution/physical acceptance remains
-
-The Blinds Quick renderer is implemented and registered. Do not treat the unchecked validation items
-below as permission to rewrite the effect before running them; reopen implementation only if evidence
-fails.
-
-Preserved implementation contract:
-
-- exact existing `blinds_program.fragment_source` rather than a replacement lookalike shader;
-- canonical linear transition timeline;
-- old effective slat grid: default seven authored columns doubled to fourteen, with rows derived from
-  target aspect ratio;
-- Horizontal, Vertical, and Diagonal shader modes;
-- resolved shader-space feather rather than raw UI-scale values or renderer-side defaults;
-- authored centre-out band growth and the existing late global destination tail;
-- lazy implementation/shader resolution and release through the common Quick transition host.
-
-Renderer admission is intentionally strict: `Random` must already be resolved to one of the three
-canonical Blinds directions and `feather` must already be converted to the finite shader-space value
-before the immutable request reaches render ownership.
-
-Implementation/test assets landed:
-
-- [x] `rendering/quick/transitions/implementations/blinds.py`;
-- [x] lazy registry/catalog admission;
-- [x] focused Blinds contract tests covering dormancy, isolated lazy resolution, authored directions,
-  resolved feather validation, old effective grid mapping, and exact legacy shader reuse;
-- [x] `tools/qtquick_blinds_smoke.py` real-GL wrapper with a shader-math midpoint oracle for all three
-  authored directions.
-
-Validation still to execute on a capable checkout/runtime:
-
-- [ ] run `pytest tests/test_qtquick_blinds_transition.py tests/test_qtquick_transition_implementations.py -q --tb=short`;
-- [ ] confirm the GitHub Actions Windows CI run for the Blinds checkpoint is green; the connected
-  Actions status did not surface a run/check during the authoring session, so this is not claimed;
-- [ ] on real Windows/OpenGL run `python tools/qtquick_blinds_smoke.py --direction horizontal --windows 1`;
-- [ ] repeat the real-GL smoke for `--direction vertical` and `--direction diagonal`;
-- [ ] on a physical two-display system repeat the three smoke directions with `--windows 2`;
-- [ ] eyes-on compare Blinds against the authored old effect and check continuity at normal and high
-  refresh before Phase C final acceptance.
-
-### C3d — Burn preservation contract
-
-Burn is a high-risk visual-preservation transition. Treat it as a BlockSpin-class authored effect,
-even though it is implemented primarily as a full-screen shader.
-
-The existing effect is not merely "a noisy wipe." Preserve its actual visual stack:
-
-- exact old/new image endpoints;
-- all currently supported burn directions, including the two diagonal directions;
-- initial ignition phase before the front begins moving;
-- domain-warped multi-octave noisy/jagged paper-like burn edge;
-- authored jaggedness control;
-- heat distortion close to the burn front;
-- warm glow bleed into the old image;
-- white-hot/thermite core line;
-- char width and the hot-ember -> cooling ember -> dark char -> new-image progression;
-- crackle/detail variation in the char zone;
-- smouldering/pulsing glow;
-- user/authored glow colour and glow intensity;
-- sparks/embers when enabled;
-- smoke wisps when enabled;
-- falling ash when enabled;
-- smoke/ash density controls;
-- per-run seed behaviour;
-- animated effect time;
-- delayed near-completion tail fade that guarantees a clean final destination frame.
-
-Prefer reusing/extracting the existing Burn shader source and authored math rather than rewriting the
-look from memory.
-
-Quick ownership may change; the effect's appearance contract may not be silently simplified.
-
-Burn-specific gates should prove at least:
-
-- implementation remains lazy/dormant while disabled;
-- only Burn-specific implementation/resources resolve when enabled;
-- required parameters are resolved before render admission rather than silently defaulted in the
-  renderer;
-- all supported directions map correctly;
-- deterministic probes demonstrate distinct unburned / glow-core-char / destination regions at
-  controlled progress;
-- smoke/ash enablement genuinely changes their intended regions without changing core burn ownership;
-- exact endpoints are clean;
-- resource teardown leaves no Burn-specific GL ownership;
-- common GL state is restored after Burn rendering.
-
-Subjective eyes-on comparison against the authored old effect remains required later when the full
-Quick runtime is convenient to inspect visually.
-
-## Phase C exit gate
-
-- all registry-eligible production transitions render through Quick;
-- disabled transitions remain renderer/resource dormant;
-- old/new image ownership is correct;
-- completion/cancel/interruption correct;
-- transition-specific authored parameters and visual contracts are preserved;
-- 60 Hz/high-refresh pacing remains healthy;
-- no old compositor dependency exists inside the new Quick renderer implementations;
-- transition-authoring documentation can now be rewritten against the final contract.
+Do not broadly retune effects or revisit presenter architecture absent evidence.
 
 ---
 
-# 7. Phase D — visualizer
+# 8. Phase D — visualizer — ACTIVE
 
 Read:
 
 - `Docs/QtQuick_Migration/03_Visualizer.md`
 - `Docs/Guardrails/Visualizer_Presentation.md`
-- Bubble BTF/guardrail documentation.
+- `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
+- `Docs/Visualizer_Reference.md`
 
-## D1 — separate logical controller from QWidget presentation
+## D1 — presentation-neutral runtime/controller
 
-Do not instantiate a hidden QWidget merely to host the Quick visualizer.
+Separate the non-pixel visualizer owner from QWidget presentation without rewriting provider/business logic.
 
-Extract/retain the non-pixel visualizer controller/state needed by:
+Retain ownership for settings/mode/preset activation, playback state, BeatEngine/source, `VisualizerLogicalRuntime`, and latest logical publication.
 
-- settings activation;
-- playback state;
-- logical runtime;
-- source/BeatEngine;
-- preset state;
-- CUSTOM participation.
+Do not instantiate a hidden QWidget merely to keep those owners alive.
 
-## D2 — immutable render snapshot
+Checkpoint/push/audit this split.
 
-The old compositor layer's live-owner handle is not render-thread safe.
+## D2 — immutable latest-state render bridge
 
-The Quick path uses immutable/current snapshots containing generation/activation identity, geometry,
-fade/style, and mode-specific render data.
+Publish bounded immutable current visualizer snapshots containing generation/activation identity, mode/playback identity, logical timestamp, geometry/fade/style, and mode-specific render data.
 
-No render-thread reads from live QWidget/QObject presentation state.
+No render-thread reads from live QWidget/QObject/provider/Settings state.
 
-## D3 — Quick visualizer render item
+Latest state wins; no FIFO/catch-up replay. Protect short-lived authored edges explicitly.
 
-Render all five modes through the Quick render node using existing authored shaders/helpers where
-practical.
+Checkpoint/push/audit the bridge separately.
 
-Preserve:
+## D3 — Quick visualizer item/node + geometry/card foundation
 
-- Spectrum;
-- Oscilloscope;
-- Sine;
-- Bubble;
-- DevCurve;
-- ghosting;
-- borders/masks;
-- card geometry;
-- fades;
-- Pause/Play;
-- paused Spectrum idle;
-- BTF.
+Use one sub-rect custom Quick item/QSGRenderNode inside the display QQuickWindow.
 
-### Visualizer authored-clock guardrail
+One committed geometry authority feeds retained card chrome and GL viewport/scissor/shader geometry/CUSTOM seam.
 
-`VisualizerLogicalRuntime` remains the sole authored logical clock.
+Preserve DPR from the owning display/window. No separate native visualizer window, QPainter fallback, or QWidget texture wrapper.
 
-Preserve:
+Retained Quick card presentation must preserve background/border/radius/shadow/color/fade/customization.
 
-- every authored logical step;
+## D4 — sole authored logical clock
+
+`VisualizerLogicalRuntime` remains the sole mode-general authored logical clock.
+
+Non-negotiable:
+
+- every authored logical step survives;
 - latest-state semantics;
-- no FIFO/catch-up replay;
+- no FIFO/catch-up;
 - no paint acknowledgement;
 - no producer/display divisor;
 - no source/event decimation;
 - no display-refresh logical cap;
-- no physical render cadence becoming simulation cadence;
-- nonblocking GSMTC/media interaction;
-- generation fencing/stale rejection;
-- clean worker join;
-- no separate visualizer native window;
-- no QPainter fallback.
+- render cadence never becomes simulation cadence;
+- nonblocking media/GSMTC interaction;
+- generation/stale fencing;
+- clean worker join.
 
-Bubble especially depends on continuous positional evolution. Do not "optimize" it by throwing away
-authored steps.
+## D5 — five mode ports
 
-Commit/push at the bridge, renderer foundation, and all-five-modes milestones.
+Preserve all current authored behavior for:
 
-Exit gate includes BTF and later real eyes-on validation.
+1. Spectrum — bars/peaks/ghosting, paused idle visibility, source freshness;
+2. Oscilloscope — waveform/line persistence/idle behavior;
+3. Sine — authored idle/layers/reactivity, no separate timer;
+4. Bubble — dedicated high-risk checkpoint with BTF, continuous positional evolution, collisions, trails/tails, ghosts/pop/transients/protected edges, authored logical Hz;
+5. DevCurve — active layers/order/alpha/offsets/outline/ghosting/tuning.
 
-After Phase D exits, update visualizer/preset authoring documentation against the landed contract.
+Do not retune modes to hide presentation problems.
+
+The observation that unrelated widgets can materially change measured Bubble-era GPU load supports retained-scene efficiency and true feature dormancy. It does not implicate Bubble collision logic by itself.
+
+## D6 — Pause/Play and lifecycle
+
+Preserve warm-source/expected-state behavior without recreating the window/item or inventing a second playback authority.
+
+Retirement must close publication, stop/join the logical runtime, invalidate activation/generation, remove snapshot admission, release GL resources on the render owner, and destroy roots cleanly.
+
+A background owner that prevents process/test shutdown is a defect.
+
+## D7 — checkpoint cadence
+
+Prefer pushed/audited checkpoints for:
+
+1. runtime/controller split;
+2. immutable bridge;
+3. item/node + geometry/card foundation;
+4. Spectrum;
+5. Oscilloscope;
+6. Sine;
+7. Bubble + BTF;
+8. DevCurve;
+9. all-five-mode lifecycle/source/pause closure;
+10. Phase-D documentation closure.
+
+## D exit
+
+All five modes use the Quick visualizer boundary with the authored logical runtime intact, immutable latest-state publication, clean lifecycle/resources, and no old compositor/QWidget presentation dependency inside the new renderer.
+
+After implementation exit, rewrite visualizer/preset authoring guidance against the landed Quick contract. Explicit physical/eyes-on items may remain as scheduled acceptance debt if they cannot be meaningfully executed by hosted agents.
 
 ---
 
-# 8. Phase E — widget presentation foundation
+# 9. Phase E — widget presentation foundation
 
 Read `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`.
 
-Do this before porting families.
+## E1 — presentation-neutral descriptor/runtime ownership
 
-## E1 — descriptor cleanup
+Make canonical widget identity/settings metadata independent of QWidget factories.
 
-Make canonical widget identity/settings metadata presentation-neutral.
+Create/rename the future `WidgetRuntimeManager` around provider/model lifecycle, enabled/visible state, monitor participation, stacking inputs, settings updates, fade intent, generation/model registration, and actions.
 
-Move QWidget-factory-only creation details out of the canonical descriptor authority rather than
-teaching new Quick code to depend on QWidget factories.
+A disabled family must not own feature-specific provider/model/process/poll/timer/Quick component/resource solely because its files are installed. Shared infrastructure remains only while another enabled capability needs it.
 
-## E2 — split WidgetManager ownership
+Do not create a giant Python `QuickBaseOverlayWidget` god object.
 
-Create/rename the future `WidgetRuntimeManager` around:
+## E2 — shared retained Quick primitives
 
-- provider/model lifecycle;
-- visibility/enabled state;
-- monitor participation;
-- stacking inputs;
-- live settings updates;
-- fade intent;
-- generation ownership.
+Build small reusable primitives for cards/backgrounds, border/radius, foreground opacity, shadows, text/header shadow, image/artwork, separators, text, fades/visibility, click targets, controls.
 
-Move pixel/QWidget operations out as families migrate.
+## E3 — eight-direction shadow authority
 
-Resolve only enabled families through the static family registry.
-
-A disabled family must not own feature-specific runtime work merely because its files are installed.
-Where solely owned by that family, disabled means no:
-
-- model;
-- provider/service/process;
-- polling/timer;
-- refresh callback;
-- Quick component;
-- family-specific presentation resource.
-
-Shared infrastructure remains alive only when another enabled capability still requires it.
-
-Do not create a giant `QuickBaseOverlayWidget` Python god object.
-
-## E3 — shared retained Quick visual primitives
-
-Build small reusable Quick components/primitives for:
-
-- card background;
-- border/radius;
-- foreground opacity;
-- card shadow;
-- text/header shadow;
-- image/artwork;
-- separators;
-- common text;
-- fade/visibility;
-- click targets.
-
-## E4 — recovered eight-direction shadow feature
-
-This is an active migration deliverable.
-
-Add a global General-setting selector with:
+Add one global presentation-neutral direction setting:
 
 ```text
 NW   N   NE
@@ -880,88 +564,23 @@ NW   N   NE
 SW   S   SE
 ```
 
-- eight selectable outer directions;
-- selected/inset indication;
-- default `SE`, matching current authored appearance;
-- center is not a ninth shadow mode unless a separate product decision explicitly adds one.
+Eight outer directions; default `SE`; center is not a ninth mode.
 
-Use one canonical presentation-neutral direction authority such as:
-
-```text
-nw, n, ne, w, e, sw, s, se
-```
-
-Do not keep the old ineffective `widgets.shadows.offset` as a competing authority.
-
-Direction changes signs; they do not flatten each shadow family's authored magnitude:
-
-```text
-card (4, 6), SE -> (+4, +6)
-card (4, 6), NW -> (-4, -6)
-text (3, 3), N  -> ( 0, -3)
-icon (3, 4), W  -> (-3,  0)
-```
-
-Preserve each family's authored magnitude, blur, spread, opacity and color.
-
-Required coverage includes:
-
-- cards;
-- text;
-- headers;
-- icons/artwork;
-- controls;
-- volume slider;
-- visualizer card;
-- digital/analogue Clock details;
-- Weather;
-- Media;
-- Reddit/Gmail;
-- Steam families;
-- multiple DPRs;
-- CUSTOM geometry;
-- no outer/content drift when direction alone changes.
+Direction changes signs while preserving each family’s authored magnitude/blur/spread/opacity/color. Cover cards, text, headers, icons/artwork, controls, volume slider, visualizer, clocks, Weather, Media, Reddit/Gmail, Steam families, multiple DPRs, and CUSTOM geometry.
 
 Do not reintroduce QWidget `QGraphicsDropShadowEffect`.
 
-Prefer bounded Quick/shader shadow primitives and keep effect topology stable during fades.
-
-Exit gate:
-
-- shared style represents current opacity/border/radius/shadow requirements;
-- eight-direction selector drives every migrated shadow family correctly;
-- default SE matches authored appearance;
-- all signed directions have sufficient four-sided padding;
-- no focus/menu/display corruption;
-- no whole-screen effect layer for ordinary cards.
-
 ---
 
-# 9. Phase F — widget families
+# 10. Phase F — widget families
 
 Port runtime pixels, not Settings GUI/backends.
 
-Each family is its own landed checkpoint unless tiny and inseparable.
-
 ## F0 — remove deprecated Imgur instead of porting it
 
-Imgur is deprecated and not worth repairing.
+Remove its live gate/defaults/settings controls/descriptor/runtime/provider/CUSTOM/tests/package/current-authority docs/Foundry metadata. Do not build compatibility around stale Imgur presentation keys.
 
-Remove its live product surface end to end:
-
-- dev/runtime gate;
-- defaults/settings model and Settings controls;
-- descriptor/factory/runtime widget;
-- provider/direct-network fallback;
-- CUSTOM payload/support;
-- tests whose only purpose is keeping Imgur alive;
-- build/package references;
-- current-authority documentation references;
-- Defaults Foundry option metadata that refers only to Imgur.
-
-Do not build compatibility around stale persisted Imgur keys.
-
-Recommended family order after that:
+Recommended family order:
 
 1. Clock / Clock2 / Clock3
 2. Weather
@@ -973,31 +592,17 @@ Recommended family order after that:
 8. Achievement Pulse
 9. Abandonment Issues
 10. Friend Pulse
-11. other deliberately supported canonical runtime families
+11. other deliberately supported canonical families
 
-Per family:
+Per family: identify provider/business logic → compact runtime model → retained Quick presentation → preserve customization → deterministic tests/gallery → CUSTOM expectations → commit/push/audit.
 
-1. identify provider/model/business logic;
-2. extract non-pixel logic trapped in QWidget;
-3. expose a compact runtime model;
-4. implement retained Quick presentation;
-5. preserve current customization controls that remain part of the new product;
-6. add/update deterministic model/presentation tests;
-7. exercise CUSTOM geometry expectations;
-8. run Quick widget gallery;
-9. commit + push;
-10. continue.
+Do not rewrite provider/network logic into QML or use QWidget screenshots as final presentation.
 
-Do not create screenshot-to-texture wrappers of the old QWidget as the final implementation.
-
-Do not rewrite provider/network logic into QML.
-
-After Phase F exits, rewrite widget-authoring guidance against the final family/descriptor/model/Quick
-presentation contract.
+After F implementation exits, rewrite widget authoring guidance for the final descriptor/model/family/Quick component contract.
 
 ---
 
-# 10. Phase G — CUSTOM, input, interaction and auxiliary runtime pixels
+# 11. Phase G — CUSTOM, input, interaction, auxiliary pixels
 
 Read `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`.
 
@@ -1005,198 +610,82 @@ Read `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`.
 
 Refactor `CustomLayoutManager` into presentation-neutral session/state + Quick edit presentation.
 
-Keep the useful layout math/behavior contract.
+Edit the real retained Quick item. Keep uncommitted session geometry separate from persisted settings. Save commits; Cancel restores baseline. Grid/outline/handles are separate Quick edit items.
 
-Preferred Quick edit behaviour:
+Cross-monitor transfer moves/recreates one presentation instance on the target scene; no simultaneous duplicate live pixel owners.
 
-- edit the real retained Quick widget item;
-- maintain uncommitted session geometry separately from persisted settings;
-- Save commits;
-- Cancel restores session baseline;
-- outline/handles/grid are separate Quick edit items;
-- no duplicate raster snapshot shell for ordinary widgets.
+Do not spend migration effort translating old QWidget geometry; H0 resets it.
 
-For cross-monitor transfer, one presentation instance moves/recreates on the target scene; do not keep
-simultaneous duplicate live pixel owners.
+## G2 — input/interaction
 
-Do not spend migration effort translating pre-Quick saved widget/CUSTOM geometry. Phase H0 resets it.
+Refactor `InputHandler` away from DisplayWidget assumptions and route QQuickWindow events to existing actions.
 
-## G2 — input
+Preserve exit gestures, hotkeys/media keys, Ctrl interaction mode, layout slots under the new schema, clicks, right-click context menu, Media Center behavior.
 
-Refactor `InputHandler` away from `DisplayWidget` type assumptions.
+Transient QWidget control UI/settings dialog may remain if decoupled from DisplayWidget and not used as accelerated presentation.
 
-Route QQuickWindow events into the same product actions.
+## G3 — auxiliary runtime pixels
 
-Preserve:
-
-- exit gestures;
-- hotkeys;
-- media keys;
-- Ctrl interaction mode;
-- layout slots as a new-schema feature;
-- click behaviour;
-- right-click context menu;
-- Media Center behaviour.
-
-## G3 — auxiliary pixels
-
-Port:
-
-- cursor halo;
-- dimming;
-- pixel shift scene transform/offset;
-- error/fallback display where still product-required;
-- edit grid/handles;
-- any remaining runtime overlay pixel owner.
-
-The existing QWidget context menu/settings dialog may remain if it is transient control UI, but it
-must be decoupled from `DisplayWidget` parent assumptions and must not become an accelerated
-presentation surface.
-
-Commit/push each owner slice.
+Port cursor halo, dimming, pixel-shift scene transform, required error/fallback display, edit grid/handles, and any remaining runtime overlay pixel owner.
 
 ---
 
-# 11. Phase H — settings epoch + production cutover
+# 12. Phase H — settings epoch + production cutover
 
-No production-owner cutover until the Quick migration harness has:
+No production-owner cutover until Quick implementation contains base images, all active transitions, all five visualizer modes, runtime widget families, CUSTOM, input/context, dimming/pixel shift/halo, multi-display/lifecycle, and packaging inputs ready for later compiled validation.
 
-- base images;
-- all active transitions;
-- visualizer all modes;
-- all runtime widget families;
-- CUSTOM;
-- input/context;
-- dimming/pixel shift/halo;
-- multi-display;
-- lifecycle;
-- build/packaging inputs ready for deferred compiled validation.
+## H0 — one-time Qt Quick settings epoch
 
-Compiled/installed product validation is not a cutover admission item unless the operator explicitly
-schedules it.
+Do not accumulate a museum of per-feature pre-Quick presentation migrations.
 
-## H0 — one-time Qt Quick settings epoch reset
+### Preserve only an explicit durable whitelist
 
-The Qt Quick production cutover is also a deliberate settings-contract epoch change.
+Intended durable categories:
 
-Backward compatibility with pre-Quick **presentation settings** is not a product requirement.
+- image/source configuration and configured locations/selections;
+- credentials/tokens/secrets;
+- account identities/slots/auth data;
+- genuinely presentation-neutral provider/backend connection information;
+- any other leaf only after inspection proves its meaning/schema survives unchanged.
 
-Do **not** accumulate a museum of per-feature migration functions for easing, widget geometry,
-shadows, visualizer presentation state, CUSTOM coordinates, and every other old presentation leaf.
+Do not preserve an entire old subtree merely because it contains one durable leaf.
 
-At H0, create one explicit settings schema/epoch boundary.
+### Reset migration-sensitive presentation state to final Quick defaults
 
-### H0.1 Preserve only a verified durable whitelist
+Reset, where present:
 
-Preserve the smallest inspected set whose meaning genuinely survives the migration.
-
-The intended durable categories are:
-
-- image/source configuration, including configured local source locations/selections and other
-  source backend configuration still valid in the new product;
-- credentials, tokens, secrets, account slots/identities and authentication data required by
-  retained providers;
-- provider/backend connection information whose schema is demonstrably presentation-neutral;
-- other data only when inspection proves it is both durable and structurally unchanged.
-
-The whitelist must be explicit in code/tests. Do not preserve an entire old subtree merely because it
-contains one durable leaf.
-
-### H0.2 Reset migration-sensitive state to final Qt Quick defaults
-
-Everything else is reset to the then-current canonical Qt Quick defaults unless inspection proves it
-belongs on the durable whitelist.
-
-This deliberately includes, where present:
-
-- transition selection;
-- transition pools;
-- transition durations/directions/parameters;
-- removed transition easing state;
-- widget enablement/presentation/style settings;
-- widget positions;
-- monitor routing where it is presentation state rather than account/source identity;
-- widget dimensions;
-- CUSTOM geometry;
-- CUSTOM restore payloads;
-- saved layout slots;
-- presentation/display geometry assumptions;
+- transition selection/pools/durations/directions/parameters/easing debris;
+- widget enablement/presentation/style/position/dimensions;
+- presentation monitor routing;
+- CUSTOM geometry/restore payloads/layout slots;
+- display geometry assumptions;
 - old shadow/effect settings;
-- visualizer presentation settings;
-- visualizer geometry;
-- pre-Quick user-authored visualizer presentation presets/configuration when their schema is not
-  deliberately retained;
-- other QWidget/QRhiWidget/compositor-era presentation state.
+- visualizer presentation/geometry;
+- old user visualizer presentation presets unless deliberately retained under a new-schema decision;
+- other QWidget/QRhi/compositor-era presentation state.
 
-Do not perform heroic coordinate conversion. If a geometry value belonged to the old presentation
-space, reset it.
+No heroic coordinate translation.
 
-For visualizers, the required post-reset product baseline is:
+Built-in visualizer presets remain product baseline; users can edit/create/save new presets in the new schema.
 
-- curated built-in presets remain valid;
-- every visualizer mode still has its intended defaults/presets;
-- users can edit visualizer settings;
-- users can create/save new presets under the new schema.
-
-Old user presentation presets do not need migration merely to avoid resetting them.
-
-### H0.3 Epoch operation
-
-Conceptually:
+### Epoch operation
 
 ```text
 pre-Quick settings detected
-        ↓
-read/copy durable whitelist
-        ↓
-construct fresh final Qt Quick defaults
-        ↓
-restore durable whitelist
-        ↓
-atomically persist new settings epoch/version
-        ↓
-future starts see current epoch and do nothing
+-> copy explicit durable whitelist
+-> construct fresh final Quick defaults
+-> restore whitelist
+-> atomically persist new epoch/version through normal durability boundary
+-> future current-epoch starts do nothing
 ```
 
-The operation must be safe enough that an error cannot silently destroy the preserved
-credentials/source configuration.
+Prove reset exactly once, durable source/auth data survives, presentation state resets, malformed old presentation state cannot leak through, second startup does not reset again, and persistence reaches normal durability boundary.
 
-Use the normal ordered settings durability boundary rather than inventing a competing writer.
+Checkpoint/push H0 before H1.
 
-### H0.4 No permanent migration archaeology
+## H1 — production-owner switch
 
-Existing generic obsolete-key cleanup may remain while migration work is in flight.
-
-After the epoch reset is established and legacy presentation is deleted:
-
-- remove one-off migration code whose sole remaining purpose is understanding pre-Quick presentation
-  keys;
-- remove obsolete pre-Quick presentation keys from current defaults/schema/presets;
-- remove old compatibility payloads that no supported product path requires;
-- retain generic settings-normalization machinery only when it has an ongoing current-schema purpose.
-
-The final settings implementation should understand the current Qt Quick schema, not every historical
-presentation schema.
-
-### H0.5 Gate
-
-Before H1:
-
-- prove a representative pre-Quick settings file resets exactly once;
-- prove configured image/source data on the explicit whitelist survives;
-- prove credentials/account/auth data on the explicit whitelist survives;
-- prove migration-sensitive presentation state returns to current defaults;
-- prove old widget/CUSTOM geometry does not leak into the new runtime;
-- prove built-in visualizer presets/defaults remain usable after reset;
-- prove a second startup does not reset the already-current settings;
-- prove malformed/partial old presentation state cannot leak into current runtime state;
-- prove persistence reaches the normal durability boundary.
-
-**Checkpoint + push H0 before H1.**
-
-## H1 — explicit production-owner switch
-
-Make one production-owner switch:
+Make one explicit switch:
 
 ```text
 DisplayManager
@@ -1204,121 +693,66 @@ DisplayManager
     to QuickDisplayRuntime
 ```
 
-Change callers to the real new API.
+Change callers to the real new API. No DisplayWidget compatibility facade and no production flag back to QRhiWidget.
 
-Do **not** preserve a `DisplayWidget` compatibility facade.
+Run focused/chunked gates as meaningful. Do not initiate installed/full build unless operator scheduled.
 
-Do **not** keep a production flag to return to QRhiWidget.
-
-Run focused + chunked tests. Do not initiate installed/compiled smoke unless explicitly scheduled by
-the operator.
-
-**Commit + push the cutover immediately when green.**
+Checkpoint/push cutover immediately when accepted.
 
 ---
 
-# 12. Phase I — immediate legacy removal
+# 13. Phase I — immediate legacy removal
 
-This is part of migration completion, not optional someday cleanup.
+Use `Future_Cleanup.md` as deletion ledger.
 
-Use `Future_Cleanup.md` as the deletion ledger.
-
-After production cutover is stable, remove in small proven batches:
+After cutover, remove in small proven batches:
 
 - QRhiWidget physical presenter;
 - `GLCompositorWidget` scheduling/presentation ownership;
-- old GL RHI surface helpers with no remaining caller;
+- old GL RHI surface helpers without callers;
 - compositor visualizer layer;
 - old GUI `present_tick` paths;
-- old QWidget runtime widget presentation classes once no settings/test owner requires them;
-- old QWidget CUSTOM edit-shell/grid presentation if fully replaced;
-- dead transition classes whose only purpose was `GLCompositorWidget`;
+- old QWidget runtime widget presentation classes after settings/test consumers move;
+- old QWidget CUSTOM edit shell/grid presentation;
+- dead transition controller classes whose only purpose was old compositor presentation;
 - obsolete effect/cache-busting presentation code;
-- legacy transition presenter/factory consumers;
-- per-feature pre-Quick presentation-setting migration helpers no longer required after H0;
+- legacy presenter/factory consumers;
+- one-off pre-Quick presentation migration helpers obsolete after H0;
 - migration-only scaffolding.
 
-Do not delete presentation-neutral authored shader/math assets merely because the old compositor also
-used them. Shared authored effect assets may survive when the Quick implementation is their real
-consumer.
+Do not delete presentation-neutral authored shaders/math merely because the old compositor also used them; shared assets survive when Quick is their real consumer.
 
-For every deletion batch:
+For every deletion batch: caller proof → focused tests → commit → push → audit → continue.
 
-```text
-rg/caller proof
--> focused tests
--> git commit
--> git push
--> continue
-```
-
-Do not leave both presenter architectures "for safety."
+Do not leave both presenter architectures “for safety.”
 
 ---
 
-# 13. Phase J — final tooling, build, lifecycle, performance and beyond-parity close
+# 14. Phase J — Defaults Foundry, final validation, documentation closure
 
 Read `Docs/QtQuick_Migration/06_Build_Tooling_Validation.md`.
 
-Compiled/full-build items below are operator scheduled after migration implementation is complete.
-Reaching this phase alone does not authorize an agent to initiate them.
+## J0 — retarget Defaults Foundry
 
-## J0 — retarget Defaults Foundry to the final Qt Quick settings/defaults schema
+Current tool: `tools/default_settings_editor.py`.
 
-Defaults Foundry is an essential project tool and must remain usable after the migration.
+It currently reads canonical `DEFAULT_SETTINGS` directly via AST/literal, recursively edits leaves, writes Normal base + MC differential, and regenerates snapshot/SST artifacts.
 
-Current tool:
+After H0/H1/I establish final schema:
 
-```text
-tools/default_settings_editor.py
-```
+- keep direct literal-reading if `core/settings/default_settings.py` remains canonical;
+- otherwise retarget explicitly;
+- remove deleted metadata such as Imgur;
+- add finite-value metadata for new canonical settings such as shadow direction;
+- remove retired compatibility-preservation behavior;
+- align import/filter rules with H0 durable-data policy;
+- regenerate default snapshots and Normal/MC SSTs;
+- update parity tests and `Docs/Defaults_Guide.md`;
+- keep the standalone Foundry QWidget UI unless a separate tooling decision changes it.
 
-It currently reads the canonical `DEFAULT_SETTINGS` Python literal directly using AST/literal
-inspection, derives the editable tree recursively, writes the canonical Normal base and MC
-differential, and regenerates snapshot/SST artifacts.
+## J1 — operator-scheduled final validation
 
-Do not accidentally strand it on pre-Quick schema assumptions.
-
-After H0/H1/I have made the final settings/defaults shape clear:
-
-- inspect whether `core/settings/default_settings.py` remains the canonical literal authority;
-- if it remains authoritative, preserve the useful direct literal-reading design and update the
-  Foundry for the final schema rather than rewriting its loader unnecessarily;
-- if canonical default authority moved for a justified reason, retarget the Foundry explicitly;
-- remove hard-coded option metadata for deleted settings/families such as Imgur;
-- add/update finite-value metadata for new canonical settings such as the eight-direction shadow
-  authority where appropriate;
-- remove Foundry behavior whose only purpose was preserving retired pre-Quick compatibility payloads;
-- make import filtering/preservation rules agree with the H0 durable-data policy and the final
-  current-schema reset/import contracts;
-- ensure new canonical settings appear in the recursive tree;
-- ensure the Foundry does not inspect, migrate, or rewrite installed user settings merely because
-  defaults are edited;
-- regenerate:
-  - defaults snapshot artifacts;
-  - Normal SST defaults;
-  - MC SST defaults;
-- update defaults parity tests and `Docs/Defaults_Guide.md`.
-
-The Foundry's standalone QWidget control UI does **not** need to be rewritten into Qt Quick merely
-because the screensaver runtime migrated. Its required migration is schema/tooling correctness unless
-a separate product/tooling decision explicitly chooses a UI rewrite.
-
-Gate:
-
-- Foundry loads the final canonical defaults without retired presentation debris;
-- Save and Regenerate is transactional;
-- MC remains a compact differential over Normal;
-- generated JSON/SST artifacts exactly match canonical defaults APIs;
-- two unchanged SST regeneration runs remain deterministic;
-- no credential/private installation data leaks into checked-in defaults artifacts;
-- Foundry can edit every intended current default leaf.
-
-**Checkpoint + push the Foundry retarget before final documentation closure.**
-
-## J1 — final validation
-
-Required, when operator scheduled:
+When explicitly scheduled, validate:
 
 - script RUN;
 - normal compiled `.scr`;
@@ -1333,48 +767,47 @@ Required, when operator scheduled:
 - monitor off/wake/topology recreation;
 - clean shutdown;
 - resource baseline;
-- PresentMon cadence check;
-- external heavy-load resilience check;
-- long-soak on final architecture.
+- PresentMon cadence where useful;
+- external heavy-load resilience;
+- long soak.
 
-Do not rerun the old manual worker heavy baseline.
+Do not rerun obsolete manual worker-heavy baselines merely out of habit.
 
-Beyond-parity acceptance should show at least:
+Beyond-parity closure should show no QWidget effect-cache shadow architecture, no per-widget accelerated surfaces, retained Quick widgets not rebuilding stable content every physical frame, clean render-thread ownership, true disabled-feature dormancy, and decomposition of overloaded old presentation modules.
 
-- no QWidget effect-cache shadow architecture;
-- fewer presentation-specific GUI callbacks than the old path;
-- no per-widget accelerated surfaces;
-- retained Quick widgets do not repaint/rebuild stable content every physical frame;
-- transition/visualizer renderer uses render-thread ownership cleanly;
-- disabled transition/widget families have no feature-specific runtime/resource ownership;
-- overloaded old presentation modules have been decomposed rather than renamed wholesale.
+## J2 — documentation closure
+
+Update current-authority docs to landed class/file names; make Quick transition/widget/visualizer authoring guides sole current implementation authority; update Defaults guide; remove current instructions that teach dead QWidget/QRhi/compositor owners.
+
+Preserve historical bug/evidence documents as history rather than rewriting them as current architecture.
 
 ---
 
-# 14. Documentation closure
+# 15. Current next work
 
-When migration lands:
+Normal implementation work is now **Phase D**.
 
-1. update `Spec.md`, `Index.md`, `Docs/Contracts.md`, architecture/guardrails to landed class/file
-   names;
-2. mark/remove completed migration decomposition docs according to
-   `Docs/Documentation_Maintenance.md`;
-3. retain P0 evidence;
-4. update `Future_Cleanup.md` to contain only genuinely deferred debt;
-5. ensure no current-authority doc calls QRhiWidget the production runtime owner;
-6. make Quick transition/widget/visualizer authoring guides the sole current implementation authority;
-7. update `Docs/Defaults_Guide.md` for the H0 settings epoch and final Defaults Foundry behavior;
-8. remove current-authority instructions that tell agents to preserve deleted pre-Quick presentation
-   keys/owners.
+Start by inspecting the exact current visualizer ownership/source before changing it, then execute:
 
-Migration is not complete while docs still teach agents to preserve dead presentation owners.
+```text
+D1 runtime/controller split
+-> checkpoint/push/audit
+D2 immutable latest-state bridge
+-> checkpoint/push/audit
+D3 Quick item/node + geometry/card foundation
+-> checkpoint/push/audit
+mode ports, with Bubble dedicated
+-> all-five-mode lifecycle/source audit
+-> Phase-D docs closure
+```
 
-Historical evidence remains historical evidence; do not rewrite old bug records as though they were
-authored under the new architecture.
+Do not wait for Phase-C eyes-on/hardware sign-off unless the Phase-D change directly depends on the unresolved evidence.
+
+Do not start E–J or `Future_Work.md` opportunistically while D is active.
 
 ---
 
-# 15. Cross-links
+# 16. Cross-links
 
 Technical decompositions:
 
@@ -1386,6 +819,23 @@ Technical decompositions:
 - `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`
 - `Docs/QtQuick_Migration/06_Build_Tooling_Validation.md`
 
+Durable routing/guardrails:
+
+- `Index.md`
+- `Spec.md`
+- `Docs/Contracts.md`
+- `Docs/Compositor_Architecture.md`
+- `Docs/Guardrails.md`
+- `Docs/Guardrails/Visualizer_Presentation.md`
+- `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
+
+Current transition/visualizer references:
+
+- `Docs/Transition_Change_Checklist.md`
+- `Docs/Harness_Index.md`
+- `Docs/TestSuite.md`
+- `Docs/Visualizer_Reference.md`
+
 Defaults/tooling:
 
 - `Docs/Defaults_Guide.md`
@@ -1393,12 +843,7 @@ Defaults/tooling:
 - `tools/regenerate_defaults_snapshot_artifacts.py`
 - `tools/regenerate_sst_defaults.py`
 
-Deletion ledger:
+Deletion/deferred scope:
 
 - `Future_Cleanup.md`
-
-Durable architecture/current-authority docs:
-
-- `Spec.md`
-- `Docs/Compositor_Architecture.md`
-- `Docs/Guardrails.md`
+- `Future_Work.md`
