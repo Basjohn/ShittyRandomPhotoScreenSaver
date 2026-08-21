@@ -372,7 +372,7 @@ Prefer these pushed/audited checkpoints:
 9. all-five-mode lifecycle/source/pause audit;
 10. Phase-D documentation closure.
 
-A successful checkpoint is committed, branch-reachable, pushed, and independently diff-audited. Connector-created blobs/trees that are not reachable from the branch are not checkpoints.
+A successful checkpoint is committed, pushed, and independently diff-audited.
 
 ## 20. Phase-D exit
 
