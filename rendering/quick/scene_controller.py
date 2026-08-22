@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QUrl, Signal, Qt
+from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlComponent, QQmlContext, QQmlEngine
 from PySide6.QtQuick import QQuickItem
+
+from core.settings.visualizer_mode_registry import VisualizerShellPolicy
+from widgets.spotify_visualizer.render_bridge import (
+    VisualizerRenderIdentity,
+    VisualizerSnapshotBridge,
+)
+from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
 
 from .bootstrap import quick_qml_root
 from .image_state import PresentationImage
 from .render import BackgroundRenderItem, RenderNodeTelemetry
 from .state import QuickSceneReadiness
 from .transitions.state import TransitionRun
+from .visualizer import VisualizerRenderItem, VisualizerRenderNodeTelemetry
 from .window import QuickDisplayWindow
 
 
@@ -98,6 +107,11 @@ class QuickSceneController(QObject):
         self._context: QQmlContext | None = None
         self._scene_root: QQuickItem | None = None
         self._background_item: BackgroundRenderItem | None = None
+        self._visualizer_loader: QQuickItem | None = None
+        self._visualizer_root: QQuickItem | None = None
+        self._visualizer_content_host: QQuickItem | None = None
+        self._visualizer_item: VisualizerRenderItem | None = None
+        self._visualizer_telemetry = VisualizerRenderNodeTelemetry()
         self._last_transition_run_id = 0
         self._readiness = QuickSceneReadiness(
             screen_index=window.screen_index,
@@ -114,6 +128,12 @@ class QuickSceneController(QObject):
         root.setParentItem(content)
         self._context = context
         self._scene_root = root
+        self._visualizer_loader = root.findChild(
+            QQuickItem,
+            "visualizerPresentationLoader",
+        )
+        if self._visualizer_loader is None:
+            raise RuntimeError("DisplayScene.qml has no visualizer presentation loader")
         self._background_item = BackgroundRenderItem(
             root,
             telemetry=self._telemetry,
@@ -159,6 +179,17 @@ class QuickSceneController(QObject):
         return self._telemetry
 
     @property
+    def visualizer_telemetry(self) -> VisualizerRenderNodeTelemetry:
+        return self._visualizer_telemetry
+
+    @property
+    def visualizer_item(self) -> VisualizerRenderItem:
+        item = self._visualizer_item
+        if item is None:
+            raise RuntimeError("visualizer presentation has not been activated")
+        return item
+
+    @property
     def readiness(self) -> QuickSceneReadiness:
         return self._readiness
 
@@ -200,12 +231,110 @@ class QuickSceneController(QObject):
         self.background_item.set_transition_run(run)
         return True
 
+    def set_visualizer_render_source(
+        self,
+        bridge: VisualizerSnapshotBridge,
+        identity: VisualizerRenderIdentity,
+    ) -> None:
+        """Bind one exact controller-owned activation to the Quick sync item."""
+
+        if not self._readiness.admission_open:
+            raise RuntimeError("Quick scene admission is closed")
+        self._ensure_visualizer_items().bind_render_source(bridge, identity)
+
+    def apply_visualizer_presentation(
+        self,
+        presentation: ResolvedVisualizerPresentation,
+        *,
+        active: bool = True,
+    ) -> None:
+        """Apply one immutable geometry/style record to shell, clip, and GL."""
+
+        if not self._readiness.admission_open:
+            raise RuntimeError("Quick scene admission is closed")
+        if not isinstance(presentation, ResolvedVisualizerPresentation):
+            raise TypeError("visualizer presentation must already be resolved")
+        item = self._ensure_visualizer_items()
+        loader = self._visualizer_loader
+        root = self._visualizer_root
+        if loader is None or root is None:
+            raise RuntimeError("visualizer presentation ownership is incomplete")
+
+        outer_x, outer_y, outer_width, outer_height = presentation.outer_rect
+        loader.setX(outer_x)
+        loader.setY(outer_y)
+        loader.setWidth(outer_width)
+        loader.setHeight(outer_height)
+        root.setX(0.0)
+        root.setY(0.0)
+        root.setWidth(outer_width)
+        root.setHeight(outer_height)
+        item.set_presentation(presentation)
+
+        style = presentation.shell_style
+        root.setOpacity(presentation.scene_fade)
+        root.setProperty(
+            "cardShellEnabled",
+            presentation.shell_policy is VisualizerShellPolicy.CARD,
+        )
+        root.setProperty(
+            "cardBackgroundColor",
+            self._color_from_style(
+                style.get("background_color", (16, 16, 16, 179))
+            ),
+        )
+        root.setProperty(
+            "cardBorderColor",
+            self._color_from_style(
+                style.get("border_color", (255, 255, 255, 230))
+            ),
+        )
+        root.setProperty("cardBorderWidth", presentation.border_width)
+        root.setProperty(
+            "cardCornerRadius",
+            float(style.get("corner_radius", 0.0)),
+        )
+        root.setProperty(
+            "cardShadowEnabled",
+            bool(style.get("shadow_enabled", False)),
+        )
+        root.setProperty(
+            "cardShadowColor",
+            self._color_from_style(
+                style.get("shadow_color", (0, 0, 0, 150))
+            ),
+        )
+        root.setProperty(
+            "cardShadowBlur",
+            float(style.get("shadow_blur", 0.0)),
+        )
+        shadow_offset = style.get("shadow_offset", (0.0, 0.0))
+        root.setProperty("cardShadowOffsetX", float(shadow_offset[0]))
+        root.setProperty("cardShadowOffsetY", float(shadow_offset[1]))
+        root.setProperty(
+            "cardShadowSpread",
+            float(style.get("shadow_spread", 0.0)),
+        )
+        root.setProperty("presentationActive", bool(active))
+
+    def set_visualizer_presentation_active(self, active: bool) -> None:
+        """Change retained presentation visibility without rebuilding it."""
+
+        if not self._readiness.admission_open:
+            raise RuntimeError("Quick scene admission is closed")
+        if self._visualizer_root is not None:
+            self._visualizer_root.setProperty("presentationActive", bool(active))
+
     def quiesce_for_retirement(self) -> None:
         """Close state admission; item deletion waits for legal invalidation."""
 
         if not self._readiness.admission_open:
             return
         self._publish_readiness(admission_open=False)
+        if self._visualizer_item is not None:
+            self._visualizer_item.clear_render_source()
+        if self._visualizer_root is not None:
+            self._visualizer_root.setProperty("presentationActive", False)
         if (
             not self._window.isVisible()
             and not self._window.isSceneGraphInitialized()
@@ -255,7 +384,65 @@ class QuickSceneController(QObject):
                 }
             ),
             "last_transition_run_id": self._last_transition_run_id,
+            "visualizer": {
+                "instantiated": self._visualizer_item is not None,
+                "render_identity": (
+                    None
+                    if self._visualizer_item is None
+                    or self._visualizer_item.render_identity is None
+                    else {
+                        "runtime_generation": (
+                            self._visualizer_item.render_identity.runtime_generation
+                        ),
+                        "engine_generation": (
+                            self._visualizer_item.render_identity.engine_generation
+                        ),
+                        "activation_id": (
+                            self._visualizer_item.render_identity.activation_id
+                        ),
+                        "mode_id": self._visualizer_item.render_identity.mode_id,
+                    }
+                ),
+                "telemetry": asdict(self._visualizer_telemetry.snapshot()),
+            },
         }
+
+    def _ensure_visualizer_items(self) -> VisualizerRenderItem:
+        if self._visualizer_item is not None:
+            return self._visualizer_item
+        loader = self._visualizer_loader
+        if loader is None:
+            raise RuntimeError("visualizer loader has retired")
+        loader.setProperty("active", True)
+        root = loader.property("item")
+        if not isinstance(root, QQuickItem):
+            raise RuntimeError("VisualizerPresentation.qml did not create a QQuickItem")
+        QQmlEngine.setObjectOwnership(
+            root,
+            QQmlEngine.ObjectOwnership.CppOwnership,
+        )
+        content_host = root.findChild(QQuickItem, "visualizerContentHost")
+        if content_host is None:
+            raise RuntimeError("visualizer presentation has no content host")
+        item = VisualizerRenderItem(
+            content_host,
+            telemetry=self._visualizer_telemetry,
+        )
+        self._visualizer_root = root
+        self._visualizer_content_host = content_host
+        self._visualizer_item = item
+        return item
+
+    @staticmethod
+    def _color_from_style(value: object) -> QColor:
+        try:
+            red, green, blue, alpha = value
+            color = QColor(int(red), int(green), int(blue), int(alpha))
+        except (TypeError, ValueError):
+            color = QColor(value)
+        if not color.isValid():
+            raise ValueError(f"invalid visualizer shell color: {value!r}")
+        return color
 
     def _sync_root_width(self) -> None:
         if self._scene_root is not None:
@@ -306,14 +493,24 @@ class QuickSceneController(QObject):
     def _retire_qml_objects(self) -> None:
         if self._readiness.qml_objects_retired:
             return
-        root, self._scene_root = self._scene_root, None
-        self._background_item = None
-        context, self._context = self._context, None
+        root = self._scene_root
+        context = self._context
+        # Detach and queue the C++-owned root while every Python child wrapper
+        # is still retained. Dropping a Python-created child first can trigger
+        # a PySide ownership cascade before the outer QML wrapper is detached.
         if root is not None:
             root.setParentItem(None)
+            root.setParent(None)
             root.deleteLater()
         if context is not None:
             context.deleteLater()
+        self._scene_root = None
+        self._background_item = None
+        self._visualizer_item = None
+        self._visualizer_content_host = None
+        self._visualizer_root = None
+        self._visualizer_loader = None
+        self._context = None
         self._publish_readiness(
             qml_root_created=False,
             qml_objects_retired=True,

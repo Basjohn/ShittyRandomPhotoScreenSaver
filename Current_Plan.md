@@ -1,6 +1,6 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-21
+Last updated: 2026-08-22
 
 ## Source / reviewed checkpoints
 
@@ -801,7 +801,7 @@ Checkpoint/push/audit the bridge separately.
 
 Use one sub-rect custom Quick item/QSGRenderNode inside the display QQuickWindow.
 
-Preferred carded scene shape:
+Selected carded scene shape:
 
 ```text
 VisualizerPresentationRoot  (one fade/visibility owner)
@@ -810,9 +810,9 @@ VisualizerPresentationRoot  (one fade/visibility owner)
     +-- retained card background    [CARD only]
     +-- visualizer content item
     |       |
-    |       +-- QSG clip node
+    |       +-- QSGRenderNode / direct OpenGL
     |               |
-    |               +-- QSGRenderNode / direct OpenGL
+    |               +-- one local SDF/stencil clip host
     +-- retained card frame/border  [CARD only, above content]
 ```
 
@@ -827,27 +827,23 @@ card fill and below the visible border without bleeding through rounded corners.
 That **visual contract remains necessary for carded modes**. The old hand-written stencil mechanism
 does not automatically remain the best owner.
 
-Preferred Quick implementation:
+The exact pinned PySide 6.9.1 proof is complete. The scene-graph clip-node handoff did not provide
+usable accumulated clip state to the Python render node: rounded cases exposed stencil state whose
+framebuffer contents did not match, while rectangular cases could expose an invalid sentinel scissor.
+Do not reopen or retain that failed path.
 
-- create a scene-graph `QSGClipNode` around the visualizer render node;
-- `CARD_INTERIOR` uses rounded clip geometry matching the actual inner edge of retained Quick card
-  chrome;
-- `VIEWPORT_RECT` uses a rectangular clip and marks it rectangular so Qt may use scissoring;
-- inside `QSGRenderNode.render()`, respect the incoming `RenderState` scissor/stencil clip information;
-- do not clear or repurpose Qt's clip stencil contents as though the render node owned the whole
-  framebuffer;
-- restore every direct-GL state the render node changes.
+The selected single Quick implementation is one render-node-local SDF/stencil clip host inside the
+same `QQuickWindow`/`QSGRenderNode` architecture:
 
-A rounded `QSGClipNode` is normally stencil-backed by Qt's scene graph. This keeps clip ownership
-composable with the surrounding Quick scene and avoids another private window-space mask authority.
-
-Because the project is pinned to PySide, prove the exact `QSGClipNode -> QSGRenderNode` path in a
-focused D3 runtime test before depending on it broadly.
-
-If pinned PySide 6.9.1 proves the scene-graph clip-node path unusable or incorrect, a render-node-local
-rounded SDF/stencil mask is an allowed **single-path implementation fallback** inside the same
-QQuickWindow/QSGRenderNode architecture. It must still derive from canonical geometry, respect any
-incoming scene clip, and restore state.
+- `CARD_INTERIOR` uses rounded geometry matching the actual inner edge of retained Quick card chrome;
+- `VIEWPORT_RECT` uses the same host with zero corner radius;
+- shell, clip and custom GL derive from one immutable canonical geometry record and render-target
+  viewport;
+- the host nests above any incoming `RenderState` scissor/stencil value without clearing Qt's clip
+  contents;
+- the temporary stencil contents and every touched direct-GL state are restored before returning to
+  Qt;
+- there is no second selectable scene-graph clip implementation.
 
 Never solve clipping by shrinking the visualizer render rect or scaling the authored content smaller.
 Historical R-21 proved that changes mode geometry/amplitude/bar sizing rather than clipping pixels.
@@ -1656,21 +1652,20 @@ architecture.
 
 # 15. Current next work
 
-Normal implementation work is now **Phase D**.
+Normal implementation work is now **Phase D**. D1, D2 and the D3/D4 item, shell, clip and canonical
+geometry foundation are structurally landed; do not reopen them without contradictory evidence.
 
-Start by inspecting exact current visualizer ownership/source before changing it, then execute:
+The next admitted slice is Spectrum:
 
-```text
-D1 runtime/controller split
--> checkpoint/push/audit
-D2 immutable latest-state bridge
--> checkpoint/push/audit
-D3 Quick item/node + clip/shell + canonical baseline geometry foundation
--> checkpoint/push/audit
-mode ports, with Bubble dedicated
--> all-five-mode lifecycle/source audit
--> Phase-D docs closure
-```
+- [ ] port Spectrum bars, peaks, ghosting, paused idle visibility and source-freshness behavior through
+  the immutable Quick render boundary;
+- [ ] prove canonical aspect at scale 1.0 and another uniform scale, plus wide/tall viewport seams
+  without stretching authored pixels;
+- [ ] run only the focused Spectrum/visualizer script and test gates;
+- [ ] inspect diff/status, commit the coherent Spectrum slice, and push immediately.
+
+Then continue in the fixed checkpoint order: Oscilloscope, Sine, Bubble + BTF, DevCurve, all-five-mode
+lifecycle/source/pause/aspect closure, and Phase-D documentation closure.
 
 If the operator instead explicitly says **continue from Phase C tests**, execute Section 7.5 test-only
 hardening first and return to D afterward.

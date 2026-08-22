@@ -223,7 +223,7 @@ window and no QPainter fallback.
 
 The render node owns its context-local GL programs/resources.
 
-Preferred visual layering:
+Selected visual layering:
 
 ```text
 VisualizerPresentationRoot
@@ -232,9 +232,9 @@ VisualizerPresentationRoot
     +-- card background      [CARD only]
     +-- content Quick item
     |       |
-    |       +-- clip node
+    |       +-- QSGRenderNode / direct GL
     |               |
-    |               +-- QSGRenderNode / direct GL
+    |               +-- one local SDF/stencil clip host
     +-- frame/border         [CARD only, above content]
 ```
 
@@ -270,48 +270,29 @@ That remains true in Quick.
 A plain `QQuickItem.clip = true` is only a rectangular item-bounds clip. It does not by itself express
 the rounded inner card path.
 
-### 7.2 Preferred Quick implementation: scene-graph clip node
+### 7.2 Scene-graph clip proof result
 
-Prefer a `QSGClipNode` as the parent of the visualizer `QSGRenderNode`.
+The exact pinned PySide 6.9.1 `QSGClipNode -> QSGRenderNode` proof is complete and failed its runtime
+bar. Rounded cases reported stencil state whose target-buffer contents did not match, while
+rectangular cases could report an invalid sentinel scissor. A live Python render node therefore
+could not safely consume that clip handoff.
 
-For `VIEWPORT_RECT`:
+Do not retain or retry that path alongside the selected implementation.
 
-- use a rectangular clip;
-- mark it rectangular so Qt may resolve it to scissoring.
+### 7.3 Selected render-node-local clip
 
-For `CARD_INTERIOR`:
-
-- provide rounded-rectangle clip geometry representing the actual inner card path;
-- allow Qt Quick's scene graph to own/accumulate the clip, normally through stencil where required.
-
-Inside `QSGRenderNode.render()`:
-
-- honor `RenderState.scissorEnabled()/scissorRect()`;
-- honor `RenderState.stencilEnabled()/stencilValue()`;
-- do not assume the stencil buffer is blank;
-- do not clear/repurpose scene-graph clip contents;
-- restore direct OpenGL state touched by the renderer.
-
-This makes the surrounding Quick scene the clip owner instead of preserving another private
-window-space stencil authority.
-
-`QSGClipNode` is exposed in PySide and arbitrary clip geometry is supported, but the exact pinned
-PySide 6.9.1 path must receive one focused real Quick/OpenGL proof before all modes depend on it.
-
-### 7.3 Allowed fallback if the binding proof fails
-
-If the pinned Python binding makes `QSGClipNode -> QSGRenderNode` unusable or incorrect, keep the same
-policy/geometry architecture and use one render-node-local rounded SDF/stencil implementation.
-
-That fallback:
+Keep the same policy/geometry architecture and use one render-node-local rounded SDF/stencil host. It:
 
 - stays inside the same QQuickWindow/QSGRenderNode architecture;
 - derives from the canonical content geometry;
+- uses the exact render-target viewport shared by the mode draw;
 - respects any incoming scene clip;
-- restores stencil/scissor/direct-GL state;
+- nests temporary stencil contents without clearing the framebuffer;
+- restores stencil contents plus scissor/direct-GL state;
 - never shrinks or anisotropically scales authored content to simulate clipping.
 
-Do not keep both clipping implementations as permanent selectable paths.
+`VIEWPORT_RECT` uses the same host with zero radius. Do not keep both clipping implementations as
+permanent selectable paths.
 
 ### 7.4 Do not copy the old mask constants
 

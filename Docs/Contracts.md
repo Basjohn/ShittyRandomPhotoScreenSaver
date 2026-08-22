@@ -63,7 +63,7 @@ See `Docs/Transition_Change_Checklist.md` and
 | Visualizer presentation root | display Quick scene | one fade/visibility/lifecycle owner for carded and frameless modes |
 | Card shell/chrome | retained Quick items when `shell_policy=CARD` | background/shadow/frame are presentation shell, not mode-render logic |
 | Visualizer content pixels | display visualizer `QQuickItem` + `QSGRenderNode` | inline custom GL inside sole display window |
-| Content clip | preferred: scene-graph `QSGClipNode`; custom render node honors incoming `RenderState` scissor/stencil | `CARD_INTERIOR` rounded clip for current modes; `VIEWPORT_RECT` for explicit frameless modes |
+| Content clip | one render-node-local SDF/stencil host honoring incoming `RenderState` scissor/stencil | `CARD_INTERIOR` rounded clip for current modes; `VIEWPORT_RECT` for explicit frameless modes |
 | Visualizer geometry | one immutable/presentation-neutral committed geometry authority | baseline viewport/aspect + uniform scale + viewport extent + DPR feed shell, clip, GL and CUSTOM |
 | Bubble spatial bounds | logical runtime receives committed viewport metrics as configuration | viewport geometry is not another clock; BTF remains binding |
 | Bubble temporal fidelity | shared chain + Bubble authored state | BTF binding |
@@ -109,13 +109,13 @@ inside the rounded inner card path
 
 Do not shrink authored render geometry to simulate clipping.
 
-Preferred destination ownership is a Quick scene-graph clip node. The custom `QSGRenderNode` must
-respect supplied scissor/stencil state and must not clear or repurpose Qt's accumulated clip stencil
-as if it owned the entire framebuffer.
+The exact pinned PySide 6.9.1 scene-graph clip-node proof failed because the Python render node did not
+receive usable clip state matching the target framebuffer. The selected destination is therefore one
+render-node-local SDF/stencil host inside the same `QQuickWindow`/`QSGRenderNode` architecture.
 
-If the pinned PySide binding proves that scene-graph clip composition unusable, one
-render-node-local rounded mask is allowed as the single implementation fallback inside the same
-QQuickWindow/QSGRenderNode architecture. Do not preserve both as selectable production paths.
+It derives from canonical content geometry, honors supplied scissor/stencil state, never clears or
+repurposes Qt's accumulated clip contents, and restores its temporary stencil contents plus touched
+direct-GL state. Do not preserve the failed scene-graph clip path as a selectable alternative.
 
 The Quick inner clip derives from actual retained Quick shell/border geometry. Historical centred
 QPainter mask constants are not destination contract.
