@@ -1788,6 +1788,184 @@ def get_widget_position_option_labels(widget_id: str) -> tuple[str, ...]:
     return descriptor.position_option_labels
 
 
+#
+# Widget family capability catalog (presentation-neutral)
+# ------------------------------------------------------
+# Phase E introduces an application-level *capability activation* authority that
+# is distinct from a widget instance's ordinary ``enabled`` checkbox. Settings
+# (E2) lists one activation row per canonical widget *family*, and the runtime
+# (E1 ``WidgetRuntimeManager``) resolves families generically. Both need one
+# cheap, presentation-neutral catalog that maps a stable ``family_id`` to its
+# member runtime widget ids without importing any QWidget/Quick/provider code.
+#
+# This catalog is the single source of truth for family membership. Runtime
+# widget descriptors keep owning per-instance behaviour; family membership is
+# derived here rather than duplicated onto every runtime descriptor.
+#
+# The Spotify visualizer is deliberately NOT a widget-family capability even
+# though some of its settings currently live in WidgetsTab; Phase D / final
+# descriptor ownership decides that boundary (see
+# ``Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`` §5.1).
+#
+
+
+@dataclass(frozen=True)
+class WidgetFamilyDescriptor:
+    """Canonical application-level capability descriptor for a widget family."""
+
+    family_id: str
+    label: str
+    member_widget_ids: tuple[str, ...]
+    settings_section_id: str
+    dev_feature_env: str | None = None
+    dev_feature_gate: str | None = None
+
+    def is_enabled_in_environment(self) -> bool:
+        if self.dev_feature_gate:
+            return is_named_gate_enabled(self.dev_feature_gate)
+        if not self.dev_feature_env:
+            return True
+        return os.getenv(self.dev_feature_env, "false").lower() == "true"
+
+
+WIDGET_FAMILY_DESCRIPTORS: tuple[WidgetFamilyDescriptor, ...] = (
+    WidgetFamilyDescriptor(
+        family_id="clocks",
+        label="Clocks",
+        member_widget_ids=("clock", "clock2", "clock3"),
+        settings_section_id="clock",
+    ),
+    WidgetFamilyDescriptor(
+        family_id="weather",
+        label="Weather",
+        member_widget_ids=("weather",),
+        settings_section_id="weather",
+    ),
+    WidgetFamilyDescriptor(
+        family_id="media",
+        label="Media",
+        member_widget_ids=("media", "spotify_volume", "mute_button"),
+        settings_section_id="media",
+    ),
+    WidgetFamilyDescriptor(
+        family_id="reddit",
+        label="Reddit",
+        member_widget_ids=("reddit", "reddit2"),
+        settings_section_id="reddit",
+    ),
+    WidgetFamilyDescriptor(
+        family_id="gmail",
+        label="Gmail",
+        member_widget_ids=("gmail",),
+        settings_section_id="gmail",
+    ),
+    WidgetFamilyDescriptor(
+        family_id="imgur",
+        label="Imgur",
+        member_widget_ids=("imgur",),
+        settings_section_id="imgur",
+        dev_feature_env="SRPSS_ENABLE_DEV",
+    ),
+    WidgetFamilyDescriptor(
+        family_id="steam",
+        label="Steam",
+        member_widget_ids=(
+            "steam_progress",
+            "achievement_pulse",
+            "abandonment_issues",
+            "friend_pulse",
+        ),
+        settings_section_id="steam",
+    ),
+)
+
+
+def get_widget_family_descriptors() -> tuple[WidgetFamilyDescriptor, ...]:
+    """Return canonical widget family capabilities available in this environment.
+
+    A family is available when it is environment-enabled *and* still owns at
+    least one active runtime member. This keeps family availability consistent
+    with per-member dev gating without a second gate authority (e.g. Imgur and
+    the ``--devsteam``-only Steam members disappear automatically).
+    """
+
+    return _get_active_widget_family_descriptors(_descriptor_env_signature())
+
+
+@lru_cache(maxsize=1)
+def _get_active_widget_family_descriptors(
+    _env_signature: tuple[tuple[str, str | None], ...],
+) -> tuple[WidgetFamilyDescriptor, ...]:
+    active_widget_ids = {
+        descriptor.widget_id for descriptor in get_widget_runtime_descriptors()
+    }
+    families: list[WidgetFamilyDescriptor] = []
+    for family in WIDGET_FAMILY_DESCRIPTORS:
+        if not family.is_enabled_in_environment():
+            continue
+        if not any(wid in active_widget_ids for wid in family.member_widget_ids):
+            continue
+        families.append(family)
+    return tuple(families)
+
+
+def get_widget_family_descriptor(family_id: str) -> WidgetFamilyDescriptor | None:
+    """Return one widget family capability descriptor by stable family id."""
+
+    if not isinstance(family_id, str) or not family_id:
+        return None
+    return _get_widget_family_descriptor_map(_descriptor_env_signature()).get(family_id)
+
+
+@lru_cache(maxsize=1)
+def _get_widget_family_descriptor_map(
+    _env_signature: tuple[tuple[str, str | None], ...],
+) -> dict[str, WidgetFamilyDescriptor]:
+    return {
+        family.family_id: family
+        for family in get_widget_family_descriptors()
+    }
+
+
+def get_family_id_for_widget(widget_id: str) -> str | None:
+    """Return the stable family id that owns a runtime widget id, if any.
+
+    The visualizer and any other widget not assigned to a capability family
+    return ``None``.
+    """
+
+    if not isinstance(widget_id, str) or not widget_id:
+        return None
+    return _get_widget_id_to_family_map(_descriptor_env_signature()).get(widget_id)
+
+
+@lru_cache(maxsize=1)
+def _get_widget_id_to_family_map(
+    _env_signature: tuple[tuple[str, str | None], ...],
+) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for family in get_widget_family_descriptors():
+        for widget_id in family.member_widget_ids:
+            mapping[widget_id] = family.family_id
+    return mapping
+
+
+def get_active_member_widget_ids(family_id: str) -> tuple[str, ...]:
+    """Return the family's member widget ids that are active in this environment."""
+
+    family = get_widget_family_descriptor(family_id)
+    if family is None:
+        return ()
+    active_widget_ids = {
+        descriptor.widget_id for descriptor in get_widget_runtime_descriptors()
+    }
+    return tuple(
+        widget_id
+        for widget_id in family.member_widget_ids
+        if widget_id in active_widget_ids
+    )
+
+
 def has_saved_custom_layout_for_widget(
     widget_id: str,
     widgets_config: Mapping[str, Any] | None,
