@@ -86,7 +86,14 @@ class VisualizerRuntimeController:
 
     @runtime_generation.setter
     def runtime_generation(self, value: int | None) -> None:
-        self._runtime_generation = coerce_identity(value)
+        generation = coerce_identity(value)
+        with self._lock:
+            runtime = self._logical_runtime
+            if runtime is not None and generation != self._runtime_generation:
+                raise RuntimeError(
+                    "cannot retarget a generation-scoped visualizer runtime"
+                )
+            self._runtime_generation = generation
 
     @property
     def bar_count(self) -> int:
@@ -346,7 +353,16 @@ class VisualizerRuntimeController:
             self._logical_present_pending = False
             return True
 
-        joined = bool(runtime.stop())
+        try:
+            joined = bool(runtime.stop())
+        except Exception:
+            # A failed stop is still a closed publication boundary. Retain the
+            # runtime object as the unresolved destruction owner, but never
+            # leave a stale frame or GUI admission request live behind it.
+            with self._lock:
+                self._logical_mailbox.clear()
+                self._logical_present_pending = False
+            raise
         with self._lock:
             if joined and self._logical_runtime is runtime:
                 self._logical_runtime = None

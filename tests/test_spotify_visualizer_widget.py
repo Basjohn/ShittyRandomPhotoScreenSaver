@@ -8909,17 +8909,11 @@ def test_visualizer_widget_initializes_fresh_generation_state(qt_app, qtbot):
     assert widget._last_engine_activation_seen == -1
 
 
-@pytest.mark.qt
-def test_tick_pipeline_backfills_missing_fresh_generation_state(qt_app, qtbot):
-    widget = SpotifyVisualizerWidget(parent=None, bar_count=8)
-    qtbot.addWidget(widget)
-
-    delattr(widget, "_waiting_for_fresh_frame")
-    delattr(widget, "_waiting_for_fresh_engine_frame")
-    delattr(widget, "_pending_engine_generation")
-    delattr(widget, "_last_engine_generation_seen")
-    delattr(widget, "_pending_engine_activation_id")
-    delattr(widget, "_last_engine_activation_seen")
+def test_tick_pipeline_backfills_missing_fresh_generation_state():
+    # The controller-backed production widget always owns these identities.
+    # Keep the compatibility path covered with a genuinely older/fake owner
+    # instead of deleting explicit controller properties from the live class.
+    widget = SimpleNamespace()
 
     tick_pipeline._ensure_fresh_generation_state(widget)
 

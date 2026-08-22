@@ -3,6 +3,9 @@ from __future__ import annotations
 import ast
 import inspect
 import threading
+from types import SimpleNamespace
+
+import pytest
 
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
@@ -123,6 +126,100 @@ def test_legacy_adapter_has_explicit_access_to_the_single_controller_state() -> 
     assert adapter._pending_engine_activation_id == 0
 
 
+@pytest.mark.qt
+def test_real_widget_activation_playback_and_clock_chain_use_controller(
+    qt_app,
+    qtbot,
+    monkeypatch,
+) -> None:
+    from PySide6.QtWidgets import QWidget
+
+    from core.settings.models import SpotifyVisualizerSettings
+    from core.settings.visualizer_presets import VisualizerActivationPayload
+    from widgets.spotify_visualizer import tick_helpers, tick_pipeline
+    import widgets.spotify_visualizer_widget as visualizer_module
+
+    playback_updates: list[bool] = []
+    engine = SimpleNamespace(
+        _bar_count=8,
+        _audio_buffer=object(),
+        _audio_worker=SimpleNamespace(),
+        _bars_result_buffer=object(),
+        get_generation_id=lambda: 0,
+        get_activation_id=lambda: 0,
+        set_playback_state=lambda playing: playback_updates.append(bool(playing)),
+        release=lambda: None,
+    )
+    monkeypatch.setattr(
+        visualizer_module,
+        "get_shared_spotify_beat_engine",
+        lambda _count: engine,
+    )
+
+    parent = QWidget()
+    parent._runtime_generation = 0
+    qtbot.addWidget(parent)
+    widget = visualizer_module.SpotifyVisualizerWidget(
+        parent=parent,
+        bar_count=8,
+        initial_mode="spectrum",
+    )
+
+    monkeypatch.setattr(
+        "rendering.spotify_widget_creators.apply_spotify_vis_model_config",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        widget,
+        "_apply_technical_config_for_mode",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(widget, "_replay_engine_config", lambda _engine: None)
+    monkeypatch.setattr(widget, "_apply_pending_mode_transition_layout", lambda: None)
+    monkeypatch.setattr(widget, "_trigger_wake", lambda **_kwargs: None)
+    monkeypatch.setattr(widget, "_reset_latency_diagnostics", lambda: None)
+    monkeypatch.setattr(widget, "sync_visibility_with_anchor", lambda: None)
+
+    model = SpotifyVisualizerSettings(mode="spectrum", bar_count=8)
+    payload = VisualizerActivationPayload(
+        mode="spectrum",
+        preset_index=0,
+        is_custom=False,
+        preset_name="Preset 1",
+        preset_path="spectrum/preset_1.json",
+        resolved_config={"mode": "spectrum", "spectrum_bar_count": 8},
+    )
+    widget.apply_resolved_activation_payload(model, payload, reason="d1_contract")
+
+    controller = widget.runtime_controller
+    assert controller.engine is engine
+    assert controller.mode_id == "spectrum"
+    assert controller.settings_model.mode == "spectrum"
+    assert controller.settings_model is not model
+    assert controller.resolved_activation == payload
+
+    widget.handle_media_update({"state": "playing"})
+    assert controller.playing is True
+    widget.handle_media_update({"state": "paused"})
+    assert controller.playing is False
+    assert playback_updates[-2:] == [True, False]
+
+    stepped = threading.Event()
+    monkeypatch.setattr(tick_pipeline, "logical_tick", lambda _owner: stepped.set())
+    widget._enabled = True
+    widget._thread_manager = object()
+    tick_helpers.ensure_tick_source(widget)
+    runtime = controller.logical_runtime
+    assert runtime is not None
+    assert widget._logical_runtime is runtime
+    assert stepped.wait(0.5)
+
+    tick_helpers.stop_tick_source(widget)
+    assert controller.logical_runtime is None
+    widget._enabled = False
+    widget.cleanup()
+
+
 def test_tick_source_uses_controller_as_the_sole_logical_runtime_owner(
     monkeypatch,
 ) -> None:
@@ -174,6 +271,45 @@ def test_failed_logical_join_retains_runtime_ownership_and_clears_admission() ->
     assert controller.logical_runtime is runtime
     assert controller.logical_mailbox.take() is None
     assert controller.logical_present_pending is False
+
+
+def test_exception_during_logical_stop_closes_admission_and_retains_owner() -> None:
+    class _ExplodingRuntime:
+        def is_running(self) -> bool:
+            return True
+
+        def stop(self) -> bool:
+            raise OSError("join failed")
+
+    controller = _controller()
+    runtime = _ExplodingRuntime()
+    controller.adopt_logical_runtime(runtime)  # type: ignore[arg-type]
+    controller.logical_mailbox.publish("stale", generation=0)
+    controller.logical_present_pending = True
+
+    with pytest.raises(OSError, match="join failed"):
+        controller.stop_logical_runtime()
+
+    assert controller.logical_runtime is runtime
+    assert controller.logical_mailbox.take() is None
+    assert controller.logical_present_pending is False
+
+
+def test_running_generation_scoped_runtime_cannot_be_retargeted() -> None:
+    class _LiveRuntime:
+        def is_running(self) -> bool:
+            return True
+
+    controller = _controller(generation=0)
+    runtime = _LiveRuntime()
+    controller.adopt_logical_runtime(runtime)  # type: ignore[arg-type]
+
+    controller.runtime_generation = 0
+    with pytest.raises(RuntimeError, match="generation-scoped"):
+        controller.runtime_generation = 1
+
+    assert controller.runtime_generation == 0
+    assert controller.logical_runtime is runtime
 
 
 def test_controller_mailbox_remains_single_slot_and_generation_fenced() -> None:
