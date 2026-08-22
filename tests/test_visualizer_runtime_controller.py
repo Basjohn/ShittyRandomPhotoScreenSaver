@@ -317,6 +317,28 @@ def test_production_stop_helper_propagates_an_unresolved_stop_exception() -> Non
     assert controller.logical_present_pending is False
 
 
+def test_production_stop_helper_blocks_teardown_after_join_timeout() -> None:
+    from widgets.spotify_visualizer import tick_helpers
+
+    class _UnjoinedRuntime:
+        def is_running(self) -> bool:
+            return True
+
+        def stop(self) -> bool:
+            return False
+
+    controller = _controller()
+    runtime = _UnjoinedRuntime()
+    controller.adopt_logical_runtime(runtime)  # type: ignore[arg-type]
+    adapter = _LegacyAdapterProbe(controller)
+
+    with pytest.raises(RuntimeError, match="join barrier"):
+        tick_helpers.stop_tick_source(adapter)
+
+    assert controller.logical_runtime is runtime
+    assert controller.logical_present_pending is False
+
+
 def test_running_generation_scoped_runtime_cannot_be_retargeted() -> None:
     class _LiveRuntime:
         def is_running(self) -> bool:

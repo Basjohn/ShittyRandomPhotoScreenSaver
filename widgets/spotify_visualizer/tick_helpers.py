@@ -207,16 +207,19 @@ def stop_tick_source(widget: Any) -> None:
     if controller is not None:
         try:
             joined = controller.stop_logical_runtime()
-            if not joined:
-                logger.error(
-                    "[SPOTIFY_VIS] Logical runtime remains owned after failed join"
-                )
         except Exception:
             logger.error(
                 "[SPOTIFY_VIS] Logical runtime stop raised; teardown is blocked",
                 exc_info=True,
             )
             raise
+        if not joined:
+            logger.error(
+                "[SPOTIFY_VIS] Logical runtime remains owned after failed join"
+            )
+            raise RuntimeError(
+                "visualizer logical runtime did not cross its join barrier"
+            )
     else:
         runtime = getattr(widget, "_logical_runtime", None)
         if runtime is not None:
