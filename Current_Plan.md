@@ -134,6 +134,8 @@ Do not add or preserve as final architecture:
 - a second accelerated visualizer/transition window;
 - QRhiWidget fallback when Quick rendering fails;
 - transition-by-transition fallback to the old compositor;
+- a supported software-only/CPU presentation mode or GL capability-demotion ladder used as runtime
+  compatibility fallback;
 - screenshot-to-texture QWidget wrappers as final widgets;
 - duplicated legacy and Quick widget presentation pipelines after cutover.
 
@@ -258,18 +260,19 @@ environment appropriate to the claim.
 
 Repository state outranks stale orientation prose.
 
-## 2.4 Documentation handoff / pack rule
+## 2.4 Documentation handoff / replacement-file rule
 
-When durable migration guidance is materially changed outside the real local worktree, the reviewer
-must return:
+When durable migration guidance is materially changed outside the real local worktree, return complete
+replacement copies of every affected repository document. Include a refreshed stand-alone
+reorientation/handoff only when it is needed to preserve migration continuity.
 
-- complete replacement copies of every affected repository document;
-- a refreshed stand-alone reorientation/handoff document;
-- preferably one ZIP containing the whole pack;
-- a manifest naming intended repository paths.
+When several replacement files are easier to hand over as one archive, a ZIP may preserve their
+repository-relative paths. Do **not** generate a manifest, checksum, inventory, index/helper file, or
+other packaging debris unless the operator explicitly asks for it. The replacement filenames and
+repository-relative paths should make placement self-evident.
 
 A chat explanation, partial snippet, or claim that a remote document was updated is not a substitute
-for the pack.
+for the required complete replacement file(s).
 
 ---
 
@@ -439,8 +442,8 @@ All 12 canonical production transitions have Quick renderers:
 
 No Quick renderer depends on `GLCompositorWidget`.
 
-Disabled transitions remain catalog-visible as appropriate while implementation/shader/resource
-ownership stays dormant.
+Canonical transitions remain catalog-visible as appropriate while application-level deactivation keeps
+implementation/shader/resource ownership dormant.
 
 ## 7.3 Critical preserved contracts
 
@@ -1236,6 +1239,23 @@ saved random-pool membership
 
 Random mode must not silently run with an empty effective pool. Prevent/resolve that state explicitly.
 
+The landed canonical normalization authority, `normalize_transition_capability_state(...)`, already
+owns the malformed persisted-state repairs:
+
+- zero activated transitions -> explicitly reactivate canonical recovery transition `Crossfade` in the
+  settings state and persist that repair;
+- Random enabled with an empty `activated ∩ saved-pool` set -> turn Random off and persist a
+  deterministic activated manual selection while preserving saved pool membership.
+
+Those are explicit settings-state normalization/recovery rules, not permission for a renderer/factory
+to run a deactivated implementation as a hidden fallback.
+
+E2 also removes the historical dual Random-mode authority. Once E2 cuts over,
+`transitions.random_always` / `Use Random Transitions` is the one live Random-mode authority and
+`transitions.type` stores a concrete manual transition selection. A legacy persisted `type="Random"`
+must be normalized into that shape without losing pool preferences or the remembered concrete manual
+selection; runtime and normalization may not disagree about whether Random is active.
+
 When `Use Random Transitions` is off, the selected transition pill is the manual transition, preserving
 the old dropdown's practical selection behavior.
 
@@ -1243,7 +1263,7 @@ When random mode is on, selecting another transition pill changes **editing focu
 the manual selection for later, but does not implicitly disable random mode.
 
 Deactivating the currently selected manual transition must choose/persist a deterministic activated
-fallback; it must not silently reactivate the disabled transition.
+replacement selection; it must not silently reactivate or run the transition the operator deactivated.
 
 Deactivation may preserve that transition's saved random-pool preference so reactivation can restore
 the user's prior configuration, while the effective pool always filters by activation.
@@ -1283,16 +1303,53 @@ Prove:
 - reactivation restores previous settings;
 - Widget `Enable All` / `Disable All` affect activation only;
 - per-widget internal `enabled` values survive family deactivation/reactivation;
-- deactivated widget family owns no exclusive provider/model/timer/process/Quick resources;
-- shared services stay alive only while another activated family needs them;
+- owners already migrated behind the activation boundary retire deactivated-family exclusive work;
+- broader provider/model/timer/process dormancy and last-consumer shared-service lifetime remain E1
+  ownership gates before Phase F, not something the E2 UI may fake by merely hiding a page;
 - transition activation removes implementation from effective selection and keeps renderer dormant;
 - random pool uses `activated ∩ pool-member`;
 - random mode cannot remain valid with an empty effective pool;
 - manual transition selection remains deterministic when its capability is deactivated;
+- direct normalization tests prove all-false activation explicitly repairs/persists Crossfade and empty
+  effective Random pool disables Random while preserving pool preferences;
+- legacy `type="Random"` is normalized to the one E2 Random authority plus a concrete manual type;
+- a pre-resolved/stale `transitions.random_choice` is revalidated at final factory admission and cannot
+  run after that transition is deactivated or becomes hardware-inadmissible;
+- engine Random selection, factory Random selection and C-key cycling never execute a literal/deactivated
+  `Crossfade` substitute when no valid candidate remains;
 - no lazy-save hydration regression;
 - Settings recreation correctly rebuilds only activated navigation/pages.
 
-Checkpoint/push/audit E2 before Phase F family migration relies on it.
+### E2.6 Open transition-admission debt — blocks E2 exit
+
+Exact pushed source at the 2026-08-22 Phase-E partial checkpoint still has four narrow activation/Random
+seams that must be closed before E2 is marked complete or Phase F is allowed to rely on E2:
+
+1. `TransitionFactory._get_random_mode()` accepts an already-populated
+   `transitions.random_choice` after canonicalization without re-checking current activation and
+   hardware admission at the final factory seam. A choice prepared before a live Settings change must
+   not survive deactivation as an executable transition.
+2. The engine's hardware-filtered Random candidate path and the factory-side Random candidate path
+   still contain literal `Crossfade` last-resort branches. Those branches may not execute Crossfade
+   when Crossfade is deactivated; if no transition is both activated and hardware-admissible, fail
+   closed or resolve through one explicit canonical admission policy rather than silently substituting
+   a deactivated implementation.
+3. C-key cycling still has unconditional Crossfade recovery branches when no candidate survives pool /
+   hardware / activation filtering. The final cycle result must itself pass activation and hardware
+   admission; an empty valid set must not manufacture a deactivated Crossfade.
+4. Runtime Random detection still treats legacy `transitions.type == "Random"` as Random mode while
+   `normalize_transition_capability_state()` / `is_random_mode_effective()` reason only about
+   `random_always`. E2 must converge this to one authority: `Use Random Transitions` /
+   `random_always`, with `type` holding a concrete remembered manual selection. Normalize legacy
+   `type="Random"` state explicitly before the old dropdown authority is removed.
+
+The normalization helper itself also needs direct regression coverage for its all-false repair and
+empty-effective-pool repair; current focused tests exercise the surrounding pool semantics but do not
+directly pin those mutations.
+
+Fix only these demonstrated seams. Do not add another selector, compatibility presenter, or fallback
+architecture. Add focused regressions for each item, then checkpoint/push/audit E2 before Phase F
+family migration relies on it.
 
 ## E3 — shared retained Quick primitives
 
@@ -1459,7 +1516,7 @@ as accelerated presentation.
 
 ## G3 — auxiliary runtime pixels
 
-Port cursor halo, dimming, pixel-shift scene transform, required error/fallback display, edit
+Port cursor halo, dimming, pixel-shift scene transform, required error/fail-safe display, edit
 grid/handles, and any remaining runtime overlay pixel owner.
 
 ---
@@ -1565,6 +1622,9 @@ After cutover, remove in small proven batches:
 - obsolete transition dropdown/random-pool UI code replaced by E2;
 - obsolete eager Widgets/Transitions settings-section creation paths replaced by E2;
 - legacy visualizer per-mode card-height/growth settings/UI/bindings/helpers/tests once the old presenter no longer calls them (`spectrum_growth`, `osc_growth`, `sine_wave_growth`, `bubble_growth`, `devcurve_growth`, and compatibility height helpers);
+- legacy GL capability-demotion / compositor-only / software-only rendering support and tests whose only
+  purpose is preserving that fallback ladder, after caller proof. Software-only rendering is not a
+  supported Quick-era product mode;
 - migration-only scaffolding.
 
 Do not delete presentation-neutral authored shaders/math merely because the old compositor also used
@@ -1641,7 +1701,7 @@ Do not rerun obsolete manual worker-heavy baselines merely out of habit.
 
 Beyond-parity closure should show no QWidget effect-cache shadow architecture, no per-widget accelerated
 surfaces, retained Quick widgets not rebuilding stable content every physical frame, clean
-render-thread ownership, true disabled-feature dormancy, and decomposition of overloaded old
+render-thread ownership, true deactivated-capability dormancy, and decomposition of overloaded old
 presentation modules.
 
 ## J2 — documentation closure
@@ -1689,32 +1749,41 @@ These do not block migration progress.
 **Phase E is IN PROGRESS** (widget presentation + capability setup foundation), started under explicit
 operator direction.
 
-Landed E foundation slices (additive, no runtime behaviour change):
+Landed E foundation slices (additive/inert at all-on defaults; no default runtime behaviour change):
 
 - **presentation-neutral widget family catalog** — `WIDGET_FAMILY_DESCRIPTORS` in
-  `rendering/widget_descriptors.py` is the single source of truth mapping stable `family_id` to member
-  runtime widget ids (`get_widget_family_descriptors` / `get_widget_family_descriptor` /
-  `get_family_id_for_widget` / `get_active_member_widget_ids`). Family availability derives from active
-  runtime descriptors so per-member dev gating stays consistent; the visualizer is deliberately excluded
-  as a widget-family capability. Pinned by `tests/test_widget_family_catalog.py`.
+  `core/settings/widget_family_catalog.py` is the single source of truth mapping stable `family_id` to
+  canonical member runtime widget ids. Family-level environment availability is neutral there;
+  `rendering/widget_descriptors.py` retains member-level runtime availability/legacy descriptor details
+  such as `get_active_member_widget_ids()`. The visualizer is deliberately excluded as a widget-family
+  capability. Pinned by `tests/test_widget_family_catalog.py`.
 - **canonical capability-activation settings schema** — `widgets.family_activation.<family_id>` and
   `transitions.activation.<setting_name>` in canonical defaults (all `True`, so behaviour is unchanged
-  until H0), plus `core/settings/capability_activation.py` presentation-neutral read/write helpers
-  (`is_widget_family_activated` / `is_transition_activated` / `get_effective_random_pool` =
-  activated ∩ pool-member / `is_random_mode_effective` / `resolve_manual_transition_selection` /
-  `get_default_activated_transition`). Regenerated `defaults_snapshot.json` and both SST doc artifacts.
-  Pinned by `tests/test_capability_activation.py`.
-- **transition activation runtime consequence** — the engine random-pool prep, the C-key cycle handler,
-  and the transition factory (random fallback pick + manual selection) all honor activation; empty
-  effective pool resolves to an activated hw-available transition; deactivated manual selection resolves
-  to a deterministic activated fallback. Inert by default. Pinned by engine-seam tests in
-  `tests/test_transition_distribution.py`.
+  until H0), plus `core/settings/capability_activation.py` presentation-neutral read/write/query and
+  normalization helpers (`is_widget_family_activated` / `is_transition_activated` /
+  `get_effective_random_pool` = activated ∩ pool-member / `is_random_mode_effective` /
+  `resolve_manual_transition_selection` / `get_default_activated_transition` /
+  `normalize_transition_capability_state`). Canonical normalization explicitly repairs all-false
+  activation by persisting Crossfade reactivation and disables Random when its effective pool is empty
+  while preserving saved pool preferences. Regenerated `defaults_snapshot.json` and both SST doc
+  artifacts. Pinned by `tests/test_capability_activation.py`.
+- **transition activation runtime foundation** — engine Random preparation, C-key cycling, manual
+  selection and factory-side Random candidate generation already filter activation in their normal
+  paths, and canonical state normalization is landed. Four narrow E2-exit seams remain: a stale
+  pre-resolved `transitions.random_choice` is not revalidated at final factory admission; engine/factory
+  Random empty-candidate paths retain literal Crossfade substitutes; C-key cycling retains unconditional
+  Crossfade recovery; and runtime still recognizes legacy `type="Random"` as a second Random-mode
+  authority while the normalizer reasons only about `random_always`. These are explicit E2-before-exit
+  defects, not permission for hidden fallback behavior. Existing focused coverage lives in
+  `tests/test_transition_distribution.py` / `tests/test_capability_activation.py`; E2 must add the
+  missing normalization/final-admission regressions.
 - **widget-family activation runtime consequence** — `_create_factory_widgets` skips a deactivated
   family (no runtime widget/model/provider) before per-instance `enabled` handling and expected-overlay
   accounting. Inert by default. Pinned by `tests/test_widget_manager_refresh.py`.
 
-The full activation *mechanism* (catalog + schema + both runtime consequences) is now landed and
-inert-by-default; the E2 SETUP UI is the operator-facing toggle that will exercise it.
+The activation foundation (neutral catalog + schema + canonical normalization + most runtime admission
+seams) is landed and inert-by-default. E2 supplies the operator-facing toggle and must close the four
+remaining transition activation/Random seams above before its exit gate can be accepted.
 
 Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase F relies on E2):
 
@@ -1725,7 +1794,9 @@ Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase 
   deactivated capability loses its settings pill, lazy-save hydration guard preserved.
   **Operator decision (2026-08-22): rebuild the nav live** — deactivating a capability while Settings is
   open immediately removes its pill and reactivation re-adds it, matching doc 07 §5.3 literally (not a
-  deferred grey-out). Checkpoint/push/audit E2 before Phase F.
+  deferred grey-out). **Before E2 exit**, close and test all four transition seams in E2.6: stale
+  pre-resolved `random_choice`, engine/factory literal Crossfade substitutes, C-key Crossfade recovery,
+  and the legacy `type="Random"` second authority. Checkpoint/push/audit E2 before Phase F.
 - **E3** — shared retained Quick visual primitives.
 - **E4** — global eight-direction shadow authority (default `SE`).
 

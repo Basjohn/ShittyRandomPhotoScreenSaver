@@ -79,13 +79,29 @@ Current canonical activation defaults are all `True`; H0 owns the final Quick-er
 
 ### 2.3 Transition runtime consequence
 
-Landed transition selection seams honor application activation:
+Landed transition selection seams now include one canonical state-normalization authority:
 
-- effective Random pool filters by activation;
-- C-key/cycle skips deactivated transitions;
-- manual selection of a deactivated transition resolves through deterministic fallback logic;
-- transition factory/random selection does not deliberately choose a deactivated transition while a
-  valid activated alternative exists.
+```text
+normalize_transition_capability_state(...)
+```
+
+It repairs malformed persisted capability state explicitly rather than letting renderer/factory code
+silently substitute another effect:
+
+- if every transition is deactivated, it reactivates the deterministic recovery transition
+  (`Crossfade`) **in canonical settings state** and reports that the repaired state must be persisted;
+- if Random is on while `activated ∩ saved pool membership` is empty, it turns Random off, persists a
+  deterministic activated manual replacement selection, and preserves the saved pool preferences;
+- effective Random pool filtering, C-key/cycle selection, and ordinary manual selection all honor
+  activation at their current seams.
+
+This recovery is a state repair, not permission to execute a deactivated Crossfade.
+
+**Current source debt at `829446c8`: final transition admission is not yet fully closed.** The factory
+still accepts an already-populated `transitions.random_choice` without re-checking activation/hardware,
+and the engine/factory still contain literal Crossfade last-resorts on empty post-hardware/factory
+candidate sets. Those paths must be corrected/tested before E2 exit so a stale/deactivated choice can
+never instantiate merely because it was prepared earlier or because a candidate list became empty.
 
 These mechanisms are inert while all activation defaults are on.
 
@@ -284,7 +300,9 @@ When Random is on:
 - it may remember the manual selection that would be used later when Random is disabled.
 
 If the selected manual transition is deactivated, resolve and persist a deterministic **activated**
-fallback. Do not silently reactivate the transition the user disabled.
+replacement selection. Do not silently reactivate the transition the user disabled except through the
+explicit zero-activated-state normalization rule below, where Crossfade reactivation is the canonical
+persisted state repair for an otherwise invalid all-false transition set.
 
 ### 5.5 Live transition navigation
 
@@ -297,7 +315,7 @@ The same live-nav rule applies:
 
 ### 5.6 Zero-activated / empty-effective-pool invariant
 
-Do not confuse two different failure states:
+Do not confuse two different invalid states:
 
 ```text
 zero activated transitions
@@ -309,21 +327,30 @@ and
 activated transitions exist, but none are Random-pool members
 ```
 
-The second state can be resolved by explicit Random-mode UX/runtime policy without violating
-activation.
+The landed canonical normalization policy is explicit:
 
-The first state has **no valid “activated fallback” by definition**. A helper returning the string
-`Crossfade` is not sufficient if Crossfade itself is deactivated.
+```text
+zero activated transitions
+    -> set Crossfade activation=True in canonical settings state
+    -> persist the repaired state
 
-At the repository checkpoint this documentation pack was based on, the Phase-E foundation does not
-establish an explicit legal all-deactivated transition runtime state. E2 must therefore either prevent
-that state or pair it with a deliberately implemented source/runtime contract before exposing it.
+Random on + empty effective pool
+    -> random_always=False
+    -> persist deterministic activated manual selection
+    -> preserve saved pool membership unchanged
+```
 
-Do **not** silently run a deactivated Crossfade, silently reactivate a transition, or claim an
-“activated fallback” exists when the activated set is empty.
+This is deliberate **state normalization**, not a renderer/factory bypass. Once normalization has run,
+any selected/run transition must still pass activation admission normally.
 
-If source lands a different explicit policy after this checkpoint, update this section to the tested
-source contract rather than preserving this warning as stale prose.
+Hardware availability is a separate rendering-side filter. If hardware filtering leaves no valid
+activated candidate, do not silently execute a deactivated Crossfade or broaden into an unrelated
+Random pool. Fail closed or perform an explicit canonical state repair whose result is then admitted
+normally.
+
+At `829446c8`, the final factory/engine admission paths still have the stale-choice/Crossfade-last-resort
+debt described in §2.3. E2 must not be considered complete until those exact paths are fenced and
+regressed.
 
 ## 6. Settings implementation shape
 
@@ -411,6 +438,11 @@ Preserve proof for:
   exists;
 - runtime factory widget creation filters deactivated family before per-instance enabled handling.
 
+The normalization implementation itself is now landed, but `tests/test_capability_activation.py` at
+`829446c8` does **not yet directly pin** the all-false Crossfade state repair or the Random-empty-pool
+normalization. Add those direct regressions before E2 exit rather than treating implementation presence
+as sufficient evidence.
+
 ### 10.2 E1 ownership tests
 
 As E1 lands, prove the owner actually responsible for each family resource retires exclusive:
@@ -450,9 +482,14 @@ Prove:
 - effective Random pool is exactly activated ∩ saved membership;
 - inactive pool preference survives;
 - Random-on pill browsing does not disable Random;
-- manual fallback after deactivation is deterministic and activated;
-- zero-activated-transition policy is explicitly tested rather than reaching a deactivated renderer
-  through fallback;
+- manual replacement selection after deactivation is deterministic and activated;
+- all-false activation explicitly reactivates/persists Crossfade through the canonical normalization
+  authority rather than a renderer bypass;
+- Random-on + empty effective pool explicitly disables Random, persists an activated manual selection,
+  and preserves saved pool membership;
+- a stale pre-resolved `transitions.random_choice` is rejected/re-resolved if it becomes deactivated or
+  hardware-invalid before factory admission;
+- hardware filtering / empty candidate sets never reach a deactivated Crossfade last-resort;
 - old dropdown/pool-checkbox authority is gone once E2 cuts over.
 
 ### 10.5 Recreate/lifecycle

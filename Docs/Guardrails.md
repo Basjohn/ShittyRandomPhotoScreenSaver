@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-08-20
+Last updated: 2026-08-22
 
 Durable cross-cutting stop rules.
 
@@ -19,7 +19,7 @@ Do not use `QQuickWidget`.
 
 Do not add second accelerated runtime surfaces.
 
-During migration, the existing QRhiWidget path is a reference/rollback implementation only.
+During migration, the existing QRhiWidget path is the current/reference implementation only.
 
 ## 2. Priority
 
@@ -68,13 +68,33 @@ Stop/reassess when:
 - valid generation `0` is lost;
 - stale generation can reveal/publish;
 - resource ownership cannot be explained;
-- a fallback silently changes presentation architecture;
+- a fallback/substitution silently changes presentation architecture, implementation, capability, or authored behavior;
 - a second accelerated window/surface is introduced;
 - `QQuickWidget` is used to claim migration progress;
 - a change deepens the old QRhiWidget presenter without explicit migration need;
 - a local renderer concern is used to reopen a whole native-presenter migration.
 
-## 5. One owner per concern
+## 5. Fallback / substitution rule
+
+Do not silently substitute an alternate implementation, presenter, renderer, capability, or authored
+behavior when the selected path fails. Fail closed or repair the selected owner.
+
+Explicitly designed provider/cache/network resilience, fail-safe error presentation, and ordinary
+candidate/default resolution **within the same feature contract** are not prohibited fallback
+architecture. Examples include using valid cached provider data when the network source is unavailable,
+trying an explicitly supported provider connection strategy, choosing a recently-used eligible image
+when the preferred unused candidate set is exhausted, or selecting another activated transition after
+the previous manual choice is deactivated.
+
+Prefer terms such as `resilience`, `fail-safe`, `replacement selection`, and `default/baseline
+resolution` for those cases. Reserve `fallback` for architectural/behavioral substitution where
+practical so the guardrail remains unambiguous.
+
+The legacy GL capability-demotion path (`FULL_SHADERS -> COMPOSITOR_ONLY -> SOFTWARE_ONLY`) and
+software-only rendering are **not supported SRPSS product behavior**. They are old-presenter debris to
+remove after caller proof/cutover and must not be carried into the Qt Quick destination.
+
+## 6. One owner per concern
 
 Examples:
 
@@ -84,9 +104,9 @@ Examples:
 - visualizer logical cadence: `VisualizerLogicalRuntime`;
 - physical runtime presentation: destination `QQuickWindow` per display;
 - GPU resource deletion: explicit legal render/context owner;
-- accounting: ResourceManager, never deletion fallback.
+- accounting: `ResourceManager`; accounting only, never GPU deletion owner.
 
-## 6. Presentation admission
+## 7. Presentation admission
 
 Allowed:
 
@@ -104,7 +124,7 @@ Forbidden:
 - source/event/logical cadence reduction;
 - independent visualizer presentation loops.
 
-## 7. Visualizer safety
+## 8. Visualizer safety
 
 Preserve:
 
@@ -123,7 +143,7 @@ Logical time never derives from physical paint cadence.
 
 For Bubble, BTF is binding.
 
-## 8. Quick/render resource safety
+## 9. Quick/render resource safety
 
 The selected Quick primitive defines the legal render/context owner.
 
@@ -138,7 +158,7 @@ Rules:
 
 Do not copy old QRhiWidget borrowed-context rules forward without verifying they apply.
 
-## 9. Lifecycle
+## 10. Lifecycle
 
 For recreation/cutover:
 
@@ -155,7 +175,7 @@ For recreation/cutover:
 No hide-only lifecycle, cleanup retry timers, force-cleared GPU handles, or garbage-collection-owned
 resource lifetime.
 
-## 10. Runtime overlays
+## 11. Runtime overlays
 
 Do not rewrite provider/model/business logic merely because runtime pixels migrate.
 
@@ -165,7 +185,7 @@ The destination Quick scene owns runtime pixels that coexist over the screensave
 
 Settings may remain QWidget.
 
-## 11. Native/C++ rule
+## 12. Native/C++ rule
 
 Native code is contingency/local optimization only.
 
@@ -178,7 +198,7 @@ Before introducing it, name:
 
 No second presentation architecture.
 
-## 12. Diagnostics
+## 13. Diagnostics
 
 Diagnostics are passive, sampled, bounded, and never cadence/admission control.
 
@@ -186,10 +206,10 @@ Use existing evidence before creating another probe family.
 
 Physical-display claims require OS/display-boundary evidence when internal callbacks are ambiguous.
 
-## 13. Documentation
+## 14. Documentation
 
 - edit canonical docs in place;
-- `Current_Plan.md` is active work only;
+- `Current_Plan.md` owns current sequence/work admission and may retain clearly marked completed-phase closure/rationale for migration continuity;
 - evidence reports keep measurements;
 - historical reports remain historical;
 - when a migration changes owner/type, reconcile current owner docs in the same docs sweep.

@@ -23,8 +23,14 @@ After the production owner switches to `QuickDisplayRuntime` and focused/full ga
 - [ ] remove obsolete GUI `present_tick`/presentation callbacks after caller proof;
 - [ ] remove old adaptive/compositor render scheduling that no live non-Quick owner needs;
 - [ ] remove compositor-only transition resource helpers after Quick renderer caller proof;
+- [ ] remove the legacy `GLErrorHandler` capability-demotion architecture (`FULL_SHADERS -> COMPOSITOR_ONLY -> SOFTWARE_ONLY`) once no live pre-cutover caller requires it; do not port that policy into Quick;
+- [ ] remove `rendering/backends/software` and any backend-selection/demotion plumbing proven to exist solely for software-only/compositor fallback support;
 - [ ] retain P0 comparison/raw evidence;
 - [ ] keep cheap architecture-neutral timing diagnostics.
+
+Software-only rendering is not a supported SRPSS destination capability. These deletion items do not
+apply to intentional provider/cache/network resilience, which remains feature-owned where explicitly
+designed.
 
 Each deletion batch:
 
@@ -93,6 +99,7 @@ After migration/correctness work:
 ## 7. Test / harness debt
 
 - [ ] retire tests protecting only removed QRhiWidget architecture;
+- [ ] remove/retarget `tests/test_gl_fallback_policy.py`, software-backend tests, and related legacy capability-demotion assertions when their old runtime callers are deleted; retain tests for the final Quick fail-closed/error contract instead;
 - [ ] retain one-clock, generation-zero, BTF, source-freshness, lifecycle gates;
 - [ ] keep P0 evidence historical;
 - [ ] maintain production-shaped Quick renderer/widget/lifecycle regression coverage;
@@ -123,7 +130,7 @@ unless the operator explicitly selects one of its items.
 
 ## 11. Documentation hygiene
 
-- [ ] `Current_Plan.md` active-only;
+- [ ] `Current_Plan.md` owns current sequence/work admission; clearly marked completed-phase closure/rationale may remain where it protects migration continuity;
 - [ ] current owner docs match landed Quick class/file names;
 - [ ] phase reports/Historical_Bugs remain evidence-scoped;
 - [ ] remove temporary migration decomposition docs once fully absorbed;
