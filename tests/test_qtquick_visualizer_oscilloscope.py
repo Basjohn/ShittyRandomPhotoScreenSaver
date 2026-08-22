@@ -293,6 +293,8 @@ def test_quick_oscilloscope_registry_is_static_lazy_and_resource_dormant(
         "spectrum",
         "oscilloscope",
         "sine_wave",
+        "bubble",
+        "devcurve",
     )
     assert all(isinstance(descriptor.module_name, str) for descriptor in descriptors)
 
@@ -316,7 +318,9 @@ def test_quick_oscilloscope_registry_is_static_lazy_and_resource_dormant(
     assert imported == [
         "rendering.quick.visualizer.implementations.oscilloscope"
     ]
-    assert implementation_registry.resolve_quick_visualizer_renderer("bubble") is None
+    bubble = implementation_registry.resolve_quick_visualizer_renderer("bubble")
+    assert bubble is not None
+    assert bubble.mode_id == "bubble"
 
 
 def test_quick_oscilloscope_renderer_has_no_legacy_presentation_dependency() -> None:

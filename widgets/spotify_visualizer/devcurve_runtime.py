@@ -129,7 +129,6 @@ def _spawn_specular_stream(
 ) -> Dict[str, float]:
     seed = state.specular_spawn_counter * 17.0 + slot_idx * 3.71 + 11.0
     r0 = 0.5 + 0.5 * math.sin(seed * 1.923)
-    r1 = 0.5 + 0.5 * math.sin(seed * 2.417 + 1.73)
     r2 = 0.5 + 0.5 * math.sin(seed * 3.117 + 0.61)
     if initial:
         x = 1.06 - slot_idx * 0.52
@@ -222,7 +221,15 @@ def _layer_energy_map(eb, transient_bus, playing: bool) -> Dict[str, float]:
     bass = float(getattr(eb, "bass", 0.0) if eb is not None else 0.0)
     mid = float(getattr(eb, "mid", 0.0) if eb is not None else 0.0)
     high = float(getattr(eb, "high", 0.0) if eb is not None else 0.0)
-    transient = float(getattr(transient_bus, "bass_transient", 0.0) if transient_bus is not None else 0.0)
+    transient = float(
+        getattr(
+            transient_bus,
+            "bass_transient",
+            getattr(transient_bus, "bass", 0.0),
+        )
+        if transient_bus is not None
+        else 0.0
+    )
     return {
         "bass": _clamp(bass, 0.0, 2.0),
         "vocals": _clamp(mid * 0.62 + high * 0.38, 0.0, 2.0),
@@ -244,22 +251,17 @@ def _build_curve(
     reactive: float,
     power: float,
     offset: float,
-    growth: float,
 ) -> List[float]:
     out: List[float] = [0.0] * sample_count
     amp_idle = 0.018 * idle_motion
     amp_reactive = 0.135 * reactive * power
-    growth = _clamp(float(growth), 1.0, 5.0)
-    growth_push = _clamp((growth - 3.0) / 2.0, -1.0, 1.0)
-    # Guardrail: authored spline Y maps directly to runtime Y at idle
-    # (0.0->bottom, 1.0->top in authored space). Growth only compresses
-    # upward excursions to preserve headroom under hot reactivity.
+    # Authored spline Y maps directly to runtime Y at idle (0.0->bottom,
+    # 1.0->top in authored space). The old devcurve_growth card-height
+    # control is deliberately absent from this authored field solver.
     _ = base_level
     center_shift = 0.0
     base_bias = 0.0
-    up_comp = 1.0 - 0.15 * max(0.0, growth_push)
-    down_comp = 1.0
-    top_soft = 0.95 - 0.02 * max(0.0, growth_push)
+    top_soft = 0.95
     for i in range(sample_count):
         x = i / max(1, sample_count - 1)
         p = _clamp(profile[i], 0.0, 1.0)
@@ -274,9 +276,6 @@ def _build_curve(
         ar2 = math.sin((x * 2.75 + phase * 0.18) * math.tau + _phase_rand(seed, 5))
         reactive_wave = ar1 * 0.64 + ar2 * 0.36
         y = base + idle_wave * amp_idle + reactive_wave * amp_reactive * (0.55 + p * 0.45)
-        d = y - base
-        d *= up_comp if d >= 0.0 else down_comp
-        y = base + d
         if y > top_soft:
             y = top_soft + (y - top_soft) * 0.34
         out[i] = _clamp(y, 0.04, 0.96)
@@ -305,7 +304,6 @@ def solve_devcurve_frame(
     idle_speed: float,
     smoothness: float,
     layer_settings: Dict[str, Dict[str, float | bool]],
-    growth: float,
 ) -> Dict[str, object]:
     dt = _clamp(float(dt), 0.001, 0.1)
     state.phase += dt
@@ -344,7 +342,6 @@ def solve_devcurve_frame(
             reactive=reactive,
             power=motion_power * power,
             offset=offset,
-            growth=growth,
         )
         prev = state.previous_layers.get(key)
         if prev and len(prev) == len(c):

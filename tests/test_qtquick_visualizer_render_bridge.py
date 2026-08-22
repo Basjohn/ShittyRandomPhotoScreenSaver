@@ -381,6 +381,7 @@ def test_legacy_capture_publishes_all_five_tagged_immutable_mode_frames(
     from widgets.spotify_visualizer.legacy_render_snapshot_adapter import (
         capture_legacy_visualizer_logical_frame,
     )
+    from widgets.spotify_visualizer.tick_pipeline import dispatch_devcurve_field
     from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 
     expected_types = {
@@ -407,8 +408,14 @@ def test_legacy_capture_publishes_all_five_tagged_immutable_mode_frames(
         assert isinstance(captured.mode_state, expected_type)
         assert isinstance(captured.common.bars, tuple)
 
-    widget._devcurve_draw_order = ["transients", "mids", "vocals", "bass"]
-    widget._devcurve_foreground_layer_id = 0
+    widget._devcurve_layer_transients_order = 1
+    widget._devcurve_layer_mids_order = 2
+    widget._devcurve_layer_vocals_order = 3
+    widget._devcurve_layer_bass_order = 4
+    widget._spotify_playing = False
+    dispatch_devcurve_field(widget, 11.0)
+    widget._devcurve_draw_order = ["bass", "vocals", "mids", "transients"]
+    widget._devcurve_foreground_layer_id = 3
     devcurve = capture_legacy_visualizer_logical_frame(
         widget,
         now_ts=11.0,
@@ -416,7 +423,12 @@ def test_legacy_capture_publishes_all_five_tagged_immutable_mode_frames(
         mode_reveal_ready=False,
     )
     assert isinstance(devcurve.mode_state, DevCurveFrame)
-    assert devcurve.mode_state.draw_order == tuple(widget._devcurve_draw_order)
+    assert devcurve.mode_state.draw_order == (
+        "transients",
+        "mids",
+        "vocals",
+        "bass",
+    )
     assert devcurve.mode_state.foreground_layer_id == 0
     widget.cleanup()
 

@@ -401,6 +401,7 @@ def test_quick_bubble_registry_is_static_lazy_and_resource_dormant() -> None:
         "oscilloscope",
         "sine_wave",
         "bubble",
+        "devcurve",
     )
     renderer = resolve_quick_visualizer_renderer("bubble")
     assert isinstance(renderer, QuickBubbleRenderer)

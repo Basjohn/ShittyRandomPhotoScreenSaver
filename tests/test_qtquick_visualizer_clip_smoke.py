@@ -72,6 +72,10 @@ def _run_bubble_smoke(case: str) -> dict[str, object]:
     return _run_visualizer_smoke("bubble", case)
 
 
+def _run_devcurve_smoke(case: str) -> dict[str, object]:
+    return _run_visualizer_smoke("devcurve", case)
+
+
 def _assert_rgb(actual: list[int], expected: list[int]) -> None:
     assert len(actual) >= 3
     assert all(
@@ -438,3 +442,75 @@ def test_bubble_ghost_trail_pop_and_idle_are_real_quick_pixels() -> None:
     assert trail["lit_bounds"][0] < canonical["lit_bounds"][0]
     assert trail["lit_pixel_count"] > canonical["lit_pixel_count"]
     assert pop["lit_pixel_count"] > 0
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "canonical",
+        "scaled",
+        "wide",
+        "tall",
+        "idle",
+        "ghost",
+        "shadow",
+        "specular",
+    ),
+)
+def test_production_devcurve_draws_and_releases_inside_quick(case: str) -> None:
+    report = _run_devcurve_smoke(case)
+
+    assert report["valid"] is True
+    assert report["error"] is None
+    capture = report["captures"][case]
+    assert capture["gl_error"] == 0
+    assert capture["lit_pixel_count"] > 0
+    assert capture["lit_column_count"] >= 64
+    assert capture["lit_row_count"] >= 16
+    assert capture["lit_bounds"] is not None
+
+    telemetry = report["telemetry"]
+    assert telemetry["error"] is None
+    assert telemetry["draw_count"] >= 1
+    assert telemetry["drawn_mode_id"] == "devcurve"
+    assert telemetry["release_thread_id"] == telemetry["render_thread_id"]
+    assert telemetry["release_count"] == 1
+    assert telemetry["invalidation_count"] == 1
+    assert report["release_context_current"] is True
+
+
+def test_devcurve_quick_geometry_reflows_without_stroke_bitmap_stretch() -> None:
+    canonical = _run_devcurve_smoke("canonical")["captures"]["canonical"]
+    scaled = _run_devcurve_smoke("scaled")["captures"]["scaled"]
+    wide = _run_devcurve_smoke("wide")["captures"]["wide"]
+    tall = _run_devcurve_smoke("tall")["captures"]["tall"]
+
+    assert scaled["outer_pixel_size"][0] == pytest.approx(
+        canonical["outer_pixel_size"][0] * 0.65,
+        abs=2,
+    )
+    assert scaled["outer_pixel_size"][1] == pytest.approx(
+        canonical["outer_pixel_size"][1] * 0.65,
+        abs=2,
+    )
+    assert scaled["lit_column_count"] < canonical["lit_column_count"]
+    assert scaled["lit_row_count"] < canonical["lit_row_count"]
+    assert wide["outer_pixel_size"][0] > canonical["outer_pixel_size"][0]
+    assert wide["outer_pixel_size"][1] == canonical["outer_pixel_size"][1]
+    assert wide["lit_column_count"] > canonical["lit_column_count"]
+    assert tall["outer_pixel_size"][0] == canonical["outer_pixel_size"][0]
+    assert tall["outer_pixel_size"][1] > canonical["outer_pixel_size"][1]
+    assert tall["lit_row_count"] > canonical["lit_row_count"]
+
+
+def test_devcurve_idle_ghost_shadow_and_specular_are_real_quick_pixels() -> None:
+    canonical = _run_devcurve_smoke("canonical")["captures"]["canonical"]
+    idle = _run_devcurve_smoke("idle")["captures"]["idle"]
+    ghost = _run_devcurve_smoke("ghost")["captures"]["ghost"]
+    shadow = _run_devcurve_smoke("shadow")["captures"]["shadow"]
+    specular = _run_devcurve_smoke("specular")["captures"]["specular"]
+
+    assert idle["lit_pixel_count"] > 0
+    assert ghost["lit_pixel_count"] > canonical["lit_pixel_count"]
+    assert shadow["rgb_sum"] != canonical["rgb_sum"]
+    assert specular["rgb_sum"] != canonical["rgb_sum"]

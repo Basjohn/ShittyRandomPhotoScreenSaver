@@ -42,6 +42,12 @@ _IMPLEMENTATIONS = (
             "rendering.quick.visualizer.implementations.bubble"
         ),
     ),
+    QuickVisualizerImplementationDescriptor(
+        mode_id="devcurve",
+        module_name=(
+            "rendering.quick.visualizer.implementations.devcurve"
+        ),
+    ),
 )
 _BY_ID = {descriptor.mode_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

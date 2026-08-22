@@ -324,6 +324,8 @@ def test_quick_sine_registry_is_lazy_and_resource_dormant(monkeypatch) -> None:
         "spectrum",
         "oscilloscope",
         "sine_wave",
+        "bubble",
+        "devcurve",
     )
     assert imported == []
 
