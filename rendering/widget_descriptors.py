@@ -427,6 +427,15 @@ class WidgetCustomPositionOptionDescriptor:
 
 WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...] = (
     WidgetSettingsSectionDescriptor(
+        section_id="setup",
+        button_label="Setup",
+        button_attr_name="_btn_setup",
+        container_attr_name="_setup_container",
+        method_name="_build_setup_ui",
+        default_selected=True,
+        bootstrap_in_lazy_mode=True,
+    ),
+    WidgetSettingsSectionDescriptor(
         section_id="clock",
         button_label="Clocks",
         button_attr_name="_btn_clocks",
@@ -451,7 +460,6 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "clock2_enabled", "clock2_timezone", "clock2_monitor_combo",
             "clock3_enabled", "clock3_timezone", "clock3_monitor_combo",
         ),
-        default_selected=True,
     ),
     WidgetSettingsSectionDescriptor(
         section_id="weather",

@@ -18,7 +18,7 @@ from copy import deepcopy
 from typing import Optional, Dict, Any, Mapping
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QComboBox, QPushButton,
+    QComboBox, QPushButton, QCheckBox,
     QScrollArea, QButtonGroup, QGroupBox,
 )
 from PySide6.QtCore import Signal, Qt
@@ -66,7 +66,9 @@ from rendering.widget_descriptors import (
     get_widget_lazy_dependency_indices,
     get_widget_lazy_bootstrap_indices,
     get_widget_programmatic_dependency_indices,
+    get_widget_family_descriptors,
     get_widget_runtime_descriptor,
+    get_widget_settings_section_descriptor,
     get_widget_settings_section_descriptors,
     get_widget_stack_preview_descriptors,
     has_saved_custom_layout_for_widget,
@@ -77,6 +79,10 @@ from rendering.widget_descriptors import (
     restore_all_widget_positions_to_application_defaults,
     resolve_widget_section_index_from_view_state,
     sync_custom_layout_restore_routes,
+)
+from core.settings.capability_activation import (
+    is_widget_family_activated,
+    set_widget_family_activated,
 )
 from ui.tabs.shared_styles import (
     SPINBOX_STYLE,
@@ -96,6 +102,21 @@ from widgets.timezone_utils import get_local_timezone, get_common_timezones
 from ui.tabs.media.technical_controls import load_per_mode_technical_controls
 
 logger = get_logger(__name__)
+
+
+# Theme-matched action button for the Widgets SETUP page (Enable/Disable All).
+SETUP_ACTION_BUTTON_STYLE = (
+    "QPushButton {"
+    " background-color: rgba(42, 42, 42, 215);"
+    " color: #ffffff;"
+    " border: 1px solid #ffffff;"
+    " border-radius: 8px;"
+    " padding: 6px 18px;"
+    " min-width: 90px;"
+    " }"
+    "QPushButton:hover { background-color: rgba(58, 58, 58, 220); }"
+    "QPushButton:pressed { background-color: rgba(70, 70, 70, 225); }"
+)
 
 
 class _RainbowGlowLabel(QWidget):
@@ -199,6 +220,7 @@ class WidgetsTab(QWidget):
         self._blocked_unhydrated_save_sections: set[str] = set()
         self._subtab_host_layouts: list[QVBoxLayout | None] = []
         self._custom_resize_lock_notice_labels: Dict[str, QLabel] = {}
+        self._family_activation_checkboxes: Dict[str, QCheckBox] = {}
         self._initialize_descriptor_default_attrs()
         self._visualizer_adv_state: Dict[str, bool] = self._load_adv_states()
         self._visualizer_tech_state: Dict[str, bool] = self._load_tech_states()
@@ -217,7 +239,10 @@ class WidgetsTab(QWidget):
         self._refresh_custom_resize_lock_state()
         self._perf_log("_load_settings", _load_start)
         self._loading = False
-        
+        # Final pass so a restored/deactivated family lands on Setup rather than
+        # a hidden pill's dead page (switch is suppressed while _loading).
+        self._apply_family_pill_visibility()
+
         logger.debug("WidgetsTab created")
 
     def _mark_widget_section_hydrated(self, section_id: str) -> None:
@@ -1022,6 +1047,145 @@ class WidgetsTab(QWidget):
         host_layout.addWidget(widget)
         self._subtab_content_built.add(subtab_id)
 
+    # ---- E2 capability SETUP subtab ----------------------------------------
+
+    def _build_setup_ui(self) -> QWidget:
+        """Build the always-present Widgets SETUP page (family capability activation).
+
+        Application-level *activation* is distinct from a widget instance's
+        ordinary ``enabled`` checkbox: deactivating a family hides its settings
+        pill and stops it running, but keeps its stored configuration for later
+        reactivation. Built only from cheap presentation-neutral catalog metadata.
+        """
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+
+        heading = QLabel("Widget Modules")
+        heading.setStyleSheet(PAGE_TITLE_STYLE)
+        layout.addWidget(heading)
+
+        blurb = QLabel(
+            "Activate the widget families you want available. Deactivating a "
+            "family hides its settings and stops it running; its saved settings "
+            "are kept for when you reactivate it."
+        )
+        blurb.setWordWrap(True)
+        blurb.setStyleSheet(STATUS_LABEL_STYLE)
+        layout.addWidget(blurb)
+
+        widgets_config = self._settings.get('widgets', {})
+        if not isinstance(widgets_config, dict):
+            widgets_config = {}
+
+        self._family_activation_checkboxes = {}
+        for family in get_widget_family_descriptors():
+            row = QCheckBox(family.label)
+            if family.description:
+                row.setToolTip(family.description)
+            row.setChecked(is_widget_family_activated(widgets_config, family.family_id))
+            row.toggled.connect(
+                lambda checked, fid=family.family_id: self._on_family_activation_toggled(fid, checked)
+            )
+            self._family_activation_checkboxes[family.family_id] = row
+            layout.addWidget(row)
+
+        layout.addSpacing(6)
+        button_row = QHBoxLayout()
+        button_row.addStretch()
+        enable_all = QPushButton("Enable All")
+        disable_all = QPushButton("Disable All")
+        enable_all.setStyleSheet(SETUP_ACTION_BUTTON_STYLE)
+        disable_all.setStyleSheet(SETUP_ACTION_BUTTON_STYLE)
+        enable_all.clicked.connect(lambda: self._set_all_family_activation(True))
+        disable_all.clicked.connect(lambda: self._set_all_family_activation(False))
+        button_row.addWidget(enable_all)
+        button_row.addWidget(disable_all)
+        layout.addLayout(button_row)
+        layout.addStretch()
+        return container
+
+    def _widget_section_index(self, section_id: str) -> int:
+        for idx, descriptor in enumerate(self._widget_section_descriptors):
+            if descriptor.section_id == section_id:
+                return idx
+        return -1
+
+    def _family_section_button(self, family) -> Optional[QPushButton]:
+        descriptor = get_widget_settings_section_descriptor(
+            family.settings_section_id, self._widget_section_descriptors
+        )
+        if descriptor is None:
+            return None
+        return getattr(self, descriptor.button_attr_name, None)
+
+    def _apply_family_pill_visibility(self) -> None:
+        """Show/hide family settings pills to match current activation state."""
+        checkboxes = getattr(self, "_family_activation_checkboxes", {})
+        deactivated_indices: set[int] = set()
+        for family in get_widget_family_descriptors():
+            checkbox = checkboxes.get(family.family_id)
+            activated = checkbox.isChecked() if checkbox is not None else True
+            button = self._family_section_button(family)
+            if button is not None:
+                button.setVisible(activated)
+            if not activated:
+                idx = self._widget_section_index(family.settings_section_id)
+                if idx >= 0:
+                    deactivated_indices.add(idx)
+        # If the currently shown subtab belongs to a now-deactivated family,
+        # return to Setup rather than leaving a dead page selected.
+        if not getattr(self, "_loading", False) and self._current_subtab in deactivated_indices:
+            self._select_setup_subtab()
+
+    def _select_setup_subtab(self) -> None:
+        setup_index = self._widget_section_index("setup")
+        if setup_index < 0:
+            return
+        button = self._subtab_group.button(setup_index)
+        if button is not None:
+            button.setChecked(True)
+        self._on_subtab_changed(setup_index)
+
+    def _on_family_activation_toggled(self, family_id: str, checked: bool) -> None:
+        self._apply_family_pill_visibility()
+        if not getattr(self, "_loading", False):
+            self._save_settings()
+
+    def _set_all_family_activation(self, activated: bool) -> None:
+        checkboxes = getattr(self, "_family_activation_checkboxes", {})
+        changed = False
+        for checkbox in checkboxes.values():
+            if checkbox.isChecked() != activated:
+                checkbox.blockSignals(True)
+                checkbox.setChecked(activated)
+                checkbox.blockSignals(False)
+                changed = True
+        self._apply_family_pill_visibility()
+        if changed and not getattr(self, "_loading", False):
+            self._save_settings()
+
+    def _load_family_activation_state(self) -> None:
+        """Refresh SETUP activation checkboxes from persisted settings."""
+        checkboxes = getattr(self, "_family_activation_checkboxes", {})
+        if not checkboxes:
+            return
+        widgets_config = self._settings.get('widgets', {})
+        if not isinstance(widgets_config, dict):
+            widgets_config = {}
+        for family_id, checkbox in checkboxes.items():
+            checkbox.blockSignals(True)
+            checkbox.setChecked(is_widget_family_activated(widgets_config, family_id))
+            checkbox.blockSignals(False)
+        self._apply_family_pill_visibility()
+
+    def _apply_family_activation_to_config(self, widgets_config: dict) -> None:
+        """Write the SETUP activation checkbox states into a widgets config."""
+        checkboxes = getattr(self, "_family_activation_checkboxes", {})
+        for family_id, checkbox in checkboxes.items():
+            set_widget_family_activated(widgets_config, family_id, bool(checkbox.isChecked()))
+
     def _on_subtab_changed(self, subtab_id: int) -> None:
         """Show/hide widget sections based on selected subtab."""
         if self._lazy_sections:
@@ -1142,6 +1306,12 @@ class WidgetsTab(QWidget):
                 except Exception as e:
                     logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
         
+        # Refresh SETUP family-activation checkboxes from persisted settings.
+        try:
+            self._load_family_activation_state()
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
+
         # Update stack status labels after loading settings
         try:
             self._refresh_custom_position_option_state()
@@ -1724,6 +1894,11 @@ class WidgetsTab(QWidget):
             )
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
+
+        # Persist application-level family capability activation (SETUP page).
+        # SETUP is always built, so this never depends on lazy hydration and can
+        # never overwrite a hidden family's stored per-instance settings.
+        self._apply_family_activation_to_config(existing_widgets)
 
         sync_custom_layout_restore_routes(existing_widgets)
         try:

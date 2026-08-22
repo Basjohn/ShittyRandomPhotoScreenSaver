@@ -60,6 +60,7 @@ class WidgetFamilyDescriptor:
     label: str
     member_widget_ids: tuple[str, ...]
     settings_section_id: str
+    description: str = ""
     dev_feature_env: str | None = None
     dev_feature_gate: str | None = None
 
@@ -77,36 +78,42 @@ WIDGET_FAMILY_DESCRIPTORS: tuple[WidgetFamilyDescriptor, ...] = (
         label="Clocks",
         member_widget_ids=("clock", "clock2", "clock3"),
         settings_section_id="clock",
+        description="Up to three digital or analog clocks with calendar, timezone and day/date.",
     ),
     WidgetFamilyDescriptor(
         family_id="weather",
         label="Weather",
         member_widget_ids=("weather",),
         settings_section_id="weather",
+        description="Current conditions and forecast for a chosen location.",
     ),
     WidgetFamilyDescriptor(
         family_id="media",
         label="Media",
         member_widget_ids=("media", "spotify_volume", "mute_button"),
         settings_section_id="media",
+        description="Now-playing card with artwork, playback controls, volume and progress.",
     ),
     WidgetFamilyDescriptor(
         family_id="reddit",
         label="Reddit",
         member_widget_ids=("reddit", "reddit2"),
         settings_section_id="reddit",
+        description="Subreddit post feeds, with two independently configured instances.",
     ),
     WidgetFamilyDescriptor(
         family_id="gmail",
         label="Gmail",
         member_widget_ids=("gmail",),
         settings_section_id="gmail",
+        description="Unread inbox summary with sender, subject and timestamps.",
     ),
     WidgetFamilyDescriptor(
         family_id="imgur",
         label="Imgur",
         member_widget_ids=("imgur",),
         settings_section_id="imgur",
+        description="Imgur image grid (deprecated).",
         dev_feature_env="SRPSS_ENABLE_DEV",
     ),
     WidgetFamilyDescriptor(
@@ -119,6 +126,7 @@ WIDGET_FAMILY_DESCRIPTORS: tuple[WidgetFamilyDescriptor, ...] = (
             "friend_pulse",
         ),
         settings_section_id="steam",
+        description="Steam progress, achievement pulse, abandonment and friend cards.",
     ),
 )
 
