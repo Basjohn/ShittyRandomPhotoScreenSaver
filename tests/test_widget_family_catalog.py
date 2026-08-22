@@ -8,10 +8,6 @@ QWidget/Quick/provider import.
 """
 from __future__ import annotations
 
-import importlib
-
-import pytest
-
 from core import dev_gates
 from rendering.widget_descriptors import (
     get_active_member_widget_ids,
@@ -91,32 +87,27 @@ def test_clocks_family_owns_all_three_clocks():
 
 def test_imgur_family_follows_dev_env_gating(monkeypatch):
     # Imgur is deprecated/dev-gated: absent without SRPSS_ENABLE_DEV, present with.
-    import rendering.widget_descriptors as wd
+    # The neutral catalog caches are keyed on an environment signature, so a
+    # monkeypatched env is reflected without reloading modules.
+    from core.settings import widget_family_catalog as wfc
 
     monkeypatch.delenv("SRPSS_ENABLE_DEV", raising=False)
-    importlib.reload(wd)
-    assert wd.get_widget_family_descriptor("imgur") is None
+    assert wfc.get_widget_family_descriptor("imgur") is None
+    assert wfc.get_family_id_for_widget("imgur") is None
 
     monkeypatch.setenv("SRPSS_ENABLE_DEV", "true")
-    importlib.reload(wd)
-    assert wd.get_widget_family_descriptor("imgur") is not None
-    assert wd.get_family_id_for_widget("imgur") == "imgur"
-
-    # Restore the pristine, unset-env module state for later tests.
-    monkeypatch.delenv("SRPSS_ENABLE_DEV", raising=False)
-    importlib.reload(wd)
+    assert wfc.get_widget_family_descriptor("imgur") is not None
+    assert wfc.get_family_id_for_widget("imgur") == "imgur"
 
 
 def test_steam_family_gating_matches_active_members():
     # Steam owns ungated members (achievement_pulse, abandonment_issues) so the
-    # family is always available; --devsteam only adds the gated members.
+    # family is always available; --devsteam only adds the gated members. The
+    # neutral catalog and runtime-descriptor caches are env-signature keyed, so
+    # toggling the gate is reflected without clearing caches.
     import rendering.widget_descriptors as wd
 
     dev_gates.force_gate(steam=False)
-    wd._get_active_widget_family_descriptors.cache_clear()
-    wd._get_widget_id_to_family_map.cache_clear()
-    wd._get_active_widget_runtime_descriptors.cache_clear()
-    wd._get_widget_runtime_descriptor_map.cache_clear()
     try:
         family = wd.get_widget_family_descriptor("steam")
         assert family is not None
@@ -128,16 +119,8 @@ def test_steam_family_gating_matches_active_members():
         assert "friend_pulse" not in active
 
         dev_gates.force_gate(steam=True)
-        wd._get_active_widget_family_descriptors.cache_clear()
-        wd._get_widget_id_to_family_map.cache_clear()
-        wd._get_active_widget_runtime_descriptors.cache_clear()
-        wd._get_widget_runtime_descriptor_map.cache_clear()
         active_dev = set(wd.get_active_member_widget_ids("steam"))
         assert "steam_progress" in active_dev
         assert "friend_pulse" in active_dev
     finally:
         dev_gates.force_gate(steam=False)
-        wd._get_active_widget_family_descriptors.cache_clear()
-        wd._get_widget_id_to_family_map.cache_clear()
-        wd._get_active_widget_runtime_descriptors.cache_clear()
-        wd._get_widget_runtime_descriptor_map.cache_clear()

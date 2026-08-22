@@ -56,6 +56,8 @@ from rendering.transition_registry import (
     is_transition_available_for_hw,
 )
 from core.settings.capability_activation import (
+    DEFAULT_RECOVERY_TRANSITION,
+    ensure_recovery_transition_activated,
     is_transition_activated,
     normalize_transition_capability_state,
 )
@@ -1423,15 +1425,24 @@ class ScreensaverEngine(QObject):
                 # non-empty per normalization above, but nothing pooled is
                 # hw-available). Fall back to ONE deterministic activated,
                 # hw-available transition rather than broadening the pool into a
-                # random choice or running a deactivated one. Crossfade is the
-                # hw-safe last resort if nothing qualifies.
+                # random choice or running a deactivated one.
                 activated_hw = [
                     name
                     for name in cycle_types
                     if is_transition_available_for_hw(name, hw)
                     and is_transition_activated(transitions, name)
                 ]
-                available = [activated_hw[0]] if activated_hw else ["Crossfade"]
+                if activated_hw:
+                    available = [activated_hw[0]]
+                else:
+                    # No activated hw-available candidate at all (pathological
+                    # config). Do not run a deactivated Crossfade: perform the
+                    # explicit canonical state repair, persist it, then admit the
+                    # now-activated recovery transition normally.
+                    if ensure_recovery_transition_activated(transitions):
+                        self.settings_manager.set('transitions', transitions)
+                        self.settings_manager.save()
+                    available = [DEFAULT_RECOVERY_TRANSITION]
             # Avoid immediate repeats of transition type. Legacy "Shuffle"
             # selections are treated as "Crossfade" so the engine no longer
             # reintroduces Shuffle into the pool.

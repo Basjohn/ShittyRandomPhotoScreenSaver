@@ -220,6 +220,24 @@ def is_random_mode_effective(
     return len(get_effective_random_pool(transitions_config)) > 0
 
 
+def ensure_recovery_transition_activated(transitions_config: Dict[str, Any]) -> bool:
+    """Guarantee the deterministic recovery transition (Crossfade) is activated.
+
+    This is the explicit canonical state-repair a runtime admission seam performs
+    when hardware filtering has left no activated candidate at all: rather than
+    silently executing a deactivated Crossfade, the seam reactivates it in
+    canonical settings state (persisting when this returns True) and then admits
+    it normally. Returns True when a repair was made.
+    """
+
+    if not isinstance(transitions_config, dict):
+        return False
+    if is_transition_activated(transitions_config, DEFAULT_RECOVERY_TRANSITION):
+        return False
+    set_transition_activated(transitions_config, DEFAULT_RECOVERY_TRANSITION, True)
+    return True
+
+
 def normalize_transition_capability_state(transitions_config: Dict[str, Any]) -> bool:
     """Enforce the transition capability invariants on a mutable config in-place.
 

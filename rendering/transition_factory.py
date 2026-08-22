@@ -22,7 +22,10 @@ from rendering.transition_registry import (
     is_transition_available_for_hw,
 )
 from core.settings.capability_activation import (
+    DEFAULT_RECOVERY_TRANSITION,
+    ensure_recovery_transition_activated,
     is_transition_activated,
+    normalize_transition_capability_state,
     resolve_manual_transition_selection,
 )
 
@@ -224,7 +227,14 @@ class TransitionFactory:
         canonical_transitions = get_default_settings().get('transitions', {})
         if not isinstance(canonical_transitions, dict):
             canonical_transitions = {}
-        
+
+        # Defensive capability normalization at the final admission boundary
+        # (fail closed): guarantee >=1 activated transition and reconcile Random
+        # with an empty effective pool before any selection. Persist only on a
+        # real repair (rare/malformed state); inert while all activation is on.
+        if normalize_transition_capability_state(transitions_settings):
+            self._persist_transitions(transitions_settings)
+
         # Get transition type
         transition_type = canonicalize_transition_name(
             transitions_settings.get('type') or canonical_transitions.get('type') or 'Crossfade',
@@ -295,16 +305,51 @@ class TransitionFactory:
             random_mode = bool(rnd) or transition_type == 'Random'
             random_choice_value = None
             if random_mode:
+                # A pre-resolved random_choice (prepared by the engine before a
+                # rotation) is only trusted if it is STILL admissible at this
+                # final seam: a transition deactivated (or made hw-invalid) after
+                # the choice was prepared must never instantiate merely because it
+                # was resolved earlier. Otherwise re-resolve here.
                 chosen = self._settings.get('transitions.random_choice', None)
                 if isinstance(chosen, str) and chosen and chosen != 'Random':
-                    random_choice_value = canonicalize_transition_name(chosen, fallback='Crossfade')
-                else:
-                    # Engine didn't pre-resolve a choice — pick one now.
+                    candidate = canonicalize_transition_name(chosen, fallback='')
+                    if candidate and self._is_admissible_random_choice(candidate, settings):
+                        random_choice_value = candidate
+                if random_choice_value is None:
+                    # Missing or stale/inadmissible pre-resolved choice: pick a
+                    # fresh admissible one now.
                     random_choice_value = self._pick_random_transition(settings)
             return random_mode, random_choice_value
         except Exception as e:
             logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             return False, None
+
+    def _persist_transitions(self, transitions_settings: dict) -> None:
+        """Persist a repaired transitions config through the settings authority."""
+        try:
+            self._settings.set('transitions', transitions_settings)
+            save = getattr(self._settings, 'save', None)
+            if callable(save):
+                save()
+        except Exception as exc:
+            logger.debug("[TRANSITION_FACTORY] transitions persist skipped: %s", exc)
+
+    def _resolve_hw_accel(self) -> bool:
+        try:
+            return SettingsManager.to_bool(self._settings.get('display.hw_accel', False), False)
+        except Exception as e:
+            logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
+            return False
+
+    def _is_admissible_random_choice(self, name: str, settings: dict) -> bool:
+        """Return whether an already-resolved random choice may still be run.
+
+        A pre-resolved ``transitions.random_choice`` must fail closed at this
+        seam if it became deactivated or hardware-invalid after it was prepared.
+        """
+        if not is_transition_activated(settings, name):
+            return False
+        return is_transition_available_for_hw(name, self._resolve_hw_accel())
 
     def _pick_random_transition(self, settings: dict) -> str:
         """Pick a concrete random transition type (factory-side fallback)."""
@@ -336,7 +381,24 @@ class TransitionFactory:
                 and is_transition_activated(settings, n)
             ]
             if not available:
-                available = ['Crossfade']
+                # No activated, pooled, hw-available candidate. Prefer any
+                # activated hw-available transition (dropping only the pool
+                # requirement, deterministically); never fall back to a
+                # deactivated Crossfade.
+                activated_hw = [
+                    n for n in all_types
+                    if is_transition_available_for_hw(n, hw)
+                    and is_transition_activated(settings, n)
+                ]
+                if activated_hw:
+                    available = [activated_hw[0]]
+                else:
+                    # Pathological: nothing activated is hw-available. Perform the
+                    # explicit canonical state repair, persist it, then admit the
+                    # now-activated recovery transition normally.
+                    if ensure_recovery_transition_activated(settings):
+                        self._persist_transitions(settings)
+                    available = [DEFAULT_RECOVERY_TRANSITION]
 
             last = self._settings.get('transitions.last_random_choice', None)
             candidates = [t for t in available if t != last] or available
