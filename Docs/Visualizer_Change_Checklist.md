@@ -84,9 +84,10 @@ Paused Spectrum idle remains perceptibly visible without fabricated source ident
 For carded modes, custom GL remains above card fill, below frame/border, and inside the rounded inner
 card path.
 
-Prefer scene-graph clip ownership (`QSGClipNode`) and have `QSGRenderNode` honor incoming scissor/
-stencil state. Do not shrink authored content to hide bleed and do not copy old centred-QPainter mask
-constants into Quick.
+Clip ownership is one render-node-local SDF/stencil host inside the same `QSGRenderNode`; the failed
+`QSGClipNode` handoff is not selectable and not a fallback. The host composes with valid inherited
+scissor/stencil state and restores it. Do not shrink authored content to hide bleed and do not copy old
+centred-QPainter mask constants into Quick.
 
 ## 8. Geometry
 
