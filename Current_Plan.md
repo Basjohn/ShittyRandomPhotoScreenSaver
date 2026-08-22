@@ -1701,16 +1701,29 @@ Landed E foundation slices (additive, no runtime behaviour change):
   `transitions.activation.<setting_name>` in canonical defaults (all `True`, so behaviour is unchanged
   until H0), plus `core/settings/capability_activation.py` presentation-neutral read/write helpers
   (`is_widget_family_activated` / `is_transition_activated` / `get_effective_random_pool` =
-  activated ∩ pool-member / `is_random_mode_effective`). Regenerated `defaults_snapshot.json` and both
-  SST doc artifacts. Pinned by `tests/test_capability_activation.py`.
+  activated ∩ pool-member / `is_random_mode_effective` / `resolve_manual_transition_selection` /
+  `get_default_activated_transition`). Regenerated `defaults_snapshot.json` and both SST doc artifacts.
+  Pinned by `tests/test_capability_activation.py`.
+- **transition activation runtime consequence** — the engine random-pool prep, the C-key cycle handler,
+  and the transition factory (random fallback pick + manual selection) all honor activation; empty
+  effective pool resolves to an activated hw-available transition; deactivated manual selection resolves
+  to a deterministic activated fallback. Inert by default. Pinned by engine-seam tests in
+  `tests/test_transition_distribution.py`.
+- **widget-family activation runtime consequence** — `_create_factory_widgets` skips a deactivated
+  family (no runtime widget/model/provider) before per-instance `enabled` handling and expected-overlay
+  accounting. Inert by default. Pinned by `tests/test_widget_manager_refresh.py`.
+
+The full activation *mechanism* (catalog + schema + both runtime consequences) is now landed and
+inert-by-default; the E2 SETUP UI is the operator-facing toggle that will exercise it.
 
 Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase F relies on E2):
 
-- **E1** — `WidgetRuntimeManager` presentation-neutral model/provider ownership split; disabled instance
-  vs deactivated family dormancy.
-- **E2** — Widgets and Transitions `SETUP` subtab UI + lazy navigation consuming the activation schema
-  above (family activation rows, Enable/Disable All, transition activation vs random-pool vs manual
-  selection). Checkpoint/push/audit E2 before Phase F.
+- **E1** — `WidgetRuntimeManager` presentation-neutral model/provider ownership split (broader than the
+  activation gate already landed above).
+- **E2** — Widgets and Transitions `SETUP` subtab UI + lazy navigation consuming the activation schema:
+  family activation rows + Enable/Disable All, transition activation vs random-pool vs manual selection,
+  deactivated capability loses its settings pill, lazy-save hydration guard preserved.
+  Checkpoint/push/audit E2 before Phase F.
 - **E3** — shared retained Quick visual primitives.
 - **E4** — global eight-direction shadow authority (default `SE`).
 
