@@ -10,6 +10,11 @@ uniform float u_dpr;
 // not card-local. Subtracting this origin restores card-local pixels.
 // A card-sized, origin-zero target simply passes (0, 0).
 uniform vec2 u_viewport_origin_px;
+// Qt Quick uses interpolated item-local coordinates. The old compositor keeps
+// the framebuffer-coordinate branch until Phase-I deletion.
+uniform int u_quick_item_coords;
+uniform vec4 u_content_rect;  // item-local x, y, width, height
+uniform float u_visual_scale;
 uniform float u_fade;
 uniform float u_time;
 
@@ -69,6 +74,10 @@ uniform int u_ghost_line3_enabled;
 uniform int u_ghost_line4_enabled;
 uniform int u_ghost_line5_enabled;
 uniform int u_ghost_line6_enabled;
+
+float authored_visual_scale() {
+    return (u_quick_item_coords == 1) ? max(u_visual_scale, 0.01) : 1.0;
+}
 
 float get_waveform_sample(int idx) {
     // Modular wrap so offset lines read valid circular-buffer data
@@ -210,7 +219,7 @@ vec4 eval_line(
     float dist = abs(ny - wave_y);
     float dist_px = dist * inner_height;
 
-    float line_width = 2.0;
+    float line_width = 2.0 * authored_visual_scale();
     float line_alpha = 1.0 - smoothstep(0.0, line_width, dist_px);
 
     float glow_alpha = 0.0;
@@ -315,35 +324,46 @@ void main() {
         discard;
     }
 
-    float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;
-    float fb_height = height * dpr;
-    vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
-    vec2 fc = vec2(localFrag.x / dpr, (fb_height - localFrag.y) / dpr);
+    vec2 fc;
+    if (u_quick_item_coords == 1) {
+        fc = v_uv * u_resolution;
+    } else {
+        float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;
+        float fb_height = height * dpr;
+        vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
+        fc = vec2(localFrag.x / dpr, (fb_height - localFrag.y) / dpr);
+    }
+
+    float px_scale = authored_visual_scale();
+    vec4 content_rect = (u_quick_item_coords == 1)
+        ? u_content_rect : vec4(0.0, 0.0, width, height);
 
     // Margins matching the card inset — enough to prevent glow bleeding past frame
-    float margin_x = 5.0;
-    float margin_y = 1.0;
-    float inner_width = width - margin_x * 2.0;
-    float inner_height = height - margin_y * 2.0;
+    float margin_x = 5.0 * px_scale;
+    float margin_y = 1.0 * px_scale;
+    float inner_width = content_rect.z - margin_x * 2.0;
+    float inner_height = content_rect.w - margin_y * 2.0;
 
     if (inner_width <= 0.0 || inner_height <= 0.0) {
         discard;
     }
 
     // Discard outside card area
-    if (fc.x < margin_x || fc.x > width - margin_x ||
-        fc.y < margin_y || fc.y > height - margin_y) {
+    if (fc.x < content_rect.x + margin_x ||
+        fc.x > content_rect.x + content_rect.z - margin_x ||
+        fc.y < content_rect.y + margin_y ||
+        fc.y > content_rect.y + content_rect.w - margin_y) {
         discard;
     }
 
     // Normalise fragment position within the inner rect
-    float nx = (fc.x - margin_x) / inner_width;   // 0..1 horizontal
-    float ny = (fc.y - margin_y) / inner_height;   // 0..1 vertical
+    float nx = (fc.x - content_rect.x - margin_x) / inner_width;
+    float ny = (fc.y - content_rect.y - margin_y) / inner_height;
 
     // Dynamic amplitude: wave peaks reach within 1px of card edges
-    float amplitude = 0.5 - 1.0 / max(inner_height, 2.0);
+    float amplitude = 0.5 - px_scale / max(inner_height, 2.0 * px_scale);
     // Size controls spread radius only; intensity controls visible strength.
-    float glow_sigma_base = 8.0 * max(u_glow_size, 0.1);
+    float glow_sigma_base = 8.0 * px_scale * max(u_glow_size, 0.1);
 
     int lines = clamp(u_line_count, 1, 6);
 
@@ -401,7 +421,7 @@ void main() {
             float gny2;
             float gv_shift_pct2 = float(u_osc_vertical_shift) / 100.0;
             if (abs(gv_shift_pct2) > 0.001) {
-                float gbase_sp2 = clamp(inner_height * 0.25, 20.0, 80.0);
+                float gbase_sp2 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
                 float gshift2 = (gbase_sp2 * gv_shift_pct2) / inner_height;
                 gny2 = ny + gshift2;
                 gamp2 = amplitude * (0.7 + e2_band * 0.15);
@@ -424,7 +444,7 @@ void main() {
             float gny3;
             float gv_shift_pct3 = float(u_osc_vertical_shift) / 100.0;
             if (abs(gv_shift_pct3) > 0.001) {
-                float gbase_sp3 = clamp(inner_height * 0.25, 20.0, 80.0);
+                float gbase_sp3 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
                 float gshift3 = (gbase_sp3 * gv_shift_pct3) / inner_height;
                 gny3 = ny - gshift3;
                 gamp3 = amplitude * (0.6 + e3_band * 0.18);
@@ -447,7 +467,7 @@ void main() {
             float gny4;
             float gv_shift_pct4 = float(u_osc_vertical_shift) / 100.0;
             if (abs(gv_shift_pct4) > 0.001) {
-                float gbase_sp4 = clamp(inner_height * 0.25, 20.0, 80.0);
+                float gbase_sp4 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
                 float gshift4 = (gbase_sp4 * gv_shift_pct4 * 1.4) / inner_height;
                 gny4 = ny + gshift4;
                 gamp4 = amplitude * (0.55 + e4_band * 0.12);
@@ -470,7 +490,7 @@ void main() {
             float gny5;
             float gv_shift_pct5 = float(u_osc_vertical_shift) / 100.0;
             if (abs(gv_shift_pct5) > 0.001) {
-                float gbase_sp5 = clamp(inner_height * 0.25, 20.0, 80.0);
+                float gbase_sp5 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
                 float gshift5 = (gbase_sp5 * gv_shift_pct5 * 1.8) / inner_height;
                 gny5 = ny - gshift5;
                 gamp5 = amplitude * (0.50 + e5_band * 0.10);
@@ -493,7 +513,7 @@ void main() {
             float gny6;
             float gv_shift_pct6 = float(u_osc_vertical_shift) / 100.0;
             if (abs(gv_shift_pct6) > 0.001) {
-                float gbase_sp6 = clamp(inner_height * 0.25, 20.0, 80.0);
+                float gbase_sp6 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
                 float gshift6 = (gbase_sp6 * gv_shift_pct6 * 2.2) / inner_height;
                 gny6 = ny + gshift6;
                 gamp6 = amplitude * (0.45 + e6_band * 0.08);
@@ -537,7 +557,7 @@ void main() {
         float ny2;
         float v_shift_pct = float(u_osc_vertical_shift) / 100.0;
         if (abs(v_shift_pct) > 0.001) {
-            float base_sp = clamp(inner_height * 0.25, 20.0, 80.0);
+            float base_sp = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
             float shift = (base_sp * v_shift_pct) / inner_height;
             ny2 = ny + shift;
             amp2 = amplitude * (0.7 + e2_band * 0.15);
@@ -567,7 +587,7 @@ void main() {
         float ny3;
         float v_shift_pct3 = float(u_osc_vertical_shift) / 100.0;
         if (abs(v_shift_pct3) > 0.001) {
-            float base_sp3 = clamp(inner_height * 0.25, 20.0, 80.0);
+            float base_sp3 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
             float shift3 = (base_sp3 * v_shift_pct3) / inner_height;
             ny3 = ny - shift3;
             amp3 = amplitude * (0.6 + e3_band * 0.18);
@@ -596,7 +616,7 @@ void main() {
         float ny4;
         float v_shift_pct4 = float(u_osc_vertical_shift) / 100.0;
         if (abs(v_shift_pct4) > 0.001) {
-            float base_sp4 = clamp(inner_height * 0.25, 20.0, 80.0);
+            float base_sp4 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
             float shift4 = (base_sp4 * v_shift_pct4 * 1.4) / inner_height;
             ny4 = ny + shift4;
             amp4 = amplitude * (0.55 + e4_band * 0.12);
@@ -625,7 +645,7 @@ void main() {
         float ny5;
         float v_shift_pct5 = float(u_osc_vertical_shift) / 100.0;
         if (abs(v_shift_pct5) > 0.001) {
-            float base_sp5 = clamp(inner_height * 0.25, 20.0, 80.0);
+            float base_sp5 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
             float shift5 = (base_sp5 * v_shift_pct5 * 1.8) / inner_height;
             ny5 = ny - shift5;
             amp5 = amplitude * (0.50 + e5_band * 0.10);
@@ -654,7 +674,7 @@ void main() {
         float ny6;
         float v_shift_pct6 = float(u_osc_vertical_shift) / 100.0;
         if (abs(v_shift_pct6) > 0.001) {
-            float base_sp6 = clamp(inner_height * 0.25, 20.0, 80.0);
+            float base_sp6 = clamp(inner_height * 0.25, 20.0 * px_scale, 80.0 * px_scale);
             float shift6 = (base_sp6 * v_shift_pct6 * 2.2) / inner_height;
             ny6 = ny + shift6;
             amp6 = amplitude * (0.45 + e6_band * 0.08);

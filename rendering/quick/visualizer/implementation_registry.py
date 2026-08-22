@@ -24,6 +24,12 @@ _IMPLEMENTATIONS = (
             "rendering.quick.visualizer.implementations.spectrum"
         ),
     ),
+    QuickVisualizerImplementationDescriptor(
+        mode_id="oscilloscope",
+        module_name=(
+            "rendering.quick.visualizer.implementations.oscilloscope"
+        ),
+    ),
 )
 _BY_ID = {descriptor.mode_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

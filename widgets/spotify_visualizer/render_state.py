@@ -262,6 +262,7 @@ class SpectrumFrame:
 class OscilloscopeFrame:
     previous_waveform: tuple[float, ...] = ()
     ghost_waveforms: tuple[tuple[float, ...], ...] = ()
+    animation_time: float = 0.0
     parameters: FrozenFields = FrozenFields()
 
     def __post_init__(self) -> None:
@@ -275,6 +276,13 @@ class OscilloscopeFrame:
             "ghost_waveforms",
             _float_tuple_rows(self.ghost_waveforms, name="ghost waveform sample"),
         )
+        object.__setattr__(
+            self,
+            "animation_time",
+            _finite(self.animation_time, name="oscilloscope animation time"),
+        )
+        if self.animation_time < 0.0:
+            raise ValueError("oscilloscope animation time must be non-negative")
         object.__setattr__(
             self,
             "parameters",

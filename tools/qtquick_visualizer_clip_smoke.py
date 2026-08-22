@@ -1,10 +1,11 @@
-"""Focused real-GL proof for the inline Quick visualizer clip and Spectrum."""
+"""Focused real-GL proof for the inline Quick visualizer clip and mode ports."""
 
 from __future__ import annotations
 
 import argparse
 import ctypes
 import json
+import math
 import sys
 import threading
 import time
@@ -57,11 +58,16 @@ from widgets.spotify_visualizer.render_bridge import (  # noqa: E402
     VisualizerSnapshotBridge,
 )
 from widgets.spotify_visualizer.render_state import (  # noqa: E402
+    OscilloscopeFrame,
     SpectrumFrame,
     VisualizerCommonState,
+    VisualizerEnergyState,
     VisualizerLogicalFrame,
     compose_visualizer_render_snapshot,
     freeze_render_fields,
+)
+from widgets.spotify_visualizer.oscilloscope_frame_runtime import (  # noqa: E402
+    OscilloscopeFrameRuntime,
 )
 from widgets.spotify_visualizer.spectrum_frame_runtime import (  # noqa: E402
     SpectrumFrameRuntime,
@@ -855,6 +861,115 @@ def _spectrum_snapshot(case: str, presentation):
     )
 
 
+def _oscilloscope_snapshot(case: str, presentation):
+    sample_count = 128
+    runtime = OscilloscopeFrameRuntime()
+    if case == "idle":
+        idle_waveform = tuple(
+            0.06 * math.sin(index * math.tau * 2.0 / sample_count)
+            for index in range(sample_count)
+        )
+        resolved = runtime.resolve(
+            idle_waveform,
+            waveform_count=sample_count,
+            now_ts=1.0,
+            runtime_generation=1,
+            engine_generation=2,
+            activation_id=3,
+            source_generation=2,
+            source_activation_id=3,
+            playing=False,
+            line_speed=0.33,
+            ghosting_enabled=True,
+            ghost_decay=0.4,
+            energy=VisualizerEnergyState(),
+            kick_event=0.0,
+            snare_event=0.0,
+            transient_width_mix=0.35,
+            base_sensitivity=3.0,
+            animation_enabled=False,
+        )
+        waveform = resolved.waveform
+        previous_waveform = resolved.previous_waveform
+        energy = resolved.energy
+        sensitivity = resolved.resolved_sensitivity
+        playing = False
+    else:
+        waveform = tuple(
+            0.42 * math.sin(index * math.tau * 2.0 / sample_count)
+            for index in range(sample_count)
+        )
+        previous_waveform = (
+            tuple(0.72 for _index in range(sample_count))
+            if case == "ghost"
+            else ()
+        )
+        energy = VisualizerEnergyState(
+            bass=0.55,
+            mid=0.38,
+            high=0.24,
+            overall=0.62,
+        )
+        sensitivity = 3.2
+        playing = True
+    logical = VisualizerLogicalFrame(
+        runtime_generation=1,
+        engine_generation=2,
+        activation_id=3,
+        source_generation=2,
+        source_activation_id=3,
+        mode_id="oscilloscope",
+        playing=playing,
+        logical_timestamp=1.0,
+        source_timestamp=None,
+        changed=True,
+        present_frame=True,
+        mode_reveal_ready=True,
+        common=VisualizerCommonState(
+            bars=(),
+            bar_count=0,
+            waveform=tuple(waveform),
+            waveform_count=len(waveform),
+            energy=energy,
+            style=freeze_render_fields(
+                {
+                    "fill_color": (18, 220, 92, 255),
+                    "border_color": (245, 250, 255, 255),
+                }
+            ),
+        ),
+        mode_state=OscilloscopeFrame(
+            previous_waveform=tuple(previous_waveform),
+            ghost_waveforms=(
+                (tuple(previous_waveform),) if previous_waveform else ()
+            ),
+            animation_time=0.25,
+            parameters=freeze_render_fields(
+                {
+                    "glow_enabled": True,
+                    "glow_intensity": 0.55,
+                    "glow_size": 1.0,
+                    "glow_reactivity": 1.0,
+                    "glow_color": (80, 210, 255, 230),
+                    "reactive_glow": True,
+                    "resolved_sensitivity": sensitivity,
+                    "line_smoothing": 0.0,
+                    "line_color": (245, 250, 255, 255),
+                    "line_count": 1,
+                    "rainbow_enabled": False,
+                    "osc_ghosting_enabled": case == "ghost",
+                    "osc_ghost_intensity": 0.9,
+                }
+            ),
+        ),
+    )
+    return compose_visualizer_render_snapshot(
+        logical,
+        presentation,
+        logical_revision=1,
+    )
+
+
 class _SpectrumSamplingNode(VisualizerRenderNode):
     def __init__(
         self,
@@ -989,11 +1104,18 @@ class _SpectrumItem(VisualizerRenderItem):
         )
 
 
-class _SpectrumRunner(QObject):
-    def __init__(self, app: QGuiApplication, case: str) -> None:
+class _VisualizerModeRunner(QObject):
+    def __init__(
+        self,
+        app: QGuiApplication,
+        case: str,
+        *,
+        mode_id: str,
+    ) -> None:
         super().__init__()
         self._app = app
         self._case = case
+        self._mode_id = mode_id
         self._started_at = time.monotonic()
         self._shared = _SharedProbe(case)
         self._telemetry = VisualizerRenderNodeTelemetry()
@@ -1004,7 +1126,7 @@ class _SpectrumRunner(QObject):
         self._window.setPersistentSceneGraph(False)
         extent, scale = _spectrum_case_geometry(case)
         self._presentation = resolve_visualizer_presentation(
-            policy=get_visualizer_presentation_policy("spectrum"),
+            policy=get_visualizer_presentation_policy(mode_id),
             display_size=_SPECTRUM_WINDOW_SIZE,
             outer_origin=_SPECTRUM_ORIGIN,
             viewport_extent=extent,
@@ -1035,18 +1157,21 @@ class _SpectrumRunner(QObject):
             runtime_generation=1,
             engine_generation=2,
             activation_id=3,
-            mode_id="spectrum",
+            mode_id=mode_id,
         )
         self._bridge.begin_activation(
             runtime_generation=1,
             engine_generation=2,
             activation_id=3,
-            mode_id="spectrum",
+            mode_id=mode_id,
         )
-        if not self._bridge.publish(
-            _spectrum_snapshot(case, self._presentation)
-        ):
-            raise RuntimeError("Spectrum smoke snapshot was rejected")
+        snapshot_factory = (
+            _spectrum_snapshot
+            if mode_id == "spectrum"
+            else _oscilloscope_snapshot
+        )
+        if not self._bridge.publish(snapshot_factory(case, self._presentation)):
+            raise RuntimeError(f"{mode_id} smoke snapshot was rejected")
         self._item.bind_render_source(self._bridge, self._identity)
         self._frame_swap_count = 0
         self._window.frameSwapped.connect(self._on_frame_swapped)
@@ -1066,7 +1191,7 @@ class _SpectrumRunner(QObject):
             self._finish(valid=False, error=error)
             return
         if time.monotonic() - self._started_at > 8.0:
-            self._finish(valid=False, error="Spectrum proof timed out")
+            self._finish(valid=False, error=f"{self._mode_id} proof timed out")
             return
         if self._case not in captures or self._frame_swap_count < 1:
             QTimer.singleShot(20, self._poll)
@@ -1237,11 +1362,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--policy",
-        choices=("rounded", "rect", "nested", "spectrum"),
+        choices=("rounded", "rect", "nested", "spectrum", "oscilloscope"),
         required=True,
     )
     parser.add_argument(
+        "--visualizer-case",
         "--spectrum-case",
+        dest="visualizer_case",
         choices=("canonical", "scaled", "wide", "tall", "idle", "ghost"),
         default="canonical",
     )
@@ -1254,8 +1381,12 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"valid": False, "error": "Quick is not using OpenGL"}))
         return 1
     runner = (
-        _SpectrumRunner(app, args.spectrum_case)
-        if args.policy == "spectrum"
+        _VisualizerModeRunner(
+            app,
+            args.visualizer_case,
+            mode_id=args.policy,
+        )
+        if args.policy in {"spectrum", "oscilloscope"}
         else _Runner(app, args.policy)
     )
     QTimer.singleShot(0, runner.start)

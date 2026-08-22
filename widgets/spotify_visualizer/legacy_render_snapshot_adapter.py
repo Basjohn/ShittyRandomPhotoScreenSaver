@@ -14,6 +14,9 @@ from typing import Any
 
 from widgets.spotify_visualizer import config_applier, mode_capabilities
 from widgets.spotify_visualizer.logical_runtime import coerce_identity
+from widgets.spotify_visualizer.oscilloscope_frame_runtime import (
+    OscilloscopeFrameRuntime,
+)
 from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
     DevCurveFrame,
@@ -292,11 +295,71 @@ def _capture_spectrum(
 def _capture_oscilloscope(
     widget: Any,
     engine: Any,
-    _context: _CaptureContext,
+    context: _CaptureContext,
 ) -> tuple[ModeFrame, dict[str, Any]]:
     extra = _base_extras(widget, "oscilloscope", engine)
     config_applier._append_line_mode_visual_extras(extra, widget, is_sine=False)
-    return OscilloscopeFrame(parameters=_render_parameters(extra)), extra
+    controller = getattr(widget, "runtime_controller", None)
+    if controller is None:
+        raise RuntimeError(
+            "Oscilloscope logical capture requires its runtime controller owner"
+        )
+    runtime = controller.resolve_logical_mode_state(
+        "oscilloscope",
+        OscilloscopeFrameRuntime,
+    )
+    if not isinstance(runtime, OscilloscopeFrameRuntime):
+        raise TypeError("Oscilloscope logical mode state has the wrong type")
+    resolved = runtime.resolve(
+        tuple(extra.get("waveform", ()) or ()),
+        waveform_count=int(extra.get("waveform_count", 0) or 0),
+        now_ts=context.now_ts,
+        runtime_generation=context.runtime_generation,
+        engine_generation=context.engine_generation,
+        activation_id=context.activation_id,
+        source_generation=context.source_generation,
+        source_activation_id=context.source_activation_id,
+        playing=context.playing,
+        line_speed=float(extra.get("line_speed", 1.0) or 1.0),
+        ghosting_enabled=bool(
+            extra.get("osc_ghosting_enabled", False)
+            and float(extra.get("osc_ghost_intensity", 0.0) or 0.0) > 0.001
+        ),
+        ghost_decay=float(extra.get("osc_ghost_decay", 0.4) or 0.4),
+        energy=_energy_state(extra.get("energy_bands")),
+        kick_event=float(extra.get("line_kick_event_strength", 0.0) or 0.0),
+        snare_event=float(
+            extra.get("line_snare_event_strength", 0.0) or 0.0
+        ),
+        transient_width_mix=float(
+            extra.get("osc_transient_width_mix", 0.35)
+        ),
+        base_sensitivity=float(extra.get("line_sensitivity", 3.0) or 3.0),
+        animation_enabled=bool(extra.get("rainbow_enabled", False)),
+    )
+    extra["_quick_resolved_waveform"] = resolved.waveform
+    extra["_quick_resolved_waveform_count"] = resolved.waveform_count
+    extra["_quick_resolved_energy"] = resolved.energy
+    extra["_quick_mode_changed"] = resolved.changed
+    parameter_values = {
+        name: value
+        for name, value in extra.items()
+        if not name.startswith("_quick_")
+    }
+    parameter_values["resolved_sensitivity"] = resolved.resolved_sensitivity
+    return (
+        OscilloscopeFrame(
+            previous_waveform=resolved.previous_waveform,
+            ghost_waveforms=(
+                (resolved.previous_waveform,)
+                if resolved.previous_waveform
+                else ()
+            ),
+            animation_time=resolved.animation_time,
+            parameters=_render_parameters(parameter_values),
+        ),
+        extra,
+    )
 
 
 def _capture_sine(
@@ -474,8 +537,18 @@ def capture_legacy_visualizer_logical_frame(
     )
     mode_state, extra = capture(widget, engine, context)
 
-    waveform = tuple(extra.get("waveform", ()) or ())
-    waveform_count = int(extra.get("waveform_count", len(waveform)) or 0)
+    waveform = tuple(
+        extra.get(
+            "_quick_resolved_waveform",
+            extra.get("waveform", ()) or (),
+        )
+    )
+    waveform_count = int(
+        extra.get(
+            "_quick_resolved_waveform_count",
+            extra.get("waveform_count", len(waveform)) or 0,
+        )
+    )
     common = VisualizerCommonState(
         bars=tuple(
             extra.get(
@@ -486,7 +559,12 @@ def capture_legacy_visualizer_logical_frame(
         bar_count=int(getattr(widget, "_bar_count", 0) or 0),
         waveform=waveform,
         waveform_count=waveform_count,
-        energy=_energy_state(extra.get("energy_bands")),
+        energy=_energy_state(
+            extra.get(
+                "_quick_resolved_energy",
+                extra.get("energy_bands"),
+            )
+        ),
         transient=_transient_state(extra.get("transient_energy")),
         style=freeze_render_fields(_common_style(widget)),
     )
@@ -500,7 +578,11 @@ def capture_legacy_visualizer_logical_frame(
         playing=bool(getattr(widget, "_spotify_playing", False)),
         logical_timestamp=float(now_ts),
         source_timestamp=source_timestamp,
-        changed=bool(changed or extra.get("_quick_spectrum_changed", False)),
+        changed=bool(
+            changed
+            or extra.get("_quick_spectrum_changed", False)
+            or extra.get("_quick_mode_changed", False)
+        ),
         present_frame=bool(present_frame),
         mode_reveal_ready=bool(mode_reveal_ready),
         common=common,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from typing import Sequence
 
 from OpenGL import GL as gl
 
@@ -18,6 +18,7 @@ from ..render_contract import (
     QUICK_VISUALIZER_VERTEX_SOURCE,
     QuickVisualizerRenderFrame,
 )
+from ..implementation_values import parameter, rgba, safe_hue
 
 
 _MAX_BARS = 64
@@ -80,37 +81,6 @@ def compute_quick_spectrum_layout(
     )
 
 
-def _rgba(value: object, *, default: tuple[int, int, int, int]) -> tuple[float, ...]:
-    channels: Sequence[object]
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        channels = value
-    else:
-        channels = default
-    if len(channels) < 3:
-        channels = default
-    alpha = channels[3] if len(channels) > 3 else 255
-    return tuple(
-        max(0.0, min(1.0, float(channel) / 255.0))
-        for channel in (*channels[:3], alpha)
-    )
-
-
-def _parameter(
-    parameters: Mapping[str, object],
-    name: str,
-    default: object,
-) -> object:
-    try:
-        return parameters[name]
-    except KeyError:
-        return default
-
-
-def _safe_hue(value: float) -> float:
-    raw = value % 1.0
-    return (raw + 0.002) % 1.0 if raw < 0.001 else raw
-
-
 class QuickSpectrumRenderer:
     mode_id = "spectrum"
 
@@ -162,34 +132,34 @@ class QuickSpectrumRenderer:
 
         parameters = mode_state.parameters
         style = logical.common.style
-        fill = _rgba(
+        fill = rgba(
             style.get("fill_color"),
             default=(30, 215, 96, 255),
         )
-        border = _rgba(
+        border = rgba(
             style.get("border_color"),
             default=(255, 255, 255, 255),
         )
-        glow_color = _rgba(
-            _parameter(parameters, "spectrum_glow_color", None),
+        glow_color = rgba(
+            parameter(parameters, "spectrum_glow_color", None),
             default=tuple(round(channel * 255.0) for channel in border),
         )
         rainbow_enabled = bool(
-            _parameter(parameters, "rainbow_enabled", False)
+            parameter(parameters, "rainbow_enabled", False)
         )
         rainbow_per_bar = bool(
-            _parameter(parameters, "rainbow_per_bar", False)
+            parameter(parameters, "rainbow_per_bar", False)
         )
         rainbow_speed = max(
             0.01,
-            min(5.0, float(_parameter(parameters, "rainbow_speed", 0.5))),
+            min(5.0, float(parameter(parameters, "rainbow_speed", 0.5))),
         )
         if rainbow_enabled:
-            hue = _safe_hue(
+            hue = safe_hue(
                 mode_state.animation_time * rainbow_speed * 0.1
             )
         elif rainbow_per_bar:
-            hue = _safe_hue(mode_state.animation_time * 0.05)
+            hue = safe_hue(mode_state.animation_time * 0.05)
         else:
             hue = 0.0
 
@@ -225,7 +195,7 @@ class QuickSpectrumRenderer:
         )
         gl.glUniform1i(
             uniforms["u_slanted"],
-            1 if bool(_parameter(parameters, "slanted", False)) else 0,
+            1 if bool(parameter(parameters, "slanted", False)) else 0,
         )
         gl.glUniform1f(
             uniforms["u_border_radius"],
@@ -233,10 +203,10 @@ class QuickSpectrumRenderer:
             * presentation.uniform_visual_scale,
         )
         ghost_enabled = bool(
-            _parameter(parameters, "spectrum_ghosting_enabled", True)
+            parameter(parameters, "spectrum_ghosting_enabled", True)
         )
         ghost_alpha = float(
-            _parameter(parameters, "spectrum_ghost_alpha", 0.4)
+            parameter(parameters, "spectrum_ghost_alpha", 0.4)
         )
         gl.glUniform1f(
             uniforms["u_ghost_alpha"],
@@ -245,7 +215,7 @@ class QuickSpectrumRenderer:
         gl.glUniform1i(
             uniforms["u_spectrum_glow_enabled"],
             1
-            if bool(_parameter(parameters, "spectrum_glow_enabled", False))
+            if bool(parameter(parameters, "spectrum_glow_enabled", False))
             else 0,
         )
         gl.glUniform1f(
@@ -255,7 +225,7 @@ class QuickSpectrumRenderer:
                 min(
                     1.5,
                     float(
-                        _parameter(
+                        parameter(
                             parameters,
                             "spectrum_glow_intensity",
                             0.55,
@@ -274,7 +244,7 @@ class QuickSpectrumRenderer:
             uniforms["u_rainbow_border"],
             1
             if bool(
-                _parameter(parameters, "spectrum_rainbow_border", False)
+                parameter(parameters, "spectrum_rainbow_border", False)
             )
             else 0,
         )
