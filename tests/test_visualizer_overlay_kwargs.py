@@ -139,8 +139,9 @@ def test_devcurve_specular_activity_fades_down_while_paused(qt_app):
 
     widget._engine = _StubEngine()
     widget.set_visualization_mode(VisualizerMode.DEVCURVE)
+    widget._spotify_playing = True
+    dispatch_devcurve_field(widget, 9.9)
     widget._spotify_playing = False
-    widget._devcurve_specular_activity_alpha = 1.0
 
     dispatch_devcurve_field(widget, 10.0)
     first = widget._devcurve_specular_activity_alpha
@@ -158,8 +159,9 @@ def test_devcurve_specular_activity_fades_up_when_playing(qt_app):
 
     widget._engine = _StubEngine()
     widget.set_visualization_mode(VisualizerMode.DEVCURVE)
+    widget._spotify_playing = False
+    dispatch_devcurve_field(widget, 19.9)
     widget._spotify_playing = True
-    widget._devcurve_specular_activity_alpha = 0.0
 
     dispatch_devcurve_field(widget, 20.0)
     first = widget._devcurve_specular_activity_alpha

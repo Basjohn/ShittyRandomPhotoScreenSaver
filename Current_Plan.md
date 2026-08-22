@@ -1653,22 +1653,23 @@ architecture.
 # 15. Current next work
 
 Normal implementation work is now **Phase D**. D1, D2, the D3/D4 item, shell, clip and canonical
-geometry foundation, Spectrum, Oscilloscope, Sine, and Bubble + BTF are structurally landed; do not
-reopen them without contradictory evidence.
+geometry foundation, and all five current mode ports are structurally landed; do not reopen them
+without contradictory evidence.
 
-The next admitted slice is DevCurve:
+The next admitted slice is the all-five-mode lifecycle/source/pause/aspect closure:
 
-- [ ] retain DevCurve's authored field/layer state on the sole logical runtime and publish immutable
-  enabled layers, order, alpha, offsets, outline and ghost state without render-cadence ownership;
-- [ ] port DevCurve through the lazy Quick implementation boundary while preserving its authored
-  tuning, card-interior clip and live/idle visual behavior;
-- [ ] prove source freshness plus canonical/scaled and admitted wide/tall geometry without retuning
-  DevCurve to hide presentation defects;
-- [ ] run only the focused DevCurve/visualizer script and test gates;
-- [ ] inspect diff/status, commit the coherent DevCurve slice, and push immediately.
+- [ ] exercise all five canonical mode descriptors through one production-shaped lazy renderer
+  lifecycle matrix, including mode replacement and render-owner resource release;
+- [ ] prove exact generation/activation source admission, stale-source rejection, and ordinary
+  Pause/Play continuity for every mode without adding another clock or cold-start path;
+- [ ] audit canonical/scaled/wide/tall behavior against each mode's admitted presentation policy,
+  including the conservative Bubble aspect policy and the four proven reflow-capable modes;
+- [ ] keep the canonical build workers and `tools/build_runner.py` compatible through focused static
+  packaging gates only; do not perform a compiled/product build;
+- [ ] run only the focused all-five visualizer script/test gates;
+- [ ] inspect diff/status, commit the coherent closure slice, and push immediately.
 
-Then continue in the fixed checkpoint order: all-five-mode lifecycle/source/pause/aspect closure and
-Phase-D documentation closure.
+Then complete the Phase-D documentation closure and pause before Phase E.
 
 If the operator instead explicitly says **continue from Phase C tests**, execute Section 7.5 test-only
 hardening first and return to D afterward.

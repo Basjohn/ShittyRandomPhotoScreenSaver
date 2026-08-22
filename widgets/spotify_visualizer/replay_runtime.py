@@ -470,9 +470,20 @@ def _capture_bubble_simulation(widget: SpotifyVisualizerWidget) -> dict[str, Any
 
 
 def _capture_devcurve_runtime(widget: SpotifyVisualizerWidget) -> dict[str, Any]:
-    state = getattr(widget, "_devcurve_runtime_state", None)
-    if state is None:
+    from widgets.spotify_visualizer.devcurve_frame_runtime import (
+        DevCurveFrameRuntime,
+    )
+
+    controller = getattr(widget, "runtime_controller", None)
+    runtime = (
+        controller.peek_logical_mode_state("devcurve")
+        if controller is not None
+        else None
+    )
+    if not isinstance(runtime, DevCurveFrameRuntime):
         return {}
+    state = runtime.solver_state
+    resolved = runtime.latest
     return {
         "phase": getattr(state, "phase", 0.0),
         "smooth_energy": dict(getattr(state, "smooth_energy", {})),
@@ -496,8 +507,8 @@ def _capture_devcurve_runtime(widget: SpotifyVisualizerWidget) -> dict[str, Any]
             "specular_spawn_counter",
             0,
         ),
-        "draw_order": list(getattr(widget, "_devcurve_draw_order", ())),
-        "foreground_layer": getattr(widget, "_devcurve_foreground_layer", ""),
+        "draw_order": list(resolved.draw_order),
+        "foreground_layer": resolved.foreground_layer,
     }
 
 

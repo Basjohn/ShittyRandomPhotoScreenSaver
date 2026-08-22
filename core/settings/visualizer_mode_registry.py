@@ -96,7 +96,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         "Spline Curve",
         "_devcurve_preset_slider",
         ("devcurve_",),
-        _CURRENT_CARDED_POLICY,
+        _REFLOWING_CARDED_POLICY,
     ),
 )
 

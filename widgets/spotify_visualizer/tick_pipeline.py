@@ -27,8 +27,10 @@ from widgets.spotify_visualizer.signal_contract import soft_ceiling
 from widgets.spotify_visualizer import mode_capabilities, mode_transition
 from widgets.spotify_visualizer.logical_runtime import coerce_identity
 from widgets.spotify_visualizer.render_state import (
+    VisualizerEnergyState,
     VisualizerLogicalFrame,
     VisualizerProtectedEdge,
+    VisualizerTransientState,
 )
 from widgets.spotify_visualizer.spectrum_presentation_smoothing import (
     reset_widget_spectrum_presentation_smoothing,
@@ -177,187 +179,344 @@ def process_heartbeat(widget: Any, now_ts: float) -> None:
 
 
 # ------------------------------------------------------------------
-# Bubble simulation dispatch
+# DevCurve authored-field dispatch
 # ------------------------------------------------------------------
 
-def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
-    """Advance Dev Curve runtime and publish sampled curve arrays."""
-    if widget._vis_mode_str != 'devcurve':
-        return
+_DEVCURVE_LAYERS = ("bass", "vocals", "mids", "transients")
+_DEVCURVE_LAYER_DEFAULTS = {
+    "bass": {
+        "color": (82, 167, 255, 230),
+        "alpha": 0.55,
+        "power": 1.0,
+        "offset": 0.0,
+    },
+    "vocals": {
+        "color": (136, 190, 255, 220),
+        "alpha": 0.42,
+        "power": 1.0,
+        "offset": -0.01,
+    },
+    "mids": {
+        "color": (100, 145, 255, 220),
+        "alpha": 0.46,
+        "power": 1.0,
+        "offset": 0.01,
+    },
+    "transients": {
+        "color": (215, 240, 255, 240),
+        "alpha": 0.66,
+        "power": 1.15,
+        "offset": 0.0,
+    },
+}
+_DEVCURVE_DEFAULT_NODES = (
+    (0.0, 0.58),
+    (0.35, 0.64),
+    (0.70, 0.52),
+    (1.0, 0.60),
+)
 
-    from widgets.spotify_visualizer.devcurve_runtime import (
-        DevCurveRuntimeState,
-        solve_devcurve_frame,
-    )
-    from widgets.spotify_visualizer.energy_bands import EnergyBands
 
-    state = getattr(widget, '_devcurve_runtime_state', None)
-    if state is None:
-        state = DevCurveRuntimeState()
-        widget._devcurve_runtime_state = state
+def _devcurve_parameter_snapshot(widget: Any) -> dict[str, object]:
+    """Detach one coherent DevCurve tuning/style input for the logical step."""
 
-    prev_ts = getattr(widget, '_devcurve_last_tick_ts', 0.0) or 0.0
-    widget._devcurve_last_tick_ts = now_ts
-    dt = max(0.001, min(0.1, now_ts - prev_ts)) if prev_ts > 0 else 0.016
-    playing = bool(widget._spotify_playing)
-
-    engine = widget._engine
-    transient_bus = None
-    if playing:
-        try:
-            energy = engine.get_energy_bands() if engine is not None else None
-            transient_bus = engine.get_transient_energy_bands() if engine is not None else None
-        except Exception:
-            energy = None
-            transient_bus = None
-    else:
-        # Bubble/Sine idle path parity: deterministic low-amplitude motion source
-        # while paused so shape stability can be tuned visually.
-        idle_phase = now_ts
-        idle_bass = 0.018 + 0.010 * (0.5 + 0.5 * math.sin(idle_phase * 0.58))
-        idle_mid = 0.015 + 0.007 * (0.5 + 0.5 * math.sin(idle_phase * 0.41 + 1.3))
-        idle_high = 0.012 + 0.005 * (0.5 + 0.5 * math.sin(idle_phase * 0.71 + 2.1))
-        energy = EnergyBands(
-            bass=idle_bass,
-            mid=idle_mid,
-            high=idle_high,
-            overall=0.018,
+    values: dict[str, object] = {
+        "devcurve_base_level": float(
+            getattr(widget, "_devcurve_base_level", 0.58)
+        ),
+        "devcurve_motion_power": float(
+            getattr(widget, "_devcurve_motion_power", 1.0)
+        ),
+        "devcurve_idle_motion": float(
+            getattr(widget, "_devcurve_idle_motion", 0.20)
+        ),
+        "devcurve_idle_speed": float(
+            getattr(widget, "_devcurve_idle_speed", 0.60)
+        ),
+        "devcurve_smoothness": float(
+            getattr(widget, "_devcurve_smoothness", 0.55)
+        ),
+        "devcurve_ghosting_enabled": bool(
+            getattr(widget, "_devcurve_ghosting_enabled", False)
+        ),
+        "devcurve_ghost_alpha": float(
+            getattr(widget, "_devcurve_ghost_alpha", 0.0)
+        ),
+        "devcurve_ghost_decay": float(
+            getattr(widget, "_devcurve_ghost_decay", 0.4)
+        ),
+        "devcurve_foreground_shadow_enabled": bool(
+            getattr(widget, "_devcurve_foreground_shadow_enabled", False)
+        ),
+        "devcurve_foreground_shadow_alpha": float(
+            getattr(widget, "_devcurve_foreground_shadow_alpha", 0.36)
+        ),
+        "devcurve_foreground_shadow_darken": float(
+            getattr(widget, "_devcurve_foreground_shadow_darken", 0.42)
+        ),
+        "devcurve_foreground_shadow_offset": float(
+            getattr(widget, "_devcurve_foreground_shadow_offset", 0.10)
+        ),
+        "devcurve_foreground_specular_enabled": bool(
+            getattr(widget, "_devcurve_foreground_specular_enabled", False)
+        ),
+        "devcurve_foreground_specular_alpha": float(
+            getattr(widget, "_devcurve_foreground_specular_alpha", 0.78)
+        ),
+        "devcurve_foreground_specular_width": float(
+            getattr(widget, "_devcurve_foreground_specular_width", 0.022)
+        ),
+        "devcurve_foreground_specular_offset": float(
+            getattr(widget, "_devcurve_foreground_specular_offset", 0.028)
+        ),
+        "devcurve_foreground_specular_crest_bias": float(
+            getattr(widget, "_devcurve_foreground_specular_crest_bias", 1.05)
+        ),
+        "rainbow_enabled": bool(getattr(widget, "_rainbow_enabled", False)),
+        "rainbow_speed": float(getattr(widget, "_rainbow_speed", 0.5)),
+    }
+    for index, name in enumerate(_DEVCURVE_LAYERS):
+        defaults = _DEVCURVE_LAYER_DEFAULTS[name]
+        prefix = f"devcurve_layer_{name}"
+        values.update(
+            {
+                f"{prefix}_enabled": bool(
+                    getattr(widget, f"_{prefix}_enabled", True)
+                ),
+                f"{prefix}_color": getattr(
+                    widget,
+                    f"_{prefix}_color",
+                    defaults["color"],
+                ),
+                f"{prefix}_alpha": float(
+                    getattr(widget, f"_{prefix}_alpha", defaults["alpha"])
+                ),
+                f"{prefix}_power": float(
+                    getattr(widget, f"_{prefix}_power", defaults["power"])
+                ),
+                f"{prefix}_offset": float(
+                    getattr(widget, f"_{prefix}_offset", defaults["offset"])
+                ),
+                f"{prefix}_outline_color": getattr(
+                    widget,
+                    f"_{prefix}_outline_color",
+                    (255, 255, 255, 255),
+                ),
+                f"{prefix}_outline_width": float(
+                    getattr(widget, f"_{prefix}_outline_width", 0.006)
+                ),
+                f"{prefix}_order": int(
+                    getattr(widget, f"_{prefix}_order", index + 1)
+                ),
+            }
         )
+    return values
 
-    layer_settings = {
-        "bass": {
-            "enabled": bool(getattr(widget, "_devcurve_layer_bass_enabled", True)),
-            "power": float(getattr(widget, "_devcurve_layer_bass_power", 1.0)),
-            "offset": float(getattr(widget, "_devcurve_layer_bass_offset", 0.0)),
-            "order": int(getattr(widget, "_devcurve_layer_bass_order", 1)),
-        },
-        "vocals": {
-            "enabled": bool(getattr(widget, "_devcurve_layer_vocals_enabled", True)),
-            "power": float(getattr(widget, "_devcurve_layer_vocals_power", 1.0)),
-            "offset": float(getattr(widget, "_devcurve_layer_vocals_offset", 0.0)),
-            "order": int(getattr(widget, "_devcurve_layer_vocals_order", 2)),
-        },
-        "mids": {
-            "enabled": bool(getattr(widget, "_devcurve_layer_mids_enabled", True)),
-            "power": float(getattr(widget, "_devcurve_layer_mids_power", 1.0)),
-            "offset": float(getattr(widget, "_devcurve_layer_mids_offset", 0.0)),
-            "order": int(getattr(widget, "_devcurve_layer_mids_order", 3)),
-        },
-        "transients": {
-            "enabled": bool(getattr(widget, "_devcurve_layer_transients_enabled", True)),
-            "power": float(getattr(widget, "_devcurve_layer_transients_power", 1.0)),
-            "offset": float(getattr(widget, "_devcurve_layer_transients_offset", 0.0)),
-            "order": int(getattr(widget, "_devcurve_layer_transients_order", 4)),
-        },
-    }
-    default_nodes = [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]]
-    layer_shape_nodes = {
-        "bass": list(getattr(widget, "_devcurve_layer_bass_shape_nodes", default_nodes)),
-        "vocals": list(getattr(widget, "_devcurve_layer_vocals_shape_nodes", default_nodes)),
-        "mids": list(getattr(widget, "_devcurve_layer_mids_shape_nodes", default_nodes)),
-        "transients": list(getattr(widget, "_devcurve_layer_transients_shape_nodes", default_nodes)),
-    }
+
+def _devcurve_energy(value: object) -> VisualizerEnergyState:
+    return VisualizerEnergyState(
+        bass=float(getattr(value, "bass", 0.0) if value is not None else 0.0),
+        mid=float(getattr(value, "mid", 0.0) if value is not None else 0.0),
+        high=float(getattr(value, "high", 0.0) if value is not None else 0.0),
+        overall=float(
+            getattr(value, "overall", 0.0) if value is not None else 0.0
+        ),
+    )
+
+
+def _devcurve_transient(value: object) -> VisualizerTransientState:
+    return VisualizerTransientState(
+        bass=float(
+            getattr(value, "bass_transient", 0.0)
+            if value is not None
+            else 0.0
+        ),
+        mid=float(
+            getattr(value, "mid_transient", 0.0)
+            if value is not None
+            else 0.0
+        ),
+        high=float(
+            getattr(value, "high_transient", 0.0)
+            if value is not None
+            else 0.0
+        ),
+        onset_detected=bool(
+            getattr(value, "onset_detected", False)
+            if value is not None
+            else False
+        ),
+        onset_type=str(
+            getattr(value, "onset_type", "") if value is not None else ""
+        ),
+        onset_strength=float(
+            getattr(value, "onset_strength", 0.0)
+            if value is not None
+            else 0.0
+        ),
+    )
+
+
+def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
+    """Advance one DevCurve step on the sole authored logical clock."""
+
+    if widget._vis_mode_str != "devcurve":
+        return
+    controller = getattr(widget, "runtime_controller", None)
+    if controller is None:
+        raise RuntimeError("DevCurve logical step requires its runtime controller")
+
+    from widgets.spotify_visualizer.devcurve_frame_runtime import (
+        DevCurveFrameRuntime,
+    )
 
     try:
-        frame = solve_devcurve_frame(
-            state,
-            dt=dt,
+        runtime = controller.resolve_logical_mode_state(
+            "devcurve",
+            DevCurveFrameRuntime,
+        )
+    except ValueError:
+        if controller.mode_id != "devcurve" or widget._vis_mode_str != "devcurve":
+            return
+        raise
+    if not isinstance(runtime, DevCurveFrameRuntime):
+        raise TypeError("DevCurve logical mode state has the wrong type")
+
+    engine = widget._engine
+    energy_input = None
+    transient_input = None
+    engine_generation = -1
+    engine_activation = -1
+    source_generation = -1
+    source_activation = -1
+    source_timestamp = 0.0
+    if engine is not None:
+        try:
+            engine_generation = coerce_identity(engine.get_generation_id())
+            engine_activation = coerce_identity(engine.get_activation_id())
+        except Exception:
+            pass
+        try:
+            energy_input = engine.get_energy_bands()
+            transient_input = engine.get_transient_energy_bands()
+        except Exception:
+            energy_input = None
+            transient_input = None
+        try:
+            (
+                raw_source_timestamp,
+                raw_source_generation,
+                raw_source_activation,
+            ) = engine.get_latest_authoritative_frame()
+            source_timestamp = float(raw_source_timestamp)
+            source_generation = coerce_identity(raw_source_generation)
+            source_activation = coerce_identity(raw_source_activation)
+        except Exception:
+            source_timestamp = 0.0
+
+    parameters = _devcurve_parameter_snapshot(widget)
+    layer_shape_nodes = {
+        name: list(
+            getattr(
+                widget,
+                f"_devcurve_layer_{name}_shape_nodes",
+                _DEVCURVE_DEFAULT_NODES,
+            )
+        )
+        for name in _DEVCURVE_LAYERS
+    }
+    try:
+        resolved = runtime.advance(
             now_ts=now_ts,
+            runtime_generation=coerce_identity(
+                getattr(widget, "_runtime_generation", None)
+            ),
+            engine_generation=engine_generation,
+            activation_id=engine_activation,
+            source_generation=source_generation,
+            source_activation_id=source_activation,
+            source_timestamp=source_timestamp,
+            playing=bool(widget._spotify_playing),
+            energy=_devcurve_energy(energy_input),
+            transient=_devcurve_transient(transient_input),
             layer_shape_nodes=layer_shape_nodes,
-            base_level=float(getattr(widget, "_devcurve_base_level", 0.58)),
-            motion_power=float(getattr(widget, "_devcurve_motion_power", 1.0)),
-            idle_motion=float(getattr(widget, "_devcurve_idle_motion", 0.20)),
-            idle_speed=float(getattr(widget, "_devcurve_idle_speed", 0.60)),
-            smoothness=float(getattr(widget, "_devcurve_smoothness", 0.55)),
-            growth=float(getattr(widget, "_devcurve_growth", 3.0)),
-            layer_settings=layer_settings,
-            energy_bands=energy,
-            transient_bus=transient_bus,
-            playing=playing,
+            parameters=parameters,
         )
     except Exception:
-        logger.debug("[SPOTIFY_VIS][DEVCURVE] runtime solve failed", exc_info=True)
+        logger.exception("[SPOTIFY_VIS][DEVCURVE] logical integration failed")
+        return
+    if resolved is None:
+        return
+    if controller.mode_id != "devcurve" or widget._vis_mode_str != "devcurve":
         return
 
-    layer_map = frame.get("layers", {}) if isinstance(frame.get("layers", {}), dict) else {}
-    widget._devcurve_sample_count = int(frame.get("sample_count", 0))
-    widget._devcurve_curve_bass = list(layer_map.get("bass", []))
-    widget._devcurve_curve_vocals = list(layer_map.get("vocals", []))
-    widget._devcurve_curve_mids = list(layer_map.get("mids", []))
-    widget._devcurve_curve_transients = list(layer_map.get("transients", []))
-    draw_order = frame.get("draw_order", ["bass", "vocals", "mids", "transients"])
-    if isinstance(draw_order, list) and len(draw_order) == 4:
-        widget._devcurve_draw_order = list(draw_order)
-    widget._devcurve_foreground_layer = str(frame.get("foreground_layer", "") or "")
-    widget._devcurve_foreground_layer_id = int(frame.get("foreground_layer_id", -1))
-    slots = frame.get("specular_slots", [])
-    if isinstance(slots, list) and slots:
-        s0 = slots[0] if len(slots) > 0 and isinstance(slots[0], list) else [0.0, 0.0, 0.0, 0.0]
-        s1 = slots[1] if len(slots) > 1 and isinstance(slots[1], list) else [0.0, 0.0, 0.0, 0.0]
-        s2 = slots[2] if len(slots) > 2 and isinstance(slots[2], list) else [0.0, 0.0, 0.0, 0.0]
-        widget._devcurve_specular_slot0 = [
-            max(-1.5, min(2.5, float(s0[0] if len(s0) > 0 else 0.0))),
-            max(0.0, min(1.0, float(s0[1] if len(s0) > 1 else 0.0))),
-            max(0.0, min(1.0, float(s0[2] if len(s0) > 2 else 0.0))),
-            max(0.0, min(1.0, float(s0[3] if len(s0) > 3 else 0.0))),
-        ]
-        widget._devcurve_specular_slot1 = [
-            max(-1.5, min(2.5, float(s1[0] if len(s1) > 0 else 0.0))),
-            max(0.0, min(1.0, float(s1[1] if len(s1) > 1 else 0.0))),
-            max(0.0, min(1.0, float(s1[2] if len(s1) > 2 else 0.0))),
-            max(0.0, min(1.0, float(s1[3] if len(s1) > 3 else 0.0))),
-        ]
-        widget._devcurve_specular_slot2 = [
-            max(-1.5, min(2.5, float(s2[0] if len(s2) > 0 else 0.0))),
-            max(0.0, min(1.0, float(s2[1] if len(s2) > 1 else 0.0))),
-            max(0.0, min(1.0, float(s2[2] if len(s2) > 2 else 0.0))),
-            max(0.0, min(1.0, float(s2[3] if len(s2) > 3 else 0.0))),
-        ]
-    else:
-        widget._devcurve_specular_slot0 = [0.0, 0.0, 0.0, 0.0]
-        widget._devcurve_specular_slot1 = [0.0, 0.0, 0.0, 0.0]
-        widget._devcurve_specular_slot2 = [0.0, 0.0, 0.0, 0.0]
-    widget._devcurve_smoothness_max_step = float(frame.get("smoothness_max_step", 0.0))
-    widget._devcurve_active_amplitude = float(frame.get("active_amplitude", 0.0))
-    widget._devcurve_idle_amplitude = float(frame.get("idle_amplitude", 0.0))
-    widget._devcurve_foreground_travel_rate = float(frame.get("foreground_travel_rate", 0.0))
-    widget._devcurve_foreground_travel_pos = float(frame.get("foreground_travel_pos", 0.0))
-    widget._devcurve_specular_travel_rate = float(frame.get("specular_travel_rate", 0.0))
-    current_specular_activity = float(
-        getattr(widget, "_devcurve_specular_activity_alpha", 1.0 if playing else 0.0)
+    # Temporary old-presenter mirror. The controller-owned immutable result is
+    # authoritative; the Quick renderer never reads these widget fields.
+    curve_map = dict(resolved.curves)
+    widget._devcurve_sample_count = int(
+        resolved.parameters.get("devcurve_sample_count", 0)
     )
-    target_specular_activity = 1.0 if playing else 0.0
-    fade_seconds = 0.85
-    blend = max(0.0, min(1.0, dt / fade_seconds))
-    widget._devcurve_specular_activity_alpha = (
-        current_specular_activity
-        + (target_specular_activity - current_specular_activity) * blend
+    for name in _DEVCURVE_LAYERS:
+        setattr(widget, f"_devcurve_curve_{name}", list(curve_map.get(name, ())))
+    widget._devcurve_draw_order = list(resolved.draw_order)
+    widget._devcurve_foreground_layer = resolved.foreground_layer
+    widget._devcurve_foreground_layer_id = resolved.foreground_layer_id
+    slots = list(resolved.specular_slots)
+    while len(slots) < 3:
+        slots.append((0.0, 0.0, 0.0, 0.0))
+    for index, slot in enumerate(slots[:3]):
+        setattr(widget, f"_devcurve_specular_slot{index}", list(slot))
+
+    diagnostics = resolved.diagnostics
+    widget._devcurve_smoothness_max_step = float(
+        diagnostics.get("smoothness_max_step", 0.0)
+    )
+    widget._devcurve_active_amplitude = float(
+        diagnostics.get("active_amplitude", 0.0)
+    )
+    widget._devcurve_idle_amplitude = float(
+        diagnostics.get("idle_amplitude", 0.0)
+    )
+    widget._devcurve_foreground_travel_rate = float(
+        diagnostics.get("foreground_travel_rate", 0.0)
+    )
+    widget._devcurve_foreground_travel_pos = float(
+        diagnostics.get("foreground_travel_pos", 0.0)
+    )
+    widget._devcurve_specular_travel_rate = float(
+        diagnostics.get("specular_travel_rate", 0.0)
+    )
+    widget._devcurve_specular_activity_alpha = float(
+        resolved.parameters.get("devcurve_specular_activity_alpha", 0.0)
     )
 
     if is_viz_diagnostics_enabled() and logger.isEnabledFor(logging.DEBUG):
-        last_diag = float(getattr(widget, "_devcurve_diag_last_log_ts", 0.0) or 0.0)
+        last_diag = float(
+            getattr(widget, "_devcurve_diag_last_log_ts", 0.0) or 0.0
+        )
         if now_ts - last_diag >= 0.80:
-            e = frame.get("energies", {}) if isinstance(frame.get("energies", {}), dict) else {}
+            energies = diagnostics.get("energies", {})
             logger.debug(
                 (
-                    "[SPOTIFY_VIS][DEVCURVE] mode=%s idle_amp=%.4f active_amp=%.4f smooth_step=%.5f "
-                    "fg=%s E[b=%.3f v=%.3f m=%.3f t=%.3f] fg_rate=%.4f fg_pos=%.3f spec_rate=%.4f S[x=%.3f/%.3f/%.3f]"
+                    "[SPOTIFY_VIS][DEVCURVE] mode=layered idle_amp=%.4f "
+                    "active_amp=%.4f smooth_step=%.5f fg=%s "
+                    "E[b=%.3f v=%.3f m=%.3f t=%.3f] fg_rate=%.4f "
+                    "fg_pos=%.3f spec_rate=%.4f S[x=%.3f/%.3f/%.3f]"
                 ),
-                "layered",
                 widget._devcurve_idle_amplitude,
                 widget._devcurve_active_amplitude,
                 widget._devcurve_smoothness_max_step,
-                str(getattr(widget, "_devcurve_foreground_layer", "")),
-                float(e.get("bass", 0.0)),
-                float(e.get("vocals", 0.0)),
-                float(e.get("mids", 0.0)),
-                float(e.get("transients", 0.0)),
-                float(getattr(widget, "_devcurve_foreground_travel_rate", 0.0)),
-                float(getattr(widget, "_devcurve_foreground_travel_pos", 0.0)),
-                float(getattr(widget, "_devcurve_specular_travel_rate", 0.0)),
-                float((getattr(widget, "_devcurve_specular_slot0", [0.0]) or [0.0])[0]),
-                float((getattr(widget, "_devcurve_specular_slot1", [0.0]) or [0.0])[0]),
-                float((getattr(widget, "_devcurve_specular_slot2", [0.0]) or [0.0])[0]),
+                resolved.foreground_layer,
+                float(energies.get("bass", 0.0)),
+                float(energies.get("vocals", 0.0)),
+                float(energies.get("mids", 0.0)),
+                float(energies.get("transients", 0.0)),
+                widget._devcurve_foreground_travel_rate,
+                widget._devcurve_foreground_travel_pos,
+                widget._devcurve_specular_travel_rate,
+                float(slots[0][0]),
+                float(slots[1][0]),
+                float(slots[2][0]),
             )
             widget._devcurve_diag_last_log_ts = now_ts
 

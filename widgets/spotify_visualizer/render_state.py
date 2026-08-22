@@ -375,6 +375,7 @@ class BubbleFrame:
 @dataclass(frozen=True, slots=True)
 class DevCurveFrame:
     curves: tuple[tuple[str, tuple[float, ...]], ...] = ()
+    ghost_curves: tuple[tuple[str, tuple[float, ...]], ...] = ()
     draw_order: tuple[str, ...] = ()
     foreground_layer_id: int = -1
     specular_slots: tuple[tuple[float, ...], ...] = ()
@@ -388,6 +389,15 @@ class DevCurveFrame:
                 raise ValueError("DevCurve curve name must not be empty")
             curves.append((name, _float_tuple(values, name=f"{name} curve sample")))
         object.__setattr__(self, "curves", tuple(curves))
+        ghost_curves: list[tuple[str, tuple[float, ...]]] = []
+        for raw_name, values in self.ghost_curves:
+            name = str(raw_name or "").strip()
+            if not name:
+                raise ValueError("DevCurve ghost curve name must not be empty")
+            ghost_curves.append(
+                (name, _float_tuple(values, name=f"{name} ghost curve sample"))
+            )
+        object.__setattr__(self, "ghost_curves", tuple(ghost_curves))
         object.__setattr__(
             self,
             "draw_order",

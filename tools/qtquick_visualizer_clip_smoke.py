@@ -6,12 +6,18 @@ import argparse
 import ctypes
 import json
 import math
+from pathlib import Path
 import sys
 import threading
 import time
 from typing import Any
 
-from rendering.quick.bootstrap import (
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from rendering.quick.bootstrap import (  # noqa: E402
     configure_quick_environment,
     configure_quick_graphics,
 )
@@ -59,6 +65,7 @@ from widgets.spotify_visualizer.render_bridge import (  # noqa: E402
 )
 from widgets.spotify_visualizer.render_state import (  # noqa: E402
     BubbleFrame,
+    DevCurveFrame,
     OscilloscopeFrame,
     SineFrame,
     SpectrumFrame,
@@ -1239,6 +1246,126 @@ def _bubble_snapshot(case: str, presentation):
     )
 
 
+def _devcurve_snapshot(case: str, presentation):
+    sample_count = 96
+
+    def _curve(base: float, phase: float) -> tuple[float, ...]:
+        return tuple(
+            max(
+                0.04,
+                min(
+                    0.96,
+                    base
+                    + 0.055
+                    * math.sin(
+                        (index / (sample_count - 1)) * math.tau * 2.0
+                        + phase
+                    ),
+                ),
+            )
+            for index in range(sample_count)
+        )
+
+    curves = (
+        ("bass", _curve(0.50, 0.0)),
+        ("vocals", _curve(0.57, 0.8)),
+        ("mids", _curve(0.63, 1.6)),
+        ("transients", _curve(0.69, 2.4)),
+    )
+    ghost_curves = ()
+    if case == "ghost":
+        ghost_curves = tuple(
+            (
+                name,
+                tuple(min(0.94, value + 0.15) for value in values),
+            )
+            for name, values in curves
+        )
+    playing = case != "idle"
+    source_generation = 2 if playing else -1
+    source_activation = 3 if playing else -1
+    parameters = {
+        "devcurve_sample_count": sample_count,
+        "devcurve_ghosting_enabled": case == "ghost",
+        "devcurve_ghost_alpha": 0.85,
+        "devcurve_ghost_decay": 0.4,
+        "devcurve_foreground_shadow_enabled": case == "shadow",
+        "devcurve_foreground_shadow_alpha": 0.75,
+        "devcurve_foreground_shadow_darken": 0.55,
+        "devcurve_foreground_shadow_offset": 0.12,
+        "devcurve_foreground_specular_enabled": case == "specular",
+        "devcurve_foreground_specular_alpha": 1.0,
+        "devcurve_foreground_specular_width": 0.055,
+        "devcurve_foreground_specular_offset": 0.032,
+        "devcurve_foreground_specular_crest_bias": 1.05,
+        "devcurve_specular_activity_alpha": 1.0 if playing else 0.0,
+        "rainbow_enabled": False,
+        "rainbow_speed": 0.5,
+    }
+    layer_values = {
+        "bass": ((55, 125, 255, 230), 0.58),
+        "vocals": ((80, 210, 255, 230), 0.52),
+        "mids": ((120, 110, 255, 230), 0.55),
+        "transients": ((245, 250, 255, 255), 0.70),
+    }
+    for index, name in enumerate(("bass", "vocals", "mids", "transients")):
+        color, alpha = layer_values[name]
+        prefix = f"devcurve_layer_{name}"
+        parameters.update(
+            {
+                f"{prefix}_enabled": True,
+                f"{prefix}_color": color,
+                f"{prefix}_alpha": alpha,
+                f"{prefix}_outline_color": (255, 255, 255, 255),
+                f"{prefix}_outline_width": 0.006,
+                f"{prefix}_order": index + 1,
+                f"{prefix}_power": 1.0,
+                f"{prefix}_offset": 0.0,
+            }
+        )
+    logical = VisualizerLogicalFrame(
+        runtime_generation=1,
+        engine_generation=2,
+        activation_id=3,
+        source_generation=source_generation,
+        source_activation_id=source_activation,
+        mode_id="devcurve",
+        playing=playing,
+        logical_timestamp=1.0,
+        source_timestamp=0.99 if playing else None,
+        changed=True,
+        present_frame=True,
+        mode_reveal_ready=True,
+        common=VisualizerCommonState(
+            bars=(),
+            bar_count=0,
+            energy=VisualizerEnergyState(
+                bass=0.55 if playing else 0.02,
+                mid=0.38 if playing else 0.015,
+                high=0.24 if playing else 0.01,
+                overall=0.62 if playing else 0.018,
+            ),
+        ),
+        mode_state=DevCurveFrame(
+            curves=curves,
+            ghost_curves=ghost_curves,
+            draw_order=("bass", "vocals", "mids", "transients"),
+            foreground_layer_id=3,
+            specular_slots=(
+                (0.28, 0.30, 1.0, 0.08),
+                (0.58, 0.34, 0.9, 0.42),
+                (0.82, 0.38, 0.8, 0.76),
+            ),
+            parameters=freeze_render_fields(parameters),
+        ),
+    )
+    return compose_visualizer_render_snapshot(
+        logical,
+        presentation,
+        logical_revision=1,
+    )
+
+
 class _SpectrumSamplingNode(VisualizerRenderNode):
     def __init__(
         self,
@@ -1320,6 +1447,11 @@ class _SpectrumSamplingNode(VisualizerRenderNode):
             capture = {
                 "target_size": [target_width, target_height],
                 "outer_pixel_size": [pixel_width, pixel_height],
+                "rgb_sum": [
+                    sum(raw[0::4]),
+                    sum(raw[1::4]),
+                    sum(raw[2::4]),
+                ],
                 "lit_pixel_count": len(lit_points),
                 "lit_column_count": len(columns),
                 "lit_row_count": len(rows),
@@ -1439,6 +1571,7 @@ class _VisualizerModeRunner(QObject):
             "oscilloscope": _oscilloscope_snapshot,
             "sine_wave": _sine_snapshot,
             "bubble": _bubble_snapshot,
+            "devcurve": _devcurve_snapshot,
         }[mode_id]
         if not self._bridge.publish(snapshot_factory(case, self._presentation)):
             raise RuntimeError(f"{mode_id} smoke snapshot was rejected")
@@ -1640,6 +1773,7 @@ def main(argv: list[str] | None = None) -> int:
             "oscilloscope",
             "sine_wave",
             "bubble",
+            "devcurve",
         ),
         required=True,
     )
@@ -1656,6 +1790,8 @@ def main(argv: list[str] | None = None) -> int:
             "ghost",
             "trail",
             "pop",
+            "shadow",
+            "specular",
         ),
         default="canonical",
     )
@@ -1673,7 +1809,8 @@ def main(argv: list[str] | None = None) -> int:
             args.visualizer_case,
             mode_id=args.policy,
         )
-        if args.policy in {"spectrum", "oscilloscope", "sine_wave", "bubble"}
+        if args.policy
+        in {"spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve"}
         else _Runner(app, args.policy)
     )
     QTimer.singleShot(0, runner.start)

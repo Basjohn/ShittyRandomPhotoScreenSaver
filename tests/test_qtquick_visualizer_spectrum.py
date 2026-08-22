@@ -371,10 +371,12 @@ def test_only_proven_quick_modes_claim_viewport_resize_capability() -> None:
     assert get_visualizer_presentation_policy(
         "sine_wave"
     ).viewport_resize_capable
-    for mode_id in ("bubble", "devcurve"):
-        assert not get_visualizer_presentation_policy(
-            mode_id
-        ).viewport_resize_capable
+    assert get_visualizer_presentation_policy(
+        "devcurve"
+    ).viewport_resize_capable
+    assert not get_visualizer_presentation_policy(
+        "bubble"
+    ).viewport_resize_capable
 
 
 def test_quick_spectrum_registry_is_static_and_lazy() -> None:
@@ -389,6 +391,7 @@ def test_quick_spectrum_registry_is_static_and_lazy() -> None:
         "oscilloscope",
         "sine_wave",
         "bubble",
+        "devcurve",
     )
     assert all(isinstance(descriptor.module_name, str) for descriptor in descriptors)
     renderer = resolve_quick_visualizer_renderer("spectrum")
@@ -407,6 +410,10 @@ def test_quick_spectrum_registry_is_static_and_lazy() -> None:
     assert bubble is not None
     assert bubble.mode_id == "bubble"
     assert bubble.has_resources is False
+    devcurve = resolve_quick_visualizer_renderer("devcurve")
+    assert devcurve is not None
+    assert devcurve.mode_id == "devcurve"
+    assert devcurve.has_resources is False
 
 
 def test_legacy_capture_freezes_quick_spectrum_peaks_without_geometry_reads() -> None:

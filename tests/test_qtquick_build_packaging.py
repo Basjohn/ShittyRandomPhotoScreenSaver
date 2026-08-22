@@ -24,6 +24,10 @@ def test_every_product_nuitka_worker_packages_the_quick_qml_contract():
         assert (
             "--include-data-dir=rendering/quick/qml=rendering/quick/qml" in source
         ), worker
+        assert (
+            "--include-data-dir=widgets/spotify_visualizer/shaders="
+            "widgets/spotify_visualizer/shaders" in source
+        ), worker
         assert '"--include-package=rendering.quick"' in source, worker
         assert '"--include-qt-plugins=qml"' in source, worker
         assert '"--include-qt-plugins=multimedia"' in source, worker

@@ -14,6 +14,7 @@ from typing import Any
 
 from widgets.spotify_visualizer import config_applier, mode_capabilities
 from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
+from widgets.spotify_visualizer.devcurve_frame_runtime import DevCurveFrameRuntime
 from widgets.spotify_visualizer.logical_runtime import coerce_identity
 from widgets.spotify_visualizer.oscilloscope_frame_runtime import (
     OscilloscopeFrameRuntime,
@@ -136,15 +137,23 @@ def _energy_state(value: Any) -> VisualizerEnergyState:
 
 
 def _transient_state(value: Any) -> VisualizerTransientState:
+    if isinstance(value, VisualizerTransientState):
+        return value
     return VisualizerTransientState(
         bass=float(
-            getattr(value, "bass_transient", 0.0) if value is not None else 0.0
+            getattr(value, "bass_transient", getattr(value, "bass", 0.0))
+            if value is not None
+            else 0.0
         ),
         mid=float(
-            getattr(value, "mid_transient", 0.0) if value is not None else 0.0
+            getattr(value, "mid_transient", getattr(value, "mid", 0.0))
+            if value is not None
+            else 0.0
         ),
         high=float(
-            getattr(value, "high_transient", 0.0) if value is not None else 0.0
+            getattr(value, "high_transient", getattr(value, "high", 0.0))
+            if value is not None
+            else 0.0
         ),
         onset_detected=bool(
             getattr(value, "onset_detected", False) if value is not None else False
@@ -512,19 +521,17 @@ def _capture_bubble(
         raise TypeError("Bubble logical mode state has the wrong type")
     resolved = runtime.latest
     extra["_quick_protected_edges"] = resolved.protected_edges
-    extra["_quick_bubble_identity_admitted"] = bool(
-        resolved.engine_generation >= 0 and resolved.activation_id >= 0
-    )
-    extra["_quick_bubble_runtime_generation"] = resolved.runtime_generation
-    extra["_quick_bubble_engine_generation"] = resolved.engine_generation
-    extra["_quick_bubble_activation_id"] = resolved.activation_id
-    extra["_quick_bubble_source_generation"] = resolved.source_generation
-    extra["_quick_bubble_source_activation_id"] = (
-        resolved.source_activation_id
-    )
-    extra["_quick_bubble_source_timestamp"] = resolved.source_timestamp
-    extra["_quick_bubble_logical_timestamp"] = resolved.simulation_timestamp
-    extra["_quick_bubble_playing"] = resolved.playing
+    if resolved.engine_generation >= 0 and resolved.activation_id >= 0:
+        extra["_quick_resolved_identity"] = (
+            resolved.runtime_generation,
+            resolved.engine_generation,
+            resolved.activation_id,
+            resolved.source_generation,
+            resolved.source_activation_id,
+            resolved.source_timestamp,
+            resolved.simulation_timestamp,
+            resolved.playing,
+        )
     return (
         BubbleFrame(
             positions=resolved.positions,
@@ -546,52 +553,44 @@ def _capture_bubble(
     )
 
 
-_DEVCURVE_ARRAY_FIELDS = {
-    "devcurve_curve_bass",
-    "devcurve_curve_vocals",
-    "devcurve_curve_mids",
-    "devcurve_curve_transients",
-    "devcurve_specular_slot0",
-    "devcurve_specular_slot1",
-    "devcurve_specular_slot2",
-}
-
-
 def _capture_devcurve(
     widget: Any,
     engine: Any,
     _context: _CaptureContext,
 ) -> tuple[ModeFrame, dict[str, Any]]:
     extra = _base_extras(widget, "devcurve", engine)
-    config_applier._append_devcurve_visual_extras(extra, widget)
-    curves = tuple(
-        (
-            name,
-            tuple(extra.get(f"devcurve_curve_{name}", ()) or ()),
+    controller = getattr(widget, "runtime_controller", None)
+    if controller is None:
+        raise RuntimeError("DevCurve logical capture requires its runtime controller")
+    runtime = controller.resolve_logical_mode_state(
+        "devcurve",
+        DevCurveFrameRuntime,
+    )
+    if not isinstance(runtime, DevCurveFrameRuntime):
+        raise TypeError("DevCurve logical mode state has the wrong type")
+    resolved = runtime.latest
+    extra["_quick_resolved_energy"] = resolved.energy
+    extra["transient_energy"] = resolved.transient
+    extra["_quick_mode_changed"] = resolved.changed
+    if resolved.engine_generation >= 0 and resolved.activation_id >= 0:
+        extra["_quick_resolved_identity"] = (
+            resolved.runtime_generation,
+            resolved.engine_generation,
+            resolved.activation_id,
+            resolved.source_generation,
+            resolved.source_activation_id,
+            resolved.source_timestamp,
+            resolved.logical_timestamp,
+            resolved.playing,
         )
-        for name in ("bass", "vocals", "mids", "transients")
-    )
-    specular_slots = tuple(
-        tuple(extra.get(f"devcurve_specular_slot{index}", ()) or ())
-        for index in range(3)
-    )
     return (
         DevCurveFrame(
-            curves=curves,
-            draw_order=tuple(
-                getattr(
-                    widget,
-                    "_devcurve_draw_order",
-                    ("bass", "vocals", "mids", "transients"),
-                )
-            ),
-            foreground_layer_id=int(
-                -1
-                if extra.get("devcurve_foreground_layer_id") is None
-                else extra["devcurve_foreground_layer_id"]
-            ),
-            specular_slots=specular_slots,
-            parameters=_render_parameters(extra, omit=_DEVCURVE_ARRAY_FIELDS),
+            curves=resolved.curves,
+            ghost_curves=resolved.ghost_curves,
+            draw_order=resolved.draw_order,
+            foreground_layer_id=resolved.foreground_layer_id,
+            specular_slots=resolved.specular_slots,
+            parameters=resolved.parameters,
         ),
         extra,
     )
@@ -671,31 +670,30 @@ def capture_legacy_visualizer_logical_frame(
     mode_state, extra = capture(widget, engine, context)
     playing = bool(getattr(widget, "_spotify_playing", False))
     logical_timestamp = float(now_ts)
-    if bool(extra.get("_quick_bubble_identity_admitted", False)):
-        runtime_generation = coerce_identity(
-            extra.get("_quick_bubble_runtime_generation")
-        )
-        engine_generation = coerce_identity(
-            extra.get("_quick_bubble_engine_generation")
-        )
-        activation_id = coerce_identity(
-            extra.get("_quick_bubble_activation_id")
-        )
-        source_generation = coerce_identity(
-            extra.get("_quick_bubble_source_generation")
-        )
-        source_activation = coerce_identity(
-            extra.get("_quick_bubble_source_activation_id")
-        )
+    resolved_identity = extra.get("_quick_resolved_identity")
+    if isinstance(resolved_identity, tuple) and len(resolved_identity) == 8:
+        (
+            raw_runtime_generation,
+            raw_engine_generation,
+            raw_activation_id,
+            raw_source_generation,
+            raw_source_activation,
+            raw_source_timestamp,
+            raw_logical_timestamp,
+            raw_playing,
+        ) = resolved_identity
+        runtime_generation = coerce_identity(raw_runtime_generation)
+        engine_generation = coerce_identity(raw_engine_generation)
+        activation_id = coerce_identity(raw_activation_id)
+        source_generation = coerce_identity(raw_source_generation)
+        source_activation = coerce_identity(raw_source_activation)
         source_timestamp = (
-            float(extra.get("_quick_bubble_source_timestamp", 0.0) or 0.0)
+            float(raw_source_timestamp or 0.0)
             if source_generation >= 0 and source_activation >= 0
             else None
         )
-        logical_timestamp = float(
-            extra.get("_quick_bubble_logical_timestamp", now_ts)
-        )
-        playing = bool(extra.get("_quick_bubble_playing", False))
+        logical_timestamp = float(raw_logical_timestamp)
+        playing = bool(raw_playing)
 
     waveform = tuple(
         extra.get(
