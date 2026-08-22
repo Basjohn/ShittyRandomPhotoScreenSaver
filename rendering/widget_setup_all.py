@@ -21,8 +21,10 @@ from rendering.multi_monitor_coordinator import get_coordinator
 from rendering.widget_descriptors import (
     get_effective_monitor_value_for_widget,
     get_factory_widget_descriptors,
+    get_family_id_for_widget,
     is_custom_position_selected_for_widget,
 )
+from core.settings.capability_activation import is_widget_family_activated
 from rendering.spotify_display_participation import describe_visualizer_spawn_display
 from widgets.base_overlay_widget import BaseOverlayWidget
 
@@ -403,6 +405,18 @@ def _create_factory_widgets(
 ) -> None:
     for descriptor in get_factory_widget_descriptors():
         if not descriptor.is_enabled_in_environment():
+            continue
+
+        # Application-level capability gate: a deactivated widget family owns no
+        # runtime widget/model/provider. Distinct from the per-instance 'enabled'
+        # checkbox below; inert while every family is activated by default.
+        family_id = get_family_id_for_widget(descriptor.settings_key)
+        if family_id is not None and not is_widget_family_activated(widgets_config, family_id):
+            logger.debug(
+                "[WIDGET_MANAGER] Descriptor %s skipped by deactivated family=%s",
+                descriptor.settings_key,
+                family_id,
+            )
             continue
 
         if descriptor.base_enabled_gate and descriptor.base_settings_key:
