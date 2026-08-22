@@ -152,7 +152,7 @@ Keep canonical Python owners for:
 - credentials;
 - network access;
 - caching;
-- error/fallback policy;
+- error/resilience policy;
 - normalized state;
 - settings persistence;
 - semantic actions.

@@ -33,7 +33,7 @@ Do not turn temporary old ownership into a new permanent contract.
 | Widget data/provider lifecycle | current owners, migrating toward `WidgetRuntimeManager` | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
 | Runtime widget pixels | destination: display retained Quick scene | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
 | General async work | `ThreadManager` | `Docs/Guardrails/Runtime_Efficiency.md` |
-| Resource accounting | `ResourceManager`; never deletion fallback | `Docs/Guardrails.md` |
+| Resource accounting | `ResourceManager`; accounting only, never deletion owner | `Docs/Guardrails.md` |
 
 `QQuickRhiItem` is not the normal SRPSS custom-render path. `QQuickWidget` is not an acceptable runtime
 presenter.

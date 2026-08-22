@@ -137,7 +137,7 @@ No production runtime switch/fallback between old and Quick is to be introduced.
 | Widget models/providers | current owners migrating toward presentation-neutral `WidgetRuntimeManager` |
 | Runtime widget pixels | destination: display Quick scene |
 | Thread/task ownership | `ThreadManager` for general async work |
-| Resource accounting | `ResourceManager`; never deletion fallback |
+| Resource accounting | `ResourceManager`; accounting only, never deletion owner |
 
 ## Capability activation direction
 

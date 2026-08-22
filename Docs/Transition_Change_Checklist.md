@@ -48,8 +48,10 @@ E2 exposes this authority through Settings `SETUP`; it does not create a second 
 
 Do not use the words “disabled” and “deactivated” interchangeably where the distinction matters.
 
-The zero-activated-transition state requires an explicit legal product/runtime policy. Do not silently
-run a deactivated fallback transition.
+The zero-activated-transition policy is now explicit canonical state repair:
+`normalize_transition_capability_state(...)` reactivates Crossfade in persisted activation state before
+normal selection continues. That is not permission for a renderer/factory to execute a deactivated
+Crossfade directly.
 
 ## 3. Production presentation contract
 
@@ -101,7 +103,7 @@ versioning, dependency resolution or a third-party transition SDK.
 Resolve Settings spelling, aliases, Random choices, clamps, colors and supported legacy fall-through
 behavior before render ownership.
 
-Canonical Settings defaults are fallback authority. Do not duplicate constructor/default magic numbers
+Canonical Settings defaults are the default-resolution authority. Do not duplicate constructor/default magic numbers
 in the renderer.
 
 Parameterized Quick renderers reject missing/unresolved required values instead of silently inventing
@@ -110,6 +112,12 @@ renderer defaults.
 Per-run values such as seeds resolve once into immutable request/run state.
 
 Activation filtering occurs before an implementation is admitted.
+
+At pushed `829446c8`, this final-admission rule is **not yet fully closed**: an already-populated
+`transitions.random_choice` can still reach the factory without an activation/hardware re-check, and
+engine/factory empty-candidate branches still contain literal Crossfade last-resorts. Before E2 exit,
+fence those seams so stale/deactivated/hardware-invalid choices are re-resolved or fail closed rather
+than silently substituting Crossfade. Add direct regressions for both paths.
 
 ## 6. Timing
 

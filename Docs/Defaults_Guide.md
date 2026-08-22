@@ -78,6 +78,16 @@ Deactivation is **not reset**. It preserves detailed saved configuration, includ
 values and saved transition pool preferences, unless an explicit reset/H0/schema migration says
 otherwise.
 
+Transition capability state has one canonical normalization rule:
+
+- malformed all-false activation explicitly reactivates Crossfade in canonical settings state and the
+  repair is persisted;
+- Random-on with an empty effective pool turns Random off, persists a deterministic activated manual
+  selection, and leaves saved pool preferences intact.
+
+That is state repair, not a renderer/factory substitution. Runtime admission must still reject stale or
+deactivated selections after normalization.
+
 Generated defaults snapshots and SST artifacts must derive activation state from canonical defaults.
 Do not hand-maintain an activation list in UI code or a generated artifact.
 
@@ -144,7 +154,7 @@ Rules:
 - do not use broad “reapply saved settings” as Cancel semantics for preview-only state;
 - family **deactivation** and instance `enabled=False` remain distinct runtime changes;
 - transition activation changes must not leave a deactivated transition effectively selected through a
-  stale/manual/random fallback.
+  stale/manual/random resolution path.
 
 When runtime recreation is genuinely required, use the one ordered lifecycle boundary rather than a
 partial teardown/rebuild side path.
@@ -199,7 +209,7 @@ not a required user-visible size or default resolution.
 
 ## 10. CUSTOM and widget defaults
 
-- Authored defaults remain fallback even when a widget uses `Custom`.
+- Authored defaults remain the baseline/default authority even when a widget uses `Custom`.
 - Committed CUSTOM geometry overlays authored defaults; it is not a replacement defaults surface.
 - Canonical `widgets.layout_slots` starts empty. Saved slots belong to an installation profile and must
   not become checked-in defaults.
