@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import threading
 import time
+from dataclasses import replace
 
 import pytest
 
@@ -266,15 +267,22 @@ class TestGate9GenerationZeroFencing:
         widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
         qtbot.addWidget(widget)
         widget._enabled = True
-        widget._runtime_generation = 0
+        widget._engine = None
+        widget._waiting_for_fresh_engine_frame = False
+        widget._waiting_for_fresh_frame = False
+        widget._runtime_generation = 5
         # A frame from some other generation is sitting in the slot, carrying a
         # decided reveal that only an armed fence will refuse.
+        tick_pipeline.logical_tick(widget)
+        published = widget._logical_mailbox.take()
+        assert published is not None
+        foreign = replace(published.state, mode_reveal_ready=True)
         widget._logical_mailbox.publish(
-            {"now_ts": 1.0, "present_frame": True, "changed": False,
-             "mode_reveal_ready": True},
+            foreign,
             generation=5,
-            activation_id=1,
+            activation_id=foreign.activation_id,
         )
+        widget._runtime_generation = 0
 
         tick_pipeline.present_tick(widget)
 
@@ -313,7 +321,12 @@ class TestGate9GenerationZeroFencing:
         tick_pipeline.logical_tick(widget)
         published = widget._logical_mailbox.peek()
         assert published is not None and published.generation == 0
-        published.state["mode_reveal_ready"] = True
+        decided_reveal = replace(published.state, mode_reveal_ready=True)
+        widget._logical_mailbox.publish(
+            decided_reveal,
+            generation=0,
+            activation_id=decided_reveal.activation_id,
+        )
         # ...then retirement/recreation advances the owner to generation 1.
         widget._runtime_generation = 1
 
@@ -407,15 +420,22 @@ class TestPublishedActivationIdentityIsReal:
         import inspect
 
         from widgets.spotify_visualizer import tick_pipeline
+        from widgets.spotify_visualizer import legacy_render_snapshot_adapter
 
         source = inspect.getsource(tick_pipeline._publish_logical_state)
         assert '"_activation_id"' not in source, (
             "mode_activation_id reads a widget attribute that does not exist "
             "and would always publish -1"
         )
-        assert "_last_engine_activation_seen" in source
+        assert "capture_legacy_visualizer_logical_frame" in source
+        capture_source = inspect.getsource(
+            legacy_render_snapshot_adapter.capture_legacy_visualizer_logical_frame
+        )
+        assert "_last_engine_activation_seen" in capture_source
 
-    def test_a_confirmed_activation_is_published(self, qt_app, qtbot):
+    def test_a_confirmed_activation_is_published(
+        self, qt_app, qtbot, monkeypatch
+    ):
         from PySide6.QtWidgets import QWidget
 
         from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
@@ -430,6 +450,11 @@ class TestPublishedActivationIdentityIsReal:
         widget._waiting_for_fresh_engine_frame = False
         widget._waiting_for_fresh_frame = False
         widget._last_engine_activation_seen = 4
+        monkeypatch.setattr(
+            tick_pipeline,
+            "consume_engine_bars",
+            lambda *_args: (False, False),
+        )
 
         tick_pipeline.logical_tick(widget)
 

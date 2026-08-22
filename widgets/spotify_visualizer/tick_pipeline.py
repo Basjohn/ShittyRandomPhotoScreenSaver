@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import math
 import time
+from collections.abc import Sequence
 from typing import Any, Optional
 
 from PySide6.QtCore import QRect
@@ -25,6 +26,10 @@ from core.logging.logger import (
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
 from widgets.spotify_visualizer import mode_capabilities, mode_transition
 from widgets.spotify_visualizer.logical_runtime import coerce_identity
+from widgets.spotify_visualizer.render_state import (
+    VisualizerLogicalFrame,
+    VisualizerProtectedEdge,
+)
 from widgets.spotify_visualizer.spectrum_presentation_smoothing import (
     reset_widget_spectrum_presentation_smoothing,
     resolve_widget_spectrum_presentation,
@@ -918,7 +923,6 @@ def push_gpu_frame(
     # switch look dead for most of the transition.
     transition_fade = widget._mode_transition_fade_factor(now_ts)
     bars_fade *= transition_fade
-    fade = scene_fade
     prev_fade = widget._last_gpu_fade_sent
     prev_bars_fade = float(getattr(widget, "_last_gpu_bars_fade_sent", -1.0))
     widget._last_gpu_fade_sent = scene_fade
@@ -1369,16 +1373,57 @@ def present_tick(widget: Any) -> bool:
     if frame is None:
         return False
     payload = frame.state
+    if not isinstance(payload, VisualizerLogicalFrame):
+        logger.error(
+            "[SPOTIFY_VIS] Rejected non-immutable logical publication: %s",
+            type(payload).__name__,
+        )
+        return False
     generation = coerce_identity(getattr(widget, "_runtime_generation", None))
-    if generation >= 0 and int(frame.generation) != generation:
+    if (
+        int(frame.generation) != payload.runtime_generation
+        or int(frame.activation_id) != payload.activation_id
+    ):
+        return False
+    if generation >= 0 and payload.runtime_generation != generation:
         # A retired generation's frame must never be presented. `coerce_identity`
         # keeps a valid generation 0 as 0 so this fence stays armed for the first
         # generation instead of being disabled by a -1 sentinel.
         return False
-    if bool(payload.get("mode_reveal_ready", False)):
+
+    engine = getattr(widget, "_engine", None)
+    current_engine_generation = coerce_identity(
+        getattr(widget, "_last_engine_generation_seen", None)
+    )
+    current_activation = coerce_identity(
+        getattr(widget, "_last_engine_activation_seen", None)
+    )
+    if engine is not None:
+        try:
+            current_engine_generation = coerce_identity(engine.get_generation_id())
+            current_activation = coerce_identity(engine.get_activation_id())
+        except Exception:
+            pass
+    if (
+        current_engine_generation >= 0
+        and payload.engine_generation != current_engine_generation
+    ):
+        return False
+    if current_activation >= 0 and payload.activation_id != current_activation:
+        return False
+    controller = getattr(widget, "runtime_controller", None)
+    current_mode = (
+        controller.mode_id
+        if controller is not None
+        else mode_capabilities.widget_mode_key(widget)
+    )
+    if payload.mode_id != current_mode:
+        return False
+
+    if payload.mode_reveal_ready:
         # The logical half decided; the GUI half performs the reveal.
-        mode_transition.execute_mode_reveal(widget, float(payload["now_ts"]))
-    if not bool(payload.get("present_frame", True)):
+        mode_transition.execute_mode_reveal(widget, payload.logical_timestamp)
+    if not payload.present_frame:
         return False
     parent = widget.parent()
     first_frame = not widget._has_pushed_first_frame
@@ -1386,8 +1431,8 @@ def present_tick(widget: Any) -> bool:
         push_gpu_frame(
             widget,
             parent,
-            float(payload["now_ts"]),
-            bool(payload.get("changed", False)),
+            payload.logical_timestamp,
+            payload.changed,
             first_frame,
         )
     )
@@ -1433,38 +1478,32 @@ def _publish_logical_state(
     changed: bool,
     mode_reveal_ready: bool,
     present_frame: bool = True,
-) -> dict:
+    protected_edges: Sequence[VisualizerProtectedEdge] = (),
+) -> VisualizerLogicalFrame:
     """Publish one immutable logical result for the presentation half.
 
     Latest-wins: a GUI thread that cannot keep up loses freshness rather than
     accumulating a backlog, and the simulation keeps its own cadence regardless.
     """
 
-    payload = {
-        "now_ts": now_ts,
-        "changed": bool(changed),
-        # Plain-data presentation intents. The GUI half decides nothing.
-        "mode_reveal_ready": bool(mode_reveal_ready),
-        # A decided reveal still has to reach the GUI half even on paths that
-        # must not push a frame - the fresh-engine-frame gate is one of them.
-        "present_frame": bool(present_frame),
-        # Generation and activation are ownership fences that both start at a
-        # valid 0; `coerce_identity` preserves that instead of collapsing it to
-        # the -1 sentinel through truthiness.
-        "generation": coerce_identity(getattr(widget, "_runtime_generation", None)),
-        # `_activation_id` is not a widget attribute; the widget-owned identity
-        # is `_last_engine_activation_seen`, updated once the engine's fresh
-        # frame for the pending activation actually arrives.
-        "mode_activation_id": coerce_identity(
-            getattr(widget, "_last_engine_activation_seen", None)
-        ),
-        "mode": mode_capabilities.widget_mode_key(widget),
-    }
+    from widgets.spotify_visualizer.legacy_render_snapshot_adapter import (
+        capture_legacy_visualizer_logical_frame,
+    )
+
+    payload = capture_legacy_visualizer_logical_frame(
+        widget,
+        now_ts=now_ts,
+        changed=changed,
+        mode_reveal_ready=mode_reveal_ready,
+        present_frame=present_frame,
+        protected_edges=protected_edges,
+    )
     mailbox = widget._logical_mailbox
     mailbox.publish(
         payload,
-        generation=payload["generation"],
-        activation_id=payload["mode_activation_id"],
+        generation=payload.runtime_generation,
+        activation_id=payload.activation_id,
+        now_ts=payload.logical_timestamp,
     )
     if getattr(widget, "_logical_runtime", None) is not None:
         # Only a thread-owned cadence needs marshalling; the GUI-driven path
@@ -1473,7 +1512,7 @@ def _publish_logical_state(
     return payload
 
 
-def logical_tick(widget: Any) -> Optional[dict]:
+def logical_tick(widget: Any) -> Optional[VisualizerLogicalFrame]:
     """Plain-data half: advance the simulation and publish the latest state.
 
     Safe to run off the GUI thread. It must not read widget geometry, touch

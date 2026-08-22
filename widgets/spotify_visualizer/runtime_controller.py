@@ -27,6 +27,15 @@ from widgets.spotify_visualizer.logical_runtime import (
     VisualizerLogicalRuntime,
     coerce_identity,
 )
+from widgets.spotify_visualizer.render_bridge import (
+    VisualizerRenderIdentity,
+    VisualizerSnapshotBridge,
+)
+from widgets.spotify_visualizer.render_state import (
+    ResolvedVisualizerPresentation,
+    VisualizerLogicalFrame,
+    compose_visualizer_render_snapshot,
+)
 
 
 EngineFactory = Callable[[int], Any]
@@ -79,6 +88,7 @@ class VisualizerRuntimeController:
         self._logical_mailbox = LatestStateMailbox()
         self._logical_runtime: VisualizerLogicalRuntime | None = None
         self._logical_present_pending = False
+        self._render_bridge = VisualizerSnapshotBridge()
 
     @property
     def runtime_generation(self) -> int:
@@ -93,6 +103,8 @@ class VisualizerRuntimeController:
                 raise RuntimeError(
                     "cannot retarget a generation-scoped visualizer runtime"
                 )
+            if generation != self._runtime_generation:
+                self._render_bridge.close_admission()
             self._runtime_generation = generation
 
     @property
@@ -115,6 +127,10 @@ class VisualizerRuntimeController:
         raw = getattr(mode, "name", mode)
         mode_id = coerce_visualizer_mode_id(str(raw or "").lower())
         with self._lock:
+            if mode_id != self._mode_id:
+                # A render admission is generation + activation + mode scoped.
+                # The target mode reopens it only when that activation commits.
+                self._render_bridge.close_admission()
             self._mode_id = mode_id
             self._presentation_policy = get_visualizer_presentation_policy(
                 mode_id
@@ -173,6 +189,18 @@ class VisualizerRuntimeController:
     @committed_activation_identity.setter
     def committed_activation_identity(self, value: tuple | None) -> None:
         self._committed_activation_identity = value
+        if value is None:
+            self._render_bridge.close_admission()
+            return
+        try:
+            _payload_identity, engine_stamp = value
+            engine_generation, activation_id = engine_stamp
+            self.begin_render_activation(
+                engine_generation=engine_generation,
+                activation_id=activation_id,
+            )
+        except (TypeError, ValueError):
+            self._render_bridge.close_admission()
 
     @property
     def mode_activation_committed_for(self) -> Any:
@@ -269,6 +297,58 @@ class VisualizerRuntimeController:
             self._logical_mailbox = mailbox
 
     @property
+    def render_bridge(self) -> VisualizerSnapshotBridge:
+        return self._render_bridge
+
+    @property
+    def render_identity(self) -> VisualizerRenderIdentity | None:
+        return self._render_bridge.identity
+
+    def begin_render_activation(
+        self,
+        *,
+        engine_generation: int,
+        activation_id: int,
+    ) -> VisualizerRenderIdentity:
+        """Open immutable render admission after activation commit."""
+
+        return self._render_bridge.begin_activation(
+            runtime_generation=self._runtime_generation,
+            engine_generation=engine_generation,
+            activation_id=activation_id,
+            mode_id=self._mode_id,
+        )
+
+    def close_render_admission(self) -> None:
+        self._render_bridge.close_admission()
+
+    def publish_render_snapshot(
+        self,
+        logical: VisualizerLogicalFrame,
+        presentation: ResolvedVisualizerPresentation,
+        *,
+        logical_revision: int,
+    ) -> bool:
+        """Compose and admit one GUI-resolved immutable Quick snapshot."""
+
+        if logical.mode_id != self._mode_id:
+            return False
+        policy = self._presentation_policy
+        if (
+            presentation.shell_policy is not policy.shell_policy
+            or presentation.clip_policy is not policy.clip_policy
+            or presentation.viewport_resize_capable
+            != policy.viewport_resize_capable
+        ):
+            return False
+        snapshot = compose_visualizer_render_snapshot(
+            logical,
+            presentation,
+            logical_revision=logical_revision,
+        )
+        return self._render_bridge.publish(snapshot)
+
+    @property
     def logical_runtime(self) -> VisualizerLogicalRuntime | None:
         return self._logical_runtime
 
@@ -311,6 +391,7 @@ class VisualizerRuntimeController:
             self._logical_runtime = None
             self._logical_mailbox.clear()
             self._logical_present_pending = False
+            self._render_bridge.close_admission()
 
     def start_logical_runtime(
         self,
@@ -346,6 +427,7 @@ class VisualizerRuntimeController:
     def stop_logical_runtime(self) -> bool:
         """Close and join logical ownership without orphaning a live thread."""
 
+        self._render_bridge.close_admission()
         with self._lock:
             runtime = self._logical_runtime
         if runtime is None:
@@ -379,6 +461,7 @@ class VisualizerRuntimeController:
             "playing": self._playing,
             "logical_running": bool(runtime and runtime.is_running()),
             "logical_revision": self._logical_mailbox.revision,
+            "render_admission_open": self._render_bridge.is_open,
         }
 
 
