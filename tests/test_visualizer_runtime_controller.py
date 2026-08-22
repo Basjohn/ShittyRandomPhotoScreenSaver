@@ -197,6 +197,11 @@ def test_real_widget_activation_playback_and_clock_chain_use_controller(
     assert controller.settings_model.mode == "spectrum"
     assert controller.settings_model is not model
     assert controller.resolved_activation == payload
+    assert controller.render_identity is not None
+    assert controller.render_identity.runtime_generation == 0
+    assert controller.render_identity.engine_generation == 0
+    assert controller.render_identity.activation_id == 0
+    assert controller.render_identity.mode_id == "spectrum"
 
     widget.handle_media_update({"state": "playing"})
     assert controller.playing is True
@@ -216,6 +221,7 @@ def test_real_widget_activation_playback_and_clock_chain_use_controller(
 
     tick_helpers.stop_tick_source(widget)
     assert controller.logical_runtime is None
+    assert controller.render_identity is None
     widget._enabled = False
     widget.cleanup()
 
