@@ -55,6 +55,7 @@ from rendering.transition_registry import (
     get_transition_setting_names,
     is_transition_available_for_hw,
 )
+from core.settings.capability_activation import is_transition_activated
 from utils.image_cache import ImageCache
 from utils.image_prefetcher import ImagePrefetcher
 
@@ -1396,16 +1397,29 @@ class ScreensaverEngine(QObject):
                     logger.debug("[ENGINE] Exception suppressed: %s", _e)
                     return True
 
+            # Effective random pool = activated ∩ pool-member ∩ hw-available.
+            # A deactivated transition is excluded from runtime selection.
             available: List[str] = []
             for name in cycle_types:
                 if not is_transition_available_for_hw(name, hw) or not _in_pool(name):
                     continue
+                if not is_transition_activated(transitions, name):
+                    continue
                 available.append(name)
 
             if not available:
-                # Fallback: always ensure at least Crossfade is available so
-                # misconfigured pool settings cannot break rotation entirely.
-                available = ["Crossfade"]
+                # Empty effective pool: resolve explicitly to an activated,
+                # hw-available transition rather than silently running a
+                # deactivated one. Dropping the pool requirement (not activation)
+                # keeps rotation working when the user pooled only deactivated
+                # transitions. Crossfade is the last resort if nothing qualifies.
+                activated_hw = [
+                    name
+                    for name in cycle_types
+                    if is_transition_available_for_hw(name, hw)
+                    and is_transition_activated(transitions, name)
+                ]
+                available = activated_hw or ["Crossfade"]
             # Avoid immediate repeats of transition type. Legacy "Shuffle"
             # selections are treated as "Crossfade" so the engine no longer
             # reintroduces Shuffle into the pool.
