@@ -24,6 +24,8 @@ from core.settings import SettingsManager
 from core.threading.manager import ThreadManager
 from rendering.transition_registry import get_transition_descriptor, is_transition_available_for_hw
 from core.settings.capability_activation import (
+    DEFAULT_RECOVERY_TRANSITION,
+    ensure_recovery_transition_activated,
     get_default_activated_transition,
     is_transition_activated,
     normalize_transition_capability_state,
@@ -79,6 +81,26 @@ def _qobject_wrapper_is_valid(value: object) -> bool:
 # Cycle transition (C key)
 # ------------------------------------------------------------------
 
+def _resolve_cycle_fallback(engine: ScreensaverEngine, transitions_config: dict, hw: bool) -> str:
+    """Return a deterministic activated, hw-available transition for C-key cycling.
+
+    Never returns a deactivated Crossfade: prefer the canonical activated
+    default, then any activated hw-available transition, and only as a last
+    resort perform the explicit canonical recovery repair (persisting it) and
+    return the now-activated recovery transition.
+    """
+    candidate = get_default_activated_transition(transitions_config)
+    if is_transition_available_for_hw(candidate, hw) and is_transition_activated(transitions_config, candidate):
+        return candidate
+    for name in engine._transition_types:
+        if is_transition_available_for_hw(name, hw) and is_transition_activated(transitions_config, name):
+            return name
+    if ensure_recovery_transition_activated(transitions_config):
+        engine.settings_manager.set('transitions', transitions_config)
+        engine.settings_manager.save()
+    return DEFAULT_RECOVERY_TRANSITION
+
+
 def on_cycle_transition(engine: ScreensaverEngine) -> None:
     """Handle cycle transition request (C key)."""
     logger.info("Cycle transition requested")
@@ -122,13 +144,16 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
         new_transition = candidate
         break
     else:
-        # Fallback to Crossfade if somehow no valid transition found
-        new_transition = "Crossfade"
-        engine._current_transition_index = engine._transition_types.index(new_transition) if new_transition in engine._transition_types else 0
+        # No activated, pooled, hw-available candidate found while cycling. Fall
+        # back to a deterministic activated transition, never a deactivated
+        # Crossfade (see _resolve_cycle_fallback).
+        new_transition = _resolve_cycle_fallback(engine, transitions_config, hw)
+        if new_transition in engine._transition_types:
+            engine._current_transition_index = engine._transition_types.index(new_transition)
 
-    # Update settings with permissible transition
-    if not is_transition_available_for_hw(new_transition, hw):
-        new_transition = "Crossfade"
+    # Update settings with a permissible, activated transition.
+    if not is_transition_available_for_hw(new_transition, hw) or not is_transition_activated(transitions_config, new_transition):
+        new_transition = _resolve_cycle_fallback(engine, transitions_config, hw)
         if new_transition in engine._transition_types:
             engine._current_transition_index = engine._transition_types.index(new_transition)
     transitions_config = engine.settings_manager.get('transitions', {})

@@ -1767,23 +1767,42 @@ Landed E foundation slices (additive/inert at all-on defaults; no default runtim
   activation by persisting Crossfade reactivation and disables Random when its effective pool is empty
   while preserving saved pool preferences. Regenerated `defaults_snapshot.json` and both SST doc
   artifacts. Pinned by `tests/test_capability_activation.py`.
-- **transition activation runtime foundation** — engine Random preparation, C-key cycling, manual
-  selection and factory-side Random candidate generation already filter activation in their normal
-  paths, and canonical state normalization is landed. Four narrow E2-exit seams remain: a stale
-  pre-resolved `transitions.random_choice` is not revalidated at final factory admission; engine/factory
-  Random empty-candidate paths retain literal Crossfade substitutes; C-key cycling retains unconditional
-  Crossfade recovery; and runtime still recognizes legacy `type="Random"` as a second Random-mode
-  authority while the normalizer reasons only about `random_always`. These are explicit E2-before-exit
-  defects, not permission for hidden fallback behavior. Existing focused coverage lives in
-  `tests/test_transition_distribution.py` / `tests/test_capability_activation.py`; E2 must add the
-  missing normalization/final-admission regressions.
-- **widget-family activation runtime consequence** — `_create_factory_widgets` skips a deactivated
-  family (no runtime widget/model/provider) before per-instance `enabled` handling and expected-overlay
-  accounting. Inert by default. Pinned by `tests/test_widget_manager_refresh.py`.
+- **transition activation runtime foundation (admission fencing closed)** — engine Random preparation,
+  C-key cycling, manual selection and factory-side Random candidate generation filter activation in
+  their normal paths, and `normalize_transition_capability_state()` is the one canonical authority
+  (consumed by engine prep, factory admission, and C-key). The final-admission foundation corrections
+  are now landed and tested:
+  - a stale/pre-resolved `transitions.random_choice` is revalidated at final factory admission
+    (`TransitionFactory._is_admissible_random_choice`) and rejected if it became deactivated or
+    hardware-invalid;
+  - the engine, factory (`_pick_random_transition`), and C-key (`_resolve_cycle_fallback`)
+    empty-candidate paths no longer run a literal deactivated Crossfade — they pick a deterministic
+    activated hw-available transition, or perform the explicit canonical recovery repair
+    (`ensure_recovery_transition_activated`, persisted) and admit the now-activated recovery normally;
+  - zero-activated and empty-effective-Random-pool states are repaired by the one normalization
+    authority (Crossfade reactivation / Random-off + deterministic manual + preserved pool prefs).
+  Pinned by `tests/test_transition_activation_admission.py` (factory stale/hw-invalid/manual/never-run-
+  deactivated-Crossfade; engine empty-pool + zero-activated repair; C-key never selects deactivated
+  Crossfade) and `tests/test_capability_activation.py` (normalization / fallback / recovery units).
+  One narrow seam remains for **E2.6**: runtime still recognizes legacy `type="Random"` as a second
+  Random-mode authority alongside `random_always`; E2 normalizes it to the single `random_always`
+  authority plus a concrete manual type.
+- **presentation-neutral capability authority (import boundary closed)** — the family catalog was
+  extracted to `core/settings/widget_family_catalog.py`; `core/settings/capability_activation.py` now
+  imports only that neutral catalog and the (neutral) transition registry. Importing the activation
+  authority no longer transitively pulls `PySide6.QtWidgets`, `rendering/widget_descriptors.py`,
+  WidgetsTab/settings builders, widget implementations/providers, or Quick renderers. Pinned by
+  `tests/test_capability_activation_neutrality.py` (subprocess import probe).
+- **widget-family activation runtime consequence (creation-admission dormancy only)** —
+  `_create_factory_widgets` skips a deactivated family before per-instance `enabled` handling and
+  expected-overlay accounting, so a deactivated family creates no runtime widget at that seam. This
+  proves **creation-admission dormancy only**; broader provider/model/service/timer/process/Quick-
+  resource dormancy and last-consumer shared-service lifetime remain the **E1 `WidgetRuntimeManager`
+  ownership responsibility**. Inert by default. Pinned by `tests/test_widget_manager_refresh.py`.
 
-The activation foundation (neutral catalog + schema + canonical normalization + most runtime admission
-seams) is landed and inert-by-default. E2 supplies the operator-facing toggle and must close the four
-remaining transition activation/Random seams above before its exit gate can be accepted.
+The activation foundation (neutral catalog + schema + canonical normalization + closed runtime admission
+fencing) is landed and inert-by-default. E2 supplies the operator-facing toggle and must close the one
+remaining `type="Random"` seam (E2.6) before its exit gate can be accepted.
 
 Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase F relies on E2):
 
@@ -1794,9 +1813,10 @@ Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase 
   deactivated capability loses its settings pill, lazy-save hydration guard preserved.
   **Operator decision (2026-08-22): rebuild the nav live** — deactivating a capability while Settings is
   open immediately removes its pill and reactivation re-adds it, matching doc 07 §5.3 literally (not a
-  deferred grey-out). **Before E2 exit**, close and test all four transition seams in E2.6: stale
-  pre-resolved `random_choice`, engine/factory literal Crossfade substitutes, C-key Crossfade recovery,
-  and the legacy `type="Random"` second authority. Checkpoint/push/audit E2 before Phase F.
+  deferred grey-out). The stale-`random_choice`, literal-Crossfade-substitute, and C-key-Crossfade
+  admission seams are now closed (see the foundation-correction slice above); **E2.6** need only
+  normalize the legacy `type="Random"` second authority into the single `random_always` authority plus a
+  concrete manual type. Checkpoint/push/audit E2 before Phase F.
 - **E3** — shared retained Quick visual primitives.
 - **E4** — global eight-direction shadow authority (default `SE`).
 
