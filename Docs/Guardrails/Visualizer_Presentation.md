@@ -145,7 +145,9 @@ render-node-local SDF/stencil host:
 - `CARD_INTERIOR` uses the rounded canonical inner-card geometry;
 - `VIEWPORT_RECT` uses the same host with zero radius;
 - the host and mode draw use the same render-target viewport;
-- supplied RenderState scissor/stencil values are honored;
+- valid inherited scissor/stencil state that genuinely corresponds to real framebuffer contents is
+  honored (composed with, not cleared); the failed `QSGClipNode` handoff proved arbitrary PySide clip
+  metadata is not trustworthy, so this is only the narrower compose-with-valid-state guarantee;
 - direct GL does not clear or overwrite scene-graph clip contents as if it owned the framebuffer;
 - temporary stencil contents and every touched direct-GL state are restored.
 

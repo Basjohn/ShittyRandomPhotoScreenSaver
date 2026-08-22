@@ -392,22 +392,37 @@ A bypass/protection test that proves only “the edge trigger executed” is not
 
 It must prove the approved resulting render/positional edge survives.
 
-### 10.1 Same-kind coalescing before one synchronization is safe by forward evolution
+### 10.1 Same-kind coalescing before one synchronization
 
 The bounded latest-state bridge coalesces protected edges by `kind`, and Bubble emits a single kind
-(`bubble_visible_result`). Two protected Bubble results before one synchronization therefore collapse to
-the newer token. This is NOT the batching/coalescing loss forbidden above, because:
+(`bubble_visible_result`) whose `result` is a **full renderer-visible Bubble result snapshot**
+(`positions`/`extras`/`trails`; `event_kinds` is diagnostic only). Two protected results before one
+synchronization therefore collapse to the newer token.
 
-- Bubble integrates exactly one authored step per advance (no skipping), so the newer result's geometry
-  is the continuous forward evolution of the older one;
-- the renderer reads only `positions`/`extras`/`trails` from the protected result (`event_kinds` is
-  diagnostic), and the older authored consequence persists in that forward-evolved geometry;
-- therefore the latest result after B still contains the required visible consequence of A, consumed
-  exactly once.
+**Precise invariant:** same-kind coalescing is safe ONLY WHILE every protected real Bubble consequence
+is forward-carried into the next renderer-visible result. It is not an unconditional licence to drop the
+older protected result.
 
-This is a latest-state guarantee, not FIFO history: two historical frames are not replayed. Only alter
-the protected-edge representation (e.g. per-kind history) if a deterministic test demonstrates ACTUAL
-visible consequence loss. `tests/test_bubble_btf_coalescing.py` pins this guarantee.
+It holds for current Bubble because:
+
+- Bubble integrates exactly one authored step per advance (no skipping), so the newer renderer-visible
+  result snapshot is the continuous forward evolution of the older one;
+- the authored event consequences are persistent in that evolving state — a kick drives
+  spawn/promotion, and vocal/snare drive the persistent stream-burst envelope and the velocities /
+  positions it produces — so an event consumed at step A still shapes the renderer-visible result at
+  step B;
+- therefore the latest result after B still contains the required consequence of A, consumed exactly
+  once.
+
+This is a latest-state guarantee, not FIFO history: two historical frames are not replayed. If a future
+authored Bubble consequence were visible for a single frame and NOT forward-carried into the next
+renderer-visible result, this invariant would be violated and the coalescing rule (not the tests) would
+need per-kind history. Only alter the protected-edge representation if a deterministic test demonstrates
+ACTUAL visible-consequence loss.
+
+`tests/test_bubble_btf_coalescing.py` pins this: the accumulating fixture proves the bridge/coalescing
+rule, and real-BubbleSimulation bars prove production `vocal_swell`/`snare` consequences are
+forward-carried into the next renderer-visible result (with one-authored-step -> one-integration).
 
 ---
 

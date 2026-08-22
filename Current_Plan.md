@@ -83,7 +83,7 @@ Production cutover in Phase H still requires the full Quick implementation surfa
 acceptance in Phase J still requires scheduled physical/compiled evidence.
 
 If the operator explicitly says **"continue from Phase C tests"** or equivalent, execute Section 7.5
-before returning to normal Phase-D work.
+before returning to current normal work. Phase D is complete; current normal work is Phase E.
 
 ---
 
