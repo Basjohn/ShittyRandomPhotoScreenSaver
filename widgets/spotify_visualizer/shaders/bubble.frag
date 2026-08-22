@@ -12,6 +12,11 @@ uniform float u_dpr;
 // not card-local. Subtracting this origin restores card-local pixels.
 // A card-sized, origin-zero target simply passes (0, 0).
 uniform vec2 u_viewport_origin_px;
+// Qt Quick uses interpolated item-local coordinates. The old compositor keeps
+// the framebuffer-coordinate/card-clip branch until Phase-I deletion.
+uniform int u_quick_item_coords;
+uniform vec4 u_content_rect;  // item-local x, y, width, height
+uniform float u_visual_scale;
 uniform float u_border_width;
 uniform float u_fade;
 uniform float u_time;
@@ -83,25 +88,32 @@ void main() {
     float height = u_resolution.y;
     if (width <= 0.0 || height <= 0.0) discard;
 
-    // Card border matches the widget card frame thickness (global control).
-    float border_w = max(1.0, u_border_width);
-    float card_radius = 8.0;
-    // Inner content radius = card radius minus border width
-    float inner_radius = max(0.0, card_radius - border_w);
+    vec2 fc;
+    if (u_quick_item_coords == 1) {
+        fc = v_uv * u_resolution;
+    } else {
+        float dpr = max(u_dpr, 1.0);
+        float fb_h = height * dpr;
+        vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
+        fc = vec2(localFrag.x / dpr, (fb_h - localFrag.y) / dpr);
+    }
 
-    float inner_w = width - border_w * 2.0;
-    float inner_h = height - border_w * 2.0;
+    float authored_scale = (u_quick_item_coords == 1)
+        ? max(u_visual_scale, 0.01) : 1.0;
+    float border_w = max(1.0, u_border_width);
+    float inner_x = (u_quick_item_coords == 1) ? u_content_rect.x : border_w;
+    float inner_y = (u_quick_item_coords == 1) ? u_content_rect.y : border_w;
+    float inner_w = (u_quick_item_coords == 1)
+        ? u_content_rect.z : width - border_w * 2.0;
+    float inner_h = (u_quick_item_coords == 1)
+        ? u_content_rect.w : height - border_w * 2.0;
+    float inner_radius = (u_quick_item_coords == 1)
+        ? 0.0 : max(0.0, 8.0 - border_w);
     if (inner_w <= 0.0 || inner_h <= 0.0) discard;
 
-    // Map v_uv (0..1 over full overlay) to pixel coords, then to inner UV
-    float dpr = max(u_dpr, 1.0);
-    float fb_h = height * dpr;
-    vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
-    vec2 fc = vec2(localFrag.x / dpr, (fb_h - localFrag.y) / dpr);
-
     // Discard outside inner content rect (rectangular pre-check)
-    if (fc.x < border_w || fc.x > width - border_w ||
-        fc.y < border_w || fc.y > height - border_w) {
+    if (fc.x < inner_x || fc.x > inner_x + inner_w ||
+        fc.y < inner_y || fc.y > inner_y + inner_h) {
         discard;
     }
 
@@ -109,8 +121,8 @@ void main() {
     // that fall outside the rounded inner rect
     if (inner_radius > 0.5) {
         // Position relative to inner rect origin
-        float ix = fc.x - border_w;
-        float iy = fc.y - border_w;
+        float ix = fc.x - inner_x;
+        float iy = fc.y - inner_y;
         // Check each corner
         float r = inner_radius;
         vec2 d = vec2(0.0);
@@ -123,11 +135,11 @@ void main() {
     }
 
     // Remap to 0..1 within inner rect
-    vec2 uv = vec2((fc.x - border_w) / inner_w, (fc.y - border_w) / inner_h);
+    vec2 uv = vec2((fc.x - inner_x) / inner_w, (fc.y - inner_y) / inner_h);
     float aspect = inner_w / max(inner_h, 1.0);
     
     // Pixel size in normalised coords (for anti-aliasing)
-    float px = 1.0 / max(inner_h, 1.0);
+    float px = authored_scale / max(inner_h, 1.0);
     
     // --- Background gradient ---
     // Gradient direction now follows "brightest point location" semantics.

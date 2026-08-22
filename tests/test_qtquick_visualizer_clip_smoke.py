@@ -68,6 +68,10 @@ def _run_sine_smoke(case: str) -> dict[str, object]:
     return _run_visualizer_smoke("sine_wave", case)
 
 
+def _run_bubble_smoke(case: str) -> dict[str, object]:
+    return _run_visualizer_smoke("bubble", case)
+
+
 def _assert_rgb(actual: list[int], expected: list[int]) -> None:
     assert len(actual) >= 3
     assert all(
@@ -373,3 +377,64 @@ def test_sine_idle_carrier_and_peak_ghost_are_real_quick_pixels() -> None:
     assert idle["lit_column_count"] >= 64
     assert idle["lit_row_count"] >= 8
     assert ghost["lit_pixel_count"] > canonical["lit_pixel_count"]
+
+
+@pytest.mark.parametrize(
+    "case",
+    ("canonical", "scaled", "wide", "tall", "idle", "ghost", "trail", "pop"),
+)
+def test_production_bubble_draws_and_releases_inside_quick(case: str) -> None:
+    report = _run_bubble_smoke(case)
+
+    assert report["valid"] is True
+    assert report["error"] is None
+    capture = report["captures"][case]
+    assert capture["gl_error"] == 0
+    assert capture["lit_pixel_count"] > 0
+    assert capture["lit_column_count"] >= 12
+    assert capture["lit_row_count"] >= 12
+    assert capture["lit_bounds"] is not None
+
+    telemetry = report["telemetry"]
+    assert telemetry["error"] is None
+    assert telemetry["draw_count"] >= 1
+    assert telemetry["drawn_mode_id"] == "bubble"
+    assert telemetry["release_thread_id"] == telemetry["render_thread_id"]
+    assert telemetry["release_count"] == 1
+    assert telemetry["invalidation_count"] == 1
+    assert report["release_context_current"] is True
+
+
+def test_bubble_quick_geometry_keeps_round_pixels_at_each_exercised_aspect() -> None:
+    canonical = _run_bubble_smoke("canonical")["captures"]["canonical"]
+    scaled = _run_bubble_smoke("scaled")["captures"]["scaled"]
+    wide = _run_bubble_smoke("wide")["captures"]["wide"]
+    tall = _run_bubble_smoke("tall")["captures"]["tall"]
+
+    for capture in (canonical, scaled, wide, tall):
+        bounds = capture["lit_bounds"]
+        width = bounds[2] - bounds[0] + 1
+        height = bounds[3] - bounds[1] + 1
+        assert width == pytest.approx(height, abs=3)
+
+    assert scaled["lit_column_count"] < canonical["lit_column_count"]
+    assert scaled["lit_row_count"] < canonical["lit_row_count"]
+    assert wide["outer_pixel_size"][0] > canonical["outer_pixel_size"][0]
+    assert wide["outer_pixel_size"][1] == canonical["outer_pixel_size"][1]
+    assert tall["outer_pixel_size"][0] == canonical["outer_pixel_size"][0]
+    assert tall["outer_pixel_size"][1] > canonical["outer_pixel_size"][1]
+
+
+def test_bubble_ghost_trail_pop_and_idle_are_real_quick_pixels() -> None:
+    canonical = _run_bubble_smoke("canonical")["captures"]["canonical"]
+    idle = _run_bubble_smoke("idle")["captures"]["idle"]
+    ghost = _run_bubble_smoke("ghost")["captures"]["ghost"]
+    trail = _run_bubble_smoke("trail")["captures"]["trail"]
+    pop = _run_bubble_smoke("pop")["captures"]["pop"]
+
+    assert idle["lit_pixel_count"] > 0
+    assert idle["lit_pixel_count"] < canonical["lit_pixel_count"]
+    assert ghost["lit_pixel_count"] > canonical["lit_pixel_count"]
+    assert trail["lit_bounds"][0] < canonical["lit_bounds"][0]
+    assert trail["lit_pixel_count"] > canonical["lit_pixel_count"]
+    assert pop["lit_pixel_count"] > 0

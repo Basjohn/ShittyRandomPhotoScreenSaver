@@ -290,15 +290,19 @@ failure.
 
 The persistent Bubble scheduler/lane experiment was rejected because it changed temporal behaviour.
 
-Current production `BubbleComputeLane` is intentionally a compatibility facade over the approved
-general COMPUTE executor semantics.
+At the P05 checkpoint, production `BubbleComputeLane` was intentionally a compatibility facade over
+the approved general COMPUTE executor semantics.
 
 Therefore:
 
 ```text
 lane_registrations = 0
-executor task per accepted Bubble step = expected current behaviour
+executor task per accepted Bubble step = expected P05 behaviour
 ```
+
+Phase D later removed that facade and its executor submission entirely: Bubble now integrates every
+admitted step directly on the sole authored visualizer logical runtime. This report remains the
+historical evidence for rejecting the persistent-lane experiment.
 
 Do not reactivate the rejected persistent lane to reduce Future/task churn.
 

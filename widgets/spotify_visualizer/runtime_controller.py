@@ -133,16 +133,26 @@ class VisualizerRuntimeController:
     def set_mode(self, mode: Any) -> str:
         raw = getattr(mode, "name", mode)
         mode_id = coerce_visualizer_mode_id(str(raw or "").lower())
+        retired_states: tuple[Any, ...] = ()
         with self._lock:
             if mode_id != self._mode_id:
                 # A render admission is generation + activation + mode scoped.
                 # The target mode reopens it only when that activation commits.
                 self._render_bridge.close_admission()
+                retired_states = tuple(self._logical_mode_states.values())
                 self._logical_mode_states.clear()
             self._mode_id = mode_id
             self._presentation_policy = get_visualizer_presentation_policy(
                 mode_id
             )
+        for state in retired_states:
+            retire = getattr(state, "retire", None)
+            if callable(retire):
+                retire()
+                continue
+            reset = getattr(state, "reset", None)
+            if callable(reset):
+                reset()
         return mode_id
 
     @property
@@ -358,6 +368,15 @@ class VisualizerRuntimeController:
                 state = factory()
                 self._logical_mode_states[canonical] = state
             return state
+
+    def peek_logical_mode_state(self, mode_id: object) -> Any:
+        """Inspect an already-active plain mode state without constructing it."""
+
+        canonical = coerce_visualizer_mode_id(mode_id)
+        with self._lock:
+            if canonical != self._mode_id:
+                return None
+            return self._logical_mode_states.get(canonical)
 
     def begin_render_activation(
         self,

@@ -388,6 +388,7 @@ def test_quick_spectrum_registry_is_static_and_lazy() -> None:
         "spectrum",
         "oscilloscope",
         "sine_wave",
+        "bubble",
     )
     assert all(isinstance(descriptor.module_name, str) for descriptor in descriptors)
     renderer = resolve_quick_visualizer_renderer("spectrum")
@@ -402,6 +403,10 @@ def test_quick_spectrum_registry_is_static_and_lazy() -> None:
     assert sine is not None
     assert sine.mode_id == "sine_wave"
     assert sine.has_resources is False
+    bubble = resolve_quick_visualizer_renderer("bubble")
+    assert bubble is not None
+    assert bubble.mode_id == "bubble"
+    assert bubble.has_resources is False
 
 
 def test_legacy_capture_freezes_quick_spectrum_peaks_without_geometry_reads() -> None:

@@ -18,6 +18,7 @@ Two pieces:
     monotonically increasing revision. Publishing replaces whatever was there;
     superseded state is dropped rather than queued. There is no FIFO and no
     catch-up replay, so a slow consumer costs freshness, never a backlog.
+    Bounded protected results are merged into the newest unread state.
 
 `VisualizerLogicalRuntime`
     One standard Python thread owning one monotonic deadline sequence. Missed
@@ -29,8 +30,8 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import dataclass
-from typing import Any, Callable, Optional, Tuple
+from dataclasses import dataclass, replace
+from typing import Any, Callable, Optional
 
 from core.logging.logger import get_logger
 
@@ -94,6 +95,49 @@ class LogicalPublication:
     produced_ts: float
 
 
+_MAX_PROTECTED_EDGE_KINDS = 8
+
+
+def _coalesce_protected_state(previous: Any, incoming: Any) -> Any:
+    """Carry bounded short-lived results into the newest unread state."""
+
+    previous_edges = getattr(previous, "protected_edges", ())
+    incoming_edges = getattr(incoming, "protected_edges", ())
+    if not isinstance(previous_edges, tuple) or not previous_edges:
+        return incoming
+    if not isinstance(incoming_edges, tuple):
+        return incoming
+    if getattr(previous, "mode_id", None) != getattr(incoming, "mode_id", None):
+        return incoming
+    if getattr(previous, "engine_generation", None) != getattr(
+        incoming,
+        "engine_generation",
+        None,
+    ):
+        return incoming
+
+    merged: dict[str, Any] = {}
+    for edge in previous_edges + incoming_edges:
+        kind = getattr(edge, "kind", None)
+        token = getattr(edge, "token", None)
+        if not isinstance(kind, str) or not isinstance(token, int):
+            return incoming
+        current = merged.get(kind)
+        if current is None or token >= current.token:
+            merged[kind] = edge
+    if len(merged) > _MAX_PROTECTED_EDGE_KINDS:
+        raise RuntimeError(
+            "visualizer protected-edge kinds exceeded the bounded mailbox contract"
+        )
+    protected_edges = tuple(merged[kind] for kind in sorted(merged))
+    if protected_edges == incoming_edges:
+        return incoming
+    try:
+        return replace(incoming, protected_edges=protected_edges)
+    except TypeError:
+        return incoming
+
+
 class LatestStateMailbox:
     """A single-slot latest-wins handoff from the logical runtime to the GUI.
 
@@ -101,7 +145,8 @@ class LatestStateMailbox:
     each state at most once and never redraws an unchanged scene; a 60-Hz display
     sampling the same producer simply misses intermediate snapshots, which is
     correct because every authored event has already been integrated into the
-    state before it could be replaced.
+    state before it could be replaced. Short-lived protected results coalesce
+    into that newest unread state rather than creating a second slot.
     """
 
     def __init__(self) -> None:
@@ -121,9 +166,15 @@ class LatestStateMailbox:
         """Replace the current slot. Returns the new revision."""
 
         with self._lock:
-            if self._publication is not None:
+            previous = self._publication
+            if previous is not None:
                 # Superseded before anyone sampled it. Counted, never queued.
                 self._dropped += 1
+                if (
+                    previous.generation == int(generation)
+                    and previous.activation_id == int(activation_id)
+                ):
+                    state = _coalesce_protected_state(previous.state, state)
             self._revision += 1
             self._publication = LogicalPublication(
                 state=state,

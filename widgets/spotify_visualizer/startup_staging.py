@@ -470,10 +470,6 @@ def deactivate_impl(widget: Any) -> None:
         widget._reset_bubble_cadence()
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to reset Bubble cadence on deactivate", exc_info=True)
-    stop_lane = getattr(widget, "_stop_bubble_compute_lane", None)
-    if callable(stop_lane):
-        stop_lane()
-
     try:
         engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
     except Exception as e:
@@ -502,9 +498,6 @@ def deactivate_impl(widget: Any) -> None:
 def cleanup_impl(widget: Any) -> None:
     """Clean up visualizer resources — lifecycle hook."""
     deactivate_impl(widget)
-    stop_lane = getattr(widget, "_stop_bubble_compute_lane", None)
-    if callable(stop_lane):
-        stop_lane()
     widget._engine = None
     # Free GL handles on the bars overlay to prevent VRAM leaks
     widget._destroy_parent_overlay(reason="cleanup_impl")
@@ -722,9 +715,6 @@ def stop_legacy(widget: Any) -> None:
         widget._reset_bubble_cadence()
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to reset Bubble cadence on stop", exc_info=True)
-    stop_lane = getattr(widget, "_stop_bubble_compute_lane", None)
-    if callable(stop_lane):
-        stop_lane()
     widget._startup_secondary_stage_pending = False
     widget._startup_hot_start_started = False
     widget._startup_wake_deferred = False

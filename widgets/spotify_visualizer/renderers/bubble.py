@@ -6,21 +6,10 @@ import numpy as np
 from core.settings.bubble_gradient_semantics import (
     get_bubble_gradient_shader_mode,
     get_bubble_gradient_shader_vector,
+    get_bubble_specular_shader_vector,
 )
 from widgets.spotify_visualizer.renderers.gl_helpers import set1f as _set1f, set1i as _set1i, set_color4 as _set_color4
 
-
-_DIRECTION_VECS = {
-    'top_left': (-0.707, 0.707),
-    'top': (0.0, 1.0),
-    'top_right': (0.707, 0.707),
-    'left': (-1.0, 0.0),
-    'right': (1.0, 0.0),
-    'bottom_left': (-0.707, -0.707),
-    'bottom': (0.0, -1.0),
-    'bottom_right': (0.707, -0.707),
-    'center_out': (0.0, 0.0),
-}
 
 _MAX_BUBBLES = 110
 _BUBBLE_POS_SIZE = _MAX_BUBBLES * 4
@@ -147,7 +136,7 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_tail_opacity", s._bubble_tail_opacity)
 
     # Specular direction
-    sd = _DIRECTION_VECS.get(s._bubble_specular_direction, (-0.707, 0.707))
+    sd = get_bubble_specular_shader_vector(s._bubble_specular_direction)
     loc = u.get("u_specular_dir", -1)
     if loc >= 0:
         gl.glUniform2f(loc, float(sd[0]), float(sd[1]))

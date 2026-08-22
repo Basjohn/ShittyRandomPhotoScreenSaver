@@ -36,6 +36,12 @@ _IMPLEMENTATIONS = (
             "rendering.quick.visualizer.implementations.sine_wave"
         ),
     ),
+    QuickVisualizerImplementationDescriptor(
+        mode_id="bubble",
+        module_name=(
+            "rendering.quick.visualizer.implementations.bubble"
+        ),
+    ),
 )
 _BY_ID = {descriptor.mode_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

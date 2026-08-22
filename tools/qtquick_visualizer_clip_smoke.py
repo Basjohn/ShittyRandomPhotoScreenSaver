@@ -58,6 +58,7 @@ from widgets.spotify_visualizer.render_bridge import (  # noqa: E402
     VisualizerSnapshotBridge,
 )
 from widgets.spotify_visualizer.render_state import (  # noqa: E402
+    BubbleFrame,
     OscilloscopeFrame,
     SineFrame,
     SpectrumFrame,
@@ -1152,6 +1153,92 @@ def _sine_snapshot(case: str, presentation):
     )
 
 
+def _bubble_snapshot(case: str, presentation):
+    center_x = 0.5
+    center_y = 0.5
+    radius = 0.07
+    alpha = 0.42 if case == "pop" else 1.0
+    positions = (center_x, center_y, radius, alpha)
+    extras = (1.0, 0.0, 0.0, 0.0)
+    trails: tuple[float, ...] = ()
+    trail_strength = 0.0
+    tail_opacity = 0.0
+    if case == "trail":
+        trails = (
+            0.22,
+            0.50,
+            1.0,
+            0.31,
+            0.50,
+            1.0,
+            0.41,
+            0.50,
+            1.0,
+        )
+        trail_strength = 1.5
+        tail_opacity = 0.85
+    if case == "idle":
+        radius = 0.045
+        positions = (center_x, center_y, radius, alpha)
+    playing = case != "idle"
+    source_generation = 2 if playing else -1
+    source_activation = 3 if playing else -1
+    background = _BACKGROUND.getRgb()
+    logical = VisualizerLogicalFrame(
+        runtime_generation=1,
+        engine_generation=2,
+        activation_id=3,
+        source_generation=source_generation,
+        source_activation_id=source_activation,
+        mode_id="bubble",
+        playing=playing,
+        logical_timestamp=1.0,
+        source_timestamp=0.99 if playing else None,
+        changed=True,
+        present_frame=True,
+        mode_reveal_ready=True,
+        common=VisualizerCommonState(
+            bars=(),
+            bar_count=0,
+            energy=VisualizerEnergyState(
+                bass=0.55 if playing else 0.02,
+                mid=0.38 if playing else 0.015,
+                high=0.24 if playing else 0.01,
+                overall=0.62 if playing else 0.015,
+            ),
+        ),
+        mode_state=BubbleFrame(
+            positions=positions,
+            extras=extras,
+            trails=trails,
+            bubble_count=1,
+            source_timestamp=0.99 if playing else 0.0,
+            simulation_timestamp=1.0,
+            parameters=freeze_render_fields(
+                {
+                    "bubble_outline_color": (245, 250, 255, 255),
+                    "bubble_specular_color": (255, 255, 255, 255),
+                    "bubble_gradient_light": background,
+                    "bubble_gradient_dark": background,
+                    "bubble_pop_color": (255, 90, 35, 255),
+                    "bubble_specular_direction": "top_left",
+                    "bubble_gradient_direction": "top",
+                    "bubble_trail_strength": trail_strength,
+                    "bubble_tail_opacity": tail_opacity,
+                    "bubble_ghosting_enabled": case == "ghost",
+                    "bubble_ghost_alpha": 1.0,
+                    "rainbow_enabled": False,
+                }
+            ),
+        ),
+    )
+    return compose_visualizer_render_snapshot(
+        logical,
+        presentation,
+        logical_revision=1,
+    )
+
+
 class _SpectrumSamplingNode(VisualizerRenderNode):
     def __init__(
         self,
@@ -1351,6 +1438,7 @@ class _VisualizerModeRunner(QObject):
             "spectrum": _spectrum_snapshot,
             "oscilloscope": _oscilloscope_snapshot,
             "sine_wave": _sine_snapshot,
+            "bubble": _bubble_snapshot,
         }[mode_id]
         if not self._bridge.publish(snapshot_factory(case, self._presentation)):
             raise RuntimeError(f"{mode_id} smoke snapshot was rejected")
@@ -1551,6 +1639,7 @@ def main(argv: list[str] | None = None) -> int:
             "spectrum",
             "oscilloscope",
             "sine_wave",
+            "bubble",
         ),
         required=True,
     )
@@ -1558,7 +1647,16 @@ def main(argv: list[str] | None = None) -> int:
         "--visualizer-case",
         "--spectrum-case",
         dest="visualizer_case",
-        choices=("canonical", "scaled", "wide", "tall", "idle", "ghost"),
+        choices=(
+            "canonical",
+            "scaled",
+            "wide",
+            "tall",
+            "idle",
+            "ghost",
+            "trail",
+            "pop",
+        ),
         default="canonical",
     )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
@@ -1575,7 +1673,7 @@ def main(argv: list[str] | None = None) -> int:
             args.visualizer_case,
             mode_id=args.policy,
         )
-        if args.policy in {"spectrum", "oscilloscope", "sine_wave"}
+        if args.policy in {"spectrum", "oscilloscope", "sine_wave", "bubble"}
         else _Runner(app, args.policy)
     )
     QTimer.singleShot(0, runner.start)

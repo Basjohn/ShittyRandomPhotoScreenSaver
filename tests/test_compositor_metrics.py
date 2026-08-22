@@ -241,8 +241,13 @@ def test_frame_gap_owner_logs_one_bounded_record_with_delivery_deltas(
         _mode_transition_phase=0,
         _waiting_for_fresh_engine_frame=False,
         _waiting_for_fresh_frame=False,
-        _bubble_compute_pending=False,
-        _bubble_pending_result=object(),
+        _bubble_cadence_state=SimpleNamespace(
+            diagnostic_snapshot=lambda: {
+                "requested_steps": 12,
+                "integrated_steps": 12,
+                "integration_failures": 0,
+            }
+        ),
         _bubble_visible_source_ts=9.900,
         _bubble_visible_simulation_ts=9.950,
         _bubble_visible_render_state_ts=9.980,
@@ -314,7 +319,8 @@ def test_frame_gap_owner_logs_one_bounded_record_with_delivery_deltas(
     assert "source_age_ms=100.00" in message
     assert "simulation_age_ms=50.00" in message
     assert "render_state_age_ms=20.00" in message
-    assert "bubble_result=1" in message
+    assert "bubble_steps=12/12" in message
+    assert "bubble_failures=0" in message
     assert "compute_callbacks=2" in message
     assert "ui_callbacks=1" in message
     assert "media_display=1" in message

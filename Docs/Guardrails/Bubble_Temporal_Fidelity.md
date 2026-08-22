@@ -491,7 +491,7 @@ shared cache/reconstruction/provider work
 transition/startup work
 ```
 
-If Bubble worker/render cost is cheap while logical holes are large, fix the shared owner first.
+If Bubble integration/render cost is cheap while logical holes are large, fix the shared owner first.
 
 Do not:
 

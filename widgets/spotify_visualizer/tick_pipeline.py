@@ -363,13 +363,11 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
 
 
 def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
-    """Submit one authored Bubble step whenever its bounded lane is free."""
+    """Advance one Bubble step on the sole authored visualizer clock."""
     if (
         widget._vis_mode_str != 'bubble'
         or widget._mode_teardown_block_until_ready
     ):
-        return
-    if widget._thread_manager is None:
         return
 
     cadence = getattr(widget, "_bubble_cadence_state", None)
@@ -378,24 +376,24 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
 
         cadence = BubbleCadenceState()
         widget._bubble_cadence_state = cadence
-        widget._bubble_active_task_token = None
-    cadence.offer_tick(now_ts=now_ts)
+    controller = getattr(widget, "runtime_controller", None)
+    if controller is None:
+        raise RuntimeError("Bubble logical step requires its runtime controller")
 
-    has_pending_result = getattr(widget, "_has_pending_bubble_result", None)
-    pending_result = bool(has_pending_result()) if callable(has_pending_result) else False
-    worker_busy = bool(widget._bubble_compute_pending)
-    if worker_busy or pending_result:
-        # Do not sample audio, consume scheduler impulses, or advance Bubble's
-        # authored timestamp while an older step/result still owns the lane.
-        cadence.note_lane_blocked(
-            worker_busy=worker_busy,
-            result_waiting=pending_result,
+    from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
+
+    try:
+        runtime = controller.resolve_logical_mode_state(
+            "bubble",
+            BubbleFrameRuntime,
         )
-        if pending_result:
-            widget._bubble_pending_result_skip_count = int(
-                getattr(widget, "_bubble_pending_result_skip_count", 0) or 0
-            ) + 1
-        return
+    except ValueError:
+        if controller.mode_id != "bubble" or widget._vis_mode_str != "bubble":
+            return
+        raise
+    if not isinstance(runtime, BubbleFrameRuntime):
+        raise TypeError("Bubble logical mode state has the wrong type")
+    cadence.request_step(now_ts=now_ts)
 
     # Bubble owns a full-dynamic continuous energy path. Using the shared
     # post-AGC snapshot here can flatten the mode into a near-constant plateau
@@ -588,95 +586,86 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         'big_size_clamp': widget._bubble_big_size_clamp,
     })
 
-    # Freeze each payload only after the ownership lane is known to be free.
-    # The event scheduler remains live by design, but now reaches exactly the
-    # current step instead of being consumed by an older batched packet.
+    # Freeze one admitted logical input. There is no Bubble worker queue or
+    # presentation acknowledgement: the current authored step integrates now.
     energy_payload = dict(eb_snap)
     settings_payload = dict(sim_settings)
     pulse_payload = dict(pulse_params)
     source_ts = 0.0
+    source_generation = -1
+    source_activation = -1
+    engine_generation = -1
+    engine_activation = -1
     if widget._engine is not None:
         try:
-            source_ts = float(widget._engine.get_latest_authoritative_frame()[0])
+            engine_generation = coerce_identity(
+                widget._engine.get_generation_id()
+            )
+            engine_activation = coerce_identity(
+                widget._engine.get_activation_id()
+            )
         except Exception:
-            try:
-                source_ts = float(getattr(widget._engine, "_last_smooth_ts", 0.0) or 0.0)
-            except Exception:
-                source_ts = 0.0
-    task_token = cadence.begin_submission()
-    widget._bubble_active_task_token = task_token
-    widget._bubble_compute_pending = True
-
-    ensure_lane = getattr(widget, "_ensure_bubble_compute_lane", None)
+            pass
+        try:
+            (
+                raw_source_ts,
+                raw_source_generation,
+                raw_source_activation,
+            ) = widget._engine.get_latest_authoritative_frame()
+            source_ts = float(raw_source_ts)
+            source_generation = coerce_identity(raw_source_generation)
+            source_activation = coerce_identity(raw_source_activation)
+        except Exception:
+            source_ts = 0.0
+    source_ready = bool(
+        source_generation >= 0
+        and source_activation >= 0
+        and source_generation == engine_generation
+        and source_activation == engine_activation
+    )
+    step_token = cadence.begin_step()
     try:
-        lane = ensure_lane() if callable(ensure_lane) else None
-    except Exception:
-        widget._bubble_active_task_token = None
-        widget._bubble_compute_pending = False
-        cadence.note_submission_failure()
-        logger.warning(
-            "[SPOTIFY_VIS][FALLBACK] Managed Bubble lane creation failed",
-            exc_info=True,
-        )
-        return
-    if lane is not None:
-        accepted = lane.submit(
-            task_token=task_token,
+        resolved = runtime.advance(
             dt=dt_bubble,
             energy=energy_payload,
             settings=settings_payload,
             pulse=pulse_payload,
-            source_ts=source_ts,
-            authored_ts=now_ts,
+            source_timestamp=source_ts,
+            authored_timestamp=now_ts,
+            runtime_generation=coerce_identity(
+                getattr(widget, "_runtime_generation", None)
+            ),
+            engine_generation=engine_generation,
+            activation_id=engine_activation,
+            playing=bool(widget._spotify_playing),
+            source_ready=source_ready,
+            source_generation=source_generation,
+            source_activation_id=source_activation,
+            edge_token=int(step_token[1]),
         )
-        if accepted:
-            cadence.note_submission_succeeded()
-        else:
-            widget._bubble_active_task_token = None
-            widget._bubble_compute_pending = False
-            cadence.note_submission_failure()
-            if not getattr(widget, "_bubble_lane_rejection_logged", False):
-                logger.warning(
-                    "[SPOTIFY_VIS][FALLBACK] Persistent Bubble lane rejected a lane-free step"
-                )
-                widget._bubble_lane_rejection_logged = True
+    except Exception:
+        cadence.note_step_failed()
+        logger.exception("[SPOTIFY_VIS] Bubble logical integration failed")
+        return
+    if resolved is None:
+        return
+    cadence.note_step_integrated()
+
+    if controller.mode_id != "bubble" or widget._vis_mode_str != "bubble":
+        # A concurrent mode retirement remains authoritative. The completed
+        # old-mode result is never mirrored or admitted into the new mode.
         return
 
-    def _on_done(
-        task_result,
-        *,
-        _task_token=task_token,
-        _source_ts=source_ts,
-        _authored_ts=now_ts,
-    ) -> None:
-        widget._bubble_compute_done(
-            task_result,
-            task_token=_task_token,
-            source_ts=_source_ts,
-            authored_ts=_authored_ts,
-        )
-
-    try:
-        widget._thread_manager.submit_compute_task(
-            widget._bubble_compute_worker,
-            dt_bubble,
-            energy_payload,
-            settings_payload,
-            pulse_payload,
-            task_token=task_token,
-            callback=_on_done,
-            task_id=getattr(widget, "_bubble_sim_task_id", f"bubble_sim_{id(widget)}"),
-            category="visualizer.bubble_simulation",
-        )
-        cadence.note_submission_succeeded()
-    except Exception:
-        widget._bubble_active_task_token = None
-        widget._bubble_compute_pending = False
-        cadence.note_submission_failure()
-        logger.warning(
-            "[SPOTIFY_VIS][FALLBACK] Bubble compute submission failed",
-            exc_info=True,
-        )
+    # Temporary old-presenter mirror. The immutable controller-owned result is
+    # authoritative; no Quick renderer reads these QWidget adapter fields.
+    widget._bubble_pos_data = list(resolved.positions)
+    widget._bubble_extra_data = list(resolved.extras)
+    widget._bubble_trail_data = list(resolved.trails)
+    widget._bubble_count = resolved.bubble_count
+    widget._bubble_visible_source_ts = resolved.source_timestamp
+    widget._bubble_visible_simulation_ts = resolved.simulation_timestamp
+    widget._bubble_visible_render_state_ts = now_ts
+    widget._bubble_last_perf_diag = dict(resolved.perf_diagnostics)
 
 
 # ------------------------------------------------------------------
@@ -1595,20 +1584,15 @@ def logical_tick(widget: Any) -> Optional[VisualizerLogicalFrame]:
     process_heartbeat(widget, now_ts)
     _record_tick_phase("heartbeat")
 
-    consume_pending_bubble = getattr(widget, "_consume_pending_bubble_result", None)
-    if getattr(widget, "_vis_mode_str", "") == "bubble" and callable(consume_pending_bubble):
-        consume_pending_bubble()
-    _record_tick_phase("bubble_consume")
-
     if widget._mode_teardown_block_until_ready and not widget._mode_transition_ready:
         return _publish_logical_state(
             widget, now_ts, changed=False, mode_reveal_ready=mode_reveal_ready,
             present_frame=False
         )
 
-    # Bubble simulation dispatch
+    # Bubble logical step
     dispatch_bubble_simulation(widget, now_ts)
-    _record_tick_phase("bubble_dispatch")
+    _record_tick_phase("bubble_step")
 
     # DEVCURVE liquid field solve (UI-thread, cheap: ~32 sources)
     dispatch_devcurve_field(widget, now_ts)

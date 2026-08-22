@@ -126,6 +126,15 @@ def _frame_owner_snapshot(widget) -> dict:
         except Exception:
             thread_snapshot = {}
 
+    bubble_cadence: dict = {}
+    cadence_state = getattr(visualizer, "_bubble_cadence_state", None)
+    cadence_snapshot = getattr(cadence_state, "diagnostic_snapshot", None)
+    if callable(cadence_snapshot):
+        try:
+            bubble_cadence = dict(cadence_snapshot())
+        except Exception:
+            bubble_cadence = {}
+
     snapshot = {
         **thread_snapshot,
         "media_display_total": int(
@@ -154,11 +163,14 @@ def _frame_owner_snapshot(widget) -> dict:
         "vis_waiting_frame": bool(
             getattr(visualizer, "_waiting_for_fresh_frame", False)
         ),
-        "bubble_worker_pending": bool(
-            getattr(visualizer, "_bubble_compute_pending", False)
+        "bubble_requested_steps": int(
+            bubble_cadence.get("requested_steps", 0) or 0
         ),
-        "bubble_result_pending": bool(
-            getattr(visualizer, "_bubble_pending_result", None) is not None
+        "bubble_integrated_steps": int(
+            bubble_cadence.get("integrated_steps", 0) or 0
+        ),
+        "bubble_integration_failures": int(
+            bubble_cadence.get("integration_failures", 0) or 0
         ),
         "bubble_visible_source_ts": float(
             getattr(visualizer, "_bubble_visible_source_ts", 0.0) or 0.0
@@ -237,7 +249,8 @@ def _log_frame_gap_owner(
         "paint_ms=%.2f request_age_ms=%s source_age_ms=%s "
         "simulation_age_ms=%s render_state_age_ms=%s target_hz=%d "
         "transition_active=%d transition=%s vis_mode=%s vis_phase=%d "
-        "waiting_engine=%d waiting_frame=%d bubble_worker=%d bubble_result=%d "
+        "waiting_engine=%d waiting_frame=%d bubble_steps=%d/%d "
+        "bubble_failures=%d "
         "io_queue=%d compute_queue=%d io_active=%d compute_active=%d "
         "io_callbacks=%d compute_callbacks=%d "
         "io_queue_wait_ms=%.2f compute_queue_wait_ms=%.2f "
@@ -263,8 +276,9 @@ def _log_frame_gap_owner(
         int(current.get("vis_phase", 0) or 0),
         int(bool(current.get("vis_waiting_engine", False))),
         int(bool(current.get("vis_waiting_frame", False))),
-        int(bool(current.get("bubble_worker_pending", False))),
-        int(bool(current.get("bubble_result_pending", False))),
+        int(current.get("bubble_integrated_steps", 0) or 0),
+        int(current.get("bubble_requested_steps", 0) or 0),
+        int(current.get("bubble_integration_failures", 0) or 0),
         int(current.get("io_queue_depth", -1) or 0),
         int(current.get("compute_queue_depth", -1) or 0),
         int(current.get("io_worker_active", 0) or 0),
