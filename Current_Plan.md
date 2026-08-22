@@ -62,8 +62,8 @@ This file owns migration sequence and work admission. Technical decompositions u
 | A — bootstrap/render-node proof | Structurally complete | Do not reopen; compiled smoke remains operator-scheduled later |
 | B — runtime-host decomposition | Structurally complete | Do not reopen without contradictory evidence |
 | C — base image + transitions | **IMPLEMENTATION COMPLETE; test-hardening/sign-off debt explicit** | Test/harness hardening may be explicitly selected; transition implementation changes only when stronger evidence exposes a real defect |
-| **D — visualizer** | **ACTIVE** | **Normal implementation work belongs here now** |
-| E — widget presentation + capability setup foundation | Waiting for D implementation exit | Reference only |
+| D — visualizer | **COMPLETE** — all five modes on the Quick boundary; documentation closure landed; physical cadence/eyes-on remain operator-scheduled acceptance debt | Do not reopen without contradictory evidence |
+| **E — widget presentation + capability setup foundation** | **NEXT** | **Normal implementation work belongs here now** |
 | F — widget families | Waiting for E | Reference only |
 | G — CUSTOM/input/auxiliary pixels | Waiting for F | Reference only |
 | H — settings epoch + production cutover | Waiting for A–G implementation | Reference only |
@@ -717,7 +717,12 @@ Do not broaden the repair into transition redesign.
 
 ---
 
-# 8. Phase D — visualizer — ACTIVE
+# 8. Phase D — visualizer — COMPLETE
+
+D1–D9 landed and Phase-D documentation closure is done (see Section 15). All five modes run on the Quick
+visualizer boundary; only operator-scheduled physical cadence/eyes-on acceptance debt remains. The
+decomposition below is retained as the durable contract; do not reopen it without contradictory
+evidence.
 
 Read:
 
@@ -1652,29 +1657,41 @@ architecture.
 
 # 15. Current next work
 
-Normal implementation work is now **Phase D documentation closure**. D1 through D9, including the
-all-five-mode lifecycle/source/pause/aspect matrix and static packaging/build-runner compatibility,
-are structurally landed; do not reopen them without contradictory evidence.
+**Phase D is COMPLETE.** All five modes (Spectrum/Oscilloscope/Sine/Bubble/DevCurve) run on the Quick
+visualizer boundary with the sole `VisualizerLogicalRuntime`, mode-owned frame runtimes, immutable
+latest-state publication through `VisualizerSnapshotBridge`, one `QSGRenderNode`/lazy renderer,
+render-node-local SDF/stencil clip, retained shell, and clean generation-fenced lifecycle. Documentation
+closure landed (visualizer/preset authoring guidance, clip evidence accuracy, geometry semantics, fade
+authority, BTF coalescing). Do not reopen D1–D9 without contradictory evidence.
 
-The only admitted Phase-D slice is documentation closure:
+Phase-D closure verification also confirmed, without production behaviour change:
 
-- [ ] rewrite visualizer/preset authoring guidance against the landed presentation-neutral runtime,
-  immutable snapshot, canonical mode policy and lazy Quick renderer boundary;
-- [ ] preserve preset/logical-runtime instructions that remain authoritative, and clearly mark the
-  Quick guide as target architecture while the old production presenter still exists;
-- [ ] refresh navigation/contracts/cross-links only where the landed Phase-D boundary requires it,
-  without mechanically rewriting historical evidence documents;
-- [ ] run focused documentation/reference/static gates only; do not perform a compiled/product build;
-- [ ] inspect diff/status, commit and push the coherent Phase-D documentation checkpoint;
-- [ ] mark Phase D complete and pause before Phase E.
+- fade authority is unambiguous — one authored authority resolves into two derived layer values
+  (`scene_fade` root/card, `content_fade` GL content); guarded by
+  `tests/test_qtquick_visualizer_fade_authority.py`;
+- the Bubble two-protected-results-before-one-sync BTF semantic holds by forward evolution; pinned by
+  `tests/test_bubble_btf_coalescing.py`;
+- Bubble keeps one-authored-step -> one-integration with no second logical clock;
+- the selected clip owner is the render-node-local SDF/stencil host (the failed `QSGClipNode` handoff is
+  not selectable);
+- baseline geometry authority = the 1.5 default aspect; literal `420x280` is an internal reference, not
+  a required runtime size.
+
+**Remaining Phase-D acceptance debt (operator-scheduled physical/eyes-on; do NOT fabricate here):**
+
+- installed screensaver Bubble wall-clock cadence on the operator's real display/GPU (deterministic
+  tests prove the logic preserves one-step->one-integration and the ~90 Hz authored cadence / >= ~88 Hz
+  recovery intent, but a bare-thread measurement here would not represent installed behaviour);
+- eyes-on old-vs-Quick authored-effect comparison and mixed-refresh continuity.
+
+These do not block migration progress.
+
+**Next normal implementation work is Phase E** (widget presentation + capability setup foundation).
+
+STOP: Phase D is closed. Do not begin Phase E in this same pass without explicit operator direction.
 
 If the operator instead explicitly says **continue from Phase C tests**, execute Section 7.5 test-only
-hardening first and return to D afterward.
-
-Do not wait for Phase-C eyes-on/hardware sign-off unless the Phase-D change directly depends on that
-unresolved evidence.
-
-Do not start E–J or `Future_Work.md` opportunistically while D is active.
+hardening first.
 
 ---
 
