@@ -249,7 +249,12 @@ def normalize_transition_capability_state(transitions_config: Dict[str, Any]) ->
        reactivates the deterministic recovery transition (Crossfade). This is an
        explicit, persistable state repair — callers persist when this returns
        True — not a hidden bypass that runs a deactivated transition.
-    2. **Random mode is never effective with an empty effective pool.** If Random
+    2. **Legacy ``type="Random"`` is not a second Random authority (E2.6).** The
+       single random-mode authority is ``random_always``. A persisted manual
+       ``type`` of ``"Random"`` is converted to ``random_always=True`` plus a
+       concrete activated manual ``type``, so the runtime never treats the manual
+       type string itself as a random trigger.
+    3. **Random mode is never effective with an empty effective pool.** If Random
        is on but ``activated ∩ pool`` is empty, Random is turned off and a
        deterministic activated manual selection is persisted. Saved pool
        membership is preserved (never erased), so reactivating transitions
@@ -270,7 +275,17 @@ def normalize_transition_capability_state(transitions_config: Dict[str, Any]) ->
         set_transition_activated(transitions_config, DEFAULT_RECOVERY_TRANSITION, True)
         changed = True
 
-    # Invariant 2: Random not effective with an empty effective pool.
+    # Invariant 2 (E2.6): legacy type="Random" -> single random_always authority
+    # plus a concrete activated manual type.
+    manual_type = transitions_config.get(TRANSITION_MANUAL_TYPE_KEY)
+    if canonicalize_transition_name(manual_type, fallback="") == "Random":
+        transitions_config[TRANSITION_RANDOM_MODE_KEY] = True
+        transitions_config[TRANSITION_MANUAL_TYPE_KEY] = (
+            get_default_activated_transition(transitions_config)
+        )
+        changed = True
+
+    # Invariant 3: Random not effective with an empty effective pool.
     if bool(transitions_config.get(TRANSITION_RANDOM_MODE_KEY, False)):
         if not get_effective_random_pool(transitions_config):
             transitions_config[TRANSITION_RANDOM_MODE_KEY] = False

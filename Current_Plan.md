@@ -1819,11 +1819,27 @@ Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase 
     deactivated, activation persisted under `widgets.family_activation.*` through the normal save path
     (SETUP is bootstrap-built so it never depends on lazy hydration and cannot corrupt hidden family
     config). Pinned by `tests/test_widgets_tab_setup.py`; lazy-build index tests updated to stable ids.
-  - **Transitions SETUP — NEXT.** Same pill/subtab pattern on the Transitions tab: activation rows,
-    `Use Random Transitions`, one random-pool list (activated ∩ pool membership), per-transition pills
-    for activated transitions only. Then **E2.6** normalizes the legacy `type="Random"` second authority
-    into the single `random_always` authority plus a concrete manual type.
-  Checkpoint/push/audit E2 before Phase F.
+  - **Transitions SETUP — LANDED.** Pill/subtab nav on the Transitions tab (`ui/tabs/transitions_tab.py`):
+    a first `Setup` pill (default landing) + one pill per activated transition; the old visible dropdown
+    is retained only as a hidden selection model and the old per-transition "Include in Switch/Random
+    Pool" checkbox is removed. SETUP page owns transition activation rows + `Enable All`/`Disable All`,
+    `Use Random Transitions` (the single `random_always` authority), and a Random Pool list (only
+    activated transitions shown; edits `transitions.pool`). Deactivating a transition hides its pill and
+    pool row live and falls back to SETUP if it was the edited one; activation persists to
+    `transitions.activation.*`; `_save_settings` now also writes `activation` + `random_always` and
+    preserves engine-managed `random_choice`/`last_random_choice`. Pinned by
+    `tests/test_transitions_tab_setup.py`.
+  - **E2.6 `type="Random"` normalization — LANDED.** `normalize_transition_capability_state` now also
+    converts a legacy manual `type="Random"` into `random_always=True` + a concrete activated manual
+    type (invariants compose with the zero-activated and empty-effective-pool repairs). The Transitions
+    tab runs the normalizer on load (persisting any repair). Pinned by `tests/test_capability_activation.py`
+    and `tests/test_transitions_tab_setup.py`.
+
+  **E2 is at its audit gate.** Both Settings tabs expose the SETUP/activation contract; activation is
+  canonical/persisted; deactivated-capability runtime dormancy is enforced (widget creation gate +
+  transition admission fencing); lazy pages cannot corrupt hidden config; transition random/manual
+  selection is deterministic; no old dropdown/pool-checkbox authority remains. Checkpoint/push/audit E2
+  before Phase F.
 - **E3** — shared retained Quick visual primitives.
 - **E4** — global eight-direction shadow authority (default `SE`).
 

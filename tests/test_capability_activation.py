@@ -218,6 +218,36 @@ def test_normalize_disables_random_on_empty_effective_pool_and_preserves_pool():
     assert transitions["pool"] == {"Burn": True}
 
 
+def test_normalize_converts_legacy_type_random_to_single_authority():
+    # E2.6: legacy type="Random" must not act as a second random authority.
+    transitions = {
+        "type": "Random",
+        "random_always": False,
+        "pool": {name: True for name in get_transition_setting_names()},
+    }
+    changed = ca.normalize_transition_capability_state(transitions)
+    assert changed is True
+    assert transitions["random_always"] is True
+    assert transitions["type"] != "Random"
+    assert ca.is_transition_activated(transitions, transitions["type"]) is True
+
+
+def test_normalize_type_random_with_empty_pool_disables_random():
+    # type="Random" turns random on, but an empty effective pool then turns it
+    # back off with a concrete manual selection (invariants compose).
+    transitions = {
+        "type": "Random",
+        "random_always": False,
+        "pool": {"Burn": True},
+        "activation": {"Burn": False},
+    }
+    changed = ca.normalize_transition_capability_state(transitions)
+    assert changed is True
+    assert transitions["random_always"] is False
+    assert transitions["type"] not in ("Random", "Burn")
+    assert ca.is_transition_activated(transitions, transitions["type"]) is True
+
+
 def test_normalize_leaves_random_on_with_nonempty_effective_pool():
     transitions = {
         "random_always": True,
