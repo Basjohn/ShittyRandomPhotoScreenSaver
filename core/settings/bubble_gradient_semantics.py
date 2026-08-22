@@ -48,6 +48,17 @@ _DIRECTIONAL_SHADER_VECTORS = {
     "bottom_right": (0.707, 0.707),
 }
 
+_SPECULAR_SHADER_VECTORS = {
+    "top_left": (-0.707, 0.707),
+    "top": (0.0, 1.0),
+    "top_right": (0.707, 0.707),
+    "left": (-1.0, 0.0),
+    "right": (1.0, 0.0),
+    "bottom_left": (-0.707, -0.707),
+    "bottom": (0.0, -1.0),
+    "bottom_right": (0.707, -0.707),
+}
+
 
 def _normalize(value: Any, valid: set[str], default: str) -> str:
     text = str(value).strip().lower()
@@ -122,3 +133,13 @@ def get_bubble_gradient_shader_vector(direction: str) -> tuple[float, float]:
     if normalized in {"center_out", "center_out_reverse"}:
         return (0.0, 0.0)
     return _DIRECTIONAL_SHADER_VECTORS.get(normalized, _DIRECTIONAL_SHADER_VECTORS["top"])
+
+
+def get_bubble_specular_shader_vector(direction: str) -> tuple[float, float]:
+    """Return the existing shader-space Bubble light direction."""
+
+    normalized = normalize_bubble_specular_direction(direction)
+    return _SPECULAR_SHADER_VECTORS.get(
+        normalized,
+        _SPECULAR_SHADER_VECTORS["top_left"],
+    )

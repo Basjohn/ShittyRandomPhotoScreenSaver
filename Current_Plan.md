@@ -1653,24 +1653,22 @@ architecture.
 # 15. Current next work
 
 Normal implementation work is now **Phase D**. D1, D2, the D3/D4 item, shell, clip and canonical
-geometry foundation, Spectrum, Oscilloscope, and Sine are structurally landed; do not reopen them
-without contradictory evidence.
+geometry foundation, Spectrum, Oscilloscope, Sine, and Bubble + BTF are structurally landed; do not
+reopen them without contradictory evidence.
 
-The next admitted slice is Bubble + BTF:
+The next admitted slice is DevCurve:
 
-- [ ] retain the authored Bubble simulation on the sole logical runtime and publish immutable
-  positions/extras/trails, pop/transient state and protected-edge inputs without render-cadence
-  ownership;
-- [ ] port the Bubble renderer through the lazy Quick implementation boundary while preserving
-  collisions, trails/tails, ghosts, styling and idle/live behavior;
-- [ ] prove the focused Bubble temporal-fidelity guardrail across irregular/missed presentation,
-  then prove canonical/scaled and admitted wide/tall geometry without hiding defects through
-  interpolation or retuning;
-- [ ] run only the focused Bubble/BTF/visualizer script and test gates;
-- [ ] inspect diff/status, commit the coherent Bubble + BTF slice, and push immediately.
+- [ ] retain DevCurve's authored field/layer state on the sole logical runtime and publish immutable
+  enabled layers, order, alpha, offsets, outline and ghost state without render-cadence ownership;
+- [ ] port DevCurve through the lazy Quick implementation boundary while preserving its authored
+  tuning, card-interior clip and live/idle visual behavior;
+- [ ] prove source freshness plus canonical/scaled and admitted wide/tall geometry without retuning
+  DevCurve to hide presentation defects;
+- [ ] run only the focused DevCurve/visualizer script and test gates;
+- [ ] inspect diff/status, commit the coherent DevCurve slice, and push immediately.
 
-Then continue in the fixed checkpoint order: DevCurve, all-five-mode lifecycle/source/pause/aspect
-closure, and Phase-D documentation closure.
+Then continue in the fixed checkpoint order: all-five-mode lifecycle/source/pause/aspect closure and
+Phase-D documentation closure.
 
 If the operator instead explicitly says **continue from Phase C tests**, execute Section 7.5 test-only
 hardening first and return to D afterward.

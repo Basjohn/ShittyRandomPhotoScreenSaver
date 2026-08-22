@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from widgets.spotify_visualizer import config_applier, mode_capabilities
+from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
 from widgets.spotify_visualizer.logical_runtime import coerce_identity
 from widgets.spotify_visualizer.oscilloscope_frame_runtime import (
     OscilloscopeFrameRuntime,
@@ -68,7 +69,29 @@ def _source_identity(
     engine: Any,
     mode_id: str,
 ) -> tuple[int, int, float | None]:
-    if mode_id in {"oscilloscope", "sine_wave"}:
+    if mode_id == "bubble":
+        getter = getattr(engine, "get_latest_authoritative_frame", None)
+        if callable(getter):
+            try:
+                timestamp, generation, activation_id = getter()
+                return (
+                    coerce_identity(generation),
+                    coerce_identity(activation_id),
+                    float(timestamp),
+                )
+            except Exception:
+                pass
+        generation = _identity_from_engine(
+            engine,
+            "get_latest_generation_with_frame",
+            None,
+        )
+        activation_id = (
+            _identity_from_engine(engine, "get_activation_id", None)
+            if generation >= 0
+            else -1
+        )
+    elif mode_id in {"oscilloscope", "sine_wave"}:
         generation = _identity_from_engine(
             engine,
             "get_latest_generation_with_waveform",
@@ -478,19 +501,46 @@ def _capture_bubble(
 ) -> tuple[ModeFrame, dict[str, Any]]:
     extra = _base_extras(widget, "bubble", engine)
     config_applier._append_bubble_visual_extras(extra, widget)
+    controller = getattr(widget, "runtime_controller", None)
+    if controller is None:
+        raise RuntimeError("Bubble logical capture requires its runtime controller")
+    runtime = controller.resolve_logical_mode_state(
+        "bubble",
+        BubbleFrameRuntime,
+    )
+    if not isinstance(runtime, BubbleFrameRuntime):
+        raise TypeError("Bubble logical mode state has the wrong type")
+    resolved = runtime.latest
+    extra["_quick_protected_edges"] = resolved.protected_edges
+    extra["_quick_bubble_identity_admitted"] = bool(
+        resolved.engine_generation >= 0 and resolved.activation_id >= 0
+    )
+    extra["_quick_bubble_runtime_generation"] = resolved.runtime_generation
+    extra["_quick_bubble_engine_generation"] = resolved.engine_generation
+    extra["_quick_bubble_activation_id"] = resolved.activation_id
+    extra["_quick_bubble_source_generation"] = resolved.source_generation
+    extra["_quick_bubble_source_activation_id"] = (
+        resolved.source_activation_id
+    )
+    extra["_quick_bubble_source_timestamp"] = resolved.source_timestamp
+    extra["_quick_bubble_logical_timestamp"] = resolved.simulation_timestamp
+    extra["_quick_bubble_playing"] = resolved.playing
     return (
         BubbleFrame(
-            positions=tuple(extra.get("bubble_pos_data", ()) or ()),
-            extras=tuple(extra.get("bubble_extra_data", ()) or ()),
-            trails=tuple(extra.get("bubble_trail_data", ()) or ()),
-            bubble_count=int(extra.get("bubble_count", 0) or 0),
-            source_timestamp=float(
-                getattr(widget, "_bubble_visible_source_ts", 0.0) or 0.0
+            positions=resolved.positions,
+            extras=resolved.extras,
+            trails=resolved.trails,
+            bubble_count=resolved.bubble_count,
+            source_timestamp=resolved.source_timestamp,
+            simulation_timestamp=resolved.simulation_timestamp,
+            parameters=_render_parameters(
+                {
+                    name: value
+                    for name, value in extra.items()
+                    if not name.startswith("_quick_")
+                },
+                omit=_BUBBLE_ARRAY_FIELDS,
             ),
-            simulation_timestamp=float(
-                getattr(widget, "_bubble_visible_simulation_ts", 0.0) or 0.0
-            ),
-            parameters=_render_parameters(extra, omit=_BUBBLE_ARRAY_FIELDS),
         ),
         extra,
     )
@@ -619,6 +669,33 @@ def capture_legacy_visualizer_logical_frame(
         first_frame=not bool(getattr(widget, "_has_pushed_first_frame", False)),
     )
     mode_state, extra = capture(widget, engine, context)
+    playing = bool(getattr(widget, "_spotify_playing", False))
+    logical_timestamp = float(now_ts)
+    if bool(extra.get("_quick_bubble_identity_admitted", False)):
+        runtime_generation = coerce_identity(
+            extra.get("_quick_bubble_runtime_generation")
+        )
+        engine_generation = coerce_identity(
+            extra.get("_quick_bubble_engine_generation")
+        )
+        activation_id = coerce_identity(
+            extra.get("_quick_bubble_activation_id")
+        )
+        source_generation = coerce_identity(
+            extra.get("_quick_bubble_source_generation")
+        )
+        source_activation = coerce_identity(
+            extra.get("_quick_bubble_source_activation_id")
+        )
+        source_timestamp = (
+            float(extra.get("_quick_bubble_source_timestamp", 0.0) or 0.0)
+            if source_generation >= 0 and source_activation >= 0
+            else None
+        )
+        logical_timestamp = float(
+            extra.get("_quick_bubble_logical_timestamp", now_ts)
+        )
+        playing = bool(extra.get("_quick_bubble_playing", False))
 
     waveform = tuple(
         extra.get(
@@ -658,8 +735,8 @@ def capture_legacy_visualizer_logical_frame(
         source_generation=source_generation,
         source_activation_id=source_activation,
         mode_id=mode_id,
-        playing=bool(getattr(widget, "_spotify_playing", False)),
-        logical_timestamp=float(now_ts),
+        playing=playing,
+        logical_timestamp=logical_timestamp,
         source_timestamp=source_timestamp,
         changed=bool(
             changed
@@ -670,7 +747,10 @@ def capture_legacy_visualizer_logical_frame(
         mode_reveal_ready=bool(mode_reveal_ready),
         common=common,
         mode_state=mode_state,
-        protected_edges=tuple(protected_edges),
+        protected_edges=(
+            tuple(protected_edges)
+            + tuple(extra.get("_quick_protected_edges", ()) or ())
+        ),
     )
 
 

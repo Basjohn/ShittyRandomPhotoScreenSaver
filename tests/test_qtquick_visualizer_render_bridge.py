@@ -13,6 +13,7 @@ from core.settings.visualizer_mode_registry import (
     VisualizerShellPolicy,
     get_visualizer_presentation_policy,
 )
+from widgets.spotify_visualizer.logical_runtime import LatestStateMailbox
 from widgets.spotify_visualizer.render_bridge import VisualizerSnapshotBridge
 from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
@@ -264,6 +265,80 @@ def test_protected_result_survives_coalescing_once_without_frame_replay() -> Non
     )
     assert next_consumed is not None
     assert next_consumed.logical.protected_edges == ()
+
+
+def test_logical_mailbox_coalesces_protected_result_only_until_take() -> None:
+    edge = VisualizerProtectedEdge(
+        token=5,
+        kind="bubble_visible_result",
+        authored_timestamp=1.0,
+        result_timestamp=1.01,
+        result={"positions": [0.4, 0.6, 0.08, 1.0]},
+    )
+    mailbox = LatestStateMailbox()
+    mailbox.publish(
+        _logical_frame(
+            runtime_generation=1,
+            engine_generation=2,
+            activation_id=3,
+            protected_edges=(edge,),
+        ),
+        generation=1,
+        activation_id=3,
+    )
+    mailbox.publish(
+        _logical_frame(
+            runtime_generation=1,
+            engine_generation=2,
+            activation_id=3,
+            logical_timestamp=1.02,
+        ),
+        generation=1,
+        activation_id=3,
+    )
+
+    publication = mailbox.take()
+    assert publication is not None
+    assert publication.state.logical_timestamp == 1.02
+    assert publication.state.protected_edges == (edge,)
+
+    mailbox.publish(
+        _logical_frame(
+            runtime_generation=1,
+            engine_generation=2,
+            activation_id=3,
+            logical_timestamp=1.03,
+        ),
+        generation=1,
+        activation_id=3,
+    )
+    next_publication = mailbox.take()
+    assert next_publication is not None
+    assert next_publication.state.protected_edges == ()
+
+    mailbox.publish(
+        _logical_frame(
+            runtime_generation=1,
+            engine_generation=2,
+            activation_id=3,
+            protected_edges=(edge,),
+        ),
+        generation=1,
+        activation_id=3,
+    )
+    mailbox.publish(
+        _logical_frame(
+            runtime_generation=1,
+            engine_generation=4,
+            activation_id=3,
+            logical_timestamp=2.0,
+        ),
+        generation=1,
+        activation_id=3,
+    )
+    replacement_publication = mailbox.take()
+    assert replacement_publication is not None
+    assert replacement_publication.state.protected_edges == ()
 
 
 def test_close_and_replacement_generation_remove_old_render_admission() -> None:

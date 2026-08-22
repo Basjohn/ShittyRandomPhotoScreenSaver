@@ -563,25 +563,14 @@ def log_perf_snapshot(widget: Any, reset: bool = False) -> None:
         except Exception:
             logger.debug("[SPOTIFY_VIS] AudioLag PERF metrics logging failed", exc_info=True)
         try:
-            bubble_result_skips = int(getattr(widget, "_bubble_pending_result_skip_count", 0) or 0)
-            if bubble_result_skips > 0:
-                logger.warning(
-                    "[PERF] [SPOTIFY_VIS][BUBBLE] result_apply_backpressure_skips=%d",
-                    bubble_result_skips,
-                )
-                widget._bubble_pending_result_skip_count = 0
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Bubble PERF metrics logging failed", exc_info=True)
-        try:
             bubble_perf = getattr(widget, "_bubble_last_perf_diag", None)
             if isinstance(bubble_perf, dict) and bubble_perf:
                 logger.info(
-                    "[PERF] [SPOTIFY_VIS][BUBBLE] worker_ms=%.2f tick_ms=%.2f collision_ms=%.2f snapshot_ms=%.2f batch_size=%d pairs=%d overlaps=%d passes=%d active=%d trail_payload=%s trail_floats=%d",
-                    float(bubble_perf.get("worker_total_ms", 0.0) or 0.0),
+                    "[PERF] [SPOTIFY_VIS][BUBBLE] integration_ms=%.2f tick_ms=%.2f collision_ms=%.2f snapshot_ms=%.2f pairs=%d overlaps=%d passes=%d active=%d trail_payload=%s trail_floats=%d",
+                    float(bubble_perf.get("integration_total_ms", 0.0) or 0.0),
                     float(bubble_perf.get("tick_ms", 0.0) or 0.0),
                     float(bubble_perf.get("collision_ms", 0.0) or 0.0),
                     float(bubble_perf.get("snapshot_ms", 0.0) or 0.0),
-                    int(bubble_perf.get("batch_size", 1.0) or 1),
                     int(bubble_perf.get("collision_pairs", 0.0) or 0),
                     int(bubble_perf.get("collision_overlaps", 0.0) or 0),
                     int(bubble_perf.get("collision_passes", 0.0) or 0),
@@ -596,49 +585,15 @@ def log_perf_snapshot(widget: Any, reset: bool = False) -> None:
             if cadence is not None:
                 cadence_diag = cadence.diagnostic_snapshot(reset=reset)
                 logger.info(
-                    "[PERF] [SPOTIFY_VIS][BUBBLE_CADENCE] offered=%d submitted_tasks=%d "
-                    "publish_ratio=%.3f worker_busy_deferrals=%d "
-                    "result_waiting_deferrals=%d submission_failures=%d stale_results=%d",
-                    int(cadence_diag.get("offered_ticks", 0)),
-                    int(cadence_diag.get("submitted_tasks", 0)),
-                    float(cadence_diag.get("publish_ratio", 0.0)),
-                    int(cadence_diag.get("worker_busy_deferrals", 0)),
-                    int(cadence_diag.get("result_waiting_deferrals", 0)),
-                    int(cadence_diag.get("submission_failures", 0)),
-                    int(getattr(widget, "_bubble_stale_result_count", 0) or 0),
+                    "[PERF] [SPOTIFY_VIS][BUBBLE_CADENCE] requested=%d integrated=%d "
+                    "integration_ratio=%.3f integration_failures=%d",
+                    int(cadence_diag.get("requested_steps", 0)),
+                    int(cadence_diag.get("integrated_steps", 0)),
+                    float(cadence_diag.get("integration_ratio", 0.0)),
+                    int(cadence_diag.get("integration_failures", 0)),
                 )
-                if reset:
-                    widget._bubble_stale_result_count = 0
         except Exception:
             logger.debug("[SPOTIFY_VIS] Bubble cadence PERF logging failed", exc_info=True)
-        try:
-            lane = getattr(widget, "_bubble_compute_lane", None)
-            if lane is not None:
-                lane_diag = lane.diagnostic_snapshot()
-                logger.info(
-                    "[PERF] [SPOTIFY_VIS][BUBBLE_LANE] lane_registrations=%d "
-                    "executor_tasks=%d logical_steps=%d completed=%d published=%d "
-                    "rejected_busy=%d rejected_stopped=%d cancelled=%d "
-                    "handoff_ms_mean=%.3f handoff_ms_max=%.3f "
-                    "execution_ms_mean=%.3f execution_ms_max=%.3f "
-                    "callback_ms_mean=%.3f callback_ms_max=%.3f",
-                    int(lane_diag.get("lane_registrations", 0)),
-                    int(lane_diag.get("executor_task_submissions", 0)),
-                    int(lane_diag.get("logical_steps_accepted", 0)),
-                    int(lane_diag.get("logical_steps_completed", 0)),
-                    int(lane_diag.get("logical_steps_published", 0)),
-                    int(lane_diag.get("submit_rejected_busy", 0)),
-                    int(lane_diag.get("submit_rejected_stopped", 0)),
-                    int(lane_diag.get("pending_cancelled", 0)),
-                    float(lane_diag.get("handoff_ms_mean", 0.0)),
-                    float(lane_diag.get("handoff_ms_max", 0.0)),
-                    float(lane_diag.get("execution_ms_mean", 0.0)),
-                    float(lane_diag.get("execution_ms_max", 0.0)),
-                    float(lane_diag.get("callback_ms_mean", 0.0)),
-                    float(lane_diag.get("callback_ms_max", 0.0)),
-                )
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Bubble lane PERF logging failed", exc_info=True)
         try:
             engine = getattr(widget, "_engine", None)
             take_lane_diag = getattr(
@@ -696,5 +651,3 @@ def log_perf_snapshot(widget: Any, reset: bool = False) -> None:
             widget._perf_audio_lag_last_ms = 0.0
             widget._perf_audio_lag_min_ms = 0.0
             widget._perf_audio_lag_max_ms = 0.0
-            if hasattr(widget, "_bubble_pending_result_skip_count"):
-                widget._bubble_pending_result_skip_count = 0

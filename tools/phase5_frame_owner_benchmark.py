@@ -48,8 +48,6 @@ def _fixture() -> tuple[SimpleNamespace, ThreadManager]:
         _mode_transition_phase=0,
         _waiting_for_fresh_engine_frame=False,
         _waiting_for_fresh_frame=False,
-        _bubble_compute_pending=False,
-        _bubble_pending_result=None,
         _bubble_visible_source_ts=1.0,
         _bubble_visible_simulation_ts=1.0,
         _bubble_visible_render_state_ts=1.0,

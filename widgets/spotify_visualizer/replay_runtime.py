@@ -16,7 +16,7 @@ import math
 import random
 import time
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 from unittest.mock import patch
 
 from PySide6.QtCore import QRect
@@ -422,7 +422,15 @@ _BUBBLE_PARTICLE_FIELDS = (
 
 
 def _capture_bubble_simulation(widget: SpotifyVisualizerWidget) -> dict[str, Any]:
-    simulation = getattr(widget, "_bubble_simulation", None)
+    from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
+
+    controller = getattr(widget, "runtime_controller", None)
+    runtime = (
+        controller.peek_logical_mode_state("bubble")
+        if controller is not None
+        else None
+    )
+    simulation = runtime.simulation if isinstance(runtime, BubbleFrameRuntime) else None
     if simulation is None:
         return {}
 

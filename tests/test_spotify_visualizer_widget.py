@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import threading
 import time
 import wave
 from pathlib import Path
@@ -871,6 +872,9 @@ class _FakeEngine:
         self._generation_id = 1
         self._activation_id = 1
         self._latest_generation_with_frame = self._generation_id
+        self._latest_authoritative_ts = time.time()
+        self._latest_authoritative_generation = self._generation_id
+        self._latest_authoritative_activation = self._activation_id
         self.playback_states: list[bool] = []
         self.wake_calls = 0
         self.reconfigure_calls: list[int] = []
@@ -909,11 +913,15 @@ class _FakeEngine:
         self.started += 1
 
     def reset_smoothing_state(self) -> None:
+        old_generation = self._generation_id
+        old_activation = self._activation_id
         self.reset_calls += 1
         self._generation_id += 1
         self._activation_id += 1
         self._latest_generation_with_frame = self._generation_id - 1
         self._latest_generation_with_waveform = self._generation_id - 1
+        self._latest_authoritative_generation = old_generation
+        self._latest_authoritative_activation = old_activation
         self._smoothed_bars = [0.0] * self._bar_count
 
     def cancel_pending_compute_tasks(self) -> None:
@@ -939,6 +947,13 @@ class _FakeEngine:
 
     def get_latest_generation_with_waveform(self) -> int:
         return getattr(self, "_latest_generation_with_waveform", self._latest_generation_with_frame)
+
+    def get_latest_authoritative_frame(self) -> tuple[float, int, int]:
+        return (
+            self._latest_authoritative_ts,
+            self._latest_authoritative_generation,
+            self._latest_authoritative_activation,
+        )
 
     def get_smoothed_bars(self) -> list[float]:
         return list(self._smoothed_bars)
@@ -967,11 +982,16 @@ class _FakeEngine:
         self._smoothed_bars = list(bars)
         self._latest_generation_with_frame = self._generation_id
         self._latest_generation_with_waveform = self._generation_id
+        self._latest_authoritative_ts = time.time()
+        self._latest_authoritative_generation = self._generation_id
+        self._latest_authoritative_activation = self._activation_id
 
     def publish_waveform_only(self) -> None:
         self._latest_generation_with_waveform = self._generation_id
 
     def reconfigure_bar_count(self, bar_count: int) -> None:
+        old_generation = self._generation_id
+        old_activation = self._activation_id
         self.reconfigure_calls.append(int(bar_count))
         self._bar_count = max(1, int(bar_count))
         self._audio_buffer = object()
@@ -982,6 +1002,8 @@ class _FakeEngine:
         self._activation_id += 1
         self._latest_generation_with_frame = self._generation_id - 1
         self._latest_generation_with_waveform = self._generation_id - 1
+        self._latest_authoritative_generation = old_generation
+        self._latest_authoritative_activation = old_activation
 
 
 def _patch_shared_engine(monkeypatch, provider: Callable[..., object]) -> None:
@@ -1333,18 +1355,37 @@ class _PrimingDisplayParent(QWidget):
         self.frames.clear()
 
 
-class _BubbleDispatchThreadManager:
+class _CapturingBubbleSimulation:
     def __init__(self) -> None:
-        self.calls: list[dict[str, object]] = []
+        self.count = 1
+        self.tick_calls: list[tuple[float, dict, dict]] = []
+        self.snapshot_calls: list[dict[str, float]] = []
+        self.reset_calls = 0
 
-    def submit_compute_task(self, worker, *args, **kwargs) -> None:
-        self.calls.append(
-            {
-                "worker": worker,
-                "args": args,
-                "kwargs": kwargs,
-            }
-        )
+    def tick(self, dt: float, energy: dict, settings: dict) -> None:
+        self.tick_calls.append((float(dt), dict(energy), dict(settings)))
+
+    def snapshot(self, **pulse: float):
+        self.snapshot_calls.append(dict(pulse))
+        return [0.25, 0.50, 0.04, 1.0], [0.0] * 4, []
+
+    def reset(self) -> None:
+        self.reset_calls += 1
+
+    @staticmethod
+    def get_perf_diagnostics() -> dict[str, float]:
+        return {"collision_pairs": 0.0}
+
+
+def _install_capturing_bubble_runtime(widget: SpotifyVisualizerWidget):
+    from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
+
+    runtime = BubbleFrameRuntime(simulation_factory=_CapturingBubbleSimulation)
+    assert widget.runtime_controller.resolve_logical_mode_state(
+        "bubble",
+        lambda: runtime,
+    ) is runtime
+    return runtime
 
 
 class _BubbleDispatchProfileEngine(_FakeEngine):
@@ -1371,6 +1412,9 @@ class _BubbleDispatchProfileEngine(_FakeEngine):
 
     def set_frame(self, idx: int) -> None:
         self._frame = self._frames[idx % len(self._frames)]
+        self._latest_authoritative_ts = time.time()
+        self._latest_authoritative_generation = self._generation_id
+        self._latest_authoritative_activation = self._activation_id
 
     def get_pre_agc_energy_bands(self):
         broad = dict(self._frame.get("broad", {}))
@@ -1422,28 +1466,30 @@ def _capture_bubble_runtime_snapshot_with_perf(
     widget: SpotifyVisualizerWidget,
     now_ts: float,
 ) -> tuple[dict[str, float], list[float], list[float], dict[str, float]]:
-    """Run Bubble's real dispatch seam and return the compute inputs/output radii.
+    """Run Bubble's real logical seam and return its input/output radii.
 
     This intentionally goes through ``dispatch_bubble_simulation`` first so the
     test exercises the same transient-mix and pulse-path contract as runtime
     instead of sampling only the beat-engine helper outputs in isolation.
     """
-    manager = _BubbleDispatchThreadManager()
-    widget._thread_manager = manager
-    widget._bubble_compute_pending = False
+    if widget.runtime_controller.mode_id != "bubble":
+        widget.runtime_controller.set_mode("bubble")
     widget._mode_teardown_block_until_ready = False
     widget._bubble_last_tick_ts = now_ts - 0.016
 
     tick_pipeline.dispatch_bubble_simulation(widget, now_ts)
 
-    assert manager.calls, "Bubble dispatch produced no compute task"
-    args = manager.calls[-1]["args"]
-    pos_data, _extra_data, _trail_data, _count, perf_diag = manager.calls[-1]["worker"](*args)
+    from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
+
+    runtime = widget.runtime_controller.peek_logical_mode_state("bubble")
+    assert isinstance(runtime, BubbleFrameRuntime)
+    resolved = runtime.latest
+    pos_data = list(resolved.positions)
+    perf_diag = dict(resolved.perf_diagnostics)
     radii = [float(pos_data[i]) for i in range(2, len(pos_data), 4)]
-    assert isinstance(perf_diag, dict)
-    assert perf_diag["worker_total_ms"] >= 0.0
+    assert perf_diag["integration_total_ms"] >= 0.0
     assert perf_diag["collision_pairs"] >= 0.0
-    sim = getattr(widget, "_bubble_simulation", None)
+    sim = runtime.simulation
     big_expansion_ratios: list[float] = []
     if sim is not None:
         for idx, bubble in enumerate(getattr(sim, "_bubbles", []) or []):
@@ -1451,7 +1497,12 @@ def _capture_bubble_runtime_snapshot_with_perf(
                 base_radius = max(1e-6, float(getattr(bubble, "radius", 0.0) or 0.0))
                 render_radius = float(pos_data[idx * 4 + 2])
                 big_expansion_ratios.append(render_radius / base_radius)
-    return dict(args[1]), radii, big_expansion_ratios, dict(perf_diag)
+    return (
+        dict(widget._bubble_dispatch_energy_snapshot),
+        radii,
+        big_expansion_ratios,
+        perf_diag,
+    )
 
 
 def _capture_bubble_lane_metrics(
@@ -1459,7 +1510,10 @@ def _capture_bubble_lane_metrics(
     now_ts: float,
 ) -> dict[str, float]:
     eb_snap, radii, big_expansion = _capture_bubble_runtime_snapshot(widget, now_ts)
-    sim = getattr(widget, "_bubble_simulation", None)
+    from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
+
+    runtime = widget.runtime_controller.peek_logical_mode_state("bubble")
+    sim = runtime.simulation if isinstance(runtime, BubbleFrameRuntime) else None
     if sim is None:
         return {
             "bass": float(eb_snap.get("bass", 0.0)),
@@ -2856,9 +2910,9 @@ def test_bubble_dispatch_uses_pre_agc_energy_even_without_legacy_toggle(qt_app, 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
     widget._engine = fake_engine
     widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    fake_engine.publish_frame([0.0] * 8)
     widget._mode_teardown_block_until_ready = False
-    widget._bubble_compute_pending = False
-    widget._thread_manager = _BubbleDispatchThreadManager()
+    runtime = _install_capturing_bubble_runtime(widget)
     widget._spotify_playing = True
     widget._bubble_last_tick_ts = time.time() - 0.016
     widget._bubble_bounce_big_pct = 87
@@ -2870,10 +2924,10 @@ def test_bubble_dispatch_uses_pre_agc_energy_even_without_legacy_toggle(qt_app, 
 
     tick_pipeline.dispatch_bubble_simulation(widget, time.time())
 
-    assert widget._thread_manager.calls
-    eb_snap = widget._thread_manager.calls[0]["args"][1]
-    sim_settings = widget._thread_manager.calls[0]["args"][2]
-    pulse_params = widget._thread_manager.calls[0]["args"][3]
+    simulation = runtime.simulation
+    assert isinstance(simulation, _CapturingBubbleSimulation)
+    _dt, eb_snap, sim_settings = simulation.tick_calls[0]
+    pulse_params = simulation.snapshot_calls[0]
     assert eb_snap["bass"] == pytest.approx(0.71)
     assert eb_snap["mid"] == pytest.approx(0.72)
     assert eb_snap["high"] == pytest.approx(0.73)
@@ -2919,9 +2973,9 @@ def test_bubble_dispatch_reads_pre_agc_snapshot_once_per_tick(qt_app, qtbot, mon
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
     widget._engine = fake_engine
     widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    fake_engine.publish_frame([0.0] * 8)
     widget._mode_teardown_block_until_ready = False
-    widget._bubble_compute_pending = False
-    widget._thread_manager = _BubbleDispatchThreadManager()
+    _install_capturing_bubble_runtime(widget)
     widget._spotify_playing = True
     widget._bubble_last_tick_ts = time.time() - 0.016
 
@@ -2931,7 +2985,11 @@ def test_bubble_dispatch_reads_pre_agc_snapshot_once_per_tick(qt_app, qtbot, mon
 
 
 @pytest.mark.qt
-def test_bubble_dispatch_freezes_payload_dicts_at_submission_boundary(qt_app, qtbot, monkeypatch):
+def test_bubble_dispatch_freezes_payload_dicts_at_logical_step_boundary(
+    qt_app,
+    qtbot,
+    monkeypatch,
+):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
 
@@ -2956,137 +3014,45 @@ def test_bubble_dispatch_freezes_payload_dicts_at_submission_boundary(qt_app, qt
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
     widget._engine = fake_engine
     widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    fake_engine.publish_frame([0.0] * 8)
     widget._mode_teardown_block_until_ready = False
-    widget._bubble_compute_pending = False
-    widget._thread_manager = _BubbleDispatchThreadManager()
+    runtime = _install_capturing_bubble_runtime(widget)
     widget._spotify_playing = True
     first_now = time.time()
     widget._bubble_last_tick_ts = first_now - 0.016
 
     tick_pipeline.dispatch_bubble_simulation(widget, first_now)
-    first_call = widget._thread_manager.calls[-1]
-    first_energy = first_call["args"][1]
-    first_settings = first_call["args"][2]
-    first_pulse = first_call["args"][3]
+    simulation = runtime.simulation
+    assert isinstance(simulation, _CapturingBubbleSimulation)
+    first_energy = simulation.tick_calls[-1][1]
+    first_settings = simulation.tick_calls[-1][2]
+    first_pulse = simulation.snapshot_calls[-1]
 
-    widget._bubble_compute_pending = False
     widget._bubble_stream_constant_speed = 0.83
     widget._bubble_big_bass_pulse = 0.92
     second_now = first_now + 0.020
     widget._bubble_last_tick_ts = second_now - 0.016
 
     tick_pipeline.dispatch_bubble_simulation(widget, second_now)
-    second_call = widget._thread_manager.calls[-1]
+    second_energy = simulation.tick_calls[-1][1]
+    second_settings = simulation.tick_calls[-1][2]
+    second_pulse = simulation.snapshot_calls[-1]
 
-    assert second_call["args"][1] is not first_energy
-    assert second_call["args"][2] is not first_settings
-    assert second_call["args"][3] is not first_pulse
+    assert second_energy is not first_energy
+    assert second_settings is not first_settings
+    assert second_pulse is not first_pulse
     assert first_settings["bubble_stream_constant_speed"] != pytest.approx(0.83)
     assert first_pulse["big_bass_pulse"] != pytest.approx(0.92)
-    assert second_call["args"][2]["bubble_stream_constant_speed"] == pytest.approx(0.83)
-    assert second_call["args"][3]["big_bass_pulse"] == pytest.approx(0.92)
+    assert second_settings["bubble_stream_constant_speed"] == pytest.approx(0.83)
+    assert second_pulse["big_bass_pulse"] == pytest.approx(0.92)
 
 
 @pytest.mark.qt
-def test_bubble_dispatch_skips_while_pending_result_waits_for_ui_tick(qt_app, qtbot, monkeypatch):
-    parent = _FakeDisplayParent()
-    qtbot.addWidget(parent)
-
-    fake_engine = _FakeEngine(bar_count=8)
-    energy_reads = {"count": 0}
-
-    def _energy_snapshot():
-        energy_reads["count"] += 1
-        return SimpleNamespace(bass=0.21, mid=0.31, high=0.41, overall=0.51)
-
-    fake_engine.get_pre_agc_energy_bands = _energy_snapshot
-    fake_engine.get_transient_energy_bands = lambda: SimpleNamespace(
-        bass_transient=0.0,
-        mid_transient=0.0,
-        high_transient=0.0,
-        onset_detected=False,
-        onset_type="",
-        onset_strength=0.0,
-    )
-    fake_engine.get_event_scheduler = lambda: None
-
-    monkeypatch.setattr(
-        vis_mod,
-        "get_shared_spotify_beat_engine",
-        lambda *_: fake_engine,
-    )
-
-    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-    widget._engine = fake_engine
-    widget.set_visualization_mode(VisualizerMode.BUBBLE)
-    widget._mode_teardown_block_until_ready = False
-    widget._bubble_compute_pending = False
-    widget._store_pending_bubble_result([1.0], [2.0], [3.0], 1)
-    widget._bubble_pending_result_skip_count = 0
-    widget._thread_manager = _BubbleDispatchThreadManager()
-    widget._spotify_playing = True
-    widget._bubble_last_tick_ts = time.time() - 0.016
-
-    tick_pipeline.dispatch_bubble_simulation(widget, time.time())
-
-    assert widget._thread_manager.calls == []
-    assert widget._bubble_pending_result_skip_count == 1
-    assert energy_reads["count"] == 0
-
-
-@pytest.mark.qt
-def test_bubble_dispatch_does_not_queue_duplicate_compute_while_previous_compute_is_in_flight(qt_app, qtbot, monkeypatch):
-    parent = _FakeDisplayParent()
-    qtbot.addWidget(parent)
-
-    fake_engine = _FakeEngine(bar_count=8)
-    energy_reads = {"count": 0}
-
-    def _energy_snapshot():
-        energy_reads["count"] += 1
-        return SimpleNamespace(bass=0.52, mid=0.31, high=0.08, overall=0.44)
-
-    fake_engine.get_pre_agc_energy_bands = _energy_snapshot
-    fake_engine.get_transient_energy_bands = lambda: SimpleNamespace(
-        bass_transient=0.11,
-        mid_transient=0.04,
-        high_transient=0.01,
-        onset_detected=False,
-        onset_type="",
-        onset_strength=0.0,
-    )
-    fake_engine.get_event_scheduler = lambda: None
-
-    monkeypatch.setattr(
-        vis_mod,
-        "get_shared_spotify_beat_engine",
-        lambda *_: fake_engine,
-    )
-
-    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-    widget._engine = fake_engine
-    widget.set_visualization_mode(VisualizerMode.BUBBLE)
-    widget._mode_teardown_block_until_ready = False
-    widget._bubble_compute_pending = False
-    widget._thread_manager = _BubbleDispatchThreadManager()
-    widget._spotify_playing = True
-    widget._bubble_last_tick_ts = time.time() - 0.016
-
-    tick_pipeline.dispatch_bubble_simulation(widget, time.time())
-    first_call_count = len(widget._thread_manager.calls)
-
-    # No callback has run, so the prior compute is still considered in-flight.
-    widget._bubble_last_tick_ts = time.time() - 0.016
-    tick_pipeline.dispatch_bubble_simulation(widget, time.time())
-
-    assert first_call_count == 1
-    assert len(widget._thread_manager.calls) == 1
-    assert widget._bubble_compute_pending is True
-    assert energy_reads["count"] == 1
-
-
-@pytest.mark.qt
-def test_bubble_dispatch_submits_every_lane_free_visualizer_tick(qt_app, qtbot, monkeypatch):
+def test_bubble_dispatch_integrates_every_authored_step_without_presenter_ack(
+    qt_app,
+    qtbot,
+    monkeypatch,
+):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
 
@@ -3116,70 +3082,219 @@ def test_bubble_dispatch_submits_every_lane_free_visualizer_tick(qt_app, qtbot, 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
     widget._engine = fake_engine
     widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    fake_engine.publish_frame([0.0] * 8)
     widget._mode_teardown_block_until_ready = False
-    widget._thread_manager = _BubbleDispatchThreadManager()
+    runtime = _install_capturing_bubble_runtime(widget)
     widget._spotify_playing = True
     first_now = time.time()
     widget._bubble_last_tick_ts = first_now - 0.001
 
     for index in range(5):
-        widget._bubble_compute_pending = False
-        widget._bubble_active_task_token = None
         tick_pipeline.dispatch_bubble_simulation(
             widget,
             first_now + index * 0.001,
         )
 
-    assert len(widget._thread_manager.calls) == 5
+    simulation = runtime.simulation
+    assert isinstance(simulation, _CapturingBubbleSimulation)
+    assert len(simulation.tick_calls) == 5
     cadence = widget._bubble_cadence_state.diagnostic_snapshot()
-    assert cadence["offered_ticks"] == 5
-    assert cadence["submitted_tasks"] == 5
-    assert cadence["publish_ratio"] == pytest.approx(1.0)
+    assert cadence["requested_steps"] == 5
+    assert cadence["integrated_steps"] == 5
+    assert cadence["integration_ratio"] == pytest.approx(1.0)
+    assert cadence["integration_failures"] == 0
 
 
 @pytest.mark.qt
-def test_bubble_compute_done_stages_pending_result_until_ui_tick_consumes_it(qt_app, qtbot):
+def test_bubble_dispatch_publishes_controller_result_and_legacy_mirror_same_step(
+    qt_app,
+    qtbot,
+    monkeypatch,
+):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
 
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine.get_event_scheduler = lambda: None
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-    widget._bubble_compute_pending = True
+    widget._engine = fake_engine
+    widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    fake_engine.publish_frame([0.0] * 8)
+    widget._mode_teardown_block_until_ready = False
+    runtime = _install_capturing_bubble_runtime(widget)
+    widget._spotify_playing = True
+    authored_ts = time.time()
+    widget._bubble_last_tick_ts = authored_ts - 0.016
 
-    result = SimpleNamespace(
-        success=True,
-        result=([1.0, 2.0], [3.0], [4.0], 5, {"worker_total_ms": 1.25, "collision_pairs": 12.0}),
+    tick_pipeline.dispatch_bubble_simulation(widget, authored_ts)
+
+    resolved = runtime.latest
+    assert resolved.positions == (0.25, 0.50, 0.04, 1.0)
+    assert widget._bubble_pos_data == list(resolved.positions)
+    assert widget._bubble_extra_data == list(resolved.extras)
+    assert widget._bubble_trail_data == list(resolved.trails)
+    assert widget._bubble_count == resolved.bubble_count
+    assert widget._bubble_visible_source_ts == pytest.approx(
+        resolved.source_timestamp
     )
-    task_token = (widget._bubble_cadence_state.activation_token, 1)
-    widget._bubble_active_task_token = task_token
-
-    source_ts = time.time() - 0.050
-    authored_ts = time.time() - 0.020
-    widget._bubble_compute_done(
-        result,
-        task_token=task_token,
-        source_ts=source_ts,
-        authored_ts=authored_ts,
-    )
-
-    assert widget._bubble_compute_pending is False
-    assert widget._has_pending_bubble_result() is True
-    assert widget._bubble_pos_data == []
-    assert widget._bubble_visible_source_ts == 0.0
-    assert widget._bubble_visible_simulation_ts == 0.0
-    assert widget._bubble_visible_render_state_ts == 0.0
-
-    render_state_before = time.time()
-    assert widget._consume_pending_bubble_result() is True
-    assert widget._has_pending_bubble_result() is False
-    assert widget._bubble_pos_data == [1.0, 2.0]
-    assert widget._bubble_extra_data == [3.0]
-    assert widget._bubble_trail_data == [4.0]
-    assert widget._bubble_count == 5
-    assert widget._bubble_visible_source_ts == pytest.approx(source_ts)
     assert widget._bubble_visible_simulation_ts == pytest.approx(authored_ts)
-    assert widget._bubble_visible_render_state_ts >= render_state_before
-    assert widget._bubble_last_perf_diag["worker_total_ms"] == pytest.approx(1.25)
-    assert widget._bubble_last_perf_diag["collision_pairs"] == pytest.approx(12.0)
+    assert widget._bubble_visible_render_state_ts == pytest.approx(authored_ts)
+    assert widget._bubble_last_perf_diag["integration_total_ms"] >= 0.0
+    assert widget._bubble_last_perf_diag["collision_pairs"] == 0.0
+
+
+@pytest.mark.qt
+def test_bubble_publication_keeps_exact_identity_admitted_before_source_race(
+    qt_app,
+    qtbot,
+    monkeypatch,
+):
+    from core.settings.visualizer_mode_registry import (
+        get_visualizer_presentation_policy,
+    )
+    from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
+    from widgets.spotify_visualizer.legacy_render_snapshot_adapter import (
+        capture_legacy_visualizer_logical_frame,
+    )
+    from widgets.spotify_visualizer.presentation_geometry import (
+        resolve_visualizer_presentation,
+    )
+
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine.get_event_scheduler = lambda: None
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._runtime_generation = 4
+    widget.runtime_controller.runtime_generation = 4
+    widget._engine = fake_engine
+    widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    fake_engine.publish_frame([0.0] * 8)
+    admitted_generation = fake_engine.get_generation_id()
+    admitted_activation = fake_engine.get_activation_id()
+    admitted_source_ts = fake_engine.get_latest_authoritative_frame()[0]
+
+    class _IdentityFlipSimulation(_CapturingBubbleSimulation):
+        def tick(self, dt: float, energy: dict, settings: dict) -> None:
+            super().tick(dt, energy, settings)
+            fake_engine._generation_id += 1
+            fake_engine._activation_id += 1
+            fake_engine.publish_frame([0.0] * 8)
+
+    runtime = BubbleFrameRuntime(simulation_factory=_IdentityFlipSimulation)
+    assert widget.runtime_controller.resolve_logical_mode_state(
+        "bubble",
+        lambda: runtime,
+    ) is runtime
+    widget._mode_teardown_block_until_ready = False
+    widget._spotify_playing = True
+    authored_ts = time.time()
+    widget._bubble_last_tick_ts = authored_ts - 0.016
+
+    tick_pipeline.dispatch_bubble_simulation(widget, authored_ts)
+    payload = capture_legacy_visualizer_logical_frame(
+        widget,
+        now_ts=authored_ts,
+        changed=True,
+        mode_reveal_ready=True,
+    )
+
+    assert fake_engine.get_generation_id() == admitted_generation + 1
+    assert fake_engine.get_activation_id() == admitted_activation + 1
+    assert payload.engine_generation == admitted_generation
+    assert payload.activation_id == admitted_activation
+    assert payload.source_generation == admitted_generation
+    assert payload.source_activation_id == admitted_activation
+    assert payload.source_timestamp == pytest.approx(admitted_source_ts)
+
+    widget.runtime_controller.begin_render_activation(
+        engine_generation=fake_engine.get_generation_id(),
+        activation_id=fake_engine.get_activation_id(),
+    )
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("bubble"),
+        display_size=(1920.0, 1080.0),
+        outer_origin=(100.0, 80.0),
+        uniform_visual_scale=1.0,
+        viewport_extent=(420.0, 280.0),
+        border_width=4.0,
+        corner_radius=8.0,
+    )
+    assert not widget.runtime_controller.publish_render_snapshot(
+        payload,
+        presentation,
+        logical_revision=1,
+    )
+
+
+@pytest.mark.qt
+def test_bubble_dispatch_treats_concurrent_mode_retirement_as_stale_noop(
+    qt_app,
+    qtbot,
+    monkeypatch,
+):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+    fake_engine = _FakeEngine(bar_count=8)
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    widget._mode_teardown_block_until_ready = False
+    widget._spotify_playing = True
+
+    controller = widget.runtime_controller
+    original_resolve = controller.resolve_logical_mode_state
+    resolve_entered = threading.Event()
+    release_resolve = threading.Event()
+    errors: list[BaseException] = []
+
+    def _delayed_resolve(mode_id, factory):
+        resolve_entered.set()
+        if not release_resolve.wait(timeout=1.0):
+            raise TimeoutError("Bubble resolve race was not released")
+        return original_resolve(mode_id, factory)
+
+    monkeypatch.setattr(
+        controller,
+        "resolve_logical_mode_state",
+        _delayed_resolve,
+    )
+
+    def _dispatch() -> None:
+        try:
+            tick_pipeline.dispatch_bubble_simulation(widget, time.time())
+        except BaseException as exc:  # pragma: no cover - assertion reports it
+            errors.append(exc)
+
+    dispatch_thread = threading.Thread(target=_dispatch, daemon=True)
+    dispatch_thread.start()
+    assert resolve_entered.wait(timeout=1.0)
+    controller.set_mode("sine_wave")
+    release_resolve.set()
+    dispatch_thread.join(timeout=1.0)
+
+    assert not dispatch_thread.is_alive()
+    assert errors == []
+    assert controller.mode_id == "sine_wave"
+    cadence = widget._bubble_cadence_state.diagnostic_snapshot()
+    assert cadence["requested_steps"] == 0
+    assert cadence["integrated_steps"] == 0
 
 
 def test_beat_engine_playback_state_keeps_worker_warm_for_short_pause():
@@ -3309,16 +3424,15 @@ def test_bubble_dispatch_keeps_idle_motion_while_paused(qt_app, qtbot, monkeypat
     widget._engine = fake_engine
     widget.set_visualization_mode(VisualizerMode.BUBBLE)
     widget._mode_teardown_block_until_ready = False
-    widget._bubble_compute_pending = False
-    widget._thread_manager = _BubbleDispatchThreadManager()
+    runtime = _install_capturing_bubble_runtime(widget)
     widget._spotify_playing = False
     widget._bubble_last_tick_ts = time.time() - 0.016
 
     tick_pipeline.dispatch_bubble_simulation(widget, time.time())
 
-    assert widget._thread_manager.calls
-    dt = widget._thread_manager.calls[0]["args"][0]
-    eb_snap = widget._thread_manager.calls[0]["args"][1]
+    simulation = runtime.simulation
+    assert isinstance(simulation, _CapturingBubbleSimulation)
+    dt, eb_snap, _settings = simulation.tick_calls[0]
     assert dt > 0.0
     assert eb_snap["bass"] > 0.0
     assert eb_snap["overall"] > 0.0
@@ -3360,16 +3474,17 @@ def test_bubble_dispatch_uses_bubble_specific_engine_feed(qt_app, qtbot, monkeyp
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
     widget._engine = fake_engine
     widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    fake_engine.publish_frame([0.0] * 8)
     widget._mode_teardown_block_until_ready = False
-    widget._bubble_compute_pending = False
-    widget._thread_manager = _BubbleDispatchThreadManager()
+    runtime = _install_capturing_bubble_runtime(widget)
     widget._spotify_playing = True
     widget._bubble_last_tick_ts = time.time() - 0.016
 
     tick_pipeline.dispatch_bubble_simulation(widget, time.time())
 
-    assert widget._thread_manager.calls
-    eb_snap = widget._thread_manager.calls[0]["args"][1]
+    simulation = runtime.simulation
+    assert isinstance(simulation, _CapturingBubbleSimulation)
+    eb_snap = simulation.tick_calls[0][1]
     assert eb_snap["bass"] == pytest.approx(0.62)
     assert eb_snap["mid"] == pytest.approx(0.41)
     assert eb_snap["overall"] == pytest.approx(min(1.0, 0.62 * 0.46 + 0.41 * 0.34 + 0.18 * 0.20))
@@ -7404,7 +7519,7 @@ def test_latest_live_bass_dominant_supra_unit_windows_open_more_than_restrained_
 
 
 @pytest.mark.qt
-def test_bubble_transition_time_worker_perf_oracle_stays_within_current_budget_band(
+def test_bubble_transition_time_integration_perf_oracle_stays_within_budget(
     qt_app,
     qtbot,
 ):
@@ -7440,25 +7555,40 @@ def test_bubble_transition_time_worker_perf_oracle_stays_within_current_budget_b
 
     assert soft_window and compressed_hot and late_hot
 
-    avg_worker = sum(m["worker_total_ms"] for m in stable_series) / len(stable_series)
+    avg_integration = sum(
+        m["integration_total_ms"] for m in stable_series
+    ) / len(stable_series)
     avg_collision = sum(m["collision_ms"] for m in stable_series) / len(stable_series)
     avg_snapshot = sum(m["snapshot_ms"] for m in stable_series) / len(stable_series)
     avg_active = sum(m["active_bubbles"] for m in stable_series) / len(stable_series)
     max_pairs = max(m["collision_pairs"] for m in stable_series)
     avg_pairs = sum(m["collision_pairs"] for m in stable_series) / len(stable_series)
-    worker_values = sorted(m["worker_total_ms"] for m in stable_series)
-    max_worker = max(m["worker_total_ms"] for m in stable_series)
-    p95_worker = worker_values[min(len(worker_values) - 1, int(len(worker_values) * 0.95))]
-    worker_profile_averages = [
-        sum(m["worker_total_ms"] for m in stable_series[start : start + len(profile)])
+    integration_values = sorted(
+        m["integration_total_ms"] for m in stable_series
+    )
+    max_integration = max(integration_values)
+    p95_integration = integration_values[
+        min(len(integration_values) - 1, int(len(integration_values) * 0.95))
+    ]
+    integration_profile_averages = [
+        sum(
+            m["integration_total_ms"]
+            for m in stable_series[start : start + len(profile)]
+        )
         / len(stable_series[start : start + len(profile)])
         for start in range(0, len(stable_series), len(profile))
     ]
-    max_profile_worker = max(worker_profile_averages)
+    max_profile_integration = max(integration_profile_averages)
 
-    soft_worker = sum(m["worker_total_ms"] for m in soft_window) / len(soft_window)
-    compressed_worker = sum(m["worker_total_ms"] for m in compressed_hot) / len(compressed_hot)
-    late_worker = sum(m["worker_total_ms"] for m in late_hot) / len(late_hot)
+    soft_integration = sum(
+        m["integration_total_ms"] for m in soft_window
+    ) / len(soft_window)
+    compressed_integration = sum(
+        m["integration_total_ms"] for m in compressed_hot
+    ) / len(compressed_hot)
+    late_integration = sum(
+        m["integration_total_ms"] for m in late_hot
+    ) / len(late_hot)
 
     authored_count = float(widget._bubble_big_count + widget._bubble_small_count)
     assert avg_active >= authored_count * 0.85, (
@@ -7467,33 +7597,33 @@ def test_bubble_transition_time_worker_perf_oracle_stays_within_current_budget_b
     assert max_pairs >= authored_count * 6.0 and avg_pairs >= authored_count * 4.5, (
         "Bubble perf oracle must still exercise a real Bubble collision field after broad-phase pruning."
     )
-    assert avg_worker < 2.7, (
-        f"Bubble worker average drifted too high ({avg_worker:.2f}ms) for the current recovered transition-time budget band."
+    assert avg_integration < 2.7, (
+        f"Bubble integration average drifted too high ({avg_integration:.2f}ms) for the current transition-time budget band."
     )
     assert avg_collision < 1.65, (
         f"Bubble collision average drifted too high ({avg_collision:.2f}ms) for the current recovered budget band."
     )
     # Snapshot construction is still bounded well below one authored-frame
     # interval. Leave room for Windows timer/scheduler variance; sustained
-    # worker-profile and installed --perf tails remain the stronger gates.
+    # integration-profile and installed --perf tails remain the stronger gates.
     assert avg_snapshot < 1.0, (
         f"Bubble snapshot average drifted too high ({avg_snapshot:.2f}ms) for the current recovered budget band."
     )
     # A complete authored profile is the smallest reliable sustained-cost window.
     # Individual Windows wall-clock samples can include unrelated scheduler stalls;
     # real --perf logs remain authoritative for those end-to-end spikes.
-    assert max_profile_worker < 4.2, (
-        "Bubble sustained worker cost drifted too high inside the isolated dispatch oracle: "
-        f"profile_max={max_profile_worker:.2f}ms wall_avg={avg_worker:.2f}ms "
-        f"sample_p95={p95_worker:.2f}ms sample_max={max_worker:.2f}ms."
+    assert max_profile_integration < 4.2, (
+        "Bubble sustained integration cost drifted too high inside the isolated logical oracle: "
+        f"profile_max={max_profile_integration:.2f}ms wall_avg={avg_integration:.2f}ms "
+        f"sample_p95={p95_integration:.2f}ms sample_max={max_integration:.2f}ms."
     )
     assert avg_pairs < 600.0, (
         f"Bubble collision pair budget stayed too high ({avg_pairs:.1f} avg pairs) after broad-phase pruning."
     )
-    assert compressed_worker <= max(soft_worker * 1.40, 2.5), (
+    assert compressed_integration <= max(soft_integration * 1.40, 2.5), (
         "Thin hot Bubble windows now cost materially more compute than the soft baseline inside the same recovered family."
     )
-    assert late_worker <= max(compressed_worker * 1.15, 2.7), (
+    assert late_integration <= max(compressed_integration * 1.15, 2.7), (
         "Later hot Bubble recovery now costs materially more compute than the thinner hot window it is meant to recover from."
     )
 
@@ -8862,7 +8992,7 @@ def test_spotify_visualizer_emits_perf_metrics(qt_app, qtbot, monkeypatch, caplo
     widget._perf_tick_min_dt = 1.0 / 120.0  # type: ignore[attr-defined]
     widget._perf_tick_max_dt = 1.0 / 20.0  # type: ignore[attr-defined]
     widget._bubble_last_perf_diag = {  # type: ignore[attr-defined]
-        "worker_total_ms": 3.2,
+        "integration_total_ms": 3.2,
         "tick_ms": 2.4,
         "collision_ms": 1.1,
         "snapshot_ms": 0.6,
@@ -8879,7 +9009,7 @@ def test_spotify_visualizer_emits_perf_metrics(qt_app, qtbot, monkeypatch, caplo
 
     messages = [r.message for r in caplog.records]
     assert any("[PERF] [SPOTIFY_VIS] Tick metrics" in m for m in messages)
-    assert any("[PERF] [SPOTIFY_VIS][BUBBLE] worker_ms=3.20" in m for m in messages)
+    assert any("[PERF] [SPOTIFY_VIS][BUBBLE] integration_ms=3.20" in m for m in messages)
 
 
 def test_compute_bars_returns_list_or_none(np_module):
