@@ -1723,7 +1723,9 @@ Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase 
 - **E2** — Widgets and Transitions `SETUP` subtab UI + lazy navigation consuming the activation schema:
   family activation rows + Enable/Disable All, transition activation vs random-pool vs manual selection,
   deactivated capability loses its settings pill, lazy-save hydration guard preserved.
-  Checkpoint/push/audit E2 before Phase F.
+  **Operator decision (2026-08-22): rebuild the nav live** — deactivating a capability while Settings is
+  open immediately removes its pill and reactivation re-adds it, matching doc 07 §5.3 literally (not a
+  deferred grey-out). Checkpoint/push/audit E2 before Phase F.
 - **E3** — shared retained Quick visual primitives.
 - **E4** — global eight-direction shadow authority (default `SE`).
 
