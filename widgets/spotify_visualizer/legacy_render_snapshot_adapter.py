@@ -254,21 +254,43 @@ def _spectrum_segment_count(viewport_height: float) -> int:
     return max(8, min(64, int(inner_height // 5.0)))
 
 
+def _resolve_current_mode_runtime(
+    controller: Any,
+    mode_id: str,
+    factory: Callable[[], Any],
+) -> Any | None:
+    """Resolve only while this capture still belongs to the current mode."""
+
+    if controller.mode_id != mode_id:
+        return None
+    try:
+        return controller.resolve_logical_mode_state(mode_id, factory)
+    except ValueError:
+        # Mode replacement may win after the check but before the controller
+        # takes its lock.  Only that expected ownership loss is a no-op.
+        if controller.mode_id != mode_id:
+            return None
+        raise
+
+
 def _capture_spectrum(
     widget: Any,
     engine: Any,
     context: _CaptureContext,
-) -> tuple[ModeFrame, dict[str, Any]]:
+) -> tuple[ModeFrame, dict[str, Any]] | None:
     extra = _base_extras(widget, "spectrum", engine)
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
         raise RuntimeError(
             "Spectrum logical capture requires its runtime controller owner"
         )
-    runtime = controller.resolve_logical_mode_state(
+    runtime = _resolve_current_mode_runtime(
+        controller,
         "spectrum",
         SpectrumFrameRuntime,
     )
+    if runtime is None:
+        return None
     if not isinstance(runtime, SpectrumFrameRuntime):
         raise TypeError("Spectrum logical mode state has the wrong type")
     _viewport_width, viewport_height = (
@@ -303,6 +325,12 @@ def _capture_spectrum(
             or getattr(widget, "_rainbow_per_bar", False)
         ),
     )
+    if resolved is None:
+        if controller.peek_logical_mode_state("spectrum") is not runtime:
+            return None
+        raise RuntimeError("Spectrum logical state retired during capture")
+    if controller.peek_logical_mode_state("spectrum") is not runtime:
+        return None
     extra["spectrum_height_scale"] = compute_spectrum_height_scale(
         viewport_height
     )
@@ -329,7 +357,7 @@ def _capture_oscilloscope(
     widget: Any,
     engine: Any,
     context: _CaptureContext,
-) -> tuple[ModeFrame, dict[str, Any]]:
+) -> tuple[ModeFrame, dict[str, Any]] | None:
     extra = _base_extras(widget, "oscilloscope", engine)
     config_applier._append_line_mode_visual_extras(extra, widget, is_sine=False)
     extra["osc_transient_width_mix"] = getattr(
@@ -342,10 +370,13 @@ def _capture_oscilloscope(
         raise RuntimeError(
             "Oscilloscope logical capture requires its runtime controller owner"
         )
-    runtime = controller.resolve_logical_mode_state(
+    runtime = _resolve_current_mode_runtime(
+        controller,
         "oscilloscope",
         OscilloscopeFrameRuntime,
     )
+    if runtime is None:
+        return None
     if not isinstance(runtime, OscilloscopeFrameRuntime):
         raise TypeError("Oscilloscope logical mode state has the wrong type")
     resolved = runtime.resolve(
@@ -375,6 +406,12 @@ def _capture_oscilloscope(
         base_sensitivity=float(extra.get("line_sensitivity", 3.0) or 3.0),
         animation_enabled=bool(extra.get("rainbow_enabled", False)),
     )
+    if resolved is None:
+        if controller.peek_logical_mode_state("oscilloscope") is not runtime:
+            return None
+        raise RuntimeError("Oscilloscope logical state retired during capture")
+    if controller.peek_logical_mode_state("oscilloscope") is not runtime:
+        return None
     extra["_quick_resolved_waveform"] = resolved.waveform
     extra["_quick_resolved_waveform_count"] = resolved.waveform_count
     extra["_quick_resolved_energy"] = resolved.energy
@@ -404,7 +441,7 @@ def _capture_sine(
     widget: Any,
     engine: Any,
     context: _CaptureContext,
-) -> tuple[ModeFrame, dict[str, Any]]:
+) -> tuple[ModeFrame, dict[str, Any]] | None:
     extra = _base_extras(widget, "sine_wave", engine)
     config_applier._append_line_mode_visual_extras(extra, widget, is_sine=True)
     extra["sine_wave_transient_width_mix"] = getattr(
@@ -415,7 +452,13 @@ def _capture_sine(
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
         raise RuntimeError("Sine logical capture requires its runtime controller owner")
-    runtime = controller.resolve_logical_mode_state("sine_wave", SineFrameRuntime)
+    runtime = _resolve_current_mode_runtime(
+        controller,
+        "sine_wave",
+        SineFrameRuntime,
+    )
+    if runtime is None:
+        return None
     if not isinstance(runtime, SineFrameRuntime):
         raise TypeError("Sine logical mode state has the wrong type")
     resolved = runtime.resolve(
@@ -459,6 +502,12 @@ def _capture_sine(
         base_heartbeat=float(extra.get("heartbeat_intensity", 0.0) or 0.0),
         heartbeat_slider=float(extra.get("sine_heartbeat", 0.0) or 0.0),
     )
+    if resolved is None:
+        if controller.peek_logical_mode_state("sine_wave") is not runtime:
+            return None
+        raise RuntimeError("Sine logical state retired during capture")
+    if controller.peek_logical_mode_state("sine_wave") is not runtime:
+        return None
     extra["_quick_resolved_energy"] = resolved.energy
     extra["_quick_mode_changed"] = resolved.changed
     parameter_values = {
@@ -507,19 +556,24 @@ def _capture_bubble(
     widget: Any,
     engine: Any,
     _context: _CaptureContext,
-) -> tuple[ModeFrame, dict[str, Any]]:
+) -> tuple[ModeFrame, dict[str, Any]] | None:
     extra = _base_extras(widget, "bubble", engine)
     config_applier._append_bubble_visual_extras(extra, widget)
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
         raise RuntimeError("Bubble logical capture requires its runtime controller")
-    runtime = controller.resolve_logical_mode_state(
+    runtime = _resolve_current_mode_runtime(
+        controller,
         "bubble",
         BubbleFrameRuntime,
     )
+    if runtime is None:
+        return None
     if not isinstance(runtime, BubbleFrameRuntime):
         raise TypeError("Bubble logical mode state has the wrong type")
     resolved = runtime.latest
+    if controller.peek_logical_mode_state("bubble") is not runtime:
+        return None
     extra["_quick_protected_edges"] = resolved.protected_edges
     if resolved.engine_generation >= 0 and resolved.activation_id >= 0:
         extra["_quick_resolved_identity"] = (
@@ -557,18 +611,23 @@ def _capture_devcurve(
     widget: Any,
     engine: Any,
     _context: _CaptureContext,
-) -> tuple[ModeFrame, dict[str, Any]]:
+) -> tuple[ModeFrame, dict[str, Any]] | None:
     extra = _base_extras(widget, "devcurve", engine)
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
         raise RuntimeError("DevCurve logical capture requires its runtime controller")
-    runtime = controller.resolve_logical_mode_state(
+    runtime = _resolve_current_mode_runtime(
+        controller,
         "devcurve",
         DevCurveFrameRuntime,
     )
+    if runtime is None:
+        return None
     if not isinstance(runtime, DevCurveFrameRuntime):
         raise TypeError("DevCurve logical mode state has the wrong type")
     resolved = runtime.latest
+    if controller.peek_logical_mode_state("devcurve") is not runtime:
+        return None
     extra["_quick_resolved_energy"] = resolved.energy
     extra["transient_energy"] = resolved.transient
     extra["_quick_mode_changed"] = resolved.changed
@@ -598,7 +657,7 @@ def _capture_devcurve(
 
 ModeCapture = Callable[
     [Any, Any, _CaptureContext],
-    tuple[ModeFrame, dict[str, Any]],
+    tuple[ModeFrame, dict[str, Any]] | None,
 ]
 
 _MODE_CAPTURE: dict[str, ModeCapture] = {
@@ -630,8 +689,8 @@ def capture_legacy_visualizer_logical_frame(
     mode_reveal_ready: bool,
     present_frame: bool = True,
     protected_edges: Sequence[VisualizerProtectedEdge] = (),
-) -> VisualizerLogicalFrame:
-    """Copy one completed old-runtime logical step into immutable state."""
+) -> VisualizerLogicalFrame | None:
+    """Copy one old-runtime step, or discard it after concurrent replacement."""
 
     mode_id = mode_capabilities.widget_mode_key(widget)
     capture = _MODE_CAPTURE.get(mode_id)
@@ -667,7 +726,10 @@ def capture_legacy_visualizer_logical_frame(
         playing=bool(getattr(widget, "_spotify_playing", False)),
         first_frame=not bool(getattr(widget, "_has_pushed_first_frame", False)),
     )
-    mode_state, extra = capture(widget, engine, context)
+    captured = capture(widget, engine, context)
+    if captured is None:
+        return None
+    mode_state, extra = captured
     playing = bool(getattr(widget, "_spotify_playing", False))
     logical_timestamp = float(now_ts)
     resolved_identity = extra.get("_quick_resolved_identity")

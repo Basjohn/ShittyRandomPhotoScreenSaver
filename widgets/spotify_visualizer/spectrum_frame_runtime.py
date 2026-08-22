@@ -6,6 +6,10 @@ import math
 from dataclasses import dataclass
 from typing import Sequence
 
+from widgets.spotify_visualizer.frame_runtime_lifecycle import (
+    RetirableFrameRuntime,
+    retirement_fenced,
+)
 from widgets.spotify_visualizer.render_state import (
     CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
 )
@@ -58,10 +62,11 @@ class SpectrumResolvedFrame:
     reactive_source_ready: bool
 
 
-class SpectrumFrameRuntime:
+class SpectrumFrameRuntime(RetirableFrameRuntime):
     """Small Spectrum-only state owner with no Qt or render-loop authority."""
 
     def __init__(self) -> None:
+        super().__init__()
         self._presentation_bars: list[float] = []
         self._presentation_last_ts = 0.0
         self._presentation_identity: tuple[object, ...] | None = None
@@ -83,6 +88,7 @@ class SpectrumFrameRuntime:
         self._activation_identity = None
         reset_spectrum_solid_hysteresis_state(self)
 
+    @retirement_fenced
     def resolve(
         self,
         source_bars: Sequence[object],
@@ -104,7 +110,7 @@ class SpectrumFrameRuntime:
         ghosting_enabled: bool,
         ghost_decay: float,
         animation_enabled: bool,
-    ) -> SpectrumResolvedFrame:
+    ) -> SpectrumResolvedFrame | None:
         count = max(0, int(bar_count))
         timestamp = float(now_ts)
         activation_identity = (

@@ -6,6 +6,10 @@ import math
 from dataclasses import dataclass
 from typing import Sequence
 
+from widgets.spotify_visualizer.frame_runtime_lifecycle import (
+    RetirableFrameRuntime,
+    retirement_fenced,
+)
 from widgets.spotify_visualizer.oscilloscope_contract import (
     advance_ghost_ring,
     blend_waveform,
@@ -58,10 +62,11 @@ class OscilloscopeResolvedFrame:
     reactive_source_ready: bool
 
 
-class OscilloscopeFrameRuntime:
+class OscilloscopeFrameRuntime(RetirableFrameRuntime):
     """Small Oscilloscope-only state owner with no Qt/render authority."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.reset()
 
     def reset(self) -> None:
@@ -79,6 +84,7 @@ class OscilloscopeFrameRuntime:
         self._last_playing: bool | None = None
         self._activation_identity: tuple[int, int, int] | None = None
 
+    @retirement_fenced
     def resolve(
         self,
         source_waveform: Sequence[object],
@@ -100,7 +106,7 @@ class OscilloscopeFrameRuntime:
         transient_width_mix: float,
         base_sensitivity: float,
         animation_enabled: bool,
-    ) -> OscilloscopeResolvedFrame:
+    ) -> OscilloscopeResolvedFrame | None:
         timestamp = float(now_ts)
         activation_identity = (
             int(runtime_generation),

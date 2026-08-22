@@ -1652,24 +1652,21 @@ architecture.
 
 # 15. Current next work
 
-Normal implementation work is now **Phase D**. D1, D2, the D3/D4 item, shell, clip and canonical
-geometry foundation, and all five current mode ports are structurally landed; do not reopen them
-without contradictory evidence.
+Normal implementation work is now **Phase D documentation closure**. D1 through D9, including the
+all-five-mode lifecycle/source/pause/aspect matrix and static packaging/build-runner compatibility,
+are structurally landed; do not reopen them without contradictory evidence.
 
-The next admitted slice is the all-five-mode lifecycle/source/pause/aspect closure:
+The only admitted Phase-D slice is documentation closure:
 
-- [ ] exercise all five canonical mode descriptors through one production-shaped lazy renderer
-  lifecycle matrix, including mode replacement and render-owner resource release;
-- [ ] prove exact generation/activation source admission, stale-source rejection, and ordinary
-  Pause/Play continuity for every mode without adding another clock or cold-start path;
-- [ ] audit canonical/scaled/wide/tall behavior against each mode's admitted presentation policy,
-  including the conservative Bubble aspect policy and the four proven reflow-capable modes;
-- [ ] keep the canonical build workers and `tools/build_runner.py` compatible through focused static
-  packaging gates only; do not perform a compiled/product build;
-- [ ] run only the focused all-five visualizer script/test gates;
-- [ ] inspect diff/status, commit the coherent closure slice, and push immediately.
-
-Then complete the Phase-D documentation closure and pause before Phase E.
+- [ ] rewrite visualizer/preset authoring guidance against the landed presentation-neutral runtime,
+  immutable snapshot, canonical mode policy and lazy Quick renderer boundary;
+- [ ] preserve preset/logical-runtime instructions that remain authoritative, and clearly mark the
+  Quick guide as target architecture while the old production presenter still exists;
+- [ ] refresh navigation/contracts/cross-links only where the landed Phase-D boundary requires it,
+  without mechanically rewriting historical evidence documents;
+- [ ] run focused documentation/reference/static gates only; do not perform a compiled/product build;
+- [ ] inspect diff/status, commit and push the coherent Phase-D documentation checkpoint;
+- [ ] mark Phase D complete and pause before Phase E.
 
 If the operator instead explicitly says **continue from Phase C tests**, execute Section 7.5 test-only
 hardening first and return to D afterward.
