@@ -295,6 +295,28 @@ def test_exception_during_logical_stop_closes_admission_and_retains_owner() -> N
     assert controller.logical_present_pending is False
 
 
+def test_production_stop_helper_propagates_an_unresolved_stop_exception() -> None:
+    from widgets.spotify_visualizer import tick_helpers
+
+    class _ExplodingRuntime:
+        def is_running(self) -> bool:
+            return True
+
+        def stop(self) -> bool:
+            raise OSError("join failed")
+
+    controller = _controller()
+    runtime = _ExplodingRuntime()
+    controller.adopt_logical_runtime(runtime)  # type: ignore[arg-type]
+    adapter = _LegacyAdapterProbe(controller)
+
+    with pytest.raises(OSError, match="join failed"):
+        tick_helpers.stop_tick_source(adapter)
+
+    assert controller.logical_runtime is runtime
+    assert controller.logical_present_pending is False
+
+
 def test_running_generation_scoped_runtime_cannot_be_retargeted() -> None:
     class _LiveRuntime:
         def is_running(self) -> bool:
