@@ -79,14 +79,14 @@ class TestWidgetsTab:
         tab = WidgetsTab(
             settings_manager,
             lazy_sections=True,
-            initial_view_state={"subtab": 1},
+            initial_view_state={"subtab_id": "weather"},
         )
         try:
             assert hasattr(tab, "weather_enabled")
             assert hasattr(tab, "widget_shadows_enabled")
             assert not hasattr(tab, "clock_enabled")
 
-            tab._on_subtab_changed(0)
+            tab._on_subtab_changed(tab._widget_section_index("clock"))
             qt_app.processEvents()
 
             assert hasattr(tab, "clock_enabled")
@@ -285,7 +285,7 @@ class TestWidgetsTab:
         tab = WidgetsTab(
             settings_manager,
             lazy_sections=True,
-            initial_view_state={"subtab": 0},
+            initial_view_state={"subtab_id": "clock"},
         )
         try:
             assert hasattr(tab, "clock_enabled")

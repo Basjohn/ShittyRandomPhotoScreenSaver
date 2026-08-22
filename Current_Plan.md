@@ -1808,15 +1808,22 @@ Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase 
 
 - **E1** — `WidgetRuntimeManager` presentation-neutral model/provider ownership split (broader than the
   activation gate already landed above).
-- **E2** — Widgets and Transitions `SETUP` subtab UI + lazy navigation consuming the activation schema:
-  family activation rows + Enable/Disable All, transition activation vs random-pool vs manual selection,
-  deactivated capability loses its settings pill, lazy-save hydration guard preserved.
+- **E2** — Widgets and Transitions `SETUP` subtab UI + lazy navigation consuming the activation schema.
   **Operator decision (2026-08-22): rebuild the nav live** — deactivating a capability while Settings is
   open immediately removes its pill and reactivation re-adds it, matching doc 07 §5.3 literally (not a
-  deferred grey-out). The stale-`random_choice`, literal-Crossfade-substitute, and C-key-Crossfade
-  admission seams are now closed (see the foundation-correction slice above); **E2.6** need only
-  normalize the legacy `type="Random"` second authority into the single `random_always` authority plus a
-  concrete manual type. Checkpoint/push/audit E2 before Phase F.
+  deferred grey-out); default landing is the SETUP page; family rows use theme-matched tooltips.
+  - **Widgets SETUP — LANDED.** New always-present first `setup` section descriptor + `_build_setup_ui`
+    in `ui/tabs/widgets_tab.py`: one circle-checkbox activation row per available family (from the
+    neutral catalog) with description tooltips, `Enable All` / `Disable All` (activation only, never
+    per-instance `enabled`), live pill show/hide on toggle, fall-back-to-SETUP when the current family is
+    deactivated, activation persisted under `widgets.family_activation.*` through the normal save path
+    (SETUP is bootstrap-built so it never depends on lazy hydration and cannot corrupt hidden family
+    config). Pinned by `tests/test_widgets_tab_setup.py`; lazy-build index tests updated to stable ids.
+  - **Transitions SETUP — NEXT.** Same pill/subtab pattern on the Transitions tab: activation rows,
+    `Use Random Transitions`, one random-pool list (activated ∩ pool membership), per-transition pills
+    for activated transitions only. Then **E2.6** normalizes the legacy `type="Random"` second authority
+    into the single `random_always` authority plus a concrete manual type.
+  Checkpoint/push/audit E2 before Phase F.
 - **E3** — shared retained Quick visual primitives.
 - **E4** — global eight-direction shadow authority (default `SE`).
 

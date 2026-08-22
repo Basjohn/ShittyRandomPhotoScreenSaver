@@ -125,6 +125,7 @@ def test_widget_settings_section_descriptors_default_order():
     descriptors = get_widget_settings_section_descriptors()
 
     assert [descriptor.section_id for descriptor in descriptors] == [
+        "setup",
         "clock",
         "weather",
         "media",
@@ -186,7 +187,15 @@ def test_widget_settings_section_descriptors_expose_default_selected_section():
     descriptors = get_widget_settings_section_descriptors()
     default_idx = get_default_widget_section_index(descriptors)
 
-    assert descriptors[default_idx].section_id == "clock"
+    # The always-present SETUP capability-activation page is the first pill and
+    # the default landing section (Phase E2).
+    assert descriptors[default_idx].section_id == "setup"
+    assert descriptors[0].section_id == "setup"
+    setup = descriptors[0]
+    assert setup.button_label == "Setup"
+    assert setup.method_name == "_build_setup_ui"
+    assert setup.bootstrap_in_lazy_mode is True
+    assert setup.persisted_widget_keys == ()
 
 
 def test_get_widget_settings_section_descriptor_uses_stable_section_id():
