@@ -21,6 +21,10 @@ from rendering.transition_registry import (
     get_transition_setting_names,
     is_transition_available_for_hw,
 )
+from core.settings.capability_activation import (
+    is_transition_activated,
+    resolve_manual_transition_selection,
+)
 
 # Transition imports
 from transitions.base_transition import BaseTransition, SlideDirection, WipeDirection
@@ -234,7 +238,14 @@ class TransitionFactory:
         )
         if random_mode and random_choice_value:
             transition_type = random_choice_value
-        
+        elif not random_mode:
+            # Manual selection: a deactivated transition is excluded from
+            # explicit runtime selection, so resolve a deterministic activated
+            # fallback (inert while every transition is activated by default).
+            transition_type = resolve_manual_transition_selection(
+                transitions_settings, transition_type
+            )
+
         # Get duration
         duration_ms = self._get_duration(transitions_settings, transition_type)
         
@@ -320,7 +331,9 @@ class TransitionFactory:
 
             available = [
                 n for n in all_types
-                if is_transition_available_for_hw(n, hw) and _in_pool(n)
+                if is_transition_available_for_hw(n, hw)
+                and _in_pool(n)
+                and is_transition_activated(settings, n)
             ]
             if not available:
                 available = ['Crossfade']

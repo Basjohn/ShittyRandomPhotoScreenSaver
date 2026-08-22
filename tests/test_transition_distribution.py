@@ -150,6 +150,56 @@ def test_random_transition_distribution_is_approximately_uniform_for_enabled_poo
         )
 
 
+def test_deactivated_transition_is_excluded_from_random_pool() -> None:
+    # Every transition is a pool member, but Burn is deactivated, so it must
+    # never be chosen while every other activated transition still can be.
+    transitions = {
+        "type": "Random",
+        "random_always": True,
+        "pool": {name: True for name in (
+            "Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip",
+            "Blinds", "3D Block Spins", "Ripple", "Warp Dissolve", "Crumble",
+            "Particle", "Burn",
+        )},
+        "activation": {"Burn": False},
+    }
+    settings = _FakeSettingsManager(transitions=transitions, hw_accel=True)
+
+    rng_state = random.getstate()
+    random.seed(2024)
+    try:
+        choices = {_run_random_transition_prepare(settings) for _ in range(4000)}
+    finally:
+        random.setstate(rng_state)
+
+    assert "Burn" not in choices
+    # Other activated transitions are still reachable.
+    assert "Crossfade" in choices
+    assert "Particle" in choices
+
+
+def test_empty_effective_pool_resolves_to_activated_transition() -> None:
+    # The only pooled transition (Burn) is deactivated -> empty effective pool.
+    # The engine must resolve to an activated transition, never the deactivated
+    # Burn, rather than silently running it.
+    transitions = {
+        "type": "Random",
+        "random_always": True,
+        "pool": {"Burn": True},
+        "activation": {"Burn": False},
+    }
+    settings = _FakeSettingsManager(transitions=transitions, hw_accel=True)
+
+    rng_state = random.getstate()
+    random.seed(4242)
+    try:
+        for _ in range(50):
+            choice = _run_random_transition_prepare(settings)
+            assert choice != "Burn"
+    finally:
+        random.setstate(rng_state)
+
+
 def test_rotation_timer_does_not_prepare_random_choice_twice() -> None:
     calls = {"show": 0, "prepare": 0}
 

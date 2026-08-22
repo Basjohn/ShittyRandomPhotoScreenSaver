@@ -143,6 +143,42 @@ def get_activated_transition_names(
     )
 
 
+def get_default_activated_transition(
+    transitions_config: Mapping[str, Any] | None,
+) -> str:
+    """Return a deterministic activated transition to fall back to.
+
+    Prefers Crossfade when activated (the historical safe default), else the
+    first activated transition in canonical registry order, else Crossfade as a
+    last resort so callers always receive a concrete name.
+    """
+
+    if is_transition_activated(transitions_config, "Crossfade"):
+        return "Crossfade"
+    for name in get_activated_transition_names(transitions_config):
+        return name
+    return "Crossfade"
+
+
+def resolve_manual_transition_selection(
+    transitions_config: Mapping[str, Any] | None,
+    requested: str,
+) -> str:
+    """Return the canonical manual transition to use, honoring activation.
+
+    A deactivated transition is excluded from explicit runtime selection, so a
+    request for one resolves to the deterministic activated fallback. A request
+    for an activated transition is returned canonicalized unchanged.
+    """
+
+    canonical = canonicalize_transition_name(requested, fallback="")
+    if not canonical or canonical == "Random":
+        return canonical or "Random"
+    if is_transition_activated(transitions_config, canonical):
+        return canonical
+    return get_default_activated_transition(transitions_config)
+
+
 def get_effective_random_pool(
     transitions_config: Mapping[str, Any] | None,
 ) -> tuple[str, ...]:

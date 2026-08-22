@@ -23,6 +23,7 @@ from core.performance.resource_metrics import log_lifecycle_resource_snapshot
 from core.settings import SettingsManager
 from core.threading.manager import ThreadManager
 from rendering.transition_registry import get_transition_descriptor, is_transition_available_for_hw
+from core.settings.capability_activation import is_transition_activated
 from rendering.display_widget import DisplayWidget
 from ui.settings_dialog import SettingsDialog
 
@@ -106,6 +107,9 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
         engine._current_transition_index = (engine._current_transition_index + 1) % len(engine._transition_types)
         candidate = engine._transition_types[engine._current_transition_index]
         if not is_transition_available_for_hw(candidate, hw) or not _in_pool(candidate):
+            continue
+        # A deactivated transition is excluded from explicit runtime cycling.
+        if not is_transition_activated(transitions_config, candidate):
             continue
         new_transition = candidate
         break
