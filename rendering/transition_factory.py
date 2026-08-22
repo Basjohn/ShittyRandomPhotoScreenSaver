@@ -299,30 +299,28 @@ class TransitionFactory:
         concrete type ourselves so the factory never passes the bare
         string ``"Random"`` into ``_create_by_type``.
         """
-        try:
-            rnd = settings.get('random_always', False)
-            rnd = SettingsManager.to_bool(rnd, False)
-            random_mode = bool(rnd) or transition_type == 'Random'
-            random_choice_value = None
-            if random_mode:
-                # A pre-resolved random_choice (prepared by the engine before a
-                # rotation) is only trusted if it is STILL admissible at this
-                # final seam: a transition deactivated (or made hw-invalid) after
-                # the choice was prepared must never instantiate merely because it
-                # was resolved earlier. Otherwise re-resolve here.
-                chosen = self._settings.get('transitions.random_choice', None)
-                if isinstance(chosen, str) and chosen and chosen != 'Random':
-                    candidate = canonicalize_transition_name(chosen, fallback='')
-                    if candidate and self._is_admissible_random_choice(candidate, settings):
-                        random_choice_value = candidate
-                if random_choice_value is None:
-                    # Missing or stale/inadmissible pre-resolved choice: pick a
-                    # fresh admissible one now.
-                    random_choice_value = self._pick_random_transition(settings)
-            return random_mode, random_choice_value
-        except Exception as e:
-            logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
+        rnd = SettingsManager.to_bool(settings.get('random_always', False), False)
+        random_mode = bool(rnd) or transition_type == 'Random'
+        if not random_mode:
             return False, None
+
+        random_choice_value = None
+        # A pre-resolved random_choice (prepared by the engine before a rotation)
+        # is only trusted if it is STILL admissible at this final seam: a
+        # transition deactivated (or made hw-invalid) after the choice was
+        # prepared must never instantiate merely because it was resolved earlier.
+        chosen = self._settings.get('transitions.random_choice', None)
+        if isinstance(chosen, str) and chosen and chosen != 'Random':
+            candidate = canonicalize_transition_name(chosen, fallback='')
+            if candidate and self._is_admissible_random_choice(candidate, settings):
+                random_choice_value = candidate
+        if random_choice_value is None:
+            # Missing or stale/inadmissible pre-resolved choice: pick a fresh
+            # admissible one now. This fails closed — any failure propagates to
+            # create_transition (which logs and returns None) rather than
+            # silently substituting a transition.
+            random_choice_value = self._pick_random_transition(settings)
+        return random_mode, random_choice_value
 
     def _persist_transitions(self, transitions_settings: dict) -> None:
         """Persist a repaired transitions config through the settings authority."""
@@ -352,60 +350,61 @@ class TransitionFactory:
         return is_transition_available_for_hw(name, self._resolve_hw_accel())
 
     def _pick_random_transition(self, settings: dict) -> str:
-        """Pick a concrete random transition type (factory-side fallback)."""
+        """Pick a concrete, activated random transition type.
+
+        Fails closed: this method has no blanket exception handler and never
+        substitutes a literal Crossfade. Any genuine failure propagates to
+        ``create_transition()``, which logs and returns None, so nothing is
+        instantiated rather than silently running a deactivated transition.
+        """
+        all_types = get_transition_setting_names()
         try:
-            all_types = get_transition_setting_names()
-            try:
-                raw_hw = self._settings.get('display.hw_accel', False)
-                hw = SettingsManager.to_bool(raw_hw, False)
-            except Exception as e:
-                logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
-                hw = False
-            pool_cfg = (
-                settings.get('pool', {})
-                if isinstance(settings.get('pool', {}), dict)
-                else {}
-            )
+            raw_hw = self._settings.get('display.hw_accel', False)
+            hw = SettingsManager.to_bool(raw_hw, False)
+        except Exception as e:
+            logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
+            hw = False
+        pool_cfg = (
+            settings.get('pool', {})
+            if isinstance(settings.get('pool', {}), dict)
+            else {}
+        )
 
-            def _in_pool(name: str) -> bool:
-                if name == 'Ripple':
-                    raw = pool_cfg.get('Ripple', pool_cfg.get('Rain Drops', True))
-                else:
-                    raw = pool_cfg.get(name, True)
-                return bool(SettingsManager.to_bool(raw, True))
+        def _in_pool(name: str) -> bool:
+            if name == 'Ripple':
+                raw = pool_cfg.get('Ripple', pool_cfg.get('Rain Drops', True))
+            else:
+                raw = pool_cfg.get(name, True)
+            return bool(SettingsManager.to_bool(raw, True))
 
-            available = [
+        available = [
+            n for n in all_types
+            if is_transition_available_for_hw(n, hw)
+            and _in_pool(n)
+            and is_transition_activated(settings, n)
+        ]
+        if not available:
+            # No activated, pooled, hw-available candidate. Prefer any activated
+            # hw-available transition (dropping only the pool requirement,
+            # deterministically); never fall back to a deactivated Crossfade.
+            activated_hw = [
                 n for n in all_types
                 if is_transition_available_for_hw(n, hw)
-                and _in_pool(n)
                 and is_transition_activated(settings, n)
             ]
-            if not available:
-                # No activated, pooled, hw-available candidate. Prefer any
-                # activated hw-available transition (dropping only the pool
-                # requirement, deterministically); never fall back to a
-                # deactivated Crossfade.
-                activated_hw = [
-                    n for n in all_types
-                    if is_transition_available_for_hw(n, hw)
-                    and is_transition_activated(settings, n)
-                ]
-                if activated_hw:
-                    available = [activated_hw[0]]
-                else:
-                    # Pathological: nothing activated is hw-available. Perform the
-                    # explicit canonical state repair, persist it, then admit the
-                    # now-activated recovery transition normally.
-                    if ensure_recovery_transition_activated(settings):
-                        self._persist_transitions(settings)
-                    available = [DEFAULT_RECOVERY_TRANSITION]
+            if activated_hw:
+                available = [activated_hw[0]]
+            else:
+                # Pathological: nothing activated is hw-available. Perform the
+                # explicit canonical state repair, persist it, then admit the
+                # now-activated recovery transition normally.
+                if ensure_recovery_transition_activated(settings):
+                    self._persist_transitions(settings)
+                available = [DEFAULT_RECOVERY_TRANSITION]
 
-            last = self._settings.get('transitions.last_random_choice', None)
-            candidates = [t for t in available if t != last] or available
-            return random.choice(candidates)
-        except Exception as e:
-            logger.debug("[TRANSITION_FACTORY] _pick_random_transition error: %s", e)
-            return 'Crossfade'
+        last = self._settings.get('transitions.last_random_choice', None)
+        candidates = [t for t in available if t != last] or available
+        return random.choice(candidates)
 
     def cleanup(self) -> None:
         """Release runtime-owned callbacks and cached precomputation state."""
