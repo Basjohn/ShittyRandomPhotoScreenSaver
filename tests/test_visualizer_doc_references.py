@@ -27,7 +27,7 @@ def test_index_does_not_reference_missing_visualizer_docs():
 
 def test_spec_does_not_reference_missing_visualizer_docs():
     spec_text = (ROOT / "Spec.md").read_text(encoding="utf-8")
-    assert "## 5. Visualizer Contract" in spec_text
+    assert "## 5. Visualizer logical contract" in spec_text
     assert "Docs/Visualizer_Reset_Matrix.md" not in spec_text
     assert "Docs/Visualizer_Signal_Contract.md" not in spec_text
     assert "Docs/Visualizer_Baseline_Tuning_Matrix.md" not in spec_text
@@ -36,15 +36,16 @@ def test_spec_does_not_reference_missing_visualizer_docs():
     assert "tools/rebuild_visualizer_presets.py" not in spec_text
 
 
-def test_visualizer_reference_uses_current_preset_tooling():
+def test_visualizer_reference_describes_the_current_quick_boundary():
     reference_text = (ROOT / "Docs" / "Visualizer_Reference.md").read_text(encoding="utf-8")
-    assert "tools/visualizer_preset_repair.py" in reference_text
+    assert "display's sole `QQuickWindow`" in reference_text
+    assert "one canonical baseline viewport aspect ratio" in reference_text
     assert "tools/rebuild_visualizer_presets.py" not in reference_text
 
 
 def test_project_overview_keeps_visualizer_scope_current():
     overview_text = (ROOT / "Docs" / "00_PROJECT_OVERVIEW.md").read_text(encoding="utf-8")
-    assert "Spotify visualizers" in overview_text
+    assert "high-fidelity multi-mode visualizer" in overview_text
     assert "tools/rebuild_visualizer_presets.py" not in overview_text
 
 
