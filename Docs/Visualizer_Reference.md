@@ -148,10 +148,18 @@ visually above the fill and below the frame/border.
 
 Historical R-21 proves that shrinking the content geometry to hide bleed is not acceptable.
 
-Preferred Quick implementation is scene-graph clipping (`QSGClipNode`) with the custom render node
-honoring supplied scissor/stencil state.
+The selected Quick implementation is **one render-node-local SDF/stencil clip host** inside the same
+`QQuickWindow`/`QSGRenderNode`. The `QSGClipNode -> QSGRenderNode` handoff was attempted and **failed**
+its pinned PySide 6.9.1 runtime bar (rounded cases exposed stencil metadata whose framebuffer contents
+did not match; rectangular cases could expose an invalid sentinel scissor). That failed handoff is
+**not a selectable implementation** and must not be reopened or kept as a fallback unless new
+contradictory evidence later justifies it.
 
-A render-node-local rounded mask is allowed only if the pinned PySide clip-node route proves unusable.
+The local host can compose with valid inherited clip state: when a genuine incoming scissor/stencil
+value corresponds to real framebuffer contents it nests above it, and it restores the temporary stencil
+contents and every touched direct-GL state before returning to Qt. The nested real-GL clip smoke proves
+exactly that narrower fact; it does **not** prove that arbitrary real PySide `QSGClipNode` metadata is
+trustworthy.
 
 Quick clip geometry must derive from Quick chrome; do not copy centred-QPainter border formulas.
 

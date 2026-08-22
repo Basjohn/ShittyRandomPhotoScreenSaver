@@ -222,13 +222,14 @@ assigned visualizer viewport.
 For carded modes, custom GL content remains above card fill, below the visible frame/border, and
 inside the rounded inner card path.
 
-Preferred destination clip ownership is Qt Quick scene-graph clipping (`QSGClipNode`) around the
-visualizer render node. The `QSGRenderNode` must honor incoming scene-graph scissor/stencil state and
-must not clear or repurpose accumulated clip state as though it owned the framebuffer.
-
-If the pinned PySide binding proves the clip-node composition unusable, one render-node-local rounded
-mask is allowed as the single implementation fallback inside the same `QQuickWindow` /
-`QSGRenderNode` architecture.
+Destination clip ownership is **one render-node-local SDF/stencil host** inside the same `QQuickWindow`
+/ `QSGRenderNode`. The `QSGClipNode -> QSGRenderNode` handoff was attempted and failed its pinned
+PySide 6.9.1 bar (rounded cases exposed stencil metadata not matching framebuffer contents; rectangular
+cases could expose an invalid sentinel scissor). That failed handoff is not a selectable implementation
+and is not a fallback unless new contradictory evidence later justifies reopening it. The local host
+composes with valid inherited scissor/stencil state that genuinely corresponds to real framebuffer
+contents, must not clear or repurpose accumulated clip state as though it owned the framebuffer, and
+restores the temporary stencil contents and every touched direct-GL state.
 
 Do not shrink authored visualizer content to simulate clipping. Do not copy old centred-QPainter
 border/mask constants into the Quick geometry contract.

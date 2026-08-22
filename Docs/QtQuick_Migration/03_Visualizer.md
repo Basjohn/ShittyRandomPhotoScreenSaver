@@ -656,7 +656,8 @@ Quick-specific coverage should include:
 - card/shader alignment;
 - `CARD` shell and rounded inner clip alignment;
 - `FRAMELESS` policy unit/scene proof without requiring a production frameless mode;
-- render node honoring incoming scene-graph scissor/stencil clip state;
+- the local clip host composing with VALID inherited scissor/stencil state and restoring it (this is
+  the narrower proven fact; it does not prove arbitrary PySide `QSGClipNode` metadata is trustworthy);
 - no old QPainter border-mask constants copied into Quick geometry;
 - one canonical baseline aspect shared by all five modes;
 - Quick snapshots/renderers contain no `spectrum_growth` / `osc_growth` / `sine_wave_growth` / `bubble_growth` / `devcurve_growth` geometry authority;
