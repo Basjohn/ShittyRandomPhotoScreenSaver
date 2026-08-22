@@ -112,21 +112,56 @@ def test_factory_manual_selection_of_deactivated_transition_falls_back(monkeypat
     assert is_transition_activated(settings.get("transitions"), chosen)
 
 
-def test_factory_never_instantiates_deactivated_crossfade(monkeypatch):
-    # Pathological: Crossfade deactivated and hardware off, so every remaining
-    # activated transition is hw-only. The factory must repair state (reactivate
-    # Crossfade) and admit it, never run a deactivated Crossfade.
-    activation = {name: True for name in get_transition_setting_names()}
-    activation["Crossfade"] = False
+def test_factory_recovery_reactivates_crossfade_when_no_hw_candidate(monkeypatch):
+    # A genuine no-activated-hw-candidate state: only an hw-REQUIRED transition
+    # (Burn) is activated while every hw-safe transition (incl. Crossfade) is
+    # deactivated, and hardware is off. The factory must perform the explicit
+    # canonical recovery repair (reactivate + persist Crossfade) and admit it,
+    # never run a deactivated Crossfade.
+    activation = {name: False for name in get_transition_setting_names()}
+    activation["Burn"] = True  # hw-required, so unavailable with hw off
     transitions = {
         "random_always": True,
         "pool": {name: True for name in get_transition_setting_names()},
         "activation": activation,
-        "random_choice": "Crossfade",  # stale + deactivated
     }
     chosen, settings = _factory_selected_type(monkeypatch, transitions, hw=False)
-    # Whatever is chosen, it is genuinely activated at admission time.
-    assert is_transition_activated(settings.get("transitions"), chosen)
+    # Recovery repaired + persisted Crossfade activation, then admitted it.
+    assert is_transition_activated(settings.get("transitions"), "Crossfade") is True
+    assert chosen == "Crossfade"
+
+
+def test_factory_fails_closed_when_pick_random_raises(monkeypatch):
+    # Correction 1: _pick_random_transition no longer has a silent Crossfade
+    # fallback. If it fails while Crossfade is deactivated, the failure must
+    # propagate to create_transition (which returns None) — nothing is
+    # instantiated, and certainly not a deactivated Crossfade.
+    from rendering.transition_factory import TransitionFactory
+
+    calls: list[str] = []
+
+    def _fake_create_by_type(self, ttype, settings, duration_ms, easing):
+        calls.append(ttype)
+        return SimpleNamespace(set_resource_manager=lambda rm: None)
+
+    def _boom(self, settings):
+        raise RuntimeError("forced pick failure")
+
+    monkeypatch.setattr(TransitionFactory, "_create_by_type", _fake_create_by_type)
+    monkeypatch.setattr(TransitionFactory, "_pick_random_transition", _boom)
+
+    transitions = {
+        "random_always": True,
+        "pool": {name: True for name in get_transition_setting_names()},
+        "activation": {"Crossfade": False},
+    }
+    settings = _StubFactorySettings(transitions, hw=True)
+    factory = TransitionFactory(settings)
+
+    result = factory.create_transition()
+
+    assert result is None
+    assert calls == []  # nothing instantiated, no Crossfade bypass
 
 
 # --- Engine random preparation seam ----------------------------------------
@@ -241,3 +276,32 @@ def test_cycle_never_selects_deactivated_crossfade():
     assert chosen != "Crossfade"
     assert is_transition_activated(transitions, chosen)
     assert chosen == "Ripple"
+
+
+def test_cycle_recovery_reactivates_crossfade_when_no_hw_candidate():
+    from engine import engine_handlers
+
+    # Only Burn (hw-required) activated, every hw-safe transition (incl.
+    # Crossfade) deactivated, hardware off. Cycling has no activated hw-available
+    # candidate, so it must perform the explicit canonical recovery repair
+    # (reactivate + persist Crossfade) rather than select a deactivated Crossfade.
+    activation = {name: False for name in get_transition_setting_names()}
+    activation["Burn"] = True
+    transitions = {
+        "type": "Slide",
+        "random_always": False,
+        "pool": {name: True for name in get_transition_setting_names()},
+        "activation": activation,
+    }
+    settings = _FakeSettingsManager(transitions=transitions, hw_accel=False)
+    engine = SimpleNamespace(
+        settings_manager=settings,
+        _transition_types=list(get_transition_setting_names()),
+        _current_transition_index=0,
+    )
+
+    engine_handlers.on_cycle_transition(engine)
+
+    chosen = settings.get("transitions.type")
+    assert chosen == "Crossfade"
+    assert is_transition_activated(transitions, "Crossfade") is True

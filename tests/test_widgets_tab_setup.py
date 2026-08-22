@@ -108,6 +108,50 @@ def test_disable_all_then_enable_all_affects_activation_only(qt_app, settings_ma
         tab.deleteLater()
 
 
+def test_deactivated_family_is_not_lazily_built_or_hydrated(qt_app, settings_manager):
+    # Persist Weather deactivated with a saved config, then restore navigation
+    # onto the weather subtab. Admission must land on SETUP and never build or
+    # hydrate the deactivated Weather page.
+    settings_manager.set("widgets", {
+        "weather": {"enabled": True, "location": "Testville", "font_size": 22},
+        "shadows": {"enabled": True, "text_enabled": True, "header_enabled": True},
+        "global": {"card_border_width_px": 3},
+        "family_activation": {"weather": False},
+    })
+    tab = _make_tab(settings_manager, initial_view_state={"subtab_id": "weather"})
+    try:
+        setup_idx = tab._widget_section_index("setup")
+        weather_idx = tab._widget_section_index("weather")
+        weather = next(f for f in get_widget_family_descriptors() if f.family_id == "weather")
+
+        # Landed on SETUP, not the hidden Weather page.
+        assert tab._current_subtab == setup_idx
+        assert _family_pill(tab, weather).isHidden() is True
+
+        # Weather page was never built or hydrated, and its controls do not exist.
+        assert weather_idx not in tab._subtab_content_built
+        assert "weather" not in tab._hydrated_widget_sections
+        assert not hasattr(tab, "weather_enabled")
+
+        # Saved Weather config is untouched.
+        cfg = settings_manager.get("widgets", {})
+        assert cfg["weather"]["location"] == "Testville"
+        assert cfg["weather"]["font_size"] == 22
+
+        # Reactivate and select Weather -> it now builds AND hydrates preserved config.
+        tab._family_activation_checkboxes["weather"].setChecked(True)
+        tab._on_subtab_changed(weather_idx)
+        qt_app.processEvents()
+
+        assert tab._current_subtab == weather_idx
+        assert weather_idx in tab._subtab_content_built
+        assert "weather" in tab._hydrated_widget_sections
+        assert hasattr(tab, "weather_enabled")
+        assert tab.weather_enabled.isChecked() is True
+    finally:
+        tab.deleteLater()
+
+
 def test_reactivation_restores_pill_and_reads_persisted_state(qt_app, settings_manager):
     # A previously deactivated family reads back deactivated, then reactivates.
     settings_manager.set("widgets", {"family_activation": {"gmail": False}})

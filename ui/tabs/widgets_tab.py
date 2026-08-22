@@ -820,7 +820,9 @@ class WidgetsTab(QWidget):
                     candidate = widgets_state.get('view_state')
                     if isinstance(candidate, dict):
                         state = candidate
-        return resolve_widget_section_index_from_view_state(state, self._widget_section_descriptors)
+        resolved = resolve_widget_section_index_from_view_state(state, self._widget_section_descriptors)
+        # Never land initial navigation on a deactivated family's page.
+        return self._admit_section_index(resolved)
 
     def _create_subtab_host(self) -> tuple[QWidget, QVBoxLayout]:
         host = QWidget()
@@ -831,6 +833,9 @@ class WidgetsTab(QWidget):
 
     def _build_lazy_subtab_content(self, subtab_id: int) -> None:
         """Build the requested subtab section only when needed."""
+        # Admission: a section owned by a deactivated family is never built or
+        # hydrated — redirect to SETUP first.
+        subtab_id = self._admit_section_index(subtab_id)
         if subtab_id in self._subtab_content_built:
             return
         if subtab_id in self._subtab_content_building:
@@ -1112,6 +1117,43 @@ class WidgetsTab(QWidget):
                 return idx
         return -1
 
+    def _family_activated(self, family_id: str) -> bool:
+        """Return current activation for a family (live checkbox, else settings)."""
+        checkboxes = getattr(self, "_family_activation_checkboxes", {})
+        checkbox = checkboxes.get(family_id)
+        if checkbox is not None:
+            return bool(checkbox.isChecked())
+        widgets_config = self._settings.get('widgets', {})
+        if not isinstance(widgets_config, dict):
+            widgets_config = {}
+        return is_widget_family_activated(widgets_config, family_id)
+
+    def _section_is_deactivated_family(self, section_id: str) -> bool:
+        """True when a section belongs to a currently deactivated widget family."""
+        for family in get_widget_family_descriptors():
+            if family.settings_section_id == section_id:
+                return not self._family_activated(family.family_id)
+        return False
+
+    def _admit_section_index(self, index) -> int:
+        """Resolve a requested subtab index, redirecting a deactivated family to SETUP.
+
+        Centralized admission derived from the neutral widget-family catalog: a
+        section owned by a deactivated family must never be built/hydrated or
+        selected. Applied before every build/selection so restored, initial, and
+        programmatic navigation cannot resolve a hidden family's page.
+        """
+        try:
+            idx = int(index)
+        except (TypeError, ValueError):
+            idx = -1
+        if 0 <= idx < len(self._widget_section_descriptors):
+            section_id = self._widget_section_descriptors[idx].section_id
+            if self._section_is_deactivated_family(section_id):
+                setup_idx = self._widget_section_index("setup")
+                return setup_idx if setup_idx >= 0 else idx
+        return idx
+
     def _family_section_button(self, family) -> Optional[QPushButton]:
         descriptor = get_widget_settings_section_descriptor(
             family.settings_section_id, self._widget_section_descriptors
@@ -1188,6 +1230,14 @@ class WidgetsTab(QWidget):
 
     def _on_subtab_changed(self, subtab_id: int) -> None:
         """Show/hide widget sections based on selected subtab."""
+        # Admission: never select a deactivated family's page; redirect to SETUP
+        # and sync the nav button (programmatic setChecked does not re-fire this).
+        admitted = self._admit_section_index(subtab_id)
+        if admitted != int(subtab_id):
+            redirect_button = self._subtab_group.button(admitted)
+            if redirect_button is not None:
+                redirect_button.setChecked(True)
+        subtab_id = admitted
         if self._lazy_sections:
             self._build_lazy_subtab_content(int(subtab_id))
         prev = self._current_subtab
@@ -1270,6 +1320,8 @@ class WidgetsTab(QWidget):
                 except (TypeError, ValueError):
                     pass
         subtab_id = resolve_widget_section_index_from_view_state(state, self._widget_section_descriptors)
+        # Never restore navigation onto a deactivated family's page.
+        subtab_id = self._admit_section_index(subtab_id)
         button = self._subtab_group.button(subtab_id)
         if button is not None:
             button.setChecked(True)
