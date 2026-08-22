@@ -1,6 +1,6 @@
 # Project Overview
 
-Last updated: 2026-08-20
+Last updated: 2026-08-22
 
 ## What SRPSS is
 
@@ -54,6 +54,54 @@ The migration changes the presentation consumer, not the authored logical clock.
 For Bubble feel/timing, read:
 
 `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
+
+## Visualizer presentation direction
+
+The Quick visualizer is not architecturally synonymous with a card.
+
+All five current production modes remain carded and use the rounded inner card as their content clip:
+
+```text
+CARD + CARD_INTERIOR
+```
+
+The architecture also permits an explicitly authored future mode to be frameless while remaining in
+the same display `QQuickWindow` and the same visualizer render/lifecycle path:
+
+```text
+FRAMELESS + VIEWPORT_RECT
+```
+
+Current-mode geometry uses one canonical baseline viewport aspect. Mode switches and visualizer
+presets do not resize that baseline.
+
+The old per-mode visualizer card-height/growth controls are pre-Quick presentation customization and
+are deliberately retired from the destination architecture.
+
+CUSTOM keeps whole-size scaling distinct from viewport playroom:
+
+```text
+scroll / corner resize
+    -> uniform whole-visualizer scale
+    -> baseline aspect preserved
+
+left/right edge resize
+    -> viewport width only
+
+top/bottom edge resize
+    -> viewport height only
+```
+
+The edge-only viewport behavior is a later Phase-G QoL seam. It changes the available mode world/layout
+rather than stretching rendered pixels and is not a migration blocker for a mode that cannot safely
+support it.
+
+For the detailed contract, read:
+
+- `Docs/Contracts.md`
+- `Docs/QtQuick_Migration/03_Visualizer.md`
+- `Docs/Guardrails/Visualizer_Presentation.md`
+- `Docs/Visualizer_Reference.md`
 
 ## Core engineering priorities
 

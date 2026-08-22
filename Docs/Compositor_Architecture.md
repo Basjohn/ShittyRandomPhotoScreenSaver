@@ -1,6 +1,6 @@
 # Runtime Presentation Architecture
 
-Last updated: 2026-08-21
+Last updated: 2026-08-22
 
 ## 1. Decision
 
@@ -53,7 +53,8 @@ Allowed inside that surface:
 
 - retained base image;
 - transition rendering;
-- visualizer/card;
+- visualizer content;
+- optional retained visualizer shell/chrome;
 - runtime overlays;
 - retained Quick widgets;
 - inline custom render nodes.
@@ -65,6 +66,9 @@ Forbidden:
 - per-widget accelerated top-level surface;
 - `QQuickWidget` as the runtime presenter;
 - per-effect fallback to an independently presented old surface.
+
+A frameless visualizer mode is still part of this one surface. `FRAMELESS` means the visualizer omits
+its own card fill/frame/shadow; it does not mean a separate window or display-global renderer.
 
 ## 4. Threading model
 
@@ -161,8 +165,77 @@ The logical runtime never mutates Quick scene objects or GPU resources.
 
 The presenter never advances authored visualizer simulation.
 
-Card and visualizer pixels share one scene/fade/geometry authority where they must appear as one
-authored visual object.
+### 7.1 Shell policy
+
+Card existence is a presentation policy, not a universal visualizer invariant.
+
+All five current production modes use:
+
+```text
+shell_policy = CARD
+clip_policy  = CARD_INTERIOR
+```
+
+A future explicitly authored mode may use:
+
+```text
+shell_policy = FRAMELESS
+clip_policy  = VIEWPORT_RECT
+```
+
+Carded modes use retained Quick card fill/shadow/frame around the custom-GL content. Frameless modes
+omit that chrome while preserving the same Quick visualizer root, fade/lifecycle authority and
+assigned viewport.
+
+### 7.2 Content clipping
+
+For current carded modes, custom GL must remain above card fill, below the visible frame/border, and
+inside the rounded inner card path.
+
+Prefer scene-graph clip ownership using `QSGClipNode`. The visualizer `QSGRenderNode` consumes the
+incoming scissor/stencil clip state rather than assuming it owns a blank stencil buffer.
+
+If the pinned PySide path proves unusable, one render-node-local rounded mask is allowed as the single
+fallback inside the same Quick architecture.
+
+Do not shrink visualizer render geometry to simulate clipping and do not copy old centred-QPainter
+border-mask constants into Quick.
+
+### 7.3 Geometry
+
+One committed visualizer geometry authority feeds retained shell/chrome, clip geometry, custom GL,
+DPR and CUSTOM/Edit.
+
+All five current modes share one canonical baseline viewport aspect. Mode changes and visualizer
+presets do not change it.
+
+The old per-mode card-height/growth controls are not destination geometry:
+
+```text
+spectrum_growth
+osc_growth
+sine_wave_growth
+bubble_growth
+devcurve_growth
+```
+
+Destination geometry keeps separate:
+
+```text
+canonical baseline viewport/aspect
+uniform_visual_scale
+viewport_extent
+```
+
+Scroll-wheel and corner-handle resize change uniform whole-visualizer scale and preserve the baseline
+aspect.
+
+Later explicit left/right edge resize may change viewport width only, while top/bottom edge resize may
+change viewport height only, at unchanged visual scale. That changes available mode playroom rather
+than stretching final rendered pixels.
+
+Where a logical mode needs spatial bounds, committed viewport metrics are configuration input to the
+logical side and never another clock.
 
 ## 8. Runtime overlays
 
@@ -191,7 +264,7 @@ Preserve:
 - no white/default flash;
 - no black placeholder;
 - no stale image/texture pop;
-- no visualizer/card flash;
+- no visualizer/shell flash;
 - coordinated multi-display reveal.
 
 Separate:
@@ -202,6 +275,9 @@ reactive_source_ready
 ```
 
 Do not make real audio/source freshness a universal prerequisite for an intentional idle scene.
+
+Readiness depends only on resources required by the resolved presentation policy; a frameless mode does
+not wait for card resources it does not own.
 
 ## 10. Lifecycle
 

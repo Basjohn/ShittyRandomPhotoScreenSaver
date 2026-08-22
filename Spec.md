@@ -1,6 +1,6 @@
 # SRPSS Specification
 
-Last updated: 2026-08-21
+Last updated: 2026-08-22
 
 Canonical durable architecture and product-behaviour contracts for SRPSS.
 
@@ -21,6 +21,9 @@ decision below is the design target and must not be reopened without new contrad
 
 Never improve counters by lowering authored visualizer cadence, transition quality, image quality,
 overlay behaviour, or supported display topology.
+
+Explicitly retired pre-Quick presentation controls are not fidelity requirements. In particular, the
+old per-mode visualizer card-height/growth controls are not part of the Qt Quick destination contract.
 
 ## 2. Accepted presentation architecture
 
@@ -55,6 +58,10 @@ Durable rules:
   remain Python unless a separate measured reason justifies changing them;
 - runtime overlay **presentation** moves into the one Quick scene where required;
 - overlay/provider/model logic does not automatically migrate to QML;
+- visualizer content and any optional visualizer shell/chrome are composed inside that same Quick
+  scene;
+- a visualizer card is a presentation policy, not a universal requirement of every possible
+  visualizer mode;
 - no second independently presented accelerated visualizer/overlay surface.
 
 ### Migration-epoch rule
@@ -96,8 +103,8 @@ If native code is ever earned, preserve the one-`QQuickWindow`-per-display prese
 - `WidgetManager` and related model/provider owners may continue to own non-pixel widget lifecycle
   during migration;
 - Settings/Edit/topology recreation use ordered generations/lifetimes;
-- visualizer audio analysis, logical simulation, render-state publication, and physical presentation
-  remain separate concerns.
+- visualizer audio analysis, logical simulation, render-state publication, shell policy, geometry,
+  content clipping, and physical presentation remain separate concerns.
 
 ## 5. Visualizer logical contract
 
@@ -124,6 +131,9 @@ Do not restore:
 - source/event decimation.
 
 For Bubble timing and feel, `Docs/Guardrails/Bubble_Temporal_Fidelity.md` remains binding.
+
+Visualizer viewport metrics may enter the logical side only as committed geometry/configuration where
+a mode needs spatial bounds. Geometry changes are never another authored clock.
 
 ## 6. Logical-to-presentation contract
 
@@ -158,7 +168,8 @@ The one Quick window may contain:
 
 - retained base image;
 - active transition;
-- visualizer/card;
+- visualizer content;
+- optional retained visualizer shell/chrome;
 - runtime overlay presentation;
 - other explicitly scene-owned layers.
 
@@ -186,6 +197,95 @@ ship two competing custom-render architectures or a per-effect fallback.
 No transparent accelerated child/top-level window may be used to avoid integrating pixels into the
 one runtime scene.
 
+### 7.1 Visualizer shell and clipping policy
+
+Visualizer presentation policy is resolved before render-thread admission.
+
+All five current production modes use:
+
+```text
+shell_policy = CARD
+clip_policy  = CARD_INTERIOR
+```
+
+A future explicitly authored mode may use:
+
+```text
+shell_policy = FRAMELESS
+clip_policy  = VIEWPORT_RECT
+```
+
+`FRAMELESS` removes visualizer card background/frame/shadow only. It does not create a second native
+window, second accelerated surface, second lifecycle owner, or permission to draw outside the
+assigned visualizer viewport.
+
+For carded modes, custom GL content remains above card fill, below the visible frame/border, and
+inside the rounded inner card path.
+
+Preferred destination clip ownership is Qt Quick scene-graph clipping (`QSGClipNode`) around the
+visualizer render node. The `QSGRenderNode` must honor incoming scene-graph scissor/stencil state and
+must not clear or repurpose accumulated clip state as though it owned the framebuffer.
+
+If the pinned PySide binding proves the clip-node composition unusable, one render-node-local rounded
+mask is allowed as the single implementation fallback inside the same `QQuickWindow` /
+`QSGRenderNode` architecture.
+
+Do not shrink authored visualizer content to simulate clipping. Do not copy old centred-QPainter
+border/mask constants into the Quick geometry contract.
+
+### 7.2 Visualizer geometry contract
+
+All five current production modes share one canonical baseline visualizer viewport aspect ratio.
+
+Mode changes and visualizer preset changes do not change that baseline viewport shape.
+
+The pre-Quick per-mode card-height/growth controls are explicitly retired from destination ownership:
+
+```text
+spectrum_growth
+osc_growth
+sine_wave_growth
+bubble_growth
+devcurve_growth
+```
+
+They must not become Quick runtime/controller state, immutable render-state fields, mode-descriptor
+geometry, or new visualizer preset-authoring controls.
+
+Destination geometry distinguishes:
+
+```text
+canonical baseline viewport/aspect
+uniform_visual_scale
+viewport_extent
+```
+
+Whole-size operations preserve the canonical baseline aspect:
+
+```text
+scroll-wheel resize
+    -> uniform whole-visualizer scale
+
+corner-handle resize
+    -> uniform whole-visualizer scale
+```
+
+The later explicit viewport-playroom operation may change one axis while preserving visual scale:
+
+```text
+left/right edge-handle resize
+    -> viewport width only
+
+top/bottom edge-handle resize
+    -> viewport height only
+```
+
+Viewport extent changes available mode world/layout. It is not post-render texture stretching and may
+not anisotropically distort Bubble circles/velocities, line stroke scale, or future 3D geometry.
+
+A current mode that cannot safely support independent viewport extent without fidelity/BTF damage may
+remain viewport-resize-incapable while retaining ordinary uniform whole-size scaling.
+
 ## 8. Readiness and reveal
 
 At minimum distinguish:
@@ -204,12 +304,15 @@ A presentation-owned idle scene may reveal without fabricating reactive source i
 
 Paused Spectrum is the canonical case.
 
+Readiness depends only on resources required by the resolved presentation policy. A frameless mode
+does not wait for card resources it deliberately does not own.
+
 Startup/recreation must eventually preserve:
 
 - no white/default window flash;
 - no black placeholder frame;
 - no stale texture/content pop;
-- no visualizer/card flash;
+- no visualizer/shell flash;
 - coordinated multi-display reveal;
 - intentional first visible content.
 
@@ -269,6 +372,10 @@ Settings controls may remain QWidget.
 CUSTOM/Edit control UI may remain QWidget where appropriate, but it must not create a competing
 accelerated runtime presentation surface or a second live pixel authority.
 
+Visualizer CUSTOM geometry uses the same committed geometry authority as runtime presentation.
+Ordinary scroll/corner resizing changes uniform whole-size scale; later edge-only viewport resizing,
+where supported, changes viewport extent rather than stretching rendered pixels.
+
 ## 12. Performance contract
 
 Physical presentation quality is judged by:
@@ -304,6 +411,10 @@ visual review where perception is part of the requirement.
 
 A gate must be structurally capable of failing on the defect it claims to guard.
 
+Visualizer architecture validation must include the current carded rounded-clip path, one frameless
+policy scene proof, canonical baseline-aspect invariance, and no anisotropic stretching under
+wide/tall viewport compatibility probes.
+
 ## 14. Documentation authority
 
 - `Current_Plan.md`: unfinished migration execution only;
@@ -313,5 +424,7 @@ A gate must be structurally capable of failing on the defect it claims to guard.
 - phase reports / Historical_Bugs: historical evidence only;
 - `Future_Cleanup.md`: deferred debt only.
 
-Old evidence may describe QOpenGLWidget, QRhiWidget, separate overlays, or GUI-timer cadence.
+Old evidence may describe QOpenGLWidget, QRhiWidget, separate overlays, GUI-timer cadence, or
+per-mode visualizer card-height controls.
+
 Those are historical mechanisms, not current design targets.
