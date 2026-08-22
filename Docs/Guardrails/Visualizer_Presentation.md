@@ -221,13 +221,29 @@ On Play, fresh current-generation/current-activation data replaces idle state in
 
 ## 11. Fade
 
-One authored fade authority applies to the complete visualizer presentation root.
+One authored fade authority applies to the complete visualizer presentation root (the single
+animation/progress owned by `presentation_fade`).
 
-For carded modes it fades shell + content coherently.
+That one authority resolves into two DERIVED per-layer values on
+`ResolvedVisualizerPresentation`, mirroring the legacy scene-fade/gpu-fade split:
+
+- `scene_fade` -> the presentation-root/card opacity (`scene_controller` applies it via
+  `root.setOpacity`);
+- `content_fade` -> the GL content opacity fed to shader `u_fade` by every mode renderer; it is the
+  Quick-era successor of the authored bars-stagger fade (`bars_fade_from_progress`), so content arrives
+  after the card is established.
+
+`content_fade` is a distinct LAYER value, not a second clock. It must always be a pure function of the
+same fade progress as `scene_fade`; never drive it from an independent animation/timer and never treat
+it as a permanent second fade authority. (Pre-cutover the Quick publisher leaves it at 1.0 because the
+live fade animation is not yet wired into the Quick path.)
+
+For carded modes the authority fades shell + content coherently.
 
 For frameless modes it fades content without manufacturing invisible card dependencies.
 
-Do not create competing QWidget and Quick opacity owners for the same visible pixels.
+Do not create competing QWidget and Quick opacity owners for the same visible pixels, and do not add a
+second Quick fade animation/clock for the visualizer content.
 
 During migration, temporary old/new paths must never both present the same visualizer simultaneously.
 
