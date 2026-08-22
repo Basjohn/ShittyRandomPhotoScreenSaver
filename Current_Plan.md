@@ -63,7 +63,7 @@ This file owns migration sequence and work admission. Technical decompositions u
 | B — runtime-host decomposition | Structurally complete | Do not reopen without contradictory evidence |
 | C — base image + transitions | **IMPLEMENTATION COMPLETE; test-hardening/sign-off debt explicit** | Test/harness hardening may be explicitly selected; transition implementation changes only when stronger evidence exposes a real defect |
 | D — visualizer | **COMPLETE** — all five modes on the Quick boundary; documentation closure landed; physical cadence/eyes-on remain operator-scheduled acceptance debt | Do not reopen without contradictory evidence |
-| **E — widget presentation + capability setup foundation** | **NEXT** | **Normal implementation work belongs here now** |
+| **E — widget presentation + capability setup foundation** | **IN PROGRESS** | **Normal implementation work belongs here now** |
 | F — widget families | Waiting for E | Reference only |
 | G — CUSTOM/input/auxiliary pixels | Waiting for F | Reference only |
 | H — settings epoch + production cutover | Waiting for A–G implementation | Reference only |
@@ -1686,9 +1686,38 @@ Phase-D closure verification also confirmed, without production behaviour change
 
 These do not block migration progress.
 
-**Next normal implementation work is Phase E** (widget presentation + capability setup foundation).
+**Phase E is IN PROGRESS** (widget presentation + capability setup foundation), started under explicit
+operator direction.
 
-STOP: Phase D is closed. Do not begin Phase E in this same pass without explicit operator direction.
+Landed E foundation slices (additive, no runtime behaviour change):
+
+- **presentation-neutral widget family catalog** — `WIDGET_FAMILY_DESCRIPTORS` in
+  `rendering/widget_descriptors.py` is the single source of truth mapping stable `family_id` to member
+  runtime widget ids (`get_widget_family_descriptors` / `get_widget_family_descriptor` /
+  `get_family_id_for_widget` / `get_active_member_widget_ids`). Family availability derives from active
+  runtime descriptors so per-member dev gating stays consistent; the visualizer is deliberately excluded
+  as a widget-family capability. Pinned by `tests/test_widget_family_catalog.py`.
+- **canonical capability-activation settings schema** — `widgets.family_activation.<family_id>` and
+  `transitions.activation.<setting_name>` in canonical defaults (all `True`, so behaviour is unchanged
+  until H0), plus `core/settings/capability_activation.py` presentation-neutral read/write helpers
+  (`is_widget_family_activated` / `is_transition_activated` / `get_effective_random_pool` =
+  activated ∩ pool-member / `is_random_mode_effective`). Regenerated `defaults_snapshot.json` and both
+  SST doc artifacts. Pinned by `tests/test_capability_activation.py`.
+
+Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase F relies on E2):
+
+- **E1** — `WidgetRuntimeManager` presentation-neutral model/provider ownership split; disabled instance
+  vs deactivated family dormancy.
+- **E2** — Widgets and Transitions `SETUP` subtab UI + lazy navigation consuming the activation schema
+  above (family activation rows, Enable/Disable All, transition activation vs random-pool vs manual
+  selection). Checkpoint/push/audit E2 before Phase F.
+- **E3** — shared retained Quick visual primitives.
+- **E4** — global eight-direction shadow authority (default `SE`).
+
+Pre-existing unrelated test failures observed during the E foundation sweep (NOT caused by E work; flag
+for separate triage): `test_visualizer_settings_plumbing.py::TestVisualizerModeBinding::test_load_visualizer_mode_selection_falls_back_when_saved_mode_is_unknown`
+(expects `bubble`, gets `devcurve`) and
+`test_sine_line4_builder_integration.py::test_actual_save_media_settings_includes_line4`.
 
 If the operator instead explicitly says **continue from Phase C tests**, execute Section 7.5 test-only
 hardening first.
