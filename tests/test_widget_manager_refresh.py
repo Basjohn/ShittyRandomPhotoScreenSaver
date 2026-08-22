@@ -514,6 +514,66 @@ def test_weather_widget_creation_handles_prefixed_positions():
     assert widget.started is True
 
 
+def _clock_config(**family_activation):
+    config = {
+        "clock": {
+            "enabled": True,
+            "monitor": "ALL",
+            "position": "WidgetPosition.BOTTOM_CENTER",
+            "font_family": "Segoe UI",
+            "font_size": 60,
+            "margin": 25,
+            "color": [1, 2, 3, 255],
+            "bg_color": [9, 9, 9, 255],
+            "border_color": [4, 4, 4, 255],
+            "border_opacity": 0.7,
+            "show_background": True,
+            "bg_opacity": 0.85,
+            "display_mode": "analog",
+            "show_numerals": False,
+            "analog_face_shadow": True,
+            "timezone": "UTC",
+        },
+        "shadows": {"enabled": True},
+    }
+    if family_activation:
+        config["family_activation"] = dict(family_activation)
+    return config
+
+
+def test_activated_widget_family_is_created_by_default():
+    # No family_activation key -> family activated -> widget created (control).
+    _manager, created = _setup_widgets(_clock_config())
+    assert "clock_widget" in created
+
+
+def test_deactivated_widget_family_is_not_created():
+    # Family capability deactivated: the family owns no runtime widget even
+    # though the per-instance 'enabled' checkbox is True.
+    _manager, created = _setup_widgets(_clock_config(clocks=False))
+    assert "clock_widget" not in created
+
+
+def test_deactivating_one_family_does_not_affect_another():
+    widgets_config = {
+        "clock": {
+            "enabled": True, "monitor": "ALL",
+            "position": "WidgetPosition.BOTTOM_CENTER", "timezone": "UTC",
+            "display_mode": "analog",
+        },
+        "weather": {
+            "enabled": True, "monitor": "ALL",
+            "position": "WidgetPosition.MIDDLE_RIGHT", "location": "Berlin",
+            "show_forecast": True,
+        },
+        "shadows": {"enabled": True},
+        "family_activation": {"clocks": False},
+    }
+    _manager, created = _setup_widgets(widgets_config)
+    assert "clock_widget" not in created
+    assert "weather_widget" in created
+
+
 def test_reddit_widgets_support_inheritance_and_limit():
     widgets_config = {
         "reddit": {
