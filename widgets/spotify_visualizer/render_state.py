@@ -26,9 +26,24 @@ RectTuple: TypeAlias = tuple[float, float, float, float]
 SizeTuple: TypeAlias = tuple[float, float]
 
 
-# The healthy committed CUSTOM/default visualizer size is the scale-1 Quick
-# baseline.  Every current mode shares this authority; viewport_extent may
-# deliberately differ without changing the baseline identity.
+# Visualizer baseline geometry authority. Distinguish three concepts:
+#   1. default/baseline ASPECT (1.5) - the sensible default shape for ordinary
+#      non-CUSTOM visualizer layout, shared by all five current modes;
+#   2. resolved runtime SIZE - outer_rect = viewport_extent * uniform scale,
+#      resolved per display (the layout owner picks width from media/free-space
+#      rules; height derives from the baseline aspect) with uniform screen-fit;
+#   3. explicit viewport EXTENT - the logical/render world, defaulting to the
+#      reference below but allowed to depart from 1.5 via the Phase-G edge-resize
+#      operation (modes reflow rather than stretching finished pixels).
+#
+# CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE is an INTERNAL REFERENCE coordinate
+# extent corresponding to the 1.5 baseline aspect. The literal 420x280 arose from
+# layout history and is NOT a required/sacred visible or runtime output size; it
+# is retained only as a stable reference for normalization and authored
+# stroke/radius scaling (e.g. DevCurve's baseline_content_extent). Do not freeze
+# runtime visualizers to 420x280, and do not delete the 1.5 default aspect in
+# favour of arbitrary mode-specific card shapes. The retired per-mode *_growth
+# controls are not an alternate aspect/height authority.
 CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE: SizeTuple = (420.0, 280.0)
 CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO = 1.5
 
