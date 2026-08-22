@@ -10,6 +10,11 @@ uniform float u_dpr;         // device pixel ratio of the backing FBO
 // not card-local. Subtracting this origin restores card-local pixels.
 // A card-sized, origin-zero target simply passes (0, 0).
 uniform vec2 u_viewport_origin_px;
+// Qt Quick uses interpolated item-local coordinates. The old compositor keeps
+// the framebuffer-coordinate branch until Phase-I deletion.
+uniform int u_quick_item_coords;
+uniform vec4 u_content_rect;  // item-local x, y, width, height
+uniform float u_visual_scale;
 uniform int u_bar_count;
 uniform int u_segments;
 uniform float u_bars[64];
@@ -80,7 +85,9 @@ float spectrum_rim_alpha(float side_dist_px, float top_dist_px) {
     // Inward rim glow: bright core near the edge that fades deeper into the
     // bar interior.  Thresholds sized so bars of 8-15px width get a clearly
     // visible tinted band (roughly the outer 40-60% of the bar).
-    float spread = 3.0 + glow_strength * 4.0;          // 3..7 px reach
+    float authored_scale = (u_quick_item_coords == 1)
+        ? max(u_visual_scale, 0.01) : 1.0;
+    float spread = (3.0 + glow_strength * 4.0) * authored_scale;
     float core_end = max(1.5, spread * 0.35);           // bright inner core
     float inner_core = 1.0 - smoothstep(0.0, core_end, edge_dist);
     float inner_falloff = 1.0 - smoothstep(core_end, spread, edge_dist);
@@ -118,18 +125,27 @@ void main() {
     // position. QOpenGLWidget renders into a device-pixel-scaled FBO, so we
     // map gl_FragCoord (physical) back into QWidget logical space using the
     // current device pixel ratio.
-    float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;
-    float fb_height = height * dpr;
-    vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
-    vec2 fragCoord = vec2(localFrag.x / dpr, (fb_height - localFrag.y) / dpr);
+    vec2 fragCoord;
+    if (u_quick_item_coords == 1) {
+        fragCoord = v_uv * u_resolution;
+    } else {
+        float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;
+        float fb_height = height * dpr;
+        vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
+        fragCoord = vec2(localFrag.x / dpr, (fb_height - localFrag.y) / dpr);
+    }
 
     // ========== SPECTRUM MODE ==========
-    float margin_y = 6.0;
+    float authored_scale = (u_quick_item_coords == 1)
+        ? max(u_visual_scale, 0.01) : 1.0;
+    vec4 content_rect = (u_quick_item_coords == 1)
+        ? u_content_rect : vec4(0.0, 0.0, width, height);
+    float margin_y = 6.0 * authored_scale;
     float gap = u_bar_gap_px;
-    float seg_gap = 1.0;
+    float seg_gap = 1.0 * authored_scale;
 
-    float inner_top = margin_y;
-    float inner_height = height - margin_y * 2.0;
+    float inner_top = content_rect.y + margin_y;
+    float inner_height = content_rect.w - margin_y * 2.0;
     float inner_bottom = inner_top + inner_height;
 
     if (inner_height <= 0.0) {
@@ -145,7 +161,7 @@ void main() {
     int bar_count_int = max(u_bar_count, 1);
     float bar_count = float(bar_count_int);
     float bar_width = u_bar_width_px;
-    if (bar_width < 1.0) {
+    if (bar_width < authored_scale) {
         discard;
     }
     float span = u_bar_span_px;
@@ -217,7 +233,7 @@ void main() {
     // The inner edge (facing center) gets a diagonal cut.
     // Center bar gets both edges slanted.
     float slant_clip = 0.0;  // extra x-inset at top of bar (0 at bottom)
-    bool slant_active = (u_slanted == 1 && bar_width > 4.0);
+    bool slant_active = (u_slanted == 1 && bar_width > 4.0 * authored_scale);
 
     // Determine which side faces center for this bar
     int center_bar = bar_count_int / 2;
@@ -247,15 +263,15 @@ void main() {
         bool is_bar = (y_rel < active_height);
         // Suppress ghost when bar is silent (active_height < 1px) to prevent
         // a white border flash from a decaying peak on a zero-height bar.
-        bool is_ghost = (!is_bar && active_height >= 1.0 && peak_height > active_height && y_rel < peak_height);
+        bool is_ghost = (!is_bar && active_height >= authored_scale && peak_height > active_height && y_rel < peak_height);
 
         if (!is_bar && !is_ghost) {
             discard;
         }
 
         // Slanted clip for single-piece bars
-        if (slant_active && active_height > 4.0) {
-            float slant_amount = min(bar_width * 0.35, 8.0);
+        if (slant_active && active_height > 4.0 * authored_scale) {
+            float slant_amount = min(bar_width * 0.35, 8.0 * authored_scale);
             float y_frac = clamp(y_rel / max(active_height, 1.0), 0.0, 1.0);
             float clip_px = slant_amount * y_frac;
             if (bar_is_center) {
@@ -278,7 +294,7 @@ void main() {
         // Border radius: each shape (bar / ghost) gets its own independent
         // rounding so all tops look consistent regardless of relative heights.
         float br_max = min(u_border_radius, bar_width * 0.5);
-        if (br_max > 0.5) {
+        if (br_max > 0.5 * authored_scale) {
             float bx_f = bar_local_x;
             float by_f = y_rel;
 
@@ -286,7 +302,7 @@ void main() {
                 // Round the TOP two corners of the active bar
                 float br_bar = (active_height < br_max * 2.0)
                     ? min(br_max, active_height * 0.5) : br_max;
-                if (br_bar > 0.5 && by_f > active_height - br_bar) {
+                if (br_bar > 0.5 * authored_scale && by_f > active_height - br_bar) {
                     if (bx_f < br_bar) {
                         float dx = br_bar - bx_f;
                         float dy = by_f - (active_height - br_bar);
@@ -304,7 +320,7 @@ void main() {
                 // Round the TOP two corners of the ghost
                 float br_ghost = (peak_height < br_max * 2.0)
                     ? min(br_max, peak_height * 0.5) : br_max;
-                if (br_ghost > 0.5 && by_f > peak_height - br_ghost) {
+                if (br_ghost > 0.5 * authored_scale && by_f > peak_height - br_ghost) {
                     if (bx_f < br_ghost) {
                         float dx = br_ghost - bx_f;
                         float dy = by_f - (peak_height - br_ghost);
@@ -317,10 +333,10 @@ void main() {
                     }
                 }
                 // Round ghost BOTTOM corners where ghost meets bar top
-                if (active_height > 2.0) {
+                if (active_height > 2.0 * authored_scale) {
                     float br_bot = (active_height < br_max * 2.0)
                         ? min(br_max, active_height * 0.5) : br_max;
-                    if (br_bot > 0.5 && by_f < active_height + br_bot) {
+                    if (br_bot > 0.5 * authored_scale && by_f < active_height + br_bot) {
                         if (bx_f < br_bot) {
                             float dx = br_bot - bx_f;
                             float dy = (active_height + br_bot) - by_f;
@@ -353,7 +369,7 @@ void main() {
             }
             // Smooth fade from bar top to peak top
             float ghost_dist = y_rel - active_height;
-            float ghost_span = max(1.0, peak_height - active_height);
+            float ghost_span = max(authored_scale, peak_height - active_height);
             float t = clamp(ghost_dist / ghost_span, 0.0, 1.0);
             float ghost_factor = mix(1.0, 0.15, t);
             vec4 ghost_base = border;
@@ -367,12 +383,12 @@ void main() {
         } else {
             // Border on left/right edges and top edge of the bar
             bool on_border = false;
-            if (bw_px <= 2.0) {
+            if (bw_px <= 2.0 * authored_scale) {
                 on_border = true;
             } else {
-                bool on_side = (bx <= 0.0 || bx >= bw_px - 1.0);
-                bool on_top = (y_rel >= active_height - 1.0);
-                bool on_bottom = (y_rel < 1.0);
+                bool on_side = (bx <= authored_scale || bx >= bw_px - authored_scale);
+                bool on_top = (y_rel >= active_height - authored_scale);
+                bool on_bottom = (y_rel < authored_scale);
                 on_border = on_side || on_top || on_bottom;
             }
             sp_is_border = on_border;
@@ -393,8 +409,8 @@ void main() {
     // ========== SEGMENTED MODE ==========
     float total_seg_gap = seg_gap * float(u_segments - 1);
     float seg_height = (inner_height - total_seg_gap) / float(u_segments);
-    seg_height = floor(seg_height);
-    if (seg_height < 1.0) {
+    seg_height = floor(seg_height / authored_scale) * authored_scale;
+    if (seg_height < authored_scale) {
         discard;
     }
 
@@ -418,8 +434,8 @@ void main() {
     }
 
     // Slanted clip for segmented bars
-    if (slant_active && seg_height > 2.0) {
-        float slant_amount = min(bar_width * 0.35, 8.0);
+    if (slant_active && seg_height > 2.0 * authored_scale) {
+        float slant_amount = min(bar_width * 0.35, 8.0 * authored_scale);
         // Use global y position within the bar (not segment-local) for consistent diagonal
         float total_bar_h = float(u_segments) * step_y;
         float y_global_frac = clamp(y_rel / max(total_bar_h, 1.0), 0.0, 1.0);
@@ -439,7 +455,7 @@ void main() {
 
     // Border radius clip for segmented bars (all 4 corners of each segment)
     float br_seg = clamp(u_border_radius, 0.0, min(bar_width * 0.5, seg_height * 0.5));
-    if (br_seg > 0.5) {
+    if (br_seg > 0.5 * authored_scale) {
         float bx_f = bar_local_x;
         float by_f = seg_local_y;
         // Bottom-left corner
@@ -513,10 +529,10 @@ void main() {
 
     bool on_border = false;
     if (is_bar_frag) {
-        if (bw_px <= 2.0 || sh_px <= 2.0) {
+        if (bw_px <= 2.0 * authored_scale || sh_px <= 2.0 * authored_scale) {
             on_border = true;
         } else {
-            if (bx <= 0.0 || bx >= bw_px - 1.0 || by <= 0.0 || by >= sh_px - 1.0) {
+            if (bx <= authored_scale || bx >= bw_px - authored_scale || by <= authored_scale || by >= sh_px - authored_scale) {
                 on_border = true;
             }
         }

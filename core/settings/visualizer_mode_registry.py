@@ -41,6 +41,14 @@ _CURRENT_CARDED_POLICY = VisualizerModePresentationPolicy(
     viewport_resize_capable=False,
 )
 
+_SPECTRUM_CARDED_POLICY = VisualizerModePresentationPolicy(
+    shell_policy=VisualizerShellPolicy.CARD,
+    clip_policy=VisualizerClipPolicy.CARD_INTERIOR,
+    # The Quick Spectrum renderer recomputes bar distribution and vertical
+    # extent from committed geometry; Phase G may safely expose edge resizing.
+    viewport_resize_capable=True,
+)
+
 @dataclass(frozen=True)
 class VisualizerModeDescriptor:
     mode_id: str
@@ -60,7 +68,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         "Spectrum",
         "_spectrum_preset_slider",
         ("spectrum_",),
-        _CURRENT_CARDED_POLICY,
+        _SPECTRUM_CARDED_POLICY,
     ),
     VisualizerModeDescriptor(
         "oscilloscope",

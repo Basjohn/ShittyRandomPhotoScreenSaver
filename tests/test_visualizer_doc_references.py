@@ -56,7 +56,8 @@ def test_visualizer_reference_describes_the_current_quick_boundary():
 def test_contracts_route_visualizer_shell_clip_and_geometry_owners():
     contracts_text = (ROOT / "Docs" / "Contracts.md").read_text(encoding="utf-8")
     assert "Mode presentation policy" in contracts_text
-    assert "QSGClipNode" in contracts_text
+    assert "one render-node-local SDF/stencil host" in contracts_text
+    assert "QSGClipNode" not in contracts_text
     assert "shell_policy = FRAMELESS" in contracts_text
     assert "canonical baseline viewport/aspect" in contracts_text
     assert "uniform_visual_scale" in contracts_text
