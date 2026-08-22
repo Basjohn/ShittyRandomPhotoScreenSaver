@@ -1,11 +1,11 @@
 # 03 — Visualizer Qt Quick Migration
 
-Status: ACTIVE Phase-D technical decomposition  
+Status: **Phase-D landed architecture / visualizer migration reference**  
 Last updated: 2026-08-22
 
 Cross-links:
 
-- sequence/permission: `Current_Plan.md`
+- current sequence/permission: `Current_Plan.md`
 - presentation guardrail: `Docs/Guardrails/Visualizer_Presentation.md`
 - Bubble temporal fidelity: `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
 - authored behavior/reference: `Docs/Visualizer_Reference.md`
@@ -14,15 +14,18 @@ Cross-links:
 - historical painted-card bleed: `Docs/Historical_Bugs/R-21_Visualizer_Painted_Card_GL_Boundary.md`
 - deferred deletion: `Future_Cleanup.md`
 
-Phase D may proceed while Phase-C physical/eyes-on sign-off remains explicitly deferred. A later
-failing transition sign-off reopens only the smallest demonstrated Phase-C defect; it does not suspend
-unrelated Phase-D work by default.
+Phase D is **complete**. D1–D9 and the Phase-D documentation closure landed. This file keeps the
+technical rationale and integration contract for later Phase-G/H work; it does not admit another
+visualizer migration pass. Reopen the landed boundary only when concrete contradictory evidence exposes
+a specific defect.
 
-## 1. Preserve the part that already works
+Remaining installed Bubble cadence, eyes-on parity and mixed-refresh checks are operator-scheduled
+acceptance debt. They are not permission to fabricate a pass and are not by themselves unfinished
+Phase-D implementation.
 
-Keep `VisualizerLogicalRuntime`.
+## 1. Preserved authored-time owner
 
-It remains:
+`VisualizerLogicalRuntime` remains:
 
 - the sole mode-general authored visualizer clock;
 - independent of GUI/render cadence;
@@ -31,47 +34,24 @@ It remains:
 - no catch-up;
 - BTF-bound for Bubble.
 
-Do not move logical simulation into:
+Logical simulation does **not** move into:
 
 - QML;
-- QSG render thread;
+- the QSG render thread;
 - `FrameAnimation`;
 - physical refresh;
 - a second mode-specific timer.
 
-Every authored logical step must still occur even when fewer physical frames are presented.
+Every authored logical step integrates even when fewer physical frames are ultimately presented.
+Presentation may sample the freshest completed state; it may not redefine authored time.
 
-## 2. Current presentation seam that must change
+## 2. Landed presentation-neutral ownership split
 
-The old compositor presentation can hold a `VisualizerRenderState` whose handle references the live
-visualizer owner and mutable/heavy arrays. That was only acceptable while publication and paint were
-GUI-thread owned.
+The old compositor could carry `VisualizerRenderState` whose handle referred back to the live
+visualizer owner and mutable/heavy arrays. That is not a legal Quick render-thread contract and is not
+the Phase-D destination.
 
-It is not a legal Quick render-thread contract.
-
-The Quick render node must not read a live `SpotifyVisualizerWidget`, arbitrary QObject presentation
-state, provider objects, or SettingsManager.
-
-The old visualizer also assumes every current mode is inside one painted card and uses a dedicated
-rounded stencil to prevent GL pixels escaping through the frame/corners. Preserve the visual result,
-not the old ownership assumptions.
-
-The old runtime also owns per-mode card-height/growth controls (`spectrum_growth`, `osc_growth`,
-`sine_wave_growth`, `bubble_growth`, `devcurve_growth`). They are legacy presentation customization,
-not authored mode behavior, and are deliberately **not** carried into the Quick visualizer contract.
-
-## 3. D1 — presentation-neutral runtime/controller owner
-
-Do not instantiate a hidden QWidget merely to retain:
-
-- playback state;
-- presets/settings;
-- BeatEngine/source ownership;
-- logical runtime;
-- mode state;
-- CUSTOM identity.
-
-Extract/retain a presentation-neutral owner, conceptually:
+The landed shape is conceptually:
 
 ```text
 VisualizerRuntimeController
@@ -79,9 +59,10 @@ VisualizerRuntimeController
     BeatEngine/source ownership
     playback-edge ownership
     VisualizerLogicalRuntime
+    mode-owned logical frame runtime
     latest logical publication
 
-QuickVisualizerPresentation
+Quick visualizer presentation
     immutable snapshot admission
     presentation policy
     geometry/fade/readiness
@@ -89,13 +70,17 @@ QuickVisualizerPresentation
     QSGRenderNode visual content
 ```
 
-Keep source/provider/business logic in Python. Do not rewrite it into QML.
+No hidden QWidget is required to retain logical/source ownership.
 
-### 3.1 Mode presentation policy
+The Quick render node does not read a live `SpotifyVisualizerWidget`, arbitrary QObject presentation
+state, provider objects or `SettingsManager`.
 
-Extend the existing cheap visualizer mode descriptor with small presentation metadata.
+Provider/source/business logic remains Python-owned; the migration changed the presentation boundary,
+not the application into a QML business-logic rewrite.
 
-Conceptual shape:
+## 3. Landed presentation policy
+
+The cheap canonical visualizer mode descriptor may carry small presentation metadata:
 
 ```text
 VisualizerModePresentationPolicy
@@ -104,42 +89,36 @@ VisualizerModePresentationPolicy
     viewport_resize_capable
 ```
 
-Initial values:
+All five current production modes use:
 
 ```text
-current five modes:
-    shell_policy = CARD
-    clip_policy  = CARD_INTERIOR
-
-future explicitly frameless mode:
-    shell_policy = FRAMELESS
-    clip_policy  = VIEWPORT_RECT
+shell_policy = CARD
+clip_policy  = CARD_INTERIOR
 ```
 
-Do not build a giant mode schema or external plugin SDK.
+A future explicitly authored mode may use:
 
-The point is to prevent `QuickSceneController`/render host from containing a permanent
-`if mode == future_blob: don't_draw_card()` special case.
+```text
+shell_policy = FRAMELESS
+clip_policy  = VIEWPORT_RECT
+```
 
-`FRAMELESS` means no visualizer card background, border/frame, or card shadow. It does not create a
-new window or presentation surface.
+`FRAMELESS` means no visualizer card background, frame/border or card shadow. It does not create a
+second window, a second accelerated surface, another logical clock or display-global drawing authority.
 
-Checkpoint and push the controller/runtime/policy split before renderer complexity.
+This policy exists so scene/controller code does not accumulate mode-specific special cases such as
+`if mode == future_blob: do_not_draw_card()`.
 
-## 4. D2 — immutable latest snapshot
+## 4. Immutable latest-state bridge
 
-Define a bounded render-thread-safe snapshot containing only data needed to draw the committed
-visualizer state.
-
-Representative fields:
+Phase D landed a bounded immutable render boundary. Representative committed state includes:
 
 ```text
 runtime_generation
-activation_id
+engine_generation / activation identity
 mode
 playing
-logical_timestamp
-fade
+logical timestamp
 
 presentation:
     shell_policy
@@ -147,83 +126,69 @@ presentation:
     outer_rect
     content_rect
     dpr
+    baseline viewport/aspect
     uniform_visual_scale
-    content_viewport_size
-    aspect_ratio
+    viewport_extent
+    current aspect
+    derived fade values
 
-common:
-    energy bands
-    color/style parameters
-
-Spectrum:
-    bars / peaks / ghost state
-
-Oscilloscope:
-    waveform geometry/state
-
-Sine:
-    sine layer state
-
-Bubble:
-    positions
-    radii/extra data
-    trails/tails
-    pop/transient/protected-edge state
-    ghost state
-    authored style
-
-DevCurve:
-    enabled layers
-    order
-    offsets
-    alpha
-    outline/ghost state
+mode-specific renderer-visible state:
+    Spectrum bars / peaks / ghosts
+    Oscilloscope waveform / ghosts
+    Sine layers / ghosts
+    Bubble positions / radii / extras / trails / pop/transient consequences
+    DevCurve layer curves / order / ghosts / specular/tuning state
 ```
 
-Use existing logical state where possible. Do not deep-copy QWidget object graphs.
+The exact records are source-owned. The durable rules are:
 
-Use tuples, immutable records, owned numpy buffers, or another explicitly proven immutable payload
-shape.
+- render-thread state is detached/immutable;
+- current generation + engine generation + activation/mode identity fence admission;
+- one latest slot, not a render backlog;
+- newer committed state may supersede older unread state;
+- no producer wait for paint/present;
+- no paint acknowledgement;
+- no FIFO/catch-up replay;
+- no requirement for one GUI callback per logical tick.
 
-One latest slot per activation/display presentation. Newer committed state supersedes older unread
-state; there is no render backlog.
+Short-lived authored consequences must survive coalescing semantically. For Bubble, the current
+same-kind protected-result design is valid only while each protected renderer-visible consequence is
+forward-carried into the next result. `Docs/Guardrails/Bubble_Temporal_Fidelity.md` owns that invariant.
+If a future Bubble consequence becomes genuinely single-frame-only and is not forward-carried, revise
+the coalescing rule rather than weakening the BTF test.
 
-The render thread must not query the mutable mode registry to discover shell/clip policy. Resolve it
-before snapshot admission.
+## 5. Synchronization boundary
 
-Checkpoint and push the immutable bridge separately.
-
-## 5. Synchronization and publication
-
-Preferred seam:
+The landed flow is:
 
 ```text
-logical publication
-    -> latest immutable snapshot
-    -> GUI/Quick item marks visual state dirty
-    -> updatePaintNode/synchronization boundary
-    -> render node receives complete current snapshot
+source / engine
+    -> sole VisualizerLogicalRuntime
+    -> mode-owned logical frame runtime
+    -> immutable latest-state publication
+    -> VisualizerSnapshotBridge
+    -> Quick synchronization boundary / take-for-render
+    -> one QSGRenderNode / lazy mode renderer
+    -> render-node-local SDF/stencil clip
+    -> retained Quick shell/chrome
+    -> one standalone QQuickWindow per physical display
 ```
 
-The exact PySide seam may vary with the landed Quick item, but the ownership rules may not:
+The synchronization boundary may mark visual state dirty and transfer a complete current snapshot. It
+may not:
 
-- no render-thread lock waiting on provider/network/GUI work;
-- no one-GUI-callback-per-logical-tick requirement;
-- latest state wins;
-- no FIFO/catch-up replay;
-- short-lived authored edges are protected explicitly rather than lost through decimation;
-- no paint acknowledgement feeding logical cadence.
+- wait on provider/network/GUI work from the render thread;
+- turn coalescing into source/event decimation;
+- hold logical producer admission until paint;
+- build an unbounded queue;
+- allow stale generation state into a replacement scene.
 
-## 6. Quick visualizer scene shape
+## 6. Quick scene shape
 
-Use one sub-rect custom `QQuickItem`/`QSGRenderNode` inside the owning display `QQuickWindow`.
+The visualizer is one sub-rect custom Quick item/render node inside the owning display
+`QQuickWindow`.
 
-The visualizer remains inline in the same scene as retained chrome and widgets. No separate native
-window and no QPainter fallback.
-
-The render node owns its context-local GL programs/resources.
-
-Selected visual layering:
+Selected layering:
 
 ```text
 VisualizerPresentationRoot
@@ -238,22 +203,18 @@ VisualizerPresentationRoot
     +-- frame/border         [CARD only, above content]
 ```
 
-The root owns final fade/visibility for both carded and frameless modes.
+No separate native visualizer window. No QPainter presentation fallback. No `QQuickWidget`.
 
-Reuse authored assets/helpers where valid:
+Context-local GL programs/resources are owned by the legal render owner and retire there.
 
-- current mode shader sources;
-- shared vertex shader/math;
-- uniform upload helpers after removing old compositor coupling;
-- Bubble logical/output data format and authored math.
+Authored shader/math assets may be reused when they are genuinely presentation-neutral. Old compositor
+ownership is not preserved merely because an asset originated there.
 
-Do not use an offscreen QWidget/card screenshot as the final presentation path.
+## 7. Clip ownership
 
-## 7. Clip ownership — preserve the mask contract, improve the owner
+### 7.1 Visual contract
 
-### 7.1 Why clipping is still required
-
-Historical R-21 established the real visual contract:
+Historical R-21 established the real requirement for carded modes:
 
 ```text
 visualizer content
@@ -262,65 +223,67 @@ visualizer content
     unable to escape rounded corners
 ```
 
-Shrinking the renderer/card rect to hide bleed was incorrect because it changed authored content
+Shrinking the renderer/card rect to hide bleed is incorrect because it changes authored content
 geometry, bar widths, amplitudes and curve scale.
 
-That remains true in Quick.
+A plain rectangular `QQuickItem.clip` does not by itself express the rounded inner card path required
+here.
 
-A plain `QQuickItem.clip = true` is only a rectangular item-bounds clip. It does not by itself express
-the rounded inner card path.
+### 7.2 Failed QSGClipNode handoff
 
-### 7.2 Scene-graph clip proof result
+The exact pinned PySide 6.9.1 `QSGClipNode -> QSGRenderNode` proof failed its runtime bar:
 
-The exact pinned PySide 6.9.1 `QSGClipNode -> QSGRenderNode` proof is complete and failed its runtime
-bar. Rounded cases reported stencil state whose target-buffer contents did not match, while
-rectangular cases could report an invalid sentinel scissor. A live Python render node therefore
-could not safely consume that clip handoff.
+- rounded cases could expose stencil metadata whose claimed target state did not match framebuffer
+  contents;
+- rectangular cases could expose an invalid/sentinel scissor.
 
-Do not retain or retry that path alongside the selected implementation.
+That handoff is not a selectable production implementation and is not retained as a fallback. Do not
+reopen it merely because historical planning described it as preferable before the proof ran.
 
-### 7.3 Selected render-node-local clip
+### 7.3 Selected local SDF/stencil host
 
-Keep the same policy/geometry architecture and use one render-node-local rounded SDF/stencil host. It:
+The selected implementation is one render-node-local SDF/stencil host inside the same
+`QQuickWindow`/`QSGRenderNode` architecture.
 
-- stays inside the same QQuickWindow/QSGRenderNode architecture;
-- derives from the canonical content geometry;
-- uses the exact render-target viewport shared by the mode draw;
-- respects any incoming scene clip;
-- nests temporary stencil contents without clearing the framebuffer;
-- restores stencil contents plus scissor/direct-GL state;
+It:
+
+- derives from canonical committed content geometry;
+- uses the same render-target viewport as the mode draw;
+- uses rounded geometry for `CARD_INTERIOR` and zero-radius rectangular geometry for
+  `VIEWPORT_RECT`;
+- can compose with **valid inherited scissor/stencil state that genuinely corresponds to real
+  framebuffer contents**;
+- nests temporary stencil contents without clearing/repurposing the framebuffer as though it owned a
+  blank stencil buffer;
+- restores temporary stencil contents and every touched direct-GL/scissor/stencil state before
+  returning to Qt;
 - never shrinks or anisotropically scales authored content to simulate clipping.
 
-`VIEWPORT_RECT` uses the same host with zero radius. Do not keep both clipping implementations as
-permanent selectable paths.
+The nested real-GL smoke proves that narrower compose-with-valid-state property. It does **not** prove
+that arbitrary real PySide `QSGClipNode` metadata is trustworthy.
 
-### 7.4 Do not copy the old mask constants
+### 7.4 Quick border semantics
 
-The old path needed a special inset because the QPainter border was a **centred** pen stroke.
+Do not copy the old centred-QPainter mask formula.
 
-Qt Quick `Rectangle` borders are rendered **inside** the rectangle bounds.
-
-Therefore derive the Quick card clip from the actual retained chrome:
+The historical path compensated for a centred pen stroke. Qt Quick `Rectangle` borders render inside
+the rectangle bounds. The Quick inner clip derives from the actual retained chrome:
 
 ```text
 outer card path
     minus inside border width
-    -> inner content path
+    -> inner content path / inner corner radius
 ```
 
-and derive inner corner radius from that same style geometry.
+Any further inset must be an explicit Quick presentation-style value, not a copied
+`1px + border_width/2` rule.
 
-Do not blindly preserve the old `1px + border_width/2` calculation.
+## 8. Authoritative geometry
 
-If the new retained card intentionally has an additional content inset, make it an explicit style
-value owned by the Quick card contract.
+One committed presentation-neutral geometry record feeds retained shell/chrome, clipping, custom GL,
+DPR and later CUSTOM/Edit.
 
-## 8. One authoritative geometry contract
-
-Create one committed presentation-neutral geometry structure feeding retained Quick chrome, clipping and
-custom GL.
-
-It must account for:
+It distinguishes:
 
 ```text
 outer_rect
@@ -332,223 +295,185 @@ uniform_visual_scale
 viewport_extent
 current_aspect_ratio
 framebuffer/Quick-item transform data
-CUSTOM edit geometry
 shell_policy
 clip_policy
 ```
 
-Card and GL content remain aligned at non-zero display origins and non-1 DPR.
+No hidden QWidget remains geometry authority. No stale visualizer-local DPR copy becomes a second
+owner.
 
-No hidden QWidget remains geometry authority. No visualizer-local stale DPR copy.
+### 8.1 Canonical default aspect vs internal reference size
 
-### 8.1 One canonical baseline aspect for every current mode
+All five current Quick modes share one canonical **default/baseline aspect ratio: 1.5**.
 
-Quick removes the old mode-driven preferred-height model.
+Mode changes and built-in visualizer preset changes do not resize that baseline shape. Presets tune
+authored visual behavior rather than viewport/card dimensions.
 
-The current code's mode-growth family changes preferred height while width remains common/media-relative;
-CUSTOM already bypasses that preferred-height path once committed custom geometry owns the visualizer.
-That legacy behavior is unwanted in the destination.
-
-For all five current Quick modes:
+The literal:
 
 ```text
-one canonical baseline viewport size/aspect
-        ↓
-mode changes do not change outer viewport shape
-        ↓
-mode presets do not own viewport/card height
+CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE = 420 x 280
 ```
 
-Do not copy `DEFAULT_GROWTH`, `preferred_height()`, `_apply_preferred_height()`, or the five `*_growth`
-settings into the Quick runtime/controller/snapshot.
+is an internal reference coordinate extent corresponding to 1.5. It arose from layout history and is
+**not** a sacred or required visible/runtime size. It remains useful for normalization and authored
+stroke/radius scaling where the implementation needs a stable reference coordinate system.
 
-Do not guess the numeric ratio from one old growth slider. During the D3/D4 geometry checkpoint,
-extract/freeze one named canonical baseline aspect from the intended healthy CUSTOM/default visualizer
-baseline and prove it is mode-invariant.
+Normal non-CUSTOM runtime size is layout-resolved: an appropriate width comes from the common
+widget/media/free-space owner and height derives from the 1.5 baseline aspect; screen-fit reduction is
+uniform.
 
-If normal placement derives width from another common layout owner such as Media, derive height from the
-canonical aspect. If screen bounds force reduction, reduce uniformly so the baseline aspect survives.
+Do not freeze runtime visualizers to 420x280 and do not reintroduce mode-specific card shapes as an
+alternate authority.
 
-### 8.2 Whole-size scale preserves the canonical aspect
+### 8.2 Retired per-mode growth controls
 
-Keep one `uniform_visual_scale`.
-
-Scroll resize and corner resize both change this scale. They enlarge/shrink the entire visualizer and
-preserve the canonical baseline aspect.
-
-They do not stretch X and Y independently.
-
-### 8.3 Viewport extent is deliberately separate
-
-Keep a separate `viewport_extent`/content viewport size.
-
-Only the explicit Phase-G edge-resize operation changes one viewport axis independently:
+The pre-Quick presentation controls:
 
 ```text
-left/right edge -> viewport width
- top/bottom edge -> viewport height
+spectrum_growth
+osc_growth
+sine_wave_growth
+bubble_growth
+devcurve_growth
 ```
 
-At constant visual scale this gives a mode more/less world to occupy. It may intentionally create a
-wide/tall aspect different from the baseline.
+are not authored mode behavior and are not part of the Quick controller, immutable render state, mode
+presentation descriptor, retained shell geometry or new preset authoring.
 
-That deliberate operation must not be confused with the retired `*_growth` controls.
+They may remain temporarily while the old presenter/settings surface still has callers. H0 establishes
+the final Quick settings epoch and later deletion removes caller-proven legacy authority.
 
-### 8.4 Logical modes that depend on spatial bounds
+### 8.3 Uniform whole-size scale
 
-If a logical simulation needs viewport dimensions (Bubble especially), publish a presentation-neutral
-`VisualizerViewportMetrics`/equivalent update when committed geometry changes.
+`uniform_visual_scale` changes the whole visualizer coherently and preserves the baseline aspect.
 
-This is configuration/geometry input, **not a clock**. It may alter simulation bounds/aspect; it may
-not make the render thread advance simulation or introduce a resize-driven logical timer.
+```text
+scroll-wheel resize -> uniform scale
+corner-handle resize -> uniform scale
+```
 
-## 9. Card chrome, frameless shell and fades
+This is not an X/Y stretch.
 
-### 9.1 Current modes
+### 8.4 Viewport extent
 
-All five current modes remain carded and must preserve:
+`viewport_extent` is separate from whole-size scale. The later Phase-G edge-only operation may change
+one axis while keeping visual scale constant:
 
-- background opacity;
-- border/radius;
-- card shadow;
-- card/foreground opacity;
-- current color/customization;
-- geometry;
-- fade behavior.
+```text
+left/right edge -> viewport width only
+top/bottom edge -> viewport height only
+```
 
-### 9.2 Future explicitly frameless modes
+That intentionally changes available world/layout playroom and may produce a wide/tall aspect other
+than 1.5. Modes reflow/adapt; final rendered pixels are not anisotropically stretched.
 
-Architecture must allow a future mode to declare `FRAMELESS`.
+A mode may remain `viewport_resize_capable = false` when free extent would threaten authored fidelity.
+That does not remove ordinary uniform whole-size scaling or collapse the geometry authority.
 
-For that mode:
+Bubble is allowed to remain conservatively capability-gated until focused Phase-G evidence earns
+free viewport resizing.
 
-- no card fill;
-- no card border/frame;
-- no card shadow;
-- same presentation root/lifecycle/fade;
-- custom GL remains inside the assigned transparent viewport;
-- default clip is `VIEWPORT_RECT`.
+### 8.5 Spatial logical modes
 
-This is intended for effects such as a true 3D deformable sphere where drawing a rectangular card
-around the object would be visually undesirable.
+When Bubble or another logical mode needs viewport bounds, committed `VisualizerViewportMetrics` (or
+source-equivalent) is configuration input to the logical side.
 
-Do not retrofit frameless behavior onto the current five modes during migration.
+Geometry changes are never another authored clock and mouse-move/render frequency never becomes
+simulation cadence.
 
-### 9.3 Readiness
+## 9. Fade and readiness authority
 
-Keep separate:
+One authored presentation fade authority owns the visualizer as a whole.
+
+The landed resolver may derive more than one **layer value** from that one authority, currently
+including:
+
+- `scene_fade` for the retained presentation root/card;
+- `content_fade` for GL content where required by the authored content-stagger/fade behavior.
+
+These are derived outputs of one authored transition. `content_fade` must never become a second timer,
+second fade lifecycle or independently advancing temporal authority.
+
+Do not animate fade by repeatedly enabling/disabling clip/shadow topology.
+
+Readiness remains split:
 
 ```text
 presentation_ready
 reactive_source_ready
 ```
 
-For `CARD`, presentation readiness includes required retained shell/chrome and render resources.
+A presentation-owned idle scene may reveal without fabricating reactive source identity. Paused
+Spectrum is the canonical case.
 
-For `FRAMELESS`, readiness must not wait for card resources that the mode deliberately does not own.
+Readiness depends only on resources required by the resolved shell policy; a future frameless mode does
+not wait for card resources it deliberately does not own.
 
-Paused Spectrum may reveal presentation-owned idle state while source identity remains absent.
+## 10. Baseline/wide/tall renderer compatibility
 
-Prefer one parent/presentation opacity authority for fade. Do not animate by repeatedly enabling or
-disabling clip/shadow topology.
+Phase D proved renderer geometry at the canonical baseline aspect at multiple uniform scales and with
+controlled wide/tall extents so the modes are not secretly hard-coded to one old card shape.
 
-## 10. Baseline-aspect and future viewport-extent compatibility
-
-During Phase D, every current mode must render correctly using the same canonical baseline aspect at
-more than one uniform scale.
-
-Also exercise controlled wide/tall viewport extents so the renderer is not secretly hard-coded to one
-card shape. Those wide/tall cases prepare Phase G; they do not make freeform edge-resize a Phase-D
-shipping requirement.
-
-Expected semantics at constant visual scale:
+Expected semantics at constant visual scale remain:
 
 ### Spectrum
 
 - bar distribution/layout recomputes from viewport width;
-- maximum vertical extent follows content height;
-- no stretched pre-rendered Spectrum image.
+- vertical extent follows content height;
+- no stretched pre-rendered image.
 
 ### Bubble
 
-- spatial domain/aspect changes;
+- spatial domain/aspect may change;
 - circles remain circles;
 - radii, velocity units, trajectories and BTF stay coherent;
-- no arbitrary X/Y scaling to fill a rectangle.
+- no arbitrary X/Y scaling.
 
 ### Oscilloscope / Sine / DevCurve
 
-- horizontal domain/layout and available vertical space adapt;
-- authored stroke thickness and uniform scale remain stable.
+- domain/placement adapts to available width/height;
+- authored stroke thickness and visual scale remain stable.
 
-### Future 3D sphere
+### Future 3D modes
 
 - camera/projection uses current viewport aspect;
-- the sphere remains round in wide/tall viewports.
+- round geometry remains round.
 
-If a current mode cannot support free viewport extent without substantial retuning, mark it
-`viewport_resize_capable = false` for Phase G and preserve ordinary whole-size scale. Do not compromise
-migration fidelity to force this optional QoL.
+These compatibility probes did not make freeform edge resizing a Phase-D shipping requirement.
 
-## 11. Sole authored-clock guardrail
+## 11. Mode contracts
 
-`VisualizerLogicalRuntime` remains the only authored mode-general logical clock.
-
-Non-negotiable:
-
-- preserve every authored logical step;
-- latest-state semantics;
-- no FIFO/catch-up replay;
-- no paint acknowledgement;
-- no producer/display divisor;
-- no source/event decimation;
-- no display-refresh logical cap;
-- render cadence does not become simulation cadence;
-- nonblocking media/GSMTC interaction;
-- generation fencing/stale rejection;
-- clean worker join.
-
-A display may present fewer samples than the logical runtime authors. That does not authorize dropping
-logical updates before the latest-state publication boundary.
-
-## 12. Spectrum contract
+### Spectrum
 
 Preserve:
 
-- current bar/peak behavior;
+- authored bar/peak behavior;
 - ghosting/persistence;
-- borders/masks/style;
+- border/mask/style;
 - paused idle bars perceptibly visible;
-- source identity absent until a real source is available;
+- source identity absent until a real source is authoritative;
 - Play replacing idle state in place rather than recreating presentation ownership.
 
 No mode-specific presentation clock.
 
-The renderer must consume dynamic viewport geometry instead of assuming the historical fixed card
-width/height forever.
+### Oscilloscope
 
-## 13. Oscilloscope contract
+Preserve authored waveform shape, line count/persistence/ghosting, idle behavior, style and logical
+cadence. `osc_growth` is not part of the Quick behavior contract.
 
-Preserve authored waveform shape, line count/persistence/ghosting, idle behavior, borders/masks/style,
-and current logical cadence. The old `osc_growth` card-height control is not part of this contract.
+Physical render cadence does not become waveform sampling cadence.
 
-Do not turn physical render cadence into waveform sampling cadence.
+### Sine
 
-Consume current viewport geometry without post-render anisotropic stretching.
+Preserve authored idle motion, layers/line persistence, reactive behavior, ghosting and tuning.
+`Sine` does not gain a separate timer merely because Quick has animation primitives.
 
-## 14. Sine contract
+`sin_wave_growth`/`sine_wave_growth` legacy presentation sizing is not authored mode behavior.
 
-Preserve authored idle motion, layers/line persistence, reactive behavior, ghosting, and mode tuning. The old `sine_wave_growth` card-height control is not part of this contract.
+### Bubble
 
-No separate Sine timer is introduced because Quick can animate.
-
-Consume current viewport geometry without changing the authored clock or stretching line pixels.
-
-## 15. Bubble contract — dedicated high-risk checkpoint
-
-Bubble is the highest-risk Phase-D mode and receives its own checkpoint/audit.
-
-`Docs/Guardrails/Bubble_Temporal_Fidelity.md` is mandatory.
+Bubble remains the timing/fidelity canary. `Docs/Guardrails/Bubble_Temporal_Fidelity.md` is mandatory.
 
 Preserve:
 
@@ -556,25 +481,22 @@ Preserve:
 - trajectories;
 - collision/elastic feel;
 - trails/tails;
-- ghost/pop/transients;
-- protected short-lived edges;
+- ghosts/pop/transients;
+- protected renderer-visible consequences;
 - source freshness;
 - authored logical Hz;
-- mode style and reactive personality.
+- authored mode style/reactive personality.
 
-Do not retune Bubble to compensate for presentation problems. Do not discard authored logical steps
+Do not retune Bubble to compensate for presentation defects and do not discard authored logical steps
 to reduce callbacks/GPU use.
 
-If viewport dimensions later change, change the Bubble spatial domain through presentation-neutral
-viewport metrics; preserve isotropic circle geometry and authored motion units.
+The historical observation that disabling unrelated widgets materially changed measured Bubble-era GPU
+load is evidence to investigate shared presentation/runtime cost and true dormancy. It is not evidence
+that Bubble collision/simulation should be individually simplified.
 
-The existing observation that unrelated active widgets can materially alter measured Bubble-era GPU
-load is reason to preserve true feature dormancy and shared-scene efficiency; it is not evidence that
-Bubble collision/simulation should be individually simplified.
+### DevCurve
 
-## 16. DevCurve contract
-
-Preserve every active layer's:
+Preserve each active layer's:
 
 - enabled state;
 - order;
@@ -582,131 +504,118 @@ Preserve every active layer's:
 - offsets;
 - outline;
 - ghosting;
-- tuning.
+- tuning/specular behavior.
 
-Do not flatten DevCurve into a generic line visualizer during porting.
+Do not flatten DevCurve into a generic line visualizer.
 
-Consume viewport geometry explicitly rather than relying on hidden QWidget/card dimensions.
+## 12. Pause / Play
 
-## 17. Pause / Play
-
-Ordinary Pause/Play keeps the same runtime ownership:
+Ordinary Pause/Play keeps runtime ownership warm:
 
 - no window/item recreation;
 - no source debounce invented by Quick;
 - warm-source policy preserved;
-- visible state changes promptly;
-- existing expected-state confirmation behavior preserved;
+- visible authored state changes promptly;
+- expected-state confirmation behavior preserved;
 - Quick visibility/activation is not a second playback authority.
 
 Shell policy does not become playback authority.
 
-## 18. CUSTOM participation
+## 13. CUSTOM participation
 
-The visualizer becomes an ordinary participant in the later Quick edit scene.
+The visualizer participates in the later Quick edit scene through the same committed geometry
+authority.
 
-During Phase D:
+Phase G owns edit handles/session behavior. It must use the real retained Quick presentation rather
+than a permanent QWidget screenshot shell.
 
-- keep the presentation-neutral scale/viewport geometry seam suitable for Phase G;
-- do not implement the Phase-G resize handles prematurely;
-- do not persist a second QML-only geometry model.
+Persist/restore whole-size scale and viewport extent as separate values if edge-resize QoL is admitted.
+A mode that is not viewport-resize-capable still supports ordinary uniform scale.
 
-Final edit behavior will use the real retained Quick item, not a QWidget screenshot shell.
+## 14. Lifecycle
 
-## 19. Lifecycle
-
-Retirement order conceptually:
+Retirement conceptually remains:
 
 ```text
 close visualizer publication
 -> stop/join VisualizerLogicalRuntime
 -> invalidate activation/generation
 -> Quick item loses snapshot admission
--> render-node GL resources destroy on render owner
+-> render-node GL resources destroy on legal render owner
 -> clip/shell nodes retire
 -> item/controller roots destroy
 ```
 
 Visibility is not destruction authority.
 
-No non-daemon/background owner may survive retirement and prevent process/test shutdown.
+A non-daemon/background owner that survives retirement and prevents process/test shutdown is a defect.
 
-## 20. Permanent tests/gates
+Generation `0` remains valid identity.
 
-Permanent contract coverage should include:
+## 15. Permanent gates
 
-- sole logical clock;
-- generation 0;
+Keep focused proof for:
+
+- sole authored logical clock;
+- every authored logical step integrated before presentation coalescing;
+- generation `0`;
 - all five modes;
 - source freshness;
-- protected edges;
-- BTF;
-- Pause/Play;
+- protected Bubble consequences and BTF;
+- Pause/Play identity;
 - Spectrum idle;
 - mode switches;
 - stale activation/generation rejection;
-- logical runtime join.
-
-Quick-specific coverage should include:
-
-- distinct render-thread ownership;
-- immutable snapshot boundary;
-- no live QWidget/QObject reads from renderer;
-- non-zero origin/non-1 DPR geometry;
+- logical runtime join;
+- distinct Quick render-thread ownership;
+- immutable render boundary;
+- no live QWidget/provider/settings reads from renderer;
+- non-zero-origin/non-1-DPR geometry;
 - card/shader alignment;
-- `CARD` shell and rounded inner clip alignment;
-- `FRAMELESS` policy unit/scene proof without requiring a production frameless mode;
-- the local clip host composing with VALID inherited scissor/stencil state and restoring it (this is
-  the narrower proven fact; it does not prove arbitrary PySide `QSGClipNode` metadata is trustworthy);
-- no old QPainter border-mask constants copied into Quick geometry;
-- one canonical baseline aspect shared by all five modes;
-- Quick snapshots/renderers contain no `spectrum_growth` / `osc_growth` / `sine_wave_growth` / `bubble_growth` / `devcurve_growth` geometry authority;
-- corner + scroll resize preserve baseline aspect;
-- default/wide/tall viewport geometry for each current mode;
-- no anisotropic Bubble/sphere-like geometry distortion;
+- `CARD` rounded inner clipping;
+- `FRAMELESS` policy scene proof without requiring a production frameless mode;
+- local clip host compose/restore with valid inherited framebuffer state;
+- no claim that arbitrary QSGClipNode metadata is trustworthy;
+- one 1.5 baseline aspect shared by all current modes;
+- no Quick authority for the retired five `*_growth` controls;
+- baseline aspect preserved by uniform whole-size scaling;
+- default/wide/tall geometry without anisotropic distortion;
 - render resource creation/release;
-- Settings recreation where presentation state is involved;
-- physical cadence/eyes-on only on suitable hardware.
+- Settings/recreation where presentation state is involved.
 
-Run deterministic Phase-D tests in the capable Windows worktree and Quick/OpenGL/physical-display gates
-only in the environment appropriate to those claims.
+Physical cadence/eyes-on claims require the operator's corresponding installed Windows/display/GPU
+environment and remain separate acceptance evidence.
 
-Do not substitute a broad unrelated suite result for focused Phase-D evidence.
+## 16. Landed Phase-D checkpoint record
 
-## 21. Checkpoint cadence
+Phase D was intentionally split/audited around:
 
-Prefer these pushed/audited checkpoints:
-
-1. presentation-neutral runtime/controller + mode presentation-policy split;
-2. immutable latest-state snapshot bridge;
-3. Quick visualizer item/node + clip/shell/authoritative geometry foundation;
+1. presentation-neutral runtime/controller + mode policy;
+2. immutable latest-state bridge;
+3. Quick visualizer item/node + clip/shell/geometry foundation;
 4. Spectrum;
 5. Oscilloscope;
 6. Sine;
-7. Bubble + BTF dedicated checkpoint;
+7. Bubble + BTF;
 8. DevCurve;
-9. all-five-mode lifecycle/source/pause + non-default-aspect audit;
-10. Phase-D documentation closure.
+9. all-five lifecycle/source/pause/aspect closure;
+10. documentation closure.
 
-A successful audit-required checkpoint is committed, pushed, then independently diff-audited before
-continuation.
+That list is historical migration rationale, **not a to-do list**.
 
-## 22. Phase-D exit
+## 17. Phase-D closure
 
-Phase D implementation exits when all five current modes use the Quick visualizer boundary with:
+Phase D is complete because all five modes use the Quick visualizer boundary with:
 
 - authored logical runtime intact;
+- mode-owned logical frame runtimes;
 - immutable latest-state publication;
-- correct lifecycle/resources;
-- `CARD + CARD_INTERIOR` fidelity;
-- no old compositor/QWidget presentation dependency inside the new renderer;
-- no architectural assumption that every future visualizer must draw a card;
-- a geometry contract that cleanly separates scale from viewport extent.
+- generation-fenced lifecycle/resources;
+- `CARD + CARD_INTERIOR` fidelity for the current five;
+- no old compositor/QWidget dependency inside the new renderer;
+- no assumption that every future mode must draw a card;
+- geometry that separates default aspect, uniform scale and viewport extent;
+- one authored fade authority;
+- selected local SDF/stencil clip ownership.
 
-Phase D does **not** need to ship freeform edit-mode viewport resizing.
-
-Physical/eyes-on acceptance may be tracked separately where evidence requires the operator's actual
-display/GPU environment, but all unresolved items must be explicit before promotion to Phase E.
-
-After Phase D implementation closure, update `Docs/Visualizer_Reference.md` and related
-authoring/preset guidance to the landed Quick boundary.
+Do not restart D1–D9 from this document. Current work admission comes from `Current_Plan.md`.

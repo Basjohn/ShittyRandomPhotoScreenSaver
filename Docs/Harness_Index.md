@@ -1,13 +1,12 @@
 # Harness Index
 
-Last updated: 2026-08-21
+Last updated: 2026-08-22
 
 Compact routing for recurring investigation and migration sign-off commands.
 
-Harness success is evidence, not final visual/timing/lifecycle sign-off. Run each harness in the
-environment appropriate to the claim it makes; physical display cadence, GPU utilization, subjective
-motion feel, and real multi-monitor topology require the corresponding real Windows/Qt/OpenGL/hardware
-environment.
+Harness success is evidence, not automatic final visual/timing/lifecycle sign-off. Run each harness in
+the environment appropriate to the claim it makes; physical cadence, GPU utilization, subjective
+motion feel and real multi-monitor topology require corresponding Windows/Qt/OpenGL/hardware evidence.
 
 SRPSS does not use hosted repository CI as the normal migration harness path unless the operator
 explicitly requests it.
@@ -22,18 +21,20 @@ pytest path\to\test_file.py -q --tb=short
 
 Use `Docs/TestSuite.md` for broader suite guidance.
 
-The repository also has the chunk wrapper for deliberate local diagnostics:
+The bounded chunk wrapper remains a deliberate local diagnostic:
 
 ```powershell
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
 ```
 
-Do not treat a red full-suite chunk run as proof the active migration slice failed until the relevant
-per-chunk log is inspected. A pytest summary followed by a process that never exits should be
-diagnosed as shutdown/lifecycle ownership rather than hidden with a larger timeout. A chunk that stops
-during execution requires smaller/verbose local isolation.
+Do not treat a red chunk/full-suite run as proof the active slice failed until the relevant failure/log
+is inspected. A completed pytest summary followed by a process that never exits strongly suggests
+shutdown/lifecycle ownership and should be isolated rather than hidden with a longer timeout.
 
-## 2. Phase-C Quick transition sign-off
+## 2. Phase-C Quick transition regression harnesses
+
+Phase-C implementation and deterministic hardening are landed. These commands remain useful regression/
+acceptance harnesses; they are **not an unfinished Phase-C implementation checklist**.
 
 ### Blinds
 
@@ -43,112 +44,84 @@ python tools\qtquick_blinds_smoke.py --direction vertical   --windows 1
 python tools\qtquick_blinds_smoke.py --direction diagonal   --windows 1
 ```
 
-Repeat with `--windows 2` on the physical dual-display system when scheduled.
+Use `--windows 2` only when the physical multi-display evidence is intentionally being exercised.
 
-### Remaining parameterized effects
-
-Use:
+### Parameterized effects
 
 ```powershell
 python tools\qtquick_phase_c_effect_smoke.py --effect <effect> --case <case> --windows 1
 ```
 
-Canonical cases include:
+Canonical case families include:
 
-- Diffuse: rectangle, membrane, lines, diamonds, amorph, random
-- Ripple: count1, count3, count8
-- Crumble: top, bottom, random-weighted, random-choice, age-weighted
-- Particle: authored mode/direction cases including directional variants plus swirl/converge
-- Burn: six directions plus smoke/ash toggle cases
+- Diffuse: rectangle, membrane, lines, diamonds, amorph, random;
+- Ripple: count1, count3, count8;
+- Crumble: top, bottom, random-weighted, random-choice, age-weighted;
+- Particle: authored modes/directions including directional variants, swirl and converge;
+- Burn: six directions plus smoke/ash toggle cases.
 
-Use `--windows 2` only for scheduled physical multi-display evidence.
+Use exact tool/source case names if they differ from this human-readable summary.
 
-## 3. Phase-C smoke strengthening requirements
+## 3. Landed Phase-C discriminator expectations
 
-Preserve the real-GL harnesses. Strengthen them rather than replacing them with mocked renderers.
+The real-GL smokes were strengthened during Phase C and those properties remain regression requirements.
+Do not create a second strengthening project merely because this section is detailed.
 
-A generic spatial wipe/reveal must not satisfy the midpoint oracle for Diffuse/Ripple/Crumble/Particle
-or Burn.
+### 3.1 Deterministic contrast setup
 
-### 3.1 Use deterministic contrast cases
-
-For parameter-sensitive cases, hold constant:
+For parameter-sensitive cases, hold constant as applicable:
 
 ```text
 source image
 destination image
 seed
-logical size / framebuffer size
+logical/framebuffer size
 progress
-effect time where applicable
+effect time
 ```
 
-and vary only the parameter under test.
+and vary only the parameter being tested.
 
-The pair must produce a meaningful effect-specific difference.
-
-### 3.2 Suggested discriminator families
-
-These are robust properties to test, not mandatory exact pixel formulas.
+### 3.2 Discriminator families
 
 #### Diffuse
 
-Use coordinate/checker source/destination textures and shape-specific spatial statistics such as:
-
-- orientation/periodicity of changed regions;
-- connected-region distribution;
-- shape-mask occupancy signature.
-
-Assert the output is not compatible with a single monotonic half-plane wipe.
+Use shape-specific spatial properties such as orientation/periodicity, connected-region distribution
+or mask occupancy so a monotonic half-plane wipe cannot satisfy the oracle.
 
 #### Ripple
 
-For count1/count3/count8, compare radial/ring boundary frequency along controlled rays or equivalent
-deterministic ring structure.
-
-The three count cases must not render equivalently under the same seed/progress.
+Count1/count3/count8 must show distinct ring/radial structure under the same seed/progress.
 
 #### Crumble
 
-For fixed seed/progress, weighting modes must alter deterministic old/new piece distribution or the
-appropriate piece-selection statistic.
+Weighting modes must alter deterministic old/new piece distribution under fixed seed/progress.
 
-Do **not** invent a visual `mosaic_mode` oracle while the canonical shader does not consume that
-uniform.
+Do not invent a visual `mosaic_mode` oracle while the canonical shader does not consume it.
 
 #### Particle
 
-Use effect-specific geometry/statistics:
-
-- opposite directions move the destination/source particle field in opposite projected directions;
-- Directional vs Swirl vs Converge differ in centroid/angular/radial structure;
-- parameter cases that are intended to be visible must differ under fixed seed/progress.
-
-Uniform wiring tests in `Docs/TestSuite.md` cover every authored control separately.
+Opposite directions/modes must produce direction/centroid/angular/radial structure consistent with the
+authored effect. Direct uniform-wiring tests cover individual controls separately.
 
 #### Burn
 
-Use a fixed seed/time/progress and distinguish:
+Distinguish the burn front/core/glow/char progression from a plain wipe; smoke/ash toggle cases prove
+their regions without replacing the proof that the core burn effect exists.
 
-- front orientation for six directions;
-- core/glow/char/destination regions from a plain wipe;
-- smoke toggle changes smoke region;
-- ash toggle changes ash region;
-- toggles do not replace the separate proof that the core burn front exists.
+### 3.3 Endpoints
 
-### 3.3 Endpoints remain exact
-
-Every stronger midpoint/contrast oracle is in addition to exact source and exact destination endpoint
+Effect-specific midpoint/contrast oracles are in addition to exact source and destination endpoint
 guards.
 
-## 4. Phase-C request/uniform and state-fence tests
+## 4. Phase-C request/uniform and GL-state tests
 
-The direct parameter→uniform wiring matrix and GL-state fence tests are ordinary focused pytest gates,
-not replacements for the real-GL wrapper.
+Direct parameter -> uniform wiring and common GL-state-fence coverage are ordinary focused pytest
+regressions. They supplement rather than replace the real-GL wrappers.
 
-See `Docs/TestSuite.md`, Phase-C test-hardening audit.
+The common fence includes the exception path where renderer execution raises.
 
-The state-fence regression must include restoration when `renderer.render()` raises.
+See `Docs/TestSuite.md` and `Docs/Transition_Change_Checklist.md`.
 
 ## 5. Visualizer authored-fidelity replay
 
@@ -162,18 +135,18 @@ Do not regenerate goldens merely to accommodate presentation migration.
 
 For Bubble, also apply `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
 
-## 6. Logical-runtime gates
+## 6. Logical-runtime / Phase-D permanent gates
 
-Search current tests by contract:
+Search current tests by contract rather than stale test names when needed:
 
 ```powershell
 rg -n "VisualizerLogicalRuntime|generation 0|mode switch|Spectrum|Pause|BTF|single clock|thread affinity" tests
 ```
 
-Required:
+Required properties include:
 
 - sole authored mode-general logical clock;
-- every authored logical step preserved;
+- every authored logical step integrated before presentation coalescing;
 - latest-state semantics, no FIFO/catch-up;
 - no paint acknowledgement;
 - no producer/display divisor;
@@ -181,18 +154,23 @@ Required:
 - no display-refresh logical cap;
 - worker cannot mutate GUI/Quick/GPU;
 - generation zero valid;
-- protected visible edges survive;
+- protected renderer-visible Bubble consequences survive coalescing;
 - source freshness separate from presentation;
-- worker joins cleanly.
+- worker joins cleanly;
+- local SDF/stencil clip composes/restores valid inherited framebuffer state;
+- 1.5 default aspect / wide/tall compatibility without anisotropic distortion.
 
-## 7. Qt Quick migration checks
+Phase D is complete; these are permanent/future-integration gates, not instructions to rerun the whole
+migration.
+
+## 7. Qt Quick runtime checks
 
 Use P0 evidence as architecture-selection record; do not expand P0 merely to reconfirm the chosen
 presenter.
 
-Focused Quick harnesses prove, as relevant:
+Focused Quick harnesses prove as relevant:
 
-- standalone QQuickWindow;
+- standalone `QQuickWindow`;
 - threaded scene graph;
 - current-generation state delivery;
 - first intentional frame;
@@ -200,20 +178,54 @@ Focused Quick harnesses prove, as relevant:
 - Settings/recreate;
 - topology/binding loss;
 - resource cleanup;
-- exact effect/visualizer contract being migrated.
+- exact transition/visualizer/widget contract being changed.
 
-## 8. Settings capability activation checks
+## 8. Phase-E capability activation checks
 
-After E2 lands, add focused Settings/runtime harnesses for:
+### 8.1 Landed foundation
 
-- opening Widgets/Transitions SETUP without importing deactivated heavy modules;
-- pills appearing/disappearing with activation;
+Focused tests already guard:
+
+- widget family catalog and environment gating;
+- canonical activation settings/helpers;
+- effective transition Random pool filtering;
+- transition runtime selection/cycle activation admission;
+- runtime widget factory creation filtered by family activation.
+
+When touching that foundation, run the current focused tests around:
+
+```text
+tests/test_widget_family_catalog.py
+tests/test_capability_activation.py
+tests/test_transition_distribution.py
+tests/test_widget_manager_refresh.py
+```
+
+Use exact current test names/source; this list is routing, not a frozen manifest.
+
+Do not infer full E1 provider/process dormancy from factory-creation gating alone.
+
+### 8.2 E1 ownership
+
+As provider/model ownership moves under the presentation-neutral manager, harness/test the actual owner
+for family-exclusive processes, timers/polls, providers/models, shared-service references and clean
+retirement.
+
+### 8.3 E2 Settings UI
+
+After E2 lands, add/retain focused Settings/runtime cases for:
+
+- Widgets/Transitions `SETUP` opening without heavy deactivated module imports;
+- pills appearing/disappearing **live** with activation;
+- selected deactivated page returning to `SETUP` immediately;
 - Settings save/recreate retaining inactive detailed configuration;
-- widget provider/model/resource retirement;
-- transition implementation dormancy;
-- random effective pool correctness.
+- lazy hidden pages not overwriting stored values;
+- widget provider/model/resource retirement at the legal runtime owner;
+- transition renderer dormancy;
+- Random effective-pool correctness;
+- explicit zero-activated-transition policy.
 
-Do not require all Settings pages to be eagerly constructed merely to test them.
+Do not require every Settings page to be eagerly constructed merely to test it.
 
 ## 9. Physical evidence
 
@@ -229,7 +241,7 @@ Use p95/p99/tails/severe gaps plus phase correlation when cadence evidence is ac
 
 ## 10. Runtime diagnostics
 
-Use only relevant existing flag families such as:
+Use only relevant existing diagnostic flag families such as:
 
 ```text
 --perf
@@ -245,26 +257,28 @@ Use only relevant existing flag families such as:
 
 Keep observer overhead named.
 
+Do not invent another probe family when existing evidence can answer the question.
+
 ## 11. Lifecycle
 
-Check:
+Check as relevant:
 
 - logical runtime stop/join;
 - stale-state fencing;
 - generation zero;
 - Quick scene/window retirement;
 - render-resource retirement;
-- deactivated capability runtime retirement after E2;
+- deactivated capability runtime retirement at the owner that has actually migrated;
 - no retired callback publication;
-- no background thread/process preventing test or product shutdown.
+- no background thread/process preventing test/product shutdown.
 
-A pytest summary followed by a process that never exits strongly suggests leaked shutdown ownership
-and should be diagnosed rather than hidden by a larger timeout.
+A pytest summary followed by a process that never exits should be diagnosed as ownership/lifecycle
+failure rather than hidden by larger timeout values.
 
 ## 12. Historical evidence
 
-Historical harnesses may describe old QRhiWidget/QOpenGLWidget/GLCompositor presentation paths. They
-remain evidence, not architecture instructions.
+Historical harnesses may describe old QRhiWidget/QOpenGLWidget/GLCompositor paths. They remain evidence,
+not current architecture instructions.
 
-Do not copy a historical presentation mechanism back into Qt Quick because the historical harness is
+Do not copy a historical presentation mechanism back into Qt Quick merely because its old harness is
 detailed.

@@ -1,14 +1,15 @@
 # 04 — Runtime Widgets, Retained Quick Presentation, Shadows and Full Customization
 
-Status: technical decomposition only
-Last updated: 2026-08-20
+Status: Phase-E/F technical decomposition; Phase-E foundation partially landed  
+Last updated: 2026-08-22
 
 Cross-links:
 
-- `Current_Plan.md`
-- `Docs/10_WIDGET_GUIDELINES.md`
-- `Docs/Custom_Style_Implementation.md`
-- `Future_Cleanup.md`
+- sequence/work admission: `Current_Plan.md`
+- capability activation / E2 UI: `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
+- canonical widget authoring guidance: `Docs/10_WIDGET_GUIDELINES.md`
+- style history: `Docs/Custom_Style_Implementation.md`
+- deletion ledger: `Future_Cleanup.md`
 
 ## 1. Core rule
 
@@ -22,149 +23,210 @@ provider / model / settings / refresh / actions
 runtime pixel presentation
 ```
 
-Keep the first side in Python.
+Keep the first side in Python unless a separate measured reason earns a different owner.
 
-Move the second side into the display's retained Quick scene.
+Move runtime pixels into the display's retained Quick scene.
 
-## 2. Current overload
+## 2. Current architecture seam
 
-`WidgetManager` currently owns a dictionary of QWidget instances and mixes:
+The old widget stack combines responsibilities that must not be recreated as one giant Python Quick
+base class.
 
-- creation;
+`WidgetManager` / current widget setup code still mixes some combination of:
+
+- concrete QWidget creation;
 - provider/model lifecycle;
-- positioning;
-- stacking;
-- visibility;
-- fades;
-- effect invalidation;
+- positioning/stacking;
+- visibility/fades;
 - compositor readiness;
-- Spotify secondary staging;
-- live settings application.
+- live settings application;
+- family-specific staging and runtime assumptions.
 
-`BaseOverlayWidget` also mixes:
+`BaseOverlayWidget` likewise combines QWidget lifecycle, style, geometry, card/shadow painting and
+other pixel-era concerns.
 
-- QWidget lifecycle;
-- common style data;
-- painter shadow caches;
-- geometry;
-- stack offset;
-- pixel shift;
-- card painting.
+Phase E decomposes ownership; Phase F ports family pixels.
 
-Do not recreate these as one giant Python Quick base class.
+## 3. Landed presentation-neutral family catalog
 
-## 3. Presentation-neutral descriptor authority
+Phase E has already landed a cheap canonical family catalog in
+`rendering/widget_descriptors.py`.
 
-Refactor canonical widget metadata so it is not defined by a QWidget factory.
+`WIDGET_FAMILY_DESCRIPTORS` is the single family-membership authority mapping stable `family_id` to
+member runtime widget ids. Current accessors include:
 
-Canonical descriptor should own things like:
+```text
+get_widget_family_descriptors()
+get_widget_family_descriptor()
+get_family_id_for_widget()
+get_active_member_widget_ids()
+```
+
+Family availability derives from active runtime descriptors/environment gates rather than maintaining
+a competing gate list.
+
+The Spotify visualizer is deliberately **not** a widget-family activation capability. Its settings may
+currently live in WidgetsTab, but its runtime/presentation ownership is the Phase-D visualizer
+subsystem.
+
+The current family catalog includes legacy/dev-gated Imgur only while the old runtime surface still
+exists. That does **not** authorize a Quick Imgur port; Phase F removes Imgur instead of migrating it.
+
+## 4. Activation is not ordinary enabled state
+
+Phase E also landed application-level family activation:
+
+```text
+widgets.family_activation.<family_id>
+```
+
+Use terms precisely:
+
+```text
+family activated/deactivated
+    = may the family capability/runtime ownership resolve at all?
+
+instance enabled/disabled
+    = ordinary configuration inside an activated family
+```
+
+Do not write “disabled family owns no provider/model/etc.” when the intended state is application-level
+**deactivated**. An ordinary `enabled=False` instance is not automatically equivalent to tearing down
+an entire capability family.
+
+At the currently landed runtime seam, `_create_factory_widgets` filters a deactivated family before
+concrete runtime widget/model/provider creation and before per-instance enabled handling. This proves a
+real runtime consequence while all default activation remains inert/all-on.
+
+The broader E1 `WidgetRuntimeManager` provider/model/resource ownership split is still separate work
+until exact source says it has landed. Do not overstate full family dormancy beyond the owners actually
+migrated.
+
+Durable destination:
+
+- a deactivated family owns no family-exclusive model/provider/process/poll/timer/Quick component or
+  family-specific render resource;
+- shared infrastructure remains alive while another activated capability still requires it;
+- deactivation preserves detailed saved configuration;
+- a fresh process does not import/construct family-heavy implementation solely because the capability
+  is catalogued.
+
+See `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`.
+
+## 5. Presentation-neutral widget metadata
+
+Canonical runtime/widget metadata must not depend on constructing a QWidget factory product.
+
+Presentation-neutral descriptors should own stable facts such as:
 
 ```text
 widget_id
-settings_key
+settings key / settings section
 family_id
-startup_stage
+startup stage
 default position
 monitor-routing keys
 CUSTOM participation
 base/inheritance keys
 service requirements
+runtime action/refresh contracts
 ```
 
-Old QWidget factory creation metadata may remain in the old factory module until cutover.
+Old factory creation metadata may remain in the old path until its callers are removed. It is not the
+final presentation authority.
 
-Quick presentation registry maps family ids to retained Quick components.
+Quick presentation maps family/runtime identity to retained Quick components through a static registry.
+Do not build dynamic third-party plugin discovery, manifests, hot loading or API-version machinery.
 
-After cutover, old factory-only metadata is deleted.
+## 6. Destination manager split
 
-## 4. Future manager split
+### 6.1 `WidgetRuntimeManager`
 
-### `WidgetRuntimeManager`
+The Phase-E destination owner is presentation-neutral and owns:
 
-Owns:
-
+- family activation admission;
 - model/provider lifetime;
-- enabled/visible intent;
+- per-instance enabled/visible intent;
 - monitor participation;
 - settings updates;
 - stacking inputs;
 - action routing;
 - runtime generation;
-- presentation model registration.
+- presentation-model registration.
 
-It does not own QWidget instances.
+It does **not** own QWidget instances or runtime pixels.
 
-### Quick widget presentation host
+This broader owner is not considered landed merely because the family catalog and creation-admission
+gate exist.
+
+### 6.2 Per-display Quick widget presentation host
 
 Owned by each `QuickSceneController`.
 
-Creates/destroys retained Quick components for models assigned to that display.
+It creates/destroys retained Quick components for models assigned to that display and owns:
 
-It owns:
-
-- QQuickItem instance;
-- current geometry;
+- `QQuickItem` instance;
+- current resolved geometry;
 - z order;
-- opacity/fade;
-- edit overlay participation.
+- root opacity/fade;
+- edit-overlay participation;
+- presentation-only resources.
 
-### Static family extensibility guardrail
+The display scene must not become a per-widget `if/elif` dispatcher.
 
-`WidgetRuntimeManager` operates generically through the presentation-neutral descriptor,
-family, and model contracts. Family-specific model and retained-presentation behaviour stays in
-each family implementation, selected through the existing static `family_id` to Quick presentation
-registry. Do not grow `WidgetRuntimeManager` or `QuickSceneController` into a per-widget
-`if`/`elif` dispatcher. This is an internal modular boundary, not dynamic discovery, manifests, hot
-loading, or an external widget plugin framework.
+### 6.3 Static family extensibility boundary
 
-The catalog stays lightweight enough for Settings, persistence, and discovery without eagerly
-importing every heavy family implementation. `WidgetRuntimeManager` resolves and instantiates only
-enabled families through the generic contract. A disabled family owns no model, provider/service or
-process used solely by that family, polling/timers, refresh callbacks, Quick component, or
-family-specific presentation resources. Shared infrastructure remains alive when another enabled
-feature still requires its capability; do not duplicate it or shut it down as part of one family's
-off-switch. A future optional built-in family uses this same catalog/registry boundary without
-changes to central runtime owners.
+`WidgetRuntimeManager` operates generically through descriptor/family/model contracts.
 
-## 5. Widget model contract
+Family-specific behavior stays in isolated family implementation modules selected by stable static
+registry metadata. A new optional built-in family should not require rewriting central scene/runtime
+owners.
 
-Each family exposes only the state its visual needs.
+This is internal modularity, not an external plugin SDK.
 
-Examples:
+## 7. Widget model contract
 
-### Clock model
+Each family exposes only the state required for its visual and actions.
+
+### Clock family
+
+Presentation state may include:
 
 ```text
 formatted time/date strings
-analog hand angles if analog
+analog hand angles if applicable
 timezone label
 display mode
 style/config
 ```
 
-Keep shared clock ticker/timezone computation in Python.
+Keep shared ticker/timezone computation in Python.
 
-### Weather model
+### Weather
+
+Presentation state may include:
 
 ```text
 location label
 condition
 temperature
 forecast rows
-icon source
+icon/condition identity
 style/config
 ```
 
-Keep weather retrieval/cache/provider in Python.
+Keep weather retrieval/cache/provider ownership in Python.
 
-### Media model
+### Media
+
+Presentation state may include:
 
 ```text
-title/artist/album
-artwork image
+title / artist / album
+artwork
 playback state
 progress
-volume/mute
+volume / mute
 control availability
 provider identity
 style/config
@@ -172,15 +234,16 @@ style/config
 
 Keep GSMTC/provider/control command logic in Python.
 
-### Reddit/Gmail/Steam
+### Reddit / Gmail / Steam
 
-Expose normalized rows/cards/actions; keep retrieval/filter/cache/ranking logic in Python.
+Expose normalized rows/cards/actions and compact state. Keep retrieval/filter/cache/ranking/service logic
+out of QML/render callbacks.
 
-## 6. Shared Quick visual primitives
+## 8. Shared retained Quick visual primitives — Phase E3
 
 Build small components rather than a base-god-object.
 
-Suggested:
+Candidate reusable primitives:
 
 ```text
 OverlayRoot.qml
@@ -194,13 +257,17 @@ ProgressBar.qml
 IconButton.qml
 ```
 
-These components bind to explicit model/style properties.
+Use actual names from landed source; the list above describes the intended decomposition, not a required
+filename manifest.
 
-## 7. Full style state
+Components bind to explicit presentation model/style properties.
 
-Create a presentation-neutral common style structure, e.g. `WidgetVisualStyle`.
+E3 remains unfinished until exact source/Current Plan marks it landed.
 
-It must represent current controls:
+## 9. Full style state
+
+Keep a presentation-neutral common style structure capable of representing current authored controls,
+including as applicable:
 
 ```text
 font family
@@ -221,13 +288,11 @@ global shadow direction
 
 Family-specific style remains family-specific.
 
-Do not collapse controls merely because Quick offers fewer convenient properties.
+Do not collapse existing controls merely because one Quick property is more convenient.
 
-## 17. Global eight-direction shadow authority
+## 10. Global eight-direction shadow authority — Phase E4
 
-The abandoned 4.6.9 shadow-direction feature is restored as part of this migration.
-
-Use one canonical direction token:
+The abandoned 4.6.9 direction feature is restored through one canonical direction token:
 
 ```text
 NW  N  NE
@@ -237,15 +302,16 @@ SW  S  SE
 
 Default: `SE`.
 
-Preferred canonical state:
+Preferred state shape:
 
 ```text
 ShadowDirection.NW / N / NE / W / E / SW / S / SE
 ```
 
-Do not retain the old ineffective `widgets.shadows.offset` as a second user-facing authority.
+Direction controls orientation only. Each shadow class keeps its own authored magnitude/blur/spread/
+opacity/color.
 
-Each shadow class keeps its own authored magnitude. Direction supplies only the sign/axis:
+Conceptually:
 
 ```text
 resolved_x = direction.x_sign * authored_x_magnitude
@@ -254,98 +320,68 @@ resolved_y = direction.y_sign * authored_y_magnitude
 
 Axis-only directions zero the perpendicular component.
 
-This preserves the existing character of:
+Do not retain the old ineffective `widgets.shadows.offset` as a second user-facing magnitude authority.
 
-- card shadows;
-- small and large text shadows;
-- header shadows;
-- icon/artwork shadows;
-- rounded control shadows;
-- Spotify volume;
-- visualizer card;
-- analogue Clock details.
+All shared shadow primitives must be signed-offset safe and reserve visual padding on the affected
+side(s), not right/bottom only.
 
-`shadowtuning.json` or its Quick-era replacement remains magnitude/tuning authority. The General
-direction setting is orientation authority. There must not be two competing magnitude sources.
+### 10.1 Settings UI
 
-All shared shadow primitives must be signed-offset safe and reserve visual padding on the actual
-affected side(s), not right/bottom only.
+After runtime support exists, add the intended inset 3x3 selector to the existing General/Appearance
+bucket:
 
-### General Settings UI
-
-Add the intended inset 3×3 selector to the existing General / Appearance bucket after runtime support
-exists.
-
-- eight outer buttons/cells;
-- selected direction visibly inset/pressed;
-- center inert/unselectable;
-- changing direction previews/saves through the canonical settings path;
-- default SE;
+- eight selectable outer cells;
+- selected direction visually inset/pressed;
+- center inert;
+- default `SE`;
+- canonical settings save/preview path;
 - no new Settings backend architecture.
 
-A direction-only change must not change widget geometry, font sizing, content layout, blur/spread,
-opacity, or per-shadow magnitude.
+A direction-only change must not alter widget geometry, font sizing, content layout, blur/spread,
+opacity or per-shadow magnitude.
 
+E4 is future Phase-E work until exact source says it has landed.
 
-## 17. Shadow history and Quick rule
+## 11. Shadow history and Quick rule
 
-Historical bug:
+Relevant historical bug evidence includes:
 
 ```text
 Docs/Historical_Bugs/U-06_MC_Shadow_Cache_Corruption.md
 Docs/Historical_Bugs/R-24_Retired_Overlay_Effect_Cache_Busting.md
 ```
 
-The old failure class involved QWidget `QGraphicsEffect`/cache/focus behaviour. Painter-owned card/text
-shadows removed that dependency.
-
-Qt Quick does not use that QWidget effect path, but the migration must still avoid fragile/general
-effect churn.
+Those failures involved QWidget `QGraphicsEffect`/cache/focus behavior. Qt Quick does not use that
+architecture, but migration must still avoid expensive/general effect churn.
 
 ### Card shadows
 
-Preferred final representation on pinned Qt 6.9.1:
+Prefer a dedicated retained mathematical/shader representation for rounded rectangular cards when it
+matches appearance and cost better than a general full-source blur.
 
-- a dedicated retained `ShaderEffect`/custom shadow item for rounded rectangular cards;
-- parameters for radius, blur, spread, offset, color, opacity;
-- draw behind the card;
-- no source-item snapshot required;
-- no effect topology toggling during fade.
-
-This is conceptually equivalent to a mathematical rectangular shadow and avoids general full-source
-blur cost.
+Properties should cover radius, blur, spread, signed offset, color and opacity. Draw behind the card;
+do not toggle effect topology during fades.
 
 ### Arbitrary-shape shadows
 
-Use `MultiEffect` only when genuinely required by an arbitrary shaped visual.
-
-Rules:
-
-- source bounds tight;
-- do not apply to whole display;
-- do not animate shader-topology properties;
-- keep blur bounds explicit;
-- disable rendering when not visible.
+Use a general effect such as `MultiEffect` only when genuinely required by an arbitrary-shaped visual.
+Keep source bounds tight, blur bounds explicit and hidden rendering dormant.
 
 ### Text/header shadows
 
-Use the smallest representation that matches current appearance:
+Use the smallest representation that preserves current appearance: retained shadow text or a bounded
+effect source where blur is actually required.
 
-- retained shadow text/effect item;
-- bounded effect source if blur is required;
-- exact current offsets/opacity/color.
+No QWidget-style global cache-busting mechanism should reappear.
 
-No global `QGraphicsEffect` cache-busting equivalent should exist.
+## 12. Old-corruption regression gate
 
-## 17. Required old-corruption regression gate
-
-The Quick widget gallery must repeatedly exercise:
+The Quick widget gallery/installed validation must repeatedly exercise the old stress class, including:
 
 ```text
 two displays
 MC/interaction mode where available
-focus display A
-focus/click display B
+focus display A -> B -> A
 context menu open/close
 widget click
 hide/show
@@ -354,66 +390,63 @@ CUSTOM enter/cancel/save
 monitor topology recreate
 ```
 
-Visually inspect:
+Inspect card/text/header shadows, opacity, clipping, stale textures, disappeared shadows and corrupted
+blur.
 
-- card shadow;
-- text/header shadow;
-- opacity;
-- clipping;
-- stale texture;
-- disappeared shadow;
-- corrupted blur.
+A failure blocks the affected shared primitive/owner, not the selected Qt Quick presenter as a whole.
 
-A corruption failure blocks the affected shared primitive, not the whole architecture.
-
-## 17. Opacity/fades
+## 13. Opacity and fades
 
 Distinguish:
 
 - content/background alpha;
 - border alpha;
 - shadow alpha;
-- whole-widget fade opacity.
+- whole-widget authored fade opacity.
 
-Use parent/root Quick `opacity` for authored fade when appropriate.
+Use retained/root opacity for the authored widget fade when appropriate.
 
-Do not animate by repeatedly enabling/disabling shadow/effect nodes.
+Do not animate by repeatedly enabling/disabling shadow/effect topology.
 
-## 17. Stacking
+## 14. Stacking
 
-Keep current stacking policy/math in Python.
+Keep canonical stacking policy/math outside QML when it is product-owned in Python.
 
-Quick scene consumes resolved geometry/z order.
+Quick consumes resolved geometry/z order.
 
-Do not make QML anchors a second stacking algorithm.
+Do not make QML anchors a second stacking algorithm. CUSTOM position overrides authored stack placement
+according to the existing contract.
 
-CUSTOM position overrides authored stack placement according to existing contract.
+## 15. Pixel shift
 
-## 17. Pixel shift
+Keep pixel-shift scheduling/intent outside QML if it remains product-owned there.
 
-Keep pixel-shift scheduling/intent outside QML if already product-owned.
+Apply the resulting offset as a retained transform/property on the appropriate presentation root.
 
-Apply resulting offset as a retained transform/property on the presentation item/root.
+Do not rebuild widget content for a small positional shift.
 
-Do not rebuild widget content for pixel shift.
+## 16. Capability dormancy and lazy Settings
 
-## Deprecated Imgur: remove, do not migrate
+E2 Settings must be able to list capabilities using cheap catalog metadata without constructing family
+pages/providers/runtime pixels.
 
-The prior repository cleanup plan already classified Imgur as deprecated.
+Operator-facing behavior is explicit:
 
-When the widget registry/family migration reaches it:
+- `SETUP` is always present;
+- only activated families expose their normal settings pill;
+- deactivating a family while Settings is open removes that pill **immediately**;
+- if the removed family page was selected, navigation returns to `SETUP` immediately;
+- reactivating immediately restores its pill;
+- detailed family pages remain lazy;
+- an unbuilt/deactivated page must never overwrite persisted values during Save.
 
-- remove its descriptor/settings/runtime/provider/CUSTOM/build/test surface;
-- do not create a Quick component;
-- do not repair its provider;
-- do not retain a QWidget-to-Quick compatibility presentation;
-- let stale persisted keys be stripped/ignored by the canonical settings cleanup path.
+This live navigation decision is UI behavior. Runtime/provider retirement still follows the safe owner
+boundary defined by exact landed E1/runtime code; do not invent unsafe immediate teardown from a UI
+callback merely to match pill removal.
 
-This is migration scope because porting it would be wasted work.
+## 17. Family migration matrix — Phase F
 
-## 17. Family migration matrix
-
-### Clock / Clock2 / Clock3
+### 17.1 Clock / Clock2 / Clock3
 
 Preserve:
 
@@ -428,7 +461,7 @@ Preserve:
 
 This is the first ordinary-widget canary.
 
-### Weather
+### 17.2 Weather
 
 Preserve:
 
@@ -437,14 +470,14 @@ Preserve:
 - font/margin;
 - card style/shadows.
 
-### Media
+Weather retrieval/cache remains Python-owned.
+
+### 17.3 Media
 
 Preserve:
 
-- artwork;
-- rounded artwork;
-- metadata;
-- header frame;
+- artwork/rounded artwork;
+- metadata/header frame;
 - controls;
 - Spotify volume;
 - mute;
@@ -453,7 +486,7 @@ Preserve:
 - live provider updates;
 - click/control actions.
 
-### Reddit / Reddit2
+### 17.4 Reddit / Reddit2
 
 Preserve:
 
@@ -461,44 +494,47 @@ Preserve:
 - rows/items;
 - separators;
 - refresh indication;
-- click/exit behaviour;
+- click/exit behavior;
 - inherited second-instance style/settings.
 
-### Gmail
+A later post-migration QoL may add retained in-scene hover/title presentation; that is not required to
+port the existing runtime pixel contract unless Current Plan explicitly admits it.
 
-Preserve all current configured presentation switches:
+### 17.5 Gmail
 
-- sender/subject;
-- envelope/three-dot/refresh indicators;
-- unread;
-- header;
-- timestamp/date mode;
-- grouping;
-- separators;
-- desaturation;
-- background/border;
-- sound behaviour remains Python-owned.
+Preserve current configured presentation switches, including sender/subject, envelope/three-dot/
+refresh indicators, unread/header, timestamp/date mode, grouping, separators, desaturation,
+background/border and current sound behavior. Sound/provider logic remains Python-owned.
 
-### Steam family
+### 17.6 Steam family
 
-Preserve each card's current:
+Preserve each supported card's artwork, selection state, accent, capsules, desaturation, metadata rows
+and current dev-gate behavior.
 
-- artwork;
-- selection state;
-- accent;
-- capsules;
-- desaturation;
-- metadata rows;
-- current dev gates.
+Shared Steam services must follow activated capabilities and remaining consumers rather than being
+silently duplicated per card.
 
-### Imgur/dev families
+### 17.7 Imgur — remove, do not port
 
-If still canonical/enabled when reached, port them or deliberately retire them as a separate product
-decision before cutover. Do not silently lose them because the migration ignored dev-gated runtime.
+Imgur is deprecated migration debris.
 
-## 17. No screenshot-wrapper final implementation
+When Phase F reaches it:
 
-A temporary development capture can be used for visual comparison.
+- remove its descriptor/settings/runtime/provider/CUSTOM/build/test surface;
+- do not create a Quick component;
+- do not repair its provider merely to migrate it;
+- do not build a QWidget-to-Quick compatibility presenter;
+- let canonical settings cleanup/H0 strip or ignore obsolete persisted state according to the active
+  plan.
+
+A current dev-gated Imgur entry in legacy descriptors/catalogs is temporary migration source state,
+**not** a supported Quick family target.
+
+There is no later contradictory “port it if still canonical” branch in this document.
+
+## 18. No screenshot-wrapper final implementation
+
+A temporary development capture may be used for visual comparison.
 
 Do not ship:
 
@@ -506,34 +542,42 @@ Do not ship:
 old QWidget -> grab() -> texture -> Quick
 ```
 
-as the final widget presenter.
+as the final widget presentation architecture.
 
-## 17. Tests
+## 19. Tests
 
-Per family:
+Per family use the relevant combination of:
 
-- model tests;
+- model/provider behavior;
+- activation admission vs instance enabled state;
 - settings-to-model mapping;
+- lazy Settings hydration/save safety;
 - style mapping;
 - Quick component instantiation;
-- geometry;
+- geometry/DPR;
 - CUSTOM;
 - click/action routes;
 - hide/show;
-- DPR;
+- lifecycle/recreation;
 - visual capture/golden where robust;
-- lifecycle.
+- deactivated fresh-process dormancy after the responsible owner has migrated.
 
-Shared primitives receive stronger regression tests because every widget depends on them.
+Shared primitives receive stronger regression coverage because every family depends on them.
 
-## 17. Commit cadence
+Do not call a family migrated because legacy Python model tests still pass.
 
-Push:
+## 20. Checkpoint cadence
 
-- descriptor-neutralization;
-- manager model/presentation split;
+Follow `Current_Plan.md` rather than treating this list as parallel sequencing.
+
+Natural bounded checkpoints include:
+
+- presentation-neutral family/catalog work;
+- E1 manager/model/provider split;
+- E2 capability Settings UI/lazy navigation;
 - common style/shadow primitives;
-- each widget family;
-- shared visual regression corrections.
+- each family port;
+- shared visual-regression corrections.
 
-Do not batch every widget into one commit.
+Do not batch every family into one commit. High-risk owner/lifecycle boundaries should be independently
+audited after push when Current Plan requires it.
