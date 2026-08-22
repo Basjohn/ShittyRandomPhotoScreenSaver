@@ -23,7 +23,11 @@ from core.performance.resource_metrics import log_lifecycle_resource_snapshot
 from core.settings import SettingsManager
 from core.threading.manager import ThreadManager
 from rendering.transition_registry import get_transition_descriptor, is_transition_available_for_hw
-from core.settings.capability_activation import is_transition_activated
+from core.settings.capability_activation import (
+    get_default_activated_transition,
+    is_transition_activated,
+    normalize_transition_capability_state,
+)
 from rendering.display_widget import DisplayWidget
 from ui.settings_dialog import SettingsDialog
 
@@ -88,6 +92,10 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
     transitions_config = engine.settings_manager.get('transitions', {})
     if not isinstance(transitions_config, dict):
         transitions_config = {}
+    # Canonical activation normalization before manual cycling (the one authority).
+    if normalize_transition_capability_state(transitions_config):
+        engine.settings_manager.set('transitions', transitions_config)
+        engine.settings_manager.save()
     pool_cfg = transitions_config.get('pool', {}) if isinstance(transitions_config.get('pool', {}), dict) else {}
 
     def _in_pool(name: str) -> bool:

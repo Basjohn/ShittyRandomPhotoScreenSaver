@@ -26,7 +26,7 @@ from rendering.transition_registry import (
     canonicalize_transition_name,
     get_transition_setting_names,
 )
-from rendering.widget_descriptors import (
+from core.settings.widget_family_catalog import (
     get_family_id_for_widget,
     get_widget_family_descriptor,
 )
@@ -35,6 +35,13 @@ WIDGET_FAMILY_ACTIVATION_KEY = "family_activation"
 TRANSITION_ACTIVATION_KEY = "activation"
 TRANSITION_POOL_KEY = "pool"
 TRANSITION_RANDOM_MODE_KEY = "random_always"
+TRANSITION_MANUAL_TYPE_KEY = "type"
+
+# The deterministic transition the runtime recovers to when a persisted state is
+# malformed (zero activated transitions). Reactivating it is an explicit canonical
+# state repair (see ``normalize_transition_capability_state``), never a hidden
+# renderer/factory bypass that runs a deactivated transition.
+DEFAULT_RECOVERY_TRANSITION = "Crossfade"
 
 
 def _as_mapping(value: Any) -> Mapping[str, Any]:
@@ -211,3 +218,47 @@ def is_random_mode_effective(
     if not bool(config.get(TRANSITION_RANDOM_MODE_KEY, False)):
         return False
     return len(get_effective_random_pool(transitions_config)) > 0
+
+
+def normalize_transition_capability_state(transitions_config: Dict[str, Any]) -> bool:
+    """Enforce the transition capability invariants on a mutable config in-place.
+
+    This is the ONE canonical normalization authority for transition activation,
+    consumed consistently by E2 SETUP, engine Random preparation, the transition
+    factory admission boundary, and C-key cycling. It enforces:
+
+    1. **At least one activated transition.** Malformed/legacy all-false state
+       reactivates the deterministic recovery transition (Crossfade). This is an
+       explicit, persistable state repair — callers persist when this returns
+       True — not a hidden bypass that runs a deactivated transition.
+    2. **Random mode is never effective with an empty effective pool.** If Random
+       is on but ``activated ∩ pool`` is empty, Random is turned off and a
+       deterministic activated manual selection is persisted. Saved pool
+       membership is preserved (never erased), so reactivating transitions
+       restores the user's prior pool choice.
+
+    Returns True when any change was made. hardware availability is intentionally
+    NOT considered here (it is a rendering-side concern applied at the seams);
+    this authority only reconciles activation and pool semantics.
+    """
+
+    if not isinstance(transitions_config, dict):
+        return False
+
+    changed = False
+
+    # Invariant 1: at least one activated transition.
+    if not get_activated_transition_names(transitions_config):
+        set_transition_activated(transitions_config, DEFAULT_RECOVERY_TRANSITION, True)
+        changed = True
+
+    # Invariant 2: Random not effective with an empty effective pool.
+    if bool(transitions_config.get(TRANSITION_RANDOM_MODE_KEY, False)):
+        if not get_effective_random_pool(transitions_config):
+            transitions_config[TRANSITION_RANDOM_MODE_KEY] = False
+            transitions_config[TRANSITION_MANUAL_TYPE_KEY] = (
+                get_default_activated_transition(transitions_config)
+            )
+            changed = True
+
+    return changed

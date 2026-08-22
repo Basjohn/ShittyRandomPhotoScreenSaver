@@ -55,7 +55,10 @@ from rendering.transition_registry import (
     get_transition_setting_names,
     is_transition_available_for_hw,
 )
-from core.settings.capability_activation import is_transition_activated
+from core.settings.capability_activation import (
+    is_transition_activated,
+    normalize_transition_capability_state,
+)
 from utils.image_cache import ImageCache
 from utils.image_prefetcher import ImagePrefetcher
 
@@ -1365,6 +1368,14 @@ class ScreensaverEngine(QObject):
     def _prepare_random_transition_if_needed(self) -> None:
         try:
             transitions = self.settings_manager.get('transitions', {})
+            if not isinstance(transitions, dict):
+                transitions = {}
+            # Canonical activation normalization (the one authority): ensure >=1
+            # activated transition and reconcile Random with an empty effective
+            # pool before selecting. Persist only on an actual repair (rare).
+            if normalize_transition_capability_state(transitions):
+                self.settings_manager.set('transitions', transitions)
+                self.settings_manager.save()
             raw_rnd = transitions.get('random_always', self.settings_manager.get('transitions.random_always', False))
             rnd = SettingsManager.to_bool(raw_rnd, False)
             # Also treat type="Random" (the canonical default) as random mode
@@ -1408,18 +1419,19 @@ class ScreensaverEngine(QObject):
                 available.append(name)
 
             if not available:
-                # Empty effective pool: resolve explicitly to an activated,
-                # hw-available transition rather than silently running a
-                # deactivated one. Dropping the pool requirement (not activation)
-                # keeps rotation working when the user pooled only deactivated
-                # transitions. Crossfade is the last resort if nothing qualifies.
+                # Effective pool empty after hw filtering (activation+pool is
+                # non-empty per normalization above, but nothing pooled is
+                # hw-available). Fall back to ONE deterministic activated,
+                # hw-available transition rather than broadening the pool into a
+                # random choice or running a deactivated one. Crossfade is the
+                # hw-safe last resort if nothing qualifies.
                 activated_hw = [
                     name
                     for name in cycle_types
                     if is_transition_available_for_hw(name, hw)
                     and is_transition_activated(transitions, name)
                 ]
-                available = activated_hw or ["Crossfade"]
+                available = [activated_hw[0]] if activated_hw else ["Crossfade"]
             # Avoid immediate repeats of transition type. Legacy "Shuffle"
             # selections are treated as "Crossfade" so the engine no longer
             # reintroduces Shuffle into the pool.

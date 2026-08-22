@@ -1,16 +1,17 @@
 # Qt Quick Production Migration — Technical Decomposition Index
 
 Status: subordinate technical notes for `Current_Plan.md`  
-Last updated: 2026-08-21
+Last updated: 2026-08-22
 
 These documents are **not independent plans**. Sequence and work admission come only from
 `Current_Plan.md`; deferred deletion/accounting comes from `Future_Cleanup.md`.
 
-Current normal implementation phase: **Phase D — visualizer**.
+Current normal implementation phase: **Phase E — widget presentation + capability setup foundation**.
 
-Phase C transition implementation is structurally complete. Its test-hardening and
-physical/eyes-on acceptance debt remains explicit and may be selected by the operator without
-rolling the migration architecture backward.
+Phase C transition implementation is structurally complete and its deterministic hardening has landed.
+Its remaining acceptance debt is explicit and operator-scheduled. Phase D visualizer implementation and
+documentation closure are complete; its remaining physical cadence/eyes-on items are likewise explicit
+acceptance debt rather than unfinished migration implementation.
 
 ## Required routing before active migration work
 
@@ -27,6 +28,9 @@ ONLY the active QtQuick_Migration decomposition
         ↓
 focused tests / current evidence
 ```
+
+`Current_Plan.md` decides what is admitted **now**. A decomposition may retain landed rationale from an
+earlier phase without reopening that phase.
 
 For visualizer work, `Docs/Guardrails/Visualizer_Presentation.md` is binding; for Bubble also read
 `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
@@ -48,17 +52,42 @@ workflow unless the operator explicitly requests one.
 When durable docs are changed by a reviewer that cannot safely edit the local worktree, return whole
 replacement files in a handoff pack for local diff/commit/push.
 
+## Phase status
+
+| Phase | Status | Normal use of its decomposition now |
+|---|---|---|
+| A — bootstrap/render-node proof | structurally complete | landed architecture/reference only |
+| B — runtime-host decomposition | structurally complete | landed owner/lifecycle reference |
+| C — base image + transitions | implementation complete | current transition authoring + regression/acceptance reference |
+| D — visualizer | complete | landed visualizer architecture + later G/H integration reference |
+| **E — widget presentation + capability setup** | **in progress** | **current normal implementation work** |
+| F — widget families | waiting for E | reference only |
+| G — CUSTOM/input/auxiliary pixels | waiting for F | reference only |
+| H — settings epoch + production cutover | waiting for A–G implementation | reference only |
+| I — legacy presenter deletion | waiting for H | reference only |
+| J — tooling/final validation/docs closure | waiting for implementation | reference only |
+
+Current Phase-E foundation already includes:
+
+- presentation-neutral widget-family catalog metadata;
+- canonical widget-family and transition capability-activation settings;
+- transition runtime admission that honors activation;
+- runtime widget creation gating by family activation.
+
+The broader E1 `WidgetRuntimeManager` ownership split and the E2 operator-facing `SETUP`/lazy
+navigation UI remain separate work until exact current source/`Current_Plan.md` says otherwise.
+
 ## Documents
 
-| File | Purpose |
+| File | Purpose / current status |
 |---|---|
-| `01_Runtime_Host_Lifecycle.md` | QQuickWindow/runtime owner, display topology, lifecycle, input seams |
-| `02_Scene_Renderer_Transitions.md` | landed QSGRenderNode/OpenGL image/transition architecture, authored transition contracts, pacing, Phase-C sign-off |
-| `03_Visualizer.md` | ACTIVE Phase-D runtime split, immutable latest snapshots, five-mode Quick rendering, BTF |
-| `04_Widget_Runtime_Presentation.md` | widget manager/model split, retained Quick components, shadows, family migration |
-| `05_Custom_Layout_Input_Interaction.md` | CUSTOM Save/Cancel, edit overlays, cross-monitor transfer, interaction/context |
-| `06_Build_Tooling_Validation.md` | Nuitka/QML packaging, tools, tests, compiled/runtime/perf gates |
-| `07_Settings_Capability_Activation.md` | Phase-E application-level transition/widget activation, SETUP subtabs, lazy settings pages, random-pool UX |
+| `01_Runtime_Host_Lifecycle.md` | landed runtime-host owner/lifecycle decomposition and cutover requirements |
+| `02_Scene_Renderer_Transitions.md` | landed Phase-C renderer architecture, current transition-authoring authority, permanent regression/acceptance rules |
+| `03_Visualizer.md` | landed Phase-D visualizer architecture/reference; not active Phase-D sequencing |
+| `04_Widget_Runtime_Presentation.md` | active Phase-E/F widget model/presentation split, retained Quick primitives, shadows and family migration |
+| `05_Custom_Layout_Input_Interaction.md` | Phase-G CUSTOM Save/Cancel, edit overlays, cross-monitor transfer, interaction/context |
+| `06_Build_Tooling_Validation.md` | packaging, tools, tests, compiled/runtime/perf gates |
+| `07_Settings_Capability_Activation.md` | Phase-E activation authority + E2 `SETUP`, live lazy navigation and transition random/manual UX |
 
 ## Off-rails rule
 

@@ -4,8 +4,8 @@ Last updated: 2026-08-22
 
 Fast task-to-owner routing during the Qt Quick presentation migration.
 
-`Current_Plan.md` owns sequencing. `Spec.md` and focused architecture docs own durable destination
-contracts. Exact source owns what is currently implemented.
+`Current_Plan.md` owns sequencing/work admission. `Spec.md` and focused architecture docs own durable
+destination contracts. Exact source owns what is currently implemented.
 
 ## Architecture-epoch rule
 
@@ -13,9 +13,9 @@ The old QRhiWidget presenter may remain live during migration.
 
 When current source and destination architecture differ:
 
-- source answers "what runs today?";
-- `Docs/Compositor_Architecture.md` answers "what are we migrating toward?";
-- `Current_Plan.md` answers "what may be changed in this slice?".
+- source answers **what runs today?**;
+- `Docs/Compositor_Architecture.md` answers **what are we migrating toward?**;
+- `Current_Plan.md` answers **what may be changed now?**.
 
 Do not turn temporary old ownership into a new permanent contract.
 
@@ -29,22 +29,63 @@ Do not turn temporary old ownership into a new permanent contract.
 | Ordinary runtime scene pixels | retained Quick items/components | `Docs/Compositor_Architecture.md` |
 | Custom GL scene pixels | inline `QQuickItem -> QSGRenderNode -> OpenGL` | `Docs/Compositor_Architecture.md` |
 | Settings/config UI | existing QWidget/settings owners | `Spec.md` |
-| Widget data/provider lifecycle | existing/refactored Python owners | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
+| Capability activation | canonical settings + cheap presentation-neutral catalogs; Phase-E runtime admission foundation | `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md` |
+| Widget data/provider lifecycle | current owners, migrating toward `WidgetRuntimeManager` | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
 | Runtime widget pixels | destination: display retained Quick scene | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
 | General async work | `ThreadManager` | `Docs/Guardrails/Runtime_Efficiency.md` |
 | Resource accounting | `ResourceManager`; never deletion fallback | `Docs/Guardrails.md` |
 
-`QQuickRhiItem` is not the normal SRPSS custom-render path. `QQuickWidget` is not an acceptable
-runtime presenter.
+`QQuickRhiItem` is not the normal SRPSS custom-render path. `QQuickWidget` is not an acceptable runtime
+presenter.
+
+## Capability activation ownership
+
+Phase E introduces a coarse application-level authority separate from ordinary feature configuration:
+
+```text
+catalogued capability
+    -> activated / deactivated
+        -> may implementation/runtime ownership resolve?
+            -> ordinary enabled/selected/pool configuration
+```
+
+Current canonical persisted state lives under:
+
+```text
+widgets.family_activation.<family_id>
+transitions.activation.<canonical setting name>
+```
+
+Durable distinctions:
+
+- **activated/deactivated** = may this capability's implementation/runtime ownership exist at all?;
+- widget instance **enabled/disabled** = ordinary configuration inside an activated family;
+- transition **pool membership** = saved Random preference, independent of activation;
+- transition **manual selection** = ordinary runtime selection among activated transitions.
+
+Missing activation state resolves to activated for compatibility with existing/pre-Quick settings.
+H0 owns final Quick-era default choices; current canonical defaults are intentionally inert/all-on until
+that epoch is selected.
+
+The presentation-neutral widget-family catalog is canonical family membership. The visualizer is
+intentionally not a widget-family activation capability.
+
+A deactivated widget family is filtered before runtime widget/model/provider creation at the currently
+landed factory creation seam. The broader E1 manager/provider ownership split remains a separate Phase-E
+migration step until exact source says it has landed.
+
+Transition runtime selection/cycle/random admission filters by activation. E2 adds the operator-facing
+`SETUP` UI and live lazy navigation; it does not invent a second activation store.
 
 ## Transition ownership
 
 | Family | Owner | Contract |
 |---|---|---|
 | Canonical id/settings identity | `rendering/transition_registry.py` | stable descriptor/catalog authority |
+| Application activation | `core/settings/capability_activation.py` + canonical settings | deactivated transition cannot participate in effective runtime selection |
 | GUI/runtime parameter resolution | Quick transition request resolver | canonical defaults/random choices resolved before render ownership |
 | Transition lifecycle/time | `TransitionRequest` / `TransitionRun` | immutable, monotonic, exactly-once completion/cancel |
-| Transition implementation | lazy static Quick implementation registry | disabled implementations/resources remain dormant |
+| Transition implementation | lazy static Quick implementation registry | dormant unless an activated transition actually resolves |
 | Transition pixels/resources | display transition `QSGRenderNode` host + implementation | no old-compositor fallback or state leak |
 
 See `Docs/Transition_Change_Checklist.md` and
@@ -56,16 +97,16 @@ See `Docs/Transition_Change_Checklist.md` and
 |---|---|---|
 | Audio capture / analysis | BeatEngine + audio worker/backend | bounded current source |
 | Logical cadence | `VisualizerLogicalRuntime` | sole authored mode-general clock |
-| Logical integration | worker-callable tick pipeline | no GUI/Quick/GL mutation |
+| Logical integration | mode-owned frame runtime / tick pipeline | no GUI/Quick/GL mutation |
 | Logical publication | latest-state mailbox/snapshot bridge | latest wins; generation fenced |
-| Presentation bridge | migration-owned bounded GUI/Quick synchronization | immutable; no paint acknowledgement |
+| Presentation bridge | bounded GUI/Quick synchronization | immutable; no paint acknowledgement |
 | Mode presentation policy | cheap canonical visualizer mode descriptor | resolves shell/clip policy before render-thread admission |
-| Visualizer presentation root | display Quick scene | one fade/visibility/lifecycle owner for carded and frameless modes |
-| Card shell/chrome | retained Quick items when `shell_policy=CARD` | background/shadow/frame are presentation shell, not mode-render logic |
+| Visualizer presentation root | display Quick scene | one authored fade/lifecycle/visibility authority |
+| Card shell/chrome | retained Quick items when `shell_policy=CARD` | shell presentation, not mode-render logic |
 | Visualizer content pixels | display visualizer `QQuickItem` + `QSGRenderNode` | inline custom GL inside sole display window |
-| Content clip | one render-node-local SDF/stencil host honoring incoming `RenderState` scissor/stencil | `CARD_INTERIOR` rounded clip for current modes; `VIEWPORT_RECT` for explicit frameless modes |
-| Visualizer geometry | one immutable/presentation-neutral committed geometry authority | baseline viewport/aspect + uniform scale + viewport extent + DPR feed shell, clip, GL and CUSTOM |
-| Bubble spatial bounds | logical runtime receives committed viewport metrics as configuration | viewport geometry is not another clock; BTF remains binding |
+| Content clip | one render-node-local SDF/stencil host | rounded `CARD_INTERIOR`; zero-radius `VIEWPORT_RECT` |
+| Visualizer geometry | immutable/presentation-neutral committed geometry | baseline aspect + uniform scale + viewport extent + DPR feed shell/clip/GL/CUSTOM |
+| Bubble spatial bounds | logical runtime receives committed viewport metrics as configuration | geometry is not another clock |
 | Bubble temporal fidelity | shared chain + Bubble authored state | BTF binding |
 
 See:
@@ -92,14 +133,14 @@ clip_policy  = VIEWPORT_RECT
 ```
 
 `FRAMELESS` removes visualizer card background/frame/shadow only. It does not create another native
-window, render surface, logical clock, or display-global drawing authority.
+window, render surface, logical clock or display-global drawing authority.
 
-The presentation root, generation/lifecycle ownership, fade authority, assigned viewport and
+The presentation root, generation/lifecycle ownership, authored fade authority, assigned viewport and
 `QSGRenderNode` architecture remain the same.
 
 ### Visualizer clip contract
 
-For carded modes, custom GL must remain:
+For carded modes, custom GL remains:
 
 ```text
 above card fill
@@ -109,22 +150,35 @@ inside the rounded inner card path
 
 Do not shrink authored render geometry to simulate clipping.
 
-The exact pinned PySide 6.9.1 scene-graph clip-node proof failed because the Python render node did not
-receive usable clip state matching the target framebuffer. The selected destination is therefore one
-render-node-local SDF/stencil host inside the same `QQuickWindow`/`QSGRenderNode` architecture.
+The pinned PySide 6.9.1 `QSGClipNode -> QSGRenderNode` handoff failed because Python render-node
+metadata did not reliably correspond to the target framebuffer contents. That path is not selectable
+and is not a fallback.
 
-It derives from canonical content geometry, honors supplied scissor/stencil state, never clears or
-repurposes Qt's accumulated clip contents, and restores its temporary stencil contents plus touched
-direct-GL state. Do not preserve the failed scene-graph clip path as a selectable alternative.
+The selected destination is one render-node-local SDF/stencil host. It derives from canonical content
+geometry and can compose with **valid inherited scissor/stencil state that genuinely corresponds to
+real framebuffer contents**. It does not treat arbitrary PySide `RenderState`/`QSGClipNode` metadata as
+trustworthy merely because fields are present. It never clears/repurposes accumulated clip contents as
+though it owned a blank framebuffer and restores temporary stencil contents plus every touched
+direct-GL/scissor/stencil state.
 
-The Quick inner clip derives from actual retained Quick shell/border geometry. Historical centred
-QPainter mask constants are not destination contract.
+The nested real-GL clip smoke proves this narrower compose/restore property, not arbitrary
+`QSGClipNode` handoff correctness.
+
+Quick inner clip geometry derives from retained Quick shell/border geometry. Historical centred-QPainter
+mask constants are not destination contract.
 
 ### Visualizer geometry contract
 
-The Quick visualizer has one canonical baseline viewport aspect for all five current modes.
+The Quick visualizer has one default/baseline viewport aspect for all five current modes:
 
-Mode changes and visualizer preset changes do **not** change that baseline viewport shape.
+```text
+1.5
+```
+
+`420x280` is an internal reference coordinate extent corresponding to that aspect, not a required
+visible/runtime size.
+
+Mode changes and visualizer preset changes do **not** change the default viewport shape.
 
 The pre-Quick per-mode card-height/growth controls are explicitly retired from destination ownership:
 
@@ -139,59 +193,40 @@ devcurve_growth
 They must not enter:
 
 - the Quick runtime/controller;
-- the immutable render snapshot;
-- the visualizer mode descriptor;
+- immutable render snapshots;
+- visualizer mode presentation policy;
 - retained Quick card geometry;
 - new visualizer preset authoring.
 
-They may remain temporarily while the old presenter still has callers. H0 resets their presentation
-state and Phase I/J0 remove their remaining settings/UI/helper/preset/default/tooling authority after
-caller proof.
+They may remain temporarily while the old presenter/settings surface still has callers. H0 and later
+caller-proven deletion remove their remaining schema/UI/tooling authority.
 
-The destination geometry distinguishes:
+Destination geometry distinguishes:
 
 ```text
-canonical baseline viewport/aspect
+default/baseline viewport aspect
 uniform_visual_scale
 viewport_extent
 ```
 
-`uniform_visual_scale` changes the whole visualizer while preserving the baseline aspect.
-
-Current/final CUSTOM semantics:
+Whole-size operations preserve the baseline aspect:
 
 ```text
-scroll-wheel resize
-    -> uniform whole-visualizer scale
-    -> baseline aspect preserved
-
-corner-handle resize
-    -> uniform whole-visualizer scale
-    -> baseline aspect preserved
+scroll-wheel resize -> uniform scale
+corner-handle resize -> uniform scale
 ```
 
-Planned Phase-G viewport-playroom semantics:
+Planned Phase-G viewport-playroom semantics, where a mode is capability-admitted:
 
 ```text
-left/right edge-handle resize
-    -> viewport width only
-    -> visual scale unchanged
-
-top/bottom edge-handle resize
-    -> viewport height only
-    -> visual scale unchanged
+left/right edge -> viewport width only
+top/bottom edge -> viewport height only
 ```
 
-Viewport extent changes available logical/render layout space. It is not post-render image stretching
-and must not anisotropically distort Bubble circles, line stroke scale, or future 3D geometry.
+Viewport extent changes available logical/render space. It is not post-render stretching and must not
+anisotropically distort Bubble circles, line stroke scale or future 3D geometry.
 
-If a current mode cannot safely support independent viewport extent without fidelity/BTF damage, that
-mode may remain viewport-resize-incapable while retaining ordinary uniform whole-size scaling. The
-geometry authority itself remains split.
-
-The historical `SpotifyBarsGLOverlay`, `card_height.py`, mode-growth helpers and old card-geometry
-owners may remain as temporary current-production/reference code during migration. Their names and
-legacy geometry behavior are not destination contracts.
+A current mode may remain viewport-resize-incapable while retaining ordinary uniform whole-size scale.
 
 ## Physical presentation
 
@@ -223,7 +258,7 @@ Forbidden:
 There is no scheduled native/C++ presenter migration.
 
 Native code may be used only for a measured local renderer problem and must preserve the one
-`QQuickWindow` presentation topology and the same logical/state contracts.
+`QQuickWindow` presentation topology and the same logical/state/lifecycle contracts.
 
 ## Readiness
 
@@ -255,12 +290,13 @@ frameless mode must not wait for card resources it deliberately does not own.
 | Presentation architecture | `Docs/Compositor_Architecture.md` |
 | Cross-cutting safety | `Docs/Guardrails.md` |
 | Transitions | `Docs/Transition_Change_Checklist.md` |
-| Visualizer migration | `Docs/QtQuick_Migration/03_Visualizer.md` |
+| Visualizer landed architecture | `Docs/QtQuick_Migration/03_Visualizer.md` |
 | Visualizer presentation | `Docs/Guardrails/Visualizer_Presentation.md` |
 | Visualizer behavior/reference | `Docs/Visualizer_Reference.md` |
 | Bubble | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
+| Widgets | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
+| Capability activation / E2 | `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md` |
 | CUSTOM / viewport resize | `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md` |
-| Qt Quick architecture evidence | `Docs/Performance_Evidence/QtQuick-P0-Comparison-2026-08-20.md` |
 | Testing | `Docs/TestSuite.md` |
 | Harnesses | `Docs/Harness_Index.md` |
 
