@@ -326,6 +326,9 @@ def runtime(qt_app, np_module, monkeypatch):
         np=np_module,
     )
 
+    from widgets.spotify_visualizer.tick_helpers import stop_tick_source
+
+    stop_tick_source(widget)
     try:
         engine.force_stop()
     except Exception:
