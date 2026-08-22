@@ -43,14 +43,19 @@ Primary owner:
 
 Supporting logical/source modules remain Python.
 
-Current durable flow:
+Current durable flow (landed Phase-D boundary):
 
 ```text
-source/audio
-    -> VisualizerLogicalRuntime
-    -> latest plain-data state
-    -> presentation bridge
-    -> Quick scene/render owner
+source / engine
+    -> sole VisualizerLogicalRuntime
+    -> mode-owned logical frame runtime (spectrum/oscilloscope/sine/bubble/devcurve)
+    -> immutable latest-state publication
+    -> VisualizerSnapshotBridge
+    -> Quick synchronization boundary (take-for-render; not a paint ack)
+    -> one QSGRenderNode / lazy mode renderer
+    -> render-node-local SDF/stencil clip
+    -> retained Quick shell/chrome
+    -> one standalone QQuickWindow per physical display
 ```
 
 During migration, old GUI `present_tick`/compositor code may still exist as reference/current
@@ -211,6 +216,23 @@ settings.
 
 All five current Quick modes share one canonical baseline viewport aspect ratio. A mode switch or
 preset load does not change viewport/card shape.
+
+That canonical baseline aspect is **1.5**. It is the sensible DEFAULT shape for ordinary non-CUSTOM
+layout, not a universal invariant. Distinguish three concepts:
+
+- **default/baseline aspect (1.5)** — the default shape shared by all five modes;
+- **resolved runtime size** — for normal non-CUSTOM layout the layout owner resolves an appropriate
+  width from widget/media/free-space rules and derives height from the 1.5 baseline aspect (screen-fit
+  clamps uniformly); mode presets tune authored visual behaviour, never viewport/card dimensions;
+- **explicit viewport extent** — the logical/render world, which the Phase-G edge operation may
+  intentionally push off 1.5 (modes reflow, never anisotropic final-pixel stretch).
+
+The literal `420x280` (`CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE`) arose from layout history and is
+**not** a required/sacred visible or runtime size. It is retained only as an internal reference
+coordinate extent corresponding to the 1.5 aspect, useful for normalization and authored stroke/radius
+scaling (e.g. DevCurve's baseline content extent). Do not freeze runtime visualizers to 420x280, and do
+not delete the 1.5 default aspect in favour of arbitrary mode-specific card shapes; the retired
+`*_growth` values are not an alternate aspect/height authority.
 
 Visualizer geometry then distinguishes:
 

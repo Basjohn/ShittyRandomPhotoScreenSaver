@@ -392,6 +392,23 @@ A bypass/protection test that proves only “the edge trigger executed” is not
 
 It must prove the approved resulting render/positional edge survives.
 
+### 10.1 Same-kind coalescing before one synchronization is safe by forward evolution
+
+The bounded latest-state bridge coalesces protected edges by `kind`, and Bubble emits a single kind
+(`bubble_visible_result`). Two protected Bubble results before one synchronization therefore collapse to
+the newer token. This is NOT the batching/coalescing loss forbidden above, because:
+
+- Bubble integrates exactly one authored step per advance (no skipping), so the newer result's geometry
+  is the continuous forward evolution of the older one;
+- the renderer reads only `positions`/`extras`/`trails` from the protected result (`event_kinds` is
+  diagnostic), and the older authored consequence persists in that forward-evolved geometry;
+- therefore the latest result after B still contains the required visible consequence of A, consumed
+  exactly once.
+
+This is a latest-state guarantee, not FIFO history: two historical frames are not replayed. Only alter
+the protected-edge representation (e.g. per-kind history) if a deterministic test demonstrates ACTUAL
+visible consequence loss. `tests/test_bubble_btf_coalescing.py` pins this guarantee.
+
 ---
 
 ## 11. Loud-passage elasticity
