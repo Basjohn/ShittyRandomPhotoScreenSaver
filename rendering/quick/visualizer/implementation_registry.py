@@ -30,6 +30,12 @@ _IMPLEMENTATIONS = (
             "rendering.quick.visualizer.implementations.oscilloscope"
         ),
     ),
+    QuickVisualizerImplementationDescriptor(
+        mode_id="sine_wave",
+        module_name=(
+            "rendering.quick.visualizer.implementations.sine_wave"
+        ),
+    ),
 )
 _BY_ID = {descriptor.mode_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

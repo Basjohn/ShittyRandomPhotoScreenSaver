@@ -297,7 +297,9 @@ class OscilloscopeFrame:
 @dataclass(frozen=True, slots=True)
 class SineFrame:
     heartbeat_intensity: float = 0.0
+    ghost_energy: VisualizerEnergyState = VisualizerEnergyState()
     ghost_waveforms: tuple[tuple[float, ...], ...] = ()
+    animation_time: float = 0.0
     parameters: FrozenFields = FrozenFields()
 
     def __post_init__(self) -> None:
@@ -306,11 +308,20 @@ class SineFrame:
             "heartbeat_intensity",
             _finite(self.heartbeat_intensity, name="heartbeat intensity"),
         )
+        if not isinstance(self.ghost_energy, VisualizerEnergyState):
+            raise TypeError("sine ghost energy must be immutable energy state")
         object.__setattr__(
             self,
             "ghost_waveforms",
             _float_tuple_rows(self.ghost_waveforms, name="sine ghost waveform sample"),
         )
+        object.__setattr__(
+            self,
+            "animation_time",
+            _finite(self.animation_time, name="sine animation time"),
+        )
+        if self.animation_time < 0.0:
+            raise ValueError("sine animation time must be non-negative")
         object.__setattr__(
             self,
             "parameters",

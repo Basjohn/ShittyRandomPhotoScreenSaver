@@ -37,6 +37,7 @@ from widgets.spotify_visualizer.spectrum_frame_runtime import (
 from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
     compute_spectrum_height_scale,
 )
+from widgets.spotify_visualizer.sine_frame_runtime import SineFrameRuntime
 
 
 _SIGNAL_FIELDS = {
@@ -299,6 +300,11 @@ def _capture_oscilloscope(
 ) -> tuple[ModeFrame, dict[str, Any]]:
     extra = _base_extras(widget, "oscilloscope", engine)
     config_applier._append_line_mode_visual_extras(extra, widget, is_sine=False)
+    extra["osc_transient_width_mix"] = getattr(
+        widget,
+        "_osc_transient_width_mix",
+        0.35,
+    )
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
         raise RuntimeError(
@@ -365,16 +371,93 @@ def _capture_oscilloscope(
 def _capture_sine(
     widget: Any,
     engine: Any,
-    _context: _CaptureContext,
+    context: _CaptureContext,
 ) -> tuple[ModeFrame, dict[str, Any]]:
     extra = _base_extras(widget, "sine_wave", engine)
     config_applier._append_line_mode_visual_extras(extra, widget, is_sine=True)
+    extra["sine_wave_transient_width_mix"] = getattr(
+        widget,
+        "_sine_wave_transient_width_mix",
+        0.4,
+    )
+    controller = getattr(widget, "runtime_controller", None)
+    if controller is None:
+        raise RuntimeError("Sine logical capture requires its runtime controller owner")
+    runtime = controller.resolve_logical_mode_state("sine_wave", SineFrameRuntime)
+    if not isinstance(runtime, SineFrameRuntime):
+        raise TypeError("Sine logical mode state has the wrong type")
+    resolved = runtime.resolve(
+        now_ts=context.now_ts,
+        runtime_generation=context.runtime_generation,
+        engine_generation=context.engine_generation,
+        activation_id=context.activation_id,
+        source_generation=context.source_generation,
+        source_activation_id=context.source_activation_id,
+        playing=context.playing,
+        energy=_energy_state(extra.get("energy_bands")),
+        kick_event=float(extra.get("line_kick_event_strength", 0.0) or 0.0),
+        snare_event=float(extra.get("line_snare_event_strength", 0.0) or 0.0),
+        ghosting_enabled=bool(
+            extra.get("sine_ghosting_enabled", False)
+            and float(extra.get("sine_ghost_alpha", 0.0) or 0.0) > 0.001
+        ),
+        ghost_decay=float(extra.get("sine_ghost_decay", 0.3) or 0.3),
+        line_count=int(extra.get("line_count", 1) or 1),
+        line_speed=float(extra.get("line_speed", 0.5) or 0.5),
+        travels=tuple(
+            extra.get(name, 0)
+            for name in (
+                "sine_wave_travel",
+                "sine_travel_line2",
+                "sine_travel_line3",
+                "sine_travel_line4",
+                "sine_travel_line5",
+                "sine_travel_line6",
+            )
+        ),
+        line_shifts=tuple(
+            extra.get(f"sine_line{index}_shift", 0.0)
+            for index in range(1, 7)
+        ),
+        transient_width_mix=float(
+            extra.get("sine_wave_transient_width_mix", 0.4)
+        ),
+        base_width_reaction=float(extra.get("sine_width_reaction", 0.0)),
+        base_sensitivity=float(extra.get("line_sensitivity", 1.0) or 1.0),
+        base_heartbeat=float(extra.get("heartbeat_intensity", 0.0) or 0.0),
+        heartbeat_slider=float(extra.get("sine_heartbeat", 0.0) or 0.0),
+    )
+    extra["_quick_resolved_energy"] = resolved.energy
+    extra["_quick_mode_changed"] = resolved.changed
+    parameter_values = {
+        name: value
+        for name, value in extra.items()
+        if not name.startswith("_quick_")
+    }
+    parameter_values["line_speed"] = resolved.line_speed
+    for name, value in zip(
+        (
+            "sine_wave_travel",
+            "sine_travel_line2",
+            "sine_travel_line3",
+            "sine_travel_line4",
+            "sine_travel_line5",
+            "sine_travel_line6",
+        ),
+        resolved.travels,
+    ):
+        parameter_values[name] = value
+    for index, value in enumerate(resolved.line_shifts, start=1):
+        parameter_values[f"sine_line{index}_shift"] = value
+    parameter_values["resolved_sensitivity"] = resolved.sensitivity
+    parameter_values["resolved_width_reaction"] = resolved.width_reaction
+    parameter_values["wave_effect_gate"] = resolved.wave_effect_gate
     return (
         SineFrame(
-            heartbeat_intensity=float(
-                getattr(widget, "_heartbeat_intensity", 0.0)
-            ),
-            parameters=_render_parameters(extra),
+            heartbeat_intensity=resolved.heartbeat_intensity,
+            ghost_energy=resolved.ghost_energy,
+            animation_time=resolved.animation_time,
+            parameters=_render_parameters(parameter_values),
         ),
         extra,
     )
