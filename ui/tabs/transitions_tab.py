@@ -10,7 +10,7 @@ Allows users to configure transition settings:
 from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QCheckBox, QGroupBox, QScrollArea,
+    QCheckBox, QGroupBox, QScrollArea, QPushButton, QButtonGroup,
     QSpinBox, QDoubleSpinBox,
 )
 from PySide6.QtCore import Signal, Qt
@@ -18,6 +18,10 @@ from PySide6.QtGui import QColor
 
 from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
+from core.settings.capability_activation import (
+    is_transition_activated,
+    normalize_transition_capability_state,
+)
 from core.logging.logger import get_logger
 from rendering.transition_registry import (
     canonicalize_transition_name,
@@ -41,6 +45,32 @@ from ui.widgets import StyledComboBox
 logger = get_logger(__name__)
 
 _TRANSITION_SETTING_NAMES = get_transition_setting_names()
+
+_SETUP_NAV_KEY = "__setup__"
+
+_NAV_PILL_STYLE = (
+    "QPushButton {"
+    " background-color: rgba(42, 42, 42, 215);"
+    " color: #ffffff;"
+    " border: 1px solid #ffffff;"
+    " border-radius: 8px;"
+    " padding: 5px 14px;"
+    " }"
+    "QPushButton:hover { background-color: rgba(52, 52, 52, 220); }"
+    "QPushButton:checked { background-color: rgba(58, 58, 58, 220); }"
+)
+
+_SETUP_ACTION_BUTTON_STYLE = (
+    "QPushButton {"
+    " background-color: rgba(42, 42, 42, 215);"
+    " color: #ffffff;"
+    " border: 1px solid #ffffff;"
+    " border-radius: 8px;"
+    " padding: 6px 18px;"
+    " min-width: 90px;"
+    " }"
+    "QPushButton:hover { background-color: rgba(58, 58, 58, 220); }"
+)
 
 
 class TransitionsTab(QWidget):
@@ -67,6 +97,9 @@ class TransitionsTab(QWidget):
         # Per-transition pool membership for random/switch behaviour.
         self._pool_by_type = {}
         self._duration_by_type = {}
+        # Per-transition application-level capability activation (E2 SETUP).
+        self._activation_by_type = {}
+        self._loading = False
         self._setup_ui()
         self._load_settings()
         
@@ -158,33 +191,37 @@ class TransitionsTab(QWidget):
         title.setStyleSheet(PAGE_TITLE_STYLE)
         layout.addWidget(title)
         
-        # Transition type group
-        type_group = QGroupBox("Transition Type")
-        _style_group_box(type_group)
-        type_layout = QVBoxLayout(type_group)
-        type_layout.setContentsMargins(0, 12, 0, 0)
-        type_layout.setSpacing(12)
-        
-        type_row = _aligned_row(type_layout, "Transition:")
+        # Internal selection model. The old visible dropdown is replaced by the
+        # pill nav below (E2.3); this combo is retained (not shown) purely as the
+        # "currently edited transition" value model that the existing per-transition
+        # load/update/save logic already reads from. Phase I removes it once that
+        # logic is migrated off it.
         self.transition_combo = StyledComboBox(size_variant="hero")
         self.transition_combo.addItems(_TRANSITION_SETTING_NAMES)
         self.transition_combo.currentTextChanged.connect(self._on_transition_changed)
-        type_row.addWidget(self.transition_combo)
-        type_row.addStretch()
+        self.transition_combo.setVisible(False)
 
-        # Per-transition pool membership: controls whether the selected
-        # transition participates in the engine's random rotation and C-key
-        # cycling. Explicit selection via the dropdown remains available
-        # regardless of this flag.
-        pool_row = _aligned_row(type_layout, "", wrap=False)
-        self.pool_checkbox = QCheckBox("Include in Switch/Random Pool")
-        self.pool_checkbox.setProperty("circleIndicator", True)
-        self.pool_checkbox.stateChanged.connect(self._save_settings)
-        pool_row.addWidget(self.pool_checkbox)
-        pool_row.addStretch()
-        
-        layout.addWidget(type_group)
-        
+        # Pill/subtab navigation: SETUP first, then one pill per transition.
+        nav_row = QHBoxLayout()
+        self._nav_group = QButtonGroup(self)
+        self._nav_group.setExclusive(True)
+        self._nav_buttons = {}
+
+        def _add_nav_pill(key: str, label: str) -> None:
+            button = QPushButton(label)
+            button.setCheckable(True)
+            button.setStyleSheet(_NAV_PILL_STYLE)
+            self._nav_buttons[key] = button
+            self._nav_group.addButton(button)
+            button.clicked.connect(lambda _checked=False, k=key: self._on_nav_selected(k))
+            nav_row.addWidget(button)
+
+        _add_nav_pill(_SETUP_NAV_KEY, "Setup")
+        for name in _TRANSITION_SETTING_NAMES:
+            _add_nav_pill(name, name)
+        nav_row.addStretch()
+        layout.addLayout(nav_row)
+
         # Duration group (slider: short → long)
         duration_group = QGroupBox("Timing")
         _style_group_box(duration_group)
@@ -612,29 +649,217 @@ class TransitionsTab(QWidget):
 
         layout.addWidget(self.burn_group)
 
+        # Transition-settings groups toggled as a set against the SETUP page.
+        self._transition_setting_groups = [
+            duration_group,
+            self.direction_group,
+            self.flip_group,
+            self.blockspin_group,
+            self.blinds_group,
+            self.diffuse_group,
+            self.ripple_group,
+            self.crumble_group,
+            self.particle_group,
+            self.burn_group,
+        ]
+
+        # SETUP page (activation + Use Random + effective random pool).
+        self._setup_page = self._build_setup_page()
+        layout.addWidget(self._setup_page)
+
         layout.addStretch()
-        
+
         # Set scroll area widget and add to main layout
         scroll.setWidget(content)
-        
+
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
-        
+
         # Update visibility based on default transition
         self._update_specific_settings()
         # Enforce GL-only availability on initial build
         self._refresh_hw_dependent_options()
-        
+        # Default landing is the SETUP page (E2.3).
+        setup_button = self._nav_buttons.get(_SETUP_NAV_KEY)
+        if setup_button is not None:
+            setup_button.setChecked(True)
+        self._on_nav_selected(_SETUP_NAV_KEY)
+
         self.setStyleSheet(
             self.styleSheet() + SPINBOX_STYLE + COMBOBOX_STYLE + CIRCLE_CHECKBOX_STYLE
         )
-    
+
+    # ---- E2 capability SETUP subtab ---------------------------------------
+
+    def _build_setup_page(self) -> QWidget:
+        """Build the Transitions SETUP page: activation, Use Random, random pool."""
+        page = QWidget()
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.setSpacing(16)
+
+        # Activation module list.
+        activation_group = QGroupBox("Transition Modules")
+        style_group_box(activation_group)
+        activation_layout = QVBoxLayout(activation_group)
+        activation_layout.setContentsMargins(0, 12, 0, 0)
+        activation_layout.setSpacing(8)
+
+        self._activation_checkboxes = {}
+        for name in _TRANSITION_SETTING_NAMES:
+            row = QCheckBox(name)
+            row.setProperty("circleIndicator", True)
+            row.setChecked(True)
+            row.toggled.connect(
+                lambda checked, n=name: self._on_transition_activation_toggled(n, checked)
+            )
+            self._activation_checkboxes[name] = row
+            activation_layout.addWidget(row)
+
+        action_row = QHBoxLayout()
+        action_row.addStretch()
+        enable_all = QPushButton("Enable All")
+        disable_all = QPushButton("Disable All")
+        enable_all.setStyleSheet(_SETUP_ACTION_BUTTON_STYLE)
+        disable_all.setStyleSheet(_SETUP_ACTION_BUTTON_STYLE)
+        enable_all.clicked.connect(lambda: self._set_all_transition_activation(True))
+        disable_all.clicked.connect(lambda: self._set_all_transition_activation(False))
+        action_row.addWidget(enable_all)
+        action_row.addWidget(disable_all)
+        activation_layout.addLayout(action_row)
+        page_layout.addWidget(activation_group)
+
+        # Random mode + effective pool.
+        random_group = QGroupBox("Random Transitions")
+        style_group_box(random_group)
+        random_layout = QVBoxLayout(random_group)
+        random_layout.setContentsMargins(0, 12, 0, 0)
+        random_layout.setSpacing(8)
+
+        self._use_random_checkbox = QCheckBox("Use Random Transitions")
+        self._use_random_checkbox.setProperty("circleIndicator", True)
+        self._use_random_checkbox.toggled.connect(self._on_use_random_toggled)
+        random_layout.addWidget(self._use_random_checkbox)
+
+        pool_label = QLabel("Random Pool")
+        pool_label.setStyleSheet(PAGE_TITLE_STYLE)
+        random_layout.addWidget(pool_label)
+
+        self._pool_checkboxes = {}
+        for name in _TRANSITION_SETTING_NAMES:
+            row = QCheckBox(name)
+            row.setProperty("circleIndicator", True)
+            row.toggled.connect(
+                lambda checked, n=name: self._on_pool_membership_toggled(n, checked)
+            )
+            self._pool_checkboxes[name] = row
+            random_layout.addWidget(row)
+
+        page_layout.addWidget(random_group)
+        return page
+
+    def _on_nav_selected(self, key: str) -> None:
+        """Show either the SETUP page or one transition's settings groups."""
+        show_setup = key == _SETUP_NAV_KEY
+        self._setup_page.setVisible(show_setup)
+        for group in getattr(self, "_transition_setting_groups", []):
+            group.setVisible(not show_setup)
+        if show_setup:
+            return
+        # Selecting a transition pill drives the internal selection model, which
+        # updates the per-transition groups and (via save) the remembered manual
+        # transition. Random mode is owned separately by the Use Random checkbox.
+        if self.transition_combo.currentText() != key:
+            self.transition_combo.setCurrentText(key)
+        else:
+            self._update_specific_settings()
+
+    def _apply_transition_pill_visibility(self) -> None:
+        """Show/hide transition pills and pool rows to match activation."""
+        deactivated_current = False
+        current = self.transition_combo.currentText()
+        for name, button in self._nav_buttons.items():
+            if name == _SETUP_NAV_KEY:
+                continue
+            activated = self._transition_activated(name)
+            button.setVisible(activated)
+            # The random pool only lists activated transitions.
+            pool_row = getattr(self, "_pool_checkboxes", {}).get(name)
+            if pool_row is not None:
+                pool_row.setVisible(activated)
+            if not activated and name == current:
+                deactivated_current = True
+        if not getattr(self, "_loading", False) and deactivated_current:
+            setup_button = self._nav_buttons.get(_SETUP_NAV_KEY)
+            if setup_button is not None:
+                setup_button.setChecked(True)
+            self._on_nav_selected(_SETUP_NAV_KEY)
+
+    def _transition_activated(self, name: str) -> bool:
+        checkbox = getattr(self, "_activation_checkboxes", {}).get(name)
+        if checkbox is not None:
+            return bool(checkbox.isChecked())
+        return bool(self._activation_by_type.get(name, True))
+
+    def _on_transition_activation_toggled(self, name: str, checked: bool) -> None:
+        self._activation_by_type[name] = bool(checked)
+        self._apply_transition_pill_visibility()
+        if not getattr(self, "_loading", False):
+            self._save_settings()
+
+    def _set_all_transition_activation(self, activated: bool) -> None:
+        changed = False
+        for name, checkbox in getattr(self, "_activation_checkboxes", {}).items():
+            if checkbox.isChecked() != activated:
+                checkbox.blockSignals(True)
+                checkbox.setChecked(activated)
+                checkbox.blockSignals(False)
+                self._activation_by_type[name] = bool(activated)
+                changed = True
+        self._apply_transition_pill_visibility()
+        if changed and not getattr(self, "_loading", False):
+            self._save_settings()
+
+    def _on_use_random_toggled(self, checked: bool) -> None:
+        if not getattr(self, "_loading", False):
+            self._save_settings()
+
+    def _on_pool_membership_toggled(self, name: str, checked: bool) -> None:
+        self._pool_by_type[name] = bool(checked)
+        if not getattr(self, "_loading", False):
+            self._save_settings()
+
     def _load_settings(self) -> None:
         """Load settings from settings manager."""
+        self._loading = True
+        try:
+            self._load_settings_impl()
+        finally:
+            self._loading = False
+        # Reflect activation on the pills, then reconcile which page is shown
+        # (load's _update_specific_settings may have re-shown a transition group).
+        self._apply_transition_pill_visibility()
+        self._on_nav_selected(self._current_nav_key())
+
+    def _current_nav_key(self) -> str:
+        for key, button in getattr(self, "_nav_buttons", {}).items():
+            if button.isChecked():
+                return key
+        return _SETUP_NAV_KEY
+
+    def _load_settings_impl(self) -> None:
         transitions_config = self._settings.get('transitions', {}) or {}
         if not isinstance(transitions_config, dict):
             transitions_config = {}
+
+        # E2.6: normalize legacy state to the single Random authority before the
+        # UI reads it — most importantly convert a legacy type="Random" into
+        # random_always=True + a concrete manual type, and repair any malformed
+        # activation/empty-pool state. Persist when a repair actually happened.
+        if normalize_transition_capability_state(transitions_config):
+            self._settings.set('transitions', transitions_config)
+            self._settings.save()
 
         canonical_transitions = get_default_settings().get('transitions', {})
         if not isinstance(canonical_transitions, dict):
@@ -687,11 +912,19 @@ class TransitionsTab(QWidget):
                 enabled = True
             self._pool_by_type[name] = bool(enabled)
 
+        # Application-level activation (E2). Missing => activated (True).
+        self._activation_by_type = {
+            name: is_transition_activated(transitions_config, name)
+            for name in type_keys
+        }
+        use_random = SettingsManager.to_bool(
+            transitions_config.get('random_always', False), False
+        )
+
         # Block signals while we apply settings to avoid recursive saves with stale state
         blockers = []
         for w in [
             getattr(self, 'transition_combo', None),
-            getattr(self, 'pool_checkbox', None),
             getattr(self, 'duration_slider', None),
             getattr(self, 'direction_combo', None),
             getattr(self, 'grid_rows_spin', None),
@@ -735,6 +968,16 @@ class TransitionsTab(QWidget):
                 w.blockSignals(True)
                 blockers.append(w)
 
+        # Also block the SETUP page controls while applying their state.
+        for w in (
+            list(getattr(self, '_activation_checkboxes', {}).values())
+            + list(getattr(self, '_pool_checkboxes', {}).values())
+            + [getattr(self, '_use_random_checkbox', None)]
+        ):
+            if w is not None and hasattr(w, 'blockSignals'):
+                w.blockSignals(True)
+                blockers.append(w)
+
         try:
             # Load transition type (default to Wipe to match SettingsManager defaults)
             transition_type = canonicalize_transition_name(
@@ -744,18 +987,19 @@ class TransitionsTab(QWidget):
             index = self.transition_combo.findText(transition_type)
             if index >= 0:
                 self.transition_combo.setCurrentIndex(index)
-            
+
             duration = self._duration_by_type.get(transition_type, default_duration)
             self.duration_slider.setValue(duration)
             self.duration_value_label.setText(f"{duration} ms")
 
-            # Load per-transition pool membership for the current type
-            current_pool = self._pool_by_type.get(transition_type, True)
-            try:
-                self.pool_checkbox.setChecked(bool(current_pool))
-            except Exception as e:
-                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-            
+            # Apply SETUP page state: activation, Use Random, and pool membership.
+            for name, checkbox in getattr(self, '_activation_checkboxes', {}).items():
+                checkbox.setChecked(bool(self._activation_by_type.get(name, True)))
+            for name, checkbox in getattr(self, '_pool_checkboxes', {}).items():
+                checkbox.setChecked(bool(self._pool_by_type.get(name, True)))
+            if getattr(self, '_use_random_checkbox', None) is not None:
+                self._use_random_checkbox.setChecked(bool(use_random))
+
             # Load per-transition directions (nested)
             slide_cfg = transitions_config.get('slide', {}) if isinstance(transitions_config.get('slide', {}), dict) else {}
             wipe_cfg = transitions_config.get('wipe', {}) if isinstance(transitions_config.get('wipe', {}), dict) else {}
@@ -928,14 +1172,6 @@ class TransitionsTab(QWidget):
         finally:
             self.duration_slider.blockSignals(False)
 
-        # Update pool checkbox to reflect stored membership for this type
-        try:
-            self.pool_checkbox.blockSignals(True)
-            enabled = self._pool_by_type.get(cur_type, True)
-            self.pool_checkbox.setChecked(bool(enabled))
-        finally:
-            self.pool_checkbox.blockSignals(False)
-
         self._save_settings()
     
     def _update_specific_settings(self) -> None:
@@ -1080,16 +1316,15 @@ class TransitionsTab(QWidget):
         except Exception as e:
             logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
-        # Update in-memory per-type pool membership
+        # Application-level activation + random-mode state are owned by the SETUP
+        # page checkboxes (E2.3). Pool membership is owned by the SETUP pool list.
+        for name, checkbox in getattr(self, "_activation_checkboxes", {}).items():
+            self._activation_by_type[name] = bool(checkbox.isChecked())
         try:
-            cur_pool = self.pool_checkbox.isChecked()
+            use_random = bool(self._use_random_checkbox.isChecked())
         except Exception as e:
             logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-            cur_pool = True
-        try:
-            self._pool_by_type[cur_type] = bool(cur_pool)
-        except Exception as e:
-            logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
+            use_random = False
 
         # Update blinds feather label
         try:
@@ -1155,6 +1390,9 @@ class TransitionsTab(QWidget):
             },
             'durations': dict(self._duration_by_type),
             'pool': dict(self._pool_by_type),
+            # E2 capability-activation authority + single random-mode authority.
+            'activation': dict(self._activation_by_type),
+            'random_always': use_random,
             # New nested per-transition direction settings
             'slide': {
                 'direction': self._dir_slide,
@@ -1166,7 +1404,15 @@ class TransitionsTab(QWidget):
                 'direction': self._dir_blockspin,
             },
         }
-        
+
+        # Preserve engine-managed transient random-choice bookkeeping across a
+        # wholesale section rewrite (the engine re-derives it each rotation).
+        existing = self._settings.get('transitions', {})
+        if isinstance(existing, dict):
+            for transient_key in ('random_choice', 'last_random_choice'):
+                if transient_key in existing:
+                    config[transient_key] = existing[transient_key]
+
         self._settings.set('transitions', config)
 
         self._settings.save()
