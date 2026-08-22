@@ -16,11 +16,8 @@ from core.logging.logger import (
 from core.threading.manager import ThreadManager
 from widgets.spotify_visualizer.tick_helpers import init_cadence_state
 from core.process import ProcessSupervisor
-from core.settings.models import SpotifyVisualizerSettings, PER_MODE_TECHNICAL_MODES
-from core.settings.visualizer_presets import (
-    VisualizerActivationPayload,
-    resolve_visualizer_activation_payload,
-)
+from core.settings.models import SpotifyVisualizerSettings
+from core.settings.visualizer_presets import VisualizerActivationPayload
 from core.settings.visualizer_mode_registry import coerce_visualizer_mode_id
 from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes, shadow_config_enabled
 from widgets.base_overlay_widget import BaseOverlayWidget
@@ -36,19 +33,21 @@ from widgets.spotify_visualizer.beat_engine import (
     get_shared_spotify_beat_engine,
     _SpotifyBeatEngine,
 )
+from widgets.spotify_visualizer.runtime_adapter import (
+    LegacyVisualizerRuntimeAdapterMixin,
+)
+from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
 from widgets.spotify_visualizer.startup_contract import VisualizerStartupState
 
 logger = get_logger(__name__)
 
+class SpotifyVisualizerWidget(LegacyVisualizerRuntimeAdapterMixin, QWidget):
+    """Temporary QWidget presentation adapter for the visualizer runtime.
 
-
-class SpotifyVisualizerWidget(QWidget):
-    """Thin bar visualizer card paired with the Spotify media widget.
-
-    The widget draws a rounded-rect card that inherits Spotify/Media
-    styling from DisplayWidget and renders a row of vertical bars whose
-    heights are driven by audio magnitudes published by
-    SpotifyVisualizerAudioWorker.
+    Phase D moves non-pixel ownership into ``VisualizerRuntimeController``.
+    This class remains the current production card/CUSTOM/input/compositor
+    adapter until the explicit Qt Quick cutover; future Quick presentation
+    constructs the controller directly and never creates a hidden QWidget.
     """
 
     def __init__(
@@ -58,6 +57,17 @@ class SpotifyVisualizerWidget(QWidget):
         initial_mode: VisualizerMode | str | None = None,
     ) -> None:
         super().__init__(parent)
+        initial_mode_id = coerce_visualizer_mode_id(
+            initial_mode.name.lower()
+            if isinstance(initial_mode, VisualizerMode)
+            else initial_mode
+        )
+        self._runtime_controller = VisualizerRuntimeController(
+            runtime_generation=getattr(parent, "_runtime_generation", None),
+            bar_count=bar_count,
+            initial_mode=initial_mode_id,
+            engine_factory=get_shared_spotify_beat_engine,
+        )
         self._runtime_generation = getattr(parent, "_runtime_generation", None)
 
         self._bar_count = max(1, int(bar_count))
@@ -159,16 +169,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._spectrum_drop_speed: float = 1.0
 
         # Visualization mode (Spectrum, Waveform, Abstract)
-        _initial_mode_id = coerce_visualizer_mode_id(
-            initial_mode.name.lower() if isinstance(initial_mode, VisualizerMode) else initial_mode
-        )
-        self._vis_mode: VisualizerMode = {
-            "spectrum": VisualizerMode.SPECTRUM,
-            "oscilloscope": VisualizerMode.OSCILLOSCOPE,
-            "sine_wave": VisualizerMode.SINE_WAVE,
-            "bubble": VisualizerMode.BUBBLE,
-            "devcurve": VisualizerMode.DEVCURVE,
-        }.get(_initial_mode_id, VisualizerMode.BUBBLE)
+        self._vis_mode = initial_mode_id
 
         # Oscilloscope settings
         self._osc_glow_enabled: bool = True
@@ -424,7 +425,7 @@ class SpotifyVisualizerWidget(QWidget):
         # aliases for _audio_worker/_bars_buffer/_bars_result_buffer so
         # existing tests and diagnostics continue to function, but all
         # heavy work is centralised in the engine.
-        self._engine: Optional[_SpotifyBeatEngine] = get_shared_spotify_beat_engine(self._bar_count)
+        self._engine = self._runtime_controller.ensure_engine()
         self._last_floor_config = (True, 0.12)
         self._last_sensitivity_config = (True, 1.0)
         self._last_energy_boost: float = 0.85

@@ -422,6 +422,10 @@ def apply_resolved_activation_payload(
         # single generation boundary has actually committed.
         _retrack_final_engine_generation(widget)
 
+    controller = getattr(widget, "runtime_controller", None)
+    if controller is not None:
+        controller.record_resolved_activation(payload)
+
     # Recorded only AFTER the final generation commits, so the identity is
     # bound to the activation that actually became authoritative.
     _commit_activation_identity(widget, identity)

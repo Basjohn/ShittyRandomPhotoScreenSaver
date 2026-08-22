@@ -9,6 +9,37 @@ around a giant generic schema.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
+
+
+class VisualizerShellPolicy(str, Enum):
+    """Retained chrome owned by the visualizer presentation root."""
+
+    CARD = "card"
+    FRAMELESS = "frameless"
+
+
+class VisualizerClipPolicy(str, Enum):
+    """Content clip resolved before a frame reaches the render thread."""
+
+    CARD_INTERIOR = "card_interior"
+    VIEWPORT_RECT = "viewport_rect"
+
+
+@dataclass(frozen=True, slots=True)
+class VisualizerModePresentationPolicy:
+    shell_policy: VisualizerShellPolicy
+    clip_policy: VisualizerClipPolicy
+    viewport_resize_capable: bool
+
+
+_CURRENT_CARDED_POLICY = VisualizerModePresentationPolicy(
+    shell_policy=VisualizerShellPolicy.CARD,
+    clip_policy=VisualizerClipPolicy.CARD_INTERIOR,
+    # Phase D proves non-default viewport extents mode by mode. Do not claim
+    # the later Phase-G affordance before its renderer/fidelity bar is green.
+    viewport_resize_capable=False,
+)
 
 @dataclass(frozen=True)
 class VisualizerModeDescriptor:
@@ -16,6 +47,7 @@ class VisualizerModeDescriptor:
     display_name: str
     preset_slider_attr: str
     setting_prefixes: tuple[str, ...]
+    presentation_policy: VisualizerModePresentationPolicy
 
     @property
     def preset_key(self) -> str:
@@ -23,11 +55,41 @@ class VisualizerModeDescriptor:
 
 
 _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
-    VisualizerModeDescriptor("spectrum", "Spectrum", "_spectrum_preset_slider", ("spectrum_",)),
-    VisualizerModeDescriptor("oscilloscope", "Oscilloscope", "_osc_preset_slider", ("osc_", "oscilloscope_")),
-    VisualizerModeDescriptor("sine_wave", "Sine Waves", "_sine_preset_slider", ("sine_", "sine_wave_", "sinewave_")),
-    VisualizerModeDescriptor("bubble", "Bubble", "_bubble_preset_slider", ("bubble_",)),
-    VisualizerModeDescriptor("devcurve", "Spline Curve", "_devcurve_preset_slider", ("devcurve_",)),
+    VisualizerModeDescriptor(
+        "spectrum",
+        "Spectrum",
+        "_spectrum_preset_slider",
+        ("spectrum_",),
+        _CURRENT_CARDED_POLICY,
+    ),
+    VisualizerModeDescriptor(
+        "oscilloscope",
+        "Oscilloscope",
+        "_osc_preset_slider",
+        ("osc_", "oscilloscope_"),
+        _CURRENT_CARDED_POLICY,
+    ),
+    VisualizerModeDescriptor(
+        "sine_wave",
+        "Sine Waves",
+        "_sine_preset_slider",
+        ("sine_", "sine_wave_", "sinewave_"),
+        _CURRENT_CARDED_POLICY,
+    ),
+    VisualizerModeDescriptor(
+        "bubble",
+        "Bubble",
+        "_bubble_preset_slider",
+        ("bubble_",),
+        _CURRENT_CARDED_POLICY,
+    ),
+    VisualizerModeDescriptor(
+        "devcurve",
+        "Spline Curve",
+        "_devcurve_preset_slider",
+        ("devcurve_",),
+        _CURRENT_CARDED_POLICY,
+    ),
 )
 
 _GATED_MODES: dict[str, callable] = {}
@@ -84,6 +146,12 @@ def get_preset_key(mode_id: str) -> str:
 
 def get_setting_prefixes(mode_id: str) -> tuple[str, ...]:
     return get_visualizer_mode_descriptor(mode_id).setting_prefixes
+
+
+def get_visualizer_presentation_policy(
+    mode_id: str,
+) -> VisualizerModePresentationPolicy:
+    return get_visualizer_mode_descriptor(mode_id).presentation_policy
 
 
 def is_mode_active(mode_id: str) -> bool:

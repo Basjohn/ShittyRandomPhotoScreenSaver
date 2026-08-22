@@ -41,18 +41,21 @@ class TestVisualizerModeEnum:
 
     def test_registry_default_mode_id_matches_canonical_default(self):
         """Verify the shared default-mode helper stays aligned with product defaults."""
+        from core.settings.default_settings import DEFAULT_SETTINGS
         from core.settings.visualizer_mode_registry import get_default_visualizer_mode_id
-        assert get_default_visualizer_mode_id() == "bubble"
+        assert get_default_visualizer_mode_id() == DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]["mode"]
 
 
 class TestVisualizerWidgetModes:
     """Tests for visualization mode on SpotifyVisualizerWidget."""
 
-    def test_widget_default_mode_is_bubble(self, qt_app):
+    def test_widget_default_mode_matches_canonical_default(self, qt_app):
         """Verify cold widget construction follows the canonical default mode."""
+        from core.settings.visualizer_mode_registry import get_default_visualizer_mode_id
         from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget, VisualizerMode
         widget = SpotifyVisualizerWidget(bar_count=15)
-        assert widget.get_visualization_mode() == VisualizerMode.BUBBLE
+        expected_mode = VisualizerMode[get_default_visualizer_mode_id().upper()]
+        assert widget.get_visualization_mode() == expected_mode
 
     def test_widget_honors_initial_mode_seed(self, qt_app):
         """Verify constructor seeding can override the cold default safely."""

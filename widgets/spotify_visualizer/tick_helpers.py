@@ -117,9 +117,14 @@ def init_cadence_state(widget: Any) -> None:
     the simulation at a time.
     """
 
+    widget._bars_timer = None
+    controller = getattr(widget, "runtime_controller", None)
+    if controller is not None:
+        controller.reset_logical_handoff()
+        return
+
     from widgets.spotify_visualizer.logical_runtime import LatestStateMailbox
 
-    widget._bars_timer = None
     widget._logical_runtime = None
     widget._logical_mailbox = LatestStateMailbox()
     widget._logical_present_pending = False
@@ -173,13 +178,22 @@ def ensure_tick_source(widget: Any) -> None:
 
     interval_s = authored_logical_interval_s(widget)
     try:
-        runtime = VisualizerLogicalRuntime(
-            step=lambda _deadline_ts, _w=widget: logical_tick(_w),
-            interval_s=interval_s,
-            generation=coerce_identity(getattr(widget, "_runtime_generation", None)),
-        )
-        runtime.start()
-        widget._logical_runtime = runtime
+        controller = getattr(widget, "runtime_controller", None)
+        if controller is not None:
+            runtime = controller.start_logical_runtime(
+                step=lambda _deadline_ts, _w=widget: logical_tick(_w),
+                interval_s=interval_s,
+            )
+        else:
+            runtime = VisualizerLogicalRuntime(
+                step=lambda _deadline_ts, _w=widget: logical_tick(_w),
+                interval_s=interval_s,
+                generation=coerce_identity(
+                    getattr(widget, "_runtime_generation", None)
+                ),
+            )
+            runtime.start()
+            widget._logical_runtime = runtime
         widget._target_timer_interval_ms = int(round(interval_s * 1000.0))
         widget._current_timer_interval_ms = widget._target_timer_interval_ms
     except Exception:
@@ -189,13 +203,27 @@ def ensure_tick_source(widget: Any) -> None:
 
 def stop_tick_source(widget: Any) -> None:
     """Quiesce and join the logical runtime, and drop any GUI fallback tick."""
-    runtime = getattr(widget, "_logical_runtime", None)
-    if runtime is not None:
-        widget._logical_runtime = None
+    controller = getattr(widget, "runtime_controller", None)
+    if controller is not None:
         try:
-            runtime.stop()
+            joined = controller.stop_logical_runtime()
+            if not joined:
+                logger.error(
+                    "[SPOTIFY_VIS] Logical runtime remains owned after failed join"
+                )
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to stop logical runtime", exc_info=True)
+    else:
+        runtime = getattr(widget, "_logical_runtime", None)
+        if runtime is not None:
+            widget._logical_runtime = None
+            try:
+                runtime.stop()
+            except Exception:
+                logger.debug(
+                    "[SPOTIFY_VIS] Failed to stop logical runtime",
+                    exc_info=True,
+                )
     timer = getattr(widget, "_bars_timer", None)
     if timer is not None:
         try:
@@ -203,10 +231,11 @@ def stop_tick_source(widget: Any) -> None:
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to stop fallback tick timer", exc_info=True)
         widget._bars_timer = None
-    mailbox = getattr(widget, "_logical_mailbox", None)
-    if mailbox is not None:
-        mailbox.clear()
-    widget._logical_present_pending = False
+    if controller is None:
+        mailbox = getattr(widget, "_logical_mailbox", None)
+        if mailbox is not None:
+            mailbox.clear()
+        widget._logical_present_pending = False
 
 def get_transition_context(widget: Any, parent: Optional[QWidget]) -> Dict[str, Any]:
     """Return lightweight transition metrics from the parent DisplayWidget."""

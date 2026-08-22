@@ -1,0 +1,369 @@
+"""Presentation-neutral visualizer runtime ownership.
+
+The legacy QWidget remains the current production presentation adapter until
+the Qt Quick cutover. This owner contains the state that must survive that
+pixel-boundary change: mode/settings/playback identity, the shared source
+handle, and the sole authored logical runtime/latest-state mailbox.
+
+This module deliberately imports no QWidget, QQuickItem, QPainter, OpenGL, or
+legacy compositor code. A future Quick presentation can own this controller
+without constructing a hidden QWidget.
+"""
+
+from __future__ import annotations
+
+import copy
+import threading
+from collections.abc import Callable
+from typing import Any
+
+from core.settings.visualizer_mode_registry import (
+    VisualizerModePresentationPolicy,
+    coerce_visualizer_mode_id,
+    get_visualizer_presentation_policy,
+)
+from widgets.spotify_visualizer.logical_runtime import (
+    LatestStateMailbox,
+    VisualizerLogicalRuntime,
+    coerce_identity,
+)
+
+
+EngineFactory = Callable[[int], Any]
+LogicalStep = Callable[[float], None]
+
+
+class VisualizerRuntimeController:
+    """Own non-pixel visualizer identity, source, and logical lifecycle.
+
+    The controller is intentionally small. Mode-specific authored state stays
+    in the existing logical modules while those modes move through Phase D;
+    presentation geometry, fades, chrome, input, and GPU resources do not
+    belong here.
+    """
+
+    def __init__(
+        self,
+        *,
+        runtime_generation: int | None,
+        bar_count: int = 32,
+        initial_mode: str | None = None,
+        engine_factory: EngineFactory | None = None,
+    ) -> None:
+        self._lock = threading.RLock()
+        self._runtime_generation = coerce_identity(runtime_generation)
+        self._bar_count = max(1, int(bar_count))
+        self._mode_id = coerce_visualizer_mode_id(initial_mode)
+        self._presentation_policy = get_visualizer_presentation_policy(
+            self._mode_id
+        )
+
+        self._enabled = False
+        self._playing = False
+        self._settings_model: Any = None
+        self._technical_config_cache: dict[str, dict[str, Any]] = {}
+        self._resolved_activation: Any = None
+        self._committed_activation_identity: tuple | None = None
+        self._mode_activation_committed_for: Any = None
+
+        self._engine_factory = engine_factory
+        self._engine: Any = None
+        self._thread_manager: Any = None
+        self._process_supervisor: Any = None
+
+        self._pending_engine_generation = -1
+        self._last_engine_generation_seen = -1
+        self._pending_engine_activation_id = -1
+        self._last_engine_activation_seen = -1
+
+        self._logical_mailbox = LatestStateMailbox()
+        self._logical_runtime: VisualizerLogicalRuntime | None = None
+        self._logical_present_pending = False
+
+    @property
+    def runtime_generation(self) -> int:
+        return self._runtime_generation
+
+    @runtime_generation.setter
+    def runtime_generation(self, value: int | None) -> None:
+        self._runtime_generation = coerce_identity(value)
+
+    @property
+    def bar_count(self) -> int:
+        return self._bar_count
+
+    @bar_count.setter
+    def bar_count(self, value: int) -> None:
+        self._bar_count = max(1, int(value))
+
+    @property
+    def mode_id(self) -> str:
+        return self._mode_id
+
+    @property
+    def presentation_policy(self) -> VisualizerModePresentationPolicy:
+        return self._presentation_policy
+
+    def set_mode(self, mode: Any) -> str:
+        raw = getattr(mode, "name", mode)
+        mode_id = coerce_visualizer_mode_id(str(raw or "").lower())
+        with self._lock:
+            self._mode_id = mode_id
+            self._presentation_policy = get_visualizer_presentation_policy(
+                mode_id
+            )
+        return mode_id
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    @enabled.setter
+    def enabled(self, value: bool) -> None:
+        self._enabled = bool(value)
+
+    @property
+    def playing(self) -> bool:
+        return self._playing
+
+    @playing.setter
+    def playing(self, value: bool) -> None:
+        self._playing = bool(value)
+
+    @property
+    def settings_model(self) -> Any:
+        return self._settings_model
+
+    @settings_model.setter
+    def settings_model(self, model: Any) -> None:
+        try:
+            self._settings_model = copy.deepcopy(model)
+        except Exception:
+            self._settings_model = model
+
+    @property
+    def technical_config_cache(self) -> dict[str, dict[str, Any]]:
+        return self._technical_config_cache
+
+    @technical_config_cache.setter
+    def technical_config_cache(self, value: dict[str, dict[str, Any]]) -> None:
+        self._technical_config_cache = value
+
+    @property
+    def resolved_activation(self) -> Any:
+        return self._resolved_activation
+
+    def record_resolved_activation(self, payload: Any) -> None:
+        try:
+            self._resolved_activation = copy.deepcopy(payload)
+        except Exception:
+            self._resolved_activation = payload
+
+    @property
+    def committed_activation_identity(self) -> tuple | None:
+        return self._committed_activation_identity
+
+    @committed_activation_identity.setter
+    def committed_activation_identity(self, value: tuple | None) -> None:
+        self._committed_activation_identity = value
+
+    @property
+    def mode_activation_committed_for(self) -> Any:
+        return self._mode_activation_committed_for
+
+    @mode_activation_committed_for.setter
+    def mode_activation_committed_for(self, value: Any) -> None:
+        self._mode_activation_committed_for = value
+
+    @property
+    def engine(self) -> Any:
+        return self._engine
+
+    @engine.setter
+    def engine(self, value: Any) -> None:
+        self._engine = value
+
+    def ensure_engine(self) -> Any:
+        with self._lock:
+            if self._engine is not None:
+                return self._engine
+            factory = self._engine_factory
+            if factory is None:
+                # Lazy so importing the controller does not import the
+                # QObject-backed source implementation or presentation code.
+                from widgets.spotify_visualizer.beat_engine import (
+                    get_shared_spotify_beat_engine,
+                )
+
+                factory = get_shared_spotify_beat_engine
+            engine = factory(self._bar_count)
+            self._engine = engine
+            return engine
+
+    @property
+    def thread_manager(self) -> Any:
+        return self._thread_manager
+
+    @thread_manager.setter
+    def thread_manager(self, value: Any) -> None:
+        self._thread_manager = value
+
+    @property
+    def process_supervisor(self) -> Any:
+        return self._process_supervisor
+
+    @process_supervisor.setter
+    def process_supervisor(self, value: Any) -> None:
+        self._process_supervisor = value
+
+    @property
+    def pending_engine_generation(self) -> int:
+        return self._pending_engine_generation
+
+    @pending_engine_generation.setter
+    def pending_engine_generation(self, value: int) -> None:
+        self._pending_engine_generation = int(value)
+
+    @property
+    def last_engine_generation_seen(self) -> int:
+        return self._last_engine_generation_seen
+
+    @last_engine_generation_seen.setter
+    def last_engine_generation_seen(self, value: int) -> None:
+        self._last_engine_generation_seen = int(value)
+
+    @property
+    def pending_engine_activation_id(self) -> int:
+        return self._pending_engine_activation_id
+
+    @pending_engine_activation_id.setter
+    def pending_engine_activation_id(self, value: int) -> None:
+        self._pending_engine_activation_id = int(value)
+
+    @property
+    def last_engine_activation_seen(self) -> int:
+        return self._last_engine_activation_seen
+
+    @last_engine_activation_seen.setter
+    def last_engine_activation_seen(self, value: int) -> None:
+        self._last_engine_activation_seen = int(value)
+
+    @property
+    def logical_mailbox(self) -> LatestStateMailbox:
+        return self._logical_mailbox
+
+    def replace_logical_mailbox(self, mailbox: LatestStateMailbox) -> None:
+        """Install an empty mailbox for a legacy harness before runtime start."""
+
+        with self._lock:
+            runtime = self._logical_runtime
+            if runtime is not None and runtime.is_running():
+                raise RuntimeError("cannot replace a running visualizer mailbox")
+            self._logical_mailbox = mailbox
+
+    @property
+    def logical_runtime(self) -> VisualizerLogicalRuntime | None:
+        return self._logical_runtime
+
+    def adopt_logical_runtime(
+        self,
+        runtime: VisualizerLogicalRuntime | None,
+    ) -> None:
+        """Adopt a preconstructed runtime used by legacy diagnostics.
+
+        Production starts through :meth:`start_logical_runtime`; this narrow
+        seam keeps existing production-shaped diagnostic tools working without
+        giving presentation code ownership of the runtime lifecycle.
+        """
+
+        with self._lock:
+            current = self._logical_runtime
+            if current is not None and current is not runtime and current.is_running():
+                raise RuntimeError("cannot replace a running visualizer runtime")
+            self._logical_runtime = runtime
+
+    @property
+    def logical_present_pending(self) -> bool:
+        return self._logical_present_pending
+
+    @logical_present_pending.setter
+    def logical_present_pending(self, value: bool) -> None:
+        self._logical_present_pending = bool(value)
+
+    def reset_logical_handoff(self) -> None:
+        """Reset the empty handoff before its owner starts.
+
+        A running logical runtime is never replaced or orphaned merely to
+        reset a mailbox.
+        """
+
+        with self._lock:
+            runtime = self._logical_runtime
+            if runtime is not None and runtime.is_running():
+                raise RuntimeError("cannot reset a running visualizer runtime")
+            self._logical_runtime = None
+            self._logical_mailbox.clear()
+            self._logical_present_pending = False
+
+    def start_logical_runtime(
+        self,
+        *,
+        step: LogicalStep,
+        interval_s: float,
+    ) -> VisualizerLogicalRuntime:
+        """Start or return the sole authored logical runtime."""
+
+        with self._lock:
+            runtime = self._logical_runtime
+            if runtime is not None:
+                if runtime.is_running():
+                    return runtime
+                self._logical_runtime = None
+
+            runtime = VisualizerLogicalRuntime(
+                step=step,
+                interval_s=interval_s,
+                generation=self._runtime_generation,
+            )
+            # Publish the owner before the thread starts. A fast first step can
+            # then observe that it is the thread-owned path and request the one
+            # bounded presentation callback.
+            self._logical_runtime = runtime
+            try:
+                runtime.start()
+            except Exception:
+                self._logical_runtime = None
+                raise
+            return runtime
+
+    def stop_logical_runtime(self) -> bool:
+        """Close and join logical ownership without orphaning a live thread."""
+
+        with self._lock:
+            runtime = self._logical_runtime
+        if runtime is None:
+            self._logical_mailbox.clear()
+            self._logical_present_pending = False
+            return True
+
+        joined = bool(runtime.stop())
+        with self._lock:
+            if joined and self._logical_runtime is runtime:
+                self._logical_runtime = None
+            self._logical_mailbox.clear()
+            self._logical_present_pending = False
+        return joined
+
+    def describe(self) -> dict[str, Any]:
+        runtime = self._logical_runtime
+        return {
+            "runtime_generation": self._runtime_generation,
+            "mode": self._mode_id,
+            "enabled": self._enabled,
+            "playing": self._playing,
+            "logical_running": bool(runtime and runtime.is_running()),
+            "logical_revision": self._logical_mailbox.revision,
+        }
+
+
+__all__ = ["VisualizerRuntimeController"]
