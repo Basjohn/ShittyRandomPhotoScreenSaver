@@ -51,6 +51,20 @@
       "interval": 40
     },
     "transitions": {
+      "activation": {
+        "3D Block Spins": true,
+        "Blinds": true,
+        "Block Puzzle Flip": true,
+        "Burn": true,
+        "Crossfade": true,
+        "Crumble": true,
+        "Diffuse": true,
+        "Particle": true,
+        "Ripple": true,
+        "Slide": true,
+        "Warp Dissolve": true,
+        "Wipe": true
+      },
       "blinds": {
         "direction": "Random",
         "feather": 2
@@ -104,7 +118,6 @@
         "Warp Dissolve": 6000,
         "Wipe": 4000
       },
-      "easing": "Auto",
       "last_random_choice": "Ripple",
       "particle": {
         "direction": "Random",
@@ -598,6 +611,14 @@
             "position": "Bottom Right"
           }
         }
+      },
+      "family_activation": {
+        "clocks": true,
+        "gmail": true,
+        "media": true,
+        "reddit": true,
+        "steam": true,
+        "weather": true
       },
       "friend_pulse": {
         "bg_color": [
