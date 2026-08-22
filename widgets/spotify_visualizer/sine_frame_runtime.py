@@ -6,6 +6,10 @@ import math
 from dataclasses import dataclass
 from typing import Sequence
 
+from widgets.spotify_visualizer.frame_runtime_lifecycle import (
+    RetirableFrameRuntime,
+    retirement_fenced,
+)
 from widgets.spotify_visualizer.render_state import VisualizerEnergyState
 from widgets.spotify_visualizer.sine_reactivity import (
     advance_sine_reactivity,
@@ -66,10 +70,11 @@ class SineResolvedFrame:
     reactive_source_ready: bool
 
 
-class SineFrameRuntime:
+class SineFrameRuntime(RetirableFrameRuntime):
     """Small Sine-only state owner with no Qt/render authority."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.reset()
 
     def reset(self) -> None:
@@ -88,6 +93,7 @@ class SineFrameRuntime:
         self._last_line_shifts = (0.0,) * _LINE_COUNT
         self._activation_identity: tuple[int, int, int] | None = None
 
+    @retirement_fenced
     def resolve(
         self,
         *,
@@ -112,7 +118,7 @@ class SineFrameRuntime:
         base_sensitivity: float,
         base_heartbeat: float,
         heartbeat_slider: float,
-    ) -> SineResolvedFrame:
+    ) -> SineResolvedFrame | None:
         timestamp = float(now_ts)
         activation_identity = (
             int(runtime_generation),

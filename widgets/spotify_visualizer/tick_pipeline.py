@@ -1627,11 +1627,12 @@ def _publish_logical_state(
     mode_reveal_ready: bool,
     present_frame: bool = True,
     protected_edges: Sequence[VisualizerProtectedEdge] = (),
-) -> VisualizerLogicalFrame:
+) -> Optional[VisualizerLogicalFrame]:
     """Publish one immutable logical result for the presentation half.
 
     Latest-wins: a GUI thread that cannot keep up loses freshness rather than
     accumulating a backlog, and the simulation keeps its own cadence regardless.
+    A capture overtaken by mode replacement is an expected no-publication result.
     """
 
     from widgets.spotify_visualizer.legacy_render_snapshot_adapter import (
@@ -1646,6 +1647,8 @@ def _publish_logical_state(
         present_frame=present_frame,
         protected_edges=protected_edges,
     )
+    if payload is None:
+        return None
     mailbox = widget._logical_mailbox
     mailbox.publish(
         payload,
