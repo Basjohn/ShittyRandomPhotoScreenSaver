@@ -82,7 +82,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         "Sine Waves",
         "_sine_preset_slider",
         ("sine_", "sine_wave_", "sinewave_"),
-        _CURRENT_CARDED_POLICY,
+        _REFLOWING_CARDED_POLICY,
     ),
     VisualizerModeDescriptor(
         "bubble",

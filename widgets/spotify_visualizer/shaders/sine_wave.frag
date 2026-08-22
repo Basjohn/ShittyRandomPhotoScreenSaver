@@ -10,10 +10,19 @@ uniform float u_dpr;
 // not card-local. Subtracting this origin restores card-local pixels.
 // A card-sized, origin-zero target simply passes (0, 0).
 uniform vec2 u_viewport_origin_px;
+// Qt Quick uses interpolated item-local coordinates. The old compositor keeps
+// the framebuffer-coordinate branch until Phase-I deletion.
+uniform int u_quick_item_coords;
+uniform vec4 u_content_rect;  // item-local x, y, width, height
+uniform float u_visual_scale;
 uniform float u_fade;
 uniform float u_time;
 
 const float TWO_PI = 6.2831853;
+
+float authored_visual_scale() {
+    return (u_quick_item_coords == 1) ? max(u_visual_scale, 0.01) : 1.0;
+}
 
 // Energy bands
 uniform float u_overall_energy;
@@ -229,7 +238,8 @@ vec4 eval_line(
     // Base width 2px, bass reaction can push it up to ~8px while still looking like a sine.
     // density_thickness_factor() tapers width at high density to prevent blobbing.
     float dtf = density_thickness_factor();
-    float line_width = (2.0 + bass_width_boost * 6.0) * dtf;
+    float line_width = (2.0 + bass_width_boost * 6.0)
+        * authored_visual_scale() * dtf;
     float line_alpha = 1.0 - smoothstep(0.0, line_width, dist_px);
 
     float glow_alpha = 0.0;
@@ -284,28 +294,39 @@ void main() {
         discard;
     }
 
-    float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;
-    float fb_height = height * dpr;
-    vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
-    vec2 fc = vec2(localFrag.x / dpr, (fb_height - localFrag.y) / dpr);
+    vec2 fc;
+    if (u_quick_item_coords == 1) {
+        fc = v_uv * u_resolution;
+    } else {
+        float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;
+        float fb_height = height * dpr;
+        vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
+        fc = vec2(localFrag.x / dpr, (fb_height - localFrag.y) / dpr);
+    }
+
+    float px_scale = authored_visual_scale();
+    vec4 content_rect = (u_quick_item_coords == 1)
+        ? u_content_rect : vec4(0.0, 0.0, width, height);
 
     // Keep a slightly larger safety margin so glow/line never overlaps the card border
-    float margin_x = 5.0;
-    float margin_y = 2.0;
-    float inner_width = width - margin_x * 2.0;
-    float inner_height = height - margin_y * 2.0;
+    float margin_x = 5.0 * px_scale;
+    float margin_y = 2.0 * px_scale;
+    float inner_width = content_rect.z - margin_x * 2.0;
+    float inner_height = content_rect.w - margin_y * 2.0;
 
     if (inner_width <= 0.0 || inner_height <= 0.0) {
         discard;
     }
 
-    if (fc.x < margin_x || fc.x > width - margin_x ||
-        fc.y < margin_y || fc.y > height - margin_y) {
+    if (fc.x < content_rect.x + margin_x ||
+        fc.x > content_rect.x + content_rect.z - margin_x ||
+        fc.y < content_rect.y + margin_y ||
+        fc.y > content_rect.y + content_rect.w - margin_y) {
         discard;
     }
 
-    float nx = (fc.x - margin_x) / inner_width;
-    float ny = (fc.y - margin_y) / inner_height;
+    float nx = (fc.x - content_rect.x - margin_x) / inner_width;
+    float ny = (fc.y - content_rect.y - margin_y) / inner_height;
 
     // --- Amplitude: card_adaptation IS the fraction of half-height the wave uses ---
     // adapt=1.0 → wave peaks touch card edges, adapt=0.3 → wave uses 30% of card
@@ -329,7 +350,7 @@ void main() {
     float hb_mult = hb_params.x;
     float hb_cap = hb_params.y;
     // Size controls spread radius only; intensity controls visible strength.
-    float glow_sigma_base = 8.0 * max(u_glow_size, 0.1);
+    float glow_sigma_base = 8.0 * px_scale * max(u_glow_size, 0.1);
 
     int lines = clamp(u_line_count, 1, 6);
 
@@ -457,7 +478,11 @@ void main() {
     float v_shift_pct = float(u_sine_vertical_shift) / 100.0;
     float v_spacing = 0.0;
     if (abs(v_shift_pct) > 0.001 && lines >= 2) {
-        float base_spacing_px = clamp(inner_height * 0.25, 20.0, 80.0);
+        float base_spacing_px = clamp(
+            inner_height * 0.25,
+            20.0 * px_scale,
+            80.0 * px_scale
+        );
         float raw_spacing = (base_spacing_px * v_shift_pct) / inner_height;
         // Clamp so lines stay within card bounds (max ±0.35 normalized)
         v_spacing = clamp(raw_spacing, -0.35, 0.35);

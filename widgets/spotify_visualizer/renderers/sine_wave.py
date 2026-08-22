@@ -6,33 +6,13 @@ import time
 
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from widgets.spotify_visualizer.renderers.gl_helpers import set1f as _set1f, set1i as _set1i, set_color4 as _set_color4
+from widgets.spotify_visualizer.sine_reactivity import (
+    advance_sine_reactivity,
+    compute_sine_reactivity_targets,
+)
 
 
 logger = get_logger(__name__)
-
-
-def _smoothstep(edge0: float, edge1: float, value: float) -> float:
-    if edge1 <= edge0:
-        return 1.0 if value >= edge1 else 0.0
-    t = max(0.0, min(1.0, (value - edge0) / (edge1 - edge0)))
-    return t * t * (3.0 - 2.0 * t)
-
-
-def _attack_release_step(
-    current: float,
-    target: float,
-    dt: float,
-    *,
-    attack_ms: float,
-    release_ms: float,
-) -> float:
-    if dt <= 0.0:
-        return target
-    tau_ms = attack_ms if target >= current else release_ms
-    if tau_ms <= 0.0:
-        return target
-    alpha = 1.0 - pow(2.718281828459045, -dt / (tau_ms / 1000.0))
-    return current + (target - current) * alpha
 
 
 def _compute_sine_reactivity_targets(s) -> dict[str, float]:
@@ -41,107 +21,23 @@ def _compute_sine_reactivity_targets(s) -> dict[str, float]:
     This keeps the stronger beat response local to Sine Wave so Oscilloscope
     and other renderers do not inherit the same tuning by accident.
     """
-    base_bass = max(0.0, float(getattr(s, '_line_smoothed_bass', 0.0)))
-    base_mid = max(0.0, float(getattr(s, '_line_smoothed_mid', 0.0)))
-    base_high = max(0.0, float(getattr(s, '_line_smoothed_high', 0.0)))
-
-    kick_evt = max(0.0, float(getattr(s, '_line_kick_event_strength', 0.0)))
-    snare_evt = max(0.0, float(getattr(s, '_line_snare_event_strength', 0.0)))
-    width_mix = max(0.0, min(1.0, float(getattr(s, '_sine_wave_transient_width_mix', 0.4))))
-    base_overall = max(0.0, float(getattr(getattr(s, '_energy_bands', None), 'overall', 0.0)))
-
-    # Keep Sine's scheduler help as a beat-confirmation assist, not a second
-    # independent heartbeat source. The actual heartbeat detector should remain
-    # the only path capable of producing the larger amplitude swells.
-    continuous_support = min(
-        1.0,
-        max(
-            base_bass,
-            base_overall * 0.98,
-            base_mid * 0.52 + base_high * 0.22,
+    return compute_sine_reactivity_targets(
+        smoothed_bass=float(getattr(s, '_line_smoothed_bass', 0.0)),
+        smoothed_mid=float(getattr(s, '_line_smoothed_mid', 0.0)),
+        smoothed_high=float(getattr(s, '_line_smoothed_high', 0.0)),
+        overall_energy=float(
+            getattr(getattr(s, '_energy_bands', None), 'overall', 0.0)
         ),
-    )
-    kick_support = min(kick_evt, 0.10 + continuous_support * 0.85)
-    snare_support = min(snare_evt, 0.08 + continuous_support * 0.70)
-    raw_event_drive = min(1.25, kick_evt * 1.00 + snare_evt * 0.55)
-    event_drive = min(raw_event_drive, 0.16 + continuous_support * 0.82)
-    beat_drive = min(
-        1.0,
-        max(
-            base_bass * 1.08,
-            continuous_support * 0.78 + kick_support * 0.22 + snare_support * 0.10,
+        kick_event=float(getattr(s, '_line_kick_event_strength', 0.0)),
+        snare_event=float(getattr(s, '_line_snare_event_strength', 0.0)),
+        transient_width_mix=float(
+            getattr(s, '_sine_wave_transient_width_mix', 0.4)
         ),
+        base_width_reaction=float(getattr(s, '_sine_width_reaction', 0.0)),
+        base_sensitivity=float(getattr(s, '_line_sensitivity', 1.0)),
+        base_heartbeat=float(getattr(s, '_heartbeat_intensity', 0.0)),
+        heartbeat_slider=float(getattr(s, '_sine_heartbeat', 0.0)),
     )
-
-    boosted_bass = min(1.0, max(base_bass, base_bass + kick_support * 0.28 + snare_support * 0.09))
-    boosted_mid = min(1.0, max(base_mid, base_mid + snare_support * 0.20 + kick_support * 0.07))
-    boosted_high = min(1.0, max(base_high, base_high + snare_support * 0.15))
-
-    boosted_overall = min(
-        1.0,
-        max(
-            base_overall,
-            boosted_bass * 0.58 + boosted_mid * 0.27 + boosted_high * 0.15,
-        ),
-    )
-
-    base_wr = max(0.0, min(1.0, float(getattr(s, '_sine_width_reaction', 0.0))))
-    width_boost = width_mix * (
-        beat_drive * 0.55
-        + kick_support * 0.22
-        + snare_support * 0.11
-    )
-    width_reaction = min(
-        1.0,
-        max(base_wr, base_wr * (1.0 + continuous_support * 0.25))
-        + width_boost,
-    )
-
-    raw_sensitivity = max(0.1, float(getattr(s, '_line_sensitivity', 1.0)))
-    sensitivity = min(
-        5.0,
-        raw_sensitivity
-        * (1.0 + continuous_support * 0.18 + kick_support * 0.26 + snare_support * 0.12),
-    )
-
-    base_heartbeat = max(0.0, float(getattr(s, '_heartbeat_intensity', 0.0)))
-    hb_slider = max(0.0, min(1.0, float(getattr(s, '_sine_heartbeat', 0.0))))
-    heartbeat_assist_cap = min(0.36, 0.05 + continuous_support * 0.28 + hb_slider * 0.12)
-    heartbeat_assist = min(heartbeat_assist_cap, kick_support * 0.30 + snare_support * 0.14)
-    heartbeat_intensity = min(1.0, max(base_heartbeat, heartbeat_assist))
-    motion_support = min(
-        1.0,
-        max(
-            base_overall * 1.30,
-            base_bass * 1.15,
-            beat_drive * 0.92,
-            base_mid * 0.42 + base_high * 0.24,
-            heartbeat_intensity * 0.78,
-        ),
-    )
-    wave_effect_gate = 0.06 + _smoothstep(0.10, 0.42, motion_support) * 0.94
-
-    return {
-        'overall_energy': boosted_overall,
-        'bass_energy': boosted_bass,
-        'mid_energy': boosted_mid,
-        'high_energy': boosted_high,
-        'beat_drive': beat_drive,
-        'event_drive': event_drive,
-        'width_reaction': width_reaction,
-        'sensitivity': sensitivity,
-        'heartbeat_intensity': heartbeat_intensity,
-        'wave_effect_gate': wave_effect_gate,
-        '_diag_kick_evt': kick_evt,
-        '_diag_snare_evt': snare_evt,
-        '_diag_raw_event_drive': raw_event_drive,
-        '_diag_continuous_support': continuous_support,
-        '_diag_base_heartbeat': base_heartbeat,
-        '_diag_heartbeat_assist': heartbeat_assist,
-        '_diag_raw_sensitivity': raw_sensitivity,
-        '_diag_base_width_reaction': base_wr,
-        '_diag_motion_support': motion_support,
-    }
 
 
 def _compute_sine_reactivity_state(s, *, now_ts: float | None = None) -> dict[str, float]:
@@ -159,78 +55,7 @@ def _compute_sine_reactivity_state(s, *, now_ts: float | None = None) -> dict[st
     if not isinstance(prev, dict):
         prev = {}
 
-    smoothed = {
-        'overall_energy': _attack_release_step(
-            float(prev.get('overall_energy', reactive['overall_energy'])),
-            reactive['overall_energy'],
-            dt,
-            attack_ms=28.0,
-            release_ms=140.0,
-        ),
-        'bass_energy': _attack_release_step(
-            float(prev.get('bass_energy', reactive['bass_energy'])),
-            reactive['bass_energy'],
-            dt,
-            attack_ms=24.0,
-            release_ms=125.0,
-        ),
-        'mid_energy': _attack_release_step(
-            float(prev.get('mid_energy', reactive['mid_energy'])),
-            reactive['mid_energy'],
-            dt,
-            attack_ms=28.0,
-            release_ms=150.0,
-        ),
-        'high_energy': _attack_release_step(
-            float(prev.get('high_energy', reactive['high_energy'])),
-            reactive['high_energy'],
-            dt,
-            attack_ms=28.0,
-            release_ms=150.0,
-        ),
-        'beat_drive': _attack_release_step(
-            float(prev.get('beat_drive', reactive['beat_drive'])),
-            reactive['beat_drive'],
-            dt,
-            attack_ms=24.0,
-            release_ms=150.0,
-        ),
-        'event_drive': _attack_release_step(
-            float(prev.get('event_drive', reactive['event_drive'])),
-            reactive['event_drive'],
-            dt,
-            attack_ms=18.0,
-            release_ms=170.0,
-        ),
-        'width_reaction': _attack_release_step(
-            float(prev.get('width_reaction', reactive['width_reaction'])),
-            reactive['width_reaction'],
-            dt,
-            attack_ms=24.0,
-            release_ms=185.0,
-        ),
-        'sensitivity': _attack_release_step(
-            float(prev.get('sensitivity', reactive['sensitivity'])),
-            reactive['sensitivity'],
-            dt,
-            attack_ms=22.0,
-            release_ms=175.0,
-        ),
-        'heartbeat_intensity': _attack_release_step(
-            float(prev.get('heartbeat_intensity', reactive['heartbeat_intensity'])),
-            reactive['heartbeat_intensity'],
-            dt,
-            attack_ms=16.0,
-            release_ms=210.0,
-        ),
-        'wave_effect_gate': _attack_release_step(
-            float(prev.get('wave_effect_gate', reactive['wave_effect_gate'])),
-            reactive['wave_effect_gate'],
-            dt,
-            attack_ms=36.0,
-            release_ms=240.0,
-        ),
-    }
+    smoothed = advance_sine_reactivity(prev, reactive, dt=dt)
 
     setattr(s, '_sine_reactivity_state_smoothed', smoothed)
     setattr(s, '_sine_reactivity_state_ts', now)

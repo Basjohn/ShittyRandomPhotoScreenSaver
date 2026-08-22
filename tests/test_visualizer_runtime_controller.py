@@ -45,7 +45,7 @@ def test_current_modes_resolve_their_proven_carded_presentation_policy() -> None
         assert policy.shell_policy is VisualizerShellPolicy.CARD
         assert policy.clip_policy is VisualizerClipPolicy.CARD_INTERIOR
         assert policy.viewport_resize_capable is (
-            mode_id in {"spectrum", "oscilloscope"}
+            mode_id in {"spectrum", "oscilloscope", "sine_wave"}
         )
 
 
