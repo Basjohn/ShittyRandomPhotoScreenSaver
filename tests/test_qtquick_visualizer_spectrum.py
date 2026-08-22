@@ -363,9 +363,12 @@ def test_spectrum_layout_uniformly_scales_and_reflows_wide_tall_viewports() -> N
     assert right_guard == pytest.approx(11.0)
 
 
-def test_only_proven_spectrum_policy_claims_viewport_resize_capability() -> None:
+def test_only_proven_quick_modes_claim_viewport_resize_capability() -> None:
     assert get_visualizer_presentation_policy("spectrum").viewport_resize_capable
-    for mode_id in ("oscilloscope", "sine_wave", "bubble", "devcurve"):
+    assert get_visualizer_presentation_policy(
+        "oscilloscope"
+    ).viewport_resize_capable
+    for mode_id in ("sine_wave", "bubble", "devcurve"):
         assert not get_visualizer_presentation_policy(
             mode_id
         ).viewport_resize_capable
@@ -378,13 +381,19 @@ def test_quick_spectrum_registry_is_static_and_lazy() -> None:
     )
 
     descriptors = iter_quick_visualizer_implementations()
-    assert tuple(descriptor.mode_id for descriptor in descriptors) == ("spectrum",)
+    assert tuple(descriptor.mode_id for descriptor in descriptors) == (
+        "spectrum",
+        "oscilloscope",
+    )
     assert all(isinstance(descriptor.module_name, str) for descriptor in descriptors)
     renderer = resolve_quick_visualizer_renderer("spectrum")
     assert renderer is not None
     assert renderer.mode_id == "spectrum"
     assert renderer.has_resources is False
-    assert resolve_quick_visualizer_renderer("oscilloscope") is None
+    oscilloscope = resolve_quick_visualizer_renderer("oscilloscope")
+    assert oscilloscope is not None
+    assert oscilloscope.mode_id == "oscilloscope"
+    assert oscilloscope.has_resources is False
 
 
 def test_legacy_capture_freezes_quick_spectrum_peaks_without_geometry_reads() -> None:

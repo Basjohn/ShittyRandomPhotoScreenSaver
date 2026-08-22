@@ -44,7 +44,9 @@ def test_current_modes_resolve_their_proven_carded_presentation_policy() -> None
         policy = get_visualizer_mode_descriptor(mode_id).presentation_policy
         assert policy.shell_policy is VisualizerShellPolicy.CARD
         assert policy.clip_policy is VisualizerClipPolicy.CARD_INTERIOR
-        assert policy.viewport_resize_capable is (mode_id == "spectrum")
+        assert policy.viewport_resize_capable is (
+            mode_id in {"spectrum", "oscilloscope"}
+        )
 
 
 def test_controller_is_presentation_neutral_and_source_resolution_is_lazy() -> None:

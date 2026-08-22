@@ -795,6 +795,7 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_si
     extra['line_dim'] = widget._sine_line_dim if is_sine else widget._osc_line_dim
     extra['line_offset_bias'] = widget._sine_line_offset_bias if is_sine else widget._osc_line_offset_bias
     extra['osc_vertical_shift'] = widget._osc_vertical_shift
+    extra['osc_transient_width_mix'] = getattr(widget, '_osc_transient_width_mix', 0.35)
     extra['sine_wave_travel'] = widget._sine_wave_travel
     extra['sine_card_adaptation'] = widget._sine_card_adaptation
     extra['sine_travel_line2'] = widget._sine_travel_line2

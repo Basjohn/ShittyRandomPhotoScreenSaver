@@ -1653,19 +1653,19 @@ architecture.
 # 15. Current next work
 
 Normal implementation work is now **Phase D**. D1, D2, the D3/D4 item, shell, clip and canonical
-geometry foundation, and Spectrum are structurally landed; do not reopen them without contradictory
-evidence.
+geometry foundation, Spectrum, and Oscilloscope are structurally landed; do not reopen them without
+contradictory evidence.
 
-The next admitted slice is Oscilloscope:
+The next admitted slice is Sine:
 
-- [ ] port the authored waveform, line persistence/ghost layers, paused idle behavior and source
-  freshness through the immutable Quick render boundary without adding a second clock;
+- [ ] port authored idle motion, layers/line persistence, reactive behavior, ghosting and mode tuning
+  through the immutable Quick render boundary without adding a separate Sine timer;
 - [ ] prove canonical aspect at scale 1.0 and another uniform scale, plus wide/tall viewport seams
-  while preserving authored stroke thickness and visual scale;
-- [ ] run only the focused Oscilloscope/visualizer script and test gates;
-- [ ] inspect diff/status, commit the coherent Oscilloscope slice, and push immediately.
+  while preserving authored line thickness and visual scale;
+- [ ] run only the focused Sine/visualizer script and test gates;
+- [ ] inspect diff/status, commit the coherent Sine slice, and push immediately.
 
-Then continue in the fixed checkpoint order: Sine, Bubble + BTF, DevCurve, all-five-mode
+Then continue in the fixed checkpoint order: Bubble + BTF, DevCurve, all-five-mode
 lifecycle/source/pause/aspect closure, and Phase-D documentation closure.
 
 If the operator instead explicitly says **continue from Phase C tests**, execute Section 7.5 test-only

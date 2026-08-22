@@ -41,11 +41,11 @@ _CURRENT_CARDED_POLICY = VisualizerModePresentationPolicy(
     viewport_resize_capable=False,
 )
 
-_SPECTRUM_CARDED_POLICY = VisualizerModePresentationPolicy(
+_REFLOWING_CARDED_POLICY = VisualizerModePresentationPolicy(
     shell_policy=VisualizerShellPolicy.CARD,
     clip_policy=VisualizerClipPolicy.CARD_INTERIOR,
-    # The Quick Spectrum renderer recomputes bar distribution and vertical
-    # extent from committed geometry; Phase G may safely expose edge resizing.
+    # Proven Quick mode renderers recompute their domain from committed
+    # geometry; Phase G may safely expose edge resizing for these modes.
     viewport_resize_capable=True,
 )
 
@@ -68,14 +68,14 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         "Spectrum",
         "_spectrum_preset_slider",
         ("spectrum_",),
-        _SPECTRUM_CARDED_POLICY,
+        _REFLOWING_CARDED_POLICY,
     ),
     VisualizerModeDescriptor(
         "oscilloscope",
         "Oscilloscope",
         "_osc_preset_slider",
         ("osc_", "oscilloscope_"),
-        _CURRENT_CARDED_POLICY,
+        _REFLOWING_CARDED_POLICY,
     ),
     VisualizerModeDescriptor(
         "sine_wave",
