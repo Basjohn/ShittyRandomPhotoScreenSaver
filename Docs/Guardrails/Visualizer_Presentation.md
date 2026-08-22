@@ -139,17 +139,17 @@ inside rounded inner card path
 Historical R-21 is binding evidence that shrinking the GL render rect to hide bleed is wrong because
 it changes authored content geometry.
 
-Preferred Quick ownership is a scene-graph `QSGClipNode`:
+The exact pinned PySide 6.9.1 scene-graph clip-node proof failed. Current Quick ownership is one
+render-node-local SDF/stencil host:
 
-- rectangle clip may use scissor;
-- rounded clip uses scene-graph clip geometry, normally stencil-backed;
-- custom `QSGRenderNode` honors the supplied RenderState scissor/stencil values;
-- direct GL does not clear or overwrite scene-graph clip contents as if it owned the framebuffer.
+- `CARD_INTERIOR` uses the rounded canonical inner-card geometry;
+- `VIEWPORT_RECT` uses the same host with zero radius;
+- the host and mode draw use the same render-target viewport;
+- supplied RenderState scissor/stencil values are honored;
+- direct GL does not clear or overwrite scene-graph clip contents as if it owned the framebuffer;
+- temporary stencil contents and every touched direct-GL state are restored.
 
-If pinned PySide makes that path unusable, a single render-node-local rounded mask is allowed, but the
-same geometry/policy contract remains and it must respect incoming scene clipping.
-
-Do not preserve two permanent selectable clip implementations.
+Do not preserve the failed clip-node route as a second selectable implementation.
 
 ## 8. Card interior geometry
 

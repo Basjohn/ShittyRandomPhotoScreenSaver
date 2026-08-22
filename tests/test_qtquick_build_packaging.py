@@ -68,7 +68,11 @@ def test_bounded_compiled_smoke_uses_production_quick_code_and_qml_payload():
 
 def test_display_scene_is_real_packaged_qml_loaded_by_the_runtime_smoke():
     qml_path = ROOT / "rendering" / "quick" / "qml" / "DisplayScene.qml"
+    visualizer_qml_path = (
+        ROOT / "rendering" / "quick" / "qml" / "VisualizerPresentation.qml"
+    )
     source = qml_path.read_text(encoding="utf-8")
+    visualizer_source = visualizer_qml_path.read_text(encoding="utf-8")
     smoke = (ROOT / "tools" / "qtquick_render_node_smoke.py").read_text(
         encoding="utf-8"
     )
@@ -78,6 +82,11 @@ def test_display_scene_is_real_packaged_qml_loaded_by_the_runtime_smoke():
 
     assert "import QtQuick" in source
     assert 'objectName: "displaySceneRoot"' in source
+    assert 'source: "VisualizerPresentation.qml"' in source
+    assert "active: false" in source
+    assert "import QtQuick.Effects" in visualizer_source
+    assert 'objectName: "visualizerPresentationRoot"' in visualizer_source
+    assert 'objectName: "visualizerContentHost"' in visualizer_source
     assert "QuickSceneFactory(self)" in smoke
     assert "QQmlEngine" in scene_owner
     assert "QQmlComponent" in scene_owner
