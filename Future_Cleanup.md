@@ -1,12 +1,12 @@
 # Future Cleanup
 
-Last updated: 2026-08-21
+Last updated: 2026-08-22
 
 Deferred/deletion ledger. Active sequencing remains in `Current_Plan.md`.
 
-During the Qt Quick migration, sections 1–4 become **immediate post-cutover deletion work** when
-their caller-removal gate is reached. They are not permission to keep a second presenter architecture
-indefinitely.
+During the Qt Quick migration, sections 1–3 become **immediate post-cutover deletion work** when
+their caller-removal gate is reached. They are not permission to keep a second presenter
+architecture indefinitely.
 
 Technical decomposition:
 
@@ -14,15 +14,15 @@ Technical decomposition:
 
 ## 1. Post-Quick-cutover presentation deletion
 
-After production owner switches to `QuickDisplayRuntime` and relevant gates are green:
+After the production owner switches to `QuickDisplayRuntime` and focused/full gates are green:
 
 - [ ] remove retired QRhiWidget physical presentation ownership;
 - [ ] remove `GLCompositorWidget` scheduling/presentation ownership;
 - [ ] remove `ExternalOpenGLRhiWidget` / old borrowed-QRhi-context surface helpers with no caller;
 - [ ] remove QRhiWidget-only lifecycle compatibility;
 - [ ] remove obsolete GUI `present_tick`/presentation callbacks after caller proof;
-- [ ] remove old adaptive/compositor render scheduling no live non-Quick owner needs;
-- [ ] remove compositor-only transition resource helpers after Quick caller proof;
+- [ ] remove old adaptive/compositor render scheduling that no live non-Quick owner needs;
+- [ ] remove compositor-only transition resource helpers after Quick renderer caller proof;
 - [ ] retain P0 comparison/raw evidence;
 - [ ] keep cheap architecture-neutral timing diagnostics.
 
@@ -42,7 +42,8 @@ After visualizer pixels are fully Quick-owned:
 - [ ] remove `CompositorVisualizerLayer`;
 - [ ] remove old compositor card texture owner;
 - [ ] retire obsolete `SpotifyBarsGLOverlay` presentation/resource-host plumbing with no caller;
-- [ ] remove QWidget visualizer card/presentation code no remaining settings/model test uses;
+- [ ] remove QWidget visualizer card/presentation code that no remaining settings/model test uses;
+- [ ] remove the retired visualizer per-mode card-height/growth settings, Settings controls/bindings, preset leaves, compatibility helpers (`card_height.py` / old growth-map paths), and tests whose only purpose is preserving that legacy geometry behavior;
 - [ ] remove QWidget/QRhi reveal/fade ownership replaced by Quick;
 - [ ] preserve logical runtime, BeatEngine/source, presets, BTF, mode algorithms/shaders.
 
@@ -56,19 +57,17 @@ After production Quick cutover and each family's caller proof:
 - [ ] delete old painted-shadow cache code after Quick shadow parity and caller proof;
 - [ ] delete old effect invalidation code if no transient QWidget control UI still owns it;
 - [ ] delete old `EditShellWidget` / `EditGridOverlayWidget` when Quick CUSTOM replaces them;
-- [ ] delete obsolete eager settings-section paths superseded by E2 capability/lazy navigation;
 - [ ] retain Python providers/models/settings logic that remains canonical.
 
 Do not retain screenshot-to-texture adapters or dual presentation registries "for safety."
 
 ## 4. Transition legacy deletion
 
-After all active transitions are Quick-rendered and E2 Settings activation/navigation is live:
+After all active transitions are Quick-rendered:
 
 - [ ] remove `gl_compositor_*_transition.py` classes whose only target was `GLCompositorWidget`;
 - [ ] retain/move pure transition parameter/easing/direction math still used by Quick;
 - [ ] remove old compositor-specific transition watchdog/animation glue;
-- [ ] remove old TransitionsTab dropdown/per-transition pool UI superseded by E2 after caller proof;
 - [ ] preserve canonical transition registry/settings identity.
 
 ## 5. Native code
@@ -103,13 +102,15 @@ After migration/correctness work:
 
 Repeat long-soak resource work on final Quick architecture.
 
-Keep memory/handle retention separate from physical-presentation decision unless evidence connects them.
+Keep memory/handle retention separate from physical-presentation decision unless evidence connects
+them.
 
 ## 9. Repository / compatibility debris
 
 - [ ] remove generated preview debris after clean-checkout proof;
 - [ ] collapse deprecated class-global input authority after Quick input owner lands;
-- [ ] remove only caller-proven Imgur debris missed by active Phase F removal;
+- [ ] remove only any caller-proven Imgur debris missed by the active Phase F removal; Imgur
+      itself is no longer deferred and must not be ported to Quick;
 - [ ] add lightweight repository-hygiene checks.
 
 ## 10. New feature / implementation backlog
@@ -118,7 +119,7 @@ New features and deliberately deferred new implementations belong in `Future_Wor
 cleanup ledger.
 
 `Future_Work.md` must not interrupt active `Current_Plan.md` or important `Future_Cleanup.md` work
-unless the operator explicitly selects an item.
+unless the operator explicitly selects one of its items.
 
 ## 11. Documentation hygiene
 

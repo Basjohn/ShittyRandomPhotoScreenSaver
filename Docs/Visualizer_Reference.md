@@ -1,18 +1,21 @@
 # Visualizer Reference
 
-Last updated: 2026-08-20
+Last updated: 2026-08-22
 
-Current visualizer behaviour and accepted presentation destination.
+Current visualizer behavior and accepted presentation destination.
 
 ## 1. Modes
 
-Canonical mode ids remain owned by the settings/mode registry:
+Canonical current mode ids remain owned by the settings/mode registry:
 
 - `spectrum`
 - `oscilloscope`
 - `sine_wave`
 - `bubble`
 - `devcurve`
+
+The mode registry may also own cheap presentation policy metadata. Do not put renderer objects or
+heavy implementation imports into it.
 
 ## 2. Capability model
 
@@ -50,8 +53,10 @@ source/audio
     -> Quick scene/render owner
 ```
 
-During migration, old GUI `present_tick`/compositor code may still be the current implementation.
-It is not the destination contract.
+During migration, old GUI `present_tick`/compositor code may still exist as reference/current
+production.
+
+It is not destination architecture.
 
 ## 4. Presentation ownership
 
@@ -63,8 +68,8 @@ Destination:
 - no independent swap/vsync owner;
 - no self-driven visualizer repaint loop.
 
-The historical `SpotifyBarsGLOverlay` name may temporarily survive as state/resource code while
-migration occurs. It is not a presentation-surface contract.
+The historical `SpotifyBarsGLOverlay` name may temporarily survive as state/resource code during
+migration. It is not a presentation-surface contract.
 
 ## 5. Logical / presentation split
 
@@ -72,9 +77,11 @@ Logical worker owns plain-data evolution.
 
 Presentation side owns:
 
-- current scene state;
+- current immutable scene state;
+- presentation policy;
 - presentation geometry;
-- card/pixel representation;
+- optional shell/chrome;
+- content clipping;
 - fade/reveal;
 - GPU resource use;
 - physical presentation.
@@ -89,36 +96,162 @@ No FIFO, catch-up, or paint acknowledgement.
 
 Every authored event integrates before later state may supersede it.
 
-## 7. Presentation geometry
+## 7. Presentation policy
 
-One authoritative display-local geometry snapshot must feed all visual parts that need alignment:
+Do not assume every possible visualizer must draw a card.
 
-- card;
-- shader/render item;
-- viewport/scissor equivalent;
+Minimum policy vocabulary:
+
+```text
+shell:
+    CARD
+    FRAMELESS
+
+clip:
+    CARD_INTERIOR
+    VIEWPORT_RECT
+```
+
+All five current production modes remain:
+
+```text
+CARD + CARD_INTERIOR
+```
+
+A future mode may explicitly opt into `FRAMELESS + VIEWPORT_RECT`.
+
+That removes card background/frame/shadow while preserving the same QQuickWindow, presentation root,
+fade/lifecycle and assigned viewport.
+
+## 8. Presentation geometry
+
+One authoritative display-local geometry snapshot feeds:
+
+- outer shell/card rect where present;
+- inner content rect;
+- custom render item;
+- viewport/scissor/scene clip;
 - DPR;
 - mask/border;
-- CUSTOM geometry.
+- CUSTOM geometry;
+- uniform visual scale;
+- content viewport extent/aspect.
 
 Do not create separate QWidget and Quick pixel geometry authorities.
 
-## 8. Card
+Do not represent freeform aspect changes by stretching final rendered pixels.
 
-Card visual fidelity must be preserved.
+## 9. Clip
 
-Implementation may reuse existing raster output initially or migrate the card to retained Quick
-primitives, but steady presentation must not rebuild expensive stable pixels every visualizer frame.
+For current carded modes, custom GL remains clipped to the rounded **inner card path** so it sits
+visually above the fill and below the frame/border.
 
-Choose based on parity and measured cost.
+Historical R-21 proves that shrinking the content geometry to hide bleed is not acceptable.
 
-## 9. Bubble / BTF
+Preferred Quick implementation is scene-graph clipping (`QSGClipNode`) with the custom render node
+honoring supplied scissor/stencil state.
+
+A render-node-local rounded mask is allowed only if the pinned PySide clip-node route proves unusable.
+
+Quick clip geometry must derive from Quick chrome; do not copy centred-QPainter border formulas.
+
+Frameless modes normally use a rectangular viewport clip.
+
+## 10. Card / frameless shell
+
+### Current carded modes
+
+Preserve visual fidelity:
+
+- background;
+- border/radius;
+- card shadow;
+- opacity;
+- customization;
+- alignment;
+- fade.
+
+Stable shell pixels must not be expensively rebuilt every visualizer frame.
+
+### Future frameless modes
+
+Architecture permits a mode to omit:
+
+- background;
+- border/frame;
+- card shadow.
+
+This is useful for a free-standing 3D object such as the planned deformable sphere.
+
+Frameless does not mean display-global or separate-window rendering.
+
+## 11. Canonical aspect, scale and viewport extent
+
+Quick deliberately retires the pre-Quick per-mode preferred-height/growth customization:
+
+```text
+spectrum_growth
+osc_growth
+sine_wave_growth
+bubble_growth
+devcurve_growth
+```
+
+Those values altered card height independently of common width and were already ignored once CUSTOM
+geometry owned the old visualizer. They are not authored mode behavior and are not destination
+settings.
+
+All five current Quick modes share one canonical baseline viewport aspect ratio. A mode switch or
+preset load does not change viewport/card shape.
+
+Visualizer geometry then distinguishes:
+
+```text
+uniform scale
+```
+
+from:
+
+```text
+viewport width / viewport height
+```
+
+Whole-size operations preserve the baseline aspect:
+
+```text
+scroll-wheel resize -> uniform scale
+corner-handle resize -> uniform scale
+```
+
+Later Phase-G edge operations intentionally change viewport playroom at the same scale:
+
+```text
+left/right edge -> viewport width only
+top/bottom edge -> viewport height only
+```
+
+Expected adaptation at constant scale:
+
+- Spectrum reflows/redistributes bars across available width/height;
+- Bubble changes domain/aspect without stretching circles/velocities;
+- Oscilloscope/Sine/DevCurve adapt domain while keeping stroke scale;
+- a 3D sphere uses aspect-correct projection and stays round.
+
+Phase D builds/tests the geometry seam. Phase G owns the interactive edge-resize QoL.
+
+If a mode cannot safely support viewport resizing without harming authored behavior, ordinary whole-size
+scale remains valid and that mode may be marked viewport-resize-incapable.
+
+## 12. Bubble / BTF
 
 `Docs/Guardrails/Bubble_Temporal_Fidelity.md` is binding.
 
 Bubble is a canary for shared timing and must not receive mode-specific cadence hacks to hide
 presentation defects.
 
-## 10. Playback
+Viewport geometry changes are spatial configuration, not logical cadence authority.
+
+## 13. Playback
 
 Pause/Play preserves:
 
@@ -130,25 +263,39 @@ Pause/Play preserves:
 
 The migration must not turn normal Pause/Play into renderer/window recreation.
 
-## 11. CUSTOM / Edit
+## 14. CUSTOM / Edit
 
-CUSTOM/Edit must preserve one authoritative committed geometry.
+CUSTOM/Edit preserves one authoritative committed geometry.
 
 Control UI may remain QWidget if appropriate.
 
 Live runtime pixels belong to the Quick scene after migration; edit plumbing must not recreate a
 second accelerated presentation surface.
 
-## 12. Validation
+Phase-G preferred visualizer resize semantics:
+
+```text
+scroll wheel   -> uniform visual scale
+corner handles -> uniform visual scale
+left/right     -> viewport width
+top/bottom     -> viewport height
+```
+
+Viewport resizing is non-blocking QoL, not permission to stretch a rendered image.
+
+## 15. Validation
 
 Use:
 
-- deterministic authored-behaviour goldens;
+- deterministic authored-behavior goldens;
 - logical scheduler tests;
 - BTF;
 - source freshness tests;
 - real renderer/output tests where visibility matters;
 - Quick runtime-shaped presentation checks;
+- card-inner clip tests;
+- cardless-policy scene test;
+- default/wide/tall geometry tests;
 - lifecycle generation tests;
 - installed manual review.
 

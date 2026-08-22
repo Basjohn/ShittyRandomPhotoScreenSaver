@@ -1,6 +1,6 @@
 # Future Work
 
-Last updated: 2026-08-20
+Last updated: 2026-08-22
 
 Long-horizon feature / new-implementation backlog.
 
@@ -322,6 +322,21 @@ This is **not** a promise to reconstruct that historical effect from memory.
 
 Instead, experiment with a new real three-dimensional sphere/orb that rotates in 3D and continuously
 deforms its physical surface in response to music.
+
+This is the primary planned consumer of the Phase-D **frameless visualizer shell** seam:
+
+```text
+shell_policy = FRAMELESS
+clip_policy  = VIEWPORT_RECT
+```
+
+It should appear as a free-standing 3D object with no rectangular card fill, frame/border or card
+shadow. It still renders inside the normal visualizer Quick item/QSGRenderNode, participates in the
+same fade/lifecycle/generation ownership, and stays inside its assigned transparent viewport.
+
+If Phase-G visualizer viewport resizing lands, the sphere must use aspect-correct projection so wider
+or taller viewports reveal/reframe more space without turning the sphere into an ellipse. Whole-size
+corner/scroll resize still scales it uniformly; only edge-only viewport resize changes framing/aspect.
 
 Cheap shape:
 
