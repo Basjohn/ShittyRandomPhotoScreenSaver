@@ -230,6 +230,7 @@ class VisualizerModeState(Protocol):
 class SpectrumFrame:
     peaks: tuple[float, ...] = ()
     ghost_bars: tuple[float, ...] = ()
+    animation_time: float = 0.0
     parameters: FrozenFields = FrozenFields()
 
     def __post_init__(self) -> None:
@@ -239,6 +240,13 @@ class SpectrumFrame:
             "ghost_bars",
             _float_tuple(self.ghost_bars, name="spectrum ghost bar"),
         )
+        object.__setattr__(
+            self,
+            "animation_time",
+            _finite(self.animation_time, name="spectrum animation time"),
+        )
+        if self.animation_time < 0.0:
+            raise ValueError("spectrum animation time must be non-negative")
         object.__setattr__(
             self,
             "parameters",

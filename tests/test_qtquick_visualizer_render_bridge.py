@@ -11,6 +11,7 @@ import pytest
 from core.settings.visualizer_mode_registry import (
     VisualizerClipPolicy,
     VisualizerShellPolicy,
+    get_visualizer_presentation_policy,
 )
 from widgets.spotify_visualizer.render_bridge import VisualizerSnapshotBridge
 from widgets.spotify_visualizer.render_state import (
@@ -59,11 +60,13 @@ def _logical_frame(
     )
 
 
-def _presentation() -> ResolvedVisualizerPresentation:
+def _presentation(mode_id: str = "spectrum") -> ResolvedVisualizerPresentation:
     return ResolvedVisualizerPresentation(
         shell_policy=VisualizerShellPolicy.CARD,
         clip_policy=VisualizerClipPolicy.CARD_INTERIOR,
-        viewport_resize_capable=False,
+        viewport_resize_capable=get_visualizer_presentation_policy(
+            mode_id
+        ).viewport_resize_capable,
         outer_rect=(1920.0, 120.0, 480.0, 270.0),
         content_rect=(1924.0, 124.0, 472.0, 262.0),
         dpr=1.5,
@@ -513,11 +516,13 @@ def test_controller_commit_and_retirement_own_render_admission() -> None:
     assert controller.render_identity.runtime_generation == 0
     assert controller.render_identity.mode_id == "spectrum"
     logical = _logical_frame()
+    assert controller.presentation_viewport_extent == (420.0, 280.0)
     assert controller.publish_render_snapshot(
         logical,
         _presentation(),
         logical_revision=1,
     ) is True
+    assert controller.presentation_viewport_extent == (472.0, 262.0)
 
     assert controller.stop_logical_runtime() is True
     assert controller.render_identity is None
@@ -542,7 +547,7 @@ def test_mode_change_closes_old_mode_render_admission_until_commit() -> None:
     assert controller.render_identity is None
     assert controller.publish_render_snapshot(
         replace(_logical_frame(), mode_id="bubble", mode_state=BubbleFrame()),
-        _presentation(),
+        _presentation("bubble"),
         logical_revision=1,
     ) is False
 
@@ -587,7 +592,7 @@ def test_production_publication_to_controller_bridge_preserves_edge_once(
     assert first_publication is not None and first_publication.state is first
     assert controller.publish_render_snapshot(
         first,
-        _presentation(),
+        _presentation("bubble"),
         logical_revision=first_publication.revision,
     )
 
@@ -601,7 +606,7 @@ def test_production_publication_to_controller_bridge_preserves_edge_once(
     assert second_publication is not None and second_publication.state is second
     assert controller.publish_render_snapshot(
         second,
-        _presentation(),
+        _presentation("bubble"),
         logical_revision=second_publication.revision,
     )
 
@@ -625,7 +630,7 @@ def test_production_publication_to_controller_bridge_preserves_edge_once(
     assert third_publication is not None
     assert controller.publish_render_snapshot(
         third,
-        _presentation(),
+        _presentation("bubble"),
         logical_revision=third_publication.revision,
     )
     next_consumed = controller.render_bridge.take_for_render(

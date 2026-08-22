@@ -32,6 +32,27 @@ def _run_clip_smoke(policy: str) -> dict[str, object]:
     return json.loads(completed.stdout[completed.stdout.index("{") :])
 
 
+def _run_spectrum_smoke(case: str) -> dict[str, object]:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.qtquick_visualizer_clip_smoke",
+            "--policy",
+            "spectrum",
+            "--spectrum-case",
+            case,
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    return json.loads(completed.stdout[completed.stdout.index("{") :])
+
+
 def _assert_rgb(actual: list[int], expected: list[int]) -> None:
     assert len(actual) >= 3
     assert all(
@@ -148,3 +169,65 @@ def test_inline_visualizer_clip_covers_only_its_canonical_content(policy: str) -
     assert telemetry["release_count"] == 1
     assert telemetry["invalidation_count"] == 1
     assert report["release_context_current"] is True
+
+
+@pytest.mark.parametrize(
+    "case",
+    ("canonical", "scaled", "wide", "tall", "idle", "ghost"),
+)
+def test_production_spectrum_draws_and_releases_inside_quick(case: str) -> None:
+    report = _run_spectrum_smoke(case)
+
+    assert report["valid"] is True
+    assert report["error"] is None
+    capture = report["captures"][case]
+    assert capture["gl_error"] == 0
+    assert capture["lit_pixel_count"] > 0
+    assert capture["lit_column_count"] >= 16
+    assert capture["lit_row_count"] >= 5
+    assert capture["lit_bounds"] is not None
+
+    telemetry = report["telemetry"]
+    assert telemetry["error"] is None
+    assert telemetry["draw_count"] >= 1
+    assert telemetry["drawn_mode_id"] == "spectrum"
+    assert telemetry["release_thread_id"] == telemetry["render_thread_id"]
+    assert telemetry["release_count"] == 1
+    assert telemetry["invalidation_count"] == 1
+    assert report["release_context_current"] is True
+
+
+def test_spectrum_quick_geometry_scales_and_reflows_without_image_stretch() -> None:
+    canonical = _run_spectrum_smoke("canonical")["captures"]["canonical"]
+    scaled = _run_spectrum_smoke("scaled")["captures"]["scaled"]
+    wide = _run_spectrum_smoke("wide")["captures"]["wide"]
+    tall = _run_spectrum_smoke("tall")["captures"]["tall"]
+
+    assert scaled["outer_pixel_size"][0] == pytest.approx(
+        canonical["outer_pixel_size"][0] * 0.65,
+        abs=2,
+    )
+    assert scaled["outer_pixel_size"][1] == pytest.approx(
+        canonical["outer_pixel_size"][1] * 0.65,
+        abs=2,
+    )
+    assert scaled["lit_column_count"] < canonical["lit_column_count"]
+    assert scaled["lit_row_count"] < canonical["lit_row_count"]
+
+    assert wide["outer_pixel_size"][0] > canonical["outer_pixel_size"][0]
+    assert wide["outer_pixel_size"][1] == canonical["outer_pixel_size"][1]
+    assert wide["lit_column_count"] > canonical["lit_column_count"]
+    assert tall["outer_pixel_size"][0] == canonical["outer_pixel_size"][0]
+    assert tall["outer_pixel_size"][1] > canonical["outer_pixel_size"][1]
+    assert tall["lit_row_count"] > canonical["lit_row_count"]
+
+
+def test_paused_idle_and_peak_ghost_are_visible_real_quick_pixels() -> None:
+    idle = _run_spectrum_smoke("idle")["captures"]["idle"]
+    ghost = _run_spectrum_smoke("ghost")["captures"]["ghost"]
+
+    assert idle["lit_column_count"] >= 16
+    assert idle["lit_row_count"] >= 8
+    # Ghost input bars are uniformly low; the immutable peak field must still
+    # produce a tall fading trail in the actual Quick shader.
+    assert ghost["lit_row_count"] > idle["lit_row_count"] * 2

@@ -1,10 +1,10 @@
-"""Visual-only display easing for Spectrum solid bars.
+"""Presentation-neutral display easing for Spectrum solid bars.
 
-This module intentionally lives at the overlay/display seam. It must not
-change FFT/audio behavior, shared beat-engine smoothing, or per-mode floor
-contracts. The helper converts continuous Spectrum bar values into a smooth
-display-space body that suppresses small boundary chatter without snapping the
-visible bar height to rigid segment steps.
+This authored state advances only on the visualizer logical tick.  The
+presentation-neutral runtime controller and the legacy overlay each own their
+temporary migration-era instance, but render cadence never advances either
+one.  It must not change FFT/audio behavior, shared beat-engine smoothing, or
+per-mode floor contracts.
 """
 from __future__ import annotations
 
@@ -101,29 +101,35 @@ def segment_float_to_spectrum_bar(
     return boosted_to_spectrum_bar(boosted, height_scale=height_scale)
 
 
+def reset_spectrum_solid_hysteresis_state(owner: Any) -> None:
+    owner._spectrum_solid_display_segments = []
+    owner._spectrum_solid_display_segment_values = []
+    owner._spectrum_solid_last_update_ts = []
+    owner._spectrum_solid_hysteresis_segments = 0
+    owner._spectrum_solid_hysteresis_bar_count = 0
+    owner._spectrum_solid_last_signal_ts = 0.0
+
+
 def reset_overlay_spectrum_solid_hysteresis_state(overlay: Any) -> None:
-    overlay._spectrum_solid_display_segments = []
-    overlay._spectrum_solid_display_segment_values = []
-    overlay._spectrum_solid_last_update_ts = []
-    overlay._spectrum_solid_hysteresis_segments = 0
-    overlay._spectrum_solid_hysteresis_bar_count = 0
-    overlay._spectrum_solid_last_signal_ts = 0.0
+    """Legacy spelling retained while the compositor presenter still exists."""
+
+    reset_spectrum_solid_hysteresis_state(overlay)
 
 
-def _ensure_overlay_hysteresis_state(overlay: Any, *, count: int, segments: int) -> None:
+def _ensure_hysteresis_state(owner: Any, *, count: int, segments: int) -> None:
     if (
-        len(getattr(overlay, "_spectrum_solid_display_segments", [])) != count
-        or len(getattr(overlay, "_spectrum_solid_display_segment_values", [])) != count
-        or len(getattr(overlay, "_spectrum_solid_last_update_ts", [])) != count
-        or int(getattr(overlay, "_spectrum_solid_hysteresis_segments", 0) or 0) != segments
-        or int(getattr(overlay, "_spectrum_solid_hysteresis_bar_count", 0) or 0) != count
+        len(getattr(owner, "_spectrum_solid_display_segments", [])) != count
+        or len(getattr(owner, "_spectrum_solid_display_segment_values", [])) != count
+        or len(getattr(owner, "_spectrum_solid_last_update_ts", [])) != count
+        or int(getattr(owner, "_spectrum_solid_hysteresis_segments", 0) or 0) != segments
+        or int(getattr(owner, "_spectrum_solid_hysteresis_bar_count", 0) or 0) != count
     ):
-        overlay._spectrum_solid_display_segments = [-1] * count
-        overlay._spectrum_solid_display_segment_values = [-1.0] * count
-        overlay._spectrum_solid_last_update_ts = [0.0] * count
-        overlay._spectrum_solid_hysteresis_segments = segments
-        overlay._spectrum_solid_hysteresis_bar_count = count
-        overlay._spectrum_solid_last_signal_ts = 0.0
+        owner._spectrum_solid_display_segments = [-1] * count
+        owner._spectrum_solid_display_segment_values = [-1.0] * count
+        owner._spectrum_solid_last_update_ts = [0.0] * count
+        owner._spectrum_solid_hysteresis_segments = segments
+        owner._spectrum_solid_hysteresis_bar_count = count
+        owner._spectrum_solid_last_signal_ts = 0.0
 
 
 def _alpha_for_rate(rate_hz: float, dt_s: float) -> float:
@@ -138,8 +144,8 @@ def _resolve_display_rate(abs_diff_seg: float, diff_seg: float) -> float:
     return _SPECTRUM_FAST_RISE_HZ if diff_seg >= 0.0 else _SPECTRUM_FAST_FALL_HZ
 
 
-def apply_overlay_spectrum_solid_hysteresis(
-    overlay: Any,
+def apply_spectrum_solid_hysteresis(
+    owner: Any,
     bars: Sequence[float],
     *,
     segments: int,
@@ -148,12 +154,12 @@ def apply_overlay_spectrum_solid_hysteresis(
 ) -> List[float]:
     count = len(bars)
     segs = max(1, int(segments))
-    _ensure_overlay_hysteresis_state(overlay, count=count, segments=segs)
+    _ensure_hysteresis_state(owner, count=count, segments=segs)
     height_scale = compute_spectrum_height_scale(render_height)
 
-    display_segments = overlay._spectrum_solid_display_segments
-    display_segment_values = overlay._spectrum_solid_display_segment_values
-    last_update_ts = overlay._spectrum_solid_last_update_ts
+    display_segments = owner._spectrum_solid_display_segments
+    display_segment_values = owner._spectrum_solid_display_segment_values
+    last_update_ts = owner._spectrum_solid_last_update_ts
     target_segment_values = [
         spectrum_bar_to_segment_float(
             raw_bar,
@@ -167,8 +173,8 @@ def apply_overlay_spectrum_solid_hysteresis(
         for value in target_segment_values
     )
     if has_signal:
-        overlay._spectrum_solid_last_signal_ts = float(now_ts)
-    last_signal_ts = float(getattr(overlay, "_spectrum_solid_last_signal_ts", 0.0) or 0.0)
+        owner._spectrum_solid_last_signal_ts = float(now_ts)
+    last_signal_ts = float(getattr(owner, "_spectrum_solid_last_signal_ts", 0.0) or 0.0)
     coherent_zero_hold = bool(
         not has_signal
         and last_signal_ts > 0.0
@@ -214,3 +220,22 @@ def apply_overlay_spectrum_solid_hysteresis(
         )
 
     return output
+
+
+def apply_overlay_spectrum_solid_hysteresis(
+    overlay: Any,
+    bars: Sequence[float],
+    *,
+    segments: int,
+    render_height: float,
+    now_ts: float,
+) -> List[float]:
+    """Legacy adapter for the old overlay caller."""
+
+    return apply_spectrum_solid_hysteresis(
+        overlay,
+        bars,
+        segments=segments,
+        render_height=render_height,
+        now_ts=now_ts,
+    )

@@ -1652,19 +1652,20 @@ architecture.
 
 # 15. Current next work
 
-Normal implementation work is now **Phase D**. D1, D2 and the D3/D4 item, shell, clip and canonical
-geometry foundation are structurally landed; do not reopen them without contradictory evidence.
+Normal implementation work is now **Phase D**. D1, D2, the D3/D4 item, shell, clip and canonical
+geometry foundation, and Spectrum are structurally landed; do not reopen them without contradictory
+evidence.
 
-The next admitted slice is Spectrum:
+The next admitted slice is Oscilloscope:
 
-- [ ] port Spectrum bars, peaks, ghosting, paused idle visibility and source-freshness behavior through
-  the immutable Quick render boundary;
+- [ ] port the authored waveform, line persistence/ghost layers, paused idle behavior and source
+  freshness through the immutable Quick render boundary without adding a second clock;
 - [ ] prove canonical aspect at scale 1.0 and another uniform scale, plus wide/tall viewport seams
-  without stretching authored pixels;
-- [ ] run only the focused Spectrum/visualizer script and test gates;
-- [ ] inspect diff/status, commit the coherent Spectrum slice, and push immediately.
+  while preserving authored stroke thickness and visual scale;
+- [ ] run only the focused Oscilloscope/visualizer script and test gates;
+- [ ] inspect diff/status, commit the coherent Oscilloscope slice, and push immediately.
 
-Then continue in the fixed checkpoint order: Oscilloscope, Sine, Bubble + BTF, DevCurve, all-five-mode
+Then continue in the fixed checkpoint order: Sine, Bubble + BTF, DevCurve, all-five-mode
 lifecycle/source/pause/aspect closure, and Phase-D documentation closure.
 
 If the operator instead explicitly says **continue from Phase C tests**, execute Section 7.5 test-only

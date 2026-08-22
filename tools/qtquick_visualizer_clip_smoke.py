@@ -1,4 +1,4 @@
-"""Focused real-GL proof for the inline Quick visualizer clip host."""
+"""Focused real-GL proof for the inline Quick visualizer clip and Spectrum."""
 
 from __future__ import annotations
 
@@ -45,10 +45,26 @@ from rendering.quick.render.gl_resources import compile_program  # noqa: E402
 from rendering.quick.visualizer import (  # noqa: E402
     VisualizerClipFrame,
     VisualizerClipHost,
+    VisualizerRenderItem,
+    VisualizerRenderNode,
     VisualizerRenderNodeTelemetry,
 )
 from widgets.spotify_visualizer.presentation_geometry import (  # noqa: E402
     resolve_visualizer_presentation,
+)
+from widgets.spotify_visualizer.render_bridge import (  # noqa: E402
+    VisualizerRenderIdentity,
+    VisualizerSnapshotBridge,
+)
+from widgets.spotify_visualizer.render_state import (  # noqa: E402
+    SpectrumFrame,
+    VisualizerCommonState,
+    VisualizerLogicalFrame,
+    compose_visualizer_render_snapshot,
+    freeze_render_fields,
+)
+from widgets.spotify_visualizer.spectrum_frame_runtime import (  # noqa: E402
+    SpectrumFrameRuntime,
 )
 
 
@@ -56,6 +72,8 @@ _WINDOW_SIZE = (320, 240)
 _OUTER_RECT = (60.0, 50.0, 180.0, 140.0)
 _BACKGROUND = QColor(18, 42, 96)
 _DRAW_COLOR = (236, 48, 36)
+_SPECTRUM_WINDOW_SIZE = (760, 600)
+_SPECTRUM_ORIGIN = (80.0, 60.0)
 
 _VERTEX_SOURCE = """#version 410 core
 layout(location = 0) in vec2 aPosition;
@@ -220,6 +238,11 @@ class _SharedProbe:
         with self.lock:
             if self.error is None:
                 self.error = f"{type(exc).__name__}: {exc}"
+
+    def fail(self, message: object) -> None:
+        with self.lock:
+            if self.error is None:
+                self.error = str(message)
 
     def capture(self, policy: str, value: dict[str, Any]) -> None:
         with self.lock:
@@ -721,6 +744,374 @@ class _ProbeItem(QQuickItem):
             node.releaseResources()
 
 
+def _spectrum_case_geometry(case: str) -> tuple[tuple[float, float], float]:
+    if case == "scaled":
+        return (420.0, 280.0), 0.65
+    if case == "wide":
+        return (560.0, 280.0), 1.0
+    if case == "tall":
+        return (420.0, 420.0), 1.0
+    return (420.0, 280.0), 1.0
+
+
+def _spectrum_snapshot(case: str, presentation):
+    runtime = SpectrumFrameRuntime()
+    if case == "idle":
+        resolved = runtime.resolve(
+            [0.0] * 16,
+            bar_count=16,
+            now_ts=1.0,
+            runtime_generation=1,
+            engine_generation=2,
+            activation_id=3,
+            source_generation=-1,
+            source_activation_id=-1,
+            playing=False,
+            first_frame=True,
+            smoothing_enabled=True,
+            smoothing_strength=0.5,
+            single_piece=True,
+            segments=53,
+            ghosting_enabled=True,
+            ghost_decay=0.4,
+            animation_enabled=False,
+        )
+        playing = False
+        source_generation = -1
+        source_activation = -1
+    else:
+        bars = (
+            (0.18,) * 16
+            if case == "ghost"
+            else tuple(
+                0.18 + 0.70 * abs(((index / 15.0) * 2.0) - 1.0)
+                for index in range(16)
+            )
+        )
+        peaks = (
+            (0.92,) * 16
+            if case == "ghost"
+            else bars
+        )
+        resolved = type(
+            "_ResolvedSpectrum",
+            (),
+            {
+                "bars": bars,
+                "peaks": peaks,
+                "ghost_bars": peaks,
+                "animation_time": 0.25,
+            },
+        )()
+        playing = True
+        source_generation = 2
+        source_activation = 3
+    logical = VisualizerLogicalFrame(
+        runtime_generation=1,
+        engine_generation=2,
+        activation_id=3,
+        source_generation=source_generation,
+        source_activation_id=source_activation,
+        mode_id="spectrum",
+        playing=playing,
+        logical_timestamp=1.0,
+        source_timestamp=None,
+        changed=True,
+        present_frame=True,
+        mode_reveal_ready=True,
+        common=VisualizerCommonState(
+            bars=tuple(resolved.bars),
+            bar_count=16,
+            style=freeze_render_fields(
+                {
+                    "fill_color": (18, 220, 92, 255),
+                    "border_color": (245, 250, 255, 255),
+                    "single_piece": True,
+                    "border_radius": 4.0,
+                }
+            ),
+        ),
+        mode_state=SpectrumFrame(
+            peaks=tuple(resolved.peaks),
+            ghost_bars=tuple(resolved.ghost_bars),
+            animation_time=float(resolved.animation_time),
+            parameters=freeze_render_fields(
+                {
+                    "rainbow_enabled": False,
+                    "rainbow_per_bar": False,
+                    "spectrum_ghosting_enabled": case == "ghost",
+                    "spectrum_ghost_alpha": 0.85,
+                    "spectrum_glow_enabled": True,
+                    "spectrum_glow_intensity": 0.55,
+                    "spectrum_glow_color": (120, 255, 180, 255),
+                }
+            ),
+        ),
+    )
+    return compose_visualizer_render_snapshot(
+        logical,
+        presentation,
+        logical_revision=1,
+    )
+
+
+class _SpectrumSamplingNode(VisualizerRenderNode):
+    def __init__(
+        self,
+        telemetry: VisualizerRenderNodeTelemetry,
+        *,
+        shared: _SharedProbe,
+        window: QQuickWindow,
+        case: str,
+        presentation,
+    ) -> None:
+        super().__init__(telemetry)
+        self._shared = shared
+        self._window = window
+        self._case = case
+        self._presentation = presentation
+
+    def render(self, state: QSGRenderNode.RenderState) -> None:
+        super().render(state)
+        telemetry = self.telemetry.snapshot()
+        if telemetry.error is not None:
+            self._shared.fail(telemetry.error)
+            return
+        if telemetry.draw_count < 1:
+            return
+        with self._shared.lock:
+            if self._case in self._shared.captures:
+                return
+        try:
+            target = self.renderTarget()
+            if target is None:
+                raise RuntimeError("Spectrum smoke has no render target")
+            target_size = target.pixelSize()
+            target_width = int(target_size.width())
+            target_height = int(target_size.height())
+            window_width = max(1.0, float(self._window.width()))
+            window_height = max(1.0, float(self._window.height()))
+            scale_x = target_width / window_width
+            scale_y = target_height / window_height
+            outer_x, outer_y, outer_width, outer_height = (
+                self._presentation.outer_rect
+            )
+            pixel_x = max(0, round(outer_x * scale_x))
+            pixel_y = max(
+                0,
+                target_height - round((outer_y + outer_height) * scale_y),
+            )
+            pixel_width = min(
+                target_width - pixel_x,
+                max(1, round(outer_width * scale_x)),
+            )
+            pixel_height = min(
+                target_height - pixel_y,
+                max(1, round(outer_height * scale_y)),
+            )
+            raw = bytes(
+                gl.glReadPixels(
+                    pixel_x,
+                    pixel_y,
+                    pixel_width,
+                    pixel_height,
+                    gl.GL_RGBA,
+                    gl.GL_UNSIGNED_BYTE,
+                )
+            )
+            expected = _BACKGROUND.getRgb()[:3]
+            lit_points: list[tuple[int, int]] = []
+            for row in range(pixel_height):
+                for column in range(pixel_width):
+                    offset = ((row * pixel_width) + column) * 4
+                    red, green, blue = raw[offset : offset + 3]
+                    if max(
+                        abs(red - expected[0]),
+                        abs(green - expected[1]),
+                        abs(blue - expected[2]),
+                    ) >= 20:
+                        lit_points.append((column, row))
+            columns = {column for column, _row in lit_points}
+            rows = {row for _column, row in lit_points}
+            capture = {
+                "target_size": [target_width, target_height],
+                "outer_pixel_size": [pixel_width, pixel_height],
+                "lit_pixel_count": len(lit_points),
+                "lit_column_count": len(columns),
+                "lit_row_count": len(rows),
+                "lit_bounds": (
+                    None
+                    if not lit_points
+                    else [
+                        min(columns),
+                        min(rows),
+                        max(columns),
+                        max(rows),
+                    ]
+                ),
+                "gl_error": int(gl.glGetError()),
+            }
+            self._shared.capture(self._case, capture)
+        except Exception as exc:
+            self._shared.fail(f"{type(exc).__name__}: {exc}")
+
+    def releaseResources(self) -> None:
+        self._shared.release_context_current = (
+            QOpenGLContext.currentContext() is not None
+        )
+        super().releaseResources()
+
+
+class _SpectrumItem(VisualizerRenderItem):
+    def __init__(
+        self,
+        parent: QQuickItem,
+        *,
+        shared: _SharedProbe,
+        window: QQuickWindow,
+        telemetry: VisualizerRenderNodeTelemetry,
+        case: str,
+        presentation,
+    ) -> None:
+        self._spectrum_shared = shared
+        self._spectrum_window = window
+        self._spectrum_case = case
+        self._spectrum_presentation = presentation
+        super().__init__(parent, telemetry=telemetry)
+
+    def _create_render_node(self) -> VisualizerRenderNode:
+        return _SpectrumSamplingNode(
+            self.telemetry,
+            shared=self._spectrum_shared,
+            window=self._spectrum_window,
+            case=self._spectrum_case,
+            presentation=self._spectrum_presentation,
+        )
+
+
+class _SpectrumRunner(QObject):
+    def __init__(self, app: QGuiApplication, case: str) -> None:
+        super().__init__()
+        self._app = app
+        self._case = case
+        self._started_at = time.monotonic()
+        self._shared = _SharedProbe(case)
+        self._telemetry = VisualizerRenderNodeTelemetry()
+        self._window = QQuickWindow()
+        self._window.setColor(_BACKGROUND)
+        self._window.resize(*_SPECTRUM_WINDOW_SIZE)
+        self._window.setPersistentGraphics(False)
+        self._window.setPersistentSceneGraph(False)
+        extent, scale = _spectrum_case_geometry(case)
+        self._presentation = resolve_visualizer_presentation(
+            policy=get_visualizer_presentation_policy("spectrum"),
+            display_size=_SPECTRUM_WINDOW_SIZE,
+            outer_origin=_SPECTRUM_ORIGIN,
+            viewport_extent=extent,
+            uniform_visual_scale=scale,
+            border_width=4.0,
+            corner_radius=12.0,
+            shadow_enabled=False,
+        )
+        outer_x, outer_y, outer_width, outer_height = (
+            self._presentation.outer_rect
+        )
+        self._host = QQuickItem(self._window.contentItem())
+        self._host.setX(outer_x)
+        self._host.setY(outer_y)
+        self._host.setWidth(outer_width)
+        self._host.setHeight(outer_height)
+        self._item = _SpectrumItem(
+            self._host,
+            shared=self._shared,
+            window=self._window,
+            telemetry=self._telemetry,
+            case=case,
+            presentation=self._presentation,
+        )
+        self._item.set_presentation(self._presentation)
+        self._bridge = VisualizerSnapshotBridge()
+        self._identity = VisualizerRenderIdentity(
+            runtime_generation=1,
+            engine_generation=2,
+            activation_id=3,
+            mode_id="spectrum",
+        )
+        self._bridge.begin_activation(
+            runtime_generation=1,
+            engine_generation=2,
+            activation_id=3,
+            mode_id="spectrum",
+        )
+        if not self._bridge.publish(
+            _spectrum_snapshot(case, self._presentation)
+        ):
+            raise RuntimeError("Spectrum smoke snapshot was rejected")
+        self._item.bind_render_source(self._bridge, self._identity)
+        self._frame_swap_count = 0
+        self._window.frameSwapped.connect(self._on_frame_swapped)
+        self._closing = False
+
+    def _on_frame_swapped(self) -> None:
+        self._frame_swap_count += 1
+
+    def start(self) -> None:
+        self._window.show()
+        self._window.update()
+        QTimer.singleShot(20, self._poll)
+
+    def _poll(self) -> None:
+        captures, error = self._shared.snapshot()
+        if error is not None:
+            self._finish(valid=False, error=error)
+            return
+        if time.monotonic() - self._started_at > 8.0:
+            self._finish(valid=False, error="Spectrum proof timed out")
+            return
+        if self._case not in captures or self._frame_swap_count < 1:
+            QTimer.singleShot(20, self._poll)
+            return
+        if not self._closing:
+            self._closing = True
+            for method in ("hide", "releaseResources", "close"):
+                QMetaObject.invokeMethod(
+                    self._window,
+                    method,
+                    Qt.ConnectionType.QueuedConnection,
+                )
+            QTimer.singleShot(20, self._poll)
+            return
+        telemetry = self._telemetry.snapshot()
+        if telemetry.invalidation_count < 1 or telemetry.release_count < 1:
+            QTimer.singleShot(20, self._poll)
+            return
+        self._finish(valid=True, error=None)
+
+    def _finish(self, *, valid: bool, error: str | None) -> None:
+        captures, shared_error = self._shared.snapshot()
+        telemetry = self._telemetry.snapshot()
+        report = {
+            "valid": bool(valid and shared_error is None),
+            "error": error or shared_error,
+            "case": self._case,
+            "captures": captures,
+            "telemetry": {
+                "sync_count": telemetry.sync_count,
+                "render_count": telemetry.render_count,
+                "draw_count": telemetry.draw_count,
+                "drawn_mode_id": telemetry.drawn_mode_id,
+                "release_count": telemetry.release_count,
+                "invalidation_count": telemetry.invalidation_count,
+                "render_thread_id": telemetry.render_thread_id,
+                "release_thread_id": telemetry.release_thread_id,
+                "error": telemetry.error,
+            },
+            "release_context_current": self._shared.release_context_current,
+        }
+        print(json.dumps(report, sort_keys=True), flush=True)
+        self._app.exit(0 if report["valid"] else 1)
+
+
 class _Runner(QObject):
     def __init__(self, app: QGuiApplication, policy: str) -> None:
         super().__init__()
@@ -846,8 +1237,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--policy",
-        choices=("rounded", "rect", "nested"),
+        choices=("rounded", "rect", "nested", "spectrum"),
         required=True,
+    )
+    parser.add_argument(
+        "--spectrum-case",
+        choices=("canonical", "scaled", "wide", "tall", "idle", "ghost"),
+        default="canonical",
     )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     configure_quick_graphics(reason="visualizer-clip-smoke")
@@ -857,7 +1253,11 @@ def main(argv: list[str] | None = None) -> int:
     if QQuickWindow.graphicsApi() != QSGRendererInterface.GraphicsApi.OpenGL:
         print(json.dumps({"valid": False, "error": "Quick is not using OpenGL"}))
         return 1
-    runner = _Runner(app, args.policy)
+    runner = (
+        _SpectrumRunner(app, args.spectrum_case)
+        if args.policy == "spectrum"
+        else _Runner(app, args.policy)
+    )
     QTimer.singleShot(0, runner.start)
     return int(app.exec())
 

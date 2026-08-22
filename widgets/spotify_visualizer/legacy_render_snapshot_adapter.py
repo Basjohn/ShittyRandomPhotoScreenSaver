@@ -9,6 +9,7 @@ consume those values, never the legacy widget or its compositor overlay.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from widgets.spotify_visualizer import config_applier, mode_capabilities
@@ -26,6 +27,12 @@ from widgets.spotify_visualizer.render_state import (
     VisualizerProtectedEdge,
     VisualizerTransientState,
     freeze_render_fields,
+)
+from widgets.spotify_visualizer.spectrum_frame_runtime import (
+    SpectrumFrameRuntime,
+)
+from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
+    compute_spectrum_height_scale,
 )
 
 
@@ -194,21 +201,109 @@ def _render_parameters(
     )
 
 
-def _capture_spectrum(widget: Any, engine: Any) -> tuple[ModeFrame, dict[str, Any]]:
+@dataclass(frozen=True, slots=True)
+class _CaptureContext:
+    now_ts: float
+    runtime_generation: int
+    engine_generation: int
+    activation_id: int
+    source_generation: int
+    source_activation_id: int
+    playing: bool
+    first_frame: bool
+
+
+def _spectrum_segment_count(viewport_height: float) -> int:
+    inner_height = max(0.0, float(viewport_height) - 12.0)
+    return max(8, min(64, int(inner_height // 5.0)))
+
+
+def _capture_spectrum(
+    widget: Any,
+    engine: Any,
+    context: _CaptureContext,
+) -> tuple[ModeFrame, dict[str, Any]]:
     extra = _base_extras(widget, "spectrum", engine)
-    return SpectrumFrame(parameters=_render_parameters(extra)), extra
+    controller = getattr(widget, "runtime_controller", None)
+    if controller is None:
+        raise RuntimeError(
+            "Spectrum logical capture requires its runtime controller owner"
+        )
+    runtime = controller.resolve_logical_mode_state(
+        "spectrum",
+        SpectrumFrameRuntime,
+    )
+    if not isinstance(runtime, SpectrumFrameRuntime):
+        raise TypeError("Spectrum logical mode state has the wrong type")
+    _viewport_width, viewport_height = (
+        controller.presentation_viewport_extent
+    )
+    resolved = runtime.resolve(
+        tuple(getattr(widget, "_display_bars", ()) or ()),
+        bar_count=int(getattr(widget, "_bar_count", 0) or 0),
+        now_ts=context.now_ts,
+        runtime_generation=context.runtime_generation,
+        engine_generation=context.engine_generation,
+        activation_id=context.activation_id,
+        source_generation=context.source_generation,
+        source_activation_id=context.source_activation_id,
+        playing=context.playing,
+        first_frame=context.first_frame,
+        smoothing_enabled=bool(
+            getattr(widget, "_spectrum_visual_smoothing_enabled", True)
+        ),
+        smoothing_strength=float(
+            getattr(widget, "_spectrum_visual_smoothing", 0.5)
+        ),
+        single_piece=bool(getattr(widget, "_spectrum_single_piece", False)),
+        segments=_spectrum_segment_count(viewport_height),
+        viewport_height=viewport_height,
+        ghosting_enabled=bool(
+            getattr(widget, "_spectrum_ghosting_enabled", True)
+        ),
+        ghost_decay=float(getattr(widget, "_spectrum_ghost_decay", 0.4)),
+        animation_enabled=bool(
+            getattr(widget, "_rainbow_enabled", False)
+            or getattr(widget, "_rainbow_per_bar", False)
+        ),
+    )
+    extra["spectrum_height_scale"] = compute_spectrum_height_scale(
+        viewport_height
+    )
+    extra["_quick_resolved_bars"] = resolved.bars
+    extra["_quick_spectrum_changed"] = resolved.changed
+    return (
+        SpectrumFrame(
+            peaks=resolved.peaks,
+            ghost_bars=resolved.ghost_bars,
+            animation_time=resolved.animation_time,
+            parameters=_render_parameters(
+                {
+                    name: value
+                    for name, value in extra.items()
+                    if not name.startswith("_quick_")
+                }
+            ),
+        ),
+        extra,
+    )
 
 
 def _capture_oscilloscope(
     widget: Any,
     engine: Any,
+    _context: _CaptureContext,
 ) -> tuple[ModeFrame, dict[str, Any]]:
     extra = _base_extras(widget, "oscilloscope", engine)
     config_applier._append_line_mode_visual_extras(extra, widget, is_sine=False)
     return OscilloscopeFrame(parameters=_render_parameters(extra)), extra
 
 
-def _capture_sine(widget: Any, engine: Any) -> tuple[ModeFrame, dict[str, Any]]:
+def _capture_sine(
+    widget: Any,
+    engine: Any,
+    _context: _CaptureContext,
+) -> tuple[ModeFrame, dict[str, Any]]:
     extra = _base_extras(widget, "sine_wave", engine)
     config_applier._append_line_mode_visual_extras(extra, widget, is_sine=True)
     return (
@@ -230,7 +325,11 @@ _BUBBLE_ARRAY_FIELDS = {
 }
 
 
-def _capture_bubble(widget: Any, engine: Any) -> tuple[ModeFrame, dict[str, Any]]:
+def _capture_bubble(
+    widget: Any,
+    engine: Any,
+    _context: _CaptureContext,
+) -> tuple[ModeFrame, dict[str, Any]]:
     extra = _base_extras(widget, "bubble", engine)
     config_applier._append_bubble_visual_extras(extra, widget)
     return (
@@ -262,7 +361,11 @@ _DEVCURVE_ARRAY_FIELDS = {
 }
 
 
-def _capture_devcurve(widget: Any, engine: Any) -> tuple[ModeFrame, dict[str, Any]]:
+def _capture_devcurve(
+    widget: Any,
+    engine: Any,
+    _context: _CaptureContext,
+) -> tuple[ModeFrame, dict[str, Any]]:
     extra = _base_extras(widget, "devcurve", engine)
     config_applier._append_devcurve_visual_extras(extra, widget)
     curves = tuple(
@@ -298,7 +401,10 @@ def _capture_devcurve(widget: Any, engine: Any) -> tuple[ModeFrame, dict[str, An
     )
 
 
-ModeCapture = Callable[[Any, Any], tuple[ModeFrame, dict[str, Any]]]
+ModeCapture = Callable[
+    [Any, Any, _CaptureContext],
+    tuple[ModeFrame, dict[str, Any]],
+]
 
 _MODE_CAPTURE: dict[str, ModeCapture] = {
     "spectrum": _capture_spectrum,
@@ -338,7 +444,6 @@ def capture_legacy_visualizer_logical_frame(
         raise ValueError(f"unsupported visualizer mode: {mode_id}")
 
     engine = getattr(widget, "_engine", None)
-    mode_state, extra = capture(widget, engine)
     runtime_generation = coerce_identity(
         getattr(widget, "_runtime_generation", None)
     )
@@ -357,11 +462,27 @@ def capture_legacy_visualizer_logical_frame(
         engine,
         mode_id,
     )
+    context = _CaptureContext(
+        now_ts=float(now_ts),
+        runtime_generation=runtime_generation,
+        engine_generation=engine_generation,
+        activation_id=activation_id,
+        source_generation=source_generation,
+        source_activation_id=source_activation,
+        playing=bool(getattr(widget, "_spotify_playing", False)),
+        first_frame=not bool(getattr(widget, "_has_pushed_first_frame", False)),
+    )
+    mode_state, extra = capture(widget, engine, context)
 
     waveform = tuple(extra.get("waveform", ()) or ())
     waveform_count = int(extra.get("waveform_count", len(waveform)) or 0)
     common = VisualizerCommonState(
-        bars=tuple(getattr(widget, "_display_bars", ()) or ()),
+        bars=tuple(
+            extra.get(
+                "_quick_resolved_bars",
+                getattr(widget, "_display_bars", ()) or (),
+            )
+        ),
         bar_count=int(getattr(widget, "_bar_count", 0) or 0),
         waveform=waveform,
         waveform_count=waveform_count,
@@ -379,7 +500,7 @@ def capture_legacy_visualizer_logical_frame(
         playing=bool(getattr(widget, "_spotify_playing", False)),
         logical_timestamp=float(now_ts),
         source_timestamp=source_timestamp,
-        changed=bool(changed),
+        changed=bool(changed or extra.get("_quick_spectrum_changed", False)),
         present_frame=bool(present_frame),
         mode_reveal_ready=bool(mode_reveal_ready),
         common=common,

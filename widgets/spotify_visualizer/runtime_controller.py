@@ -32,6 +32,7 @@ from widgets.spotify_visualizer.render_bridge import (
     VisualizerSnapshotBridge,
 )
 from widgets.spotify_visualizer.render_state import (
+    CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
     ResolvedVisualizerPresentation,
     VisualizerLogicalFrame,
     compose_visualizer_render_snapshot,
@@ -40,6 +41,7 @@ from widgets.spotify_visualizer.render_state import (
 
 EngineFactory = Callable[[int], Any]
 LogicalStep = Callable[[float], None]
+ModeStateFactory = Callable[[], Any]
 
 
 class VisualizerRuntimeController:
@@ -88,6 +90,10 @@ class VisualizerRuntimeController:
         self._logical_mailbox = LatestStateMailbox()
         self._logical_runtime: VisualizerLogicalRuntime | None = None
         self._logical_present_pending = False
+        self._logical_mode_states: dict[str, Any] = {}
+        self._presentation_viewport_extent = (
+            CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+        )
         self._render_bridge = VisualizerSnapshotBridge()
 
     @property
@@ -105,6 +111,7 @@ class VisualizerRuntimeController:
                 )
             if generation != self._runtime_generation:
                 self._render_bridge.close_admission()
+                self._logical_mode_states.clear()
             self._runtime_generation = generation
 
     @property
@@ -131,6 +138,7 @@ class VisualizerRuntimeController:
                 # A render admission is generation + activation + mode scoped.
                 # The target mode reopens it only when that activation commits.
                 self._render_bridge.close_admission()
+                self._logical_mode_states.clear()
             self._mode_id = mode_id
             self._presentation_policy = get_visualizer_presentation_policy(
                 mode_id
@@ -304,6 +312,53 @@ class VisualizerRuntimeController:
     def render_identity(self) -> VisualizerRenderIdentity | None:
         return self._render_bridge.identity
 
+    @property
+    def presentation_viewport_extent(self) -> tuple[float, float]:
+        """Latest committed presentation-neutral logical viewport metrics."""
+
+        with self._lock:
+            return self._presentation_viewport_extent
+
+    def commit_presentation_metrics(
+        self,
+        presentation: ResolvedVisualizerPresentation,
+    ) -> None:
+        """Publish geometry configuration for the next authored logical tick."""
+
+        if not isinstance(presentation, ResolvedVisualizerPresentation):
+            raise TypeError("visualizer presentation must already be resolved")
+        policy = self._presentation_policy
+        if (
+            presentation.shell_policy is not policy.shell_policy
+            or presentation.clip_policy is not policy.clip_policy
+            or presentation.viewport_resize_capable
+            != policy.viewport_resize_capable
+        ):
+            raise ValueError("visualizer presentation policy does not match mode")
+        with self._lock:
+            self._presentation_viewport_extent = presentation.viewport_extent
+
+    def resolve_logical_mode_state(
+        self,
+        mode_id: object,
+        factory: ModeStateFactory,
+    ) -> Any:
+        """Lazily own plain authored state for only the current mode."""
+
+        canonical = coerce_visualizer_mode_id(mode_id)
+        if not callable(factory):
+            raise TypeError("visualizer logical mode state requires a factory")
+        with self._lock:
+            if canonical != self._mode_id:
+                raise ValueError(
+                    "visualizer logical mode state does not match current mode"
+                )
+            state = self._logical_mode_states.get(canonical)
+            if state is None:
+                state = factory()
+                self._logical_mode_states[canonical] = state
+            return state
+
     def begin_render_activation(
         self,
         *,
@@ -341,6 +396,7 @@ class VisualizerRuntimeController:
             != policy.viewport_resize_capable
         ):
             return False
+        self.commit_presentation_metrics(presentation)
         snapshot = compose_visualizer_render_snapshot(
             logical,
             presentation,
@@ -391,6 +447,7 @@ class VisualizerRuntimeController:
             self._logical_runtime = None
             self._logical_mailbox.clear()
             self._logical_present_pending = False
+            self._logical_mode_states.clear()
             self._render_bridge.close_admission()
 
     def start_logical_runtime(
@@ -433,6 +490,7 @@ class VisualizerRuntimeController:
         if runtime is None:
             self._logical_mailbox.clear()
             self._logical_present_pending = False
+            self._logical_mode_states.clear()
             return True
 
         try:
@@ -448,6 +506,7 @@ class VisualizerRuntimeController:
         with self._lock:
             if joined and self._logical_runtime is runtime:
                 self._logical_runtime = None
+                self._logical_mode_states.clear()
             self._logical_mailbox.clear()
             self._logical_present_pending = False
         return joined

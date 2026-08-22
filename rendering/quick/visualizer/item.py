@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import threading
 
-from PySide6.QtCore import Qt
-from PySide6.QtQuick import QQuickItem, QSGNode
+from PySide6.QtCore import Slot, Qt
+from PySide6.QtQuick import QQuickItem, QQuickWindow, QSGNode
 
 from widgets.spotify_visualizer.render_bridge import (
     VisualizerRenderIdentity,
@@ -52,14 +52,14 @@ class VisualizerRenderItem(QQuickItem):
         *,
         telemetry: VisualizerRenderNodeTelemetry | None = None,
     ) -> None:
-        super().__init__(parent)
-        self.setFlag(QQuickItem.Flag.ItemHasContents, True)
         self._telemetry = telemetry or VisualizerRenderNodeTelemetry()
         self._retirement = _RenderNodeRetirement(self._telemetry)
         self._bridge: VisualizerSnapshotBridge | None = None
         self._identity: VisualizerRenderIdentity | None = None
         self._presentation: ResolvedVisualizerPresentation | None = None
-        self._bound_window = None
+        self._bound_window: QQuickWindow | None = None
+        super().__init__(parent)
+        self.setFlag(QQuickItem.Flag.ItemHasContents, True)
         self.windowChanged.connect(self._bind_window_invalidation)
         self._bind_window_invalidation(self.window())
 
@@ -117,20 +117,21 @@ class VisualizerRenderItem(QQuickItem):
             self.setHeight(height)
         self.update()
 
-    def _bind_window_invalidation(self, window) -> None:
-        if window is self._bound_window:
+    @Slot(QQuickWindow)
+    def _bind_window_invalidation(self, window: QQuickWindow | None) -> None:
+        bound_window = getattr(self, "_bound_window", None)
+        retirement = getattr(self, "_retirement", None)
+        if window is bound_window or retirement is None:
             return
-        if self._bound_window is not None:
+        if bound_window is not None:
             try:
-                self._bound_window.sceneGraphInvalidated.disconnect(
-                    self._retirement.invalidate
-                )
+                bound_window.sceneGraphInvalidated.disconnect(retirement.invalidate)
             except (RuntimeError, TypeError):
                 pass
         self._bound_window = window
         if window is not None:
             window.sceneGraphInvalidated.connect(
-                self._retirement.invalidate,
+                retirement.invalidate,
                 Qt.ConnectionType.DirectConnection,
             )
 

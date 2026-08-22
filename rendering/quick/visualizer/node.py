@@ -1,15 +1,23 @@
-"""Inline QSGRenderNode foundation for immutable visualizer snapshots."""
+"""Inline QSGRenderNode host for immutable visualizer snapshots."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import QRectF
+from PySide6.QtGui import QOpenGLContext
 from PySide6.QtQuick import QSGRenderNode
+
+from core.logging.logger import get_logger
 
 from widgets.spotify_visualizer.render_bridge import VisualizerRenderIdentity
 from widgets.spotify_visualizer.render_state import VisualizerRenderSnapshot
 
-from .clip_host import VisualizerClipHost
+from .clip_host import VisualizerClipFrame, VisualizerClipHost
+from .render_contract import snapshot_is_render_admissible
+from .render_host import QuickVisualizerRenderHost
 from .telemetry import VisualizerRenderNodeTelemetry
+
+
+logger = get_logger(__name__)
 
 
 def _rect_tuple(value: object) -> tuple[int, int, int, int] | None:
@@ -29,9 +37,9 @@ def _rect_tuple(value: object) -> tuple[int, int, int, int] | None:
 class VisualizerRenderNode(QSGRenderNode):
     """Render-thread owner for one current visualizer activation.
 
-    Mode GL implementations land behind this node in the following Phase-D
-    checkpoints.  This foundation already owns identity reset, immutable state,
-    clip-state observation, bounded geometry, and legal invalidation teardown.
+    Mode implementations resolve lazily behind one small common host.  This
+    node owns identity reset, immutable state, the selected local clip, shared
+    GL resources, and legal invalidation teardown.
     """
 
     def __init__(
@@ -45,6 +53,7 @@ class VisualizerRenderNode(QSGRenderNode):
         self._logical_size = (0.0, 0.0)
         self._device_pixel_ratio = 1.0
         self._clip_host = VisualizerClipHost()
+        self._render_host = QuickVisualizerRenderHost()
         self._released = False
 
     @property
@@ -62,6 +71,10 @@ class VisualizerRenderNode(QSGRenderNode):
     @property
     def clip_host(self) -> VisualizerClipHost:
         return self._clip_host
+
+    @property
+    def render_host(self) -> QuickVisualizerRenderHost:
+        return self._render_host
 
     def synchronize(
         self,
@@ -91,7 +104,13 @@ class VisualizerRenderNode(QSGRenderNode):
             )
             if snapshot_identity != identity:
                 raise ValueError("visualizer snapshot identity does not match render node")
-            self._snapshot = snapshot
+            if snapshot_is_render_admissible(snapshot):
+                self._snapshot = snapshot
+            else:
+                # A playing source-gated mode keeps its last admitted idle/live
+                # pixels until a current source replaces them. A non-present
+                # logical publication likewise cannot erase a valid scene.
+                self._telemetry.note_admission_rejected()
         self._logical_size = (
             max(0.0, float(logical_size[0])),
             max(0.0, float(logical_size[1])),
@@ -106,12 +125,15 @@ class VisualizerRenderNode(QSGRenderNode):
         return QSGRenderNode.RenderingFlag.BoundedRectRendering
 
     def changedStates(self) -> QSGRenderNode.StateFlag:
-        # The foundation changes no GL state.  Mode implementations must
-        # preserve inherited scene-graph state before this remains true.
-        return QSGRenderNode.StateFlag(0)
+        return (
+            QSGRenderNode.StateFlag.BlendState
+            | QSGRenderNode.StateFlag.CullState
+            | QSGRenderNode.StateFlag.DepthState
+            | QSGRenderNode.StateFlag.StencilState
+        )
 
     def render(self, state: QSGRenderNode.RenderState) -> None:
-        """Record the inherited clip contract without advancing logical state."""
+        """Draw the latest admitted state without advancing logical state."""
 
         try:
             scissor_enabled = bool(state.scissorEnabled())
@@ -126,19 +148,69 @@ class VisualizerRenderNode(QSGRenderNode):
                     int(state.stencilValue()) if stencil_enabled else None
                 ),
             )
+            snapshot = self._snapshot
+            if snapshot is None or min(self._logical_size) <= 0.0:
+                return
+            render_target = self.renderTarget()
+            if render_target is None:
+                raise RuntimeError("Quick visualizer has no active render target")
+            target_size = render_target.pixelSize()
+            viewport = (
+                0,
+                0,
+                int(target_size.width()),
+                int(target_size.height()),
+            )
+            if min(viewport[2:]) <= 0:
+                raise RuntimeError(
+                    f"Quick visualizer has invalid render target: {viewport[2:]}"
+                )
+            matrix = self.projectionMatrix() * self.matrix()
+            matrix_values = tuple(float(value) for value in matrix.data())
+            clip_frame = VisualizerClipFrame.from_presentation(
+                snapshot.presentation,
+                matrix_values=matrix_values,
+                viewport=viewport,
+            )
+            clip_run = self._clip_host.begin(clip_frame, state)
+            try:
+                mode_id = self._render_host.render(
+                    snapshot=snapshot,
+                    viewport=viewport,
+                    logical_size=self._logical_size,
+                    matrix_values=matrix_values,
+                )
+            finally:
+                self._clip_host.end(clip_run)
+            self._telemetry.note_draw(mode_id)
         except Exception as exc:
             self._telemetry.note_error(f"{type(exc).__name__}: {exc}")
+            logger.exception("[QUICK] Visualizer render node failed: %s", exc)
 
     def releaseResources(self) -> None:
         """Retire node-owned state on Qt Quick's render/context owner."""
 
         if self._released:
             return
-        try:
-            self._clip_host.release_resources()
-        except Exception as exc:
+        if QOpenGLContext.currentContext() is None and (
+            self._clip_host.has_resources or self._render_host.has_resources
+        ):
             self._telemetry.note_error(
-                f"visualizer resource release failed: {type(exc).__name__}: {exc}"
+                "visualizer resources released without a current GL context"
+            )
+            return
+        errors: list[str] = []
+        for label, release in (
+            ("mode host", self._render_host.release_resources),
+            ("clip host", self._clip_host.release_resources),
+        ):
+            try:
+                release()
+            except Exception as exc:
+                errors.append(f"{label}:{type(exc).__name__}:{exc}")
+        if errors:
+            self._telemetry.note_error(
+                "visualizer resource release failed: " + " | ".join(errors)
             )
             return
         self._released = True
