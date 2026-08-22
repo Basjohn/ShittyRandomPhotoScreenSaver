@@ -61,7 +61,7 @@ This file owns migration sequence and work admission. Technical decompositions u
 | --- | --- | --- |
 | A — bootstrap/render-node proof | Structurally complete | Do not reopen; compiled smoke remains operator-scheduled later |
 | B — runtime-host decomposition | Structurally complete | Do not reopen without contradictory evidence |
-| C — base image + transitions | **IMPLEMENTATION COMPLETE; test-hardening (C-T1..C-T8) landed; real-GL effect sign-off DRIVEN GREEN (35/35); only Blinds real-GL, multi-display, and eyes-on remain** | Transition implementation changes only when stronger evidence exposes a real defect |
+| C — base image + transitions | **IMPLEMENTATION COMPLETE; test-hardening (C-T1..C-T8) landed; real-GL sign-off DRIVEN GREEN on two displays (35 effects + Blinds ×3 + mature transitions + topology); only eyes-on + block_spins concurrent-probe deflake (audit-required) remain** | Transition implementation changes only when stronger evidence exposes a real defect |
 | **D — visualizer** | **ACTIVE** | **Normal implementation work belongs here now** |
 | E — widget presentation + capability setup foundation | Waiting for D implementation exit | Reference only |
 | F — widget families | Waiting for E | Reference only |
@@ -471,21 +471,37 @@ densities/toggles, per-run seed, run-clock animation time, delayed destination t
 
 ## 7.4 Existing Phase-C acceptance debt
 
-Real-GL sign-off DRIVEN on real hardware 2026-08-21 (MSI G321Q, OpenGL threaded, `--size 480x270`):
+Real-GL sign-off DRIVEN on real hardware 2026-08-21/22 (MSI G321Q + LG TV, OpenGL threaded,
+`--size 480x270`), single- AND two-display (`--windows 2`, both physical screens):
 
 - ✅ focused deterministic Phase-C tests execute green in the capable Windows worktree;
 - ✅ `tools/qtquick_phase_c_effect_smoke.py` — all 35 effect×case cases (Diffuse 6, Ripple 3, Crumble
-  5, Particle 12, Burn 9) report `valid=True` after the effect midpoint oracles were made reliable via
-  an isolated dense (15×15) midpoint grid + burn fire/char and particle-scatter signatures;
-- ✅ mature transitions re-verified unaffected on real GL (Crossfade, Slide, Wipe, Warp, Block Flip,
-  and all six Block Spins directions) — the shared sparse 5×5 grid was left byte-identical.
+  5, Particle 12, Burn 9) report `valid=True` single- and two-display, after the effect midpoint
+  oracles were made reliable via an isolated dense (15×15) midpoint grid + burn fire/char and
+  particle-scatter signatures;
+- ✅ `tools/qtquick_blinds_smoke.py` — Horizontal / Vertical / Diagonal all pass single- and
+  two-display. Vertical previously failed because the sparse 5-row grid aliased against 8 vertical
+  bands; fixed by routing Blinds through the dense grid with a domain-based banded oracle;
+- ✅ mature transitions on two displays: Crossfade, Slide, Wipe, Warp, Block Flip all pass; two-display
+  topology recreation (`--topology-recreate --generations 3`) passes for Crossfade and Wipe. The shared
+  sparse 5×5 grid was left byte-identical so these geometry oracles are unchanged.
 
-Remaining sign-off (needs operator's own display/topology, not modelable here):
+Known real-GL harness timing fragility (pre-existing; NOT a rendering or logic defect; block_spins
+untouched by this work):
 
-- run Blinds real-GL directions;
-- scheduled physical two-display variants where required;
-- eyes-on old-vs-Quick authored-effect comparison (operator has confirmed Burn looks correct);
-- normal/high-refresh continuity and physical cadence only where it answers an unresolved question.
+- **Block Spins probe oracle is timing-flaky under concurrent two-display capture.** It passes
+  reliably single-display (5/5, probe frames ~0.417/0.495/0.598) and passes intermittently two-display;
+  the 3-frame slab-projection probe occasionally captures a frame where the sparse 5×5 samples miss the
+  fast-rotating slab within tolerance. block_spins renders correctly on both displays. Deflaking the
+  concurrent probe capture (or moving block_spins to a dense-aware probe oracle) is a **high-risk,
+  audit-required** harness checkpoint per §2.2 — do NOT weaken the precise 3D oracle to force a pass.
+  Broad single-process real-GL runs show the same class of contention flakiness in `test_script_smoke_*`
+  and runtime-teardown tests (all pass in isolation); chunk such runs (`tests/run_chunked.py`).
+
+Remaining sign-off (needs operator's own environment, not modelable here):
+
+- eyes-on old-vs-Quick authored-effect comparison (operator has confirmed Burn and effects look correct);
+- mixed 60 Hz/high-refresh continuity and physical cadence only where it answers an unresolved question.
 
 Phase D may proceed while these remain open.
 
@@ -528,8 +544,10 @@ python -m pytest tests/test_qtquick_transition_controller.py \
 - C-T7/C-T9: honoured (Crumble mosaic tested only as the optional uniform-upload contract; real-GL
   harnesses kept real, fakes used only for wiring/state-contract level evidence).
 
-**If the operator says "continue from Phase C tests", the discrete C-T work is done; run the Section 7.4
-real-GL sign-off, or proceed to Phase D.**
+**If the operator says "continue from Phase C tests", the discrete C-T work is done and the Section 7.4
+real-GL sign-off has been driven green on two displays; proceed to Phase D. The only open Phase-C item
+is the audit-required block_spins concurrent-probe deflake (renderer is correct; oracle is timing-flaky
+under two-display capture only).**
 
 The Phase-C test audit found real coverage holes. Improve the tests/harnesses first. Do **not**
 redesign transition implementation merely to satisfy the audit. If a stronger test exposes a real
