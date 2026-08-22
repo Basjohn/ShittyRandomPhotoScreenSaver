@@ -13,11 +13,11 @@ Original architecture/decision orientation anchor:
 
 That SHA is historical orientation, not a required current HEAD.
 
-Latest Phase-C implementation checkpoint reviewed before this plan revision:
+Latest Phase-C closure checkpoint reviewed before this plan revision:
 
 ```text
-7c4871016464c4a82cf19af6f113bcb21153a483
-Expand Phase C real-GL sign-off matrix
+e0abcad316081802bce302b835a4f9d23f11af79
+Phase C plan: two-display closure complete (54/54); 3D-slab oracles deflaked
 ```
 
 Later documentation/test-workflow commits may exist. Always inspect exact current `main` before acting.
@@ -61,7 +61,7 @@ This file owns migration sequence and work admission. Technical decompositions u
 | --- | --- | --- |
 | A — bootstrap/render-node proof | Structurally complete | Do not reopen; compiled smoke remains operator-scheduled later |
 | B — runtime-host decomposition | Structurally complete | Do not reopen without contradictory evidence |
-| C — base image + transitions | **IMPLEMENTATION COMPLETE; test-hardening (C-T1..C-T8) landed; real-GL sign-off DRIVEN GREEN on two displays — full 54/54 closure sweep (35 effects + Blinds + all mature transitions incl. both 3D-slab + topology); only eyes-on/high-refresh remain** | Transition implementation changes only when stronger evidence exposes a real defect |
+| C — base image + transitions | **IMPLEMENTATION COMPLETE; test-hardening/sign-off debt explicit** | Test/harness hardening may be explicitly selected; transition implementation changes only when stronger evidence exposes a real defect |
 | **D — visualizer** | **ACTIVE** | **Normal implementation work belongs here now** |
 | E — widget presentation + capability setup foundation | Waiting for D implementation exit | Reference only |
 | F — widget families | Waiting for E | Reference only |
@@ -114,7 +114,7 @@ Keep unaffected product systems unless a later phase explicitly replaces a prese
 - authored visualizer algorithms/mode personality;
 - useful CUSTOM layout math/behavior;
 - transition registry/settings identity;
-- product features/customization.
+- product features/customization, **except presentation controls explicitly retired by this plan** (notably the pre-Quick per-mode visualizer card-height/growth controls).
 
 Backward compatibility with pre-Quick **presentation state** is deliberately not a migration goal;
 Phase H0 creates a new settings epoch.
@@ -180,7 +180,7 @@ backgrounds/cards, borders/radius, fonts/colors, shadows, artwork, separators/ic
 controls, stacking, monitor routing, pixel shift, dimming, CUSTOM geometry/edit, context interaction,
 visualizer all five modes, transitions, and Media Center interaction.
 
-Do not solve migration defects by flattening/removing authored effects.
+Do not solve migration defects by flattening/removing authored effects. Explicitly retired legacy presentation controls are not parity requirements; the pre-Quick per-mode visualizer card-height/growth sliders are deliberately retired in Phase D rather than copied into Quick.
 
 ## 1.4 No premature full/compiled builds
 
@@ -396,8 +396,7 @@ Production `DisplayManager -> QuickDisplayRuntime` ownership still waits for Pha
 
 # 7. Phase C — base image + transitions
 
-**Implementation status: complete. Deterministic test-hardening (Section 7.5,
-C-T1..C-T8) landed; only operator-scheduled real-GL/eyes-on sign-off remains.**
+**Implementation status: complete. Deterministic test-hardening (Section 7.5, C-T1..C-T8) landed; only operator-scheduled real-GL/eyes-on sign-off remains.**
 
 Read:
 
@@ -471,63 +470,36 @@ densities/toggles, per-run seed, run-clock animation time, delayed destination t
 
 ## 7.4 Existing Phase-C acceptance debt
 
-Real-GL sign-off DRIVEN on real hardware 2026-08-21/22 (MSI G321Q + LG TV, OpenGL threaded,
-`--size 480x270`), single- AND two-display (`--windows 2`, both physical screens):
+Real-GL sign-off was driven on real hardware 2026-08-21/22 (MSI G321Q + LG TV, OpenGL threaded,
+`--size 480x270`), single- and two-display (`--windows 2`, both physical screens):
 
-- ✅ focused deterministic Phase-C tests execute green in the capable Windows worktree;
-- ✅ `tools/qtquick_phase_c_effect_smoke.py` — all 35 effect×case cases (Diffuse 6, Ripple 3, Crumble
-  5, Particle 12, Burn 9) report `valid=True` single- and two-display, after the effect midpoint
-  oracles were made reliable via an isolated dense (15×15) midpoint grid + burn fire/char and
-  particle-scatter signatures;
-- ✅ `tools/qtquick_blinds_smoke.py` — Horizontal / Vertical / Diagonal all pass single- and
-  two-display. Vertical previously failed because the sparse 5-row grid aliased against 8 vertical
-  bands; fixed by routing Blinds through the dense grid with a domain-based banded oracle;
-- ✅ mature transitions on two displays: Crossfade, Slide, Wipe, Warp, Block Flip, and all six Block
-  Spins directions pass; two-display topology recreation (`--topology-recreate --generations 3`) passes
-  for Crossfade and Wipe.
-- ✅ **Full two-display closure sweep: 54/54** (35 effects + 6 Blinds + mature transitions + topology),
-  both physical screens.
+- ✅ focused deterministic Phase-C tests green in the capable Windows worktree;
+- ✅ all 35 parameterized effect×case smokes green single- and two-display;
+- ✅ Blinds Horizontal / Vertical / Diagonal green single- and two-display;
+- ✅ mature transitions green two-display: Crossfade, Slide, Wipe, Warp, Block Flip and all six Block
+  Spins directions;
+- ✅ topology recreation green for Crossfade and Wipe;
+- ✅ **full two-display closure sweep: 54/54**.
 
-The two 3D-slab oracles (Block Spins, Block Flip) were timing-flaky under concurrent two-display capture
-on the 60 Hz LG TV — the coarse frame cadence drifts the probe/midpoint frame outside a narrow valid
-progress window. Diagnosed to three deterministic causes and fixed as **harness-only** robustness
-changes (renderers are correct; no production/renderer change; shared sparse 5×5 grid left byte-identical
-for all other geometry oracles):
+The two 3D-slab oracles (Block Spins and Block Flip) exposed timing fragility on the 60 Hz display.
+Those were corrected as **harness-only robustness changes**: production transition renderers were not
+changed, the precise geometry/UV fallbacks remain rejecting flat substitutes, and the shared sparse
+5×5 geometry grid remained unchanged for unrelated geometry oracles.
 
-- Block Spins early probe: rim samples just outside the silhouette (extent ~1.086, inside the authored
-  white edge rim) were asserted as clean void → added a symmetric outside-edge skip band (§`_BLOCK_SPIN_EDGE_MARGIN`).
-- Block Spins late probe / Block Flip midpoint: absolute void-count requirements failed near face-on /
-  outside a ~0.03 window narrower than one 60 Hz frame step. Dropped those timing-dependent aggregate
-  void counts; per-sample domain/UV still verify void where the model predicts it, and projected-face /
-  UV checks still reject a flat fullscreen fallback (verified).
+Broad single-process real-GL runs can still show contention flakiness after hundreds of window
+creations. Chunk those runs rather than attributing unrelated teardown contention to the active slice.
 
-Validated on real hardware (MSI G321Q 165 Hz + LG TV 60 Hz): Block Spins/left 0/24 two-display failures
-(was ~50%); all six directions of both slab transitions pass repeatedly two-display; flat fallbacks
-rejected; deterministic render_node + transition_implementations tests green.
+Remaining acceptance requiring the operator's own environment:
 
-NOTE: broad single-process real-GL runs (600+ window-spawning tests) still show contention flakiness in
-`test_script_smoke_*` and runtime-teardown tests (all pass in isolation); chunk such runs
-(`tests/run_chunked.py`) rather than attributing the flakiness to a slice.
+- eyes-on old-vs-Quick authored-effect comparison where still useful;
+- mixed 60 Hz/high-refresh continuity and physical cadence only where it answers an unresolved
+  question.
 
-Remaining sign-off (needs operator's own environment, not modelable here):
-
-- eyes-on old-vs-Quick authored-effect comparison (operator has confirmed Burn and effects look correct);
-- mixed 60 Hz/high-refresh continuity and physical cadence only where it answers an unresolved question.
-
-Phase D may proceed while these remain open.
+Phase D may proceed while those acceptance items remain explicit.
 
 ## 7.5 Phase-C test/harness strengthening — explicit test-only debt
 
-**STATUS (2026-08-21): deterministic test-hardening C-T1..C-T8 LANDED and pushed, AND the real-GL
-effect sign-off has been DRIVEN GREEN on real hardware — all 35 effect×case cases report valid=True
-(see Section 7.4). No transition implementation was changed. The real-GL run first exposed that the
-shared 5×5 diagnostic grid was too sparse to sample thin authored effect regions; this was fixed as
-test/harness strengthening only (an isolated dense 15×15 midpoint grid for the effect oracles, plus
-burn fire/char and particle-scatter signatures), leaving the geometry oracles' sparse grid untouched.
-The C-T subsections below are retained as the durable rationale for future transition-test changes.
-NOTE: broad single-process real-GL runs (600+ window-spawning tests) show contention flakiness in the
-`test_script_smoke_*` and runtime-teardown tests; these pass in isolation — chunk such runs
-(`tests/run_chunked.py`) rather than attributing the flakiness to a slice.**
+**STATUS (2026-08-22): deterministic test-hardening C-T1..C-T8 is landed and the real-GL closure sweep is green 54/54 on two physical displays. Both 3D-slab harness timing defects were subsequently deflaked without production renderer changes. The C-T subsections remain durable rationale, not active unfinished work.**
 
 Landed evidence (focused gate, capable Windows worktree, HEAD after the C-T checkpoints):
 
@@ -555,10 +527,7 @@ python -m pytest tests/test_qtquick_transition_controller.py \
 - C-T7/C-T9: honoured (Crumble mosaic tested only as the optional uniform-upload contract; real-GL
   harnesses kept real, fakes used only for wiring/state-contract level evidence).
 
-**If the operator says "continue from Phase C tests", the discrete C-T work is done and the Section 7.4
-real-GL sign-off has been driven green on two displays (full 54/54 closure sweep, both 3D-slab oracles
-deflaked); proceed to Phase D. Only eyes-on / high-refresh acceptance remains, needing the operator's
-own environment.**
+**If the operator says "continue from Phase C tests", Phase-C implementation/test hardening and the two-display real-GL closure sweep are complete; proceed to Phase D. Only operator-owned eyes-on/high-refresh acceptance remains.**
 
 The Phase-C test audit found real coverage holes. Improve the tests/harnesses first. Do **not**
 redesign transition implementation merely to satisfy the audit. If a stronger test exposes a real
@@ -757,7 +726,25 @@ Read:
 - `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
 - `Docs/Visualizer_Reference.md`
 
-## D1 — presentation-neutral runtime/controller
+Phase D must preserve the current five visualizers **and** avoid baking the historical painted-card
+assumption into the new architecture.
+
+The final visualizer presentation is explicitly split into:
+
+```text
+mode/render state
+        +
+presentation shell policy
+        +
+content clip policy
+        +
+presentation geometry / viewport
+```
+
+All current five modes use the carded policy. No current visual result is intentionally changed by
+this architectural split.
+
+## D1 — presentation-neutral runtime/controller + mode presentation policy
 
 Separate the non-pixel visualizer owner from QWidget presentation without rewriting provider/business
 logic.
@@ -767,32 +754,244 @@ Retain settings/mode/preset activation, playback state, BeatEngine/source,
 
 Do not instantiate a hidden QWidget merely to keep those owners alive.
 
+Extend the cheap canonical visualizer mode descriptor with presentation metadata rather than adding
+mode-specific `if/elif` branches to scene owners.
+
+Conceptually:
+
+```text
+VisualizerModePresentationPolicy
+    shell_policy = CARD | FRAMELESS
+    clip_policy  = CARD_INTERIOR | VIEWPORT_RECT
+    viewport_resize_capable = bool
+```
+
+Current five modes:
+
+```text
+shell_policy = CARD
+clip_policy  = CARD_INTERIOR
+```
+
+A future explicitly authored mode such as the post-migration deformable 3D sphere may use:
+
+```text
+shell_policy = FRAMELESS
+clip_policy  = VIEWPORT_RECT
+```
+
+`FRAMELESS` means no card fill, frame/border, or card shadow. It does **not** mean a second native
+window or permission to draw arbitrarily across the display.
+
 Checkpoint/push/audit this split.
 
 ## D2 — immutable latest-state render bridge
 
 Publish bounded immutable current visualizer snapshots containing generation/activation identity,
-mode/playback identity, logical timestamp, geometry/fade/style, and mode-specific render data.
+mode/playback identity, logical timestamp, fade/style, mode-specific render data, and the resolved
+presentation policy/geometry required for that committed frame.
 
-No render-thread reads from live QWidget/QObject/provider/Settings state.
+No render-thread reads from live QWidget/QObject/provider/Settings state or live mode-registry state.
 
 Latest state wins; no FIFO/catch-up replay. Protect short-lived authored edges explicitly.
 
 Checkpoint/push/audit the bridge separately.
 
-## D3 — Quick visualizer item/node + geometry/card foundation
+## D3 — Quick visualizer scene composition, clip owner, and card/frameless shell
 
 Use one sub-rect custom Quick item/QSGRenderNode inside the display QQuickWindow.
 
-One committed geometry authority feeds retained card chrome and GL viewport/scissor/shader
-geometry/CUSTOM seam.
+Preferred carded scene shape:
 
-Preserve DPR from the owning display/window. No separate native visualizer window, QPainter fallback,
-or QWidget texture wrapper.
+```text
+VisualizerPresentationRoot  (one fade/visibility owner)
+    |
+    +-- retained card shadow        [CARD only]
+    +-- retained card background    [CARD only]
+    +-- visualizer content item
+    |       |
+    |       +-- QSG clip node
+    |               |
+    |               +-- QSGRenderNode / direct OpenGL
+    +-- retained card frame/border  [CARD only, above content]
+```
 
-Retained Quick card presentation must preserve background/border/radius/shadow/color/fade/customization.
+For `FRAMELESS`, omit the card shadow/background/frame while retaining the same presentation root,
+content item, lifecycle, fade authority and display-scene ownership.
 
-## D4 — sole authored logical clock
+### D3.1 — clipping policy
+
+The old architecture needed a rounded-card stencil because custom GL content had to remain above the
+card fill and below the visible border without bleeding through rounded corners.
+
+That **visual contract remains necessary for carded modes**. The old hand-written stencil mechanism
+does not automatically remain the best owner.
+
+Preferred Quick implementation:
+
+- create a scene-graph `QSGClipNode` around the visualizer render node;
+- `CARD_INTERIOR` uses rounded clip geometry matching the actual inner edge of retained Quick card
+  chrome;
+- `VIEWPORT_RECT` uses a rectangular clip and marks it rectangular so Qt may use scissoring;
+- inside `QSGRenderNode.render()`, respect the incoming `RenderState` scissor/stencil clip information;
+- do not clear or repurpose Qt's clip stencil contents as though the render node owned the whole
+  framebuffer;
+- restore every direct-GL state the render node changes.
+
+A rounded `QSGClipNode` is normally stencil-backed by Qt's scene graph. This keeps clip ownership
+composable with the surrounding Quick scene and avoids another private window-space mask authority.
+
+Because the project is pinned to PySide, prove the exact `QSGClipNode -> QSGRenderNode` path in a
+focused D3 runtime test before depending on it broadly.
+
+If pinned PySide 6.9.1 proves the scene-graph clip-node path unusable or incorrect, a render-node-local
+rounded SDF/stencil mask is an allowed **single-path implementation fallback** inside the same
+QQuickWindow/QSGRenderNode architecture. It must still derive from canonical geometry, respect any
+incoming scene clip, and restore state.
+
+Never solve clipping by shrinking the visualizer render rect or scaling the authored content smaller.
+Historical R-21 proved that changes mode geometry/amplitude/bar sizing rather than clipping pixels.
+
+### D3.2 — Quick border semantics
+
+Do not cargo-cult the old mask formula.
+
+The historical mask compensated for a centred QPainter border (`border_width / 2`) plus painted-card
+shadow tuning. Qt Quick `Rectangle` borders are rendered **inside** the rectangle bounds.
+
+The new card-interior clip must therefore be derived from the actual retained Quick chrome contract:
+
+```text
+outer card shape
+        ↓
+inside border width
+        ↓
+inner content path / inner corner radius
+```
+
+Any additional inset must be an explicit authored Quick card/style value, not a copied magic
+`1px + border/2` rule from the QWidget/QPainter era.
+
+## D4 — canonical geometry: one baseline aspect, uniform scale, separate viewport extent
+
+Create one committed presentation-neutral geometry record capable of expressing:
+
+```text
+outer_rect
+content_rect
+dpr
+baseline_viewport_size
+baseline_aspect_ratio
+uniform_visual_scale
+viewport_extent
+current_aspect_ratio
+shell_policy
+clip_policy
+```
+
+### D4.1 — retire the legacy per-mode card-height/growth system from Quick
+
+The old runtime carries per-mode presentation controls such as:
+
+```text
+spectrum_growth
+osc_growth
+sine_wave_growth
+bubble_growth
+devcurve_growth
+```
+
+They change preferred **outer card height** while width remains media-relative. CUSTOM already bypasses
+that preferred-height path once committed custom geometry owns the visualizer.
+
+These are legacy presentation customization and are **not part of the Qt Quick visualizer contract**.
+Do not port them into the Quick controller, immutable render snapshot, mode descriptor or retained
+card geometry.
+
+For the Quick-era normal/default layout:
+
+- all current visualizer modes share one canonical baseline viewport aspect ratio;
+- normal card width/placement may still follow the intended common layout owner, but height derives
+  from that one baseline aspect rather than a mode-specific growth multiplier;
+- switching Spectrum ↔ Oscilloscope ↔ Sine ↔ Bubble ↔ DevCurve does not resize the viewport merely
+  because the mode changed;
+- built-in presets may tune the mode's visual behavior but do not own viewport/card height;
+- screen-bound clamping preserves the baseline aspect by uniform scale/downsize rather than chopping
+  one axis independently.
+
+Do **not** invent a new numerical aspect ratio from an arbitrary old mode-growth value. D3/D4 should
+extract/freeze one explicit canonical ratio from the intended healthy CUSTOM/default visualizer
+baseline and give it one named authority. Once chosen, every current mode uses that authority.
+
+The destination should therefore behave like the clean part of current CUSTOM: legacy growth values
+are irrelevant to visualizer shape.
+
+The old settings/UI/preset keys may remain temporarily while the old presenter still exists, but the
+Quick implementation ignores them. H0 resets them away and Phase I/J0 remove their remaining current
+schema/UI/preset/default/tooling authority after caller proof.
+
+### D4.2 — uniform scale preserves the baseline aspect
+
+`uniform_visual_scale` is the ordinary whole-visualizer size control.
+
+It scales shell + viewport + authored content coherently and **preserves the canonical baseline aspect
+ratio**.
+
+This is the semantic used by:
+
+- existing/custom scroll-wheel resize;
+- corner-handle resize;
+- ordinary reset-to-size behavior.
+
+It is not an X/Y stretch.
+
+### D4.3 — viewport extent is a separate future operation
+
+`viewport_extent` changes how much visualizer world/layout is available at the current visual scale.
+It may intentionally produce a wide/tall aspect that differs from the baseline aspect.
+
+That deviation is allowed **only** through the explicit viewport-extent operation planned for Phase G,
+not through mode presets, legacy growth controls or ordinary corner/scroll resize.
+
+Do not bake these assumptions into the five renderer ports:
+
+- mode-specific preferred heights;
+- one fixed historical card size hidden inside a renderer;
+- non-uniform final-pixel stretching;
+- card existence as a precondition for drawing.
+
+Where logical simulation needs spatial bounds (Bubble in particular), viewport changes enter through a
+presentation-neutral viewport-metrics update owned outside the render thread. That update is
+configuration, not another clock.
+
+## D5 — prove baseline aspect independence and future viewport compatibility
+
+During the five mode ports, exercise at least:
+
+```text
+canonical baseline aspect at scale 1.0
+canonical baseline aspect at another uniform scale
+wide viewport extent at the same visual scale
+tall viewport extent at the same visual scale
+```
+
+The first two are migration requirements. Wide/tall cases are architectural compatibility probes for
+the later Phase-G QoL; Phase D does not ship the edit handles.
+
+Expected semantics:
+
+- Spectrum: redistribute bars/layout across available width; vertical limit follows content height;
+- Bubble: spatial bounds/aspect change without anisotropically stretching circles, radii, velocities
+  or trajectories;
+- Oscilloscope/Sine/DevCurve: recompute available domain/placement while preserving stroke thickness
+  and authored scale;
+- future 3D sphere: aspect-correct camera/projection so the sphere remains round.
+
+If one current mode cannot safely support free viewport extent without compromising authored behavior,
+keep the D4 geometry seam and mark that mode `viewport_resize_capable = false` for the later QoL. Do
+not block migration and do not fake support by stretching pixels.
+
+## D6 — sole authored logical clock
 
 `VisualizerLogicalRuntime` remains the sole mode-general authored logical clock.
 
@@ -810,9 +1009,9 @@ Non-negotiable:
 - generation/stale fencing;
 - clean worker join.
 
-## D5 — five mode ports
+## D7 — five mode ports
 
-Preserve all current authored behavior for:
+Preserve all current authored **mode behavior** for the five modes below. The D4-retired per-mode card-height/growth presentation controls are explicitly excluded from parity:
 
 1. Spectrum — bars/peaks/ghosting, paused idle visibility, source freshness;
 2. Oscilloscope — waveform/line persistence/idle behavior;
@@ -821,35 +1020,39 @@ Preserve all current authored behavior for:
    trails/tails, ghosts/pop/transients/protected edges, authored logical Hz;
 5. DevCurve — active layers/order/alpha/offsets/outline/ghosting/tuning.
 
+All five current modes remain `CARD + CARD_INTERIOR`.
+
 Do not retune modes to hide presentation problems.
 
 The observation that unrelated widgets can materially change measured Bubble-era GPU load supports
 retained-scene efficiency and true feature dormancy. It does not implicate Bubble collision logic by
 itself.
 
-## D6 — Pause/Play and lifecycle
+## D8 — Pause/Play and lifecycle
 
 Preserve warm-source/expected-state behavior without recreating the window/item or inventing a second
 playback authority.
+
+One presentation-root fade authority covers both carded and frameless modes.
 
 Retirement must close publication, stop/join the logical runtime, invalidate activation/generation,
 remove snapshot admission, release GL resources on the render owner, and destroy roots cleanly.
 
 A background owner that prevents process/test shutdown is a defect.
 
-## D7 — checkpoint cadence
+## D9 — checkpoint cadence
 
 Prefer pushed/audited checkpoints for:
 
-1. runtime/controller split;
+1. runtime/controller split + presentation policy;
 2. immutable bridge;
-3. item/node + geometry/card foundation;
+3. item/node + clip/shell/geometry foundation;
 4. Spectrum;
 5. Oscilloscope;
 6. Sine;
 7. Bubble + BTF;
 8. DevCurve;
-9. all-five-mode lifecycle/source/pause closure;
+9. all-five-mode lifecycle/source/pause + aspect-policy closure;
 10. Phase-D documentation closure.
 
 ## D exit
@@ -857,6 +1060,11 @@ Prefer pushed/audited checkpoints for:
 All five modes use the Quick visualizer boundary with the authored logical runtime intact, immutable
 latest-state publication, clean lifecycle/resources, and no old compositor/QWidget presentation
 dependency inside the new renderer.
+
+The renderer architecture must no longer assume every possible visualizer mode requires a card, and
+its geometry contract must preserve a clean later seam for viewport-extent resizing.
+
+Phase D does **not** need to ship the Phase-G freeform viewport-resize UI to exit.
 
 After implementation exit, rewrite visualizer/preset authoring guidance against the landed Quick
 contract. Explicit physical/eyes-on items may remain scheduled acceptance debt when they require the
@@ -1161,7 +1369,7 @@ descriptor/model/family/Quick component contract.
 
 Read `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`.
 
-## G1 — CUSTOM session
+## G1 — CUSTOM session + visualizer viewport-resize QoL
 
 Refactor `CustomLayoutManager` into presentation-neutral session/state + Quick edit presentation.
 
@@ -1172,6 +1380,70 @@ Cross-monitor transfer moves/recreates one presentation instance on the target s
 duplicate live pixel owners.
 
 Do not spend migration effort translating old QWidget geometry; H0 resets it.
+
+### G1.1 — visualizer resize has two distinct operations
+
+The Phase-D geometry contract separates **uniform whole-visualizer scale** from **viewport extent**.
+
+Preferred edit semantics:
+
+```text
+scroll-wheel resize
+    -> uniform whole-visualizer scale
+    -> canonical baseline aspect preserved
+
+corner-handle resize
+    -> uniform whole-visualizer scale
+    -> canonical baseline aspect preserved
+
+left/right edge-handle resize
+    -> viewport width only
+    -> visual scale unchanged
+
+top/bottom edge-handle resize
+    -> viewport height only
+    -> visual scale unchanged
+```
+
+This deliberately preserves the existing useful CUSTOM interaction: scroll/corner resize makes the
+entire visualizer larger or smaller as one object. Edge-only dragging is the new operation that gives
+a mode more or less playroom.
+
+Viewport resizing is not post-render image stretching.
+
+The renderer/logical mode consumes the new viewport dimensions so content adapts/reflows:
+
+- Spectrum redistributes bars across available width and uses the new vertical extent;
+- Bubble changes spatial bounds/aspect without turning circles into ellipses or scaling X/Y velocities
+  differently;
+- Oscilloscope/Sine/DevCurve adapt domain/layout while preserving authored stroke/visual scale;
+- future frameless 3D modes use aspect-correct camera/projection.
+
+When a card shell exists, its outer geometry follows the viewport extent plus canonical shell/border
+insets. A frameless mode changes only its transparent assigned viewport.
+
+`Reset Size` should restore both uniform scale and viewport extent to the canonical baseline geometry
+unless a later deliberate UX adds separate reset affordances.
+
+Persist scale and viewport extent as distinct new-schema values. Do not resurrect the old per-mode
+`*_growth` controls as hidden aliases for either field.
+
+### G1.2 — non-blocking migration rule
+
+This QoL is preferred because Phase D is already paying the architectural cost to keep the geometry
+seam clean.
+
+It is **not a production-cutover blocker** if focused implementation evidence shows that one or more
+current modes cannot support freeform viewport extents without substantial BTF/fidelity risk.
+
+If that happens:
+
+- keep the Phase-D scale/viewport separation;
+- disable viewport-edge handles for the affected mode(s);
+- preserve ordinary uniform scale resize;
+- record the deferred mode-specific work explicitly;
+- do not fake support by stretching the rendered visualizer texture.
+
 
 ## G2 — input/interaction
 
@@ -1226,7 +1498,7 @@ Reset, where present:
 - CUSTOM geometry/restore payloads/layout slots;
 - display geometry assumptions;
 - old shadow/effect settings;
-- visualizer presentation/geometry;
+- visualizer presentation/geometry, including old per-mode `*_growth`/card-height controls and any Quick-era shell/clip/scale/viewport state where persisted;
 - old user visualizer presentation presets unless deliberately retained under a new-schema decision;
 - other QWidget/QRhi/compositor-era presentation state.
 
@@ -1291,6 +1563,7 @@ After cutover, remove in small proven batches:
 - one-off pre-Quick presentation migration helpers obsolete after H0;
 - obsolete transition dropdown/random-pool UI code replaced by E2;
 - obsolete eager Widgets/Transitions settings-section creation paths replaced by E2;
+- legacy visualizer per-mode card-height/growth settings/UI/bindings/helpers/tests once the old presenter no longer calls them (`spectrum_growth`, `osc_growth`, `sine_wave_growth`, `bubble_growth`, `devcurve_growth`, and compatibility height helpers);
 - migration-only scaffolding.
 
 Do not delete presentation-neutral authored shaders/math merely because the old compositor also used
@@ -1332,6 +1605,7 @@ After H0/H1/I establish final schema:
 - otherwise retarget explicitly;
 - remove deleted metadata such as Imgur;
 - add finite-value metadata for new canonical settings such as shadow direction;
+- remove legacy visualizer per-mode card-height/growth leaves from canonical defaults/preset authoring/Foundry metadata; visualizer presets must not change viewport shape through those retired keys;
 - expose/validate final transition capability-activation, random-mode/pool and widget-family
   activation defaults without importing heavy implementation modules;
 - remove retired compatibility-preservation behavior;
@@ -1391,16 +1665,15 @@ D1 runtime/controller split
 -> checkpoint/push/audit
 D2 immutable latest-state bridge
 -> checkpoint/push/audit
-D3 Quick item/node + geometry/card foundation
+D3 Quick item/node + clip/shell + canonical baseline geometry foundation
 -> checkpoint/push/audit
 mode ports, with Bubble dedicated
 -> all-five-mode lifecycle/source audit
 -> Phase-D docs closure
 ```
 
-The Section 7.5 test-only hardening (C-T1..C-T8) is already landed; if the operator says **continue
-from Phase C tests**, the remaining Phase-C item is the Section 7.4 operator-scheduled real-GL/eyes-on
-sign-off, after which return to D.
+If the operator instead explicitly says **continue from Phase C tests**, execute Section 7.5 test-only
+hardening first and return to D afterward.
 
 Do not wait for Phase-C eyes-on/hardware sign-off unless the Phase-D change directly depends on that
 unresolved evidence.

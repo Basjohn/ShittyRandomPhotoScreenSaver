@@ -1,8 +1,9 @@
 # Visualizer Presentation Guardrails
 
-Last updated: 2026-08-20
+Last updated: 2026-08-22
 
-Read for visualizer cadence, source freshness, render state, fade/readiness, and presentation work.
+Read for visualizer cadence, source freshness, render state, fade/readiness, shell/clip policy,
+geometry, and presentation work.
 
 For Bubble also read `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
 
@@ -68,7 +69,7 @@ Protected short-lived visible edges require explicit survival tests.
 
 ## 4. Quick presentation bridge
 
-The GUI/Quick boundary is an implementation detail but must be:
+The GUI/Quick boundary must be:
 
 - bounded;
 - latest-state oriented;
@@ -76,8 +77,8 @@ The GUI/Quick boundary is an implementation detail but must be:
 - safe for Quick scene/render-thread ownership;
 - independent of physical paint completion.
 
-The migration should remove obsolete GUI `present_tick`/QRhiWidget ownership as those pixels move to
-Quick, rather than wrapping it permanently inside another layer.
+The migration removes obsolete GUI `present_tick`/QRhiWidget ownership as pixels move to Quick rather
+than wrapping it permanently inside another layer.
 
 ## 5. Physical presentation
 
@@ -90,7 +91,119 @@ No:
 - second accelerated surface;
 - separate visualizer swap/vsync owner.
 
-## 6. Readiness
+## 6. Shell policy is not mode rendering
+
+Do not hard-code "visualizer always owns a card" into the render host.
+
+Resolve a lightweight presentation policy before render-thread admission.
+
+Minimum policies:
+
+```text
+shell:
+    CARD
+    FRAMELESS
+
+clip:
+    CARD_INTERIOR
+    VIEWPORT_RECT
+```
+
+All current five modes remain:
+
+```text
+CARD + CARD_INTERIOR
+```
+
+A future explicitly authored frameless mode may use:
+
+```text
+FRAMELESS + VIEWPORT_RECT
+```
+
+`FRAMELESS` removes card background/frame/shadow only. It does not create a new native window and does
+not grant unrestricted display-wide drawing.
+
+Shell policy must not become a second playback/mode clock.
+
+## 7. Clip contract
+
+Carded custom-GL content must remain:
+
+```text
+above card fill
+below visible frame/border
+inside rounded inner card path
+```
+
+Historical R-21 is binding evidence that shrinking the GL render rect to hide bleed is wrong because
+it changes authored content geometry.
+
+Preferred Quick ownership is a scene-graph `QSGClipNode`:
+
+- rectangle clip may use scissor;
+- rounded clip uses scene-graph clip geometry, normally stencil-backed;
+- custom `QSGRenderNode` honors the supplied RenderState scissor/stencil values;
+- direct GL does not clear or overwrite scene-graph clip contents as if it owned the framebuffer.
+
+If pinned PySide makes that path unusable, a single render-node-local rounded mask is allowed, but the
+same geometry/policy contract remains and it must respect incoming scene clipping.
+
+Do not preserve two permanent selectable clip implementations.
+
+## 8. Card interior geometry
+
+Do not copy QWidget/QPainter mask constants into Quick.
+
+Historical centred-pen math such as:
+
+```text
+1px inset + border_width / 2
+```
+
+was specific to the old painted-card implementation.
+
+Qt Quick card border geometry is different; derive the content clip from the actual retained Quick
+shell.
+
+One canonical geometry authority owns:
+
+- outer card;
+- border width;
+- inner content path;
+- inner radius;
+- content rect;
+- DPR.
+
+Card frame and custom GL may not use competing geometry calculations.
+
+## 9. Geometry: one baseline aspect; scale and viewport extent are distinct
+
+All five current modes share one canonical baseline viewport aspect in the Quick architecture. Mode changes and mode presets do not resize that baseline viewport. The legacy per-mode `spectrum_growth`, `osc_growth`, `sine_wave_growth`, `bubble_growth`, and `devcurve_growth` card-height controls are retired and must not be copied into Quick.
+
+The visualizer geometry model must distinguish:
+
+```text
+uniform_visual_scale
+```
+
+from:
+
+```text
+content_viewport_size / extent
+```
+
+Uniform scale changes the whole authored visual size while preserving the canonical baseline aspect. Scroll-wheel and corner-handle resize use uniform scale.
+
+Viewport extent changes how much layout/world is available. Only the explicit Phase-G left/right or top/bottom edge resize changes one viewport axis independently.
+
+Do not implement wide/tall visualizers by stretching a rendered texture or scaling X and Y
+independently. Do not use a retired per-mode growth value as a hidden viewport-extent alias.
+
+Where a logical mode needs spatial bounds, committed viewport metrics may enter the logical runtime as
+configuration. They do not become another clock.
+
+## 10. Readiness
 
 Distinguish:
 
@@ -101,17 +214,24 @@ reactive_source_ready
 
 Paused Spectrum may reveal presentation-owned idle state while source identity remains absent.
 
+Readiness depends only on resources actually required by the resolved shell policy. A frameless mode
+must not wait for card resources it does not own.
+
 On Play, fresh current-generation/current-activation data replaces idle state in place.
 
-## 7. Fade
+## 11. Fade
 
-One authored fade authority applies to the visualizer/card visual.
+One authored fade authority applies to the complete visualizer presentation root.
+
+For carded modes it fades shell + content coherently.
+
+For frameless modes it fades content without manufacturing invisible card dependencies.
 
 Do not create competing QWidget and Quick opacity owners for the same visible pixels.
 
 During migration, temporary old/new paths must never both present the same visualizer simultaneously.
 
-## 8. Source freshness
+## 12. Source freshness
 
 Measure separately:
 
@@ -126,7 +246,7 @@ Smooth motion over stale audio is not healthy.
 
 Do not retune Bubble/shader smoothing to conceal source staleness.
 
-## 9. Pause / Play
+## 13. Pause / Play
 
 Ordinary Pause/Play preserves:
 
@@ -139,14 +259,17 @@ Ordinary Pause/Play preserves:
 The migration may change the pixel owner; it must not reintroduce playback debounce or recreate the
 logical runtime on ordinary Pause/Play.
 
-## 10. Fidelity
+## 14. Fidelity
 
-Preserve all mode personality and current behavioural goldens.
+Preserve all current-mode personality and behavioral goldens.
 
 BTF additionally binds Bubble trajectory, elasticity, transients, source freshness, logical cadence,
 edge survival, state-to-screen timing, and final continuity.
 
-## 11. Generation fencing
+Non-default viewport aspect must not be implemented by anisotropically stretching Bubble circles,
+line widths, or future 3D objects.
+
+## 15. Generation fencing
 
 Generation/activation are ownership identity.
 
@@ -154,7 +277,7 @@ Generation/activation are ownership identity.
 
 Retired state cannot enter a replacement Quick scene, trigger reveal, or mutate current render state.
 
-## 12. Native renderer rule
+## 16. Native renderer rule
 
 A native/C++ visualizer renderer is not a migration phase.
 
