@@ -26,6 +26,13 @@ RectTuple: TypeAlias = tuple[float, float, float, float]
 SizeTuple: TypeAlias = tuple[float, float]
 
 
+# The healthy committed CUSTOM/default visualizer size is the scale-1 Quick
+# baseline.  Every current mode shares this authority; viewport_extent may
+# deliberately differ without changing the baseline identity.
+CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE: SizeTuple = (420.0, 280.0)
+CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO = 1.5
+
+
 def _finite(value: object, *, name: str) -> float:
     number = float(value)
     if not math.isfinite(number):
@@ -512,6 +519,7 @@ class ResolvedVisualizerPresentation:
     content_rect: RectTuple
     dpr: float
     baseline_viewport_size: SizeTuple
+    baseline_aspect_ratio: float
     uniform_visual_scale: float
     viewport_extent: SizeTuple
     current_aspect_ratio: float
@@ -536,16 +544,37 @@ class ResolvedVisualizerPresentation:
             "baseline_viewport_size",
             _size_tuple(self.baseline_viewport_size, name="baseline viewport size"),
         )
+        if self.baseline_viewport_size != CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE:
+            raise ValueError("visualizer baseline viewport size is not canonical")
         object.__setattr__(
             self,
             "viewport_extent",
             _size_tuple(self.viewport_extent, name="viewport extent"),
         )
-        for name in ("uniform_visual_scale", "current_aspect_ratio"):
+        for name in (
+            "baseline_aspect_ratio",
+            "uniform_visual_scale",
+            "current_aspect_ratio",
+        ):
             value = _finite(getattr(self, name), name=name)
             if value <= 0.0:
                 raise ValueError(f"{name} must be positive")
             object.__setattr__(self, name, value)
+        if not math.isclose(
+            self.baseline_aspect_ratio,
+            CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            raise ValueError("visualizer baseline aspect ratio is not canonical")
+        expected_aspect = self.viewport_extent[0] / self.viewport_extent[1]
+        if not math.isclose(
+            self.current_aspect_ratio,
+            expected_aspect,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            raise ValueError("current aspect ratio does not match viewport extent")
         for name in ("scene_fade", "content_fade"):
             value = _finite(getattr(self, name), name=name)
             if not 0.0 <= value <= 1.0:
@@ -604,6 +633,8 @@ def compose_visualizer_render_snapshot(
 
 __all__ = [
     "BubbleFrame",
+    "CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO",
+    "CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE",
     "DevCurveFrame",
     "FrozenFields",
     "ModeFrame",
