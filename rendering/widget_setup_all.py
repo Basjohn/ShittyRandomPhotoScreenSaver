@@ -678,13 +678,14 @@ def _create_remote_custom_visualizer_on_target(
         host_index = getattr(target, "screen_index", None)
         coordinator = get_coordinator()
         if host_index is not None and int(host_index) != int(target_screen_index):
-            coordinator.set_visualizer_failover(
+            coordinator.set_visualizer_fallback_owner(
                 intended_index=target_screen_index,
                 host=target,
                 origin_manager=(origin_manager or target_manager),
-                pending=False,
             )
         else:
+            # Configured monitor now owns the visualizer -> outage over; clearing
+            # invalidates the failover generation, retiring any old grace callback.
             coordinator.clear_visualizer_failover()
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to update visualizer failover record", exc_info=True)
@@ -701,25 +702,29 @@ def _schedule_remote_custom_visualizer_fallback_recheck(
     *,
     target_screen_index: int,
 ) -> None:
+    # E2.7 (global grace authority): arm ONE grace for the single Visualizer
+    # outage. If a grace/fallback is already active (another DisplayWidget armed
+    # it during this same outage), arm returns None and we do NOT start or reset a
+    # second 30 s deadline. The returned generation is the global authority every
+    # delayed callback validates — a straggler from another display cannot act
+    # after reclaim or a new outage.
+    generation = get_coordinator().arm_visualizer_grace(
+        intended_index=target_screen_index,
+        origin_manager=mgr,
+    )
+    if generation is None:
+        logger.debug(
+            "[SPOTIFY_VIS][FALLBACK] grace already active for this outage; not arming another"
+        )
+        return
     token = int(getattr(mgr, "_remote_custom_visualizer_reconcile_token", 0)) + 1
     setattr(mgr, "_remote_custom_visualizer_reconcile_token", token)
-    # E2.7 §2: record the pending grace so topology reconciliation (reclaim) can
-    # SEE it — a configured target that returns before the deadline is restored
-    # immediately and this pending callback is fenced (token bumped).
-    try:
-        get_coordinator().set_visualizer_failover(
-            intended_index=target_screen_index,
-            host=None,
-            origin_manager=mgr,
-            pending=True,
-        )
-    except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to record pending visualizer grace", exc_info=True)
     logger.warning(
         "[SPOTIFY_VIS][FALLBACK] Requested CUSTOM monitor %s not participating; "
-        "arming %sms one-shot grace before any temporary fallback",
+        "arming %sms one-shot grace (gen=%s) before any temporary fallback",
         target_screen_index,
         REMOTE_CUSTOM_VISUALIZER_FALLBACK_GRACE_MS,
+        generation,
     )
     media_widget_ref = _passive_ref(media_widget) if media_widget is not None else None
     _schedule_weak_runtime_callback(
@@ -733,6 +738,7 @@ def _schedule_remote_custom_visualizer_fallback_recheck(
         media_widget_ref,
         target_screen_index,
         token,
+        generation,
     )
 
 
@@ -745,6 +751,7 @@ def _run_remote_custom_visualizer_fallback_recheck_owned(
     media_widget_ref: "weakref.ReferenceType[QWidget] | None",
     target_screen_index: int,
     token: int,
+    generation: int,
 ) -> None:
     media_widget = media_widget_ref() if media_widget_ref is not None else None
     _run_remote_custom_visualizer_fallback_recheck(
@@ -756,6 +763,7 @@ def _run_remote_custom_visualizer_fallback_recheck_owned(
         media_widget,
         target_screen_index,
         token,
+        generation,
     )
 
 
@@ -768,9 +776,16 @@ def _run_remote_custom_visualizer_fallback_recheck(
     media_widget: Optional[QWidget],
     target_screen_index: int,
     token: int,
+    generation: int = 0,
 ) -> None:
+    # Global authority (E2.7): the delayed grace callback is valid only while its
+    # coordinator generation is the currently-active outage generation. Reclaim,
+    # a target return, or a new outage all invalidate the old generation, so a
+    # straggler from ANY DisplayWidget aborts here regardless of its local token.
+    if not get_coordinator().is_visualizer_failover_generation_current(generation):
+        return
     if token != int(getattr(mgr, "_remote_custom_visualizer_reconcile_token", 0)):
-        return  # fenced: a newer grace/reclaim superseded this pending callback
+        return  # secondary fence: local manager token superseded
     current_display = getattr(mgr, "_parent", None)
     if current_display is None or bool(getattr(current_display, "_exiting", False)):
         return
@@ -977,9 +992,16 @@ def reclaim_remote_custom_visualizer_owner() -> None:
 
     # gap-3: re-resolve the CURRENT configured CUSTOM monitor from live Settings.
     if not is_custom_position_selected_for_widget("spotify_visualizer", widgets_config):
-        # No longer CUSTOM-routed -> failover superseded; retire any stray owner.
-        if host is not None:
-            _retire_visualizer_owner(host)
+        # No longer CUSTOM-routed -> failover superseded. Retire any stray owner
+        # first; only declare the failover normalized if retirement is CONFIRMED
+        # (blocker-2). If it is not, retain the record so a later event retries —
+        # never clear while an old Visualizer may still be alive.
+        if host is not None and not _retire_visualizer_owner(host):
+            logger.warning(
+                "[SPOTIFY_VIS][RECLAIM] not clearing failover: stray owner retirement unconfirmed "
+                "(no-longer-CUSTOM branch)"
+            )
+            return
         coordinator.clear_visualizer_failover()
         return
     monitor_value = get_effective_monitor_value_for_widget(
@@ -998,9 +1020,17 @@ def reclaim_remote_custom_visualizer_owner() -> None:
 
     if getattr(configured, "spotify_visualizer_widget", None) is not None:
         # Configured display already owns the visualizer; retire any stray
-        # temporary owner and normalize the record to a single owner.
+        # temporary owner and normalize the record to a single owner. Only clear
+        # if the stray owner's retirement is CONFIRMED (blocker-2); otherwise
+        # retain the record so a later event retries rather than declaring
+        # ownership normalized while an old Visualizer may still be alive.
         if host is not None and host is not configured:
-            _retire_visualizer_owner(host)
+            if not _retire_visualizer_owner(host):
+                logger.warning(
+                    "[SPOTIFY_VIS][RECLAIM] not clearing failover: stray owner retirement "
+                    "unconfirmed (configured-already-owns branch)"
+                )
+                return
         coordinator.clear_visualizer_failover()
         return
 
@@ -1013,20 +1043,15 @@ def reclaim_remote_custom_visualizer_owner() -> None:
             )
             return
 
-    # gap-2: fence the still-pending delayed grace callback so it cannot also act.
-    if origin_manager is not None:
-        try:
-            token = int(getattr(origin_manager, "_remote_custom_visualizer_reconcile_token", 0)) + 1
-            setattr(origin_manager, "_remote_custom_visualizer_reconcile_token", token)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS][RECLAIM] failed to fence pending grace token", exc_info=True)
-
     shadows_config = widgets_config.get("shadows", {}) if isinstance(widgets_config, dict) else {}
     thread_manager = getattr(configured, "_thread_manager", None)
     logger.info(
         "[SPOTIFY_VIS][RECLAIM] CUSTOM monitor %s available; restoring visualizer to it",
         current_index,
     )
+    # A successful create on the configured display clears the failover, which
+    # invalidates the whole outage generation — so any still-pending delayed
+    # callback (from THIS or any other DisplayWidget) aborts its generation check.
     created = _create_remote_custom_visualizer_on_target(
         configured,
         widgets_config,
@@ -1038,12 +1063,10 @@ def reclaim_remote_custom_visualizer_owner() -> None:
     if not created:
         # Creation failed (e.g. capability dropped mid-transaction). The temporary
         # owner is already retired, so leave a PENDING grace (never a dangling
-        # fallback host) so a later event can retry.
-        coordinator.set_visualizer_failover(
+        # fallback host), preserving the generation so a later event can retry.
+        coordinator.repend_visualizer_failover(
             intended_index=current_index,
-            host=None,
             origin_manager=origin_manager,
-            pending=True,
         )
 
 

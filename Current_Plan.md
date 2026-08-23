@@ -390,6 +390,29 @@ Remaining operator eyes-on confirmation of responsive Settings layout / Visualiz
 deferred acceptance and does **not** block the next Phase-E implementation slice under the phase
 promotion rule.
 
+### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — AUDIT-CORRECTED (2), RE-AUDIT REQUIRED
+
+**Second audit-correction checkpoint (independent audit of `e83d54ce` found two blockers; both
+corrected — NOT self-promoted):**
+
+1. **Grace authority is now GLOBAL per the single Visualizer, not per WidgetManager.** The coordinator
+   owns one failover generation authority: `arm_visualizer_grace` allocates a generation only when no
+   failover is active, so repeated reconcile from other DisplayWidgets during one outage cannot start or
+   reset a second grace. Every delayed grace callback validates the coordinator generation
+   (`is_visualizer_failover_generation_current`) — not merely its local manager token — so a straggler
+   from another display cannot act after reclaim or a new outage. Reclaim/target return clears the record
+   and invalidates the whole generation; a target disappearing again is a genuinely new outage with a
+   fresh full 30 s grace (strictly-greater generation).
+2. **Retirement failure is never discarded.** The reclaim "no longer CUSTOM" and "configured display
+   already owns" branches now retain the failover record (and leave the stray owner recorded) when
+   `_retire_visualizer_owner` does not confirm success, instead of clearing it. Ownership is never
+   declared normalized while an old Visualizer may still be alive; a later event retries.
+
+New regressions in `tests/test_visualizer_failover_reclaim.py`: only one grace is armed across multiple
+origins; an old-generation callback from another display is fenced even when its local token matches; the
+current-generation callback still acts; a new outage after reclaim gets a fresh generation; and both
+retirement-failure reclaim branches retain the record.
+
 ### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — AUDIT-CORRECTED, RE-AUDIT REQUIRED
 
 **Audit-correction checkpoint (independent audit of `9058a5cb` found four gaps; all corrected — NOT

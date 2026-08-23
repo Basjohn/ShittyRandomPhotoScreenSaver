@@ -302,8 +302,8 @@ def test_settings_monitor_change_during_fallback_reclaims_new_target(world, sche
     # A temporary fallback is live on display 0 for old monitor 1; the user then
     # reconfigures to monitor 2 which is participating. Reclaim must hand off to 2.
     d0, m0 = _make_display(0, settings=_Settings(ACTIVE), has_vis=True)
-    get_coordinator().set_visualizer_failover(
-        intended_index=1, host=d0, origin_manager=m0, pending=False,
+    get_coordinator().set_visualizer_fallback_owner(
+        intended_index=1, host=d0, origin_manager=m0,
     )
     d2, m2 = _make_display(2, settings=_Settings(ACTIVE))
     world.participants = {0: d0, 2: d2}
@@ -316,8 +316,8 @@ def test_settings_monitor_change_during_fallback_reclaims_new_target(world, sche
 
 def test_reclaim_superseded_to_non_custom_clears_and_retires(world):
     d0, m0 = _make_display(0, settings=_Settings(ACTIVE), has_vis=True)
-    get_coordinator().set_visualizer_failover(
-        intended_index=1, host=d0, origin_manager=m0, pending=False,
+    get_coordinator().set_visualizer_fallback_owner(
+        intended_index=1, host=d0, origin_manager=m0,
     )
     world.participants = {0: d0}
     world.custom = False  # visualizer no longer CUSTOM-routed
@@ -334,8 +334,8 @@ def test_reclaim_fails_closed_when_retirement_fails(world):
     # confirmed. Reclaim must NOT create a second owner; it defers.
     d0, m0 = _make_display(0, settings=_Settings(ACTIVE), has_vis=True, cleanup_ok=False)
     d1, m1 = _make_display(1, settings=_Settings(ACTIVE))
-    get_coordinator().set_visualizer_failover(
-        intended_index=1, host=d0, origin_manager=m0, pending=False,
+    get_coordinator().set_visualizer_fallback_owner(
+        intended_index=1, host=d0, origin_manager=m0,
     )
     world.participants = {0: d0, 1: d1}
     world.configured_index = 1
@@ -349,8 +349,8 @@ def test_reclaim_fails_closed_when_retirement_fails(world):
 def test_retire_confirms_and_reclaims_when_cleanup_ok(world):
     d0, m0 = _make_display(0, settings=_Settings(ACTIVE), has_vis=True, cleanup_ok=True)
     d1, m1 = _make_display(1, settings=_Settings(ACTIVE))
-    get_coordinator().set_visualizer_failover(
-        intended_index=1, host=d0, origin_manager=m0, pending=False,
+    get_coordinator().set_visualizer_fallback_owner(
+        intended_index=1, host=d0, origin_manager=m0,
     )
     world.participants = {0: d0, 1: d1}
     world.configured_index = 1
@@ -388,8 +388,8 @@ def test_reclaim_noop_without_record(world):
 
 def test_reclaim_keeps_record_when_configured_still_absent(world):
     d0, m0 = _make_display(0, settings=_Settings(ACTIVE), has_vis=True)
-    get_coordinator().set_visualizer_failover(
-        intended_index=1, host=d0, origin_manager=m0, pending=False,
+    get_coordinator().set_visualizer_fallback_owner(
+        intended_index=1, host=d0, origin_manager=m0,
     )
     world.participants = {0: d0}  # configured (1) still absent
     world.configured_index = 1
@@ -401,8 +401,8 @@ def test_reclaim_keeps_record_when_configured_still_absent(world):
 def test_reclaim_blocked_when_capability_deactivated(world):
     d0, m0 = _make_display(0, settings=_Settings(VIS_OFF), has_vis=True)
     d1, m1 = _make_display(1, settings=_Settings(VIS_OFF))
-    get_coordinator().set_visualizer_failover(
-        intended_index=1, host=d0, origin_manager=m0, pending=False,
+    get_coordinator().set_visualizer_fallback_owner(
+        intended_index=1, host=d0, origin_manager=m0,
     )
     world.participants = {0: d0, 1: d1}
     world.configured_index = 1
@@ -415,8 +415,8 @@ def test_reclaim_blocked_when_capability_deactivated(world):
 def test_reclaim_idempotent_across_repeated_events(world):
     d0, m0 = _make_display(0, settings=_Settings(ACTIVE), has_vis=True)
     d1, m1 = _make_display(1, settings=_Settings(ACTIVE))
-    get_coordinator().set_visualizer_failover(
-        intended_index=1, host=d0, origin_manager=m0, pending=False,
+    get_coordinator().set_visualizer_fallback_owner(
+        intended_index=1, host=d0, origin_manager=m0,
     )
     world.participants = {0: d0, 1: d1}
     world.configured_index = 1
@@ -424,6 +424,103 @@ def test_reclaim_idempotent_across_repeated_events(world):
     wsa.reclaim_remote_custom_visualizer_owner()
     assert m1.create_calls == 1
     assert get_coordinator().get_visualizer_failover() is None
+
+
+# --- Global grace generation authority (blocker-1) -------------------------
+
+
+def test_repeated_reconcile_from_other_displays_arms_only_one_grace(world, scheduler):
+    # Multiple DisplayWidgets run setup/reconcile during ONE outage for the single
+    # Visualizer. Only the first arms a grace; the others must not start/reset a
+    # second 30 s deadline.
+    d0, m0 = _make_display(0, settings=_Settings(ACTIVE))
+    world.participants = {0: d0}          # configured monitor 1 absent
+    world.configured_index = 1
+    _, om0 = _make_display(0, settings=_Settings(ACTIVE))
+    _, om2 = _make_display(2, settings=_Settings(ACTIVE))
+    wsa._reconcile_remote_custom_visualizer(om0, ACTIVE, {}, 0, None, SimpleNamespace())
+    wsa._reconcile_remote_custom_visualizer(om2, ACTIVE, {}, 2, None, SimpleNamespace())
+    assert len(scheduler.captured) == 1  # exactly one grace across both origins
+
+
+def test_old_generation_callback_from_other_display_is_fenced(world):
+    # A delayed callback from ANOTHER DisplayWidget still carrying an OLD outage
+    # generation must not act after reclaim / a new outage, even if that display's
+    # LOCAL token happens to match. Generation is the global authority.
+    coord = get_coordinator()
+    gen1 = coord.arm_visualizer_grace(intended_index=1, origin_manager=None)  # outage 1
+    coord.clear_visualizer_failover()                                          # reclaim/return
+    coord.arm_visualizer_grace(intended_index=1, origin_manager=None)         # new outage (gen2)
+
+    other, other_mgr = _make_display(3, settings=_Settings(ACTIVE))
+    other_mgr._settings_manager = _Settings(ACTIVE)
+    other_mgr._remote_custom_visualizer_reconcile_token = 7  # local token DOES match below
+    world.participants = {3: other}
+    world.configured_index = 1
+    wsa._run_remote_custom_visualizer_fallback_recheck(
+        other_mgr, dict(ACTIVE), {}, 3, None, SimpleNamespace(),
+        target_screen_index=1, token=7, generation=gen1,
+    )
+    assert other_mgr.create_calls == 0  # fenced by stale generation, not by token
+
+
+def test_current_generation_callback_acts(world):
+    coord = get_coordinator()
+    gen = coord.arm_visualizer_grace(intended_index=1, origin_manager=None)
+    d1, m1 = _make_display(1, settings=_Settings(ACTIVE))
+    m1._settings_manager = _Settings(ACTIVE)
+    m1._remote_custom_visualizer_reconcile_token = 1
+    world.participants = {1: d1}
+    world.configured_index = 1
+    wsa._run_remote_custom_visualizer_fallback_recheck(
+        m1, dict(ACTIVE), {}, 1, None, SimpleNamespace(),
+        target_screen_index=1, token=1, generation=gen,
+    )
+    assert m1.create_calls == 1
+
+
+def test_new_outage_after_reclaim_gets_fresh_generation(world, scheduler):
+    # After a handback, the target disappearing again is a genuinely NEW outage
+    # with its own fresh grace/generation (strictly greater than the old one).
+    coord = get_coordinator()
+    gen1 = coord.arm_visualizer_grace(intended_index=1, origin_manager=None)
+    coord.clear_visualizer_failover()  # reclaim/handback ends outage 1
+    d0, m0 = _make_display(0, settings=_Settings(ACTIVE))
+    world.participants = {0: d0}       # monitor 1 absent again
+    world.configured_index = 1
+    _, om0 = _make_display(0, settings=_Settings(ACTIVE))
+    wsa._reconcile_remote_custom_visualizer(om0, ACTIVE, {}, 0, None, SimpleNamespace())
+    record = coord.get_visualizer_failover()
+    assert record is not None and record["generation"] > gen1
+    assert not coord.is_visualizer_failover_generation_current(gen1)
+
+
+# --- Retirement failure must never be discarded (blocker-2) -----------------
+
+
+def test_non_custom_branch_retains_record_when_retire_fails(world):
+    # "No longer CUSTOM" branch: if the stray owner's retirement is not confirmed,
+    # the failover record must be retained (never normalized while it may be live).
+    d0, m0 = _make_display(0, settings=_Settings(ACTIVE), has_vis=True, cleanup_ok=False)
+    get_coordinator().set_visualizer_fallback_owner(intended_index=1, host=d0, origin_manager=m0)
+    world.participants = {0: d0}
+    world.custom = False  # visualizer no longer CUSTOM-routed
+    wsa.reclaim_remote_custom_visualizer_owner()
+    assert d0.spotify_visualizer_widget is not None          # still alive
+    assert get_coordinator().get_visualizer_failover() is not None  # record retained
+
+
+def test_already_owns_branch_retains_record_when_stray_retire_fails(world):
+    # "Configured already owns" branch: a stray temporary owner whose retirement
+    # fails must not be discarded; retain the record for a later retry.
+    stray, sm = _make_display(0, settings=_Settings(ACTIVE), has_vis=True, cleanup_ok=False)
+    configured, cm = _make_display(1, settings=_Settings(ACTIVE), has_vis=True)  # already owns
+    get_coordinator().set_visualizer_fallback_owner(intended_index=1, host=stray, origin_manager=sm)
+    world.participants = {0: stray, 1: configured}
+    world.configured_index = 1
+    wsa.reclaim_remote_custom_visualizer_owner()
+    assert stray.spotify_visualizer_widget is not None       # stray still alive
+    assert get_coordinator().get_visualizer_failover() is not None  # record retained
 
 
 # --- Never persists monitor/geometry ---------------------------------------
