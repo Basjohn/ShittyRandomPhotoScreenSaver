@@ -16,12 +16,16 @@ from PySide6.QtGui import QCursor
 
 from core.logging.logger import get_logger
 from rendering.custom_layout_manager import CustomLayoutManager
-from rendering.transition_registry import canonicalize_transition_name
+from rendering.transition_registry import (
+    canonicalize_transition_name,
+    is_transition_available_for_hw,
+)
 from core.settings.settings_manager import SettingsManager
 from core.settings.capability_activation import (
     get_activated_transition_names,
     get_effective_random_pool,
     is_transition_activated,
+    is_widget_family_effective,
     normalize_transition_capability_state,
 )
 from core.settings.visualizer_mode_registry import coerce_visualizer_mode_id
@@ -136,7 +140,16 @@ def show_context_menu(widget, global_pos) -> None:
             if not isinstance(trans_cfg, dict):
                 trans_cfg = {}
             activated_names = list(get_activated_transition_names(trans_cfg))
-            random_selectable = len(get_effective_random_pool(trans_cfg)) > 0
+            # Random is only selectable when the effective pool has a candidate
+            # that is also runnable under the current hardware condition — the
+            # same bounded rule the runtime uses (E2 §11).
+            hw_on = SettingsManager.to_bool(
+                widget.settings_manager.get("display.hw_accel", False), False
+            ) if widget.settings_manager else False
+            random_selectable = any(
+                is_transition_available_for_hw(n, hw_on)
+                for n in get_effective_random_pool(trans_cfg)
+            )
             widget._context_menu.refresh_transition_modes(
                 activated_names,
                 current_transition,
@@ -145,6 +158,16 @@ def show_context_menu(widget, global_pos) -> None:
             )
         except Exception:
             logger.debug("[CONTEXT_MENU] Failed to refresh activated transitions", exc_info=True)
+        # Visualizer submenu availability follows the Visualizers capability and
+        # its Media dependency (E2 §7), refreshed each time the menu is shown.
+        try:
+            widgets_cfg = widget.settings_manager.get("widgets", {}) if widget.settings_manager else {}
+            if not isinstance(widgets_cfg, dict):
+                widgets_cfg = {}
+            vis_available = is_widget_family_effective(widgets_cfg, "visualizers")
+            widget._context_menu.set_visualizer_available(vis_available)
+        except Exception:
+            logger.debug("[CONTEXT_MENU] Failed to resolve visualizer availability", exc_info=True)
         widget._context_menu.update_transition_state(current_transition, random_enabled)
         widget._context_menu.update_dimming_state(dimming_enabled)
         widget._context_menu.update_interaction_mode_state(interaction_mode)
@@ -452,6 +475,17 @@ def on_context_visualizer_selected(widget, mode_id: str) -> None:
     the same crossfade transition path as double-click / cycle_mode.
     """
     try:
+        # Reject a stale/programmatic mode switch when the capability is not
+        # admitted (Visualizers or its Media dependency deactivated).
+        try:
+            widgets_cfg = widget.settings_manager.get("widgets", {}) if widget.settings_manager else {}
+            if not isinstance(widgets_cfg, dict):
+                widgets_cfg = {}
+            if not is_widget_family_effective(widgets_cfg, "visualizers"):
+                logger.info("Context menu: ignoring visualizer mode switch (capability inactive)")
+                return
+        except Exception:
+            logger.debug("[CONTEXT_MENU] Visualizer capability check failed", exc_info=True)
         vis, source = _resolve_visualizer_for_context_mode_switch(widget)
         if vis is not None:
             vis.switch_to_mode(mode_id)

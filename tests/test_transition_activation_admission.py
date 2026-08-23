@@ -112,23 +112,36 @@ def test_factory_manual_selection_of_deactivated_transition_falls_back(monkeypat
     assert is_transition_activated(settings.get("transitions"), chosen)
 
 
-def test_factory_recovery_reactivates_crossfade_when_no_hw_candidate(monkeypatch):
-    # A genuine no-activated-hw-candidate state: only an hw-REQUIRED transition
-    # (Burn) is activated while every hw-safe transition (incl. Crossfade) is
-    # deactivated, and hardware is off. The factory must perform the explicit
-    # canonical recovery repair (reactivate + persist Crossfade) and admit it,
-    # never run a deactivated Crossfade.
+def test_factory_fails_closed_when_no_hw_candidate(monkeypatch):
+    # No-activated-hw-candidate state: only an hw-REQUIRED transition (Burn) is
+    # activated+pooled while hardware is off, so the effective pool
+    # (activated ∩ saved pool ∩ hardware) is empty. Random must FAIL CLOSED — the
+    # factory instantiates nothing rather than broadening beyond the saved pool
+    # (E2 §10). It must never run an out-of-pool transition.
+    from rendering.transition_factory import TransitionFactory
+
+    calls: list[str] = []
+
+    def _fake_create_by_type(self, ttype, settings, duration_ms, easing):
+        calls.append(ttype)
+        return SimpleNamespace(set_resource_manager=lambda rm: None)
+
+    monkeypatch.setattr(TransitionFactory, "_create_by_type", _fake_create_by_type)
+
     activation = {name: False for name in get_transition_setting_names()}
-    activation["Burn"] = True  # hw-required, so unavailable with hw off
+    activation["Burn"] = True  # hw-required, unavailable with hw off
     transitions = {
         "random_always": True,
-        "pool": {name: True for name in get_transition_setting_names()},
+        "pool": {name: (name == "Burn") for name in get_transition_setting_names()},
         "activation": activation,
     }
-    chosen, settings = _factory_selected_type(monkeypatch, transitions, hw=False)
-    # Recovery repaired + persisted Crossfade activation, then admitted it.
-    assert is_transition_activated(settings.get("transitions"), "Crossfade") is True
-    assert chosen == "Crossfade"
+    settings = _StubFactorySettings(transitions, hw=False)
+    factory = TransitionFactory(settings)
+
+    result = factory.create_transition()
+
+    assert result is None
+    assert calls == []  # nothing instantiated; no out-of-pool substitution
 
 
 def test_factory_fails_closed_when_pick_random_raises(monkeypatch):
