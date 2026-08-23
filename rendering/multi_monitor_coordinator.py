@@ -93,7 +93,15 @@ class MultiMonitorCoordinator(QObject):
         
         # Settings dialog active flag - prevents halo from showing
         self._settings_dialog_active: bool = False
-        
+
+        # E2.7 Visualizer CUSTOM failover: runtime-only record of a *temporary*
+        # fallback visualizer owner. This is never persisted (a fallback must not
+        # become configuration authority); it is cleared on runtime teardown via
+        # cleanup(). Holds the configured/intended screen index and a weakref to
+        # the display currently hosting the temporary fallback.
+        self._visualizer_fallback_intended_index: Optional[int] = None
+        self._visualizer_fallback_host_ref: Optional[weakref.ref] = None
+
         logger.debug("[MULTI_MONITOR] Coordinator initialized")
     
     # =========================================================================
@@ -443,6 +451,54 @@ class MultiMonitorCoordinator(QObject):
             except Exception as e:
                 logger.debug("[COORDINATOR] Exception suppressed: %s", e)
 
+    # =========================================================================
+    # Visualizer CUSTOM failover record (E2.7) — runtime-only, never persisted
+    # =========================================================================
+
+    def set_visualizer_fallback(self, intended_screen_index: int, host_display: object) -> None:
+        """Record that a *temporary* fallback visualizer owner is live.
+
+        ``intended_screen_index`` is the configured/canonical CUSTOM monitor that
+        should own the visualizer once it returns; ``host_display`` is the display
+        temporarily hosting it. Runtime-only: never written to settings.
+        """
+        with self._state_lock:
+            try:
+                self._visualizer_fallback_intended_index = int(intended_screen_index)
+            except Exception:
+                self._visualizer_fallback_intended_index = None
+                self._visualizer_fallback_host_ref = None
+                return
+            self._visualizer_fallback_host_ref = (
+                weakref.ref(host_display) if host_display is not None else None
+            )
+        logger.debug(
+            "[MULTI_MONITOR] Visualizer fallback recorded intended_index=%s host=%s",
+            intended_screen_index,
+            getattr(host_display, "screen_index", None),
+        )
+
+    def clear_visualizer_fallback(self) -> None:
+        """Clear any recorded temporary fallback visualizer owner."""
+        with self._state_lock:
+            had = self._visualizer_fallback_intended_index is not None
+            self._visualizer_fallback_intended_index = None
+            self._visualizer_fallback_host_ref = None
+        if had:
+            logger.debug("[MULTI_MONITOR] Visualizer fallback record cleared")
+
+    def get_visualizer_fallback(self) -> tuple[Optional[int], object]:
+        """Return (intended_screen_index, host_display) or (None, None).
+
+        A dead host weakref collapses the record to (None, None).
+        """
+        with self._state_lock:
+            intended = self._visualizer_fallback_intended_index
+            host = self._visualizer_fallback_host_ref() if self._visualizer_fallback_host_ref else None
+            if intended is None or host is None:
+                return None, None
+            return intended, host
+
     def cleanup(self) -> None:
         """Clean up all coordinator state."""
         with self._state_lock:
@@ -452,6 +508,8 @@ class MultiMonitorCoordinator(QObject):
             self._event_filter_installed = False
             self._event_filter_owner_ref = None
             self._instances.clear()
+            self._visualizer_fallback_intended_index = None
+            self._visualizer_fallback_host_ref = None
         logger.debug("[MULTI_MONITOR] Coordinator cleanup complete")
 
 
