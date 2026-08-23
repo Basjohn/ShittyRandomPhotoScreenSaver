@@ -381,28 +381,36 @@ blockers GREEN:
 
 Detailed correction history and test lists are historicalized; do not repeat them here.
 
-### E2 remaining blocker — context-menu unresolved state must fail closed
+### E2 remaining blocker — context-menu unresolved state must fail closed — CORRECTED, AUDIT REQUIRED
 
-One narrow blocker remains in `rendering/display_context_menu.py`.
+The narrow `rendering/display_context_menu.py` blocker has been corrected (awaiting independent audit;
+E2 implementation is NOT self-promoted to closed until that audit is GREEN).
 
-Current callers can turn an unresolvable state into `{}` before calling
-`is_widget_family_effective(...)`. Because a **valid** mapping with absent activation keys intentionally
-means active for backwards compatibility, `{}` is permission rather than fail-closed.
+Root cause was: callers coerced an unresolvable state into `{}` before calling
+`is_widget_family_effective(...)`; because a **valid** mapping with absent activation keys intentionally
+means active for backwards compatibility, `{}` read as permission rather than fail-closed.
 
-Required correction:
+Correction landed:
 
-- missing SettingsManager -> Visualizer submenu unavailable and mode switch rejected;
-- failed widgets read -> unavailable/rejected;
-- malformed/non-mapping widgets root -> unavailable/rejected;
-- a valid widgets mapping with absent activation keys retains the canonical compatibility semantics;
-- keep `is_widget_family_effective(...)` as the dependency authority; do not hard-code a second
-  Media→Visualizers rule.
+- one `_resolve_visualizer_capability_available(widget)` resolver is now the single seam for both
+  context-menu boundaries. It fails closed (returns False) on an *unresolvable* state — missing
+  `SettingsManager`, a raised widgets read, or a malformed/non-mapping widgets root — while a genuine
+  `dict` (including a valid empty map with absent activation keys) is handed to
+  `is_widget_family_effective(...)`, which stays the sole dependency authority (no second
+  Media→Visualizers rule);
+- show-menu boundary: Visualizer submenu availability is set from that resolver;
+- mode-switch boundary (`on_context_visualizer_selected`): a mode switch is rejected when the resolver
+  denies.
 
-Tests must hit both real context-menu boundaries, not only a helper.
+Regressions (`tests/test_visualizer_capability_admission.py`) hit **both** real boundaries directly —
+missing manager / failed read / malformed root -> unavailable/rejected — plus a valid-empty-map negative
+control that stays available/allowed. Four of them fail on the pre-fix source (`a1b1b387`), confirming
+the bar.
 
-After a pushed correction, stop for independent audit. If GREEN, E2 implementation is closed; the
-remaining E2 acceptance is operator `python main.py --s` eyes-on confirmation of responsive Settings
-layout and Visualizers dependency UX across relevant widths.
+After independent audit of this correction is GREEN, E2 implementation is closed; the remaining E2
+acceptance is operator `python main.py --s` eyes-on confirmation of responsive Settings layout and
+Visualizers dependency UX across relevant widths. Do NOT implement E2.7 until this correction audits
+GREEN.
 
 ### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — QUEUED, AUDIT REQUIRED
 
