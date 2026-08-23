@@ -29,6 +29,7 @@ from rendering.transition_registry import (
 from core.settings.widget_family_catalog import (
     get_family_id_for_widget,
     get_widget_family_descriptor,
+    get_widget_family_descriptors,
 )
 
 WIDGET_FAMILY_ACTIVATION_KEY = "family_activation"
@@ -73,14 +74,69 @@ def is_widget_activated(
 ) -> bool:
     """Return whether the family that owns ``widget_id`` is activated.
 
-    Widgets with no owning capability family (e.g. the visualizer) are always
-    considered activated because family activation does not gate them.
+    Widgets with no owning capability family return activated (True).
     """
 
     family_id = get_family_id_for_widget(widget_id)
     if family_id is None:
         return True
     return is_widget_family_activated(widgets_config, family_id)
+
+
+def is_widget_family_dependency_satisfied(
+    widgets_config: Mapping[str, Any] | None,
+    family_id: str,
+) -> bool:
+    """Return whether every required family for ``family_id`` is activated."""
+
+    descriptor = get_widget_family_descriptor(family_id)
+    if descriptor is None:
+        return True
+    return all(
+        is_widget_family_activated(widgets_config, required)
+        for required in descriptor.required_family_ids
+    )
+
+
+def is_widget_family_effective(
+    widgets_config: Mapping[str, Any] | None,
+    family_id: str,
+) -> bool:
+    """Return whether a family is activated AND its dependencies are satisfied."""
+
+    return (
+        is_widget_family_activated(widgets_config, family_id)
+        and is_widget_family_dependency_satisfied(widgets_config, family_id)
+    )
+
+
+def normalize_widget_capability_state(widgets_config: Dict[str, Any]) -> bool:
+    """Enforce widget-family capability dependencies in-place; returns changed.
+
+    The single neutral dependency authority: a family whose required families are
+    not all activated is forced off (e.g. ``media=False`` forces
+    ``visualizers=False``). Never activates a dependency implicitly. Callers
+    persist when this returns True.
+    """
+
+    if not isinstance(widgets_config, dict):
+        return False
+    changed = False
+    # Iterate to a fixed point so transitive dependencies settle.
+    for _ in range(len(get_widget_family_descriptors()) + 1):
+        pass_changed = False
+        for descriptor in get_widget_family_descriptors():
+            if not descriptor.required_family_ids:
+                continue
+            if not is_widget_family_activated(widgets_config, descriptor.family_id):
+                continue
+            if not is_widget_family_dependency_satisfied(widgets_config, descriptor.family_id):
+                set_widget_family_activated(widgets_config, descriptor.family_id, False)
+                pass_changed = True
+                changed = True
+        if not pass_changed:
+            break
+    return changed
 
 
 def set_widget_family_activated(

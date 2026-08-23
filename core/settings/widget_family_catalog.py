@@ -24,10 +24,11 @@ Membership vs availability:
   owns it. This keeps one dev-gate authority (``core.dev_gates``) without
   duplicating per-member gate bindings here.
 
-The Spotify visualizer is deliberately NOT a widget-family capability even though
-some of its settings currently live in WidgetsTab; Phase D / final descriptor
-ownership decides that boundary (see
-``Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`` §5.1).
+The Spotify visualizer participates in application-level capability activation
+through this catalog (family ``visualizers``, which *requires* the ``media``
+family). Its runtime/render ownership remains the special Phase-D visualizer
+subsystem — it does NOT become an ordinary Phase-F widget presentation family and
+does NOT move under ``WidgetRuntimeManager`` merely because it is catalogued here.
 """
 from __future__ import annotations
 
@@ -61,6 +62,10 @@ class WidgetFamilyDescriptor:
     member_widget_ids: tuple[str, ...]
     settings_section_id: str
     description: str = ""
+    # Other capability families that must be activated for this one to be usable.
+    # This is the single neutral dependency authority (e.g. Visualizers requires
+    # Media); do not scatter per-family ``if family_id == ...`` checks elsewhere.
+    required_family_ids: tuple[str, ...] = ()
     dev_feature_env: str | None = None
     dev_feature_gate: str | None = None
 
@@ -93,6 +98,14 @@ WIDGET_FAMILY_DESCRIPTORS: tuple[WidgetFamilyDescriptor, ...] = (
         member_widget_ids=("media", "spotify_volume", "mute_button"),
         settings_section_id="media",
         description="Now-playing card with artwork, playback controls, volume and progress.",
+    ),
+    WidgetFamilyDescriptor(
+        family_id="visualizers",
+        label="Visualizers",
+        member_widget_ids=("spotify_visualizer",),
+        settings_section_id="visualizers",
+        description="Audio-reactive visualizer modes. Requires Media.",
+        required_family_ids=("media",),
     ),
     WidgetFamilyDescriptor(
         family_id="reddit",

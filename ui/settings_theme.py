@@ -31,7 +31,7 @@ def load_theme(widget) -> None:
                 }
                 
                 #dialogContainer {
-                    background-color: rgba(0, 0, 0, 10);
+                    background-color: rgba(60, 60, 60, 20);
                     border: none;
                 }
                 
@@ -87,13 +87,13 @@ def load_theme(widget) -> None:
                 }
                 
                 #sidebar {
-                    background-color: rgba(60, 60, 60, 115);
+                    background-color: rgba(40, 40, 40, 32);
                     border: 1.75px solid #ffffff;
                     border-radius: 8px;
                 }
                 
                 #tabButton {
-                    background-color: rgba(20, 20, 20, 125);
+                    background-color: rgba(20, 20, 20, 48);
                     color: #cccccc;
                     text-align: left;
                     padding: 10px 20px;

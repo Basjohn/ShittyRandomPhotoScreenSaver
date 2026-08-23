@@ -616,6 +616,7 @@
         "media": true,
         "reddit": true,
         "steam": true,
+        "visualizers": true,
         "weather": true
       },
       "friend_pulse": {

@@ -55,7 +55,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Mapping, Optional
 
 from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -90,6 +90,9 @@ APP_TITLE = "SRPSS Theme Foundry"
 THEME_FORMAT = "srpss-theme"
 THEME_VERSION = 1
 THEME_EXTENSION = ".srtheme"
+PREFERENCES_VERSION = 1
+DIAGNOSTIC_QSS_PATH = "themes/dark.qss"
+
 
 # Intentionally narrow.  Do not add runtime widget/rendering sources here merely
 # because they contain colours.  Theme Foundry's durable scope is Settings GUI +
@@ -240,6 +243,13 @@ class ThemeToken:
     source_hint: str
     bindings: list[Binding] = field(default_factory=list)
     default_link_group: str | None = None
+    # Foundry-only metadata.  These do not become runtime theme authorities.
+    description: str = ""
+
+    @property
+    def official_name(self) -> str:
+        """Stable source identity shown alongside the friendlier Foundry label."""
+        return self.token_id
 
 
 @dataclass
@@ -253,6 +263,9 @@ class DiscoveryResult:
     tokens: dict[str, ThemeToken]
     sources: dict[str, SourceSnapshot]
     warnings: list[str]
+    # Read-only presentation sources that can explain layering/overrides but are
+    # intentionally outside Theme Foundry's editable scope.
+    diagnostic_sources: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -702,22 +715,78 @@ def _dedupe_tokens(tokens: Iterable[ThemeToken]) -> dict[str, ThemeToken]:
 
 
 def _apply_friendly_overrides(tokens: dict[str, ThemeToken]) -> None:
-    """Make the high-value shell/context tokens pleasant to read."""
-    label_by_fragment = {
-        "settings.theme.customtitlebar.background_color": ("Title Bar Background", "Window"),
-        "settings.theme.dialogcontainer.background_color": ("Outer Dialog Glass", "Window"),
-        "settings.theme.sidebar.background_color": ("Sidebar / Tab Block Background", "Navigation"),
-        "settings.theme.tabbutton.background_color": ("Sidebar Tab Background", "Navigation"),
-        "settings.theme.tabbutton_hover.background_color": ("Sidebar Tab Hover", "Navigation"),
-        "settings.theme.tabbutton_checked.background_color": ("Sidebar Tab Selected", "Navigation"),
-        "settings.theme.contentarea.background_color": ("Main Content Background", "Content"),
-        "settings.theme.qgroupbox.background_color": ("Settings Group / Frame Background", "Panels"),
-    }
-    for fragment, (label, category) in label_by_fragment.items():
+    """Attach human-facing names/descriptions without changing stable token ids."""
+
+    # High-value shell/settings tokens where source analysis gives us a useful
+    # logical name.  The token id remains visible as the official identity.
+    overrides: tuple[tuple[str, str, str, str], ...] = (
+        (
+            "settings.window.acrylic_tint",
+            "Windows Acrylic Tint",
+            "Window",
+            "Native Windows acrylic/DWM tint behind the Settings Qt surfaces. Its alpha is tint strength, not a master opacity for everything drawn above it. Alpha 0 is a degenerate/unsupported acrylic edge case on some Windows builds.",
+        ),
+        (
+            "settings.theme.customtitlebar.background_color",
+            "Settings Title Bar Background",
+            "Window",
+            "Dark translucent surface behind the SRPSS SETTINGS title area. It is painted above the native acrylic backdrop.",
+        ),
+        (
+            "settings.theme.dialogcontainer.background_color",
+            "Outer Dialog Glass",
+            "Window",
+            "Very low-alpha Qt shell fill for the Settings dialog. Sidebar, content and title surfaces are painted above this layer.",
+        ),
+        (
+            "settings.theme.sidebar.background_color",
+            "Sidebar / Tab Block Background",
+            "Navigation",
+            "Background of the left Settings navigation block. Individual tab-button states are painted above it.",
+        ),
+        (
+            "settings.theme.tabbutton.background_color",
+            "Sidebar Tab Background",
+            "Navigation",
+            "Normal background of a Settings sidebar tab. Hover and selected states can override it.",
+        ),
+        (
+            "settings.theme.tabbutton_hover.background_color",
+            "Sidebar Tab Hover",
+            "Navigation",
+            "Background used while a Settings sidebar tab is hovered. This state overrides the normal tab background.",
+        ),
+        (
+            "settings.theme.tabbutton_checked.background_color",
+            "Sidebar Tab Selected",
+            "Navigation",
+            "Background used by the currently selected Settings sidebar tab. This state overrides the normal tab background.",
+        ),
+        (
+            "settings.theme.contentarea.background_color",
+            "Main Content Background",
+            "Content",
+            "Background of the right-hand Settings content host. It is intentionally transparent in the current theme, so most visible darkness comes from lower acrylic/shell layers and panels drawn above it.",
+        ),
+        (
+            "settings.theme.qgroupbox.background_color",
+            "Global Settings Group / Frame Background",
+            "Panels",
+            "Global QGroupBox background in the Settings theme. Many mature Settings subsections apply a later local group-box style, so this value can be partly or completely masked.",
+        ),
+        (
+            "settings.controls.subsection_divider_style.background_color",
+            "Subsection Panel Background",
+            "Panels",
+            "Local background used by style_group_box() for mature Settings subsection frames. It is commonly painted above the main content host and can override/mask the global QGroupBox background.",
+        ),
+    )
+    for fragment, label, category, description in overrides:
         for token_id, token in tokens.items():
             if token_id.startswith(fragment):
                 token.label = label
                 token.category = category
+                token.description = description
 
     # Context-menu names and intentional default link groups.
     for token in tokens.values():
@@ -725,31 +794,228 @@ def _apply_friendly_overrides(tokens: dict[str, ThemeToken]) -> None:
         if tid.startswith("context.main.qmenu.background_color"):
             token.label = "Context Menu Background"
             token.default_link_group = "context.background"
+            token.description = "Base background of the screensaver context menu. Item state backgrounds are painted above it."
         elif tid.startswith("context.submenu.qmenu.background_color"):
             token.label = "Context Submenu Background"
             token.default_link_group = "context.background"
+            token.description = "Base background of context-menu submenus. Linked to the main menu background by default."
         elif tid.startswith("context.main.qmenu.border"):
             token.label = "Context Menu Border"
             token.default_link_group = "context.border"
+            token.description = "Outer border of the screensaver context menu."
         elif tid.startswith("context.submenu.qmenu.border"):
             token.label = "Context Submenu Border"
             token.default_link_group = "context.border"
+            token.description = "Outer border of screensaver context submenus."
+        elif tid.startswith("context.main.qmenu_item.background_color"):
+            token.label = "Context Menu Item Background"
+            token.description = "Ordinary item background above the menu base. It is currently fully transparent, so its RGB channels are visually dormant until alpha is raised."
+        elif tid.startswith("context.submenu.qmenu_item.background_color"):
+            token.label = "Context Submenu Item Background"
+            token.description = "Ordinary submenu item background above the submenu base. It is currently fully transparent, so its RGB channels are visually dormant until alpha is raised."
         elif tid.startswith("context.main.qmenu_item.color"):
             token.label = "Context Menu Text"
             token.default_link_group = "context.text"
+            token.description = "Normal text colour for screensaver context-menu items."
         elif tid.startswith("context.submenu.qmenu_item.color"):
             token.label = "Context Submenu Text"
             token.default_link_group = "context.text"
+            token.description = "Normal text colour for screensaver context-submenu items."
         elif "qmenu_item_selected.background_color" in tid:
             token.label = "Context Selected Background" if tid.startswith("context.main") else "Context Submenu Selected"
             token.default_link_group = "context.selected"
+            token.description = "Selection-state background painted above the ordinary menu/item background."
         elif "qmenu_item_checked.background_color" in tid:
             token.label = "Context Checked Background"
             token.default_link_group = "context.selected"
+            token.description = "Checked-state background for submenu items, painted above the submenu base."
         elif "qmenu_item_disabled.color" in tid:
             token.label = "Context Disabled Text"
+            token.description = "Text colour/opacity for disabled context-menu items."
         elif "qmenu_separator.background_color" in tid:
             token.label = "Context Separator"
+            token.description = "Colour and opacity of context-menu separator lines."
+
+    # Remaining automatically discovered settings colours still get useful
+    # Foundry-only descriptions.  We deliberately phrase uncertain mappings as
+    # source-derived rather than pretending static analysis knows the full scene.
+    for token in tokens.values():
+        if token.description:
+            continue
+        if token.source_path == "ui/tabs/shared_styles.py":
+            token.description = (
+                f"Settings control/style colour discovered from {token.source_hint}. "
+                "It may apply to a control state or local subsection style; inspect Known Layers for any mapped override relationships."
+            )
+        elif token.source_path == "ui/settings_dialog.py":
+            token.description = f"Settings-dialog chrome/popup colour discovered from {token.source_hint}."
+        elif token.source_path == "ui/settings_about_tab.py":
+            token.description = f"About-page presentation colour discovered from {token.source_hint}."
+        elif token.source_path == "widgets/context_menu.py":
+            token.description = f"Screensaver context-menu presentation colour discovered from {token.source_hint}."
+        else:
+            token.description = f"Settings presentation colour discovered from {token.source_hint}."
+
+
+# Curated high-confidence relationships.  Each rule reads:
+#   lower/base fragment, upper/override fragment, relationship kind, explanation.
+# Fragments are used because generated token suffixes can change as source styles
+# evolve while the semantic selector/property prefix stays stable.
+KNOWN_LAYER_RULES: tuple[tuple[str, str, str, str], ...] = (
+    (
+        "settings.window.acrylic_tint",
+        "settings.theme.dialogcontainer.background_color",
+        "composite",
+        "The native acrylic/DWM backdrop is below the Qt Settings shell fill.",
+    ),
+    (
+        "settings.window.acrylic_tint",
+        "settings.theme.customtitlebar.background_color",
+        "composite",
+        "The Settings title bar paints above the native acrylic backdrop.",
+    ),
+    (
+        "settings.window.acrylic_tint",
+        "settings.theme.sidebar.background_color",
+        "composite",
+        "The sidebar/tab block paints above the native acrylic backdrop.",
+    ),
+    (
+        "settings.window.acrylic_tint",
+        "settings.theme.contentarea.background_color",
+        "composite",
+        "The main content host sits above the native acrylic backdrop; when transparent it exposes lower layers rather than controlling them.",
+    ),
+    (
+        "settings.theme.dialogcontainer.background_color",
+        "settings.theme.sidebar.background_color",
+        "composite",
+        "The sidebar is a child surface above the outer dialog glass.",
+    ),
+    (
+        "settings.theme.dialogcontainer.background_color",
+        "settings.theme.contentarea.background_color",
+        "composite",
+        "The content host is a child surface above the outer dialog glass.",
+    ),
+    (
+        "settings.theme.contentarea.background_color",
+        "settings.theme.qgroupbox.background_color",
+        "composite",
+        "Global Settings group boxes are panels painted above the content host.",
+    ),
+    (
+        "settings.theme.contentarea.background_color",
+        "settings.controls.subsection_divider_style.background_color",
+        "composite",
+        "Mature subsection panels are painted above the content host and can dominate its apparent opacity.",
+    ),
+    (
+        "settings.theme.qgroupbox.background_color",
+        "settings.controls.subsection_divider_style.background_color",
+        "override",
+        "style_group_box() applies a local QGroupBox stylesheet after the global Settings QGroupBox rule, so the local subsection fill can mask the global group-box fill.",
+    ),
+    (
+        "settings.theme.sidebar.background_color",
+        "settings.theme.tabbutton.background_color",
+        "composite",
+        "Individual navigation-tab backgrounds are painted above the sidebar block.",
+    ),
+    (
+        "settings.theme.tabbutton.background_color",
+        "settings.theme.tabbutton_hover.background_color",
+        "state",
+        "Hover state overrides the ordinary sidebar-tab background while active.",
+    ),
+    (
+        "settings.theme.tabbutton.background_color",
+        "settings.theme.tabbutton_checked.background_color",
+        "state",
+        "Checked/selected state overrides the ordinary sidebar-tab background while active.",
+    ),
+    (
+        "context.main.qmenu.background_color",
+        "context.main.qmenu_item.background_color",
+        "composite",
+        "Ordinary context-menu item backgrounds are painted above the menu base.",
+    ),
+    (
+        "context.main.qmenu_item.background_color",
+        "context.main.qmenu_item_selected.background_color",
+        "state",
+        "Selected state overrides the ordinary item background.",
+    ),
+    (
+        "context.submenu.qmenu.background_color",
+        "context.submenu.qmenu_item.background_color",
+        "composite",
+        "Ordinary submenu item backgrounds are painted above the submenu base.",
+    ),
+    (
+        "context.submenu.qmenu_item.background_color",
+        "context.submenu.qmenu_item_selected.background_color",
+        "state",
+        "Selected submenu state overrides the ordinary item background.",
+    ),
+    (
+        "context.submenu.qmenu_item.background_color",
+        "context.submenu.qmenu_item_checked.background_color",
+        "state",
+        "Checked submenu state overrides the ordinary item background.",
+    ),
+)
+
+
+def _theme_foundry_data_dir() -> Path:
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    base = Path(local_app_data) if local_app_data else Path.home() / "AppData" / "Local"
+    return base / "SRPSS" / "ThemeFoundry"
+
+
+def _preferences_path() -> Path:
+    return _theme_foundry_data_dir() / "preferences.json"
+
+
+def _load_favorites() -> set[str]:
+    try:
+        payload = json.loads(_preferences_path().read_text(encoding="utf-8"))
+        if not isinstance(payload, Mapping):
+            return set()
+        raw = payload.get("favorites", [])
+        if not isinstance(raw, list):
+            return set()
+        return {str(item) for item in raw if str(item).strip()}
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return set()
+
+
+def _save_favorites(favorites: set[str]) -> None:
+    path = _preferences_path()
+    payload = {
+        "version": PREFERENCES_VERSION,
+        "favorites": sorted(favorites),
+    }
+    try:
+        _atomic_write_text(path, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+    except OSError:
+        # Favorites are QoL state only; failure must never block theme editing.
+        pass
+
+
+def _alpha_over(top: Rgba, bottom: Rgba) -> Rgba:
+    """Simple straight-alpha preview composite used only for Foundry estimates."""
+    t = top.clamped()
+    b = bottom.clamped()
+    ta = t.a / 255.0
+    ba = b.a / 255.0
+    out_a = ta + ba * (1.0 - ta)
+    if out_a <= 0.000001:
+        return Rgba(0, 0, 0, 0)
+    def channel(tc: int, bc: int) -> int:
+        value = (tc * ta + bc * ba * (1.0 - ta)) / out_a
+        return max(0, min(255, round(value)))
+    return Rgba(channel(t.r, b.r), channel(t.g, b.g), channel(t.b, b.b), round(out_a * 255.0))
 
 
 def discover_from_texts(text_by_path: Mapping[str, str]) -> DiscoveryResult:
@@ -824,6 +1090,12 @@ def discover_repo(repo_root: Path) -> DiscoveryResult:
         text_by_path[relpath] = path.read_text(encoding="utf-8")
     result = discover_from_texts(text_by_path)
     result.warnings[:0] = warnings
+    diagnostic_path = repo_root / DIAGNOSTIC_QSS_PATH
+    if diagnostic_path.is_file():
+        try:
+            result.diagnostic_sources[DIAGNOSTIC_QSS_PATH] = diagnostic_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            result.warnings.append(f"Could not read diagnostic stylesheet {DIAGNOSTIC_QSS_PATH}: {exc}")
     return result
 
 
@@ -859,7 +1131,11 @@ def discover_git_head(repo_root: Path) -> DiscoveryResult | None:
             text_by_path[relpath] = text
     if not text_by_path:
         return None
-    return discover_from_texts(text_by_path)
+    result = discover_from_texts(text_by_path)
+    diagnostic = _git(repo_root, "show", f"HEAD:{DIAGNOSTIC_QSS_PATH}")
+    if diagnostic is not None:
+        result.diagnostic_sources[DIAGNOSTIC_QSS_PATH] = diagnostic
+    return result
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
@@ -986,6 +1262,15 @@ class SwatchButton(QPushButton):
 
 
 class ThemeFoundryWindow(QMainWindow):
+    """Developer-facing authoring UI for the narrow Settings/context-menu theme scope."""
+
+    COL_FAV = 0
+    COL_TOKEN = 1
+    COL_STATE = 2
+    COL_WORKING = 3
+    COL_REPO = 4
+    COL_LINK = 5
+
     def __init__(self, repo_root: Path) -> None:
         super().__init__()
         self.repo_root = repo_root.resolve()
@@ -997,14 +1282,18 @@ class ThemeFoundryWindow(QMainWindow):
         self.active_links: dict[str, str | None] = {}
         self.default_links: dict[str, str | None] = {}
         self.tree_items: dict[str, QTreeWidgetItem] = {}
+        self.favorites: set[str] = _load_favorites()
         self._selected_id: str | None = None
         self._updating_editor = False
         self._theme_path: Path | None = None
         self._session_head = git_head_sha(self.repo_root)
 
         self.setWindowTitle(APP_TITLE)
-        self.resize(1220, 800)
-        self.setMinimumSize(980, 650)
+        icon_path = self.repo_root / "SRPSS.ico"
+        if icon_path.is_file():
+            self.setWindowIcon(QIcon(str(icon_path)))
+        self.resize(1340, 860)
+        self.setMinimumSize(1040, 680)
         self._build_ui()
         self._apply_internal_style()
         self.reload_sources(first_load=True)
@@ -1012,16 +1301,32 @@ class ThemeFoundryWindow(QMainWindow):
     # ----- UI -----------------------------------------------------------
     def _build_ui(self) -> None:
         root = QWidget(self)
+        root.setObjectName("themeFoundryRoot")
         self.setCentralWidget(root)
         outer = QVBoxLayout(root)
-        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setContentsMargins(18, 14, 18, 14)
         outer.setSpacing(10)
+
+        title = QLabel("THEME FOUNDRY")
+        title.setObjectName("themeFoundryTitle")
+        title_font = QFont(title.font())
+        title_font.setPointSize(max(16, title_font.pointSize() + 6))
+        title_font.setBold(True)
+        title.setFont(title_font)
+        outer.addWidget(title)
+
+        subtitle = QLabel(
+            "Settings GUI + screensaver context-menu palette laboratory · canonical source editor · full .srtheme snapshots"
+        )
+        subtitle.setObjectName("themeFoundrySubtitle")
+        outer.addWidget(subtitle)
 
         toolbar = QHBoxLayout()
         self.reload_btn = QPushButton("Reload Sources")
         self.load_btn = QPushButton("Load Theme…")
         self.save_btn = QPushButton("Save Theme…")
         self.apply_btn = QPushButton("Apply to Sources")
+        self.apply_btn.setObjectName("themeFoundryPrimary")
         self.launch_btn = QPushButton("Launch Settings (--s)")
         toolbar.addWidget(self.reload_btn)
         toolbar.addSpacing(8)
@@ -1033,8 +1338,8 @@ class ThemeFoundryWindow(QMainWindow):
         outer.addLayout(toolbar)
 
         scope = QLabel(
-            "Scope: Settings GUI + screensaver context menu only. Runtime widgets, visualizers, "
-            "transitions, overlays and cursor halo are intentionally excluded."
+            "Scope is deliberately hard-bounded: Settings GUI + screensaver context menu only. "
+            "Runtime widgets, visualizers, transition rendering, overlays and cursor halo are not discovered or edited."
         )
         scope.setWordWrap(True)
         scope.setObjectName("scopeBanner")
@@ -1044,28 +1349,37 @@ class ThemeFoundryWindow(QMainWindow):
         outer.addWidget(splitter, 1)
 
         left = QWidget()
+        left.setObjectName("themeFoundryPane")
         left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(0, 0, 6, 0)
+        left_layout.setContentsMargins(10, 10, 10, 10)
+        left_layout.setSpacing(8)
         search_row = QHBoxLayout()
         search_row.addWidget(QLabel("Filter"))
         self.search = QLineEdit()
-        self.search.setPlaceholderText("e.g. sidebar, opacity, context, shadow…")
+        self.search.setPlaceholderText("sidebar, content, acrylic, context, shadow…")
         search_row.addWidget(self.search, 1)
         self.category_filter = QComboBox()
         self.category_filter.addItem("All categories")
         search_row.addWidget(self.category_filter)
+        self.favorites_only = QCheckBox("★ Favorites")
+        self.favorites_only.setToolTip("Show only starred Theme Foundry tokens")
+        search_row.addWidget(self.favorites_only)
         left_layout.addLayout(search_row)
 
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Theme token", "Working", "Repo default", "Link"])
+        self.tree.setObjectName("themeFoundryTree")
+        self.tree.setHeaderLabels(["★", "Theme token", "State", "Working", "Repo default", "Link"])
         self.tree.setAlternatingRowColors(True)
         self.tree.setRootIsDecorated(True)
         self.tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.tree.setUniformRowHeights(True)
         header = self.tree.header()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.COL_FAV, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.COL_TOKEN, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(self.COL_STATE, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.COL_WORKING, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.COL_REPO, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.COL_LINK, QHeaderView.ResizeMode.ResizeToContents)
         left_layout.addWidget(self.tree, 1)
         splitter.addWidget(left)
 
@@ -1073,25 +1387,62 @@ class ThemeFoundryWindow(QMainWindow):
         right_scroll.setWidgetResizable(True)
         right_scroll.setFrameShape(QFrame.Shape.NoFrame)
         editor = QWidget()
+        editor.setObjectName("themeFoundryEditor")
         right_scroll.setWidget(editor)
         editor_layout = QVBoxLayout(editor)
-        editor_layout.setContentsMargins(12, 2, 4, 2)
+        editor_layout.setContentsMargins(14, 4, 8, 6)
         editor_layout.setSpacing(10)
 
+        title_row = QHBoxLayout()
         self.token_title = QLabel("Select a theme token")
+        self.token_title.setObjectName("tokenTitle")
         font = QFont(self.token_title.font())
         font.setPointSize(font.pointSize() + 3)
         font.setBold(True)
         self.token_title.setFont(font)
-        editor_layout.addWidget(self.token_title)
+        title_row.addWidget(self.token_title, 1)
+        self.favorite_btn = QPushButton("☆ Favorite")
+        self.favorite_btn.setObjectName("favoriteButton")
+        self.favorite_btn.setToolTip("Star this token for quick filtering. Favorites are Foundry preferences, not theme data.")
+        title_row.addWidget(self.favorite_btn)
+        editor_layout.addLayout(title_row)
 
         self.token_source = QLabel("")
         self.token_source.setWordWrap(True)
         self.token_source.setObjectName("muted")
         editor_layout.addWidget(self.token_source)
 
+        self.token_description = QLabel("")
+        self.token_description.setWordWrap(True)
+        self.token_description.setObjectName("descriptionBox")
+        editor_layout.addWidget(self.token_description)
+
+        self.state_banner = QLabel("")
+        self.state_banner.setWordWrap(True)
+        self.state_banner.setObjectName("stateBanner")
+        editor_layout.addWidget(self.state_banner)
+
+        preview_row = QHBoxLayout()
+        isolated_col = QVBoxLayout()
+        isolated_label = QLabel("Isolated colour / alpha")
+        isolated_label.setObjectName("previewLabel")
+        isolated_col.addWidget(isolated_label)
         self.preview = ColorPreview()
-        editor_layout.addWidget(self.preview)
+        isolated_col.addWidget(self.preview)
+        preview_row.addLayout(isolated_col, 1)
+
+        composite_col = QVBoxLayout()
+        composite_label = QLabel("Estimated with nearest known layer")
+        composite_label.setObjectName("previewLabel")
+        composite_col.addWidget(composite_label)
+        self.composite_preview = ColorPreview()
+        composite_col.addWidget(self.composite_preview)
+        self.composite_note = QLabel("No mapped compositing neighbour")
+        self.composite_note.setWordWrap(True)
+        self.composite_note.setObjectName("muted")
+        composite_col.addWidget(self.composite_note)
+        preview_row.addLayout(composite_col, 1)
+        editor_layout.addLayout(preview_row)
 
         self.swatch = SwatchButton()
         editor_layout.addWidget(self.swatch)
@@ -1135,12 +1486,34 @@ class ThemeFoundryWindow(QMainWindow):
 
         link_row = QHBoxLayout()
         self.link_btn = QPushButton("🔗 Linked")
-        self.link_btn.setToolTip("Toggle the token's intentional linked palette group")
+        self.link_btn.setToolTip("Toggle intentional palette linkage. This is separate from visual layering.")
         self.link_info = QLabel("")
         self.link_info.setWordWrap(True)
         link_row.addWidget(self.link_btn)
         link_row.addWidget(self.link_info, 1)
         editor_layout.addLayout(link_row)
+
+        layers_heading = QLabel("KNOWN VISUAL / STYLE LAYERS")
+        layers_heading.setObjectName("sectionHeading")
+        editor_layout.addWidget(layers_heading)
+        layers_help = QLabel(
+            "These are high-confidence relationships inferred from current SRPSS source. "
+            "They explain why changing one alpha can have little visible effect. Double-click an editable related token to jump to it."
+        )
+        layers_help.setWordWrap(True)
+        layers_help.setObjectName("muted")
+        editor_layout.addWidget(layers_help)
+        self.layers_tree = QTreeWidget()
+        self.layers_tree.setObjectName("layersTree")
+        self.layers_tree.setHeaderLabels(["Relationship", "Layer / override", "Why it matters"])
+        self.layers_tree.setRootIsDecorated(False)
+        self.layers_tree.setAlternatingRowColors(True)
+        self.layers_tree.setMinimumHeight(150)
+        layers_header = self.layers_tree.header()
+        layers_header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        layers_header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        layers_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        editor_layout.addWidget(self.layers_tree)
 
         reset_row = QHBoxLayout()
         self.reset_opened_btn = QPushButton("Reset to Opened")
@@ -1155,7 +1528,7 @@ class ThemeFoundryWindow(QMainWindow):
         editor_layout.addWidget(self.reset_all_repo_btn)
         editor_layout.addStretch(1)
         splitter.addWidget(right_scroll)
-        splitter.setSizes([760, 430])
+        splitter.setSizes([800, 500])
 
         status = QStatusBar(self)
         self.setStatusBar(status)
@@ -1169,7 +1542,11 @@ class ThemeFoundryWindow(QMainWindow):
         self.launch_btn.clicked.connect(self.launch_settings)
         self.search.textChanged.connect(self._filter_tree)
         self.category_filter.currentTextChanged.connect(self._filter_tree)
+        self.favorites_only.toggled.connect(self._filter_tree)
         self.tree.currentItemChanged.connect(self._tree_selection_changed)
+        self.tree.itemClicked.connect(self._tree_item_clicked)
+        self.layers_tree.itemDoubleClicked.connect(self._layer_item_activated)
+        self.favorite_btn.clicked.connect(self._toggle_selected_favorite)
         self.swatch.colorRequested.connect(self._choose_color)
         self.r_spin.valueChanged.connect(self._editor_value_changed)
         self.g_spin.valueChanged.connect(self._editor_value_changed)
@@ -1189,25 +1566,61 @@ class ThemeFoundryWindow(QMainWindow):
         return spin
 
     def _apply_internal_style(self) -> None:
-        # Theme Foundry's own stable skin is intentionally self-contained.  It
-        # must remain readable even while it edits SRPSS's Settings theme files.
+        # Self-contained developer-tool skin: visually related to Build/Defaults
+        # Foundry, but never sourced from the Settings theme being edited.
         self.setStyleSheet(
             """
-            QMainWindow, QWidget { background: #202020; color: #f0f0f0; }
-            QLineEdit, QComboBox, QSpinBox, QTreeWidget {
-                background: #292929; color: #f0f0f0; border: 1px solid #666;
-                border-radius: 5px; padding: 4px;
+            QMainWindow { background: #0d181e; color: #f4f0e6; }
+            QWidget { color: #f4f0e6; font-family: 'Jost', 'Segoe UI', sans-serif; }
+            QWidget#themeFoundryRoot {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(13,24,30,255), stop:0.55 rgba(24,30,31,255), stop:1 rgba(41,34,24,255));
             }
-            QPushButton { background: #333; color: #fff; border: 1px solid #888;
-                border-radius: 6px; padding: 7px 12px; }
-            QPushButton:hover { background: #414141; }
-            QPushButton:disabled { color: #777; border-color: #555; }
-            QHeaderView::section { background: #303030; color: #eee; padding: 5px; border: 0; }
-            QTreeWidget::item:selected { background: #4a4a4a; }
-            QFrame#valuesBox { border: 1px solid #555; border-radius: 6px; background: #252525; }
-            QLabel#scopeBanner { background: #292929; border: 1px solid #555; border-radius: 6px; padding: 7px; }
-            QLabel#muted { color: #aaa; }
-            QStatusBar { background: #191919; }
+            QWidget#themeFoundryPane, QWidget#themeFoundryEditor {
+                background: rgba(10,15,17,150);
+                border: 1px solid rgba(225,193,127,90);
+                border-radius: 10px;
+            }
+            QLabel#themeFoundryTitle { color: #f4c66d; letter-spacing: 2px; }
+            QLabel#themeFoundrySubtitle { color: #c8d4d1; font-size: 12px; padding-bottom: 3px; }
+            QLabel#scopeBanner, QLabel#descriptionBox, QLabel#stateBanner {
+                background: rgba(16,25,27,210); border: 1px solid rgba(225,193,127,110);
+                border-radius: 8px; padding: 8px; color: #dce5df;
+            }
+            QLabel#stateBanner { color: #f4c66d; }
+            QLabel#muted { color: #9fb2ad; }
+            QLabel#previewLabel, QLabel#sectionHeading { color: #f4c66d; font-weight: 700; letter-spacing: 0.6px; }
+            QLabel#tokenTitle { color: #f4f0e6; }
+            QLineEdit, QComboBox, QSpinBox {
+                background: #1f2626; color: #f4f0e6; border: 1px solid #8f7950;
+                border-radius: 7px; padding: 5px;
+            }
+            QTreeWidget#themeFoundryTree, QTreeWidget#layersTree {
+                background-color: rgba(10,15,17,218);
+                alternate-background-color: rgba(31,38,38,205);
+                border: 1px solid rgba(225,193,127,150);
+                border-radius: 10px; color: #edf1ed; outline: none;
+            }
+            QTreeWidget#themeFoundryTree::item, QTreeWidget#layersTree::item { min-height: 28px; padding: 2px 5px; }
+            QTreeWidget#themeFoundryTree::item:selected, QTreeWidget#layersTree::item:selected { background: rgba(60,108,103,210); }
+            QHeaderView::section {
+                background: rgba(31,47,48,245); color: #f4c66d; border: none;
+                border-right: 1px solid rgba(255,255,255,35); padding: 7px; font-weight: 700;
+            }
+            QPushButton {
+                background: #263b3a; color: #f4f0e6; border: 1px solid #8f7950;
+                border-radius: 7px; padding: 7px 12px; font-weight: 600;
+            }
+            QPushButton:hover { background: #33504d; border-color: #f4c66d; }
+            QPushButton:disabled { color: #6f7e7b; border-color: #4f554e; background: #1b2424; }
+            QPushButton#themeFoundryPrimary { background: #d59b42; color: #101719; border-color: #f4c66d; }
+            QPushButton#themeFoundryPrimary:hover { background: #efb65a; }
+            QPushButton#favoriteButton { min-width: 105px; }
+            QFrame#valuesBox { border: 1px solid rgba(225,193,127,110); border-radius: 8px; background: rgba(16,25,27,205); }
+            QCheckBox { spacing: 6px; }
+            QSlider::groove:horizontal { height: 5px; background: #11191b; border: 1px solid #8f7950; border-radius: 2px; }
+            QSlider::handle:horizontal { width: 14px; margin: -5px 0; border-radius: 7px; background: #f4c66d; border: 1px solid #fff0c5; }
+            QStatusBar { background: #0a0f11; color: #c8d4d1; border-top: 1px solid rgba(225,193,127,90); }
             """
         )
 
@@ -1235,11 +1648,7 @@ class ThemeFoundryWindow(QMainWindow):
         if first_load or not previous_opened:
             self.opened_values = dict(self.values)
         else:
-            # Session "Opened" values remain what the operator started with for
-            # tokens that still exist; genuinely new tokens adopt their current value.
-            self.opened_values = {
-                tid: previous_opened.get(tid, value) for tid, value in self.values.items()
-            }
+            self.opened_values = {tid: previous_opened.get(tid, value) for tid, value in self.values.items()}
         self.repo_values = (
             {tid: token.value for tid, token in repo_discovery.tokens.items() if tid in discovery.tokens}
             if repo_discovery is not None
@@ -1250,12 +1659,12 @@ class ThemeFoundryWindow(QMainWindow):
             self.active_links = dict(self.default_links)
             self._drop_invalid_default_links()
         else:
-            self.active_links = {
-                tid: self.active_links.get(tid, self.default_links.get(tid)) for tid in discovery.tokens
-            }
+            self.active_links = {tid: self.active_links.get(tid, self.default_links.get(tid)) for tid in discovery.tokens}
+        self.favorites.intersection_update(set(discovery.tokens))
         self._rebuild_tree(selected)
+        diagnostic = " · dark.qss diagnostics loaded" if DIAGNOSTIC_QSS_PATH in discovery.diagnostic_sources else ""
         warning_text = f" · {len(discovery.warnings)} source warning(s)" if discovery.warnings else ""
-        self._set_status(f"Loaded {len(self.values)} editable theme tokens{warning_text}")
+        self._set_status(f"Loaded {len(self.values)} editable theme tokens{diagnostic}{warning_text}")
         if discovery.warnings and first_load:
             self._warning("Theme discovery warnings", "\n".join(discovery.warnings[:12]))
 
@@ -1268,11 +1677,105 @@ class ThemeFoundryWindow(QMainWindow):
             if len(ids) < 2:
                 continue
             values = {self.values.get(tid) for tid in ids}
-            # If canonical source values have diverged, do not force them together
-            # merely because an old link hint exists.
             if len(values) > 1:
                 for tid in ids:
                     self.active_links[tid] = None
+
+    # ----- metadata/layers ----------------------------------------------
+    def _find_token_ids(self, fragment: str) -> list[str]:
+        return [tid for tid in self.discovery.tokens if tid.startswith(fragment)]
+
+    def _token_state(self, tid: str) -> tuple[str, str]:
+        value = self.values.get(tid, self.discovery.tokens[tid].value)
+        token = self.discovery.tokens[tid]
+        if tid == "settings.window.acrylic_tint" and value.a == 0:
+            return (
+                "⚠ DWM α=0",
+                "Acrylic alpha 0 is a degenerate/unsupported edge case on some Windows versions. It can disable or change the native effect instead of producing a perfectly clear acrylic backdrop.",
+            )
+        if value.a == 0:
+            return (
+                "○ α=0",
+                "Currently fully transparent: its RGB channels have no visible effect until opacity is raised above zero.",
+            )
+        if value.a < 255:
+            return (f"α {value.alpha_percent:.0f}%", "Currently translucent; lower visual layers can contribute to the final result.")
+        if "background" in token.token_id or "border" in token.token_id:
+            return ("Opaque", "Currently fully opaque at this token's own layer.")
+        return ("Active", "Current value is visually active at this token's own layer.")
+
+    def _dark_qss_matches(self, token: ThemeToken) -> list[str]:
+        source = self.discovery.diagnostic_sources.get(DIAGNOSTIC_QSS_PATH)
+        if not source or token.source_path != "ui/settings_theme.py":
+            return []
+        match = re.match(r"custom_styles:\s*(?P<selector>.*?)\s*/\s*(?P<prop>[A-Za-z0-9_-]+)\s*$", token.source_hint)
+        if not match:
+            return []
+        selector = match.group("selector").strip()
+        prop = match.group("prop").strip()
+        results: list[str] = []
+        # A deliberately modest diagnostic parser: exact selector blocks only.
+        for block in re.finditer(r"(?P<selector>[^{}]+)\{(?P<body>[^{}]*)\}", source, re.DOTALL):
+            selectors = [s.strip() for s in re.sub(r"/\*.*?\*/", "", block.group("selector"), flags=re.DOTALL).split(",")]
+            if selector not in selectors:
+                continue
+            declaration = re.search(rf"\b{re.escape(prop)}\s*:\s*(?P<value>[^;]+);", block.group("body"), re.IGNORECASE)
+            if declaration:
+                results.append(declaration.group("value").strip())
+        return results
+
+    def _layer_entries(self, tid: str) -> list[tuple[str, str, str, str | None]]:
+        entries: list[tuple[str, str, str, str | None]] = []
+        for lower_fragment, upper_fragment, kind, why in KNOWN_LAYER_RULES:
+            lowers = self._find_token_ids(lower_fragment)
+            uppers = self._find_token_ids(upper_fragment)
+            if tid in lowers:
+                for other in uppers:
+                    relation = "STATE ABOVE" if kind == "state" else ("OVERRIDES THIS" if kind == "override" else "ABOVE THIS")
+                    entries.append((relation, self.discovery.tokens[other].label, why, other))
+            elif tid in uppers:
+                for other in lowers:
+                    relation = "STATE BASE" if kind == "state" else ("OVERRIDES" if kind == "override" else "BELOW THIS")
+                    entries.append((relation, self.discovery.tokens[other].label, why, other))
+
+        token = self.discovery.tokens[tid]
+        for value in self._dark_qss_matches(token):
+            entries.append((
+                "EARLIER QSS",
+                "themes/dark.qss",
+                f"The base dark stylesheet contains the same selector/property with value {value}. settings_theme.py custom_styles is appended later, so the editable token normally wins; this earlier rule is shown read-only for override diagnosis.",
+                None,
+            ))
+        return entries
+
+    def _estimated_composite(self, tid: str) -> tuple[Rgba, str]:
+        selected = self.values[tid]
+        # Prefer actual compositing relationships over state/override rules.
+        for lower_fragment, upper_fragment, kind, why in KNOWN_LAYER_RULES:
+            if kind != "composite":
+                continue
+            lowers = self._find_token_ids(lower_fragment)
+            uppers = self._find_token_ids(upper_fragment)
+            if tid in lowers and uppers:
+                upper = uppers[0]
+                return _alpha_over(self.values[upper], selected), f"Estimate: {self.discovery.tokens[upper].label} over this token"
+            if tid in uppers and lowers:
+                lower = lowers[0]
+                return _alpha_over(selected, self.values[lower]), f"Estimate: this token over {self.discovery.tokens[lower].label}"
+        # Checkerboard preview already handles intrinsic alpha; use a neutral dark
+        # backing for tokens with no mapped compositing neighbour.
+        return _alpha_over(selected, Rgba(24, 30, 31, 255)), "No mapped neighbour; shown over Theme Foundry's neutral dark reference"
+
+    def _tree_tooltip(self, tid: str) -> str:
+        token = self.discovery.tokens[tid]
+        state, state_detail = self._token_state(tid)
+        layer_count = len(self._layer_entries(tid))
+        return (
+            f"{token.label}\n\nOfficial token: {token.official_name}\n"
+            f"Source: {token.source_path}\n{token.source_hint}\n\n"
+            f"{token.description}\n\nState: {state} — {state_detail}\n"
+            f"Known layer/override relationships: {layer_count}"
+        )
 
     # ----- tree -----------------------------------------------------------
     def _rebuild_tree(self, select_id: str | None = None) -> None:
@@ -1290,26 +1793,31 @@ class ThemeFoundryWindow(QMainWindow):
 
         parents: dict[str, QTreeWidgetItem] = {}
         for category in categories:
-            parent = QTreeWidgetItem([category])
-            font = parent.font(0)
+            parent = QTreeWidgetItem(["", category])
+            font = parent.font(self.COL_TOKEN)
             font.setBold(True)
-            parent.setFont(0, font)
+            parent.setFont(self.COL_TOKEN, font)
             self.tree.addTopLevelItem(parent)
             parents[category] = parent
 
         for tid, token in sorted(self.discovery.tokens.items(), key=lambda item: (item[1].category, item[1].label.lower(), item[0])):
             value = self.values[tid]
             repo = self.repo_values.get(tid)
+            state, _detail = self._token_state(tid)
             item = QTreeWidgetItem(
                 [
+                    "★" if tid in self.favorites else "☆",
                     token.label,
+                    state,
                     self._short_value(value),
                     self._short_value(repo) if repo else "—",
                     "🔗" if self.active_links.get(tid) else ("⛓" if self.default_links.get(tid) else ""),
                 ]
             )
-            item.setData(0, Qt.ItemDataRole.UserRole, tid)
-            item.setToolTip(0, f"{tid}\n{token.source_path}\n{token.source_hint}")
+            item.setData(self.COL_FAV, Qt.ItemDataRole.UserRole, tid)
+            item.setToolTip(self.COL_TOKEN, self._tree_tooltip(tid))
+            item.setToolTip(self.COL_STATE, self._token_state(tid)[1])
+            item.setTextAlignment(self.COL_FAV, Qt.AlignmentFlag.AlignCenter)
             parents[token.category].addChild(item)
             self.tree_items[tid] = item
         self.tree.expandAll()
@@ -1323,20 +1831,26 @@ class ThemeFoundryWindow(QMainWindow):
         del args
         text = self.search.text().strip().lower()
         category = self.category_filter.currentText()
+        favorites_only = self.favorites_only.isChecked()
         for i in range(self.tree.topLevelItemCount()):
             parent = self.tree.topLevelItem(i)
             visible_children = 0
             for j in range(parent.childCount()):
                 item = parent.child(j)
-                tid = item.data(0, Qt.ItemDataRole.UserRole)
+                tid = item.data(self.COL_FAV, Qt.ItemDataRole.UserRole)
                 token = self.discovery.tokens.get(tid)
                 if token is None:
                     item.setHidden(True)
                     continue
                 category_ok = category == "All categories" or token.category == category
-                haystack = " ".join((token.label, token.token_id, token.source_path, token.source_hint, token.category)).lower()
+                favorite_ok = not favorites_only or tid in self.favorites
+                state, state_detail = self._token_state(tid)
+                haystack = " ".join((
+                    token.label, token.token_id, token.source_path, token.source_hint,
+                    token.description, token.category, state, state_detail,
+                )).lower()
                 text_ok = not text or text in haystack
-                visible = category_ok and text_ok
+                visible = category_ok and favorite_ok and text_ok
                 item.setHidden(not visible)
                 if visible:
                     visible_children += 1
@@ -1346,11 +1860,40 @@ class ThemeFoundryWindow(QMainWindow):
         del previous
         if current is None:
             return
-        tid = current.data(0, Qt.ItemDataRole.UserRole)
+        tid = current.data(self.COL_FAV, Qt.ItemDataRole.UserRole)
         if not tid or tid not in self.discovery.tokens:
             return
         self._selected_id = str(tid)
         self._refresh_editor()
+
+    def _tree_item_clicked(self, item: QTreeWidgetItem, column: int) -> None:
+        if column != self.COL_FAV:
+            return
+        tid = item.data(self.COL_FAV, Qt.ItemDataRole.UserRole)
+        if tid in self.discovery.tokens:
+            self._toggle_favorite(str(tid))
+
+    def _toggle_favorite(self, tid: str) -> None:
+        if tid in self.favorites:
+            self.favorites.remove(tid)
+        else:
+            self.favorites.add(tid)
+        _save_favorites(self.favorites)
+        self._refresh_tree_item(tid)
+        self._filter_tree()
+        if tid == self._selected_id:
+            self._refresh_editor()
+
+    def _toggle_selected_favorite(self) -> None:
+        if self._selected_id:
+            self._toggle_favorite(self._selected_id)
+
+    def _layer_item_activated(self, item: QTreeWidgetItem, column: int) -> None:
+        del column
+        tid = item.data(0, Qt.ItemDataRole.UserRole)
+        if tid and tid in self.tree_items:
+            self.tree.setCurrentItem(self.tree_items[tid])
+            self.tree.scrollToItem(self.tree_items[tid])
 
     # ----- editor ---------------------------------------------------------
     def _refresh_editor(self) -> None:
@@ -1359,11 +1902,20 @@ class ThemeFoundryWindow(QMainWindow):
             return
         token = self.discovery.tokens[tid]
         value = self.values[tid]
+        state, state_detail = self._token_state(tid)
         self._updating_editor = True
         try:
             self.token_title.setText(token.label)
-            self.token_source.setText(f"{token.token_id}\n{token.source_path} · {token.source_hint}")
+            self.favorite_btn.setText("★ Favorite" if tid in self.favorites else "☆ Favorite")
+            self.token_source.setText(
+                f"Official token: {token.official_name}\nSource: {token.source_path} · {token.source_hint}"
+            )
+            self.token_description.setText(token.description)
+            self.state_banner.setText(f"{state}  ·  {state_detail}")
             self.preview.set_rgba(value)
+            composite, composite_note = self._estimated_composite(tid)
+            self.composite_preview.set_rgba(composite)
+            self.composite_note.setText(composite_note)
             self.swatch.set_rgba(value)
             self.r_spin.setValue(value.r)
             self.g_spin.setValue(value.g)
@@ -1392,8 +1944,21 @@ class ThemeFoundryWindow(QMainWindow):
                 else:
                     self.link_info.setText(f"Unlinked from default palette group: {default_group}")
             else:
-                self.link_info.setText("This token has no intentional default link group.")
+                self.link_info.setText("No intentional colour-link group. Visual layering is listed separately below.")
             self.reset_repo_btn.setEnabled(tid in self.repo_values)
+
+            self.layers_tree.clear()
+            entries = self._layer_entries(tid)
+            if not entries:
+                no_item = QTreeWidgetItem(["—", "No mapped relationship", "Static source analysis has no high-confidence layer/override mapping for this token yet."])
+                self.layers_tree.addTopLevelItem(no_item)
+            else:
+                for relation, label, why, related_tid in entries:
+                    item = QTreeWidgetItem([relation, label, why])
+                    if related_tid:
+                        item.setData(0, Qt.ItemDataRole.UserRole, related_tid)
+                        item.setToolTip(1, "Double-click to jump to this editable token")
+                    self.layers_tree.addTopLevelItem(item)
         finally:
             self._updating_editor = False
 
@@ -1465,8 +2030,6 @@ class ThemeFoundryWindow(QMainWindow):
         if self.active_links.get(tid):
             self.active_links[tid] = None
         else:
-            # Rejoin the group's current authored value.  If no members remain,
-            # relinking simply restores membership without changing the value.
             anchor = next(
                 (mid for mid, group in self.active_links.items() if group == default_group and mid != tid),
                 None,
@@ -1604,9 +2167,6 @@ class ThemeFoundryWindow(QMainWindow):
                 self.values[tid] = Rgba.from_json(entry.get("rgba"))
                 known += 1
 
-            # Theme files preserve authoring links.  Any token not explicitly in
-            # a saved link group is loaded as unlinked, even if v1's source hint
-            # would normally link it.
             self.active_links = {tid: None for tid in self.values}
             raw_links = payload.get("links", [])
             if isinstance(raw_links, list):
@@ -1616,8 +2176,6 @@ class ThemeFoundryWindow(QMainWindow):
                     group_id = f"loaded.link.{idx}"
                     members = [str(tid) for tid in group if str(tid) in self.values]
                     if len(members) >= 2:
-                        # Preserve the semantic/default group id when all members
-                        # agree on one; otherwise loaded link id remains authoring-only.
                         defaults = {self.default_links.get(tid) for tid in members}
                         defaults.discard(None)
                         if len(defaults) == 1:
@@ -1659,8 +2217,6 @@ class ThemeFoundryWindow(QMainWindow):
             self._error("Apply failed", str(exc))
             return
 
-        # Re-discover exact new source spans while preserving original session
-        # baselines.  This also validates that our rewritten source remains parseable.
         selected = self._selected_id
         original_opened = dict(self.opened_values)
         try:
@@ -1674,9 +2230,7 @@ class ThemeFoundryWindow(QMainWindow):
         desired = dict(self.values)
         self.discovery = new_discovery
         self.values = {tid: desired.get(tid, token.value) for tid, token in new_discovery.tokens.items()}
-        self.opened_values = {
-            tid: original_opened.get(tid, token.value) for tid, token in new_discovery.tokens.items()
-        }
+        self.opened_values = {tid: original_opened.get(tid, token.value) for tid, token in new_discovery.tokens.items()}
         self.default_links = {tid: token.default_link_group for tid, token in new_discovery.tokens.items()}
         self.active_links = {tid: self.active_links.get(tid, self.default_links.get(tid)) for tid in new_discovery.tokens}
         self.repo_discovery = discover_git_head(self.repo_root)
@@ -1704,15 +2258,24 @@ class ThemeFoundryWindow(QMainWindow):
         item = self.tree_items.get(tid)
         if item is None:
             return
-        item.setText(1, self._short_value(self.values[tid]))
+        state, detail = self._token_state(tid)
+        item.setText(self.COL_FAV, "★" if tid in self.favorites else "☆")
+        item.setText(self.COL_STATE, state)
+        item.setToolTip(self.COL_STATE, detail)
+        item.setText(self.COL_WORKING, self._short_value(self.values[tid]))
         repo = self.repo_values.get(tid)
-        item.setText(2, self._short_value(repo) if repo else "—")
-        item.setText(3, "🔗" if self.active_links.get(tid) else ("⛓" if self.default_links.get(tid) else ""))
+        item.setText(self.COL_REPO, self._short_value(repo) if repo else "—")
+        item.setText(self.COL_LINK, "🔗" if self.active_links.get(tid) else ("⛓" if self.default_links.get(tid) else ""))
+        item.setToolTip(self.COL_TOKEN, self._tree_tooltip(tid))
 
     def _update_dirty_status(self) -> None:
         dirty = sum(1 for tid, value in self.values.items() if self.discovery.tokens[tid].value != value)
+        dormant = sum(1 for tid in self.values if self.values[tid].a == 0)
         theme_name = self._theme_path.name if self._theme_path else "unsaved theme"
-        self._set_status(f"{dirty} source change(s) pending · {theme_name} · {len(self.values)} total editable tokens")
+        self._set_status(
+            f"{dirty} source change(s) pending · {theme_name} · {len(self.values)} editable tokens · "
+            f"{len(self.favorites)} favorite(s) · {dormant} currently transparent"
+        )
 
     def _short_value(self, value: Rgba | None) -> str:
         if value is None:
@@ -1782,6 +2345,9 @@ def main(argv: list[str] | None = None) -> int:
 
     app = QApplication(sys.argv[:1])
     app.setApplicationName(APP_TITLE)
+    icon_path = repo_root / "SRPSS.ico"
+    if icon_path.is_file():
+        app.setWindowIcon(QIcon(str(icon_path)))
     window = ThemeFoundryWindow(repo_root)
     window.show()
     return app.exec()

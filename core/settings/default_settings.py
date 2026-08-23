@@ -709,6 +709,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 4
                                    'media': True,
                                    'reddit': True,
                                    'steam': True,
+                                   'visualizers': True,
                                    'weather': True},
              'global': {'card_border_width_px': 4, 'stacking_enabled': True},
              'gmail': {'account_slot': '0',

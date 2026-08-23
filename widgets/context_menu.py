@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 # Uses same color palette as settings_dialog.py for consistency
 MENU_STYLE = """
 QMenu {
-    background-color: rgba(43, 43, 43, 255);
+    background-color: rgba(25, 25, 25, 205);
     border: 3px solid #ffffff;
     border-radius: 10px;
     padding: 8px 6px;
@@ -67,7 +67,7 @@ QMenu::indicator:unchecked {
 
 SUBMENU_STYLE = """
 QMenu {
-    background-color: rgba(43, 43, 43, 255);
+    background-color: rgba(25, 25, 25, 205);
     border: 3px solid #ffffff;
     border-radius: 8px;
     padding: 6px 4px;
@@ -192,12 +192,15 @@ class ScreensaverContextMenu(QMenu):
         self._populate_transition_submenu()
         self.addMenu(self._transition_menu)
         
-        # Visualizer submenu — populated from active mode registry (gate-aware)
+        # Visualizer submenu — populated from active mode registry (gate-aware).
+        # Its availability follows the Visualizers capability (+ its Media
+        # dependency), refreshed on show via set_visualizer_available().
         self._visualizer_menu = QMenu("⟳  Change Visualizer", self)
         self._visualizer_menu.setStyleSheet(SUBMENU_STYLE)
         self._visualizer_actions: dict[str, QAction] = {}
         self._populate_visualizer_submenu()
-        self.addMenu(self._visualizer_menu)
+        self._visualizer_menu_action = self.addMenu(self._visualizer_menu)
+        self._visualizer_available = True
         
         self.addSeparator()
         
@@ -399,6 +402,16 @@ class ScreensaverContextMenu(QMenu):
         self._current_visualizer = mode_id
         for mid, action in self._visualizer_actions.items():
             action.setChecked(mid == mode_id)
+
+    def set_visualizer_available(self, available: bool) -> None:
+        """Show/hide the whole Change Visualizer submenu by capability state."""
+        self._visualizer_available = bool(available)
+        action = getattr(self, "_visualizer_menu_action", None)
+        if action is not None:
+            action.setVisible(self._visualizer_available)
+
+    def is_visualizer_available(self) -> bool:
+        return bool(getattr(self, "_visualizer_available", True))
     
     def refresh_visualizer_modes(self) -> None:
         """Rebuild the visualizer submenu (e.g. after gate changes)."""
