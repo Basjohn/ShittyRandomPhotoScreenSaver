@@ -390,6 +390,34 @@ Remaining operator eyes-on confirmation of responsive Settings layout / Visualiz
 deferred acceptance and does **not** block the next Phase-E implementation slice under the phase
 promotion rule.
 
+### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — AUDIT-CORRECTED (3), RE-AUDIT REQUIRED
+
+**Third audit-correction checkpoint (independent audit of `01a22e69` found one blocker; corrected — NOT
+self-promoted):**
+
+- **Capability deactivation retires the GLOBAL failover lifecycle, not merely blocks creation.** New
+  canonical boundary reaction `retire_visualizer_failover_on_capability_change`, invoked from
+  `WidgetManager._handle_settings_changed` whenever `widgets` / `widgets.family_activation` changes: when
+  Media OFF or Visualizers OFF makes the capability ineffective, a pending grace has its record + global
+  generation invalidated (so stale delayed callbacks stay fenced), and a live temporary fallback owner is
+  retired — its record discarded only when retirement is CONFIRMED (a failed retirement retains the
+  live-owner record for retry). A later explicit reactivation with the target still absent therefore arms
+  a genuinely fresh generation and a full new 30 s grace. Covers both Visualizers-off and Media-off.
+
+New regressions in `tests/test_visualizer_failover_reclaim.py`: pending grace → capability off →
+record/generation retired → stale callback no-op → reactivation → fresh grace/generation (Visualizers-off
+and Media-off); active fallback → capability off → owner retired + state retired; failed retirement on
+deactivation retains the live-owner record; no-op when capability still effective.
+
+Also brought the pre-existing `tests/test_widget_manager_refresh.py` remote-reconcile lifecycle tests
+onto the corrected E2/E2.7 contract (they had gone stale across the E2 capability gate and the E2.7
+grace/generation changes): the capability final-create boundary now requires a resolvable
+`SettingsManager`; an absent target gets the grace then falls back at the deadline; the grace constant is
+`REMOTE_CUSTOM_VISUALIZER_FALLBACK_GRACE_MS`; the delayed callback carries/validates the failover
+generation and re-resolves current CUSTOM routing from live Settings. Each test still asserts its
+original intended behavior (participating-target immediate create + saved-layout reapply, foreign-rect
+rejection/repair, defer-then-recover, deadline fallback) through the current API — no assertions weakened.
+
 ### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — AUDIT-CORRECTED (2), RE-AUDIT REQUIRED
 
 **Second audit-correction checkpoint (independent audit of `e83d54ce` found two blockers; both

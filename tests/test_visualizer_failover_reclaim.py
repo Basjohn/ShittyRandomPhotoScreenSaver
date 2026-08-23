@@ -25,6 +25,7 @@ from rendering.multi_monitor_coordinator import get_coordinator
 
 ACTIVE = {"family_activation": {"media": True, "visualizers": True}}
 VIS_OFF = {"family_activation": {"media": True, "visualizers": False}}
+MEDIA_OFF = {"family_activation": {"media": False, "visualizers": True}}
 
 
 class _Settings:
@@ -521,6 +522,87 @@ def test_already_owns_branch_retains_record_when_stray_retire_fails(world):
     wsa.reclaim_remote_custom_visualizer_owner()
     assert stray.spotify_visualizer_widget is not None       # stray still alive
     assert get_coordinator().get_visualizer_failover() is not None  # record retained
+
+
+# --- Capability deactivation retires the failover lifecycle ----------------
+
+
+def test_deactivation_retires_pending_grace_then_fresh_grace_after_reactivation(world, scheduler):
+    # 1. pending grace -> capability off (Visualizers) -> state/generation retired
+    #    -> stale callback no-op -> capability on -> fresh grace/generation.
+    coord = get_coordinator()
+    d0, m0 = _make_display(0, settings=_Settings(ACTIVE))
+    world.participants = {0: d0}          # configured monitor 1 absent
+    world.configured_index = 1
+    _, om0 = _make_display(0, settings=_Settings(ACTIVE))
+    om0._settings_manager = _Settings(ACTIVE)
+    wsa._reconcile_remote_custom_visualizer(om0, ACTIVE, {}, 0, None, SimpleNamespace())
+    rec = coord.get_visualizer_failover()
+    assert rec is not None and rec["pending"] is True
+    gen1 = rec["generation"]
+
+    # Capability off -> failover lifecycle retired (record + generation).
+    wsa.retire_visualizer_failover_on_capability_change(_Settings(VIS_OFF))
+    assert coord.get_visualizer_failover() is None
+    assert not coord.is_visualizer_failover_generation_current(gen1)
+
+    # The stale pending deadline now fires -> fenced by the retired generation.
+    scheduler.fire_all()
+    assert m0.create_calls == 0
+
+    # Explicit reactivation, target still absent -> a genuinely fresh grace.
+    _, om0b = _make_display(0, settings=_Settings(ACTIVE))
+    om0b._settings_manager = _Settings(ACTIVE)
+    wsa._reconcile_remote_custom_visualizer(om0b, ACTIVE, {}, 0, None, SimpleNamespace())
+    rec2 = coord.get_visualizer_failover()
+    assert rec2 is not None and rec2["pending"] is True
+    assert rec2["generation"] > gen1
+
+
+def test_deactivation_media_off_retires_pending_grace(world, scheduler):
+    # Media-off effective deactivation also retires the pending grace lifecycle.
+    coord = get_coordinator()
+    d0, m0 = _make_display(0, settings=_Settings(ACTIVE))
+    world.participants = {0: d0}
+    world.configured_index = 1
+    _, om0 = _make_display(0, settings=_Settings(ACTIVE))
+    om0._settings_manager = _Settings(ACTIVE)
+    wsa._reconcile_remote_custom_visualizer(om0, ACTIVE, {}, 0, None, SimpleNamespace())
+    assert coord.get_visualizer_failover() is not None
+    wsa.retire_visualizer_failover_on_capability_change(_Settings(MEDIA_OFF))
+    assert coord.get_visualizer_failover() is None
+
+
+def test_deactivation_retires_active_fallback_owner_and_state(world):
+    # 2. active fallback -> capability off (Media) -> owner retired + state retired.
+    coord = get_coordinator()
+    d0, m0 = _make_display(0, settings=_Settings(MEDIA_OFF), has_vis=True, cleanup_ok=True)
+    coord.set_visualizer_fallback_owner(intended_index=1, host=d0, origin_manager=m0)
+    wsa.retire_visualizer_failover_on_capability_change(_Settings(MEDIA_OFF))
+    assert "spotify_visualizer" in m0.cleanup_calls
+    assert d0.spotify_visualizer_widget is None      # temporary owner retired
+    assert coord.get_visualizer_failover() is None    # failover state retired
+
+
+def test_deactivation_failed_retirement_retains_live_owner_record(world):
+    # 3. failed fallback retirement on deactivation must NOT lose the live-owner
+    #    record (retire is unconfirmed -> retain for a later retry).
+    coord = get_coordinator()
+    d0, m0 = _make_display(0, settings=_Settings(VIS_OFF), has_vis=True, cleanup_ok=False)
+    coord.set_visualizer_fallback_owner(intended_index=1, host=d0, origin_manager=m0)
+    wsa.retire_visualizer_failover_on_capability_change(_Settings(VIS_OFF))
+    assert d0.spotify_visualizer_widget is not None   # still alive (not orphaned)
+    assert coord.get_visualizer_failover() is not None  # record retained
+
+
+def test_deactivation_noop_when_capability_effective(world):
+    coord = get_coordinator()
+    d0, m0 = _make_display(0, settings=_Settings(ACTIVE), has_vis=True)
+    coord.set_visualizer_fallback_owner(intended_index=1, host=d0, origin_manager=m0)
+    wsa.retire_visualizer_failover_on_capability_change(_Settings(ACTIVE))
+    assert coord.get_visualizer_failover() is not None  # still effective -> untouched
+    assert d0.spotify_visualizer_widget is not None
+    assert m0.cleanup_calls == []
 
 
 # --- Never persists monitor/geometry ---------------------------------------

@@ -24,6 +24,35 @@ class _FakeSignal:
         return
 
 
+# E2/E2.7 remote-visualizer reconcile tests need a capability-effective settings
+# manager (the final creation boundary fails closed without one) that also
+# satisfies create_spotify_visualizer_widget's set_widgets_map/save calls.
+class _CapEffectiveSettings:
+    def __init__(self, widgets=None):
+        self._widgets = widgets or {"family_activation": {"media": True, "visualizers": True}}
+
+    def get(self, key, default=None):
+        return self._widgets if key == "widgets" else default
+
+    def set_widgets_map(self, *a, **k):
+        return None
+
+    def save(self):
+        return None
+
+
+def _make_failover_coordinator(instances):
+    """Return a real MultiMonitorCoordinator (so the E2.7 failover generation API
+    exists) whose participating set is controlled by the test."""
+    from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
+
+    class _FailoverCoordinator(MultiMonitorCoordinator):
+        def get_all_instances(self):
+            return list(instances)
+
+    return _FailoverCoordinator()
+
+
 class _StubSettingsManager:
     """Minimal settings manager that exposes widget config + signal hooks."""
 
@@ -829,6 +858,7 @@ def test_reconcile_remote_custom_visualizer_reapplies_saved_layouts_after_second
         def __init__(self, target):
             self._target = target
             self.registered = []
+            self._settings_manager = _CapEffectiveSettings()
 
         def create_spotify_visualizer_widget(self, *args, **kwargs):
             vis = _Visualizer()
@@ -932,6 +962,7 @@ def test_reconcile_remote_custom_visualizer_falls_back_to_participating_display_
         def __init__(self, target):
             self._target = target
             self.registered = []
+            self._settings_manager = _CapEffectiveSettings()
 
         def create_spotify_visualizer_widget(self, *args, **kwargs):
             vis = _Visualizer()
@@ -946,6 +977,7 @@ def test_reconcile_remote_custom_visualizer_falls_back_to_participating_display_
             self.screen_index = screen_index
             self.media_widget = object()
             self.spotify_visualizer_widget = None
+            self._thread_manager = None
             self._screen = SimpleNamespace(
                 geometry=lambda: SimpleNamespace(
                     isValid=lambda: True,
@@ -961,18 +993,26 @@ def test_reconcile_remote_custom_visualizer_falls_back_to_participating_display_
             self.apply_calls += 1
 
     source_display = _Display(0, participating=True)
-    class _Coordinator:
-        def get_all_instances(self):
-            return [source_display]
-
-    monkeypatch.setattr(widget_setup_all, "get_coordinator", lambda: _Coordinator())
-    monkeypatch.setattr(display_participation, "get_coordinator", lambda: _Coordinator())
+    coordinator = _make_failover_coordinator([source_display])
+    monkeypatch.setattr(widget_setup_all, "get_coordinator", lambda: coordinator)
+    monkeypatch.setattr(display_participation, "get_coordinator", lambda: coordinator)
     monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda _widgets: None)
-    mgr = SimpleNamespace(_parent=source_display)
 
+    scheduled: list = []
+    monkeypatch.setattr(
+        widget_setup_all.ThreadManager, "single_shot",
+        lambda delay, cb: scheduled.append(cb),
+    )
     widgets_config = {
+        "family_activation": {"media": True, "visualizers": True},
         "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
     }
+    # The delayed recheck re-reads the CURRENT canonical CUSTOM routing from live
+    # Settings, so the manager's settings must carry that routing.
+    mgr = SimpleNamespace(
+        _parent=source_display,
+        _settings_manager=_CapEffectiveSettings(widgets_config),
+    )
 
     with caplog.at_level(logging.WARNING):
         widget_setup_all._reconcile_remote_custom_visualizer(
@@ -984,12 +1024,23 @@ def test_reconcile_remote_custom_visualizer_falls_back_to_participating_display_
             media_widget=object(),
         )
 
+    # E2.7: an absent configured target gets the 30 s grace, NOT an immediate
+    # spawn into an unseen target. No owner exists yet; a deadline is armed.
+    assert source_display.spotify_visualizer_widget is None
+    assert len(scheduled) == 1
+
+    # When the deadline fires and the target is still absent, the last-resort
+    # fallback restores one visible owner on a participating display (never the
+    # unseen target).
+    with caplog.at_level(logging.WARNING):
+        for cb in scheduled:
+            cb()
+
     assert source_display.spotify_visualizer_widget is not None, (
-        "If the requested CUSTOM monitor is not participating in the active "
-        "display/compositor set, remote reconcile must choose a participating "
-        "display owner instead of spawning into an unseen target."
+        "At the grace deadline, if the requested CUSTOM monitor is still not "
+        "participating, remote reconcile must choose a participating display owner "
+        "instead of spawning into an unseen target."
     )
-    assert "Requested CUSTOM monitor 1 is not participating" in caplog.text
     assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
 
 
@@ -1051,9 +1102,7 @@ def test_reconcile_remote_custom_visualizer_defers_fallback_when_requested_targe
     source_display = _Display(0, awake=True)
     waking_target_display = _Display(1, awake=False)
 
-    class _Coordinator:
-        def get_all_instances(self):
-            return [source_display, waking_target_display]
+    coordinator = _make_failover_coordinator([source_display, waking_target_display])
 
     def _capture_single_shot(delay_ms, callback, *args):
         def _invoke(_callback=callback, _args=args):
@@ -1061,8 +1110,8 @@ def test_reconcile_remote_custom_visualizer_defers_fallback_when_requested_targe
 
         scheduled_calls.append((int(delay_ms), _invoke))
 
-    monkeypatch.setattr(widget_setup_all, "get_coordinator", lambda: _Coordinator())
-    monkeypatch.setattr(display_participation, "get_coordinator", lambda: _Coordinator())
+    monkeypatch.setattr(widget_setup_all, "get_coordinator", lambda: coordinator)
+    monkeypatch.setattr(display_participation, "get_coordinator", lambda: coordinator)
     monkeypatch.setattr(widget_setup_all.ThreadManager, "single_shot", _capture_single_shot)
     monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda _widgets: None)
     mgr = SimpleNamespace(_parent=source_display)
@@ -1080,11 +1129,13 @@ def test_reconcile_remote_custom_visualizer_defers_fallback_when_requested_targe
             media_widget=object(),
         )
 
+    # E2.7: a runtime-known-but-not-participating target defers via the 30 s grace;
+    # no owner is created yet and exactly one deadline is armed.
     assert source_display.spotify_visualizer_widget is None
     assert waking_target_display.spotify_visualizer_widget is None
     assert len(scheduled_calls) == 1
-    assert scheduled_calls[0][0] == widget_setup_all.REMOTE_CUSTOM_VISUALIZER_FALLBACK_RECHECK_MS
-    assert "delaying fallback recheck" in caplog.text
+    assert scheduled_calls[0][0] == widget_setup_all.REMOTE_CUSTOM_VISUALIZER_FALLBACK_GRACE_MS
+    assert "one-shot grace" in caplog.text
 
     waking_target_display.awake = True
     resolution = display_participation.describe_visualizer_spawn_display(
@@ -1160,35 +1211,43 @@ def test_reconcile_remote_custom_visualizer_falls_back_after_delayed_recheck_whe
     source_display = _Display(0, awake=True)
     sleeping_target_display = _Display(1, awake=False)
 
-    class _Coordinator:
-        def get_all_instances(self):
-            return [source_display, sleeping_target_display]
+    coordinator = _make_failover_coordinator([source_display, sleeping_target_display])
 
-    def _record_create(target, widgets_config, shadows_config, target_screen_index, thread_manager):
+    def _record_create(target, widgets_config, shadows_config, target_screen_index,
+                       thread_manager, origin_manager=None):
         create_calls.append(int(getattr(target, "screen_index", -1)))
         target.spotify_visualizer_widget = _Visualizer()
+        return True
 
-    monkeypatch.setattr(widget_setup_all, "get_coordinator", lambda: _Coordinator())
-    monkeypatch.setattr(display_participation, "get_coordinator", lambda: _Coordinator())
+    monkeypatch.setattr(widget_setup_all, "get_coordinator", lambda: coordinator)
+    monkeypatch.setattr(display_participation, "get_coordinator", lambda: coordinator)
     monkeypatch.setattr(widget_setup_all, "_create_remote_custom_visualizer_on_target", _record_create)
     monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda _widgets: None)
-    mgr = SimpleNamespace(_parent=source_display)
-    mgr._remote_custom_visualizer_reconcile_token = 1
 
-    widgets_config = {
+    # The recheck re-reads the CURRENT canonical CUSTOM routing + capability from
+    # live Settings, and validates the coordinator failover generation.
+    live_widgets = {
+        "family_activation": {"media": True, "visualizers": True},
         "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
     }
+    mgr = SimpleNamespace(
+        _parent=source_display,
+        _settings_manager=_CapEffectiveSettings(live_widgets),
+    )
+    generation = coordinator.arm_visualizer_grace(intended_index=1, origin_manager=mgr)
+    mgr._remote_custom_visualizer_reconcile_token = 1
 
     with caplog.at_level(logging.WARNING):
         widget_setup_all._run_remote_custom_visualizer_fallback_recheck(
             mgr,
-            widgets_config,
+            live_widgets,
             {},
             0,
             None,
             object(),
             1,
             1,
+            generation,
         )
 
     assert create_calls == [0]
@@ -1265,7 +1324,7 @@ def test_reconcile_remote_custom_visualizer_rejects_foreign_saved_rect_when_requ
             self.registered = []
             self._parent = target
             self._widgets = {}
-            self._settings_manager = None
+            self._settings_manager = _CapEffectiveSettings()
 
         def create_spotify_visualizer_widget(self, *args, **kwargs):
             vis = creators.create_spotify_visualizer_widget(self, *args, **kwargs)
@@ -1303,42 +1362,57 @@ def test_reconcile_remote_custom_visualizer_rejects_foreign_saved_rect_when_requ
             self.apply_calls += 1
 
     source_display = _Display(0, participating=True)
-    class _Coordinator:
-        def get_all_instances(self):
-            return [source_display]
+    coordinator = _make_failover_coordinator([source_display])
 
-    monkeypatch.setattr(widget_setup_all, "get_coordinator", lambda: _Coordinator())
-    monkeypatch.setattr(display_participation, "get_coordinator", lambda: _Coordinator())
+    scheduled: list = []
+    monkeypatch.setattr(widget_setup_all, "get_coordinator", lambda: coordinator)
+    monkeypatch.setattr(display_participation, "get_coordinator", lambda: coordinator)
     monkeypatch.setattr(creators, "SpotifyVisualizerWidget", lambda *args, **kwargs: _Visualizer())
     monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
-    monkeypatch.setattr(creators, "get_coordinator", lambda: _Coordinator())
+    monkeypatch.setattr(creators, "get_coordinator", lambda: coordinator)
     monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda _widgets: None)
-    monkeypatch.setattr(widget_setup_all.ThreadManager, "single_shot", lambda *args, **kwargs: None)
-    mgr = SimpleNamespace(_parent=source_display)
+    monkeypatch.setattr(
+        widget_setup_all.ThreadManager, "single_shot",
+        lambda delay, cb: scheduled.append(cb),
+    )
+
+    # The absent configured target gets the grace; at the deadline the fallback
+    # create runs on the participating display and the foreign-bucket rect is
+    # rejected there. The recheck re-reads this config from live Settings.
+    widgets_config = {
+        "family_activation": {"media": True, "visualizers": True},
+        "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                "screen:missing-monitor": {
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
+                        "size_payload": {"width": 420, "height": 280},
+                        "resize_mode": "visualizer_rect",
+                    }
+                }
+            },
+        },
+    }
+    mgr = SimpleNamespace(
+        _parent=source_display,
+        _settings_manager=_CapEffectiveSettings(widgets_config),
+    )
 
     with caplog.at_level(logging.WARNING):
         widget_setup_all._reconcile_remote_custom_visualizer(
             mgr,
-            {
-                "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
-                "custom_layout": {
-                    "version": 1,
-                    "displays": {
-                        "screen:missing-monitor": {
-                            "spotify_visualizer": {
-                                "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
-                                "size_payload": {"width": 420, "height": 280},
-                                "resize_mode": "visualizer_rect",
-                            }
-                        }
-                    },
-                },
-            },
+            widgets_config,
             shadows_config={},
             screen_index=0,
             thread_manager=None,
             media_widget=object(),
         )
+        # Absent target -> grace armed, no immediate create; fire the deadline.
+        assert source_display.spotify_visualizer_widget is None
+        for cb in scheduled:
+            cb()
 
     vis = source_display.spotify_visualizer_widget
     assert vis is None
@@ -1412,7 +1486,7 @@ def test_reconcile_remote_custom_visualizer_repairs_single_foreign_rect_when_act
             self.registered = []
             self._parent = target
             self._widgets = {}
-            self._settings_manager = None
+            self._settings_manager = _CapEffectiveSettings()
 
         def create_spotify_visualizer_widget(self, *args, **kwargs):
             vis = creators.create_spotify_visualizer_widget(self, *args, **kwargs)
