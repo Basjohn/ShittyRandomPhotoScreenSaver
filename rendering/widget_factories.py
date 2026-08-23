@@ -585,13 +585,17 @@ class RedditWidgetFactory(WidgetFactory):
             widget_pos = coerce_widget_position(model.position, WidgetPosition.TOP_RIGHT)
             position = position_map.get(widget_pos, RedditPosition.TOP_RIGHT)
             
-            widget = RedditWidget(parent=parent, position=position)
-            # E1 slice 2: the RedditPostProvider lifetime is now owned by the
+            # E1 slice 2: the RedditPostProvider lifetime is owned by the
             # presentation-neutral WidgetRuntimeManager, which builds it from
             # canonical settings (honoring reddit2 family inheritance) and injects
-            # it during widget setup. The factory no longer constructs/injects the
-            # provider; a bare RedditWidget still carries its own __init__ default
-            # provider for standalone use.
+            # it during widget setup BEFORE start. The factory neither constructs
+            # nor injects the provider, and the runtime-managed widget must not
+            # construct a QWidget-owned default first (no duplicate construction,
+            # no fail-open to a default provider). A bare RedditWidget created
+            # outside this factory still builds its own default for standalone use.
+            widget = RedditWidget(
+                parent=parent, position=position, build_default_provider=False
+            )
 
             # Set overlay name for fade sync coordination and cache key
             widget._overlay_name = settings_key

@@ -126,6 +126,7 @@ class RedditWidget(BaseOverlayWidget):
         subreddit: str = "wallpapers",
         position: RedditPosition = RedditPosition.TOP_RIGHT,
         post_provider: Optional[RedditPostProvider] = None,
+        build_default_provider: bool = True,
     ) -> None:
         # Convert RedditPosition to OverlayPosition for base class
         overlay_pos = OverlayPosition(position.value)
@@ -207,9 +208,18 @@ class RedditWidget(BaseOverlayWidget):
         self._show_separators: bool = False
 
         self._shutdown_event = threading.Event()
-        self._post_provider: RedditPostProvider = (
-            post_provider if post_provider is not None else build_default_reddit_post_provider()
-        )
+        # Provider ownership: an explicitly supplied provider always wins. When a
+        # runtime-managed widget defers ownership to WidgetRuntimeManager
+        # (build_default_provider=False), do NOT construct a QWidget-owned default
+        # here — the neutral owner injects the configured provider before start,
+        # and a failed injection fails closed (the widget is retired) rather than
+        # silently running on a default. Standalone construction keeps the default.
+        if post_provider is not None:
+            self._post_provider: Optional[RedditPostProvider] = post_provider
+        elif build_default_provider:
+            self._post_provider = build_default_reddit_post_provider()
+        else:
+            self._post_provider = None
 
         self._setup_ui()
 
@@ -847,6 +857,11 @@ class RedditWidget(BaseOverlayWidget):
         occurred.
         """
 
+        if self._post_provider is None:
+            # Runtime-managed widget without an injected provider must not fetch
+            # (fail closed rather than fall back to a default source).
+            logger.debug("[REDDIT] fetch skipped: no post provider injected")
+            return False
         if not self._subreddit:
             return False
         if defer_for_transition and self._defer_refresh_if_transition():

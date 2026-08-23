@@ -2227,3 +2227,63 @@ def test_reddit_cache_regeneration_defers_during_transition(qt_app, qtbot):  # n
     finally:
         widget.cleanup()
         parent.deleteLater()
+
+
+def test_factory_reddit_widget_defers_provider_without_default(monkeypatch):
+    # E1 slice 2 correction: a runtime-managed (factory-created) RedditWidget must
+    # NOT construct a QWidget-owned default provider before WidgetRuntimeManager
+    # injects the neutral one — no duplicate construction, no fail-open default.
+    from unittest.mock import MagicMock
+    from PySide6.QtWidgets import QWidget
+    from rendering.widget_factories import RedditWidgetFactory
+
+    calls = {"default": 0}
+    real_default = reddit_module.build_default_reddit_post_provider
+
+    def _tracking(*args, **kwargs):
+        calls["default"] += 1
+        return real_default(*args, **kwargs)
+
+    monkeypatch.setattr(reddit_module, "build_default_reddit_post_provider", _tracking)
+
+    parent = QWidget()
+    widget = None
+    try:
+        widget = RedditWidgetFactory(MagicMock()).create(
+            parent,
+            {"enabled": True, "subreddit": "games", "limit": 5},
+            settings_key="reddit",
+        )
+        assert widget is not None
+        # No default provider was constructed, and the widget defers ownership.
+        assert calls["default"] == 0
+        assert widget._post_provider is None  # type: ignore[attr-defined]
+    finally:
+        if widget is not None:
+            widget.cleanup()
+            widget.deleteLater()
+        parent.deleteLater()
+
+
+def test_standalone_reddit_widget_still_builds_default_provider():
+    # Standalone construction (outside the runtime-managed factory) preserves the
+    # convenience default provider so bare RedditWidget() use still works.
+    widget = RedditWidget()
+    try:
+        assert widget._post_provider is not None  # type: ignore[attr-defined]
+    finally:
+        widget.cleanup()
+        widget.deleteLater()
+
+
+def test_runtime_managed_reddit_widget_without_provider_does_not_fetch():
+    # A deferred-provider widget must fail closed on fetch rather than fall back
+    # to a default source before neutral injection.
+    widget = RedditWidget(build_default_provider=False)
+    try:
+        assert widget._post_provider is None  # type: ignore[attr-defined]
+        widget._subreddit = "games"
+        assert widget._fetch_feed(defer_for_transition=False) is False
+    finally:
+        widget.cleanup()
+        widget.deleteLater()

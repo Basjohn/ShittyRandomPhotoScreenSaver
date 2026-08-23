@@ -2,8 +2,9 @@
 
 Covers the responsibility extracted out of the WidgetManager god-object:
 
-- capability *admission* authority (dependency-aware; the single shared-consumer
-  accounting query), including compatibility defaults for missing keys;
+- capability *admission* authority (dependency-aware; activation + required-family
+  satisfaction, not shared-provider consumer counting), including compatibility
+  defaults for missing keys;
 - capability-*deactivation* reaction dispatch delegating to the E2.7 canonical
   Visualizer failover retirement (retire on ineffective, no-op while effective);
 - presentation-neutral runtime *lifecycle routing* over the host registry,
@@ -83,7 +84,7 @@ def test_is_family_activated_missing_keys_resolve_compatibly():
 def test_is_family_effective_honors_media_dependency():
     owner = WidgetRuntimeManager(_Host())
     assert owner.is_family_effective(ACTIVE, "visualizers") is True
-    # Media off -> visualizers cannot be effective (shared-consumer accounting).
+    # Media off -> visualizers cannot be effective (dependency satisfaction).
     assert owner.is_family_effective(MEDIA_OFF, "visualizers") is False
     assert owner.is_family_effective(VIS_OFF, "visualizers") is False
     # Media itself has no dependency and stays effective when activated.

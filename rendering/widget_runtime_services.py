@@ -73,8 +73,14 @@ def _build_reddit_service(widget_id: str, widgets_config: Mapping[str, Any]) -> 
 
 def _inject_reddit_service(widget: Any, service: Any) -> None:
     setter = getattr(widget, "set_post_provider", None)
-    if callable(setter):
-        setter(service)
+    if not callable(setter):
+        # A required service could not be handed to the widget. Raise so the owner
+        # fails closed rather than leaving a runtime-managed widget with no
+        # neutral provider (or on a QWidget-owned default).
+        raise AttributeError(
+            "runtime widget cannot accept post provider (missing set_post_provider)"
+        )
+    setter(service)
 
 
 _REDDIT_SERVICE_SPEC = RuntimeServiceSpec(

@@ -431,6 +431,55 @@ def _reapply_saved_custom_layouts_after_startup(parent: Optional[QWidget], *, lo
         logger.debug("%s Failed to schedule saved custom layout stabilization", log_prefix, exc_info=True)
 
 
+def _fail_closed_runtime_service_widget(
+    mgr: "WidgetManager",
+    created: Dict[str, QWidget],
+    descriptor,
+    widget: QWidget,
+) -> None:
+    """Retire a just-created widget whose required runtime service failed.
+
+    A widget that requires a presentation-neutral runtime service must not be
+    left registered/started when that service cannot be built/injected. Undo the
+    registration performed above and destroy the widget so it cannot run on a
+    QWidget-owned default provider.
+    """
+    attr_name = getattr(descriptor, "attr_name", None)
+    settings_key = getattr(descriptor, "settings_key", None)
+    try:
+        if settings_key:
+            mgr._expected_overlays.discard(settings_key)
+    except Exception:
+        logger.debug("[WIDGET_MANAGER] fail-closed: expected-overlay discard failed", exc_info=True)
+    if attr_name:
+        created.pop(attr_name, None)
+    try:
+        if settings_key:
+            mgr.unregister_widget(settings_key)
+    except Exception:
+        logger.debug("[WIDGET_MANAGER] fail-closed: unregister failed", exc_info=True)
+    try:
+        if attr_name:
+            mgr._bind_parent_attribute(attr_name, None)
+    except Exception:
+        logger.debug("[WIDGET_MANAGER] fail-closed: parent unbind failed", exc_info=True)
+    for method_name in ("cleanup", "hide"):
+        try:
+            method = getattr(widget, method_name, None)
+            if callable(method):
+                method()
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] fail-closed: %s failed", method_name, exc_info=True)
+    try:
+        widget.setParent(None)
+    except Exception:
+        logger.debug("[WIDGET_MANAGER] fail-closed: setParent(None) failed", exc_info=True)
+    try:
+        widget.deleteLater()
+    except Exception:
+        logger.debug("[WIDGET_MANAGER] fail-closed: deleteLater failed", exc_info=True)
+
+
 def _create_factory_widgets(
     mgr: "WidgetManager",
     created: Dict[str, QWidget],
@@ -504,16 +553,28 @@ def _create_factory_widgets(
                     mgr.register_widget(descriptor.settings_key, widget)
                     created[descriptor.attr_name] = widget
                     mgr._bind_parent_attribute(descriptor.attr_name, widget)
-                    # E1: the neutral owner builds/owns this widget's
-                    # presentation-neutral runtime service (provider/model) and
-                    # injects it, so the provider lifetime is not owned merely
-                    # because a QWidget exists. Synchronous and pre-start so the
-                    # widget uses the configured service from its first fetch.
-                    mgr._runtime_manager.ensure_widget_service(
-                        descriptor.settings_key, widget, widgets_config
-                    )
 
         if widget is not None:
+            # E1: the neutral owner builds/owns this widget's presentation-neutral
+            # runtime service (provider/model) and injects it BEFORE start, so the
+            # provider lifetime is not owned merely because a QWidget exists. If a
+            # widget REQUIRES such a service (has_runtime_service) and the build or
+            # injection fails, FAIL CLOSED: retire the widget rather than leave it
+            # running on a QWidget-owned default provider.
+            if runtime_owner.has_runtime_service(descriptor.settings_key):
+                service = runtime_owner.ensure_widget_service(
+                    descriptor.settings_key, widget, widgets_config
+                )
+                if service is None:
+                    logger.error(
+                        "[WIDGET_MANAGER] Required runtime service for %s could not be "
+                        "built/injected; failing closed (widget not started)",
+                        descriptor.settings_key,
+                    )
+                    _fail_closed_runtime_service_widget(
+                        mgr, created, descriptor, widget
+                    )
+                    continue
             _ensure_thread_manager(mgr, widget, descriptor.settings_key)
 
 

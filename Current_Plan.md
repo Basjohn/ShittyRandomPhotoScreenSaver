@@ -530,7 +530,34 @@ Windows execution.
    The later hoist moves ownership out of legacy `WidgetManager` into the display-runtime boundary; do
    not invent a process-global god manager merely to remove the temporary host edge.
 
-### E1 slice 2 — first real provider/model ownership extraction — PUSHED, RE-AUDIT REQUIRED
+### E1 slice 2 — first real provider/model ownership extraction — AUDIT-CORRECTED, RE-AUDIT REQUIRED
+
+#### Audit correction (blocker: duplicate construction / fail-open to default provider)
+
+Independent audit found that the real `RedditWidgetFactory` created `RedditWidget` with no provider, so
+`RedditWidget.__init__` constructed the old default provider before the neutral owner injected — both
+duplicating provider construction and making a neutral service build/inject failure **fail open** to the
+QWidget-owned default. Corrected:
+
+- `RedditWidget.__init__` gained `build_default_provider` (default `True`, preserving standalone use);
+  the factory now passes `build_default_provider=False` so a runtime-managed widget builds **no** default
+  provider (`_post_provider is None` until injection). `_fetch_feed` guards a `None` provider (never
+  fetches on a default);
+- `WidgetRuntimeManager.ensure_widget_service` now **fails closed** on build *or* injection failure
+  (retires any partially-owned service, returns `None`); `_inject_reddit_service` raises if the widget
+  cannot accept the provider; new `has_runtime_service(widget_id)` lets the creation path distinguish
+  "no spec" from "required-service failure";
+- `_create_factory_widgets` now, for a widget that requires a runtime service, retires the widget via
+  `_fail_closed_runtime_service_widget` (unregister / unbind / drop expected-overlay / cleanup / delete)
+  when the service is `None` — the widget is never registered/started on a default;
+- removed the remaining stale "shared-consumer accounting" wording and the "generic future live
+  family-retirement" framing in `widget_runtime_manager.py` / its tests (live in-place family retirement
+  is not an E1 deliverable; the capability-change hook is the E2.7 transitional bridge only).
+
+New production-seam regressions: `tests/test_reddit_widget.py` (factory-created widget builds no default
+provider and defers ownership; standalone still builds its default; deferred widget fails closed on
+fetch); `tests/test_widget_manager_refresh.py` (a failed provider build fails closed — no widget created,
+none owned). Local sweep: `440 passed, 4 skipped`.
 
 #### Landed this checkpoint
 
