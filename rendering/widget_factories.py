@@ -548,7 +548,6 @@ class RedditWidgetFactory(WidgetFactory):
         shadows_config: Optional[Dict[str, Any]] = None,
     ) -> Optional[QWidget]:
         """Create and configure a RedditWidget with full settings inheritance."""
-        from core.reddit_post_provider import build_reddit_post_provider
         from widgets.reddit_widget import RedditWidget, RedditPosition
         from core.settings.models import RedditWidgetSettings, WidgetPosition, coerce_widget_position
         
@@ -587,10 +586,13 @@ class RedditWidgetFactory(WidgetFactory):
             position = position_map.get(widget_pos, RedditPosition.TOP_RIGHT)
             
             widget = RedditWidget(parent=parent, position=position)
-            if hasattr(widget, "set_post_provider"):
-                provider_id = inherit_style('provider', model.provider)
-                widget.set_post_provider(build_reddit_post_provider(provider_id))
-            
+            # E1 slice 2: the RedditPostProvider lifetime is now owned by the
+            # presentation-neutral WidgetRuntimeManager, which builds it from
+            # canonical settings (honoring reddit2 family inheritance) and injects
+            # it during widget setup. The factory no longer constructs/injects the
+            # provider; a bare RedditWidget still carries its own __init__ default
+            # provider for standalone use.
+
             # Set overlay name for fade sync coordination and cache key
             widget._overlay_name = settings_key
             widget._cache_key = settings_key  # Use settings_key (reddit/reddit2) for cache persistence

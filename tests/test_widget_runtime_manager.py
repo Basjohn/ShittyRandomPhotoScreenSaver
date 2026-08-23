@@ -197,3 +197,108 @@ def test_cleanup_releases_host_and_fails_closed():
     assert owner.initialize_widget("a") is False
     assert owner.initialize_all_widgets() == 0
     assert owner.get_all_lifecycle_states() == {}
+
+
+# --------------------------------------------------------------------------- #
+# Presentation-neutral runtime service (provider/model) ownership             #
+# --------------------------------------------------------------------------- #
+class _ProviderConsumer:
+    """Stub runtime widget that records an injected provider (no QWidget)."""
+
+    def __init__(self):
+        self.injected = None
+
+    def set_post_provider(self, provider):
+        self.injected = provider
+
+
+def test_ensure_widget_service_builds_owns_and_injects_reddit_provider():
+    # The provider owner exists independently of any QWidget pixel ownership:
+    # a plain consumer stub (not a QWidget) receives the built provider, and the
+    # owner holds it for independent retirement.
+    owner = WidgetRuntimeManager(_Host())
+    consumer = _ProviderConsumer()
+    service = owner.ensure_widget_service(
+        "reddit", consumer, {"reddit": {"provider": "public_json"}}
+    )
+    assert service is not None
+    assert getattr(service, "provider_id", None) == "public_json"
+    assert consumer.injected is service
+    assert owner.get_widget_service("reddit") is service
+
+
+def test_ensure_widget_service_none_for_unregistered_widget():
+    owner = WidgetRuntimeManager(_Host())
+    assert owner.ensure_widget_service("clock", _ProviderConsumer(), {}) is None
+    assert owner.get_widget_service("clock") is None
+
+
+def _install_counting_spec(monkeypatch):
+    """Register a spec with retire/build/inject counters for one widget id."""
+    from rendering import widget_runtime_services as wrs
+
+    calls = {"build": 0, "inject": 0, "retire": 0}
+
+    def _build(widget_id, widgets_config):
+        calls["build"] += 1
+        return f"service-{calls['build']}"
+
+    def _inject(widget, service):
+        calls["inject"] += 1
+        if widget is not None:
+            widget.injected = service
+
+    def _retire(service):
+        calls["retire"] += 1
+
+    spec = wrs.RuntimeServiceSpec(build=_build, inject=_inject, retire=_retire)
+    monkeypatch.setattr(
+        wrs, "get_runtime_service_spec", lambda wid: spec if wid == "svc" else None
+    )
+    return calls
+
+
+def test_ensure_widget_service_idempotent_retires_prior_before_reowning(monkeypatch):
+    calls = _install_counting_spec(monkeypatch)
+    owner = WidgetRuntimeManager(_Host())
+
+    first = owner.ensure_widget_service("svc", _ProviderConsumer(), {})
+    second = owner.ensure_widget_service("svc", _ProviderConsumer(), {})
+
+    # Re-owning retired the prior service exactly once and owns exactly one now.
+    assert first != second
+    assert calls["build"] == 2
+    assert calls["retire"] == 1
+    assert owner.get_widget_service("svc") == second
+
+
+def test_retire_and_cleanup_release_service_exactly_once(monkeypatch):
+    calls = _install_counting_spec(monkeypatch)
+    owner = WidgetRuntimeManager(_Host())
+    owner.ensure_widget_service("svc", _ProviderConsumer(), {})
+
+    assert owner.retire_widget_service("svc") is True
+    assert owner.retire_widget_service("svc") is False  # already gone, no double
+    assert calls["retire"] == 1
+    assert owner.get_widget_service("svc") is None
+
+    # cleanup() retires any remaining owned services exactly once.
+    owner.ensure_widget_service("svc", _ProviderConsumer(), {})
+    owner.cleanup()
+    assert calls["retire"] == 2
+    assert owner.get_widget_service("svc") is None
+
+
+def test_ensure_widget_service_build_failure_fails_closed(monkeypatch):
+    from rendering import widget_runtime_services as wrs
+
+    def _boom(widget_id, widgets_config):
+        raise RuntimeError("build failed")
+
+    spec = wrs.RuntimeServiceSpec(build=_boom, inject=lambda w, s: None)
+    monkeypatch.setattr(
+        wrs, "get_runtime_service_spec", lambda wid: spec if wid == "svc" else None
+    )
+    owner = WidgetRuntimeManager(_Host())
+    assert owner.ensure_widget_service("svc", _ProviderConsumer(), {}) is None
+    assert owner.get_widget_service("svc") is None
