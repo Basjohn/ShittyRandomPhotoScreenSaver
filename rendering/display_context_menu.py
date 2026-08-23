@@ -38,6 +38,41 @@ logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
 
 
+def _resolve_visualizer_capability_available(widget) -> bool:
+    """Return whether the Visualizer capability is currently admitted.
+
+    FAILS CLOSED (returns False) when capability state is *unresolvable*:
+
+    - no ``SettingsManager`` on the widget (missing/``None``);
+    - the widgets read raises;
+    - a malformed/non-mapping widgets root (``None``, list, str, ...).
+
+    This is the distinction the E2 blocker requires: callers previously coerced
+    an unresolvable state to ``{}``, which — because a *valid* mapping with absent
+    activation keys deliberately means active for backwards compatibility — read
+    as permission rather than fail-closed. Here only a genuine ``dict`` is handed
+    to ``is_widget_family_effective`` (still the sole dependency authority), so a
+    valid mapping with absent activation keys keeps the canonical compatibility
+    semantics while an unresolvable state is denied.
+    """
+    settings_manager = getattr(widget, "settings_manager", None)
+    if settings_manager is None:
+        return False
+    try:
+        widgets_cfg = settings_manager.get("widgets", None)
+    except Exception:
+        logger.debug("[CONTEXT_MENU] Visualizer capability read failed closed", exc_info=True)
+        return False
+    if not isinstance(widgets_cfg, dict):
+        # Missing/None/malformed root is unresolvable, not a valid empty config.
+        return False
+    try:
+        return bool(is_widget_family_effective(widgets_cfg, "visualizers"))
+    except Exception:
+        logger.debug("[CONTEXT_MENU] Visualizer capability evaluation failed closed", exc_info=True)
+        return False
+
+
 def _get_current_visualizer_mode(widget) -> str:
     """Read the canonical current visualizer mode_id for the context menu."""
     try:
@@ -161,10 +196,10 @@ def show_context_menu(widget, global_pos) -> None:
         # Visualizer submenu availability follows the Visualizers capability and
         # its Media dependency (E2 §7), refreshed each time the menu is shown.
         try:
-            widgets_cfg = widget.settings_manager.get("widgets", {}) if widget.settings_manager else {}
-            if not isinstance(widgets_cfg, dict):
-                widgets_cfg = {}
-            vis_available = is_widget_family_effective(widgets_cfg, "visualizers")
+            # Unresolvable capability state (missing manager, failed read, or a
+            # malformed widgets root) fails closed; a valid mapping keeps the
+            # canonical compatibility semantics. See _resolve_visualizer_*.
+            vis_available = _resolve_visualizer_capability_available(widget)
             widget._context_menu.set_visualizer_available(vis_available)
         except Exception:
             # Fail closed: an unresolved capability state must never leave the
@@ -482,18 +517,10 @@ def on_context_visualizer_selected(widget, mode_id: str) -> None:
     """
     try:
         # Reject a stale/programmatic mode switch when the capability is not
-        # admitted (Visualizers or its Media dependency deactivated).
-        try:
-            widgets_cfg = widget.settings_manager.get("widgets", {}) if widget.settings_manager else {}
-            if not isinstance(widgets_cfg, dict):
-                widgets_cfg = {}
-            if not is_widget_family_effective(widgets_cfg, "visualizers"):
-                logger.info("Context menu: ignoring visualizer mode switch (capability inactive)")
-                return
-        except Exception:
-            # Fail closed: if current capability state cannot be resolved, do not
-            # proceed with a stale visualizer mode switch.
-            logger.debug("[CONTEXT_MENU] Visualizer capability check failed closed", exc_info=True)
+        # admitted (Visualizers or its Media dependency deactivated) OR when the
+        # capability state is unresolvable (fail closed, never stale permission).
+        if not _resolve_visualizer_capability_available(widget):
+            logger.info("Context menu: ignoring visualizer mode switch (capability inactive/unresolved)")
             return
         vis, source = _resolve_visualizer_for_context_mode_switch(widget)
         if vis is not None:
