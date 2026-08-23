@@ -1,0 +1,2022 @@
+{
+  "format": "srpss-theme",
+  "version": 1,
+  "name": "Default Dark",
+  "generated_utc": "2026-08-23T00:52:05.197700+00:00",
+  "source_head": "ad2b064954f99629c5cccefa6bbf0b0b161472f4",
+  "scope": [
+    "settings_gui",
+    "screensaver_context_menu"
+  ],
+  "tokens": {
+    "context.main.qmenu.background_color": {
+      "rgba": [
+        43,
+        43,
+        43,
+        255
+      ],
+      "label": "Context Menu Background",
+      "category": "Context Menu"
+    },
+    "context.main.qmenu.border": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Context Menu Border",
+      "category": "Context Menu"
+    },
+    "context.main.qmenu_item.background_color": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "Qmenu Item · Background",
+      "category": "Context Menu"
+    },
+    "context.main.qmenu_item.color": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Context Menu Text",
+      "category": "Context Menu"
+    },
+    "context.main.qmenu_item_disabled.color": {
+      "rgba": [
+        120,
+        120,
+        130,
+        150
+      ],
+      "label": "Context Disabled Text",
+      "category": "Context Menu"
+    },
+    "context.main.qmenu_item_selected.background_color": {
+      "rgba": [
+        62,
+        62,
+        62,
+        220
+      ],
+      "label": "Context Selected Background",
+      "category": "Context Menu"
+    },
+    "context.main.qmenu_separator.background_color": {
+      "rgba": [
+        90,
+        90,
+        90,
+        150
+      ],
+      "label": "Context Separator",
+      "category": "Context Menu"
+    },
+    "context.submenu.qmenu.background_color": {
+      "rgba": [
+        43,
+        43,
+        43,
+        255
+      ],
+      "label": "Context Submenu Background",
+      "category": "Context Menu"
+    },
+    "context.submenu.qmenu.border": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Context Submenu Border",
+      "category": "Context Menu"
+    },
+    "context.submenu.qmenu_item.background_color": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "Qmenu Item · Background",
+      "category": "Context Menu"
+    },
+    "context.submenu.qmenu_item.color": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Context Submenu Text",
+      "category": "Context Menu"
+    },
+    "context.submenu.qmenu_item_checked.background_color": {
+      "rgba": [
+        62,
+        62,
+        62,
+        220
+      ],
+      "label": "Context Checked Background",
+      "category": "Context Menu"
+    },
+    "context.submenu.qmenu_item_checked.color": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Qmenu Item:Checked · Color",
+      "category": "Context Menu"
+    },
+    "context.submenu.qmenu_item_selected.background_color": {
+      "rgba": [
+        62,
+        62,
+        62,
+        220
+      ],
+      "label": "Context Submenu Selected",
+      "category": "Context Menu"
+    },
+    "settings.about.build_about_tab.string_background_color_01": {
+      "rgba": [
+        31,
+        31,
+        31,
+        200
+      ],
+      "label": "build_about_tab · Background 1",
+      "category": "About"
+    },
+    "settings.about.build_about_tab.string_background_color_06": {
+      "rgba": [
+        40,
+        40,
+        45,
+        200
+      ],
+      "label": "build_about_tab · Background 6",
+      "category": "About"
+    },
+    "settings.about.build_about_tab.string_background_color_08": {
+      "rgba": [
+        60,
+        60,
+        70,
+        220
+      ],
+      "label": "build_about_tab · Background 8",
+      "category": "About"
+    },
+    "settings.about.build_about_tab.string_background_color_10": {
+      "rgba": [
+        16,
+        16,
+        16,
+        230
+      ],
+      "label": "build_about_tab · Background 10",
+      "category": "About"
+    },
+    "settings.about.build_about_tab.string_border_02": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "build_about_tab · Border 2",
+      "category": "About"
+    },
+    "settings.about.build_about_tab.string_border_05": {
+      "rgba": [
+        80,
+        80,
+        90,
+        150
+      ],
+      "label": "build_about_tab · Border 5",
+      "category": "About"
+    },
+    "settings.about.build_about_tab.string_color_03": {
+      "rgba": [
+        221,
+        221,
+        221,
+        255
+      ],
+      "label": "build_about_tab · Color 3",
+      "category": "About"
+    },
+    "settings.about.build_about_tab.string_color_04": {
+      "rgba": [
+        204,
+        204,
+        204,
+        255
+      ],
+      "label": "build_about_tab · Color 4",
+      "category": "About"
+    },
+    "settings.about.build_about_tab.string_color_07": {
+      "rgba": [
+        200,
+        200,
+        210,
+        220
+      ],
+      "label": "build_about_tab · Color 7",
+      "category": "About"
+    },
+    "settings.about.build_about_tab.string_color_09": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "build_about_tab · Color 9",
+      "category": "About"
+    },
+    "settings.about.build_about_tab_make_link_button.string_background_color_01": {
+      "rgba": [
+        47,
+        47,
+        47,
+        215
+      ],
+      "label": "build_about_tab / _make_link_button · Background 1",
+      "category": "About"
+    },
+    "settings.about.build_about_tab_make_link_button.string_background_color_04": {
+      "rgba": [
+        58,
+        58,
+        58,
+        220
+      ],
+      "label": "build_about_tab / _make_link_button · Background 4",
+      "category": "About"
+    },
+    "settings.about.build_about_tab_make_link_button.string_background_color_05": {
+      "rgba": [
+        38,
+        38,
+        38,
+        220
+      ],
+      "label": "build_about_tab / _make_link_button · Background 5",
+      "category": "About"
+    },
+    "settings.about.build_about_tab_make_link_button.string_border_03": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "build_about_tab / _make_link_button · Border 3",
+      "category": "About"
+    },
+    "settings.about.build_about_tab_make_link_button.string_border_06": {
+      "rgba": [
+        200,
+        200,
+        200,
+        200
+      ],
+      "label": "build_about_tab / _make_link_button · Border 6",
+      "category": "About"
+    },
+    "settings.about.build_about_tab_make_link_button.string_color_02": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "build_about_tab / _make_link_button · Color 2",
+      "category": "About"
+    },
+    "settings.chrome.cornersizegrip_paintevent.qcolor_01": {
+      "rgba": [
+        255,
+        255,
+        255,
+        200
+      ],
+      "label": "CornerSizeGrip / paintEvent · QColor 1",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.customtitlebar_setup_ui.qcolor_01": {
+      "rgba": [
+        0,
+        0,
+        0,
+        140
+      ],
+      "label": "CustomTitleBar / _setup_ui · QColor 1",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.module.qcolor_01": {
+      "rgba": [
+        12,
+        12,
+        12,
+        255
+      ],
+      "label": "Module · QColor 1",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.module.qcolor_02": {
+      "rgba": [
+        12,
+        12,
+        12,
+        255
+      ],
+      "label": "Module · QColor 2",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.nosourcespopup_init.qcolor_01": {
+      "rgba": [
+        0,
+        0,
+        0,
+        200
+      ],
+      "label": "NoSourcesPopup / __init__ · QColor 1",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.nosourcespopup_init.string_background_color_02": {
+      "rgba": [
+        76,
+        175,
+        80,
+        255
+      ],
+      "label": "NoSourcesPopup / __init__ · Background 2",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.nosourcespopup_init.string_background_color_03": {
+      "rgba": [
+        69,
+        160,
+        73,
+        255
+      ],
+      "label": "NoSourcesPopup / __init__ · Background 3",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.nosourcespopup_init.string_background_color_04": {
+      "rgba": [
+        61,
+        139,
+        64,
+        255
+      ],
+      "label": "NoSourcesPopup / __init__ · Background 4",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.nosourcespopup_init.string_background_color_05": {
+      "rgba": [
+        102,
+        102,
+        102,
+        255
+      ],
+      "label": "NoSourcesPopup / __init__ · Background 5",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.nosourcespopup_init.string_background_color_06": {
+      "rgba": [
+        85,
+        85,
+        85,
+        255
+      ],
+      "label": "NoSourcesPopup / __init__ · Background 6",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.nosourcespopup_init.string_background_color_07": {
+      "rgba": [
+        68,
+        68,
+        68,
+        255
+      ],
+      "label": "NoSourcesPopup / __init__ · Background 7",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.nosourcespopup_init.string_background_color_08": {
+      "rgba": [
+        20,
+        20,
+        20,
+        245
+      ],
+      "label": "NoSourcesPopup / __init__ · Background 8",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.nosourcespopup_init.string_border_09": {
+      "rgba": [
+        255,
+        255,
+        255,
+        30
+      ],
+      "label": "NoSourcesPopup / __init__ · Border 9",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.nosourcespopup_init.string_color_01": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "NoSourcesPopup / __init__ · Color 1",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.resetdefaultsdialog_init.qcolor_01": {
+      "rgba": [
+        0,
+        0,
+        0,
+        180
+      ],
+      "label": "ResetDefaultsDialog / __init__ · QColor 1",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.resetdefaultsdialog_init.string_background_color_01": {
+      "rgba": [
+        16,
+        16,
+        16,
+        230
+      ],
+      "label": "ResetDefaultsDialog / __init__ · Background 1",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.settingsdialog_init.qcolor_01": {
+      "rgba": [
+        0,
+        0,
+        0,
+        180
+      ],
+      "label": "SettingsDialog / __init__ · QColor 1",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.settingsdialog_more_options_menu_stylesheet.string_background_color_01": {
+      "rgba": [
+        25,
+        25,
+        30,
+        240
+      ],
+      "label": "SettingsDialog / _more_options_menu_stylesheet · Background 1",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.settingsdialog_more_options_menu_stylesheet.string_background_color_03": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "SettingsDialog / _more_options_menu_stylesheet · Background 3",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.settingsdialog_more_options_menu_stylesheet.string_background_color_05": {
+      "rgba": [
+        60,
+        60,
+        75,
+        200
+      ],
+      "label": "SettingsDialog / _more_options_menu_stylesheet · Background 5",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.settingsdialog_more_options_menu_stylesheet.string_background_color_06": {
+      "rgba": [
+        80,
+        80,
+        90,
+        120
+      ],
+      "label": "SettingsDialog / _more_options_menu_stylesheet · Background 6",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.settingsdialog_more_options_menu_stylesheet.string_border_02": {
+      "rgba": [
+        80,
+        80,
+        90,
+        180
+      ],
+      "label": "SettingsDialog / _more_options_menu_stylesheet · Border 2",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.settingsdialog_more_options_menu_stylesheet.string_color_04": {
+      "rgba": [
+        220,
+        220,
+        225,
+        230
+      ],
+      "label": "SettingsDialog / _more_options_menu_stylesheet · Color 4",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.settingsdialog_paintevent.qcolor_01": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "SettingsDialog / paintEvent · QColor 1",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.settingsdialog_setup_ui.qcolor_01": {
+      "rgba": [
+        0,
+        0,
+        0,
+        120
+      ],
+      "label": "SettingsDialog / _setup_ui · QColor 1",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.settingsdialog_setup_window.qcolor_01": {
+      "rgba": [
+        0,
+        0,
+        0,
+        180
+      ],
+      "label": "SettingsDialog / _setup_window · QColor 1",
+      "category": "Settings Chrome"
+    },
+    "settings.chrome.settingsdialog_style_tab_widget.qcolor_01": {
+      "rgba": [
+        0,
+        0,
+        0,
+        120
+      ],
+      "label": "SettingsDialog / _style_tab_widget · QColor 1",
+      "category": "Settings Chrome"
+    },
+    "settings.controls.accessibility_desc_style.color_01": {
+      "rgba": [
+        170,
+        170,
+        170,
+        255
+      ],
+      "label": "Accessibility Desc Style · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.accessibility_section_desc_style.color_01": {
+      "rgba": [
+        136,
+        136,
+        136,
+        255
+      ],
+      "label": "Accessibility Section Desc Style · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.accessibility_title_style.color_01": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Accessibility Title Style · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.adv_helper_label_style.color_01": {
+      "rgba": [
+        220,
+        220,
+        220,
+        153
+      ],
+      "label": "Adv Helper Label Style · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.circle_checkbox_style.background_01": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "Circle Checkbox Style · Background 1",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_popup_view_style.background_06": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "Combobox Popup View Style · Background 6",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_popup_view_style.background_color_01": {
+      "rgba": [
+        18,
+        18,
+        18,
+        242
+      ],
+      "label": "Combobox Popup View Style · Background 1",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_popup_view_style.border_02": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Combobox Popup View Style · Border 2",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_popup_view_style.color_05": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Combobox Popup View Style · Color 5",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_popup_view_style.selection_background_color_03": {
+      "rgba": [
+        255,
+        255,
+        255,
+        56
+      ],
+      "label": "Combobox Popup View Style · Selection-Background 3",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_popup_view_style.selection_color_04": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Combobox Popup View Style · Selection-Color 4",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_style.background_10": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "Combobox Style · Background 10",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_style.background_color_03": {
+      "rgba": [
+        31,
+        31,
+        31,
+        255
+      ],
+      "label": "Combobox Style · Background 3",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_style.background_color_04": {
+      "rgba": [
+        22,
+        22,
+        22,
+        255
+      ],
+      "label": "Combobox Style · Background 4",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_style.background_color_05": {
+      "rgba": [
+        20,
+        20,
+        20,
+        255
+      ],
+      "label": "Combobox Style · Background 5",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_style.background_color_09": {
+      "rgba": [
+        31,
+        31,
+        31,
+        255
+      ],
+      "label": "Combobox Style · Background 9",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_style.border_02": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Combobox Style · Border 2",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_style.border_color_06": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Combobox Style · Border-Color 6",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_style.border_color_08": {
+      "rgba": [
+        106,
+        106,
+        106,
+        255
+      ],
+      "label": "Combobox Style · Border-Color 8",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_style.color_01": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Combobox Style · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.combobox_style.color_07": {
+      "rgba": [
+        255,
+        255,
+        255,
+        115
+      ],
+      "label": "Combobox Style · Color 7",
+      "category": "Controls"
+    },
+    "settings.controls.form_label_style.color_01": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Form Label Style · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.form_label_style_disabled.color_01": {
+      "rgba": [
+        102,
+        102,
+        102,
+        255
+      ],
+      "label": "Form Label Style Disabled · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.form_row_label_style.color_01": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Form Row Label Style · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.form_row_label_style_disabled.color_01": {
+      "rgba": [
+        102,
+        102,
+        102,
+        255
+      ],
+      "label": "Form Row Label Style Disabled · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.info_label_style.color_01": {
+      "rgba": [
+        170,
+        170,
+        170,
+        255
+      ],
+      "label": "Info Label Style · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.info_label_style_disabled.color_01": {
+      "rgba": [
+        85,
+        85,
+        85,
+        255
+      ],
+      "label": "Info Label Style Disabled · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.page_title_style.color_01": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Page Title Style · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.recommendedmarkslider_init.qcolor_01": {
+      "rgba": [
+        210,
+        210,
+        210,
+        170
+      ],
+      "label": "RecommendedMarkSlider / __init__ · QColor 1",
+      "category": "Controls"
+    },
+    "settings.controls.rss_input_style.background_color_02": {
+      "rgba": [
+        40,
+        40,
+        40,
+        255
+      ],
+      "label": "Rss Input Style · Background 2",
+      "category": "Controls"
+    },
+    "settings.controls.rss_input_style.border_01": {
+      "rgba": [
+        70,
+        70,
+        70,
+        153
+      ],
+      "label": "Rss Input Style · Border 1",
+      "category": "Controls"
+    },
+    "settings.controls.rss_input_style.border_color_04": {
+      "rgba": [
+        200,
+        200,
+        200,
+        217
+      ],
+      "label": "Rss Input Style · Border-Color 4",
+      "category": "Controls"
+    },
+    "settings.controls.rss_input_style.box_shadow_03": {
+      "rgba": [
+        0,
+        0,
+        0,
+        115
+      ],
+      "label": "Rss Input Style · Box-Shadow 3",
+      "category": "Controls"
+    },
+    "settings.controls.scroll_area_style.background_01": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "Scroll Area Style · Background 1",
+      "category": "Controls"
+    },
+    "settings.controls.scroll_area_style.background_02": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "Scroll Area Style · Background 2",
+      "category": "Controls"
+    },
+    "settings.controls.section_heading_style.color_01": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Section Heading Style · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.section_heading_style_disabled.color_01": {
+      "rgba": [
+        102,
+        102,
+        102,
+        255
+      ],
+      "label": "Section Heading Style Disabled · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.background_25": {
+      "rgba": [
+        90,
+        90,
+        90,
+        255
+      ],
+      "label": "Slider Style · Background 25",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.background_26": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "Slider Style · Background 26",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.border_05": {
+      "rgba": [
+        12,
+        12,
+        12,
+        230
+      ],
+      "label": "Slider Style · Border 5",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.border_11": {
+      "rgba": [
+        35,
+        35,
+        35,
+        217
+      ],
+      "label": "Slider Style · Border 11",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.border_17": {
+      "rgba": [
+        103,
+        103,
+        103,
+        255
+      ],
+      "label": "Slider Style · Border 17",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.border_21": {
+      "rgba": [
+        153,
+        153,
+        153,
+        255
+      ],
+      "label": "Slider Style · Border 21",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.border_24": {
+      "rgba": [
+        42,
+        42,
+        42,
+        255
+      ],
+      "label": "Slider Style · Border 24",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.border_27": {
+      "rgba": [
+        17,
+        17,
+        17,
+        255
+      ],
+      "label": "Slider Style · Border 27",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.border_bottom_color_07": {
+      "rgba": [
+        70,
+        70,
+        70,
+        64
+      ],
+      "label": "Slider Style · Border-Bottom-Color 7",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.border_bottom_color_13": {
+      "rgba": [
+        80,
+        80,
+        80,
+        64
+      ],
+      "label": "Slider Style · Border-Bottom-Color 13",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.border_top_color_06": {
+      "rgba": [
+        0,
+        0,
+        0,
+        178
+      ],
+      "label": "Slider Style · Border-Top-Color 6",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.border_top_color_12": {
+      "rgba": [
+        25,
+        25,
+        25,
+        178
+      ],
+      "label": "Slider Style · Border-Top-Color 12",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_01": {
+      "rgba": [
+        8,
+        8,
+        8,
+        242
+      ],
+      "label": "Slider Style · Stop 1",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_02": {
+      "rgba": [
+        20,
+        20,
+        20,
+        230
+      ],
+      "label": "Slider Style · Stop 2",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_03": {
+      "rgba": [
+        30,
+        30,
+        30,
+        217
+      ],
+      "label": "Slider Style · Stop 3",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_04": {
+      "rgba": [
+        45,
+        45,
+        45,
+        178
+      ],
+      "label": "Slider Style · Stop 4",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_08": {
+      "rgba": [
+        50,
+        50,
+        50,
+        230
+      ],
+      "label": "Slider Style · Stop 8",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_09": {
+      "rgba": [
+        65,
+        65,
+        65,
+        217
+      ],
+      "label": "Slider Style · Stop 9",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_10": {
+      "rgba": [
+        50,
+        50,
+        50,
+        191
+      ],
+      "label": "Slider Style · Stop 10",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_14": {
+      "rgba": [
+        46,
+        46,
+        46,
+        255
+      ],
+      "label": "Slider Style · Stop 14",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_15": {
+      "rgba": [
+        26,
+        26,
+        26,
+        255
+      ],
+      "label": "Slider Style · Stop 15",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_16": {
+      "rgba": [
+        17,
+        17,
+        17,
+        255
+      ],
+      "label": "Slider Style · Stop 16",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_18": {
+      "rgba": [
+        58,
+        58,
+        58,
+        255
+      ],
+      "label": "Slider Style · Stop 18",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_19": {
+      "rgba": [
+        36,
+        36,
+        36,
+        255
+      ],
+      "label": "Slider Style · Stop 19",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_20": {
+      "rgba": [
+        24,
+        24,
+        24,
+        255
+      ],
+      "label": "Slider Style · Stop 20",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_22": {
+      "rgba": [
+        34,
+        34,
+        34,
+        255
+      ],
+      "label": "Slider Style · Stop 22",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_23": {
+      "rgba": [
+        20,
+        20,
+        20,
+        255
+      ],
+      "label": "Slider Style · Stop 23",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_28": {
+      "rgba": [
+        46,
+        46,
+        46,
+        255
+      ],
+      "label": "Slider Style · Stop 28",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_29": {
+      "rgba": [
+        26,
+        26,
+        26,
+        255
+      ],
+      "label": "Slider Style · Stop 29",
+      "category": "Controls"
+    },
+    "settings.controls.slider_style.stop_30": {
+      "rgba": [
+        17,
+        17,
+        17,
+        255
+      ],
+      "label": "Slider Style · Stop 30",
+      "category": "Controls"
+    },
+    "settings.controls.spinbox_style.background_color_02": {
+      "rgba": [
+        31,
+        31,
+        31,
+        255
+      ],
+      "label": "Spinbox Style · Background 2",
+      "category": "Controls"
+    },
+    "settings.controls.spinbox_style.background_color_04": {
+      "rgba": [
+        31,
+        31,
+        31,
+        255
+      ],
+      "label": "Spinbox Style · Background 4",
+      "category": "Controls"
+    },
+    "settings.controls.spinbox_style.background_color_09": {
+      "rgba": [
+        31,
+        31,
+        31,
+        255
+      ],
+      "label": "Spinbox Style · Background 9",
+      "category": "Controls"
+    },
+    "settings.controls.spinbox_style.background_color_10": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Spinbox Style · Background 10",
+      "category": "Controls"
+    },
+    "settings.controls.spinbox_style.background_color_11": {
+      "rgba": [
+        77,
+        77,
+        77,
+        255
+      ],
+      "label": "Spinbox Style · Background 11",
+      "category": "Controls"
+    },
+    "settings.controls.spinbox_style.background_color_12": {
+      "rgba": [
+        45,
+        45,
+        45,
+        255
+      ],
+      "label": "Spinbox Style · Background 12",
+      "category": "Controls"
+    },
+    "settings.controls.spinbox_style.background_color_13": {
+      "rgba": [
+        106,
+        106,
+        106,
+        255
+      ],
+      "label": "Spinbox Style · Background 13",
+      "category": "Controls"
+    },
+    "settings.controls.spinbox_style.border_03": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Spinbox Style · Border 3",
+      "category": "Controls"
+    },
+    "settings.controls.spinbox_style.border_color_05": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Spinbox Style · Border-Color 5",
+      "category": "Controls"
+    },
+    "settings.controls.spinbox_style.border_color_06": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Spinbox Style · Border-Color 6",
+      "category": "Controls"
+    },
+    "settings.controls.spinbox_style.border_color_08": {
+      "rgba": [
+        106,
+        106,
+        106,
+        255
+      ],
+      "label": "Spinbox Style · Border-Color 8",
+      "category": "Controls"
+    },
+    "settings.controls.spinbox_style.color_01": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Spinbox Style · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.spinbox_style.color_07": {
+      "rgba": [
+        255,
+        255,
+        255,
+        115
+      ],
+      "label": "Spinbox Style · Color 7",
+      "category": "Controls"
+    },
+    "settings.controls.subsection_divider_style.background_color_01": {
+      "rgba": [
+        60,
+        60,
+        60,
+        115
+      ],
+      "label": "Subsection Divider Style · Background 1",
+      "category": "Controls"
+    },
+    "settings.controls.subsection_divider_style.border_02": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Subsection Divider Style · Border 2",
+      "category": "Controls"
+    },
+    "settings.controls.swatch_label_style.color_01": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Swatch Label Style · Color 1",
+      "category": "Controls"
+    },
+    "settings.controls.tooltip_style.background_color_01": {
+      "rgba": [
+        30,
+        30,
+        30,
+        255
+      ],
+      "label": "Tooltip Style · Background 1",
+      "category": "Controls"
+    },
+    "settings.controls.tooltip_style.border_03": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Tooltip Style · Border 3",
+      "category": "Controls"
+    },
+    "settings.controls.tooltip_style.color_02": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Tooltip Style · Color 2",
+      "category": "Controls"
+    },
+    "settings.theme.contentarea.background_color": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "Main Content Background",
+      "category": "Content"
+    },
+    "settings.theme.contentarea.border": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Content Area · Border",
+      "category": "Content"
+    },
+    "settings.theme.contentarea_qwidget.background": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "Content Area > Qwidget · Background",
+      "category": "Content"
+    },
+    "settings.theme.customtitlebar.background_color": {
+      "rgba": [
+        12,
+        12,
+        12,
+        209
+      ],
+      "label": "Title Bar Background",
+      "category": "Window"
+    },
+    "settings.theme.dialogcontainer.background_color": {
+      "rgba": [
+        0,
+        0,
+        0,
+        10
+      ],
+      "label": "Outer Dialog Glass",
+      "category": "Window"
+    },
+    "settings.theme.qcheckbox.color": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Qcheck Box · Color",
+      "category": "Controls"
+    },
+    "settings.theme.qcheckbox_indicator.background_color": {
+      "rgba": [
+        45,
+        45,
+        45,
+        204
+      ],
+      "label": "Qcheck Box Indicator · Background",
+      "category": "Controls"
+    },
+    "settings.theme.qcheckbox_indicator.border_bottom": {
+      "rgba": [
+        0,
+        0,
+        0,
+        191
+      ],
+      "label": "Qcheck Box Indicator · Border-Bottom",
+      "category": "Controls"
+    },
+    "settings.theme.qcheckbox_indicator.border_left": {
+      "rgba": [
+        90,
+        90,
+        90,
+        191
+      ],
+      "label": "Qcheck Box Indicator · Border-Left",
+      "category": "Controls"
+    },
+    "settings.theme.qcheckbox_indicator.border_right": {
+      "rgba": [
+        0,
+        0,
+        0,
+        179
+      ],
+      "label": "Qcheck Box Indicator · Border-Right",
+      "category": "Controls"
+    },
+    "settings.theme.qcheckbox_indicator.border_top": {
+      "rgba": [
+        90,
+        90,
+        90,
+        191
+      ],
+      "label": "Qcheck Box Indicator · Border-Top",
+      "category": "Controls"
+    },
+    "settings.theme.qcheckbox_indicator_checked.background_color": {
+      "rgba": [
+        210,
+        210,
+        210,
+        217
+      ],
+      "label": "Qcheck Box Indicator:Checked · Background",
+      "category": "Controls"
+    },
+    "settings.theme.qcheckbox_indicator_checked.border_bottom": {
+      "rgba": [
+        60,
+        60,
+        60,
+        191
+      ],
+      "label": "Qcheck Box Indicator:Checked · Border-Bottom",
+      "category": "Controls"
+    },
+    "settings.theme.qcheckbox_indicator_checked.border_left": {
+      "rgba": [
+        200,
+        200,
+        200,
+        204
+      ],
+      "label": "Qcheck Box Indicator:Checked · Border-Left",
+      "category": "Controls"
+    },
+    "settings.theme.qcheckbox_indicator_checked.border_right": {
+      "rgba": [
+        60,
+        60,
+        60,
+        179
+      ],
+      "label": "Qcheck Box Indicator:Checked · Border-Right",
+      "category": "Controls"
+    },
+    "settings.theme.qcheckbox_indicator_checked.border_top": {
+      "rgba": [
+        200,
+        200,
+        200,
+        204
+      ],
+      "label": "Qcheck Box Indicator:Checked · Border-Top",
+      "category": "Controls"
+    },
+    "settings.theme.qdialog.background_color": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "Qdialog · Background",
+      "category": "Settings"
+    },
+    "settings.theme.qgroupbox.background_color": {
+      "rgba": [
+        60,
+        60,
+        60,
+        115
+      ],
+      "label": "Settings Group / Frame Background",
+      "category": "Panels"
+    },
+    "settings.theme.qgroupbox.border": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Qgroup Box · Border",
+      "category": "Panels"
+    },
+    "settings.theme.qgroupbox.color": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Qgroup Box · Color",
+      "category": "Panels"
+    },
+    "settings.theme.qgroupbox_title.color": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Qgroup Box Title · Color",
+      "category": "Window"
+    },
+    "settings.theme.qlabel.background_color": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "Qlabel · Background",
+      "category": "Controls"
+    },
+    "settings.theme.qlabel.color": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Qlabel · Color",
+      "category": "Controls"
+    },
+    "settings.theme.qlistwidget.background_color": {
+      "rgba": [
+        30,
+        30,
+        30,
+        215
+      ],
+      "label": "Qlist Widget · Background",
+      "category": "Controls"
+    },
+    "settings.theme.qlistwidget.border": {
+      "rgba": [
+        80,
+        80,
+        80,
+        153
+      ],
+      "label": "Qlist Widget · Border",
+      "category": "Controls"
+    },
+    "settings.theme.qlistwidget.color": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Qlist Widget · Color",
+      "category": "Controls"
+    },
+    "settings.theme.qlistwidget_item_hover.background_color": {
+      "rgba": [
+        55,
+        55,
+        55,
+        204
+      ],
+      "label": "Qlist Widget Item:Hover · Background",
+      "category": "Controls"
+    },
+    "settings.theme.qlistwidget_item_selected.background_color": {
+      "rgba": [
+        70,
+        70,
+        70,
+        204
+      ],
+      "label": "Qlist Widget Item:Selected · Background",
+      "category": "Controls"
+    },
+    "settings.theme.qlistwidget_item_selected.border_left": {
+      "rgba": [
+        255,
+        255,
+        255,
+        180
+      ],
+      "label": "Qlist Widget Item:Selected · Border-Left",
+      "category": "Controls"
+    },
+    "settings.theme.qpushbutton.background_color": {
+      "rgba": [
+        45,
+        45,
+        45,
+        215
+      ],
+      "label": "Qpush Button · Background",
+      "category": "Controls"
+    },
+    "settings.theme.qpushbutton.border": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Qpush Button · Border",
+      "category": "Controls"
+    },
+    "settings.theme.qpushbutton.color": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Qpush Button · Color",
+      "category": "Controls"
+    },
+    "settings.theme.qpushbutton_hover.background_color": {
+      "rgba": [
+        60,
+        60,
+        60,
+        220
+      ],
+      "label": "Qpush Button:Hover · Background",
+      "category": "Controls"
+    },
+    "settings.theme.qpushbutton_hover.border": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Qpush Button:Hover · Border",
+      "category": "Controls"
+    },
+    "settings.theme.qpushbutton_pressed.background_color": {
+      "rgba": [
+        35,
+        35,
+        35,
+        220
+      ],
+      "label": "Qpush Button:Pressed · Background",
+      "category": "Controls"
+    },
+    "settings.theme.qpushbutton_pressed.border": {
+      "rgba": [
+        200,
+        200,
+        200,
+        200
+      ],
+      "label": "Qpush Button:Pressed · Border",
+      "category": "Controls"
+    },
+    "settings.theme.sidebar.background_color": {
+      "rgba": [
+        60,
+        60,
+        60,
+        115
+      ],
+      "label": "Sidebar / Tab Block Background",
+      "category": "Navigation"
+    },
+    "settings.theme.sidebar.border": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Sidebar · Border",
+      "category": "Navigation"
+    },
+    "settings.theme.tabbutton.background_color": {
+      "rgba": [
+        43,
+        43,
+        43,
+        90
+      ],
+      "label": "Sidebar Tab Background",
+      "category": "Navigation"
+    },
+    "settings.theme.tabbutton.border": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Tab Button · Border",
+      "category": "Navigation"
+    },
+    "settings.theme.tabbutton.color": {
+      "rgba": [
+        204,
+        204,
+        204,
+        255
+      ],
+      "label": "Tab Button · Color",
+      "category": "Navigation"
+    },
+    "settings.theme.tabbutton_checked.background_color": {
+      "rgba": [
+        62,
+        62,
+        62,
+        140
+      ],
+      "label": "Sidebar Tab Selected",
+      "category": "Navigation"
+    },
+    "settings.theme.tabbutton_checked.border": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Tab Button:Checked · Border",
+      "category": "Navigation"
+    },
+    "settings.theme.tabbutton_checked.color": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Tab Button:Checked · Color",
+      "category": "Navigation"
+    },
+    "settings.theme.tabbutton_hover.background_color": {
+      "rgba": [
+        62,
+        62,
+        62,
+        120
+      ],
+      "label": "Sidebar Tab Hover",
+      "category": "Navigation"
+    },
+    "settings.theme.tabbutton_hover.border": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Tab Button:Hover · Border",
+      "category": "Navigation"
+    },
+    "settings.theme.tabbutton_hover.color": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Tab Button:Hover · Color",
+      "category": "Navigation"
+    },
+    "settings.theme.titlebarbutton.background_color": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "Title Bar Button · Background",
+      "category": "Window"
+    },
+    "settings.theme.titlebarbutton.color": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Title Bar Button · Color",
+      "category": "Window"
+    },
+    "settings.theme.titlebarbutton_hover.background_color": {
+      "rgba": [
+        62,
+        62,
+        62,
+        204
+      ],
+      "label": "Title Bar Button:Hover · Background",
+      "category": "Window"
+    },
+    "settings.theme.titlebarbutton_pressed.background_color": {
+      "rgba": [
+        50,
+        50,
+        50,
+        220
+      ],
+      "label": "Title Bar Button:Pressed · Background",
+      "category": "Window"
+    },
+    "settings.theme.titlebarclosebutton.background_color": {
+      "rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "label": "Title Bar Close Button · Background",
+      "category": "Window"
+    },
+    "settings.theme.titlebarclosebutton.color": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Title Bar Close Button · Color",
+      "category": "Window"
+    },
+    "settings.theme.titlebarclosebutton_hover.background_color": {
+      "rgba": [
+        232,
+        17,
+        35,
+        204
+      ],
+      "label": "Title Bar Close Button:Hover · Background",
+      "category": "Window"
+    },
+    "settings.theme.titlebarlabel.color": {
+      "rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "label": "Title Bar Label · Color",
+      "category": "Window"
+    },
+    "settings.window.acrylic_tint": {
+      "rgba": [
+        24,
+        24,
+        24,
+        80
+      ],
+      "label": "Windows Acrylic Tint",
+      "category": "Window"
+    }
+  },
+  "links": [
+    [
+      "context.main.qmenu.background_color",
+      "context.submenu.qmenu.background_color"
+    ],
+    [
+      "context.main.qmenu.border",
+      "context.submenu.qmenu.border"
+    ],
+    [
+      "context.main.qmenu_item_selected.background_color",
+      "context.submenu.qmenu_item_checked.background_color",
+      "context.submenu.qmenu_item_selected.background_color"
+    ],
+    [
+      "context.main.qmenu_item.color",
+      "context.submenu.qmenu_item.color"
+    ]
+  ]
+}
