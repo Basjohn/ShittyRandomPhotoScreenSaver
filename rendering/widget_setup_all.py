@@ -24,7 +24,10 @@ from rendering.widget_descriptors import (
     get_family_id_for_widget,
     is_custom_position_selected_for_widget,
 )
-from core.settings.capability_activation import is_widget_family_activated
+from core.settings.capability_activation import (
+    is_widget_family_activated,
+    is_widget_family_effective,
+)
 from rendering.spotify_display_participation import describe_visualizer_spawn_display
 from widgets.base_overlay_widget import BaseOverlayWidget
 
@@ -514,6 +517,11 @@ def _setup_spotify_visualizer(
     thread_manager: Optional["ThreadManager"],
     media_widget: Optional[QWidget],
 ) -> Optional[QWidget]:
+    # Application-level capability admission (E2): the visualizer requires BOTH
+    # the visualizers capability AND its Media dependency to be activated. A
+    # stale/reused Media object must not bypass this canonical gate.
+    if not is_widget_family_effective(widgets_config, "visualizers"):
+        return None
     vis_widget = _reuse_existing_secondary(mgr, created, "spotify_visualizer_widget", "spotify_visualizer")
     if vis_widget is None:
         vis_widget = mgr.create_spotify_visualizer_widget(
@@ -535,6 +543,9 @@ def _reconcile_remote_custom_visualizer(
     *,
     allow_runtime_presence_fallback: bool = False,
 ) -> None:
+    # Same canonical capability admission for the remote CUSTOM reconcile path.
+    if not is_widget_family_effective(widgets_config, "visualizers"):
+        return
     if media_widget is None:
         return
     if not is_custom_position_selected_for_widget("spotify_visualizer", widgets_config):

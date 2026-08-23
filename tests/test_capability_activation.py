@@ -18,6 +18,47 @@ from rendering.widget_descriptors import get_widget_family_descriptors
 # --- Defaults preserve current behaviour -----------------------------------
 
 
+def test_canonical_default_activates_visualizers():
+    widgets = get_default_settings()["widgets"]
+    assert ca.is_widget_family_activated(widgets, "visualizers") is True
+
+
+# --- Visualizers -> Media dependency ---------------------------------------
+
+
+def test_visualizers_and_media_both_on_is_valid():
+    cfg = {"family_activation": {"media": True, "visualizers": True}}
+    assert ca.normalize_widget_capability_state(cfg) is False
+    assert ca.is_widget_family_activated(cfg, "visualizers") is True
+
+
+def test_visualizers_off_media_on_is_valid():
+    cfg = {"family_activation": {"media": True, "visualizers": False}}
+    assert ca.normalize_widget_capability_state(cfg) is False
+
+
+def test_media_off_forces_visualizers_off():
+    cfg = {"family_activation": {"media": False, "visualizers": True}}
+    changed = ca.normalize_widget_capability_state(cfg)
+    assert changed is True
+    assert ca.is_widget_family_activated(cfg, "visualizers") is False
+    # Media is NOT implicitly reactivated.
+    assert ca.is_widget_family_activated(cfg, "media") is False
+
+
+def test_media_off_visualizers_off_is_valid():
+    cfg = {"family_activation": {"media": False, "visualizers": False}}
+    assert ca.normalize_widget_capability_state(cfg) is False
+
+
+def test_dependency_helpers():
+    on = {"family_activation": {"media": True, "visualizers": True}}
+    off = {"family_activation": {"media": False, "visualizers": True}}
+    assert ca.is_widget_family_dependency_satisfied(on, "visualizers") is True
+    assert ca.is_widget_family_dependency_satisfied(off, "visualizers") is False
+    assert ca.is_widget_family_effective(off, "visualizers") is False
+
+
 def test_canonical_defaults_activate_every_family():
     widgets = get_default_settings()["widgets"]
     for family in get_widget_family_descriptors():

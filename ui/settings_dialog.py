@@ -97,7 +97,7 @@ class CustomTitleBar(QWidget):
         title_shadow = QGraphicsDropShadowEffect(self)
         title_shadow.setBlurRadius(8)
         title_shadow.setOffset(0, 1)
-        title_shadow.setColor(QColor(0, 0, 0, 140))
+        title_shadow.setColor(QColor(100, 100, 100, 70))
         self.title_label.setGraphicsEffect(title_shadow)
         
         # Buttons

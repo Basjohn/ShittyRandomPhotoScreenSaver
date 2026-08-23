@@ -56,12 +56,19 @@ def test_reverse_lookup_round_trips():
             assert get_family_id_for_widget(wid) == family.family_id
 
 
-def test_visualizer_is_not_a_widget_family_capability():
-    # The visualizer's settings live in WidgetsTab but it is deliberately not a
-    # widget-family capability (docs 04/07). It must not appear in any family.
-    for family in get_widget_family_descriptors():
-        assert "spotify_visualizer" not in family.member_widget_ids
-    assert get_family_id_for_widget("spotify_visualizer") is None
+def test_visualizer_is_the_visualizers_capability_family():
+    # Visualizers now participates in application-level capability activation.
+    family = get_widget_family_descriptor("visualizers")
+    assert family is not None
+    assert family.member_widget_ids == ("spotify_visualizer",)
+    assert family.settings_section_id == "visualizers"
+    assert get_family_id_for_widget("spotify_visualizer") == "visualizers"
+
+
+def test_visualizers_requires_media_dependency_metadata():
+    family = get_widget_family_descriptor("visualizers")
+    assert family is not None
+    assert family.required_family_ids == ("media",)
 
 
 def test_unknown_ids_resolve_to_none():
