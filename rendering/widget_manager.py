@@ -60,6 +60,7 @@ from rendering.widget_stacking import (
     get_stack_lane,
 )
 from rendering.widget_factories import WidgetFactoryRegistry
+from rendering.widget_runtime_manager import WidgetRuntimeManager
 from widgets.base_overlay_widget import BaseOverlayWidget
 
 if TYPE_CHECKING:
@@ -159,7 +160,13 @@ class WidgetManager:
         
         # Widget references
         self._widgets: Dict[str, QWidget] = {}
-        
+
+        # Phase-E1 presentation-neutral runtime owner. Owns capability admission
+        # (dependency-aware) and lifecycle routing; this manager delegates to it
+        # and keeps thin wrappers for its public API. Constructed after the
+        # widget registry so the owner can route over it.
+        self._runtime_manager: Optional[WidgetRuntimeManager] = WidgetRuntimeManager(self)
+
         # Rate limiting for raise operations
         self._last_raise_time: float = 0.0
         self._pending_raise: bool = False
@@ -988,7 +995,8 @@ class WidgetManager:
         # here — not just block creation — so a pending grace/generation cannot
         # stay stuck and a later reactivation can arm a fresh grace.
         if setting_key == 'widgets' or setting_key.startswith('widgets.family_activation'):
-            self._retire_visualizer_failover_if_capability_off()
+            if self._runtime_manager is not None:
+                self._runtime_manager.handle_capability_change(self._settings_manager)
 
         if setting_key == 'widgets':
             widgets_payload: Optional[Mapping[str, Any]] = value if isinstance(value, Mapping) else None
@@ -1016,24 +1024,6 @@ class WidgetManager:
                 parent._apply_saved_custom_layouts()
             except Exception:
                 logger.debug("[WIDGET_MANAGER] Failed to reapply saved custom layouts", exc_info=True)
-
-    def _retire_visualizer_failover_if_capability_off(self) -> None:
-        """Retire the global Visualizer failover lifecycle on capability deactivation.
-
-        Delegates to the E2.7 canonical retirement so a pending grace / live
-        temporary fallback does not stay stuck when Media or Visualizers is turned
-        off. Lazy import avoids a module-load cycle with widget_setup_all.
-        """
-        try:
-            from rendering.widget_setup_all import (
-                retire_visualizer_failover_on_capability_change,
-            )
-            retire_visualizer_failover_on_capability_change(self._settings_manager)
-        except Exception:
-            logger.debug(
-                "[WIDGET_MANAGER] Visualizer failover deactivation retirement failed",
-                exc_info=True,
-            )
 
     def _settings_key_requires_custom_layout_reapply(self, setting_key: str) -> bool:
         """Return whether a settings change should replay committed CUSTOM layout.
@@ -2203,6 +2193,9 @@ class WidgetManager:
         self._compositor_ready_callback = None
         self._settings_changed_callback = None
         self._resource_manager = None
+        if self._runtime_manager is not None:
+            self._runtime_manager.cleanup()
+            self._runtime_manager = None
         self._parent = None
         logger.debug("[WIDGET_MANAGER] Cleanup complete")
 
@@ -2241,174 +2234,71 @@ class WidgetManager:
     # Lifecycle Integration (Dec 2025)
     # =========================================================================
 
+    # Runtime lifecycle routing is owned by WidgetRuntimeManager (Phase E1).
+    # These thin wrappers preserve the public API used by callers and tests, plus
+    # the E2.7 confirmed-retirement contract (``cleanup_widget`` returns an
+    # explicit bool). A missing owner (post-cleanup) fails closed.
     def initialize_widget(self, name: str) -> bool:
-        """Initialize a widget using the new lifecycle system.
-        
-        Args:
-            name: Name of the widget to initialize
-            
-        Returns:
-            True if widget was initialized successfully
-        """
-        widget = self._widgets.get(name)
-        if widget is None:
+        """Initialize a widget using the lifecycle system (delegated)."""
+        if self._runtime_manager is None:
             return False
-        
-        try:
-            if hasattr(widget, 'initialize') and callable(widget.initialize):
-                widget.initialize()
-                logger.debug("[LIFECYCLE] Widget %s initialized via WidgetManager", name)
-                return True
-        except Exception:
-            logger.debug("[LIFECYCLE] Failed to initialize %s", name, exc_info=True)
-        return False
+        return self._runtime_manager.initialize_widget(name)
 
     def activate_widget(self, name: str) -> bool:
-        """Activate a widget using the new lifecycle system.
-        
-        Args:
-            name: Name of the widget to activate
-            
-        Returns:
-            True if widget was activated successfully
-        """
-        widget = self._widgets.get(name)
-        if widget is None:
+        """Activate a widget using the lifecycle system (delegated)."""
+        if self._runtime_manager is None:
             return False
-        
-        try:
-            if hasattr(widget, 'activate') and callable(widget.activate):
-                widget.activate()
-                logger.debug("[LIFECYCLE] Widget %s activated via WidgetManager", name)
-                return True
-        except Exception:
-            logger.debug("[LIFECYCLE] Failed to activate %s", name, exc_info=True)
-        return False
+        return self._runtime_manager.activate_widget(name)
 
     def deactivate_widget(self, name: str) -> bool:
-        """Deactivate a widget using the new lifecycle system.
-        
-        Args:
-            name: Name of the widget to deactivate
-            
-        Returns:
-            True if widget was deactivated successfully
-        """
-        widget = self._widgets.get(name)
-        if widget is None:
+        """Deactivate a widget using the lifecycle system (delegated)."""
+        if self._runtime_manager is None:
             return False
-        
-        try:
-            if hasattr(widget, 'deactivate') and callable(widget.deactivate):
-                widget.deactivate()
-                logger.debug("[LIFECYCLE] Widget %s deactivated via WidgetManager", name)
-                return True
-        except Exception:
-            logger.debug("[LIFECYCLE] Failed to deactivate %s", name, exc_info=True)
-        return False
+        return self._runtime_manager.deactivate_widget(name)
 
     def cleanup_widget(self, name: str) -> bool:
-        """Cleanup a widget using the new lifecycle system.
-        
-        Args:
-            name: Name of the widget to cleanup
-            
-        Returns:
-            True if widget was cleaned up successfully
+        """Cleanup a widget using the lifecycle system (delegated).
+
+        Returns an explicit success bool; the E2.7 confirmed-retirement contract
+        relies on it.
         """
-        widget = self._widgets.get(name)
-        if widget is None:
+        if self._runtime_manager is None:
             return False
-        
-        try:
-            if hasattr(widget, 'cleanup') and callable(widget.cleanup):
-                widget.cleanup()
-                logger.debug("[LIFECYCLE] Widget %s cleaned up via WidgetManager", name)
-                return True
-        except Exception:
-            logger.debug("[LIFECYCLE] Failed to cleanup %s", name, exc_info=True)
-        return False
+        return self._runtime_manager.cleanup_widget(name)
 
     def initialize_all_widgets(self) -> int:
-        """Initialize all managed widgets using the new lifecycle system.
-        
-        Returns:
-            Number of widgets successfully initialized
-        """
-        count = 0
-        for name in list(self._widgets.keys()):
-            if self.initialize_widget(name):
-                count += 1
-        logger.debug("[LIFECYCLE] Initialized %d widgets", count)
-        return count
+        """Initialize all managed widgets (delegated)."""
+        if self._runtime_manager is None:
+            return 0
+        return self._runtime_manager.initialize_all_widgets()
 
     def activate_all_widgets(self) -> int:
-        """Activate all managed widgets using the new lifecycle system.
-        
-        NOTE: This method is DORMANT as of Jan 2026. The legacy start() system
-        is used instead (see setup_all_widgets). Lifecycle methods exist in all
-        widgets but are not called. This is intentional - the lifecycle system
-        is complete but kept dormant to reduce regression risk. Migration to
-        lifecycle activation is planned for v1.3 after stabilization.
-        
-        Returns:
-            Number of widgets successfully activated
+        """Activate all managed widgets (delegated).
+
+        DORMANT as of Jan 2026: the legacy start() system is used instead (see
+        setup_all_widgets).
         """
-        count = 0
-        for name in list(self._widgets.keys()):
-            if self.activate_widget(name):
-                count += 1
-        logger.debug("[LIFECYCLE] Activated %d widgets", count)
-        return count
+        if self._runtime_manager is None:
+            return 0
+        return self._runtime_manager.activate_all_widgets()
 
     def deactivate_all_widgets(self) -> int:
-        """Deactivate all managed widgets using the new lifecycle system.
-        
-        Returns:
-            Number of widgets successfully deactivated
-        """
-        count = 0
-        for name in list(self._widgets.keys()):
-            if self.deactivate_widget(name):
-                count += 1
-        logger.debug("[LIFECYCLE] Deactivated %d widgets", count)
-        return count
+        """Deactivate all managed widgets (delegated)."""
+        if self._runtime_manager is None:
+            return 0
+        return self._runtime_manager.deactivate_all_widgets()
 
     def get_widget_lifecycle_state(self, name: str) -> Optional[str]:
-        """Get the lifecycle state of a widget.
-        
-        Args:
-            name: Name of the widget
-            
-        Returns:
-            Lifecycle state name or None if widget not found or doesn't support lifecycle
-        """
-        widget = self._widgets.get(name)
-        if widget is None:
+        """Get the lifecycle state of a widget (delegated)."""
+        if self._runtime_manager is None:
             return None
-        
-        try:
-            if hasattr(widget, '_lifecycle_state'):
-                state = widget._lifecycle_state
-                if hasattr(state, 'name'):
-                    return state.name
-                return str(state)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-        return None
+        return self._runtime_manager.get_widget_lifecycle_state(name)
 
     def get_all_lifecycle_states(self) -> Dict[str, str]:
-        """Get lifecycle states of all managed widgets.
-        
-        Returns:
-            Dict mapping widget name to lifecycle state name
-        """
-        states = {}
-        for name in self._widgets.keys():
-            state = self.get_widget_lifecycle_state(name)
-            if state is not None:
-                states[name] = state
-        return states
+        """Get lifecycle states of all managed widgets (delegated)."""
+        if self._runtime_manager is None:
+            return {}
+        return self._runtime_manager.get_all_lifecycle_states()
 
     # =========================================================================
     # Widget Positioning (Dec 2025)

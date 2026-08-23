@@ -435,6 +435,7 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_widget_manager.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_manager_refresh.py` | **MIGRATION-CRITICAL — E1/F** | Current E2/E2.7 lifecycle/admission regression owner; six stale tests were corrected at 5b3cbaef. Update with E1/F ownership. |
 | `tests/test_widget_performance.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
+| `tests/test_widget_runtime_manager.py` | **MIGRATION-CRITICAL — E1** | E1 owner regression bar (`WidgetRuntimeManager` admission/deactivation-dispatch/lifecycle routing). Extend as each E1 slice migrates provider/model ownership. |
 | `tests/test_widget_positioner.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
 | `tests/test_widget_positioning_comprehensive.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
 | `tests/test_widget_setup.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
