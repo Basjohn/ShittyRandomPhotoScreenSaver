@@ -3,9 +3,9 @@
 ``WidgetRuntimeManager`` is the Phase-E destination owner named in
 ``Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`` (§6.1) and
 ``Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`` (§7). It owns
-application-level widget-family capability **admission** (dependency-aware — the
-single shared-consumer/dependency accounting authority) and presentation-neutral
-runtime **lifecycle routing**.
+application-level widget-family capability **admission** (dependency-aware —
+activation + required-family satisfaction, not shared-provider consumer counting)
+and presentation-neutral runtime **lifecycle routing**.
 
 It deliberately does **not** create or own QWidget/Quick instances or runtime
 pixels. The host (currently ``WidgetManager``) still owns the widget registry;
@@ -62,7 +62,7 @@ class WidgetRuntimeManager:
         self._services: Dict[str, Tuple[Any, "RuntimeServiceSpec"]] = {}
 
     # ------------------------------------------------------------------ #
-    # Capability admission authority (dependency-aware; shared-consumer)  #
+    # Capability admission authority (activation + dependency satisfaction) #
     # ------------------------------------------------------------------ #
     def family_for_widget(self, widget_id: str) -> Optional[str]:
         """Return the canonical family id owning a runtime widget id, if any.
@@ -115,6 +115,17 @@ class WidgetRuntimeManager:
     # ------------------------------------------------------------------ #
     # Presentation-neutral runtime service (provider/model) ownership     #
     # ------------------------------------------------------------------ #
+    def has_runtime_service(self, widget_id: str) -> bool:
+        """Return whether a widget id requires a neutral runtime service.
+
+        When True, the creation path must FAIL CLOSED if
+        :meth:`ensure_widget_service` returns None (build/injection failure):
+        the widget must not be left running on a QWidget-owned fallback.
+        """
+        from rendering.widget_runtime_services import get_runtime_service_spec
+
+        return get_runtime_service_spec(widget_id) is not None
+
     def ensure_widget_service(
         self,
         widget_id: str,
@@ -129,6 +140,12 @@ class WidgetRuntimeManager:
         service for the same id is retired first so a re-admission never
         double-owns. Family-specific knowledge lives in the neutral
         ``widget_runtime_services`` registry, not here.
+
+        Returns the service on success, or ``None`` when the widget id has no
+        spec OR when build/injection fails. A caller that required a service
+        (see :meth:`has_runtime_service`) must treat ``None`` as a hard failure
+        and fail closed — a failed build/injection never leaves an owned service
+        behind, so the widget cannot silently run on a QWidget-owned default.
         """
         from rendering.widget_runtime_services import get_runtime_service_spec
 
@@ -149,15 +166,18 @@ class WidgetRuntimeManager:
         if service is None:
             return None
         self._services[widget_id] = (service, spec)
-        if widget is not None:
-            try:
-                spec.inject(widget, service)
-            except Exception:
-                logger.debug(
-                    "[WIDGET_RUNTIME] Failed to inject runtime service for %s",
-                    widget_id,
-                    exc_info=True,
-                )
+        try:
+            spec.inject(widget, service)
+        except Exception:
+            # Injection failed: do NOT leave an owned-but-unusable service or a
+            # widget without its neutral service. Retire and fail closed.
+            logger.debug(
+                "[WIDGET_RUNTIME] Failed to inject runtime service for %s; failing closed",
+                widget_id,
+                exc_info=True,
+            )
+            self.retire_widget_service(widget_id)
+            return None
         return service
 
     def get_widget_service(self, widget_id: str) -> Any:
@@ -197,12 +217,14 @@ class WidgetRuntimeManager:
     def handle_capability_change(self, settings_manager: Any) -> None:
         """React to a capability-activation change at the owner boundary.
 
-        Currently dispatches the E2.7 canonical Visualizer failover retirement:
-        when Media or Visualizers becomes ineffective, a pending grace / live
-        temporary fallback must be retired so it cannot stay stuck. This is the
-        extensible seam through which future E1 slices register additional
-        family-exclusive runtime retirements. Lazy import avoids a module-load
-        cycle with ``widget_setup_all``.
+        This dispatches the E2.7 canonical Visualizer failover retirement: when
+        Media or Visualizers becomes ineffective, a pending grace / live temporary
+        fallback must be retired so it cannot stay stuck. It is a transitional
+        bridge to that specific closed E2.7 lifecycle only — NOT a generic
+        in-place family live-retirement mechanism (family activation is applied
+        through the Settings-owned runtime teardown/recreation path, per
+        ``Current_Plan.md``). Lazy import avoids a module-load cycle with
+        ``widget_setup_all``.
         """
         try:
             from rendering.widget_setup_all import (

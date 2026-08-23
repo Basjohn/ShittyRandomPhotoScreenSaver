@@ -285,10 +285,13 @@ class _StubWeatherWidget(_BaseStubWidget):
 
 
 class _StubRedditWidget(_BaseStubWidget):
-    def __init__(self, parent, position):
+    def __init__(self, parent, position, build_default_provider=True):
         super().__init__()
         self.parent = parent
         self.position = position
+        # Mirror the runtime-managed contract: when the owner will inject the
+        # provider, do not carry a default; otherwise keep a sentinel default.
+        self.post_provider = object() if build_default_provider else None
         self.thread_manager = None
         self.font_family = None
         self.font_size = None
@@ -351,6 +354,9 @@ class _StubRedditWidget(_BaseStubWidget):
 
     def set_subreddit(self, value):
         self.subreddit = value
+
+    def set_post_provider(self, provider):
+        self.post_provider = provider
 
 
 @pytest.fixture(autouse=True)
@@ -656,6 +662,23 @@ def test_disabled_reddit_instance_is_not_family_deactivation():
     assert "reddit2_widget" not in created
     assert manager._runtime_manager.get_widget_service("reddit") is not None
     assert manager._runtime_manager.get_widget_service("reddit2") is None
+
+
+def test_reddit_fails_closed_when_runtime_service_build_fails(monkeypatch):
+    # E1 slice 2 correction: if the required neutral provider cannot be built, the
+    # creation path must FAIL CLOSED — the widget is not created/registered/started
+    # and owns no service (no fail-open to a QWidget-owned default provider).
+    import core.reddit_post_provider as rpp
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("provider build failed")
+
+    monkeypatch.setattr(rpp, "build_reddit_post_provider", _boom)
+
+    manager, created = _setup_widgets(_reddit_config(provider="public_json"))
+    assert "reddit_widget" not in created
+    assert manager.get_widget("reddit") is None
+    assert manager._runtime_manager.get_widget_service("reddit") is None
 
 
 def test_reddit_widgets_support_inheritance_and_limit():
