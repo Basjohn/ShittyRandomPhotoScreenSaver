@@ -167,7 +167,13 @@ def show_context_menu(widget, global_pos) -> None:
             vis_available = is_widget_family_effective(widgets_cfg, "visualizers")
             widget._context_menu.set_visualizer_available(vis_available)
         except Exception:
+            # Fail closed: an unresolved capability state must never leave the
+            # Change Visualizer submenu available (stale permission).
             logger.debug("[CONTEXT_MENU] Failed to resolve visualizer availability", exc_info=True)
+            try:
+                widget._context_menu.set_visualizer_available(False)
+            except Exception:
+                logger.debug("[CONTEXT_MENU] Failed to force visualizer submenu closed", exc_info=True)
         widget._context_menu.update_transition_state(current_transition, random_enabled)
         widget._context_menu.update_dimming_state(dimming_enabled)
         widget._context_menu.update_interaction_mode_state(interaction_mode)
@@ -485,7 +491,10 @@ def on_context_visualizer_selected(widget, mode_id: str) -> None:
                 logger.info("Context menu: ignoring visualizer mode switch (capability inactive)")
                 return
         except Exception:
-            logger.debug("[CONTEXT_MENU] Visualizer capability check failed", exc_info=True)
+            # Fail closed: if current capability state cannot be resolved, do not
+            # proceed with a stale visualizer mode switch.
+            logger.debug("[CONTEXT_MENU] Visualizer capability check failed closed", exc_info=True)
+            return
         vis, source = _resolve_visualizer_for_context_mode_switch(widget)
         if vis is not None:
             vis.switch_to_mode(mode_id)

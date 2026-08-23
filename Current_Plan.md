@@ -1902,17 +1902,53 @@ Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase 
   `tests/test_transitions_tab_setup.py`, `tests/test_transition_activation_admission.py`,
   `tests/test_transition_distribution.py`, and `tests/test_context_menu_activation.py`.
 
-  **E2 remains at its audit gate — do NOT self-promote to complete.** The only remaining acceptance item
-  is operator `python main.py --s` eyes-on confirmation of the responsive layout (already reported
-  "much better") and the new Visualizers dependency UX across widths. Checkpoint/push/audit E2 before
-  Phase F.
+  **E2 third audit correction (independent audit of `4ac884f8` found three further contract gaps;
+  corrected — E2 still NOT self-promoted).** Landed on top of the above:
+  - **Final random admission revalidates the saved pool.** `TransitionFactory._is_admissible_random_choice`
+    now verifies ALL current admission dimensions of a pre-resolved `transitions.random_choice` —
+    activation, hardware, AND saved-pool membership — sharing one `_is_in_saved_pool` helper with
+    `_pick_random_transition`. A choice that was pooled when prepared but later removed from the pool is
+    rejected and re-resolved through the current bounded pool (or fails closed); it can no longer escape
+    the pool merely because it stays activated + hw-runnable.
+  - **Delayed remote CUSTOM visualizer rechecks capability.** The delayed fallback recheck
+    (`_run_remote_custom_visualizer_fallback_recheck`) and the single final creation boundary
+    (`_create_remote_custom_visualizer_on_target`) now re-read CURRENT canonical capability state via the
+    live `SettingsManager` (`_visualizer_capability_admitted_now`, fail-closed) rather than trusting the
+    config copied when the callback was scheduled. A Media/Visualizers deactivation during the delay is
+    honoured; a stale Media object cannot re-open the gate.
+  - **Persisted Media→Visualizers dependency repaired durably at load.** `SettingsManager.__init__` runs
+    `_normalize_persisted_widget_capability_state` after defaults merge, driving the one authority
+    (`normalize_widget_capability_state`) over the widgets root and persisting via the low-level store (no
+    `settings_changed` emission → no signal/save recursion). An invalid persisted/migrated state
+    (`media=False` with `visualizers` activated or its key missing) can no longer stay latent so a later
+    Media reactivation silently re-enables Visualizers.
+  - **Fail-closed capability checks:** the context-menu show path and `on_context_visualizer_selected`
+    now force the visualizer submenu unavailable / reject the mode switch when the capability state
+    cannot be resolved (an exception no longer becomes permission).
+  - **Doc reconciliation:** doc 04 now names `core/settings/widget_family_catalog.py` (not
+    `rendering/widget_descriptors.py`) as the membership authority; the catalog's
+    `get_family_id_for_widget` docstring records the visualizer's owning family.
+
+  Pinned additionally by `tests/test_remote_visualizer_capability_admission.py`,
+  `tests/test_widget_capability_persist_repair.py`, and the extended
+  `tests/test_transition_activation_admission.py` (stale out-of-pool random_choice cases).
+
+  **E2 remains at its independent-audit gate — do NOT self-promote to complete.** This third correction
+  (`4ac884f8` → the pushed checkpoint below) has not yet been independently audited, so operator eyes-on
+  is NOT yet the only remaining item. After this correction is audited green, the remaining acceptance
+  item is operator `python main.py --s` eyes-on confirmation of the responsive layout (already reported
+  "much better") and the Visualizers dependency UX across widths. Checkpoint/push/audit E2 before Phase F.
 - **E3** — shared retained Quick visual primitives.
 - **E4** — global eight-direction shadow authority (default `SE`).
 
 Pre-existing unrelated test failures observed during the E foundation sweep (NOT caused by E work; flag
 for separate triage): `test_visualizer_settings_plumbing.py::TestVisualizerModeBinding::test_load_visualizer_mode_selection_falls_back_when_saved_mode_is_unknown`
-(expects `bubble`, gets `devcurve`) and
-`test_sine_line4_builder_integration.py::test_actual_save_media_settings_includes_line4`.
+(expects `bubble`, gets `devcurve`);
+`test_sine_line4_builder_integration.py::test_actual_save_media_settings_includes_line4`; and
+`test_visualizer_doc_references.py::test_contracts_route_visualizer_shell_clip_and_geometry_owners`
+(asserts `QSGClipNode` absent from `Docs/Contracts.md`, but the visualizer clip contract legitimately
+names it — the test, not the doc, is stale). All three fail identically on baseline `4ac884f8` with none
+of the E2 third-correction changes applied.
 
 If the operator instead explicitly says **continue from Phase C tests**, execute Section 7.5 test-only
 hardening first.

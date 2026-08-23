@@ -50,11 +50,22 @@ class _VisualizerSwitchTarget:
         self.calls.append(mode_id)
 
 
+def _active_capability_settings():
+    # Visualizer capability admission (E2) requires a resolvable, active settings
+    # manager; these tests exercise target resolution, not the capability gate.
+    return SimpleNamespace(
+        get=lambda k, d=None: {"family_activation": {"media": True, "visualizers": True}}
+        if k == "widgets"
+        else d
+    )
+
+
 def test_context_visualizer_mode_switch_prefers_invoking_display_visualizer() -> None:
     local = _VisualizerSwitchTarget()
     remote = _VisualizerSwitchTarget()
     widget = SimpleNamespace(
         spotify_visualizer_widget=local,
+        settings_manager=_active_capability_settings(),
         get_all_instances=lambda: [
             SimpleNamespace(spotify_visualizer_widget=remote),
         ],
@@ -70,6 +81,7 @@ def test_context_visualizer_mode_switch_targets_sole_global_visualizer_when_loca
     remote = _VisualizerSwitchTarget()
     widget = SimpleNamespace(
         spotify_visualizer_widget=None,
+        settings_manager=_active_capability_settings(),
         get_all_instances=lambda: [
             SimpleNamespace(spotify_visualizer_widget=None),
             SimpleNamespace(spotify_visualizer_widget=remote),
