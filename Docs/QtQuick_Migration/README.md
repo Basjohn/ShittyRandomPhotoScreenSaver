@@ -1,17 +1,26 @@
 # Qt Quick Production Migration — Technical Decomposition Index
 
 Status: subordinate technical notes for `Current_Plan.md`  
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 These documents are **not independent plans**. Sequence and work admission come only from
 `Current_Plan.md`; deferred deletion/accounting comes from `Future_Cleanup.md`.
 
 Current normal implementation phase: **Phase E — widget presentation + capability setup foundation**.
 
-Phase C transition implementation is structurally complete and its deterministic hardening has landed.
-Its remaining acceptance debt is explicit and operator-scheduled. Phase D visualizer implementation and
-documentation closure are complete; its remaining physical cadence/eyes-on items are likewise explicit
-acceptance debt rather than unfinished migration implementation.
+Phase C transition implementation/deterministic hardening and Phase D visualizer implementation/
+documentation are structurally closed. Remaining physical/eyes-on evidence is explicit acceptance
+debt rather than unfinished implementation.
+
+Within Phase E:
+
+- activation/catalog foundation: landed;
+- **E2 `SETUP`/live lazy navigation: implementation CLOSED**;
+- **E2.7 Visualizer CUSTOM failover/reclaim: implementation CLOSED / audit GREEN**;
+- **E1 presentation-neutral runtime/model/provider ownership: ACTIVE next**;
+- E3 retained Quick primitives: waiting for E1;
+- E4 global eight-direction shadow authority: waiting for E3;
+- Phase F waits for Phase-E closure.
 
 ## Required routing before active migration work
 
@@ -60,34 +69,34 @@ replacement files in a handoff pack for local diff/commit/push.
 | B — runtime-host decomposition | structurally complete | landed owner/lifecycle reference |
 | C — base image + transitions | implementation complete | current transition authoring + regression/acceptance reference |
 | D — visualizer | complete | landed visualizer architecture + later G/H integration reference |
-| **E — widget presentation + capability setup** | **in progress** | **current normal implementation work** |
+| **E — widget presentation + capability setup** | **in progress: E1 ACTIVE** | **current normal implementation work** |
 | F — widget families | waiting for E | reference only |
 | G — CUSTOM/input/auxiliary pixels | waiting for F | reference only |
 | H — settings epoch + production cutover | waiting for A–G implementation | reference only |
 | I — legacy presenter deletion | waiting for H | reference only |
 | J — tooling/final validation/docs closure | waiting for implementation | reference only |
 
-Current Phase-E foundation already includes:
+## Current-legacy presentation warning
 
-- presentation-neutral widget-family catalog metadata;
-- canonical widget-family and transition capability-activation settings;
-- transition runtime admission that honors activation;
-- runtime widget creation gating by family activation.
+References to `DisplayWidget`, QRhiWidget, `GLCompositorWidget`, old QWidget runtime pixels,
+`CompositorVisualizerLayer` or `SpotifyBarsGLOverlay` presentation ownership may still describe real
+pre-cutover source. They are **CURRENT-LEGACY — WILL BE OBSOLETE** at their F/H/I caller-removal gates
+and must never be used as destination authority.
 
-The broader E1 `WidgetRuntimeManager` ownership split and the E2 operator-facing `SETUP`/lazy
-navigation UI remain separate work until exact current source/`Current_Plan.md` says otherwise.
+Presentation-neutral logic, authored behavior, providers/models/settings and useful math may survive
+when their owner is explicitly rehomed.
 
 ## Documents
 
 | File | Purpose / current status |
 |---|---|
-| `01_Runtime_Host_Lifecycle.md` | landed runtime-host owner/lifecycle decomposition and cutover requirements |
+| `01_Runtime_Host_Lifecycle.md` | landed runtime-host decomposition + H cutover requirements; old `DisplayWidget` seam is current-legacy |
 | `02_Scene_Renderer_Transitions.md` | landed Phase-C renderer architecture, current transition-authoring authority, permanent regression/acceptance rules |
-| `03_Visualizer.md` | landed Phase-D visualizer architecture/reference; not active Phase-D sequencing |
-| `04_Widget_Runtime_Presentation.md` | active Phase-E/F widget model/presentation split, retained Quick primitives, shadows and family migration |
+| `03_Visualizer.md` | landed Phase-D visualizer architecture/reference; old presentation-host names are migration source only |
+| `04_Widget_Runtime_Presentation.md` | **active E1**, then E3/E4 and Phase-F widget model/presentation split |
 | `05_Custom_Layout_Input_Interaction.md` | Phase-G CUSTOM Save/Cancel, edit overlays, cross-monitor transfer, interaction/context |
 | `06_Build_Tooling_Validation.md` | packaging, tools, tests, compiled/runtime/perf gates |
-| `07_Settings_Capability_Activation.md` | Phase-E activation authority + E2 `SETUP`, live lazy navigation and transition random/manual UX |
+| `07_Settings_Capability_Activation.md` | **landed E2/E2.7 capability/Settings contract** + E1 dormancy boundary |
 
 ## Off-rails rule
 

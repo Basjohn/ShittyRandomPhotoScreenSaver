@@ -1,6 +1,6 @@
 # Contracts
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 Fast task-to-owner routing during the Qt Quick presentation migration.
 
@@ -19,6 +19,24 @@ When current source and destination architecture differ:
 
 Do not turn temporary old ownership into a new permanent contract.
 
+### Current-legacy owners scheduled for retirement
+
+These owners may still have real callers today, but they are **CURRENT-LEGACY — WILL BE OBSOLETE** at
+the named migration gate:
+
+| Current-legacy owner | Retirement/rehome gate | Surviving contract |
+|---|---|---|
+| `DisplayWidget` / QRhiWidget physical presenter | H cutover -> I deletion | one runtime per display, topology/lifecycle semantics move to Quick runtime |
+| `GLCompositorWidget` presentation/scheduling | H/I | image/transition state and useful math move to Quick scene/render nodes |
+| software-only/backend-demotion presenter path | H/I | final Quick path fails closed; provider/network resilience remains feature-owned |
+| `CompositorVisualizerLayer` / `SpotifyBarsGLOverlay` presentation-host role | H/I | visualizer logical runtime, shaders, mode behavior and render-node contract survive |
+| QWidget runtime widget pixel classes / `BaseOverlayWidget` presentation role | F/H/I | Python provider/model/settings behavior survives as appropriate; pixels move to Quick |
+| QWidget painted shadow/effect runtime machinery | E3/E4/F/I | authored style semantics survive through retained Quick primitives/global direction |
+| pre-Quick visualizer growth/card-height controls | H0/I | explicitly retired; no destination replacement authority |
+
+`Future_Cleanup.md` owns deletion sequencing. `Docs/TestSuite.md` owns the corresponding test
+retirement/rehome ledger.
+
 ## Core runtime
 
 | Family | Durable owner/direction | Focused document |
@@ -29,8 +47,8 @@ Do not turn temporary old ownership into a new permanent contract.
 | Ordinary runtime scene pixels | retained Quick items/components | `Docs/Compositor_Architecture.md` |
 | Custom GL scene pixels | inline `QQuickItem -> QSGRenderNode -> OpenGL` | `Docs/Compositor_Architecture.md` |
 | Settings/config UI | existing QWidget/settings owners | `Spec.md` |
-| Capability activation | canonical settings + cheap presentation-neutral catalogs; Phase-E runtime admission foundation | `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md` |
-| Widget data/provider lifecycle | current owners, migrating toward `WidgetRuntimeManager` | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
+| Capability activation | canonical settings + cheap presentation-neutral catalogs; landed E2 authority | `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md` |
+| Widget data/provider lifecycle | current owners, **E1 active** toward `WidgetRuntimeManager` | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
 | Runtime widget pixels | destination: display retained Quick scene | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
 | General async work | `ThreadManager` | `Docs/Guardrails/Runtime_Efficiency.md` |
 | Resource accounting | `ResourceManager`; accounting only, never deletion owner | `Docs/Guardrails.md` |
@@ -40,7 +58,7 @@ presenter.
 
 ## Capability activation ownership
 
-Phase E introduces a coarse application-level authority separate from ordinary feature configuration:
+Phase E introduced a coarse application-level authority separate from ordinary feature configuration:
 
 ```text
 catalogued capability
@@ -75,11 +93,12 @@ subsystem. `capability_activation.normalize_widget_capability_state` is the one 
 dependency (`media=False` forces `visualizers=False`).
 
 A deactivated widget family is filtered before runtime widget/model/provider creation at the currently
-landed factory creation seam. The broader E1 manager/provider ownership split remains a separate Phase-E
-migration step until exact source says it has landed.
+landed factory creation seam. The broader E1 manager/provider ownership split is the **active Phase-E
+slice** until exact source says it has landed.
 
-Transition runtime selection/cycle/random admission filters by activation. E2 adds the operator-facing
-`SETUP` UI and live lazy navigation; it does not invent a second activation store.
+Transition runtime selection/cycle/random admission filters by activation. **E2 operator-facing
+`SETUP` UI, live lazy navigation, normalization and context-menu admission are implementation-closed.**
+They share the same canonical activation/settings authority; no second store exists.
 
 ## Transition ownership
 
@@ -119,6 +138,26 @@ See:
 - `Docs/Guardrails/Visualizer_Presentation.md`
 - `Docs/Visualizer_Reference.md`
 - `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
+
+### Visualizer capability / singleton contract
+
+`visualizers` is an application capability family, but that classification does not make the
+Visualizer an ordinary Phase-F widget runtime.
+
+At runtime there may be:
+
+```text
+0 Visualizers temporarily
+1 Visualizer normally
+```
+
+Never two.
+
+For CUSTOM monitor routing, the persisted configured target remains canonical. If unavailable, E2.7
+uses one global 30-second one-shot grace before a temporary runtime fallback; target return later is
+event-driven reclaim with retire-before-create and no persisted fallback geometry/monitor authority.
+Capability deactivation retires the global failover lifecycle. The deterministic implementation is
+closed; physical dual-display sleep/wake/late-return remains deferred acceptance under R-26.
 
 ### Visualizer shell contract
 
@@ -299,9 +338,9 @@ frameless mode must not wait for card resources it deliberately does not own.
 | Visualizer behavior/reference | `Docs/Visualizer_Reference.md` |
 | Bubble | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
 | Widgets | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
-| Capability activation / E2 | `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md` |
+| Capability activation / landed E2 | `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md` |
 | CUSTOM / viewport resize | `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md` |
-| Testing | `Docs/TestSuite.md` |
+| Testing / retirement ledger | `Docs/TestSuite.md` |
 | Harnesses | `Docs/Harness_Index.md` |
 
 Historical reports are evidence only, never current owner maps.

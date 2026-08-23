@@ -1,82 +1,153 @@
 # Future Cleanup
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 Deferred/deletion ledger. Active sequencing remains in `Current_Plan.md`.
 
-During the Qt Quick migration, sections 1–3 become **immediate post-cutover deletion work** when
-their caller-removal gate is reached. They are not permission to keep a second presenter
-architecture indefinitely.
+This file records **caller-proven retirement**, not permission to preserve compatibility architecture.
+Use `Docs/TestSuite.md` as the canonical test inventory/retirement ledger and
+`Docs/Documentation_Maintenance.md` for documentation retirement rules.
 
-Technical decomposition:
+## Retirement labels
 
-- `Docs/QtQuick_Migration/README.md`
+```text
+CURRENT-LEGACY — WILL BE OBSOLETE
+    live callers still exist, but destination work must not deepen the owner
 
-## 1. Post-Quick-cutover presentation deletion
+OBSOLETE NOW
+    no meaningful live contract remains; delete at a safe bounded checkpoint
 
-After the production owner switches to `QuickDisplayRuntime` and focused/full gates are green:
+LANDED / PRESERVE
+    survives the migration even if its original implementation/phase name is old
+```
 
+## 0. Immediate low-risk cleanup already identified
+
+These items do not define migration sequencing and must not interrupt a higher-priority active slice,
+but they are already classified by the TestSuite audit:
+
+- [ ] delete `tests/test_settings_sync.py` — **OBSOLETE NOW**, zero-test QSettings tombstone;
+- [ ] delete `tests/test_phase_e_effect_corruption.py` — **OBSOLETE NOW**, historical QWidget
+      `QGraphicsEffect` investigation scaffolding rather than meaningful current regression coverage;
+- [ ] update the three `UPDATE REQUIRED NOW` tests listed in `Docs/TestSuite.md` when their owning
+      implementation/test slice is next touched; do not weaken assertions merely to make them green.
+
+If these test files change, update `Docs/TestSuite.md` in the same checkpoint.
+
+## 1. Phase H/I — old production presenter deletion
+
+The following are **CURRENT-LEGACY — WILL BE OBSOLETE at production cutover / Phase I**.
+
+After production owner switches to `QuickDisplayRuntime`, replacement gates are green and callers are
+proved absent:
+
+- [ ] remove `DisplayWidget` as runtime physical presenter;
 - [ ] remove retired QRhiWidget physical presentation ownership;
 - [ ] remove `GLCompositorWidget` scheduling/presentation ownership;
 - [ ] remove `ExternalOpenGLRhiWidget` / old borrowed-QRhi-context surface helpers with no caller;
 - [ ] remove QRhiWidget-only lifecycle compatibility;
-- [ ] remove obsolete GUI `present_tick`/presentation callbacks after caller proof;
+- [ ] remove obsolete GUI `present_tick`/physical-presentation callbacks after caller proof;
 - [ ] remove old adaptive/compositor render scheduling that no live non-Quick owner needs;
 - [ ] remove compositor-only transition resource helpers after Quick renderer caller proof;
-- [ ] remove the legacy `GLErrorHandler` capability-demotion architecture (`FULL_SHADERS -> COMPOSITOR_ONLY -> SOFTWARE_ONLY`) once no live pre-cutover caller requires it; do not port that policy into Quick;
-- [ ] remove `rendering/backends/software` and any backend-selection/demotion plumbing proven to exist solely for software-only/compositor fallback support;
+- [ ] remove legacy `GLErrorHandler` capability-demotion architecture
+      (`FULL_SHADERS -> COMPOSITOR_ONLY -> SOFTWARE_ONLY`) once no live pre-cutover caller requires it;
+- [ ] remove `rendering/backends/software` and backend-selection/demotion plumbing existing solely for
+      software/compositor fallback support;
 - [ ] retain P0 comparison/raw evidence;
-- [ ] keep cheap architecture-neutral timing diagnostics.
+- [ ] retain cheap architecture-neutral timing diagnostics.
 
-Software-only rendering is not a supported SRPSS destination capability. These deletion items do not
-apply to intentional provider/cache/network resilience, which remains feature-owned where explicitly
-designed.
+Software-only rendering is not a supported SRPSS destination capability. Intentional provider/cache/
+network resilience remains feature-owned and is unrelated to presenter fallback deletion.
 
 Each deletion batch:
 
 ```text
 caller proof
+-> replacement-contract test proof
 -> focused tests
+-> update TestSuite retirement rows
 -> commit
 -> push
 ```
 
-## 2. Visualizer legacy deletion
+## 2. Visualizer legacy deletion — H0/I
 
-After visualizer pixels are fully Quick-owned:
+The logical/runtime contract is **LANDED / PRESERVE**. Old pixel/presenter machinery is
+**CURRENT-LEGACY — WILL BE OBSOLETE**.
+
+After visualizer pixels are fully Quick-owned and relevant old callers are gone:
 
 - [ ] remove `CompositorVisualizerLayer`;
 - [ ] remove old compositor card texture owner;
 - [ ] retire obsolete `SpotifyBarsGLOverlay` presentation/resource-host plumbing with no caller;
-- [ ] remove QWidget visualizer card/presentation code that no remaining settings/model test uses;
-- [ ] remove the retired visualizer per-mode card-height/growth settings, Settings controls/bindings, preset leaves, compatibility helpers (`card_height.py` / old growth-map paths), and tests whose only purpose is preserving that legacy geometry behavior;
+- [ ] remove QWidget visualizer card/presentation code not needed by remaining Settings/model logic;
 - [ ] remove QWidget/QRhi reveal/fade ownership replaced by Quick;
-- [ ] preserve logical runtime, BeatEngine/source, presets, BTF, mode algorithms/shaders.
+- [ ] remove pre-Quick per-mode card-height/growth Settings controls/bindings/preset leaves/
+      compatibility helpers (`card_height.py` / old growth-map paths) at the H0/I schema/caller gate;
+- [ ] delete/retarget tests whose only purpose is preserving that retired presentation geometry;
+- [ ] preserve `VisualizerLogicalRuntime`, BeatEngine/source, presets, BTF, mode algorithms/shaders,
+      snapshot bridge and destination Quick render contracts.
 
-## 3. Runtime widget legacy deletion
+Do not confuse a historical class name with the behavior it protected. Rehome surviving lifecycle/
+scheduling/fidelity assertions before deleting old presentation tests.
 
-After production Quick cutover and each family's caller proof:
+## 3. E3/E4/F/I — runtime widget presentation deletion
+
+Runtime QWidget pixel owners are **CURRENT-LEGACY — WILL BE OBSOLETE / REHOMED** as each family moves.
+
+After the corresponding Quick primitive/family/cutover caller proof:
 
 - [ ] delete old QWidget runtime-pixel class code no longer used by Settings/model tests;
-- [ ] delete old QWidget-only widget factory paths;
-- [ ] delete `BaseOverlayWidget` when no remaining runtime/settings owner requires it;
-- [ ] delete old painted-shadow cache code after Quick shadow parity and caller proof;
-- [ ] delete old effect invalidation code if no transient QWidget control UI still owns it;
+- [ ] delete old QWidget-only widget factory presentation paths;
+- [ ] delete `BaseOverlayWidget` after no remaining runtime/settings owner requires it;
+- [ ] delete painted runtime-shadow/static-frame cache code after Quick shadow parity and caller proof;
+- [ ] delete QWidget runtime `QGraphicsEffect` invalidation/fade/shadow code where no transient Settings
+      control UI still owns it;
 - [ ] delete old `EditShellWidget` / `EditGridOverlayWidget` when Quick CUSTOM replaces them;
-- [ ] retain Python providers/models/settings logic that remains canonical.
+- [ ] retain Python providers/models/settings/business logic that remains canonical.
 
 Do not retain screenshot-to-texture adapters or dual presentation registries "for safety."
 
-## 4. Transition legacy deletion
+## 4. Phase F0 — Imgur removal
 
-After all active transitions are Quick-rendered:
+Imgur is **CURRENT-LEGACY — WILL BE REMOVED**, not a Quick migration target.
+
+When Phase F reaches F0:
+
+- [ ] remove Imgur descriptor/family/catalog entry;
+- [ ] remove runtime/provider/settings/CUSTOM/build surface with no surviving caller;
+- [ ] delete Imgur tests rather than porting them;
+- [ ] remove/ignore obsolete persisted Imgur state through the canonical settings epoch/cleanup route;
+- [ ] do not repair or redesign Imgur merely to make it migrate.
+
+Any leftover caller-proven debris found later belongs here, but Imgur itself is active Phase-F removal
+work when admitted by `Current_Plan.md`, not a permanent deferred feature.
+
+## 5. Transition legacy deletion — Phase I
+
+All canonical transitions already have Quick renderers. The old presentation implementation may still
+have live pre-cutover callers and is therefore **CURRENT-LEGACY — WILL BE OBSOLETE at I**.
+
+After production cutover/caller proof:
 
 - [ ] remove `gl_compositor_*_transition.py` classes whose only target was `GLCompositorWidget`;
 - [ ] retain/move pure transition parameter/easing/direction math still used by Quick;
 - [ ] remove old compositor-specific transition watchdog/animation glue;
-- [ ] preserve canonical transition registry/settings identity.
+- [ ] preserve canonical transition registry/settings identity and Quick renderer regressions.
 
-## 5. Native code
+## 6. Phase G/I — CUSTOM/input/auxiliary pixel deletion
+
+After retained Quick edit/input ownership lands and callers are proven absent:
+
+- [ ] remove QWidget edit-shell/grid pixel ownership;
+- [ ] remove `DisplayWidget`-specific input assumptions superseded by `RuntimeInputController`;
+- [ ] remove old auxiliary top-level/transient runtime pixel owners replaced by the Quick scene;
+- [ ] preserve product-owned CUSTOM persistence/math/session semantics;
+- [ ] preserve QWidget Settings/control UI where it remains the selected non-runtime owner.
+
+Cross-monitor/CUSTOM retirement must not delete the saved geometry authority it was meant to preserve.
+
+## 7. Native code
 
 There is no deferred "rewrite presenter in C++" task.
 
@@ -87,7 +158,7 @@ If later profiling finds a specific Quick renderer Python bottleneck:
 - [ ] preserve the same QQuickWindow topology;
 - [ ] preserve state/lifecycle/fidelity contracts.
 
-## 6. Logical-runtime cleanup
+## 8. Logical-runtime cleanup
 
 After migration/correctness work:
 
@@ -96,42 +167,60 @@ After migration/correctness work:
 - [ ] audit monotonic-clock semantics;
 - [ ] remove stale one-update-per-publication assumptions.
 
-## 7. Test / harness debt
+Do **not** delete `VisualizerLogicalRuntime` or its permanent tests merely because some files retain old
+P2/Phase-D names.
 
-- [ ] retire tests protecting only removed QRhiWidget architecture;
-- [ ] remove/retarget `tests/test_gl_fallback_policy.py`, software-backend tests, and related legacy capability-demotion assertions when their old runtime callers are deleted; retain tests for the final Quick fail-closed/error contract instead;
-- [ ] retain one-clock, generation-zero, BTF, source-freshness, lifecycle gates;
+## 9. Test / harness debt
+
+`Docs/TestSuite.md` is authoritative for exact file status.
+
+General retirement rules:
+
+- [ ] retire tests protecting only removed QRhiWidget/GLCompositor/software-presentation architecture;
+- [ ] remove/retarget `tests/test_gl_fallback_policy.py`, software-backend tests and related legacy
+      capability-demotion assertions when their old runtime callers are deleted;
+- [ ] rehome surviving semantics before deleting old owner-specific tests;
+- [ ] retain one-clock, generation-zero, BTF, source-freshness, capability, lifecycle and Quick
+      presentation gates;
 - [ ] keep P0 evidence historical;
 - [ ] maintain production-shaped Quick renderer/widget/lifecycle regression coverage;
-- [ ] remove migration-only harnesses with no continuing guard value.
+- [ ] remove migration-only harnesses with no continuing guard value in Phase J.
 
-## 8. Long-run resources
+Do not preserve an empty tombstone test module as historical documentation.
+
+## 10. Long-run resources
 
 Repeat long-soak resource work on final Quick architecture.
 
-Keep memory/handle retention separate from physical-presentation decision unless evidence connects
+Keep memory/handle retention separate from the physical-presentation decision unless evidence connects
 them.
 
-## 9. Repository / compatibility debris
+## 11. Repository / compatibility debris
 
 - [ ] remove generated preview debris after clean-checkout proof;
 - [ ] collapse deprecated class-global input authority after Quick input owner lands;
-- [ ] remove only any caller-proven Imgur debris missed by the active Phase F removal; Imgur
-      itself is no longer deferred and must not be ported to Quick;
-- [ ] add lightweight repository-hygiene checks.
+- [ ] add lightweight repository-hygiene checks if they provide continuing value;
+- [ ] remove migration-only compatibility aliases after caller proof rather than carrying them as a
+      permanent translation layer.
 
-## 10. New feature / implementation backlog
+## 12. Documentation hygiene — through J
+
+At each owner/cutover change:
+
+- [ ] `Current_Plan.md` current-next-work section matches actual phase state;
+- [ ] `Index.md` / `Docs/Contracts.md` owner map matches landed source;
+- [ ] current-legacy owners are labelled **WILL BE OBSOLETE** until removed;
+- [ ] `Docs/TestSuite.md` matches test add/delete/rehome/retirement;
+- [ ] phase reports/Historical_Bugs remain evidence-scoped;
+- [ ] incident status headers are updated when audit/validation state changes;
+- [ ] evidence/archive navigation READMEs do not call an old phase current;
+- [ ] remove temporary migration decomposition docs only once their durable contracts are absorbed;
+- [ ] never create a second live roadmap hierarchy.
+
+## 13. New feature / implementation backlog
 
 New features and deliberately deferred new implementations belong in `Future_Work.md`, not this
 cleanup ledger.
 
-`Future_Work.md` must not interrupt active `Current_Plan.md` or important `Future_Cleanup.md` work
-unless the operator explicitly selects one of its items.
-
-## 11. Documentation hygiene
-
-- [ ] `Current_Plan.md` owns current sequence/work admission; clearly marked completed-phase closure/rationale may remain where it protects migration continuity;
-- [ ] current owner docs match landed Quick class/file names;
-- [ ] phase reports/Historical_Bugs remain evidence-scoped;
-- [ ] remove temporary migration decomposition docs once fully absorbed;
-- [ ] never create a second live roadmap hierarchy.
+`Future_Work.md` must not interrupt active `Current_Plan.md` or important admitted cleanup work unless
+the operator explicitly selects one of its items.

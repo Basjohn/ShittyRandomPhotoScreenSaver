@@ -1,13 +1,13 @@
 # 02 — Quick Scene Renderer, Images, Transitions and Pacing
 
 Status: **Phase-C landed architecture / current transition-authoring authority**  
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 Cross-links:
 
 - sequence/work admission: `Current_Plan.md`
 - transition authoring/checklist: `Docs/Transition_Change_Checklist.md`
-- capability activation/E2: `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
+- capability activation / landed E2: `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
 - runtime/lifecycle: `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md`
 - validation routing: `Docs/Harness_Index.md`
 - deferred deletion: `Future_Cleanup.md`
@@ -131,9 +131,9 @@ advances to the current monotonic sample; it is not replayed.
 Explicit cancellation snaps/finalizes according to authored destination policy once. Stale render
 snapshots/completions are rejected by identity/generation.
 
-## 6. Application-level activation — Phase-E foundation
+## 6. Application-level activation — LANDED E2 contract
 
-Transition activation is now a landed coarse runtime authority:
+Transition activation is a landed coarse runtime authority:
 
 ```text
 transitions.activation.<canonical setting name>
@@ -144,19 +144,37 @@ It is distinct from manual selection and saved Random-pool membership.
 A deactivated transition is excluded from effective manual/cycle/random resolution and must not gain a
 renderer merely because its code is installed.
 
-Effective Random pool is:
+Saved pool preference may remain while inactive. Effective runtime Random candidates are:
 
 ```text
-activated transitions ∩ saved pool members
+activated ∩ saved pool membership ∩ runnable/hardware
 ```
 
-Saved pool preference may remain while inactive so reactivation restores user intent.
+E2 `SETUP`/pill UI and live navigation are implementation-closed and use the same canonical activation
+store. They do not introduce a second authority.
 
-E2 adds the operator-facing `SETUP`/pill UI; it does not create a second activation store.
+The formerly ambiguous invalid states now have explicit persisted normalization:
 
-The all-deactivated-transition state must have an explicit legal policy before E2 exposes it. Do not
-silently run a transition whose activation is false merely because a fallback helper returns its name.
-See `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`.
+```text
+zero activated transitions
+    -> activate Crossfade in canonical state
+    -> persist repair
+
+Random on + empty effective saved pool
+    -> random_always=False
+    -> persist deterministic activated manual selection
+    -> preserve saved pool preferences
+```
+
+This is state repair, not permission to execute a deactivated Crossfade.
+
+Final admission is also closed: stale pre-resolved `transitions.random_choice` is revalidated at the
+factory boundary; `_pick_random_transition` fails closed rather than returning blanket Crossfade; and
+engine/factory/C-key empty-candidate paths never run a deactivated transition. `random_always` is the
+single live Random authority; legacy `type="Random"` is migration input only.
+
+Do not write “before E2 exposes it” or “E2 adds this later” around this contract. It is landed and must
+be preserved.
 
 ## 7. Canonical authored timing
 
@@ -425,5 +443,6 @@ architecture by default.
 Phase C implementation is complete. Later phases may use this document as current transition-authoring
 and regression authority.
 
-Production cutover remains Phase H. Old compositor-only presentation code may remain until the planned
-legacy deletion phase, but no new Quick transition may call back into it or keep it as a fallback.
+Production cutover remains Phase H. Old compositor-only presentation code is
+**CURRENT-LEGACY — WILL BE OBSOLETE at Phase I** after caller proof; no new Quick transition may call
+back into it or keep it as a fallback.

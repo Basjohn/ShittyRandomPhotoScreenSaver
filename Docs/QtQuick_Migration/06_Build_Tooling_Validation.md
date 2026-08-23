@@ -1,7 +1,7 @@
 # 06 — Build, Tooling, Tests, Installed Validation and Cutover Evidence
 
-Status: technical decomposition only  
-Last updated: 2026-08-21
+Status: technical decomposition; E2/E2.7 landed, E1 active  
+Last updated: 2026-08-23
 
 Cross-links:
 
@@ -10,9 +10,12 @@ Cross-links:
 - `Docs/Harness_Index.md`
 - `Future_Cleanup.md`
 
+`Docs/TestSuite.md` is the canonical live test inventory and retirement ledger. This document owns
+build/tooling/installed-validation shape, not a competing test manifest.
+
 ## 1. Build risk is handled early; build execution is deferred
 
-During Phases C–G, update build scripts, packaging declarations, and `build_runner.py` as required and
+During Phases E–G, update build scripts, packaging declarations, and `build_runner.py` as required and
 validate with focused static/script tests.
 
 Do not initiate a compiled/full product build merely as routine migration validation.
@@ -56,9 +59,8 @@ For Nuitka onefile/standalone include the QML directory explicitly, conceptually
 
 Do not generate paths that only work from repository root.
 
-A Qt resource `.qrc` is optional unless file packaging proves fragile.
-
-Choose one packaging method and remove abandoned duplicates.
+A Qt resource `.qrc` is optional unless file packaging proves fragile. Choose one packaging method and
+remove abandoned duplicates.
 
 ## 4. Nuitka Qt QML plugin
 
@@ -70,9 +72,8 @@ Make the required QML plugin family explicit:
 
 while preserving required multimedia plugins.
 
-Ensure Python imports make QtQml/QtQuick dependencies visible.
-
-Do not use `--include-qt-plugins=all` unless a focused packaging failure earns it.
+Ensure Python imports make QtQml/QtQuick dependencies visible. Do not use
+`--include-qt-plugins=all` unless a focused packaging failure earns it.
 
 ## 5. Build scripts to reconcile
 
@@ -95,7 +96,7 @@ Keep publishing/layout behavior unchanged unless Quick packaging requires a chan
 After migration implementation is complete and the operator schedules a build window, build the
 smallest normal/diagnostic target that exercises:
 
-- QQuickWindow;
+- `QQuickWindow`;
 - QtQml;
 - QML component load;
 - threaded render loop;
@@ -121,8 +122,9 @@ transition, scene teardown and generation recreation.
 Synthetic/offline models for widget families showing normal/extreme valid styling, shadows, borders,
 artwork, controls, visualizer card and two-display focus stress.
 
-After E2, include activated/deactivated family navigation/runtime cases without eagerly constructing
-all settings pages.
+E2 is already landed: the gallery/settings harness must preserve activated/deactivated family
+navigation, live pill removal/re-addition and lazy page behavior without eagerly constructing all
+settings pages. E1 adds proof that the actual provider/model/resource owner goes dormant or retires.
 
 ### Lifecycle harness
 
@@ -132,9 +134,11 @@ Prefer adapting existing lifecycle harnesses rather than creating another lifecy
 
 Preserve P0 as architecture evidence.
 
-Do not keep expanding it merely to reconfirm Quick.
+Do not keep expanding it merely to reconfirm Quick. Use production-shaped harnesses for migration
+regression.
 
-Use production-shaped harnesses for migration regression.
+Architecture-selection benchmark tests/harnesses may be **WILL BE OBSOLETE — Phase J** once final
+Quick evidence is recorded; see `Docs/TestSuite.md` before deleting them.
 
 ## 9. Automated/focused tests
 
@@ -144,7 +148,7 @@ Add/update focused tests for:
 
 - render loop configured before Quick creation;
 - graphics API OpenGL;
-- no QQuickWidget.
+- no `QQuickWidget`.
 
 ### runtime
 
@@ -168,12 +172,15 @@ Add/update focused tests for:
 - visual style;
 - CUSTOM;
 - actions;
-- E2 capability activation;
-- lazy settings-page hydration safety.
+- landed E2 capability activation + SETUP/live lazy navigation;
+- lazy settings-page hydration safety;
+- active E1 provider/model/resource dormancy and retirement at the real owner.
 
 ### visualizer
 
-- existing permanent gates + Quick snapshot/render ownership.
+- existing permanent gates + Quick snapshot/render ownership;
+- E2.7 global singleton failover/reclaim contract remains regressed;
+- physical dual-display wake/late-return acceptance remains a separate hardware gate.
 
 ### build
 
@@ -200,6 +207,10 @@ Do not run the entire suite after every small edit.
 Do run the bounded suite before production cutover, major legacy deletion, and final migration closure
 when the environment is appropriate.
 
+A red old-presenter test is not automatically a current defect. Classify it against
+`Docs/TestSuite.md`; likewise, do not delete a `WILL BE OBSOLETE` test before its replacement-owner
+coverage exists.
+
 ## 11. Manual/installed gates
 
 ### Renderer/transition
@@ -217,14 +228,16 @@ when the environment is appropriate.
 - Bubble eyes-on/BTF;
 - Pause/Play;
 - Spectrum idle;
-- CUSTOM.
+- CUSTOM;
+- physical dual-display failover/reclaim where R-26 acceptance is being closed.
 
 ### widgets/settings
 
 - full widget composition;
 - shadows/opacities/borders/sizing/stacking;
 - interaction;
-- E2 activation and pill navigation;
+- landed E2 activation and pill navigation;
+- E1 deactivated-family provider/model/resource dormancy;
 - no hidden family runtime work.
 
 ### lifecycle
@@ -256,9 +269,8 @@ Final production Quick evidence may include:
 - both displays;
 - light/external heavy load.
 
-Use the existing worker baseline from preserved evidence.
-
-Do not ask for another manual worker-heavy baseline.
+Use the existing worker baseline from preserved evidence. Do not ask for another manual worker-heavy
+baseline.
 
 ## 13. Heavy-load success
 
@@ -302,15 +314,15 @@ git push
 
 Never use destructive Git to make the tree convenient.
 
-Low-risk work may continue after green push.
-
-High-risk/audit-required work stops after push for independent review.
+Low-risk work may continue after green push. High-risk/audit-required work stops after push for
+independent review.
 
 ## 16. Final cutover checklist
 
 Production owner is Quick only.
 
-Verify absence of active imports/callers for:
+The following are **CURRENT-LEGACY — WILL BE OBSOLETE at H/I** and must have no active runtime callers
+before deletion:
 
 ```text
 DisplayWidget runtime presenter
@@ -318,10 +330,13 @@ GLCompositorWidget
 ExternalOpenGLRhiWidget
 CompositorVisualizerLayer
 GUI present_tick physical owner
-QQuickWidget
+legacy software/backend-demotion presenter path
 ```
 
-Historical evidence/tests may still name them.
+`QQuickWidget` is prohibited rather than a tolerated legacy presenter.
+
+Historical evidence may still name all of the above. Current tests that exist only for those owners are
+retired according to `Docs/TestSuite.md`, not preserved as a compatibility layer.
 
 After caller proof, remove dead production files through `Future_Cleanup.md`.
 
@@ -332,10 +347,10 @@ Update:
 - `Docs/TestSuite.md`;
 - `Docs/Harness_Index.md`;
 - `Index.md`;
+- `Docs/Contracts.md` when owners change;
 - build documentation;
 - `Docs/Defaults_Guide.md`;
 - `Future_Cleanup.md`.
 
-Delete migration-only tools that no longer guard a live risk.
-
-Keep cheap production-shaped regression harnesses.
+Delete migration-only tools that no longer guard a live risk. Keep cheap production-shaped regression
+harnesses.

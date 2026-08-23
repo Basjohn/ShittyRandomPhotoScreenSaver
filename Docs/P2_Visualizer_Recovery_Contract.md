@@ -1,7 +1,10 @@
 # Visualizer Recovery / Migration Contract
 
-Status: binding visualizer ownership contract during Qt Quick presentation migration
-Date: 2026-08-20
+Status: **LANDED / PRESERVE visualizer ownership contract during Qt Quick migration**  
+Date: 2026-08-23
+
+The `P2` filename is historical. The contract below remains current and must not be deleted merely
+because the originating recovery phase is old.
 
 ## 1. Product invariant
 
@@ -48,6 +51,9 @@ Logical publication is latest-state.
 
 The migration replaces the old QRhiWidget/GUI physical consumer with a bounded Quick presentation
 bridge.
+
+The old consumer is **CURRENT-LEGACY — WILL BE OBSOLETE at H/I**. Preserve this bridge contract, not
+the old presenter.
 
 Required properties:
 
@@ -98,6 +104,9 @@ Retired generation state cannot:
 - trigger reveal;
 - mutate the current Quick scene/render state.
 
+Application-level Visualizers capability admission is governed by the landed E2 contract. Do not
+confuse capability deactivation with ordinary playback/instance state.
+
 ## 8. Error visibility
 
 - worker thread-affinity violations fail loudly in tests/development;
@@ -135,5 +144,5 @@ Preserve:
 - compiled build;
 - bounded resources.
 
-The completed P0 benchmark selects Quick as the presentation destination. The remaining work is
-migration correctness and parity, not another presenter bake-off.
+The completed P0 benchmark selects Quick as the presentation destination. Remaining work is migration
+correctness/parity/cutover, not another presenter bake-off.

@@ -1,15 +1,16 @@
 # 04 — Runtime Widgets, Retained Quick Presentation, Shadows and Full Customization
 
-Status: Phase-E/F technical decomposition; Phase-E foundation partially landed  
-Last updated: 2026-08-22
+Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE**  
+Last updated: 2026-08-23
 
 Cross-links:
 
 - sequence/work admission: `Current_Plan.md`
-- capability activation / E2 UI: `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
+- landed capability activation / E2 UI: `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
 - canonical widget authoring guidance: `Docs/10_WIDGET_GUIDELINES.md`
 - style history: `Docs/Custom_Style_Implementation.md`
 - deletion ledger: `Future_Cleanup.md`
+- test retirement/rehome ledger: `Docs/TestSuite.md`
 
 ## 1. Core rule
 
@@ -27,7 +28,7 @@ Keep the first side in Python unless a separate measured reason earns a differen
 
 Move runtime pixels into the display's retained Quick scene.
 
-## 2. Current architecture seam
+## 2. Current architecture seam — CURRENT-LEGACY
 
 The old widget stack combines responsibilities that must not be recreated as one giant Python Quick
 base class.
@@ -44,6 +45,10 @@ base class.
 
 `BaseOverlayWidget` likewise combines QWidget lifecycle, style, geometry, card/shadow painting and
 other pixel-era concerns.
+
+Those QWidget runtime-pixel/presentation responsibilities are **CURRENT-LEGACY — WILL BE OBSOLETE in
+E1/F/H/I as their callers are rehomed/deleted**. Presentation-neutral provider/model/settings behavior
+survives where the destination contracts still require it.
 
 Phase E decomposes ownership; Phase F ports family pixels.
 
@@ -101,9 +106,9 @@ At the currently landed runtime seam, `_create_factory_widgets` filters a deacti
 concrete runtime widget/model/provider creation and before per-instance enabled handling. This proves a
 real runtime consequence while all default activation remains inert/all-on.
 
-The broader E1 `WidgetRuntimeManager` provider/model/resource ownership split is still separate work
-until exact source says it has landed. Do not overstate full family dormancy beyond the owners actually
-migrated.
+The broader **E1 `WidgetRuntimeManager` provider/model/resource ownership split is ACTIVE now**. Do not
+overstate full family dormancy beyond the owners actually migrated, but do not send E1 work back into
+E2 UI either.
 
 Durable destination:
 
@@ -135,8 +140,8 @@ service requirements
 runtime action/refresh contracts
 ```
 
-Old factory creation metadata may remain in the old path until its callers are removed. It is not the
-final presentation authority.
+Old factory creation metadata may remain in the old path until its callers are removed. It is
+**CURRENT-LEGACY — WILL BE OBSOLETE** as presentation authority.
 
 Quick presentation maps family/runtime identity to retained Quick components through a static registry.
 Do not build dynamic third-party plugin discovery, manifests, hot loading or API-version machinery.
@@ -160,7 +165,7 @@ The Phase-E destination owner is presentation-neutral and owns:
 It does **not** own QWidget instances or runtime pixels.
 
 This broader owner is not considered landed merely because the family catalog and creation-admission
-gate exist.
+gate exist. E1 closes this owner split.
 
 ### 6.2 Per-display Quick widget presentation host
 
@@ -242,6 +247,10 @@ Keep GSMTC/provider/control command logic in Python.
 Expose normalized rows/cards/actions and compact state. Keep retrieval/filter/cache/ranking/service logic
 out of QML/render callbacks.
 
+The old Steam implementation plan contains useful provider/security/product decisions, but its
+QWidget/painter/factory presentation mapping is migration-epoch source only and must be rehomed rather
+than copied into Quick.
+
 ## 8. Shared retained Quick visual primitives — Phase E3
 
 Build small components rather than a base-god-object.
@@ -265,7 +274,7 @@ filename manifest.
 
 Components bind to explicit presentation model/style properties.
 
-E3 remains unfinished until exact source/Current Plan marks it landed.
+E3 remains unfinished until exact source/Current Plan marks it landed. It follows E1.
 
 ## 9. Full style state
 
@@ -291,7 +300,9 @@ global shadow direction
 
 Family-specific style remains family-specific.
 
-Do not collapse existing controls merely because one Quick property is more convenient.
+Do not collapse existing authored controls merely because one Quick property is more convenient,
+**except controls explicitly retired by `Current_Plan.md`/`Spec.md`**. The pre-Quick visualizer
+per-mode growth/card-height controls are the current named exception.
 
 ## 10. Global eight-direction shadow authority — Phase E4
 
@@ -356,6 +367,9 @@ Docs/Historical_Bugs/R-24_Retired_Overlay_Effect_Cache_Busting.md
 
 Those failures involved QWidget `QGraphicsEffect`/cache/focus behavior. Qt Quick does not use that
 architecture, but migration must still avoid expensive/general effect churn.
+
+The old QWidget painted-frame/cache/effect implementation is **CURRENT-LEGACY — WILL BE OBSOLETE in
+E3/E4/F/I** after parity/caller proof. Do not port the cache-busting architecture itself.
 
 ### Card shadows
 
@@ -428,12 +442,12 @@ Apply the resulting offset as a retained transform/property on the appropriate p
 
 Do not rebuild widget content for a small positional shift.
 
-## 16. Capability dormancy and lazy Settings
+## 16. Capability dormancy and lazy Settings — E2 LANDED / E1 ACTIVE
 
-E2 Settings must be able to list capabilities using cheap catalog metadata without constructing family
+E2 Settings already lists capabilities using cheap catalog metadata without constructing family
 pages/providers/runtime pixels.
 
-Operator-facing behavior is explicit:
+Landed operator-facing behavior:
 
 - `SETUP` is always present;
 - only activated families expose their normal settings pill;
@@ -441,11 +455,11 @@ Operator-facing behavior is explicit:
 - if the removed family page was selected, navigation returns to `SETUP` immediately;
 - reactivating immediately restores its pill;
 - detailed family pages remain lazy;
-- an unbuilt/deactivated page must never overwrite persisted values during Save.
+- an unbuilt/deactivated page never overwrites persisted values during Save.
 
-This live navigation decision is UI behavior. Runtime/provider retirement still follows the safe owner
-boundary defined by exact landed E1/runtime code; do not invent unsafe immediate teardown from a UI
-callback merely to match pill removal.
+This live navigation decision is UI behavior. **E1 now owns the broader runtime/provider dormancy
+implementation** at the safe owner boundary; do not invent teardown directly from navigation-button
+callbacks.
 
 ## 17. Family migration matrix — Phase F
 
@@ -569,17 +583,25 @@ Shared primitives receive stronger regression coverage because every family depe
 
 Do not call a family migrated because legacy Python model tests still pass.
 
+`Docs/TestSuite.md` is the canonical file-level keep/rehome/retirement ledger; update it when an old
+QWidget/presenter test changes owner or becomes obsolete.
+
 ## 20. Checkpoint cadence
 
 Follow `Current_Plan.md` rather than treating this list as parallel sequencing.
 
-Natural bounded checkpoints include:
+Landed checkpoints:
 
 - presentation-neutral family/catalog work;
-- E1 manager/model/provider split;
-- E2 capability Settings UI/lazy navigation;
-- common style/shadow primitives;
-- each family port;
+- **E2 capability Settings UI/lazy navigation**;
+- **E2.7 Visualizer CUSTOM failover/reclaim**.
+
+Current/future bounded checkpoints:
+
+- **E1 manager/model/provider split**;
+- E3 common retained style/shadow primitives;
+- E4 global shadow direction;
+- each Phase-F family port;
 - shared visual-regression corrections.
 
 Do not batch every family into one commit. High-risk owner/lifecycle boundaries should be independently

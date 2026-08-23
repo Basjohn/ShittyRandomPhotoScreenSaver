@@ -1,10 +1,22 @@
 # Historical Bug Records
 
-Last updated: 2026-08-11
+Last updated: 2026-08-23
 
 Authoritative standalone incident records for significant SRPSS regressions.
-`Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory
-own the full narratives.
+`Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory own the full
+narratives.
+
+## Reading rule
+
+Incident bodies preserve the owner names, architecture and evidence that existed when the failure was
+investigated. Do not translate old QOpenGLWidget/QRhiWidget/GLCompositor/QWidget wording into current
+architecture by editing history.
+
+For current sequencing/ownership read `Current_Plan.md`, `Index.md`, `Docs/Contracts.md` and focused
+current docs first.
+
+A historical owner can be **CURRENT-LEGACY — WILL BE OBSOLETE** while the bug lesson remains binding.
+Rehome surviving regression coverage before deleting an old owner.
 
 ## Current Open / Watchlist
 
@@ -12,11 +24,12 @@ own the full narratives.
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](U-06_MC_Shadow_Cache_Corruption.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
 
-## Active / Pending
+## Active / Pending Acceptance
 
-No R-series lifecycle/recreation incident is currently active. R-60 is solved by the
-current live repeated-transition evidence. Ongoing Phase 5 memory/GPU/plateau and
-workload work remains architecture/performance work.
+- [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN at `5b3cbaef`; only physical dual-display acceptance remains.
+
+Current migration implementation sequencing is **not** owned by this folder. At the 2026-08-23
+reconciliation E1 is active in `Current_Plan.md`.
 
 ## R Records
 
@@ -68,7 +81,7 @@ workload work remains architecture/performance work.
 - [R-13 — Visualizer Sine/Oscilloscope Lines 4-6 Settings Never Persisted](R-13_Sine_Oscilloscope_Lines_4_6_Persistence.md)
 - [R-12 — Runtime Custom Slot Replaced While Cycling Presets](R-12_Runtime_Custom_Preset_Cycling.md)
 - [R-11 — Visualizer Preset Tooling Regression](R-11_Visualizer_Preset_Tooling_Regression.md)
-- [R-10 — Widget C++ Object Already Deleted on Provider Switch](R-10_Deleted_QObject_Provider_Switch_Callback.md)
+- [R-10 — Widget C++ Object Already Deleted on Provider Switch Callback](R-10_Deleted_QObject_Provider_Switch_Callback.md)
 - [R-09 — Settings Spinbox/LineEdit Fill Regression](R-09_Settings_Input_Fill_QSS_Specificity.md)
 - [R-08 — Pixel Shift Visualizer Bleed-Through](R-08_Pixel_Shift_Visualizer_Bleed_Through.md)
 - [R-07 — Startup Fade / Visualizer Secondary-Stage Ownership Split](R-07_Startup_Fade_Visualizer_Secondary_Stage.md)
@@ -81,9 +94,9 @@ workload work remains architecture/performance work.
 
 ### Historical numbering note
 
-`R-19` and `R-20` were historical navigation aliases for the incidents now canonically
-recorded as `U-02` and `U-03`. The monolithic source never contained independent anchored
-R-19/R-20 incident bodies, so duplicate standalone records are intentionally absent.
+`R-19` and `R-20` were historical navigation aliases for the incidents now canonically recorded as
+`U-02` and `U-03`. The monolithic source never contained independent anchored R-19/R-20 bodies, so
+duplicate standalone records are intentionally absent.
 
 ## U Records
 
@@ -111,10 +124,11 @@ R-19/R-20 incident bodies, so duplicate standalone records are intentionally abs
 - one incident has one authoritative standalone file;
 - preserve dates, evidence, failed approaches, correction and guardrails;
 - cross-link sibling/superseding records instead of duplicating bodies;
-- open/watch status lives here and in `Docs/Historical_Bugs.md`;
-- small resolved notes may remain in `Docs/Regression_Notes.md`.
+- open/watch/acceptance status lives here and in `Docs/Historical_Bugs.md`;
+- small resolved notes may remain in `Docs/Regression_Notes.md`;
+- do not let historical phase status override `Current_Plan.md`.
 
 ## Migration Status
 
-The standalone split is complete. `Docs/Historical_Bugs.md` is navigation/status only,
-not a fallback store for unsplit incident bodies.
+The standalone split is complete. `Docs/Historical_Bugs.md` is navigation/status only, not a fallback
+store for unsplit incident bodies.
