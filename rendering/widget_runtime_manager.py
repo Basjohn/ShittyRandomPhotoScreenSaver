@@ -9,21 +9,28 @@ runtime **lifecycle routing**.
 
 It deliberately does **not** create or own QWidget/Quick instances or runtime
 pixels. The host (currently ``WidgetManager``) still owns the widget registry;
-this owner only *admits* families and *routes* lifecycle/capability reactions
-through duck-typed contracts. To stay presentation-neutral it imports no
-QWidget/Quick/provider/renderer code — only the neutral capability/catalog
-authorities and logging.
+this owner *admits* families, *routes* lifecycle/capability reactions, and owns
+presentation-neutral runtime *service* (provider/model) lifetimes on behalf of
+runtime widgets. At module top it imports no QWidget/Quick/provider/renderer
+code — only the neutral capability/catalog authorities and logging; the
+transitional E2.7 failover bridge and the family-specific runtime-service specs
+are imported lazily at their call sites, so this owner never becomes a
+provider/presenter switchboard.
 
-E1 slice 1 establishes this owner by extracting the responsibility out of the
-``WidgetManager`` god-object (a net reduction there); the host keeps thin
+E1 slice 1 established this owner by extracting admission + lifecycle routing out
+of the ``WidgetManager`` god-object (a net reduction there); the host keeps thin
 delegating wrappers so its public API and the E2.7 confirmed-retirement contract
-(``cleanup_widget`` returning an explicit bool) are preserved. Later E1 slices
-migrate provider/model lifetime and hoist ownership above the host; this slice
-deliberately does not migrate providers.
+(``cleanup_widget`` returning an explicit bool) are preserved. E1 slice 2 moves
+the first real provider lifetime (the Reddit post provider) here: the owner
+builds it from canonical settings via the neutral
+``rendering.widget_runtime_services`` registry, injects it into the widget for
+use, and retires it on teardown — so the provider is no longer owned merely
+because a QWidget exists. Later E1 slices migrate further provider/model lifetimes
+and hoist ownership above the host.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, Optional, TYPE_CHECKING
+from typing import Any, Dict, Mapping, Optional, Tuple, TYPE_CHECKING
 
 from core.logging.logger import get_logger
 from core.settings.capability_activation import (
@@ -34,12 +41,13 @@ from core.settings.widget_family_catalog import get_family_id_for_widget
 
 if TYPE_CHECKING:
     from rendering.widget_manager import WidgetManager
+    from rendering.widget_runtime_services import RuntimeServiceSpec
 
 logger = get_logger(__name__)
 
 
 class WidgetRuntimeManager:
-    """Presentation-neutral capability-admission + lifecycle-routing owner."""
+    """Presentation-neutral capability-admission, lifecycle and service owner."""
 
     def __init__(self, host: "WidgetManager") -> None:
         # Transitional package-internal coupling: the host still owns the widget
@@ -47,6 +55,11 @@ class WidgetRuntimeManager:
         # never creates or retains QWidget instances of its own. A later E1 slice
         # hoists registry ownership; keep this edge weak of intent, not identity.
         self._host = host
+        # Presentation-neutral runtime services (provider/model lifetimes) owned
+        # on behalf of runtime widgets, keyed by widget id. Each entry is the
+        # (service, spec) pair so retirement uses the spec's retire hook exactly
+        # once, independently of QWidget pixel ownership.
+        self._services: Dict[str, Tuple[Any, "RuntimeServiceSpec"]] = {}
 
     # ------------------------------------------------------------------ #
     # Capability admission authority (dependency-aware; shared-consumer)  #
@@ -76,9 +89,11 @@ class WidgetRuntimeManager:
     ) -> bool:
         """Return whether a family is activated AND its required families are.
 
-        This is the single neutral shared-consumer/dependency accounting query
+        This is the canonical **activation + dependency-satisfaction** query
         (e.g. ``visualizers`` requires ``media``): a family is only *effective*
-        while every capability it depends on remains activated.
+        while every capability it depends on remains activated. It is **not** a
+        shared-provider last-consumer counter; genuine shared-service lifetime
+        must use explicit consumer/ownership accounting, not this query.
         """
         return is_widget_family_effective(widgets_config, family_id)
 
@@ -96,6 +111,85 @@ class WidgetRuntimeManager:
         if family_id is None:
             return True
         return self.is_family_activated(widgets_config, family_id)
+
+    # ------------------------------------------------------------------ #
+    # Presentation-neutral runtime service (provider/model) ownership     #
+    # ------------------------------------------------------------------ #
+    def ensure_widget_service(
+        self,
+        widget_id: str,
+        widget: Any,
+        widgets_config: Optional[Mapping[str, Any]],
+    ) -> Any:
+        """Own the presentation-neutral runtime service for a created widget.
+
+        If ``widget_id`` has a registered :class:`RuntimeServiceSpec`, build the
+        service from canonical settings, take ownership of its lifetime, and
+        inject it into the widget for consumption. Idempotent: an existing owned
+        service for the same id is retired first so a re-admission never
+        double-owns. Family-specific knowledge lives in the neutral
+        ``widget_runtime_services`` registry, not here.
+        """
+        from rendering.widget_runtime_services import get_runtime_service_spec
+
+        spec = get_runtime_service_spec(widget_id)
+        if spec is None:
+            return None
+        # Retire any prior owned service for this id before re-owning.
+        self.retire_widget_service(widget_id)
+        try:
+            service = spec.build(widget_id, widgets_config or {})
+        except Exception:
+            logger.debug(
+                "[WIDGET_RUNTIME] Failed to build runtime service for %s",
+                widget_id,
+                exc_info=True,
+            )
+            return None
+        if service is None:
+            return None
+        self._services[widget_id] = (service, spec)
+        if widget is not None:
+            try:
+                spec.inject(widget, service)
+            except Exception:
+                logger.debug(
+                    "[WIDGET_RUNTIME] Failed to inject runtime service for %s",
+                    widget_id,
+                    exc_info=True,
+                )
+        return service
+
+    def get_widget_service(self, widget_id: str) -> Any:
+        """Return the owned runtime service for a widget id, or None."""
+        entry = self._services.get(widget_id)
+        return entry[0] if entry is not None else None
+
+    def retire_widget_service(self, widget_id: str) -> bool:
+        """Retire and drop the owned runtime service for a widget id.
+
+        Returns whether a service was retired. Calls the spec's retire hook
+        exactly once; a spec with no retire hook simply drops the reference.
+        """
+        entry = self._services.pop(widget_id, None)
+        if entry is None:
+            return False
+        service, spec = entry
+        if spec.retire is not None:
+            try:
+                spec.retire(service)
+            except Exception:
+                logger.debug(
+                    "[WIDGET_RUNTIME] Failed to retire runtime service for %s",
+                    widget_id,
+                    exc_info=True,
+                )
+        return True
+
+    def retire_all_services(self) -> None:
+        """Retire every owned runtime service (terminal teardown)."""
+        for widget_id in list(self._services.keys()):
+            self.retire_widget_service(widget_id)
 
     # ------------------------------------------------------------------ #
     # Capability-deactivation reaction dispatch                          #
@@ -248,5 +342,6 @@ class WidgetRuntimeManager:
         return states
 
     def cleanup(self) -> None:
-        """Release the host edge; terminal for this owner."""
+        """Retire owned services and release the host edge; terminal."""
+        self.retire_all_services()
         self._host = None

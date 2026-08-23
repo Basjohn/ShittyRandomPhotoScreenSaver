@@ -530,7 +530,44 @@ Windows execution.
    The later hoist moves ownership out of legacy `WidgetManager` into the display-runtime boundary; do
    not invent a process-global god manager merely to remove the temporary host edge.
 
-### E1 slice 2 — first real provider/model ownership extraction — ACTIVE NEXT
+### E1 slice 2 — first real provider/model ownership extraction — PUSHED, RE-AUDIT REQUIRED
+
+#### Landed this checkpoint
+
+Chosen seam: the **Reddit post-provider** (`core.reddit_post_provider`). Rationale: it is the smallest
+single-purpose provider still *constructed and owned by a runtime QWidget* (built in
+`RedditWidget.__init__`/`RedditWidgetFactory` and held on `self._post_provider`), unlike the already-
+neutral clock ticker singleton or the `GmailBackend.instance()` singleton; it is per-instance (not
+shared → no artificial consumer machinery); and it has no live-rebuild coupling.
+
+What moved:
+
+- new `rendering/widget_runtime_services.py` — a neutral registry (`RuntimeServiceSpec` +
+  `get_runtime_service_spec`) holding the family-specific build/inject/retire knowledge (reddit +
+  reddit2, honoring reddit2 family provider inheritance). Heavy provider import is lazy;
+- `WidgetRuntimeManager` gained generic `ensure_widget_service` / `get_widget_service` /
+  `retire_widget_service` / `retire_all_services` (retired in `cleanup()`). It owns the provider
+  lifetime keyed by widget id and stays generic (no `if family == …` switchboard — family knowledge
+  lives in the registry);
+- `_create_factory_widgets` builds/owns/injects the service through the owner at creation (synchronous,
+  pre-start);
+- `RedditWidgetFactory` no longer constructs/injects the provider (bare `RedditWidget` keeps its
+  `__init__` default only for standalone use);
+- corrected the slice-1 wording: `is_family_effective()` is documented as activation +
+  dependency-satisfaction (not shared-consumer accounting), and the owner's "imports no renderer code"
+  claim is narrowed to module-top only (transitional seams are lazily imported). Slice-1 YELLOW #1 is
+  thereby addressed.
+
+Regressions: `tests/test_widget_runtime_manager.py` (owner builds/owns/injects independent of QWidget;
+idempotent re-own; retire/cleanup exactly once; build-failure fails closed), `tests/test_widget_manager_refresh.py`
+(provider owned via real `setup_all_widgets`; deactivated family owns no provider; disabled instance ≠
+family deactivation), `tests/test_reddit_provider_settings.py` (reddit2 inheritance / override / rss
+default now asserted through the neutral registry). Local sweep: `419 passed, 4 skipped`.
+
+Not done (deliberately, per this slice's bounds): no other family migrated; no shared-consumer
+accounting added (reddit is per-instance); E2.7 hook untouched; owner not hoisted.
+
+#### Original slice-2 contract (satisfied above)
 
 Move one **actual** provider/model/service lifetime seam out of QWidget presentation ownership and into
 presentation-neutral runtime ownership.

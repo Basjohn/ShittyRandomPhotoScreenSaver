@@ -504,6 +504,14 @@ def _create_factory_widgets(
                     mgr.register_widget(descriptor.settings_key, widget)
                     created[descriptor.attr_name] = widget
                     mgr._bind_parent_attribute(descriptor.attr_name, widget)
+                    # E1: the neutral owner builds/owns this widget's
+                    # presentation-neutral runtime service (provider/model) and
+                    # injects it, so the provider lifetime is not owned merely
+                    # because a QWidget exists. Synchronous and pre-start so the
+                    # widget uses the configured service from its first fetch.
+                    mgr._runtime_manager.ensure_widget_service(
+                        descriptor.settings_key, widget, widgets_config
+                    )
 
         if widget is not None:
             _ensure_thread_manager(mgr, widget, descriptor.settings_key)

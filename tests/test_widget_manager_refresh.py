@@ -603,6 +603,61 @@ def test_deactivating_one_family_does_not_affect_another():
     assert "weather_widget" in created
 
 
+def _reddit_config(*, enabled=True, provider="public_json", **family_activation):
+    config = {
+        "reddit": {
+            "enabled": enabled,
+            "monitor": "ALL",
+            "position": "WidgetPosition.TOP_RIGHT",
+            "provider": provider,
+            "subreddit": "games",
+            "limit": 5,
+        },
+        "shadows": {"enabled": True},
+    }
+    if family_activation:
+        config["family_activation"] = dict(family_activation)
+    return config
+
+
+def test_reddit_provider_lifetime_owned_by_runtime_manager():
+    # E1 slice 2: the post-provider lifetime is owned by the neutral runtime
+    # owner, built from canonical settings during setup — existing independently
+    # of QWidget pixel ownership (the stub widget has no set_post_provider, yet
+    # the owner still owns the built provider).
+    manager, created = _setup_widgets(_reddit_config(provider="public_json"))
+    assert "reddit_widget" in created
+    service = manager._runtime_manager.get_widget_service("reddit")
+    assert service is not None
+    assert getattr(service, "provider_id", None) == "public_json"
+
+
+def test_deactivated_reddit_family_owns_no_provider():
+    # Family capability deactivated: no widget AND no owned provider lifetime.
+    manager, created = _setup_widgets(_reddit_config(reddit=False))
+    assert "reddit_widget" not in created
+    assert manager._runtime_manager.get_widget_service("reddit") is None
+
+
+def test_disabled_reddit_instance_is_not_family_deactivation():
+    # Ordinary instance enabled=False (family still activated) is distinct from
+    # family deactivation: the enabled member is created and its provider owned;
+    # the disabled member is simply absent, without deactivating the family.
+    config = _reddit_config(enabled=True, provider="public_json")
+    config["reddit2"] = {
+        "enabled": False,
+        "monitor": "ALL",
+        "position": "WidgetPosition.TOP_LEFT",
+        "subreddit": "python",
+        "limit": 5,
+    }
+    manager, created = _setup_widgets(config)
+    assert "reddit_widget" in created
+    assert "reddit2_widget" not in created
+    assert manager._runtime_manager.get_widget_service("reddit") is not None
+    assert manager._runtime_manager.get_widget_service("reddit2") is None
+
+
 def test_reddit_widgets_support_inheritance_and_limit():
     widgets_config = {
         "reddit": {
