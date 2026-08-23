@@ -1,6 +1,6 @@
 # SRPSS Index
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 Navigation and architecture-epoch routing.
 
@@ -31,6 +31,11 @@ agent may implement from it only when the operator explicitly selects an item or
 
 During the Qt Quick migration, exact source tells you what is **currently implemented** while
 `Spec.md` and `Docs/Compositor_Architecture.md` define the accepted destination architecture.
+
+`Docs/TestSuite.md` is the canonical live test inventory, migration-retirement ledger and testing
+strategy. Use it before treating a broad-suite failure, old phase-numbered test or presenter-specific
+assertion as current architectural authority. `Docs/Harness_Index.md` routes recurring commands and
+runtime harnesses; it is not a replacement test inventory.
 
 ## Current migration status
 
@@ -63,7 +68,7 @@ Current normal implementation work is **Phase E — widget presentation + capabi
 | CUSTOM/input/interaction | `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md` |
 | Defaults/settings schema | `Docs/Defaults_Guide.md` |
 | Qt Quick architecture evidence | `Docs/Performance_Evidence/QtQuick-P0-Comparison-2026-08-20.md` |
-| Tests | `Docs/TestSuite.md` |
+| Tests / test retirement / stale-test triage | `Docs/TestSuite.md` |
 | Recurring harnesses | `Docs/Harness_Index.md` |
 | Documentation roles/hygiene | `Docs/Documentation_Maintenance.md` |
 | Prior regressions | `Docs/Historical_Bugs/README.md` |
@@ -154,7 +159,10 @@ ordinary enabled / manual / pool state
 Use `activated/deactivated` for the application-level gate and `enabled/disabled` for ordinary widget
 instance state. Transition pool membership/manual selection are separate again.
 
-The visualizer is not a widget-family activation capability.
+`visualizers` is a canonical application capability family with member widget
+`spotify_visualizer` and a hard dependency on `media`. That activation-family relationship does not
+move the Visualizer out of its special logical/runtime presentation ownership or make it an ordinary
+widget presentation path.
 
 ## Visualizer direction
 
@@ -195,6 +203,9 @@ Repository connectors are read/audit only for normal SRPSS workflow. Hosted CI i
 operator explicitly requests it.
 
 Do not use destructive Git operations to force checkpoint state.
+
+When a checkpoint adds, removes, renames, rehomes or intentionally retires tests, update the canonical
+inventory/status in `Docs/TestSuite.md` in the same documentation sweep.
 
 ## Historical navigation
 
