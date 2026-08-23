@@ -32,6 +32,17 @@ Current gaps identified during the Phase-E2 independent audit:
 - E2.7 sets a 30-second one-shot grace and requires event-driven reclaim, exactly-one-owner fencing,
   current capability re-admission, and no recurring monitor polling timer.
 
+### 2026-08-23 E2.7 implementation note (awaiting independent audit)
+
+The E2.7 lifecycle has been implemented (not yet independently audited, so this record stays
+**PARTIAL / reopened**): a 30 s token-fenced one-shot grace
+(`REMOTE_CUSTOM_VISUALIZER_FALLBACK_GRACE_MS`), a runtime-only temporary-fallback record on
+`MultiMonitorCoordinator` (never persisted), and event-driven reclaim
+(`reclaim_remote_custom_visualizer_owner`, driven from the `WM_DISPLAYCHANGE` re-anchor path) that
+retires the temporary owner and restores the configured CUSTOM display with its saved geometry.
+Capability is re-read on both fallback and reclaim; regression bar in
+`tests/test_visualizer_failover_reclaim.py`. `Current_Plan.md` E2.7 owns the audit gate.
+
 Do not erase the June chronology below: it records a real correction that remains part of the final
 solution. Its former `SOLVED` classification was simply broader than the evidence justified.
 

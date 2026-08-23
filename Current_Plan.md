@@ -7,8 +7,8 @@ Last updated: 2026-08-23
 Independent review basis:
 
 ```text
-91e2b5471dab6b64a90039c7272eb6d6785b0601
-Phase E2 audit correction 3
+b787c57a4df9220385a33c81832999120bd45151
+Phase E2 context-menu fail-closed correction — independently audited GREEN
 ```
 
 Always inspect exact current `main` before acting. Repository state outranks this file if a later
@@ -369,61 +369,63 @@ Read for active Phase E work:
 - `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
 - current source and tests at exact `main`
 
-## E2 — finish current capability/Settings slice first
+## E2 — application-level capability/Settings slice — IMPLEMENTATION CLOSED
 
-E2's substantive architecture is landed. Independent audit of `91e2b547` found the three previous
-blockers GREEN:
+Independent audit of exact current source at `b787c57a` is **GREEN**. E2 implementation is closed.
 
-- final Random admission revalidates current saved-pool membership;
-- delayed remote CUSTOM Visualizer creation re-reads current Media + Visualizers capability state at
-  callback execution and final creation;
-- invalid persisted Media→Visualizers state is durably repaired at SettingsManager load.
+Verified final invariants include:
 
-Detailed correction history and test lists are historicalized; do not repeat them here.
+- final Random admission revalidates activation, hardware and current saved-pool membership;
+- delayed/final remote CUSTOM Visualizer creation re-reads current Media + Visualizers capability state;
+- invalid persisted Media→Visualizers state is durably repaired at SettingsManager load;
+- context-menu Visualizer availability and mode switching fail closed when current capability state is
+  unresolvable, while a valid mapping with absent activation keys retains the canonical compatibility
+  semantics;
+- the two real context-menu boundaries are regression-covered, including missing manager, failed read,
+  malformed root and valid-empty-map controls.
 
-### E2 remaining blocker — context-menu unresolved state must fail closed — CORRECTED, AUDIT REQUIRED
+Detailed E2 correction chronology belongs in the historical plan archive, not here.
 
-The narrow `rendering/display_context_menu.py` blocker has been corrected (awaiting independent audit;
-E2 implementation is NOT self-promoted to closed until that audit is GREEN).
+Remaining operator eyes-on confirmation of responsive Settings layout / Visualizers dependency UX is
+deferred acceptance and does **not** block the next Phase-E implementation slice under the phase
+promotion rule.
 
-Root cause was: callers coerced an unresolvable state into `{}` before calling
-`is_widget_family_effective(...)`; because a **valid** mapping with absent activation keys intentionally
-means active for backwards compatibility, `{}` read as permission rather than fail-closed.
-
-Correction landed:
-
-- one `_resolve_visualizer_capability_available(widget)` resolver is now the single seam for both
-  context-menu boundaries. It fails closed (returns False) on an *unresolvable* state — missing
-  `SettingsManager`, a raised widgets read, or a malformed/non-mapping widgets root — while a genuine
-  `dict` (including a valid empty map with absent activation keys) is handed to
-  `is_widget_family_effective(...)`, which stays the sole dependency authority (no second
-  Media→Visualizers rule);
-- show-menu boundary: Visualizer submenu availability is set from that resolver;
-- mode-switch boundary (`on_context_visualizer_selected`): a mode switch is rejected when the resolver
-  denies.
-
-Regressions (`tests/test_visualizer_capability_admission.py`) hit **both** real boundaries directly —
-missing manager / failed read / malformed root -> unavailable/rejected — plus a valid-empty-map negative
-control that stays available/allowed. Four of them fail on the pre-fix source (`a1b1b387`), confirming
-the bar.
-
-After independent audit of this correction is GREEN, E2 implementation is closed; the remaining E2
-acceptance is operator `python main.py --s` eyes-on confirmation of responsive Settings layout and
-Visualizers dependency UX across relevant widths. Do NOT implement E2.7 until this correction audits
-GREEN.
-
-### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — QUEUED, AUDIT REQUIRED
+### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — IMPLEMENTED, AUDIT REQUIRED
 
 This is a bounded current-product lifecycle/topology correction discovered while auditing E2. It is
 separate from the narrow E2 context-menu correction and must not be folded into that checkpoint.
 
-Historical context: `Docs/Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md` correctly
-records the June fix for partial startup display registration and immediate sleep/wake duplicate-owner
-fallbacks, but its current `SOLVED` classification is now too strong. The existing 1500 ms delayed
-fallback is not a human-scale monitor-wake grace, and current source has no independently proven
-event-driven hand-back from a temporary fallback to the configured CUSTOM display after that display
-returns. R-26 should be reopened/marked PARTIAL when this slice begins, preserving its original
-chronology.
+Historical context: `Docs/Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md` preserves
+the June fix for partial startup display registration and immediate sleep/wake duplicate-owner
+fallbacks and is now correctly marked **PARTIAL / reopened**. The existing 1500 ms delayed fallback is
+not a human-scale monitor-wake grace, and current source has no independently proven event-driven
+hand-back from a temporary fallback to the configured CUSTOM display after that display returns.
+
+**Implementation landed (awaiting independent audit; NOT self-promoted to closed):**
+
+- **30 s one-shot grace.** `REMOTE_CUSTOM_VISUALIZER_FALLBACK_GRACE_MS = 30000` replaces the 1500 ms
+  recheck; a runtime-known-but-not-participating configured target defers via one token-fenced
+  `ThreadManager.single_shot` deadline — no recurring poll.
+- **Temporary fallback is runtime-only.** `MultiMonitorCoordinator` holds a runtime-only fallback record
+  (configured/intended screen index + weakref host); it is never persisted and is cleared on runtime
+  teardown. `_create_remote_custom_visualizer_on_target` records it when the host is not the configured
+  monitor and clears it when the configured monitor owns the visualizer. The configured monitor
+  selection and saved CUSTOM geometry are never rewritten by failover.
+- **Event-driven reclaim.** `reclaim_remote_custom_visualizer_owner()` is invoked from the centralized
+  `WM_DISPLAYCHANGE` re-anchor path (`rendering/display_native_events.py`) after all displays re-anchor.
+  When the configured display participates again — seconds, minutes, or hours later — it retires the
+  temporary owner (`_retire_visualizer_owner`, which also bumps the host reconcile token) and recreates
+  the visualizer on the configured display with its saved CUSTOM geometry, as one transaction. No timer.
+- **Exactly one owner / fencing.** Retire-before-create plus the existing "already owns a visualizer"
+  creation guard and per-manager token bump keep at most one live owner and fence stale delayed
+  callbacks; repeated return events are idempotent (record cleared after reclaim).
+- **Capability current.** Both the delayed fallback and reclaim re-read live Media+Visualizers
+  capability via `_visualizer_capability_admitted_now` and fail closed; a stale Media object grants no
+  permission. No second Media→Visualizers dependency authority is introduced.
+
+Regression bar `tests/test_visualizer_failover_reclaim.py` covers every E2.7.7 item. After independent
+audit of this checkpoint is GREEN, E2.7 is closed and E1 (the broader `WidgetRuntimeManager` ownership
+split) is the next slice.
 
 #### E2.7.1 Canonical owner vs temporary runtime fallback
 
@@ -620,9 +622,7 @@ Do not reintroduce QWidget `QGraphicsDropShadowEffect`.
 Unless stronger current evidence forces a smaller corrective detour:
 
 ```text
-E2 narrow context-menu correction
--> independent audit
--> E2.7 Visualizer CUSTOM failover/reclaim lifecycle
+E2.7 Visualizer CUSTOM failover/reclaim lifecycle
 -> independent audit
 -> E1 runtime/model/provider ownership
 -> independent audit
@@ -990,31 +990,31 @@ architecture.
 
 # 15. Current next work
 
-Current normal sequence is the Phase-E execution order above.
+**E2 implementation is CLOSED by independent audit at `b787c57a`.**
 
-Immediate next checkpoint from reviewed `91e2b547`:
+The active next checkpoint is:
 
 ```text
-fix context-menu unresolved-state fail-open
--> focused context-menu/capability tests
+E2.7 Visualizer CUSTOM display failover/reclaim lifecycle
+-> focused lifecycle/topology regressions
 -> diff/status
 -> commit + push
 -> independent audit
 ```
 
-Do **not** implement E2.7 in that same tiny correction checkpoint.
-
-Once the narrow E2 correction audits GREEN, E2.7 is the next bounded lifecycle/topology slice. Its
-central product rule is simple and non-negotiable:
+E2.7 is lifecycle/topology ownership work and remains audit-required. Its central product rule is:
 
 ```text
 persisted CUSTOM target = canonical owner forever until the user changes it
 fallback display        = temporary runtime host only
 ```
 
-A temporary fallback must never overwrite configured monitor selection or the configured target's
-saved CUSTOM geometry, even if the fallback remains active for minutes or hours. The configured target
-reclaims ownership whenever it later returns, using event-driven display/topology reconciliation.
+Use a 30-second one-shot grace before temporary fallback. If the configured target returns at any
+later time — seconds, minutes or hours after fallback — existing display/topology events must reconcile
+the Visualizer home, retire/fence the temporary owner, and restore the configured target's saved CUSTOM
+geometry. No fallback-relative monitor or geometry state may become persisted authority.
+
+Do not add recurring monitor polling. Reclaim must be event-driven and exactly-one-owner.
 
 ---
 

@@ -194,6 +194,17 @@ def handle_nativeEvent(widget, eventType, message):
                                 pass
                     except Exception as e:
                         logger.debug("[NATIVE] WM_DISPLAYCHANGE re-anchor error for instance: %s", e)
+                # E2.7: after all displays have re-anchored (a configured CUSTOM
+                # monitor may now be participating again), reconcile visualizer
+                # ownership back to the configured display if a temporary fallback
+                # is active. Event-driven, idempotent, no polling.
+                try:
+                    from rendering.widget_setup_all import (
+                        reclaim_remote_custom_visualizer_owner,
+                    )
+                    reclaim_remote_custom_visualizer_owner()
+                except Exception as e:
+                    logger.debug("[NATIVE] WM_DISPLAYCHANGE visualizer reclaim error: %s", e)
             except Exception as e:
                 logger.debug("[NATIVE] WM_DISPLAYCHANGE handler error: %s", e)
 
