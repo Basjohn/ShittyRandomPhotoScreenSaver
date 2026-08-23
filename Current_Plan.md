@@ -7,17 +7,17 @@ Last updated: 2026-08-24
 Independent review basis:
 
 ```text
-8fcbc57a41c0b402fd4253d9668a0c6548b3100f
-Phase E1 slice 1 — WidgetRuntimeManager establishment by extraction — independently audited GREEN
+c320887cc27e1b2bace10ba562a36e24ae9307ca
+Phase E1 slice 2 — Reddit post-provider runtime ownership — independently audited GREEN after correction
 ```
 
 E1 remains active. E2/E2.7 remain implementation-closed; physical R-26 dual-display acceptance remains
 deferred hardware evidence.
 
-The subsequent documentation-only checkpoint `9adb74916010304f622a843e1b6d48e054792e6d` temporarily
-over-scoped the next E1 slice as a generic live family-retirement/recreation mechanism. Source review
-showed that current production family activation is applied through Settings-owned full runtime
-teardown/recreation, so that prescription is superseded by the corrected E1 sequencing below.
+The earlier `9adb74916010304f622a843e1b6d48e054792e6d` prescription for a generic live family
+OFF/ON retirement mechanism remains superseded: current production family activation is applied through
+Settings-owned full runtime teardown/recreation. E1 migrates real provider/model/runtime ownership; it
+does not invent a second hot-reload lifecycle without a demonstrated live writer.
 
 Always inspect exact current `main` before acting. Repository state outranks this file if a later
 checkpoint has landed.
@@ -453,12 +453,12 @@ Do not reopen E2.7 without contradictory runtime/source evidence.
 ## E1 — presentation-neutral runtime/model/provider ownership — ACTIVE
 
 E2 and E2.7 are implementation-closed. Complete the broader `WidgetRuntimeManager` ownership split
-across bounded, individually-audited slices (do not batch every provider into one commit).
+across bounded, individually-audited slices. Do not batch every family into one commit.
 
 Required destination:
 
 - canonical widget identity/settings metadata independent of QWidget factories;
-- presentation-neutral provider/model lifecycle ownership;
+- presentation-neutral provider/model/runtime-data lifecycle ownership;
 - activated/enabled/visible state and monitor participation without QWidget presentation authority;
 - when a capability is deactivated, its exclusive provider/model/process/poll/timer/resource ownership
   must not survive the legal runtime lifecycle that applies that configuration;
@@ -494,154 +494,215 @@ alive, that path must satisfy the same ownership contract. Do not build such a p
 The existing E2.7 live Visualizer capability/failover reaction is a special closed lifecycle seam and is
 not precedent for making every widget family hot-retire in place.
 
-### E1 slice 1 — establish the owner by extraction — AUDITED GREEN
+### E1 slice 1 — establish `WidgetRuntimeManager` by extraction — AUDITED GREEN
 
-Pushed/audited implementation checkpoint:
+Pushed/audited checkpoint:
 
 ```text
 8fcbc57a41c0b402fd4253d9668a0c6548b3100f
 ```
 
-Independent source audit confirmed:
+Landed:
 
-- `rendering/widget_runtime_manager.py` establishes the presentation-neutral owner shell without
-  creating/owning QWidget or Quick instances;
-- `widget_manager.py` shrank by 110 lines rather than absorbing another subsystem;
-- the old initialize/activate/deactivate/cleanup lifecycle routing was relocated without material
-  behavior change and `cleanup_widget()` still returns an explicit bool required by E2.7;
-- factory-backed creation now delegates family activation admission through `WidgetRuntimeManager`;
-- capability-change dispatch still reaches the landed E2.7 Visualizer failover retirement;
-- no provider/model lifetime was migrated in this slice;
-- no E3/E4/F work entered the checkpoint.
+- presentation-neutral admission/lifecycle owner shell;
+- capability admission routed through it;
+- E2.7 capability-change bridge preserved;
+- `WidgetManager` reduced by 110 lines rather than enlarged;
+- no provider/model family migration yet.
 
-The coding agent reported its local focused/broader Windows gate as `325 passed, 4 skipped`; the
-independent reviewer audited pushed source/diff/regression intent but did not independently rerun that
+Reported local gate: `325 passed, 4 skipped`. The independent reviewer audited pushed source/diff/test
+intent but did not independently rerun that Windows execution.
+
+### E1 slice 2 — Reddit post-provider ownership — AUDITED GREEN
+
+Final audited implementation checkpoint:
+
+```text
+c320887cc27e1b2bace10ba562a36e24ae9307ca
+```
+
+The original slice landed at `61483372...`; independent audit found one real blocker: the production
+`RedditWidgetFactory` still allowed `RedditWidget.__init__` to build its old default provider before the
+neutral owner injected a second provider. That duplicated construction and made neutral service failure
+fail open to the QWidget-owned default.
+
+The correction at `c320887c...` is independently GREEN:
+
+- `rendering/widget_runtime_services.py` is the static family-specific runtime-service registry;
+- `WidgetRuntimeManager` generically owns/builds/injects/retires runtime services without a central
+  family `if/elif` switchboard;
+- production `RedditWidgetFactory` creates runtime-managed Reddit widgets with default-provider
+  construction explicitly suppressed;
+- standalone `RedditWidget()` retains its convenience default where direct construction is genuinely
+  used;
+- runtime service build **or injection** failure leaves no neutral service and causes the production
+  creation path to fail closed rather than run on a QWidget-owned fallback;
+- deactivated Reddit capability creates neither widget nor provider;
+- ordinary instance `enabled=False` remains distinct from family deactivation;
+- Reddit/Reddit2 provider inheritance remains preserved;
+- no shared-consumer machinery was invented because the Reddit post-provider seam is per-instance;
+- the E2.7 Visualizer bridge was not generalized into ordinary family hot-retirement.
+
+Reported corrected local gate: `440 passed, 4 skipped`, plus `py_compile` and `git diff --check` clean.
+The independent reviewer audited the pushed source and regressions but did not independently rerun that
 Windows execution.
 
-#### Slice-1 YELLOWs / remaining guardrails
+Non-blocking cleanup for the next time the owner tests are touched: add a dedicated generic
+service-injection-exception regression (build failure is already covered through the real production
+setup seam). Do not create a separate checkpoint solely for that test.
 
-1. `is_family_effective()` is the canonical **activation + dependency-satisfaction** query. It is not a
-   generic shared-provider last-consumer counter. Correct the slice-1 source/doc wording when that file
-   is next touched; do not invent a refcount merely to replace the wording.
-2. `handle_capability_change()` still lazily calls the legacy
-   `rendering.widget_setup_all.retire_visualizer_failover_on_capability_change` seam. Treat that as the
-   transitional E2.7 bridge it is; do not grow it into a family-specific presenter switchboard.
-3. One `WidgetRuntimeManager` per display runtime is compatible with the destination decomposition.
-   The later hoist moves ownership out of legacy `WidgetManager` into the display-runtime boundary; do
-   not invent a process-global god manager merely to remove the temporary host edge.
+### Reviewer family triage after slice 2
 
-### E1 slice 2 — first real provider/model ownership extraction — AUDIT-CORRECTED, RE-AUDIT REQUIRED
+The reviewer inspected the remaining current families rather than delegating selection to the coding
+agent.
 
-#### Audit correction (blocker: duplicate construction / fail-open to default provider)
+**Next family: Weather.**
 
-Independent audit found that the real `RedditWidgetFactory` created `RedditWidget` with no provider, so
-`RedditWidget.__init__` constructed the old default provider before the neutral owner injected — both
-duplicating provider construction and making a neutral service build/inject failure **fail open** to the
-QWidget-owned default. Corrected:
+Reasoning:
 
-- `RedditWidget.__init__` gained `build_default_provider` (default `True`, preserving standalone use);
-  the factory now passes `build_default_provider=False` so a runtime-managed widget builds **no** default
-  provider (`_post_provider is None` until injection). `_fetch_feed` guards a `None` provider (never
-  fetches on a default);
-- `WidgetRuntimeManager.ensure_widget_service` now **fails closed** on build *or* injection failure
-  (retires any partially-owned service, returns `None`); `_inject_reddit_service` raises if the widget
-  cannot accept the provider; new `has_runtime_service(widget_id)` lets the creation path distinguish
-  "no spec" from "required-service failure";
-- `_create_factory_widgets` now, for a widget that requires a runtime service, retires the widget via
-  `_fail_closed_runtime_service_widget` (unregister / unbind / drop expected-overlay / cleanup / delete)
-  when the service is `None` — the widget is never registered/started on a default;
-- removed the remaining stale "shared-consumer accounting" wording and the "generic future live
-  family-retirement" framing in `widget_runtime_manager.py` / its tests (live in-place family retirement
-  is not an E1 deliverable; the capability-change hook is the E2.7 transitional bridge only).
+- **Clock / Clock2 / Clock3:** the shared `GlobalClockTicker` is already presentation-neutral; do not
+  manufacture an E1 provider migration merely because the current pixels are QWidget.
+- **Reddit / Reddit2:** provider ownership is now landed and audited GREEN in slice 2.
+- **Weather:** the current `WeatherWidget` still owns the refresh/retry lifecycle, async request
+  generations, cache-first startup orchestration and the worker closure that constructs
+  `OpenMeteoProvider`. This is the clearest next ordinary-family runtime-data ownership seam.
+- **Gmail:** `GmailBackend.instance()` is already a neutral singleton backend. Gmail still has
+  presentation-coupled runtime orchestration to migrate later, but it is not the smallest next
+  provider-owner extraction.
+- **Steam card families:** current constructors are deliberately provider-inert/cache-bridge based.
+  Their remaining model/runtime separation should be evaluated after the simpler ordinary families;
+  do not force them into the runtime-service registry just to create work.
+- **Media:** `MediaWidget` really does construct/hold a `BaseMediaController`, so Media is a substantial
+  later E1 owner migration. It is deliberately **not next** because it is high-blast-radius: Spotify
+  controls, Visualizer/media dependency behavior, transport state and cross-display/shared state all
+  meet there.
+- **Imgur:** do not migrate; Phase F0 removes it.
 
-New production-seam regressions: `tests/test_reddit_widget.py` (factory-created widget builds no default
-provider and defers ownership; standalone still builds its default; deferred widget fails closed on
-fetch); `tests/test_widget_manager_refresh.py` (a failed provider build fails closed — no widget created,
-none owned). Local sweep: `440 passed, 4 skipped`.
+This ordering is an E1 migration decision, not a permanent family ranking.
 
-#### Landed this checkpoint
+### E1 slice 3 — Weather runtime-data/provider ownership — ACTIVE NEXT
 
-Chosen seam: the **Reddit post-provider** (`core.reddit_post_provider`). Rationale: it is the smallest
-single-purpose provider still *constructed and owned by a runtime QWidget* (built in
-`RedditWidget.__init__`/`RedditWidgetFactory` and held on `self._post_provider`), unlike the already-
-neutral clock ticker singleton or the `GmailBackend.instance()` singleton; it is per-instance (not
-shared → no artificial consumer machinery); and it has no live-rebuild coupling.
+Move the **Weather runtime-data lifecycle** out of `WeatherWidget` presentation ownership.
 
-What moved:
+This is one family only. The goal is not merely to relocate the
+`OpenMeteoProvider(...)` constructor; leave the slice with a coherent neutral Weather runtime owner.
 
-- new `rendering/widget_runtime_services.py` — a neutral registry (`RuntimeServiceSpec` +
-  `get_runtime_service_spec`) holding the family-specific build/inject/retire knowledge (reddit +
-  reddit2, honoring reddit2 family provider inheritance). Heavy provider import is lazy;
-- `WidgetRuntimeManager` gained generic `ensure_widget_service` / `get_widget_service` /
-  `retire_widget_service` / `retire_all_services` (retired in `cleanup()`). It owns the provider
-  lifetime keyed by widget id and stays generic (no `if family == …` switchboard — family knowledge
-  lives in the registry);
-- `_create_factory_widgets` builds/owns/injects the service through the owner at creation (synchronous,
-  pre-start);
-- `RedditWidgetFactory` no longer constructs/injects the provider (bare `RedditWidget` keeps its
-  `__init__` default only for standalone use);
-- corrected the slice-1 wording: `is_family_effective()` is documented as activation +
-  dependency-satisfaction (not shared-consumer accounting), and the owner's "imports no renderer code"
-  claim is narrowed to module-top only (transitional seams are lazily imported). Slice-1 YELLOW #1 is
-  thereby addressed.
+#### Destination boundary for this slice
 
-Regressions: `tests/test_widget_runtime_manager.py` (owner builds/owns/injects independent of QWidget;
-idempotent re-own; retire/cleanup exactly once; build-failure fails closed), `tests/test_widget_manager_refresh.py`
-(provider owned via real `setup_all_widgets`; deactivated family owns no provider; disabled instance ≠
-family deactivation), `tests/test_reddit_provider_settings.py` (reddit2 inheritance / override / rss
-default now asserted through the neutral registry). Local sweep: `419 passed, 4 skipped`.
+A presentation-neutral Weather runtime service/model owns the non-pixel behavior required to obtain
+and maintain Weather data, including the parts that are currently coupled to the QWidget:
 
-Not done (deliberately, per this slice's bounds): no other family migrated; no shared-consumer
-accounting added (reddit is per-instance); E2.7 hook untouched; owner not hoisted.
+- provider construction/use;
+- detached network fetch + preparation;
+- startup cache load and cache persistence;
+- automatic refresh cadence and retry scheduling that exist solely to maintain Weather data;
+- current-request / stale-result generation authority required to prevent retired or superseded Weather
+  work from committing;
+- clean retirement/cancellation of family-exclusive timer/poll/in-flight ownership.
 
-#### Original slice-2 contract (satisfied above)
+`WeatherWidget` becomes a legacy presentation consumer for this migration epoch:
 
-Move one **actual** provider/model/service lifetime seam out of QWidget presentation ownership and into
-presentation-neutral runtime ownership.
+```text
+Weather runtime service/model
+    -> prepared immutable/current Weather state + refresh/error events
+    -> WeatherWidget presentation
+```
 
-Before choosing the seam, inspect current source and select the smallest family/service where a real
-provider/model/process/poll/timer lifetime is still materially owned by a runtime QWidget. Do not
-manufacture work for a family whose relevant ownership is already neutral.
+Keep in the QWidget only presentation/UI behavior still needed before Phase F:
 
-Required boundaries:
+- painting/layout/icons/pixmaps;
+- card/text/shadow presentation;
+- fade/visibility presentation;
+- click geometry and Settings-navigation presentation;
+- applying already-prepared Weather state to the old pixels.
 
-- one bounded family/service seam only; no all-family migration;
-- provider/model/service lifetime becomes presentation-neutral and is not owned merely because a
-  QWidget exists;
-- current Settings-owned teardown/recreation remains the normal family-activation application path;
-- deactivated-before-recreation must not recreate/resolve the migrated exclusive owner;
-- reactivation through the next normal runtime generation may recreate it from preserved detailed
-  settings;
-- ordinary member `enabled=False` remains distinct from family deactivation;
-- preserve existing legal ownership for genuinely shared services when it already gives correct
-  lifetime; add explicit consumer accounting **only if the concrete migrated seam demonstrably needs
-  it**;
-- do not generalize the E2.7 Visualizer live hook into ordinary family lifecycle;
-- `WidgetRuntimeManager` remains generic: no central `if family == ...` provider/presenter switchboard;
-- correct the slice-1 `is_family_effective()` / “imports no renderer code” overstatements while touching
-  the owner, without redesigning E2.7.
+Do not move Weather retrieval/business logic into QML.
 
-Regression bar for the chosen seam:
+#### Ownership rules
 
-- provider/model owner exists independently of QWidget pixel ownership;
-- family deactivated before runtime recreation -> migrated exclusive owner is not created/resolved;
-- family reactivated -> one normal fresh-generation owner can be created with preserved detailed config;
-- normal runtime teardown cleans the migrated owner exactly once;
-- ordinary instance disabled is not treated as family deactivation;
-- if the chosen service is truly shared, prove the actual surviving-consumer lifetime contract; if it is
-  not shared, do not add artificial shared-consumer machinery;
-- existing E2/E2.7 capability/failover regressions remain green where touched.
+- build/own the production Weather runtime service through `WidgetRuntimeManager` / the static neutral
+  service registry, or an equally presentation-neutral owner reached by that registry;
+- keep family-specific Weather implementation outside `WidgetRuntimeManager` itself;
+- the production `WeatherWidget` must not directly construct `OpenMeteoProvider` or silently fall back
+  to an old QWidget-owned provider path;
+- provider creation should remain lazy enough that service construction itself does not perform network
+  or filesystem work unnecessarily;
+- deactivated Weather capability before runtime recreation creates no Weather service/provider/timer;
+- ordinary `widgets.weather.enabled=False` remains an instance state, not family deactivation;
+- normal runtime teardown retires Weather runtime-data ownership exactly once and fences late results;
+- the next normal runtime generation may reconstruct Weather from preserved location/detail settings;
+- Weather is not a shared-provider problem: do not add generic shared-consumer accounting for it;
+- preserve the existing Settings-owned teardown/recreation capability application path; do not add a
+  live Weather family OFF/ON subsystem;
+- do not touch Media, Gmail, Steam, Visualizer, E3/E4 or Quick pixels in this slice.
 
-Push this bounded slice and stop for independent audit.
+#### Current compatibility seams
 
-### E1 remaining after slice 2
+`widgets.weather_components.WeatherFetcher` has no identified production construction caller; current
+production uses `WeatherWidget._fetch_via_thread_manager`. Do **not** promote `WeatherFetcher` into the
+new authority merely because it already wraps `OpenMeteoProvider`.
 
-- continue provider/model lifetime migration off member QWidgets, one bounded family/service seam at a
-  time;
+If its only surviving callers are tests/compatibility:
+
+- either rehome/delete those expectations when the neutral Weather service replaces them; or
+- leave it explicitly compatibility-only with no production ownership.
+
+A directly constructed `WeatherWidget` may retain a compatibility convenience runtime service if
+current tests/tools genuinely require standalone behavior, but the production factory path must
+explicitly defer to the neutral owner so there is no Reddit-style duplicate construction/fail-open
+path.
+
+#### Behavior that must survive
+
+Preserve the current Weather product behavior while moving ownership:
+
+- cache-first startup display;
+- stale cache remains usable while refresh is attempted;
+- startup/steady-state refresh policy;
+- approximately 30-minute periodic cadence and existing jitter policy;
+- retry behavior after provider failure;
+- `--noupdates` / automatic-service-updates gating;
+- manual/double-click refresh;
+- location changes cannot accept stale old-location results;
+- retired runtime generations cannot commit stale startup/provider results;
+- provider/widget cache persistence semantics;
+- missing-location behavior;
+- no premature network work during construction/presentation paint.
+
+#### Regression bar
+
+At minimum prove:
+
+- real production factory/setup obtains Weather data runtime ownership through the neutral owner;
+- runtime-managed `WeatherWidget` does not construct a direct provider/default data service before
+  neutral injection/attachment;
+- family deactivated -> no Weather runtime service/provider/timer resolves;
+- instance disabled remains distinct from family deactivation;
+- one normal active Weather runtime owns one refresh cadence, not duplicate QWidget + neutral timers;
+- teardown cancels/retires Weather service ownership once and stale completion cannot update the widget;
+- location A request followed by location B cannot commit A into B;
+- provider failure preserves valid cached display state and follows the existing retry policy without
+  constructing a hidden QWidget fallback provider;
+- standalone compatibility, if retained, is explicitly tested separately from the production path;
+- while touching `WidgetRuntimeManager` service tests, add the missing generic injection-exception
+  retirement regression noted after slice 2;
+- focused Weather + E1 owner + setup/lifecycle tests remain green.
+
+Push this bounded Weather slice and **STOP for independent audit**.
+
+### E1 remaining after slice 3
+
+After Weather is independently GREEN:
+
+- continue only the **real** remaining provider/model/runtime-data ownership migrations, with Media
+  expected to require its own deliberately high-risk checkpoint rather than being casually folded into
+  another family;
+- inspect Gmail and Steam residual runtime/model ownership against their already-neutral backend/cache
+  seams before deciding what actually needs migration;
 - fresh-process import dormancy: catalogued-but-deactivated capability resolves no unnecessary heavy
   family implementation before first use;
-- hoist the per-display owner out of legacy `WidgetManager` into the final display-runtime boundary as
-  that boundary lands.
+- hoist the per-display runtime owner out of legacy `WidgetManager` into the final display-runtime
+  boundary as that boundary lands.
 
 A live in-place family retirement mechanism is **not** an E1 deliverable unless exact current source
 introduces a real live activation writer or another demonstrated product flow requires it.
@@ -1057,26 +1118,33 @@ it does not reopen E2.7 implementation or block the next Phase-E slice.
 **E1 slice 1 is CLOSED / AUDITED GREEN at
 `8fcbc57a41c0b402fd4253d9668a0c6548b3100f`.**
 
-The `9adb7491...` documentation prescription for generic live family retirement is superseded. Current
-production family activation is applied through Settings-owned full runtime teardown/recreation.
+**E1 slice 2 is CLOSED / AUDITED GREEN at
+`c320887cc27e1b2bace10ba562a36e24ae9307ca`.**
 
-The active next checkpoint is:
+The earlier generic live family-retirement prescription remains superseded. Current production family
+activation is applied through Settings-owned full runtime teardown/recreation.
+
+The reviewer has selected **Weather runtime-data/provider ownership** as the active next checkpoint
+after inspecting the remaining families.
 
 ```text
-inspect current provider/model ownership
--> choose one smallest real QWidget-coupled provider/model/service seam
--> extract that lifetime into presentation-neutral ownership
--> preserve Settings teardown/recreation as capability application path
--> add shared-consumer machinery only if that concrete seam actually requires it
--> focused ownership/dormancy/lifecycle regressions
+Weather only
+-> move provider/network/cache/refresh/request-generation ownership out of WeatherWidget
+-> neutral Weather runtime service/model owned through WidgetRuntimeManager
+-> WeatherWidget remains legacy pixel consumer of prepared Weather state
+-> no direct production OpenMeteoProvider fallback from QWidget
+-> preserve cache-first/retry/noupdates/manual-refresh/stale-result contracts
+-> focused Weather + owner + setup/lifecycle regressions
 -> diff/status
 -> commit + push
 -> STOP for independent audit
 ```
 
-Do not invent a generic live family OFF/ON lifecycle without a real current runtime writer.
+Do not ask the coding agent to choose another family unless exact source evidence invalidates the
+Weather assessment. If such contradictory evidence appears, stop and report it rather than silently
+substituting a different migration.
 
-After E1 completes across its bounded slices:
+After E1 completes across bounded owner slices:
 
 ```text
 E3 retained Quick primitives
@@ -1085,8 +1153,7 @@ E3 retained Quick primitives
 -> Phase F
 ```
 
-Do not send an implementation agent back into E2/E2.7 unless new source/runtime evidence demonstrates
-a specific regression.
+Do not send implementation work back into E2/E2.7 without a demonstrated regression.
 
 ---
 
