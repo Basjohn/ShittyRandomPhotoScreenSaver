@@ -41,8 +41,9 @@ widget instance enabled / disabled
 
 Do not use “disabled family” when you mean application-level `deactivated`.
 
-The visualizer is deliberately not a widget-family activation capability even though its current
-Settings section may be colocated with widget controls.
+Visualizers is a widget-family activation capability (family `visualizers`, member `spotify_visualizer`)
+that requires the `media` family; its runtime/render ownership remains the special Phase-D visualizer
+subsystem rather than an ordinary Phase-F widget family.
 
 At the currently landed foundation, factory-backed widget creation is filtered by family activation
 before per-instance enabled handling. As E1 moves model/provider/service ownership under the final

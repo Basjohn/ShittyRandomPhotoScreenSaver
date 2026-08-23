@@ -106,10 +106,70 @@ class TransitionsTab(QWidget):
         # hidden combo only mirrors this; it is never a second authority.
         self._current_transition = ""
         self._loading = False
+        # Reentrancy guard so our own writes do not bounce back through the
+        # cross-manager settings_changed broadcast as an "external" change.
+        self._writing_settings = False
         self._setup_ui()
         self._load_settings()
-        
+
+        # Live link: reflect external `transitions` mutations (e.g. the
+        # screensaver context-menu Random action) without becoming a second
+        # authority. Auto-disconnected when this QObject is destroyed.
+        try:
+            self._settings.settings_changed.connect(self._on_external_settings_changed)
+        except Exception as e:
+            logger.debug("[TRANSITIONS_TAB] settings_changed subscribe skipped: %s", e)
+
         logger.debug("TransitionsTab created")
+
+    def _on_external_settings_changed(self, key: str, value: object) -> None:
+        """Reflect an external transitions-root mutation into the live controls.
+
+        This makes `Use Random Transitions` and the context-menu `Random` action
+        two views of the one canonical `transitions.random_always` state. It never
+        builds unbuilt transition pages, never saves in response, and is guarded
+        against our own writes / load to avoid signal loops.
+        """
+        if getattr(self, "_writing_settings", False) or getattr(self, "_loading", False):
+            return
+        if not (key == "transitions" or (isinstance(key, str) and key.startswith("transitions."))):
+            return
+        cfg = self._settings.get("transitions", {})
+        if not isinstance(cfg, dict):
+            return
+        self._loading = True
+        try:
+            for name, cb in getattr(self, "_activation_checkboxes", {}).items():
+                desired = is_transition_activated(cfg, name)
+                if cb.isChecked() != desired:
+                    cb.blockSignals(True)
+                    cb.setChecked(desired)
+                    cb.blockSignals(False)
+                self._activation_by_type[name] = desired
+            pool = cfg.get("pool", {}) if isinstance(cfg.get("pool", {}), dict) else {}
+            for name, cb in getattr(self, "_pool_checkboxes", {}).items():
+                desired = bool(SettingsManager.to_bool(pool.get(name, self._pool_by_type.get(name, True)), True))
+                if cb.isChecked() != desired:
+                    cb.blockSignals(True)
+                    cb.setChecked(desired)
+                    cb.blockSignals(False)
+                self._pool_by_type[name] = desired
+            use_random = SettingsManager.to_bool(cfg.get("random_always", False), False)
+            cbr = getattr(self, "_use_random_checkbox", None)
+            if cbr is not None and cbr.isChecked() != use_random:
+                cbr.blockSignals(True)
+                cbr.setChecked(use_random)
+                cbr.blockSignals(False)
+            new_type = canonicalize_transition_name(cfg.get("type", ""), fallback="")
+            if new_type and new_type != "Random":
+                self._current_transition = new_type
+                self.transition_combo.blockSignals(True)
+                self.transition_combo.setCurrentText(new_type)
+                self.transition_combo.blockSignals(False)
+        finally:
+            self._loading = False
+        # Reconcile pill visibility (may redirect to SETUP if current deactivated).
+        self._apply_transition_pill_visibility()
     
     def load_from_settings(self) -> None:
         """Reload all UI controls from settings manager (called after preset change)."""
@@ -988,8 +1048,29 @@ class TransitionsTab(QWidget):
 
         self._specific_group_host_layout.addWidget(self.burn_group)
 
+    def _admit_nav_key(self, key: str) -> str:
+        """Return SETUP for any deactivated transition; otherwise the key.
+
+        Centralized transition-navigation admission so a stale/programmatic
+        selection of a deactivated transition never leaves SETUP, mutates
+        _current_transition, mirrors the combo, builds a page, or saves.
+        """
+        if key == _SETUP_NAV_KEY:
+            return key
+        if not self._transition_activated(key):
+            return _SETUP_NAV_KEY
+        return key
+
     def _on_nav_selected(self, key: str) -> None:
         """Show either the SETUP page or one transition's settings groups."""
+        # Admission first: a deactivated transition redirects to SETUP before any
+        # selection state, mirror, page build, or save happens.
+        admitted = self._admit_nav_key(key)
+        if admitted != key:
+            button = self._nav_buttons.get(admitted)
+            if button is not None:
+                button.setChecked(True)
+        key = admitted
         show_setup = key == _SETUP_NAV_KEY
         self._setup_page.setVisible(show_setup)
         for group in getattr(self, "_transition_setting_groups", []):
@@ -1558,8 +1639,12 @@ class TransitionsTab(QWidget):
         # type="Random" before persistence, then reflect the repair live.
         normalize_transition_capability_state(config)
 
-        self._settings.set('transitions', config)
-        self._settings.save()
+        self._writing_settings = True
+        try:
+            self._settings.set('transitions', config)
+            self._settings.save()
+        finally:
+            self._writing_settings = False
         self.transitions_changed.emit()
 
         self._reflect_capability_state(config)

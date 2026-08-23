@@ -10,6 +10,7 @@ import pytest
 
 from core.settings.capability_activation import is_widget_family_activated
 from rendering.widget_descriptors import (
+    get_widget_family_descriptor,
     get_widget_family_descriptors,
     get_widget_settings_section_descriptor,
     get_widget_settings_section_descriptors,
@@ -167,6 +168,93 @@ def test_deactivated_family_is_not_lazily_built_or_hydrated(qt_app, settings_man
         assert "weather" in tab._hydrated_widget_sections
         assert hasattr(tab, "weather_enabled")
         assert tab.weather_enabled.isChecked() is True
+    finally:
+        tab.deleteLater()
+
+
+def test_visualizers_row_present_and_depends_on_media(qt_app, settings_manager):
+    tab = _make_tab(settings_manager)
+    try:
+        assert "visualizers" in tab._family_activation_checkboxes
+        vis_cb = tab._family_activation_checkboxes["visualizers"]
+        media_cb = tab._family_activation_checkboxes["media"]
+        # Media active -> Visualizers toggleable.
+        assert media_cb.isChecked() is True
+        assert vis_cb.isEnabled() is True
+
+        # Deactivate Media -> Visualizers forced off, disabled, pill hidden.
+        media_cb.setChecked(False)
+        tab._save_settings_now()
+        assert vis_cb.isChecked() is False
+        assert vis_cb.isEnabled() is False
+        cfg = settings_manager.get("widgets", {})
+        assert is_widget_family_activated(cfg, "visualizers") is False
+        assert is_widget_family_activated(cfg, "media") is False
+        vis_family = get_widget_family_descriptor("visualizers")
+        assert _family_pill(tab, vis_family).isHidden() is True
+
+        # Reactivate Media -> Visualizers row enabled again but NOT auto-on.
+        media_cb.setChecked(True)
+        tab._save_settings_now()
+        assert vis_cb.isEnabled() is True
+        assert vis_cb.isChecked() is False
+        assert is_widget_family_activated(settings_manager.get("widgets", {}), "visualizers") is False
+    finally:
+        tab.deleteLater()
+
+
+def test_enable_all_and_disable_all_respect_media_visualizers_dependency(qt_app, settings_manager):
+    tab = _make_tab(settings_manager)
+    try:
+        tab._set_all_family_activation(True)
+        tab._save_settings_now()
+        cfg = settings_manager.get("widgets", {})
+        assert is_widget_family_activated(cfg, "media") is True
+        assert is_widget_family_activated(cfg, "visualizers") is True
+
+        tab._set_all_family_activation(False)
+        tab._save_settings_now()
+        cfg = settings_manager.get("widgets", {})
+        assert is_widget_family_activated(cfg, "media") is False
+        assert is_widget_family_activated(cfg, "visualizers") is False
+    finally:
+        tab.deleteLater()
+
+
+def test_generic_family_page_retires_and_rebuilds(qt_app, settings_manager):
+    # Representative non-visualizer family (Weather): built -> deactivate retires
+    # -> reactivate keeps it unbuilt -> select rebuilds + hydrates preserved config.
+    settings_manager.set("widgets", {
+        "weather": {"enabled": True, "location": "Testville", "font_size": 22},
+        "shadows": {"enabled": True, "text_enabled": True, "header_enabled": True},
+        "global": {"card_border_width_px": 3},
+    })
+    tab = _make_tab(settings_manager, initial_view_state={"subtab_id": "weather"})
+    try:
+        weather_idx = tab._widget_section_index("weather")
+        assert hasattr(tab, "weather_enabled")  # built on initial selection
+        assert "weather" in tab._hydrated_widget_sections
+
+        # Deactivate -> SETUP, pill hidden, page retired.
+        tab._family_activation_checkboxes["weather"].setChecked(False)
+        assert tab._current_subtab == tab._widget_section_index("setup")
+        assert not hasattr(tab, "weather_enabled")
+        assert weather_idx not in tab._subtab_content_built
+        assert "weather" not in tab._hydrated_widget_sections
+        # Persisted detail untouched.
+        assert settings_manager.get("widgets", {})["weather"]["location"] == "Testville"
+
+        # Reactivate -> pill returns, page still unbuilt.
+        tab._family_activation_checkboxes["weather"].setChecked(True)
+        weather = get_widget_family_descriptor("weather")
+        assert _family_pill(tab, weather).isHidden() is False
+        assert not hasattr(tab, "weather_enabled")
+
+        # Select -> rebuild + hydrate preserved values.
+        tab._on_subtab_changed(weather_idx)
+        qt_app.processEvents()
+        assert hasattr(tab, "weather_enabled")
+        assert "weather" in tab._hydrated_widget_sections
     finally:
         tab.deleteLater()
 

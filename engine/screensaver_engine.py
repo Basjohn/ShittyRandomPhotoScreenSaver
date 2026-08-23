@@ -56,8 +56,6 @@ from rendering.transition_registry import (
     is_transition_available_for_hw,
 )
 from core.settings.capability_activation import (
-    DEFAULT_RECOVERY_TRANSITION,
-    ensure_recovery_transition_activated,
     is_transition_activated,
     normalize_transition_capability_state,
 )
@@ -1419,28 +1417,17 @@ class ScreensaverEngine(QObject):
                 available.append(name)
 
             if not available:
-                # Effective pool empty after hw filtering (activation+pool is
-                # non-empty per normalization above, but nothing pooled is
-                # hw-available). Fall back to ONE deterministic activated,
-                # hw-available transition rather than broadening the pool into a
-                # random choice or running a deactivated one.
-                activated_hw = [
-                    name
-                    for name in cycle_types
-                    if is_transition_available_for_hw(name, hw)
-                    and is_transition_activated(transitions, name)
-                ]
-                if activated_hw:
-                    available = [activated_hw[0]]
-                else:
-                    # No activated hw-available candidate at all (pathological
-                    # config). Do not run a deactivated Crossfade: perform the
-                    # explicit canonical state repair, persist it, then admit the
-                    # now-activated recovery transition normally.
-                    if ensure_recovery_transition_activated(transitions):
-                        self.settings_manager.set('transitions', transitions)
-                        self.settings_manager.save()
-                    available = [DEFAULT_RECOVERY_TRANSITION]
+                # Effective pool (activated ∩ saved pool ∩ hardware) is empty.
+                # FAIL CLOSED: never broaden Random beyond the saved pool and
+                # never run an out-of-pool transition merely because hardware
+                # filtering removed every pooled candidate. Clear any stale
+                # pre-resolved choice and select nothing this rotation.
+                self.settings_manager.set('transitions.random_choice', None)
+                logger.info(
+                    "Random transition selection failed closed: empty effective "
+                    "pool (activated ∩ saved pool ∩ hardware)."
+                )
+                return
             # Avoid immediate repeats of transition type. Legacy "Shuffle"
             # selections are treated as "Crossfade" so the engine no longer
             # reintroduces Shuffle into the pool.

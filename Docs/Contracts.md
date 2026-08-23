@@ -67,8 +67,12 @@ Missing activation state resolves to activated for compatibility with existing/p
 H0 owns final Quick-era default choices; current canonical defaults are intentionally inert/all-on until
 that epoch is selected.
 
-The presentation-neutral widget-family catalog is canonical family membership. The visualizer is
-intentionally not a widget-family activation capability.
+`core/settings/widget_family_catalog.py` is the canonical, presentation-neutral authority for widget
+family membership and family-level dependency metadata (`rendering/widget_descriptors.py` re-exports it
+but is not the membership source). Visualizers is a capability family (member `spotify_visualizer`) that
+**requires** the `media` family; its runtime/render ownership stays the special Phase-D visualizer
+subsystem. `capability_activation.normalize_widget_capability_state` is the one authority enforcing the
+dependency (`media=False` forces `visualizers=False`).
 
 A deactivated widget family is filtered before runtime widget/model/provider creation at the currently
 landed factory creation seam. The broader E1 manager/provider ownership split remains a separate Phase-E

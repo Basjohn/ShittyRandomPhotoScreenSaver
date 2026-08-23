@@ -1754,9 +1754,10 @@ Landed E foundation slices (additive/inert at all-on defaults; no default runtim
 - **presentation-neutral widget family catalog** — `WIDGET_FAMILY_DESCRIPTORS` in
   `core/settings/widget_family_catalog.py` is the single source of truth mapping stable `family_id` to
   canonical member runtime widget ids. Family-level environment availability is neutral there;
-  `rendering/widget_descriptors.py` retains member-level runtime availability/legacy descriptor details
-  such as `get_active_member_widget_ids()`. The visualizer is deliberately excluded as a widget-family
-  capability. Pinned by `tests/test_widget_family_catalog.py`.
+  `rendering/widget_descriptors.py` re-exports the catalog and retains member-level runtime
+  availability/legacy descriptor details such as `get_active_member_widget_ids()` — it is not the
+  membership source. (Visualizers was later added as a capability family requiring Media; see the E2
+  second audit-correction notes below.) Pinned by `tests/test_widget_family_catalog.py`.
 - **canonical capability-activation settings schema** — `widgets.family_activation.<family_id>` and
   `transitions.activation.<setting_name>` in canonical defaults (all `True`, so behaviour is unchanged
   until H0), plus `core/settings/capability_activation.py` presentation-neutral read/write/query and
@@ -1821,7 +1822,8 @@ Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase 
     config). Pinned by `tests/test_widgets_tab_setup.py`; lazy-build index tests updated to stable ids.
   - **Transitions SETUP — LANDED.** Pill/subtab nav on the Transitions tab (`ui/tabs/transitions_tab.py`):
     a first `Setup` pill (default landing) + one pill per activated transition; the old visible dropdown
-    is retained only as a hidden selection model and the old per-transition "Include in Switch/Random
+    is retained only as a passive compatibility mirror (not a selection authority) and the old
+    per-transition "Include in Switch/Random
     Pool" checkbox is removed. SETUP page owns transition activation rows + `Enable All`/`Disable All`,
     `Use Random Transitions` (the single `random_always` authority), and a Random Pool list (only
     activated transitions shown; edits `transitions.pool`). Deactivating a transition hides its pill and
@@ -1866,9 +1868,44 @@ Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase 
   `tests/test_context_menu_activation.py`, `tests/test_flow_layout.py`, `tests/test_widgets_tab_setup.py`,
   and the transition admission suite.
 
-  **E2 remains at its audit gate — do NOT self-promote to complete.** Operator-scheduled `python main.py
-  --s` eyes-on confirmation of the responsive layout at multiple widths is the remaining acceptance item.
-  Checkpoint/push/audit E2 before Phase F.
+  **E2 second audit correction (independent audit of `ad2b0649` found five further substantive gaps;
+  corrected — E2 still NOT self-promoted).** Landed on top of the above:
+  - **Visualizers is now an application-level capability** (neutral catalog family `visualizers`, member
+    `spotify_visualizer`, `settings_section_id="visualizers"`) with a neutral dependency
+    `required_family_ids=("media",)`. Canonical default `widgets.family_activation.visualizers=True`;
+    snapshot + SST regenerated. Runtime/render ownership stays the Phase-D subsystem (not Phase-F, not
+    `WidgetRuntimeManager`).
+  - **Media→Visualizers dependency** enforced by the one neutral authority
+    `normalize_widget_capability_state` (`media=False` forces `visualizers=False`, never auto-reactivates
+    Media/Visualizers). Widgets SETUP shows a Visualizers row that is disabled + "Requires Media" while
+    Media is off, with the repair reflected live.
+  - **Explicit visualizer runtime admission**: local `_setup_spotify_visualizer` and remote
+    `_reconcile_remote_custom_visualizer` fence on `is_widget_family_effective(config, "visualizers")`
+    (activated + Media activated), so a stale/reused Media object cannot bypass the capability gate.
+  - **Context-menu visualizer admission**: the Change Visualizer submenu is hidden when Visualizers/Media
+    is deactivated (refreshed on show), and a stale mode-selection request is rejected.
+  - **Generic Widgets page retirement**: deactivating any family retires its built Settings section
+    (container destroyed, built/hydrated ownership + control attrs cleared) so it is genuinely
+    rebuildable; persisted per-family config is preserved; SETUP is never retired.
+  - **Live Random link**: `TransitionsTab` subscribes to `SettingsManager.settings_changed` and reflects
+    external `transitions` mutations (context-menu Random / concrete selection) into its live controls
+    with a write-reentrancy guard, so it can no longer resurrect a stale `random_always`/`type`.
+  - **Random can no longer escape the saved pool**: the engine random prep and factory
+    `_pick_random_transition` FAIL CLOSED when `activated ∩ saved pool ∩ hardware` is empty (no
+    broadening, no out-of-pool substitution, saved pool untouched); the context-menu Random availability
+    uses the same bounded rule.
+  - **Transitions programmatic-nav admission**: `_on_nav_selected` redirects a deactivated transition key
+    to SETUP before any selection/mirror/build/save.
+
+  Pinned by `tests/test_widget_family_catalog.py`, `tests/test_capability_activation.py`,
+  `tests/test_widgets_tab_setup.py`, `tests/test_visualizer_capability_admission.py`,
+  `tests/test_transitions_tab_setup.py`, `tests/test_transition_activation_admission.py`,
+  `tests/test_transition_distribution.py`, and `tests/test_context_menu_activation.py`.
+
+  **E2 remains at its audit gate — do NOT self-promote to complete.** The only remaining acceptance item
+  is operator `python main.py --s` eyes-on confirmation of the responsive layout (already reported
+  "much better") and the new Visualizers dependency UX across widths. Checkpoint/push/audit E2 before
+  Phase F.
 - **E3** — shared retained Quick visual primitives.
 - **E4** — global eight-direction shadow authority (default `SE`).
 

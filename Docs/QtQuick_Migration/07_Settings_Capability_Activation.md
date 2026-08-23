@@ -61,7 +61,11 @@ The catalog maps stable family ids to member runtime widget ids and derives avai
 runtime descriptors/environment gates. It does not import family Quick presenters/providers merely to
 list the catalog.
 
-The visualizer is deliberately excluded from widget-family activation.
+Visualizers participates in application-level capability activation via the neutral catalog (family
+`visualizers`, member `spotify_visualizer`), and it **requires** the `media` family
+(`required_family_ids = ("media",)`). Its runtime/render ownership remains the special Phase-D
+visualizer subsystem — being catalogued does not make it an ordinary Phase-F widget family or move it
+under `WidgetRuntimeManager`.
 
 ### 2.2 Canonical persisted activation schema
 
@@ -168,7 +172,10 @@ Steam -> supported Steam family cards/services
 Imgur may remain temporarily visible only under its current legacy/dev environment gate before Phase F
 removes it; it is not a Quick family target.
 
-The visualizer is not a widget-family activation row.
+Visualizers is a widget-family activation row that requires Media: while Media is deactivated the
+Visualizers row is shown but disabled/unchecked with a "Requires Media" affordance, and canonical state
+is normalized so `visualizers` is never activated while `media` is not (`media=False` forces
+`visualizers=False`; reactivating Media never silently reactivates Visualizers).
 
 ### 4.2 Enable All / Disable All
 

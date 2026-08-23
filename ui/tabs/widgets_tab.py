@@ -66,6 +66,7 @@ from rendering.widget_descriptors import (
     get_widget_lazy_dependency_indices,
     get_widget_lazy_bootstrap_indices,
     get_widget_programmatic_dependency_indices,
+    get_widget_family_descriptor,
     get_widget_family_descriptors,
     get_widget_runtime_descriptor,
     get_widget_settings_section_descriptor,
@@ -82,6 +83,7 @@ from rendering.widget_descriptors import (
 )
 from core.settings.capability_activation import (
     is_widget_family_activated,
+    normalize_widget_capability_state,
     set_widget_family_activated,
 )
 from ui.tabs.shared_styles import (
@@ -1204,8 +1206,99 @@ class WidgetsTab(QWidget):
             button.setChecked(True)
         self._on_subtab_changed(setup_index)
 
+    def _apply_family_dependency_state(self) -> None:
+        """Enforce widget-family dependencies live on the SETUP checkboxes.
+
+        A family whose required families are not all activated is forced off,
+        disabled, and given a "Requires <X>" tooltip; when its dependency is
+        satisfied it is re-enabled (but never auto-reactivated). The single
+        dependency authority is the neutral family catalog.
+        """
+        checkboxes = getattr(self, "_family_activation_checkboxes", {})
+        active = {fid: cb.isChecked() for fid, cb in checkboxes.items()}
+        for family in get_widget_family_descriptors():
+            checkbox = checkboxes.get(family.family_id)
+            if checkbox is None or not family.required_family_ids:
+                continue
+            deps_ok = all(
+                active.get(req, is_widget_family_activated(self._settings.get('widgets', {}), req))
+                for req in family.required_family_ids
+            )
+            checkbox.setEnabled(deps_ok)
+            if not deps_ok:
+                if checkbox.isChecked():
+                    checkbox.blockSignals(True)
+                    checkbox.setChecked(False)
+                    checkbox.blockSignals(False)
+                    active[family.family_id] = False
+                req_labels = ", ".join(
+                    desc.label
+                    for req in family.required_family_ids
+                    if (desc := get_widget_family_descriptor(req)) is not None
+                )
+                checkbox.setToolTip(f"Requires {req_labels}")
+            else:
+                checkbox.setToolTip(family.description or "")
+
+    def _retire_widget_section(self, section_id: str) -> None:
+        """Destroy a built family Settings section so it is genuinely rebuildable.
+
+        Removes the section container, clears its built/hydrated ownership, and
+        deletes its control attributes so loaders/savers/builders treat it as
+        unbuilt. Persisted per-family configuration is untouched (save preserves
+        unhydrated sections). SETUP is never retired.
+        """
+        if not section_id or section_id == "setup":
+            return
+        descriptor = get_widget_settings_section_descriptor(
+            section_id, self._widget_section_descriptors
+        )
+        if descriptor is None:
+            return
+        idx = self._widget_section_index(section_id)
+        container = getattr(self, descriptor.container_attr_name, None)
+        if container is None:
+            return  # not built; nothing to retire
+        try:
+            container.setParent(None)
+            container.deleteLater()
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
+        try:
+            delattr(self, descriptor.container_attr_name)
+        except Exception:
+            pass
+        if idx >= 0:
+            self._subtab_content_built.discard(idx)
+        self._hydrated_widget_sections.discard(section_id)
+        self._blocked_unhydrated_save_sections.discard(section_id)
+        # Delete control/guard attributes so the descriptor-driven load/save/
+        # build guards (all hasattr-based) see the section as unbuilt again.
+        stale_attrs = (
+            set(descriptor.loader_guard_attrs)
+            | set(descriptor.saver_guard_attrs)
+            | set(descriptor.signal_block_attrs)
+        )
+        for attr in stale_attrs:
+            if hasattr(self, attr):
+                try:
+                    delattr(self, attr)
+                except Exception:
+                    pass
+
+    def _retire_deactivated_family_sections(self) -> None:
+        """Retire built Settings pages for any currently deactivated family."""
+        checkboxes = getattr(self, "_family_activation_checkboxes", {})
+        for family in get_widget_family_descriptors():
+            checkbox = checkboxes.get(family.family_id)
+            activated = checkbox.isChecked() if checkbox is not None else True
+            if not activated:
+                self._retire_widget_section(family.settings_section_id)
+
     def _on_family_activation_toggled(self, family_id: str, checked: bool) -> None:
+        self._apply_family_dependency_state()
         self._apply_family_pill_visibility()
+        self._retire_deactivated_family_sections()
         if not getattr(self, "_loading", False):
             self._save_settings()
 
@@ -1218,7 +1311,9 @@ class WidgetsTab(QWidget):
                 checkbox.setChecked(activated)
                 checkbox.blockSignals(False)
                 changed = True
+        self._apply_family_dependency_state()
         self._apply_family_pill_visibility()
+        self._retire_deactivated_family_sections()
         if changed and not getattr(self, "_loading", False):
             self._save_settings()
 
@@ -1234,13 +1329,20 @@ class WidgetsTab(QWidget):
             checkbox.blockSignals(True)
             checkbox.setChecked(is_widget_family_activated(widgets_config, family_id))
             checkbox.blockSignals(False)
+        self._apply_family_dependency_state()
         self._apply_family_pill_visibility()
 
     def _apply_family_activation_to_config(self, widgets_config: dict) -> None:
-        """Write the SETUP activation checkbox states into a widgets config."""
+        """Write the SETUP activation checkbox states into a widgets config.
+
+        Applies the neutral capability dependency normalization so an invalid
+        combination (e.g. Visualizers on while Media off) is repaired before
+        persistence rather than deferred to a later load/runtime seam.
+        """
         checkboxes = getattr(self, "_family_activation_checkboxes", {})
         for family_id, checkbox in checkboxes.items():
             set_widget_family_activated(widgets_config, family_id, bool(checkbox.isChecked()))
+        normalize_widget_capability_state(widgets_config)
 
     def _on_subtab_changed(self, subtab_id: int) -> None:
         """Show/hide widget sections based on selected subtab."""

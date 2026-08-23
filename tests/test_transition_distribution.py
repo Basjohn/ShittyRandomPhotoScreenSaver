@@ -6,6 +6,7 @@ from collections import Counter
 from types import SimpleNamespace
 
 from engine.screensaver_engine import ScreensaverEngine
+from rendering.transition_registry import get_transition_setting_names
 
 
 class _FakeSettingsManager:
@@ -198,6 +199,26 @@ def test_empty_effective_pool_resolves_to_activated_transition() -> None:
             assert choice != "Burn"
     finally:
         random.setstate(rng_state)
+
+
+def test_engine_random_fails_closed_when_pool_hw_unavailable() -> None:
+    # Random on; the only activated pool member (Burn) is hw-required and hw is
+    # off; Crossfade is activated + hw-safe but NOT a pool member. Random must
+    # fail closed — never escape the saved pool into the out-of-pool Crossfade.
+    pool = {name: False for name in get_transition_setting_names()}
+    pool["Burn"] = True
+    transitions = {
+        "type": "Crossfade",
+        "random_always": True,
+        "pool": pool,
+        "activation": {},
+    }
+    settings = _FakeSettingsManager(transitions=transitions, hw_accel=False)
+    choice = _run_random_transition_prepare(settings)
+    assert choice is None  # no out-of-pool substitution; fail closed
+    # Saved pool membership is unchanged.
+    assert settings.get("transitions.pool")["Burn"] is True
+    assert settings.get("transitions.pool")["Crossfade"] is False
 
 
 def test_rotation_timer_does_not_prepare_random_choice_twice() -> None:

@@ -22,8 +22,6 @@ from rendering.transition_registry import (
     is_transition_available_for_hw,
 )
 from core.settings.capability_activation import (
-    DEFAULT_RECOVERY_TRANSITION,
-    ensure_recovery_transition_activated,
     is_transition_activated,
     normalize_transition_capability_state,
     resolve_manual_transition_selection,
@@ -248,6 +246,12 @@ class TransitionFactory:
         )
         if random_mode and random_choice_value:
             transition_type = random_choice_value
+        elif random_mode:
+            # Random is on but no admissible pooled candidate exists (empty
+            # effective pool after hardware filtering). Fail closed: instantiate
+            # nothing this rotation rather than running an out-of-pool transition.
+            logger.info("[TRANSITION_FACTORY] No admissible random transition; failing closed")
+            return None
         elif not random_mode:
             # Manual selection: a deactivated transition is excluded from
             # explicit runtime selection, so resolve a deterministic activated
@@ -346,13 +350,14 @@ class TransitionFactory:
             return False
         return is_transition_available_for_hw(name, self._resolve_hw_accel())
 
-    def _pick_random_transition(self, settings: dict) -> str:
-        """Pick a concrete, activated random transition type.
+    def _pick_random_transition(self, settings: dict) -> Optional[str]:
+        """Pick a concrete random transition from the effective pool, or None.
 
-        Fails closed: this method has no blanket exception handler and never
-        substitutes a literal Crossfade. Any genuine failure propagates to
-        ``create_transition()``, which logs and returns None, so nothing is
-        instantiated rather than silently running a deactivated transition.
+        Effective pool = activated ∩ saved pool ∩ hardware-available. This FAILS
+        CLOSED: if that set is empty it returns None (no Random transition is
+        admitted) rather than broadening beyond the saved pool or substituting an
+        out-of-pool transition. It has no blanket exception handler, so genuine
+        failures propagate to ``create_transition()`` (which returns None).
         """
         all_types = get_transition_setting_names()
         try:
@@ -381,23 +386,13 @@ class TransitionFactory:
             and is_transition_activated(settings, n)
         ]
         if not available:
-            # No activated, pooled, hw-available candidate. Prefer any activated
-            # hw-available transition (dropping only the pool requirement,
-            # deterministically); never fall back to a deactivated Crossfade.
-            activated_hw = [
-                n for n in all_types
-                if is_transition_available_for_hw(n, hw)
-                and is_transition_activated(settings, n)
-            ]
-            if activated_hw:
-                available = [activated_hw[0]]
-            else:
-                # Pathological: nothing activated is hw-available. Perform the
-                # explicit canonical state repair, persist it, then admit the
-                # now-activated recovery transition normally.
-                if ensure_recovery_transition_activated(settings):
-                    self._persist_transitions(settings)
-                available = [DEFAULT_RECOVERY_TRANSITION]
+            # Fail closed: never run an out-of-pool transition just because the
+            # saved pool has no hardware-available candidate.
+            logger.info(
+                "[TRANSITION_FACTORY] Random pick failed closed: empty effective "
+                "pool (activated ∩ saved pool ∩ hardware)."
+            )
+            return None
 
         last = self._settings.get('transitions.last_random_choice', None)
         candidates = [t for t in available if t != last] or available

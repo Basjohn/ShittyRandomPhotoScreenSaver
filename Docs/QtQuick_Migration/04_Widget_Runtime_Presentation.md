@@ -65,9 +65,10 @@ get_active_member_widget_ids()
 Family availability derives from active runtime descriptors/environment gates rather than maintaining
 a competing gate list.
 
-The Spotify visualizer is deliberately **not** a widget-family activation capability. Its settings may
-currently live in WidgetsTab, but its runtime/presentation ownership is the Phase-D visualizer
-subsystem.
+The Spotify visualizer **participates in application-level capability activation** through the neutral
+family catalog (family `visualizers`, which **requires** the `media` family). Its runtime/render
+ownership remains the special Phase-D visualizer subsystem — capability activation does **not** make it
+an ordinary Phase-F widget-presentation family and does **not** move it under `WidgetRuntimeManager`.
 
 The current family catalog includes legacy/dev-gated Imgur only while the old runtime surface still
 exists. That does **not** authorize a Quick Imgur port; Phase F removes Imgur instead of migrating it.

@@ -170,6 +170,19 @@ def test_transition_page_is_lazy(qapp, settings_manager, qtbot):
     assert not hasattr(tab, "flip_group")
 
 
+def test_programmatic_nav_to_deactivated_transition_redirects_to_setup(qapp, settings_manager, qtbot):
+    tab = _make(qapp, settings_manager, qtbot)
+    tab._activation_checkboxes["Burn"].setChecked(False)
+    # A stale/programmatic navigation to a deactivated transition must be
+    # admitted to SETUP before any state mutation / page build / save.
+    tab._on_nav_selected("Burn")
+    assert tab._nav_buttons[_SETUP_NAV_KEY].isChecked() is True
+    assert not tab._setup_page.isHidden()
+    assert not hasattr(tab, "burn_group")
+    assert tab._current_transition != "Burn"
+    assert settings_manager.get("transitions", {}).get("type") != "Burn"
+
+
 def test_deactivated_transition_never_built(qapp, settings_manager, qtbot):
     tab = _make(qapp, settings_manager, qtbot)
     tab._activation_checkboxes["Burn"].setChecked(False)
@@ -272,6 +285,53 @@ def test_browsing_while_random_on_leaves_random_enabled(qapp, settings_manager, 
     assert settings_manager.get("transitions", {}).get("random_always") is True
     tab._on_nav_selected("Wipe")
     assert settings_manager.get("transitions", {}).get("random_always") is True
+
+
+def test_random_state_live_links_with_external_authority(qapp, settings_manager, qtbot):
+    # Use Random Transitions and the context-menu Random action are two views of
+    # the one canonical transitions.random_always. An open TransitionsTab must
+    # reflect an external change and must not resurrect its stale value on save.
+    tab = _make(qapp, settings_manager, qtbot)
+    tab._use_random_checkbox.setChecked(False)
+    assert settings_manager.get("transitions", {}).get("random_always") is False
+
+    # External authority (e.g. context menu) flips random_always -> True.
+    cfg = dict(settings_manager.get("transitions", {}))
+    cfg["random_always"] = True
+    settings_manager.set("transitions", cfg)
+    qapp.processEvents()
+    assert tab._use_random_checkbox.isChecked() is True
+
+    # An unrelated tab save must NOT write the stale False back.
+    tab._pool_checkboxes["Wipe"].setChecked(True)
+    assert settings_manager.get("transitions", {}).get("random_always") is True
+
+    # Reverse direction: external -> False is reflected and not resurrected.
+    cfg = dict(settings_manager.get("transitions", {}))
+    cfg["random_always"] = False
+    settings_manager.set("transitions", cfg)
+    qapp.processEvents()
+    assert tab._use_random_checkbox.isChecked() is False
+    tab._pool_checkboxes["Wipe"].setChecked(False)
+    assert settings_manager.get("transitions", {}).get("random_always") is False
+
+
+def test_external_manual_type_change_is_reflected(qapp, settings_manager, qtbot):
+    tab = _make(qapp, settings_manager, qtbot)
+    tab._use_random_checkbox.setChecked(False)
+    tab._on_nav_selected("Slide")
+    assert tab._current_transition == "Slide"
+
+    # External concrete selection (context menu) changes type -> Wipe.
+    cfg = dict(settings_manager.get("transitions", {}))
+    cfg["type"] = "Wipe"
+    cfg["random_always"] = False
+    settings_manager.set("transitions", cfg)
+    qapp.processEvents()
+    assert tab._current_transition == "Wipe"
+    # A later unrelated save must not overwrite type back to the stale Slide.
+    tab._pool_checkboxes["Wipe"].setChecked(True)
+    assert settings_manager.get("transitions", {}).get("type") == "Wipe"
 
 
 def test_e26_legacy_type_random_normalized_on_load(qapp, settings_manager, qtbot):
