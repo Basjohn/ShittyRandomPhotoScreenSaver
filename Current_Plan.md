@@ -7,9 +7,12 @@ Last updated: 2026-08-23
 Independent review basis:
 
 ```text
-5b3cbaef4d443c79941e5ac780252f82a4e77bc4
-Phase E2.7 Visualizer CUSTOM failover/reclaim lifecycle — independently audited GREEN; implementation closed
+8fcbc57a41c0b402fd4253d9668a0c6548b3100f
+Phase E1 slice 1 — WidgetRuntimeManager establishment by extraction — independently audited GREEN
 ```
+
+E1 remains active. E2/E2.7 remain implementation-closed; physical R-26 dual-display acceptance remains
+deferred hardware evidence.
 
 Always inspect exact current `main` before acting. Repository state outranks this file if a later
 checkpoint has landed.
@@ -442,7 +445,7 @@ SOLVED from deterministic tests alone.
 Detailed E2.7 implementation/correction chronology is historical evidence, not active execution guidance.
 Do not reopen E2.7 without contradictory runtime/source evidence.
 
-## E1 — presentation-neutral runtime/model/provider ownership — ACTIVE (slice 1 pushed, RE-AUDIT REQUIRED)
+## E1 — presentation-neutral runtime/model/provider ownership — ACTIVE
 
 E2 and E2.7 are implementation-closed. Complete the broader `WidgetRuntimeManager` ownership split
 across bounded, individually-audited slices (do not batch every provider into one commit).
@@ -453,40 +456,96 @@ Required destination:
 - presentation-neutral provider/model lifecycle ownership;
 - activated/enabled/visible state and monitor participation without QWidget presentation authority;
 - family deactivation retires exclusive provider/model/process/poll/timer/Quick/resource ownership;
-- shared infrastructure survives only while another activated consumer needs it;
+- shared infrastructure survives only while another valid consumer needs it;
 - deactivated capability before first use does not unnecessarily import/resolve heavy implementation;
 - ordinary instance-disabled state remains distinct from family deactivation;
 - no giant Python `QuickBaseOverlayWidget` replacement god object.
 
-### E1 slice 1 — establish the owner by extraction (PUSHED, awaiting independent audit)
+### E1 slice 1 — establish the owner by extraction — AUDITED GREEN
 
-`rendering/widget_runtime_manager.py` now hosts the presentation-neutral `WidgetRuntimeManager`,
-established by extracting responsibility **out of** the `WidgetManager` god-object (net −110 lines in
-`widget_manager.py`; owner is 252 lines; no provider migrated this slice). It owns:
+Pushed/audited checkpoint:
 
-- capability **admission** authority — `family_for_widget`, `is_family_activated`,
-  `is_family_effective` (the single dependency-aware / shared-consumer accounting query) and
-  `admits_widget_family`; `_create_factory_widgets` now admits through it;
-- capability-**deactivation** reaction dispatch (`handle_capability_change`) — the extensible seam that
-  currently drives the E2.7 canonical Visualizer failover retirement; `WidgetManager` delegates here and
-  its `_retire_visualizer_failover_if_capability_off` method is removed;
-- presentation-neutral runtime **lifecycle routing** (initialize/activate/deactivate/cleanup + `_all`
-  variants + state queries) over the host registry; `WidgetManager` keeps thin delegating wrappers so
-  its public API and the E2.7 confirmed-retirement `cleanup_widget` bool are preserved.
+```text
+8fcbc57a41c0b402fd4253d9668a0c6548b3100f
+```
 
-It imports no QWidget/Quick/provider/renderer code and creates/owns no QWidget instances. Regression:
-`tests/test_widget_runtime_manager.py`.
+Independent source audit confirmed:
 
-### E1 remaining slices (not started)
+- `rendering/widget_runtime_manager.py` establishes the presentation-neutral owner shell without
+  creating/owning QWidget or Quick instances;
+- `widget_manager.py` shrank by 110 lines rather than absorbing another subsystem;
+- the old initialize/activate/deactivate/cleanup lifecycle routing was relocated without material
+  behavior change and `cleanup_widget()` still returns an explicit bool required by E2.7;
+- factory-backed creation now delegates family activation admission through `WidgetRuntimeManager`;
+- capability-change dispatch still reaches the landed E2.7 Visualizer failover retirement;
+- no provider/model lifetime was migrated in this slice;
+- no E3/E4/F work entered the checkpoint.
 
-- live mid-runtime family-deactivation **retirement** of exclusive provider/model/process/poll/timer
-  ownership at the owner boundary, with shared-infra survival and the reactivation counterpart;
-- migrate provider/model lifetime ownership off the member QWidgets into the neutral owner (per family,
-  bounded);
-- fresh-process import dormancy (catalogued-but-deactivated resolves no heavy implementation);
-- hoist owner construction above `WidgetManager` where appropriate.
+The coding agent reported its local focused/broader Windows gate as `325 passed, 4 skipped`; the
+independent reviewer audited pushed source/diff/regression intent but did not independently rerun that
+Windows execution.
 
-Each remaining slice is an audit checkpoint.
+#### Slice-1 YELLOWs / next-slice guardrails
+
+These are not slice-1 blockers, but they must not be mistaken for already-landed destination behavior:
+
+1. `is_family_effective()` is the canonical **activation + dependency-satisfaction** query. It is **not**
+   by itself shared-provider/service last-consumer accounting. E1 still needs explicit ownership/consumer
+   lifetime semantics wherever infrastructure is shared. Do not use `is_family_effective()` as a
+   substitute refcount/lease/consumer registry.
+2. The new owner has no top-level QWidget/Quick/provider implementation imports, but
+   `handle_capability_change()` still lazily calls the legacy
+   `rendering.widget_setup_all.retire_visualizer_failover_on_capability_change` seam. Treat that as a
+   transitional E2.7 bridge, not a pattern for accumulating family-specific presenter imports inside
+   `WidgetRuntimeManager`.
+3. One `WidgetRuntimeManager` per display runtime is compatible with the destination decomposition.
+   The later hoist moves ownership out of legacy `WidgetManager` into the display-runtime boundary; do
+   not invent a process-global god manager merely to remove this temporary host edge.
+
+### E1 slice 2 — live capability retirement + reactivation — ACTIVE NEXT
+
+Land the live family transition boundary without turning the new manager into another switchboard.
+
+Required behavior:
+
+- a family becoming deactivated while runtime is live retires that display runtime's family-exclusive
+  member/model/provider/process/poll/timer/resource ownership through its legal owner;
+- reactivation reconstructs/re-admits the family once from preserved canonical settings without
+  resetting detailed config;
+- ordinary instance `enabled=False` remains distinct from family deactivation;
+- repeated/root settings notifications are idempotent and do not double-retire or double-create;
+- Media -> Visualizers dependency behavior remains canonical; the Visualizer's special runtime and E2.7
+  singleton/failover lifecycle remain delegated to their existing authority rather than becoming an
+  ordinary widget-family presenter;
+- shared infrastructure is retained until its actual remaining consumer set is empty. Introduce or use
+  explicit consumer ownership where required; do not infer this from `is_family_effective()` alone;
+- legacy QWidget create/remove plumbing may act as a temporary adapter while current production still
+  uses it, but family-specific provider/presentation branches must not accumulate in the neutral owner;
+- correct the slice-1 source/doc wording that calls dependency effectiveness “shared-consumer
+  accounting” and narrow the “imports no renderer code” claim to the actual transitional boundary.
+
+Regression bar must include at least:
+
+- live family OFF -> exclusive runtime owner retires;
+- OFF repeated -> no duplicate retirement;
+- OFF -> ON -> exactly one fresh runtime owner with preserved detailed settings;
+- ordinary instance disabled does not masquerade as family deactivation;
+- dependency-driven Visualizers ineffectiveness remains correct for both Visualizers-off and Media-off;
+- shared service/provider survives while a valid consumer remains and retires after the last consumer;
+- E2.7 confirmed-retirement/fresh-30-second-grace behavior remains green.
+
+Push this bounded slice and stop for independent audit.
+
+### E1 remaining after slice 2
+
+- migrate provider/model lifetime ownership off member QWidgets into the neutral owner, per family and
+  in bounded checkpoints;
+- fresh-process import dormancy (catalogued-but-deactivated resolves no heavy family implementation);
+- hoist the per-display owner out of legacy `WidgetManager` into the final display-runtime boundary as
+  that boundary lands.
+
+Each remaining ownership/lifecycle slice is an audit checkpoint.
+
 
 ## E3 — shared retained Quick primitives
 
@@ -893,15 +952,22 @@ architecture.
 Physical dual-display sleep/wake/late-return acceptance for R-26 remains deferred hardware evidence;
 it does not reopen E2.7 implementation or block the next Phase-E slice.
 
-**E1 slice 1 (establish `WidgetRuntimeManager` by extraction) is PUSHED and awaiting independent
-audit** — see the E1 section above. The active checkpoint is that re-audit:
+**E1 slice 1 is CLOSED / AUDITED GREEN at
+`8fcbc57a41c0b402fd4253d9668a0c6548b3100f`.**
+
+The active next checkpoint is the bounded E1 slice 2 described above:
 
 ```text
-audit E1 slice 1 pushed source/diff (widget_runtime_manager.py + WidgetManager delegation)
--> confirm net reduction, preserved E2.7 cleanup_widget bool, no provider migrated, owner neutral
--> correction if required
--> then next bounded E1 slice (live deactivation retirement) as its own audit checkpoint
+live family deactivation retirement + reactivation
+-> explicit shared-consumer lifetime where actually needed
+-> preserve instance-enabled distinction + E2.7 Visualizer special ownership
+-> focused lifecycle/dormancy/dependency regressions
+-> diff/status
+-> commit + push
+-> STOP for independent audit
 ```
+
+Do not use `is_family_effective()` as a substitute for shared-provider last-consumer accounting.
 
 After E1 completes across its bounded slices:
 

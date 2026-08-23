@@ -1,6 +1,6 @@
 # 04 — Runtime Widgets, Retained Quick Presentation, Shadows and Full Customization
 
-Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE**  
+Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — slice 1 audited GREEN**  
 Last updated: 2026-08-23
 
 Cross-links:
@@ -164,15 +164,38 @@ The Phase-E destination owner is presentation-neutral and owns:
 
 It does **not** own QWidget instances or runtime pixels.
 
-E1 slice 1 has **established** this owner (`rendering/widget_runtime_manager.py`) by extracting the
-capability-**admission** authority (dependency-aware, the single shared-consumer accounting query),
-the capability-**deactivation** reaction dispatch (currently driving the E2.7 Visualizer failover
-retirement), and presentation-neutral runtime **lifecycle routing** out of the `WidgetManager`
-god-object; `_create_factory_widgets` admits through it and `WidgetManager` delegates. That slice is
-pushed and awaiting independent audit. The owner is **not** considered fully closed yet: no
-provider/model lifetime has been migrated off the member QWidgets, and live mid-runtime deactivation
-retirement / fresh-process import dormancy remain later bounded E1 slices. See `Current_Plan.md` for
-the slice ledger.
+E1 slice 1 is independently **GREEN** at
+`8fcbc57a41c0b402fd4253d9668a0c6548b3100f`. It established
+`rendering/widget_runtime_manager.py` by extracting capability admission,
+capability-change dispatch and dormant lifecycle routing from the legacy `WidgetManager`; the legacy
+manager was reduced rather than expanded. No provider/model lifetime migrated in that slice.
+
+Treat the current host edge as transitional:
+
+```text
+legacy per-display WidgetManager
+        -> WidgetRuntimeManager
+```
+
+The destination decomposition still has one widget-runtime owner per display runtime, but that owner
+ultimately belongs to the display-runtime boundary rather than a QWidget presentation god-object.
+
+Two distinctions are binding for the remaining E1 work:
+
+- `is_family_effective()` means **family activated + required families satisfied**. It is the canonical
+  capability/dependency query; it is **not** shared-provider/service last-consumer accounting.
+- the current `handle_capability_change()` lazy bridge into
+  `rendering.widget_setup_all.retire_visualizer_failover_on_capability_change` exists to preserve the
+  already-landed E2.7 special Visualizer lifecycle. Do not generalize that reverse dependency into a
+  central list of family-specific presenter imports.
+
+For shared infrastructure, lifetime must be derived from explicit valid consumers/leases/ownership at
+the service's legal scope. A dependency query alone cannot prove that the final consumer has retired.
+
+E1 slice 2 owns live family deactivation retirement + reactivation through this neutral boundary while
+legacy QWidget create/remove code remains only a temporary adapter. Later bounded E1 slices migrate
+provider/model lifetime, prove fresh-process import dormancy, and hoist the owner out of the legacy
+`WidgetManager` as the Quick display-runtime boundary lands.
 
 ### 6.2 Per-display Quick widget presentation host
 
