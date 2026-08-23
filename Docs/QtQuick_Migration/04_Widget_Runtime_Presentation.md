@@ -1,6 +1,6 @@
 # 04 — Runtime Widgets, Retained Quick Presentation, Shadows and Full Customization
 
-Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — slice 1 audited GREEN**  
+Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — slices 1–2 audited GREEN; Weather slice next**  
 Last updated: 2026-08-24
 
 Cross-links:
@@ -153,7 +153,7 @@ Do not build dynamic third-party plugin discovery, manifests, hot loading or API
 The Phase-E destination owner is presentation-neutral and owns:
 
 - family activation admission;
-- model/provider lifetime as those seams migrate;
+- model/provider/runtime-data lifetime as those seams migrate;
 - per-instance enabled/visible intent;
 - monitor participation;
 - settings updates;
@@ -165,10 +165,14 @@ The Phase-E destination owner is presentation-neutral and owns:
 It does **not** own QWidget instances or runtime pixels.
 
 E1 slice 1 is independently **GREEN** at
-`8fcbc57a41c0b402fd4253d9668a0c6548b3100f`. It established
-`rendering/widget_runtime_manager.py` by extracting capability admission,
-capability-change dispatch and dormant lifecycle routing from the legacy `WidgetManager`; the legacy
-manager was reduced rather than expanded. No provider/model lifetime migrated in that slice.
+`8fcbc57a41c0b402fd4253d9668a0c6548b3100f`: the neutral owner shell was extracted while the
+legacy `WidgetManager` shrank.
+
+E1 slice 2 is independently **GREEN** at
+`c320887cc27e1b2bace10ba562a36e24ae9307ca`: Reddit/Reddit2 post-provider lifetime now routes through
+the neutral runtime-service registry/owner. Production Reddit widgets suppress their standalone default
+provider until neutral injection; required service build/injection failure fails closed; standalone
+construction retains its compatibility default.
 
 Treat the current host edge as transitional:
 
@@ -203,24 +207,53 @@ must satisfy the same ownership contract. The existing E2.7 live Visualizer capa
 is special lifecycle machinery for the global Visualizer singleton and must not be generalized into
 ordinary family hot-reload.
 
-Two distinctions remain binding:
+`is_family_effective()` means **family activated + required families satisfied**. It is the canonical
+capability/dependency query; it is not generic shared-provider last-consumer accounting.
 
-- `is_family_effective()` means **family activated + required families satisfied**. It is the canonical
-  capability/dependency query. It is not generic shared-provider/service last-consumer accounting.
-- the current `handle_capability_change()` lazy bridge into
-  `rendering.widget_setup_all.retire_visualizer_failover_on_capability_change` exists to preserve the
-  already-landed E2.7 special Visualizer lifecycle. Do not generalize that reverse dependency into a
-  central list of family-specific presenter imports.
+The current `handle_capability_change()` lazy bridge into the E2.7 Visualizer failover retirement
+remains transitional. Do not turn it into a central family-specific presenter/runtime switchboard.
 
-For a genuinely shared service, first preserve/reuse its actual legal owner and lifetime. Add explicit
-consumer/lease accounting only when inspection of a concrete migrated seam shows that the existing
-ownership cannot distinguish remaining consumers. Do not introduce generic accounting in advance of
-such evidence.
+#### Next ordinary-family owner seam: Weather
 
-The next E1 slice migrates one smallest **real** provider/model/service lifetime seam off QWidget
-presentation ownership. Subsequent bounded slices continue that migration, prove fresh-process import
-dormancy, and hoist the per-display owner out of the legacy `WidgetManager` as the Quick display-runtime
-boundary lands.
+Reviewer inspection after Reddit selected Weather as the next bounded E1 migration:
+
+- Clock's shared ticker is already presentation-neutral;
+- Gmail's backend is already a neutral singleton and its residual orchestration is a larger later seam;
+- Steam card constructors are currently provider-inert/cache-bridge based;
+- Media has a real QWidget-owned controller but is deliberately deferred to a high-risk dedicated
+  checkpoint because of Spotify/Visualizer/transport/shared-state coupling;
+- Imgur is removed in F0 rather than migrated;
+- Weather still couples provider construction, cache/startup flow, refresh/retry cadence and async
+  request-generation ownership directly to `WeatherWidget`.
+
+The Weather slice should leave one coherent presentation-neutral Weather runtime-data service/model,
+not merely move the `OpenMeteoProvider(...)` line.
+
+Destination shape:
+
+```text
+WidgetRuntimeManager
+    -> Weather runtime service/model
+           -> provider/network/cache/refresh/request-generation ownership
+           -> prepared current Weather state/events
+    -> WeatherWidget (temporary legacy pixel consumer)
+```
+
+`WeatherWidget` may retain old pixel/layout/icon/fade interaction until Phase F, but production Weather
+provider/network/timer ownership must no longer exist merely because the QWidget exists.
+
+`widgets.weather_components.WeatherFetcher` is not a production-owner candidate by default: current
+production uses the `WeatherWidget` ThreadManager fetch path, and repository search found no separate
+production construction caller for `WeatherFetcher`. Do not promote a compatibility/test helper into
+destination authority without evidence.
+
+For a genuinely shared future service, preserve/reuse its actual legal owner and lifetime. Add explicit
+consumer/lease accounting only when inspection of that concrete seam proves it is necessary. Weather
+itself does not justify generic shared-consumer machinery.
+
+After Weather, continue bounded real ownership migrations, then prove fresh-process import dormancy and
+hoist the per-display owner out of the legacy `WidgetManager` as the Quick display-runtime boundary
+lands.
 
 ### 6.2 Per-display Quick widget presentation host
 
