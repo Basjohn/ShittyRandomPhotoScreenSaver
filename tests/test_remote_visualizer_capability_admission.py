@@ -123,18 +123,23 @@ def test_final_create_allowed_when_active():
 
 
 def _run_delayed(monkeypatch, mgr_settings, target):
+    from rendering.multi_monitor_coordinator import get_coordinator
     monkeypatch.setattr(wsa, "describe_visualizer_spawn_display", _fake_resolution_to(target))
     # The recheck re-reads live CUSTOM routing from Settings; keep it CUSTOM-routed
     # to monitor 2 so the capability outcome is what these tests isolate.
     monkeypatch.setattr(wsa, "is_custom_position_selected_for_widget", lambda *a, **k: True)
     monkeypatch.setattr(wsa, "get_effective_monitor_value_for_widget", lambda *a, **k: "2")
     mgr = _StubMgr(mgr_settings)
+    # Arm a grace so the recheck's global generation check is satisfied; the
+    # capability outcome is what these tests isolate.
+    generation = get_coordinator().arm_visualizer_grace(intended_index=1, origin_manager=mgr)
+    mgr._remote_custom_visualizer_reconcile_token = 1
     # widgets_config here is the STALE copy captured at schedule time (active),
     # deliberately different from the live mgr settings.
     stale_active_copy = {"family_activation": {"media": True, "visualizers": True}}
     wsa._run_remote_custom_visualizer_fallback_recheck(
         mgr, stale_active_copy, {}, 0, None, SimpleNamespace(alive=True),
-        target_screen_index=1, token=1,
+        target_screen_index=1, token=1, generation=generation,
     )
 
 

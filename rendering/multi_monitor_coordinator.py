@@ -105,6 +105,15 @@ class MultiMonitorCoordinator(QObject):
         self._visualizer_failover_host_ref: Optional[weakref.ref] = None
         self._visualizer_failover_origin_ref: Optional[weakref.ref] = None
         self._visualizer_failover_pending: bool = False
+        # Global failover GENERATION authority for the single Visualizer. One
+        # outage owns one generation regardless of how many DisplayWidgets run
+        # setup/reconcile: ``_seq`` only ever increments (unique per outage);
+        # ``_gen`` is the currently-active outage generation (0 = none active).
+        # Every delayed grace callback validates ``_gen`` — not merely a local
+        # manager token — so a straggler from another display cannot act after
+        # reclaim or a new outage.
+        self._visualizer_failover_seq: int = 0
+        self._visualizer_failover_gen: int = 0
 
         logger.debug("[MULTI_MONITOR] Coordinator initialized")
     
@@ -468,49 +477,93 @@ class MultiMonitorCoordinator(QObject):
         except TypeError:
             return None
 
-    def set_visualizer_failover(
+    def arm_visualizer_grace(
         self,
         *,
         intended_index: int,
-        host: object = None,
         origin_manager: object = None,
-        pending: bool,
+    ) -> Optional[int]:
+        """Arm ONE global grace for the single Visualizer outage.
+
+        Returns a fresh generation to schedule the deadline with, or ``None`` when
+        a failover (grace or live fallback) is already active for the current
+        outage — in which case the caller must NOT schedule another 30 s deadline.
+        This makes the grace authority global: repeated reconcile from other
+        DisplayWidgets during one outage cannot start or reset a second grace.
+        """
+        with self._state_lock:
+            if self._visualizer_failover_intended is not None:
+                return None  # a grace/fallback is already active for this outage
+            try:
+                idx = int(intended_index)
+            except Exception:
+                return None
+            self._visualizer_failover_seq += 1
+            gen = self._visualizer_failover_seq
+            self._visualizer_failover_gen = gen
+            self._visualizer_failover_intended = idx
+            self._visualizer_failover_host_ref = None
+            self._visualizer_failover_origin_ref = self._weak_or_none(origin_manager)
+            self._visualizer_failover_pending = True
+        logger.debug(
+            "[MULTI_MONITOR] Visualizer grace armed gen=%s intended_index=%s", gen, idx
+        )
+        return gen
+
+    def set_visualizer_fallback_owner(
+        self,
+        *,
+        intended_index: int,
+        host: object,
+        origin_manager: object = None,
     ) -> None:
-        """Record the current visualizer CUSTOM failover state (runtime-only).
+        """Record a live temporary fallback owner for the CURRENT outage.
 
-        Two states share one record so topology reconciliation can see *both*:
-
-        - ``pending=True`` (grace armed): a configured CUSTOM monitor is temporarily
-          unavailable and a one-shot 30 s deadline is scheduled; no temporary owner
-          exists yet (``host`` is ``None``). A configured display returning before
-          the deadline can then be restored immediately and the stale callback
-          fenced.
-        - ``pending=False`` (fallback active): a temporary owner is live on
-          ``host`` (a non-configured display) until the configured display returns.
-
-        ``intended_index`` is the configured CUSTOM monitor index resolved at
-        record time; reclaim always re-resolves the CURRENT configured monitor
-        from live settings, so a later Settings change supersedes this. Never
-        persisted; cleared on runtime teardown.
+        Keeps the current failover generation (the fallback is the same outage as
+        the grace). Allocates a generation if somehow none is active. Never
+        persisted.
         """
         with self._state_lock:
             try:
-                self._visualizer_failover_intended = int(intended_index)
+                idx = int(intended_index)
             except Exception:
-                self._visualizer_failover_intended = None
-                self._visualizer_failover_host_ref = None
-                self._visualizer_failover_origin_ref = None
-                self._visualizer_failover_pending = False
                 return
+            if self._visualizer_failover_gen == 0:
+                self._visualizer_failover_seq += 1
+                self._visualizer_failover_gen = self._visualizer_failover_seq
+            self._visualizer_failover_intended = idx
             self._visualizer_failover_host_ref = self._weak_or_none(host)
             self._visualizer_failover_origin_ref = self._weak_or_none(origin_manager)
-            self._visualizer_failover_pending = bool(pending)
+            self._visualizer_failover_pending = False
         logger.debug(
-            "[MULTI_MONITOR] Visualizer failover recorded intended_index=%s pending=%s host=%s",
-            intended_index,
-            pending,
-            getattr(host, "screen_index", None),
+            "[MULTI_MONITOR] Visualizer fallback owner recorded gen=%s intended_index=%s host=%s",
+            self._visualizer_failover_gen, idx, getattr(host, "screen_index", None),
         )
+
+    def repend_visualizer_failover(
+        self,
+        *,
+        intended_index: int,
+        origin_manager: object = None,
+    ) -> None:
+        """Return the CURRENT outage record to the pending-grace state (no owner).
+
+        Used when a reclaim create fails after the temporary owner was already
+        retired: keep the same generation so a later event can retry without a
+        dangling fallback host.
+        """
+        with self._state_lock:
+            try:
+                idx = int(intended_index)
+            except Exception:
+                return
+            if self._visualizer_failover_gen == 0:
+                self._visualizer_failover_seq += 1
+                self._visualizer_failover_gen = self._visualizer_failover_seq
+            self._visualizer_failover_intended = idx
+            self._visualizer_failover_host_ref = None
+            self._visualizer_failover_origin_ref = self._weak_or_none(origin_manager)
+            self._visualizer_failover_pending = True
 
     def update_visualizer_failover_intended(self, intended_index: int) -> None:
         """Update the recorded intended index (a live Settings monitor change)."""
@@ -523,22 +576,33 @@ class MultiMonitorCoordinator(QObject):
                 pass
 
     def clear_visualizer_failover(self) -> None:
-        """Clear any recorded visualizer failover (grace or fallback) state."""
+        """Clear the failover record and INVALIDATE its generation.
+
+        Setting the active generation to 0 makes every outstanding delayed grace
+        callback (from any origin, this outage or older) fail its generation
+        check, so reclaim/target-return retires the whole old generation at once.
+        A later outage arms a fresh, strictly-greater generation.
+        """
         with self._state_lock:
             had = self._visualizer_failover_intended is not None
             self._visualizer_failover_intended = None
             self._visualizer_failover_host_ref = None
             self._visualizer_failover_origin_ref = None
             self._visualizer_failover_pending = False
+            self._visualizer_failover_gen = 0
         if had:
-            logger.debug("[MULTI_MONITOR] Visualizer failover record cleared")
+            logger.debug("[MULTI_MONITOR] Visualizer failover record cleared (generation invalidated)")
+
+    def is_visualizer_failover_generation_current(self, generation: int) -> bool:
+        """Return whether ``generation`` is the currently-active outage generation."""
+        with self._state_lock:
+            return generation != 0 and generation == self._visualizer_failover_gen
 
     def get_visualizer_failover(self) -> Optional[dict]:
         """Return the current failover record, or None if there is none.
 
         Shape: ``{"intended_index": int, "host": obj|None,
-        "origin_manager": obj|None, "pending": bool}``. A collected host weakref
-        yields ``host=None`` (treated as pending grace by reclaim).
+        "origin_manager": obj|None, "pending": bool, "generation": int}``.
         """
         with self._state_lock:
             if self._visualizer_failover_intended is None:
@@ -550,6 +614,7 @@ class MultiMonitorCoordinator(QObject):
                 "host": host,
                 "origin_manager": origin,
                 "pending": self._visualizer_failover_pending,
+                "generation": self._visualizer_failover_gen,
             }
 
     def cleanup(self) -> None:
@@ -565,6 +630,7 @@ class MultiMonitorCoordinator(QObject):
             self._visualizer_failover_host_ref = None
             self._visualizer_failover_origin_ref = None
             self._visualizer_failover_pending = False
+            self._visualizer_failover_gen = 0
         logger.debug("[MULTI_MONITOR] Coordinator cleanup complete")
 
 
