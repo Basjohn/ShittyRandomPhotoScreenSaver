@@ -390,6 +390,34 @@ Remaining operator eyes-on confirmation of responsive Settings layout / Visualiz
 deferred acceptance and does **not** block the next Phase-E implementation slice under the phase
 promotion rule.
 
+### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — AUDIT-CORRECTED, RE-AUDIT REQUIRED
+
+**Audit-correction checkpoint (independent audit of `9058a5cb` found four gaps; all corrected — NOT
+self-promoted to closed):**
+
+1. **Absent target now gets the grace.** `_reconcile_remote_custom_visualizer` schedules the 30 s
+   one-shot grace for a configured CUSTOM monitor that is not participating whether it is
+   runtime-known-but-not-participating OR completely absent from runtime — no more immediate fallback for
+   the human-turns-the-monitor-on case. A truly-absent physical display *appearing* is still handled by
+   the existing `QGuiApplication.screenAdded → DisplayManager → ScreensaverEngine` full topology rebuild
+   (no second display-creation path was introduced).
+2. **Pending grace is visible to reconciliation.** The coordinator now records the failover state when
+   the grace is armed (pending, no owner yet), not only after a fallback is created. A configured target
+   returning before the deadline (`WM_DISPLAYCHANGE → reclaim_remote_custom_visualizer_owner`) is
+   restored immediately and the still-pending delayed callback is fenced (origin reconcile token bumped).
+3. **Current Settings always win.** The delayed recheck and reclaim both re-resolve the CURRENT canonical
+   CUSTOM monitor/config from live `SettingsManager` (not the index/config captured when the grace was
+   armed), so changing the configured monitor during grace/fallback supersedes the old target; a change
+   away from CUSTOM clears the failover.
+4. **Retire-before-create is now a hard guarantee.** `_retire_visualizer_owner` honors
+   `WidgetManager.cleanup_widget`'s explicit success/failure and does not unbind (orphan) a widget whose
+   cleanup failed; it returns confirmation. Reclaim creates the configured owner only when retirement is
+   confirmed, else it fails closed and defers to the next event.
+
+Strengthened regression bar (`tests/test_visualizer_failover_reclaim.py`) now exercises the real
+absent-target grace, the event-before-deadline restore + stale-callback fence, configured-monitor
+changes during grace and during fallback, the actual event/deadline race, and retirement failure.
+
 ### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — IMPLEMENTED, AUDIT REQUIRED
 
 This is a bounded current-product lifecycle/topology correction discovered while auditing E2. It is

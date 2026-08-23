@@ -574,8 +574,6 @@ def _reconcile_remote_custom_visualizer(
     screen_index: int,
     thread_manager: Optional["ThreadManager"],
     media_widget: Optional[QWidget],
-    *,
-    allow_runtime_presence_fallback: bool = False,
 ) -> None:
     # Same canonical capability admission for the remote CUSTOM reconcile path.
     if not is_widget_family_effective(widgets_config, "visualizers"):
@@ -596,49 +594,30 @@ def _reconcile_remote_custom_visualizer(
         target_screen_index,
         current_display=current_display,
     )
-    target = resolution.chosen_display
-    if target is None:
-        return
-    if (
-        resolution.requested_has_runtime_presence
-        and not resolution.requested_is_participating
-    ):
-        if not allow_runtime_presence_fallback:
-            _schedule_remote_custom_visualizer_fallback_recheck(
-                mgr,
-                widgets_config,
-                shadows_config,
-                screen_index,
-                thread_manager,
-                media_widget,
-                target_screen_index=target_screen_index,
-            )
-            return
-        target = resolution.fallback_display
-        if target is None:
-            return
-        logger.warning(
-            "[SPOTIFY_VIS][FALLBACK] Requested CUSTOM monitor %s is still not participating after %sms; "
-            "falling back to participating display screen_index=%s",
+    if resolution.requested_is_participating and resolution.requested_display is not None:
+        # Configured CUSTOM display is available now -> create on it immediately.
+        _create_remote_custom_visualizer_on_target(
+            resolution.requested_display,
+            widgets_config,
+            shadows_config,
             target_screen_index,
-            REMOTE_CUSTOM_VISUALIZER_FALLBACK_GRACE_MS,
-            getattr(target, "screen_index", "?"),
+            thread_manager,
+            origin_manager=mgr,
         )
-    elif not resolution.requested_has_runtime_presence:
-        logger.warning(
-            "[SPOTIFY_VIS][FALLBACK] Requested CUSTOM monitor %s is not participating; "
-            "falling back to participating display screen_index=%s",
-            target_screen_index,
-            getattr(target, "screen_index", "?"),
-        )
-    elif target is current_display and target_screen_index == screen_index:
         return
-    _create_remote_custom_visualizer_on_target(
-        target,
+    # Configured target is not participating yet. E2.7 §2: give the SAME 30 s
+    # one-shot grace whether the target is runtime-known-but-not-participating OR
+    # completely absent from runtime (startup/wake). No immediate fallback — a
+    # temporary owner is only created at the deadline if it is still unavailable,
+    # and an event-driven reclaim restores it sooner if it returns first.
+    _schedule_remote_custom_visualizer_fallback_recheck(
+        mgr,
         widgets_config,
         shadows_config,
-        target_screen_index,
+        screen_index,
         thread_manager,
+        media_widget,
+        target_screen_index=target_screen_index,
     )
 
 
@@ -648,23 +627,30 @@ def _create_remote_custom_visualizer_on_target(
     shadows_config: dict,
     target_screen_index: int,
     thread_manager: Optional["ThreadManager"],
-) -> None:
+    origin_manager: object = None,
+) -> bool:
+    """Create/reuse the CUSTOM visualizer on ``target``; return True on success.
+
+    Single creation/reuse boundary for the immediate reconcile, the delayed
+    fallback recheck, and reclaim. Records/clears the coordinator failover state:
+    a host that is NOT the configured monitor is a temporary fallback (recorded);
+    the configured monitor owning the visualizer clears the record.
+    """
     if getattr(target, "spotify_visualizer_widget", None) is not None:
-        return
+        return False
     target_manager = getattr(target, "_widget_manager", None)
     if target_manager is None:
-        return
-    # Final capability admission (E2 §2): this is the single creation/reuse
-    # boundary shared by the immediate reconcile and the delayed fallback
-    # recheck. Re-read CURRENT canonical capability state here so a stale/delayed
-    # callback (scheduled while the capability was active) can never create a
-    # Visualizer after Media or Visualizers was deactivated. Fails closed.
+        return False
+    # Final capability admission (E2 §2): re-read CURRENT canonical capability
+    # state here so a stale/delayed callback (scheduled while the capability was
+    # active) can never create a Visualizer after Media or Visualizers was
+    # deactivated. Fails closed.
     if not _visualizer_capability_admitted_now(getattr(target_manager, "_settings_manager", None)):
         logger.debug(
             "[SPOTIFY_VIS] remote CUSTOM create skipped: visualizer capability "
             "no longer admitted at final creation boundary"
         )
-        return
+        return False
     vis = target_manager.create_spotify_visualizer_widget(
         widgets_config,
         shadows_config,
@@ -673,7 +659,7 @@ def _create_remote_custom_visualizer_on_target(
         getattr(target, "media_widget", None),
     )
     if vis is None:
-        return
+        return False
     target_manager._register_spotify_secondary_fade(vis)
     try:
         target._apply_saved_custom_layouts()
@@ -686,18 +672,23 @@ def _create_remote_custom_visualizer_on_target(
     )
     # E2.7: record whether this is a *temporary* fallback owner (host display is
     # NOT the configured/intended monitor) or the canonical owner (host IS the
-    # configured monitor). This is runtime-only bookkeeping so an event-driven
-    # reclaim can later hand ownership back to the configured display; it never
-    # persists the fallback monitor/geometry as configuration.
+    # configured monitor). Runtime-only bookkeeping so an event-driven reclaim can
+    # later hand ownership back; never persists the fallback monitor/geometry.
     try:
         host_index = getattr(target, "screen_index", None)
         coordinator = get_coordinator()
         if host_index is not None and int(host_index) != int(target_screen_index):
-            coordinator.set_visualizer_fallback(target_screen_index, target)
+            coordinator.set_visualizer_failover(
+                intended_index=target_screen_index,
+                host=target,
+                origin_manager=(origin_manager or target_manager),
+                pending=False,
+            )
         else:
-            coordinator.clear_visualizer_fallback()
+            coordinator.clear_visualizer_failover()
     except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to update visualizer fallback record", exc_info=True)
+        logger.debug("[SPOTIFY_VIS] Failed to update visualizer failover record", exc_info=True)
+    return True
 
 
 def _schedule_remote_custom_visualizer_fallback_recheck(
@@ -712,9 +703,21 @@ def _schedule_remote_custom_visualizer_fallback_recheck(
 ) -> None:
     token = int(getattr(mgr, "_remote_custom_visualizer_reconcile_token", 0)) + 1
     setattr(mgr, "_remote_custom_visualizer_reconcile_token", token)
+    # E2.7 §2: record the pending grace so topology reconciliation (reclaim) can
+    # SEE it — a configured target that returns before the deadline is restored
+    # immediately and this pending callback is fenced (token bumped).
+    try:
+        get_coordinator().set_visualizer_failover(
+            intended_index=target_screen_index,
+            host=None,
+            origin_manager=mgr,
+            pending=True,
+        )
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to record pending visualizer grace", exc_info=True)
     logger.warning(
-        "[SPOTIFY_VIS][FALLBACK] Requested CUSTOM monitor %s is still part of runtime but not participating; "
-        "delaying fallback recheck by %sms",
+        "[SPOTIFY_VIS][FALLBACK] Requested CUSTOM monitor %s not participating; "
+        "arming %sms one-shot grace before any temporary fallback",
         target_screen_index,
         REMOTE_CUSTOM_VISUALIZER_FALLBACK_GRACE_MS,
     )
@@ -767,61 +770,97 @@ def _run_remote_custom_visualizer_fallback_recheck(
     token: int,
 ) -> None:
     if token != int(getattr(mgr, "_remote_custom_visualizer_reconcile_token", 0)):
-        return
+        return  # fenced: a newer grace/reclaim superseded this pending callback
     current_display = getattr(mgr, "_parent", None)
     if current_display is None or bool(getattr(current_display, "_exiting", False)):
         return
-    # This delayed callback captured a copy of widgets_config when it was
-    # scheduled; that copy can be stale. Re-read CURRENT canonical capability
-    # state before doing any resolution/creation work so a Media/Visualizers
-    # deactivation that happened during the delay is honoured. Fails closed.
-    if not _visualizer_capability_admitted_now(getattr(mgr, "_settings_manager", None)):
+    settings_manager = getattr(mgr, "_settings_manager", None)
+    # Re-read CURRENT canonical capability state (a Media/Visualizers deactivation
+    # during the grace must be honoured). Fails closed.
+    if not _visualizer_capability_admitted_now(settings_manager):
         logger.debug(
             "[SPOTIFY_VIS][FALLBACK] delayed recheck skipped: visualizer "
             "capability no longer admitted"
         )
         return
+    # E2.7 §gap-3: re-resolve the CURRENT canonical CUSTOM monitor/config from live
+    # Settings rather than trusting the copy captured when the grace was armed, so
+    # a Settings change during the grace supersedes the old pending target.
+    live_widgets = None
+    try:
+        live_widgets = settings_manager.get("widgets", {}) if settings_manager is not None else None
+    except Exception:
+        logger.debug("[SPOTIFY_VIS][FALLBACK] delayed recheck failed to read live widgets", exc_info=True)
+        return
+    if not isinstance(live_widgets, dict):
+        return
+    if not is_custom_position_selected_for_widget("spotify_visualizer", live_widgets):
+        # Visualizer no longer CUSTOM-routed -> pending grace superseded.
+        get_coordinator().clear_visualizer_failover()
+        return
+    monitor_value = get_effective_monitor_value_for_widget(
+        "spotify_visualizer", live_widgets, default="ALL"
+    )
+    try:
+        current_index = int(monitor_value) - 1
+    except Exception:
+        return
+    live_shadows = live_widgets.get("shadows", {}) if isinstance(live_widgets, dict) else {}
+    live_thread_manager = getattr(current_display, "_thread_manager", None) or thread_manager
+    get_coordinator().update_visualizer_failover_intended(current_index)
+
     resolution = describe_visualizer_spawn_display(
-        target_screen_index,
+        current_index,
         current_display=current_display,
     )
     requested_display = resolution.requested_display
     if getattr(requested_display, "spotify_visualizer_widget", None) is not None:
         return
-    target = None
-    if resolution.requested_is_participating:
-        target = resolution.chosen_display
+    if resolution.requested_is_participating and requested_display is not None:
+        target = requested_display
     else:
         target = resolution.fallback_display
         if target is None:
+            # No participating display at the deadline -> fail closed; do not
+            # invent one. Leave the pending grace so a later display/topology
+            # event can still reclaim without any polling timer.
+            logger.info(
+                "[SPOTIFY_VIS][FALLBACK] deadline for CUSTOM monitor %s: no participating "
+                "display; failing closed (grace retained for event-driven reclaim)",
+                current_index,
+            )
             return
         logger.warning(
-            "[SPOTIFY_VIS][FALLBACK] Requested CUSTOM monitor %s is still not participating after %sms; "
-            "falling back to participating display screen_index=%s",
-            target_screen_index,
+            "[SPOTIFY_VIS][FALLBACK] CUSTOM monitor %s still not participating after %sms; "
+            "creating temporary fallback on participating display screen_index=%s",
+            current_index,
             REMOTE_CUSTOM_VISUALIZER_FALLBACK_GRACE_MS,
             getattr(target, "screen_index", "?"),
         )
     _create_remote_custom_visualizer_on_target(
         target,
-        widgets_config,
-        shadows_config,
-        target_screen_index,
-        thread_manager,
+        live_widgets,
+        live_shadows,
+        current_index,
+        live_thread_manager,
+        origin_manager=mgr,
     )
 
 
-def _retire_visualizer_owner(host_display: object) -> None:
+def _retire_visualizer_owner(host_display: object) -> bool:
     """Retire a temporary fallback visualizer owner on ``host_display``.
 
     Tears down the hosted visualizer and clears the display's owner attribute so
-    exactly one live owner remains after reclaim. Best-effort and idempotent.
+    exactly one live owner remains after reclaim. Returns True only when the host
+    is confirmed to no longer own a visualizer (E2.7: reclaim must not create the
+    configured owner unless retirement is confirmed). Best-effort and idempotent.
     """
     if host_display is None:
-        return
+        return True
     host_manager = getattr(host_display, "_widget_manager", None)
-    if getattr(host_display, "spotify_visualizer_widget", None) is None and host_manager is None:
-        return
+    existing = getattr(host_display, "spotify_visualizer_widget", None)
+    if existing is None and host_manager is None:
+        return True
     if host_manager is not None:
         # Fence any pending delayed fallback work owned by the host so a stale
         # callback cannot resurrect the retired fallback owner.
@@ -830,10 +869,24 @@ def _retire_visualizer_owner(host_display: object) -> None:
             setattr(host_manager, "_remote_custom_visualizer_reconcile_token", token)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to bump host reconcile token during retire", exc_info=True)
+        # gap-4: honor cleanup_widget's explicit success/failure. If teardown of a
+        # live widget fails, DO NOT unbind the attribute (that would orphan a live
+        # widget and mask the failure) — fail closed so reclaim does not create a
+        # second owner.
+        cleanup_ok = True
         try:
-            host_manager.cleanup_widget("spotify_visualizer")
+            result = host_manager.cleanup_widget("spotify_visualizer")
+            cleanup_ok = bool(result) or existing is None
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to cleanup temporary fallback visualizer", exc_info=True)
+            cleanup_ok = False
+        if not cleanup_ok:
+            logger.warning(
+                "[SPOTIFY_VIS] Temporary fallback visualizer cleanup failed on screen_index=%s; "
+                "retirement NOT confirmed (failing closed)",
+                getattr(host_display, "screen_index", "?"),
+            )
+            return False
         try:
             unregister = getattr(host_manager, "unregister_widget", None)
             if callable(unregister):
@@ -849,85 +902,149 @@ def _retire_visualizer_owner(host_display: object) -> None:
             setattr(host_display, "spotify_visualizer_widget", None)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to clear fallback visualizer attribute", exc_info=True)
+    # Confirm the host no longer owns a visualizer.
+    confirmed = getattr(host_display, "spotify_visualizer_widget", None) is None
+    if not confirmed:
+        logger.warning(
+            "[SPOTIFY_VIS] Temporary fallback owner retirement NOT confirmed on screen_index=%s",
+            getattr(host_display, "screen_index", "?"),
+        )
+    return confirmed
+
+
+def _resolve_live_settings_manager(coordinator, preferred: object) -> object:
+    """Return a live SettingsManager: the preferred one, else any participant's."""
+    settings_manager = getattr(preferred, "_settings_manager", None)
+    if settings_manager is not None:
+        return settings_manager
+    try:
+        for inst in coordinator.get_all_instances():
+            mgr = getattr(inst, "_widget_manager", None)
+            sm = getattr(mgr, "_settings_manager", None)
+            if sm is not None:
+                return sm
+    except Exception:
+        logger.debug("[SPOTIFY_VIS][RECLAIM] failed to resolve a live settings manager", exc_info=True)
+    return None
 
 
 def reclaim_remote_custom_visualizer_owner() -> None:
     """Event-driven reclaim of the configured CUSTOM visualizer display (E2.7).
 
     Invoked from the existing display/topology event machinery (Windows
-    ``WM_DISPLAYCHANGE`` re-anchor) rather than any recurring poll. If a temporary
-    fallback visualizer owner is live and the configured/intended CUSTOM display
-    has become participating again — seconds, minutes, or hours later — this
-    retires the temporary owner and recreates the visualizer on the configured
-    display using its saved CUSTOM geometry, as one reconciliation transaction.
+    ``WM_DISPLAYCHANGE`` re-anchor), never a recurring poll. Handles BOTH a
+    pending grace (no temporary owner yet) and a live temporary fallback: when the
+    CURRENT configured CUSTOM display (re-resolved from live Settings) is
+    participating again — seconds, minutes, or hours later — this hands ownership
+    back to it as one reconciliation transaction.
 
     Contract properties:
 
-    - **Idempotent:** with no active fallback record it is a no-op, so repeated
-      display events are safe.
-    - **One owner:** the temporary owner is retired *before* the configured owner
-      is created; the creation boundary also refuses to duplicate onto a display
-      that already owns a visualizer.
-    - **Capability current:** reclaim re-reads live Media+Visualizers capability
-      and does nothing when it is deactivated (no stale recreation); a stale Media
-      object grants no permission.
-    - **Never persists fallback state:** the configured monitor selection and its
-      saved CUSTOM geometry are untouched; only runtime ownership moves.
-    - **Fresh grace after re-loss:** if the configured display disappears again,
-      the ordinary reconcile path arms a new token-fenced grace.
+    - **Idempotent:** no failover record -> no-op; safe under repeated events.
+    - **Pending grace visible:** a runtime-known target returning before the
+      deadline is restored immediately and the stale pending callback is fenced.
+    - **Current config wins (gap-3):** the configured monitor is re-resolved from
+      live Settings, so a Settings monitor change supersedes any old target.
+    - **Retire-confirmed create (gap-4):** the configured owner is created only
+      after the temporary owner's retirement is confirmed; otherwise it defers.
+    - **One owner / capability current / never persists:** as E2.7 requires.
     """
     coordinator = get_coordinator()
-    intended_index, host = coordinator.get_visualizer_fallback()
-    if intended_index is None:
-        return  # no temporary fallback active -> nothing to reclaim (idempotent)
+    record = coordinator.get_visualizer_failover()
+    if record is None:
+        return  # no pending grace or fallback -> nothing to reclaim (idempotent)
 
-    resolution = describe_visualizer_spawn_display(intended_index, current_display=None)
-    configured = resolution.requested_display
-    if configured is None or not resolution.requested_is_participating:
-        return  # configured display still not back -> keep the temporary fallback
+    host = record["host"]
+    origin_manager = record["origin_manager"]
 
-    configured_manager = getattr(configured, "_widget_manager", None)
-    settings_manager = getattr(configured_manager, "_settings_manager", None)
+    settings_manager = _resolve_live_settings_manager(coordinator, origin_manager)
+    if settings_manager is None:
+        return  # cannot resolve current config -> keep record for a later event
+
     if not _visualizer_capability_admitted_now(settings_manager):
-        # Capability deactivated: a topology-return event must not recreate or
-        # reclaim a visualizer. Leave state as-is and fail closed.
+        # Capability deactivated: a topology event must not recreate/reclaim a
+        # visualizer. Leave the record; fail closed.
         logger.debug("[SPOTIFY_VIS][RECLAIM] capability not admitted; not reclaiming")
         return
 
-    if host is configured:
-        # Host already IS the configured display; normalize the record and stop.
-        coordinator.clear_visualizer_fallback()
-        return
-
-    # Reconstruct current config for creation on the configured display.
     try:
         widgets_config = settings_manager.get("widgets", {})
-        if not isinstance(widgets_config, dict):
-            widgets_config = {}
     except Exception:
-        logger.debug("[SPOTIFY_VIS][RECLAIM] failed to read widgets config; aborting", exc_info=True)
+        logger.debug("[SPOTIFY_VIS][RECLAIM] failed to read live widgets config", exc_info=True)
         return
+    if not isinstance(widgets_config, dict):
+        return
+
+    # gap-3: re-resolve the CURRENT configured CUSTOM monitor from live Settings.
+    if not is_custom_position_selected_for_widget("spotify_visualizer", widgets_config):
+        # No longer CUSTOM-routed -> failover superseded; retire any stray owner.
+        if host is not None:
+            _retire_visualizer_owner(host)
+        coordinator.clear_visualizer_failover()
+        return
+    monitor_value = get_effective_monitor_value_for_widget(
+        "spotify_visualizer", widgets_config, default="ALL"
+    )
+    try:
+        current_index = int(monitor_value) - 1
+    except Exception:
+        return
+    coordinator.update_visualizer_failover_intended(current_index)
+
+    resolution = describe_visualizer_spawn_display(current_index, current_display=None)
+    configured = resolution.requested_display
+    if configured is None or not resolution.requested_is_participating:
+        return  # configured display still not back -> keep the grace/fallback
+
+    if getattr(configured, "spotify_visualizer_widget", None) is not None:
+        # Configured display already owns the visualizer; retire any stray
+        # temporary owner and normalize the record to a single owner.
+        if host is not None and host is not configured:
+            _retire_visualizer_owner(host)
+        coordinator.clear_visualizer_failover()
+        return
+
+    # gap-4: only create the configured owner once the temporary owner's
+    # retirement is CONFIRMED; otherwise defer (never two live owners).
+    if host is not None and host is not configured:
+        if not _retire_visualizer_owner(host):
+            logger.warning(
+                "[SPOTIFY_VIS][RECLAIM] deferring reclaim: temporary owner not retired"
+            )
+            return
+
+    # gap-2: fence the still-pending delayed grace callback so it cannot also act.
+    if origin_manager is not None:
+        try:
+            token = int(getattr(origin_manager, "_remote_custom_visualizer_reconcile_token", 0)) + 1
+            setattr(origin_manager, "_remote_custom_visualizer_reconcile_token", token)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS][RECLAIM] failed to fence pending grace token", exc_info=True)
+
     shadows_config = widgets_config.get("shadows", {}) if isinstance(widgets_config, dict) else {}
     thread_manager = getattr(configured, "_thread_manager", None)
-
     logger.info(
-        "[SPOTIFY_VIS][RECLAIM] Configured CUSTOM monitor %s returned; reclaiming visualizer "
-        "from temporary host screen_index=%s",
-        intended_index,
-        getattr(host, "screen_index", "?"),
+        "[SPOTIFY_VIS][RECLAIM] CUSTOM monitor %s available; restoring visualizer to it",
+        current_index,
     )
-
-    # One reconciliation transaction: retire the temporary owner first (never two
-    # live owners), then create on the configured display with saved geometry.
-    _retire_visualizer_owner(host)
-    coordinator.clear_visualizer_fallback()
-    _create_remote_custom_visualizer_on_target(
+    created = _create_remote_custom_visualizer_on_target(
         configured,
         widgets_config,
         shadows_config,
-        intended_index,
+        current_index,
         thread_manager,
+        origin_manager=origin_manager,
     )
+    if not created:
+        # Creation failed (e.g. capability dropped mid-transaction). The temporary
+        # owner is already retired, so leave a PENDING grace (never a dangling
+        # fallback host) so a later event can retry.
+        coordinator.set_visualizer_failover(
+            intended_index=current_index,
+            host=None,
+            origin_manager=origin_manager,
+            pending=True,
+        )
 
 
 def _finalize_widget_startup(mgr: "WidgetManager", created: Dict[str, QWidget]) -> None:
