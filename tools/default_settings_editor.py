@@ -815,6 +815,9 @@ class DefaultSettingsEditor(QMainWindow):
         self._leaf_items: dict[tuple[str, ...], QTreeWidgetItem] = {}
 
         self.setWindowTitle("SRPSS Defaults Foundry")
+        icon_path = REPO_ROOT / "images" / "foundries" / "SRPSSDefaults.ico"
+        if icon_path.is_file():
+            self.setWindowIcon(QIcon(str(icon_path)))
         self.resize(1220, 790)
         self.setMinimumSize(940, 620)
         self._build_ui()
