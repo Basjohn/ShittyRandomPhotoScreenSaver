@@ -1,6 +1,6 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
 ## Current reviewed checkpoint
 
@@ -13,6 +13,11 @@ Phase E1 slice 1 — WidgetRuntimeManager establishment by extraction — indepe
 
 E1 remains active. E2/E2.7 remain implementation-closed; physical R-26 dual-display acceptance remains
 deferred hardware evidence.
+
+The subsequent documentation-only checkpoint `9adb74916010304f622a843e1b6d48e054792e6d` temporarily
+over-scoped the next E1 slice as a generic live family-retirement/recreation mechanism. Source review
+showed that current production family activation is applied through Settings-owned full runtime
+teardown/recreation, so that prescription is superseded by the corrected E1 sequencing below.
 
 Always inspect exact current `main` before acting. Repository state outranks this file if a later
 checkpoint has landed.
@@ -455,15 +460,43 @@ Required destination:
 - canonical widget identity/settings metadata independent of QWidget factories;
 - presentation-neutral provider/model lifecycle ownership;
 - activated/enabled/visible state and monitor participation without QWidget presentation authority;
-- family deactivation retires exclusive provider/model/process/poll/timer/Quick/resource ownership;
-- shared infrastructure survives only while another valid consumer needs it;
+- when a capability is deactivated, its exclusive provider/model/process/poll/timer/resource ownership
+  must not survive the legal runtime lifecycle that applies that configuration;
+- shared infrastructure survives while another real consumer still needs it;
 - deactivated capability before first use does not unnecessarily import/resolve heavy implementation;
 - ordinary instance-disabled state remains distinct from family deactivation;
 - no giant Python `QuickBaseOverlayWidget` replacement god object.
 
+### Current capability-lifetime fact
+
+Current production family activation is not an in-place runtime hot-toggle architecture.
+
+The normal user flow is:
+
+```text
+running screensaver
+-> Settings request
+-> engine.stop(exit_app=False, reason="settings")
+-> complete display/runtime teardown
+-> destruction barrier
+-> Settings dialog opens
+-> family activation is changed/saved
+-> new runtime generation is created
+-> creation admission applies the new capability state
+```
+
+Therefore the durable requirement “deactivated capability owns no exclusive runtime resources” does
+**not** imply that E1 must invent a second generic live family-retirement/recreation system.
+
+If future/current source gains a real family-activation writer while the screensaver runtime remains
+alive, that path must satisfy the same ownership contract. Do not build such a path speculatively.
+
+The existing E2.7 live Visualizer capability/failover reaction is a special closed lifecycle seam and is
+not precedent for making every widget family hot-retire in place.
+
 ### E1 slice 1 — establish the owner by extraction — AUDITED GREEN
 
-Pushed/audited checkpoint:
+Pushed/audited implementation checkpoint:
 
 ```text
 8fcbc57a41c0b402fd4253d9668a0c6548b3100f
@@ -485,66 +518,71 @@ The coding agent reported its local focused/broader Windows gate as `325 passed,
 independent reviewer audited pushed source/diff/regression intent but did not independently rerun that
 Windows execution.
 
-#### Slice-1 YELLOWs / next-slice guardrails
+#### Slice-1 YELLOWs / remaining guardrails
 
-These are not slice-1 blockers, but they must not be mistaken for already-landed destination behavior:
-
-1. `is_family_effective()` is the canonical **activation + dependency-satisfaction** query. It is **not**
-   by itself shared-provider/service last-consumer accounting. E1 still needs explicit ownership/consumer
-   lifetime semantics wherever infrastructure is shared. Do not use `is_family_effective()` as a
-   substitute refcount/lease/consumer registry.
-2. The new owner has no top-level QWidget/Quick/provider implementation imports, but
-   `handle_capability_change()` still lazily calls the legacy
-   `rendering.widget_setup_all.retire_visualizer_failover_on_capability_change` seam. Treat that as a
-   transitional E2.7 bridge, not a pattern for accumulating family-specific presenter imports inside
-   `WidgetRuntimeManager`.
+1. `is_family_effective()` is the canonical **activation + dependency-satisfaction** query. It is not a
+   generic shared-provider last-consumer counter. Correct the slice-1 source/doc wording when that file
+   is next touched; do not invent a refcount merely to replace the wording.
+2. `handle_capability_change()` still lazily calls the legacy
+   `rendering.widget_setup_all.retire_visualizer_failover_on_capability_change` seam. Treat that as the
+   transitional E2.7 bridge it is; do not grow it into a family-specific presenter switchboard.
 3. One `WidgetRuntimeManager` per display runtime is compatible with the destination decomposition.
    The later hoist moves ownership out of legacy `WidgetManager` into the display-runtime boundary; do
-   not invent a process-global god manager merely to remove this temporary host edge.
+   not invent a process-global god manager merely to remove the temporary host edge.
 
-### E1 slice 2 — live capability retirement + reactivation — ACTIVE NEXT
+### E1 slice 2 — first real provider/model ownership extraction — ACTIVE NEXT
 
-Land the live family transition boundary without turning the new manager into another switchboard.
+Move one **actual** provider/model/service lifetime seam out of QWidget presentation ownership and into
+presentation-neutral runtime ownership.
 
-Required behavior:
+Before choosing the seam, inspect current source and select the smallest family/service where a real
+provider/model/process/poll/timer lifetime is still materially owned by a runtime QWidget. Do not
+manufacture work for a family whose relevant ownership is already neutral.
 
-- a family becoming deactivated while runtime is live retires that display runtime's family-exclusive
-  member/model/provider/process/poll/timer/resource ownership through its legal owner;
-- reactivation reconstructs/re-admits the family once from preserved canonical settings without
-  resetting detailed config;
-- ordinary instance `enabled=False` remains distinct from family deactivation;
-- repeated/root settings notifications are idempotent and do not double-retire or double-create;
-- Media -> Visualizers dependency behavior remains canonical; the Visualizer's special runtime and E2.7
-  singleton/failover lifecycle remain delegated to their existing authority rather than becoming an
-  ordinary widget-family presenter;
-- shared infrastructure is retained until its actual remaining consumer set is empty. Introduce or use
-  explicit consumer ownership where required; do not infer this from `is_family_effective()` alone;
-- legacy QWidget create/remove plumbing may act as a temporary adapter while current production still
-  uses it, but family-specific provider/presentation branches must not accumulate in the neutral owner;
-- correct the slice-1 source/doc wording that calls dependency effectiveness “shared-consumer
-  accounting” and narrow the “imports no renderer code” claim to the actual transitional boundary.
+Required boundaries:
 
-Regression bar must include at least:
+- one bounded family/service seam only; no all-family migration;
+- provider/model/service lifetime becomes presentation-neutral and is not owned merely because a
+  QWidget exists;
+- current Settings-owned teardown/recreation remains the normal family-activation application path;
+- deactivated-before-recreation must not recreate/resolve the migrated exclusive owner;
+- reactivation through the next normal runtime generation may recreate it from preserved detailed
+  settings;
+- ordinary member `enabled=False` remains distinct from family deactivation;
+- preserve existing legal ownership for genuinely shared services when it already gives correct
+  lifetime; add explicit consumer accounting **only if the concrete migrated seam demonstrably needs
+  it**;
+- do not generalize the E2.7 Visualizer live hook into ordinary family lifecycle;
+- `WidgetRuntimeManager` remains generic: no central `if family == ...` provider/presenter switchboard;
+- correct the slice-1 `is_family_effective()` / “imports no renderer code” overstatements while touching
+  the owner, without redesigning E2.7.
 
-- live family OFF -> exclusive runtime owner retires;
-- OFF repeated -> no duplicate retirement;
-- OFF -> ON -> exactly one fresh runtime owner with preserved detailed settings;
-- ordinary instance disabled does not masquerade as family deactivation;
-- dependency-driven Visualizers ineffectiveness remains correct for both Visualizers-off and Media-off;
-- shared service/provider survives while a valid consumer remains and retires after the last consumer;
-- E2.7 confirmed-retirement/fresh-30-second-grace behavior remains green.
+Regression bar for the chosen seam:
+
+- provider/model owner exists independently of QWidget pixel ownership;
+- family deactivated before runtime recreation -> migrated exclusive owner is not created/resolved;
+- family reactivated -> one normal fresh-generation owner can be created with preserved detailed config;
+- normal runtime teardown cleans the migrated owner exactly once;
+- ordinary instance disabled is not treated as family deactivation;
+- if the chosen service is truly shared, prove the actual surviving-consumer lifetime contract; if it is
+  not shared, do not add artificial shared-consumer machinery;
+- existing E2/E2.7 capability/failover regressions remain green where touched.
 
 Push this bounded slice and stop for independent audit.
 
 ### E1 remaining after slice 2
 
-- migrate provider/model lifetime ownership off member QWidgets into the neutral owner, per family and
-  in bounded checkpoints;
-- fresh-process import dormancy (catalogued-but-deactivated resolves no heavy family implementation);
+- continue provider/model lifetime migration off member QWidgets, one bounded family/service seam at a
+  time;
+- fresh-process import dormancy: catalogued-but-deactivated capability resolves no unnecessary heavy
+  family implementation before first use;
 - hoist the per-display owner out of legacy `WidgetManager` into the final display-runtime boundary as
   that boundary lands.
 
-Each remaining ownership/lifecycle slice is an audit checkpoint.
+A live in-place family retirement mechanism is **not** an E1 deliverable unless exact current source
+introduces a real live activation writer or another demonstrated product flow requires it.
+
+Each substantial ownership/lifecycle slice remains an audit checkpoint.
 
 
 ## E3 — shared retained Quick primitives
@@ -955,19 +993,24 @@ it does not reopen E2.7 implementation or block the next Phase-E slice.
 **E1 slice 1 is CLOSED / AUDITED GREEN at
 `8fcbc57a41c0b402fd4253d9668a0c6548b3100f`.**
 
-The active next checkpoint is the bounded E1 slice 2 described above:
+The `9adb7491...` documentation prescription for generic live family retirement is superseded. Current
+production family activation is applied through Settings-owned full runtime teardown/recreation.
+
+The active next checkpoint is:
 
 ```text
-live family deactivation retirement + reactivation
--> explicit shared-consumer lifetime where actually needed
--> preserve instance-enabled distinction + E2.7 Visualizer special ownership
--> focused lifecycle/dormancy/dependency regressions
+inspect current provider/model ownership
+-> choose one smallest real QWidget-coupled provider/model/service seam
+-> extract that lifetime into presentation-neutral ownership
+-> preserve Settings teardown/recreation as capability application path
+-> add shared-consumer machinery only if that concrete seam actually requires it
+-> focused ownership/dormancy/lifecycle regressions
 -> diff/status
 -> commit + push
 -> STOP for independent audit
 ```
 
-Do not use `is_family_effective()` as a substitute for shared-provider last-consumer accounting.
+Do not invent a generic live family OFF/ON lifecycle without a real current runtime writer.
 
 After E1 completes across its bounded slices:
 
