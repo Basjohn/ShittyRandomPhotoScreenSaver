@@ -982,6 +982,14 @@ class WidgetManager:
             )
             return
 
+        # E2.7 canonical capability-deactivation boundary: a widgets/family
+        # activation change may make the Visualizer capability ineffective (Media
+        # OFF or Visualizers OFF). Retire the GLOBAL Visualizer failover lifecycle
+        # here — not just block creation — so a pending grace/generation cannot
+        # stay stuck and a later reactivation can arm a fresh grace.
+        if setting_key == 'widgets' or setting_key.startswith('widgets.family_activation'):
+            self._retire_visualizer_failover_if_capability_off()
+
         if setting_key == 'widgets':
             widgets_payload: Optional[Mapping[str, Any]] = value if isinstance(value, Mapping) else None
             for handler_name in get_live_refresh_handlers():
@@ -1008,6 +1016,24 @@ class WidgetManager:
                 parent._apply_saved_custom_layouts()
             except Exception:
                 logger.debug("[WIDGET_MANAGER] Failed to reapply saved custom layouts", exc_info=True)
+
+    def _retire_visualizer_failover_if_capability_off(self) -> None:
+        """Retire the global Visualizer failover lifecycle on capability deactivation.
+
+        Delegates to the E2.7 canonical retirement so a pending grace / live
+        temporary fallback does not stay stuck when Media or Visualizers is turned
+        off. Lazy import avoids a module-load cycle with widget_setup_all.
+        """
+        try:
+            from rendering.widget_setup_all import (
+                retire_visualizer_failover_on_capability_change,
+            )
+            retire_visualizer_failover_on_capability_change(self._settings_manager)
+        except Exception:
+            logger.debug(
+                "[WIDGET_MANAGER] Visualizer failover deactivation retirement failed",
+                exc_info=True,
+            )
 
     def _settings_key_requires_custom_layout_reapply(self, setting_key: str) -> bool:
         """Return whether a settings change should replay committed CUSTOM layout.

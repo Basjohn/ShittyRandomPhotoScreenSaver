@@ -1070,6 +1070,51 @@ def reclaim_remote_custom_visualizer_owner() -> None:
         )
 
 
+def retire_visualizer_failover_on_capability_change(settings_manager) -> None:
+    """Retire the GLOBAL Visualizer failover lifecycle when capability is off.
+
+    Canonical capability-deactivation reaction (E2.7): when Media or Visualizers
+    becomes ineffective, an in-flight failover (pending grace or live temporary
+    fallback) must be RETIRED — not merely blocked from creating — so it cannot
+    stay stuck:
+
+    - capability still effective -> no-op (this only retires on deactivation);
+    - a live temporary fallback owner is retired, and its failover record is
+      discarded only when retirement is CONFIRMED (a failed retirement retains
+      the record so a later event retries — never lose a live-owner record);
+    - a pending grace (no owner) has its record + global generation invalidated,
+      so stale delayed callbacks from the retired generation remain fenced;
+    - a later explicit reactivation therefore arms a genuinely fresh generation
+      and a full new 30 s grace (arm no longer refuses because the stale record is
+      gone).
+
+    Covers both Visualizers-off and Media-off effective deactivation (the
+    capability check requires both the visualizers family and its media
+    dependency to be active).
+    """
+    coordinator = get_coordinator()
+    record = coordinator.get_visualizer_failover()
+    if record is None:
+        return  # no in-flight failover -> nothing to retire (idempotent)
+    if _visualizer_capability_admitted_now(settings_manager):
+        return  # still effective -> not a deactivation; leave the failover intact
+    host = record.get("host")
+    if host is not None:
+        # Live temporary fallback owner: retire it and only discard the record
+        # when retirement is CONFIRMED (never lose a live-owner record).
+        if not _retire_visualizer_owner(host):
+            logger.warning(
+                "[SPOTIFY_VIS][DEACTIVATE] not clearing failover: temporary owner "
+                "retirement unconfirmed; retaining record for retry"
+            )
+            return
+    coordinator.clear_visualizer_failover()
+    logger.info(
+        "[SPOTIFY_VIS][DEACTIVATE] visualizer failover lifecycle retired (capability off); "
+        "generation invalidated"
+    )
+
+
 def _finalize_widget_startup(mgr: "WidgetManager", created: Dict[str, QWidget]) -> None:
     parent = mgr._parent
     if parent is not None:
