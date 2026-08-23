@@ -86,7 +86,7 @@ from PySide6.QtWidgets import (
 )
 
 
-APP_TITLE = "SRPSS Theme Foundry — UI Alignment Pass"
+APP_TITLE = "SRPSS Theme Foundry"
 THEME_FORMAT = "srpss-theme"
 THEME_VERSION = 1
 THEME_EXTENSION = ".srtheme"
@@ -1210,8 +1210,8 @@ class ColorPreview(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._color = Rgba(255, 255, 255, 255)
-        self.setMinimumWidth(150)
-        self.setFixedHeight(76)
+        self.setMinimumWidth(160)
+        self.setFixedHeight(80)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     def set_rgba(self, value: Rgba) -> None:
@@ -1290,9 +1290,13 @@ class ThemeFoundryWindow(QMainWindow):
         self._session_head = git_head_sha(self.repo_root)
 
         self.setWindowTitle(APP_TITLE)
-        icon_path = self.repo_root / "SRPSS.ico"
+        icon_path = self.repo_root / "images" / "foundries" / "SRPSSTheme.ico"
         if icon_path.is_file():
-            self.setWindowIcon(QIcon(str(icon_path)))
+            foundry_icon = QIcon(str(icon_path))
+            self.setWindowIcon(foundry_icon)
+            app = QApplication.instance()
+            if app is not None:
+                app.setWindowIcon(foundry_icon)
         self.resize(1340, 860)
         self.setMinimumSize(1040, 680)
         self._build_ui()
@@ -1423,41 +1427,39 @@ class ThemeFoundryWindow(QMainWindow):
         self.state_banner.setObjectName("stateBanner")
         editor_layout.addWidget(self.state_banner)
 
-        preview_row = QHBoxLayout()
-        preview_row.setSpacing(10)
-        isolated_col = QVBoxLayout()
-        isolated_col.setSpacing(5)
+        preview_grid = QGridLayout()
+        preview_grid.setHorizontalSpacing(12)
+        preview_grid.setVerticalSpacing(6)
+
         isolated_label = QLabel("Isolated colour / alpha")
         isolated_label.setObjectName("previewLabel")
-        isolated_col.addWidget(isolated_label)
-        self.preview = ColorPreview()
-        isolated_col.addWidget(self.preview)
-        preview_row.addLayout(isolated_col, 1)
+        preview_grid.addWidget(isolated_label, 0, 0)
 
-        composite_col = QVBoxLayout()
-        composite_col.setSpacing(5)
         composite_label = QLabel("Estimated with nearest known layer")
         composite_label.setObjectName("previewLabel")
-        composite_col.addWidget(composite_label)
+        composite_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        preview_grid.addWidget(composite_label, 0, 1)
+
+        self.preview = ColorPreview()
+        preview_grid.addWidget(self.preview, 1, 0)
         self.composite_preview = ColorPreview()
-        composite_col.addWidget(self.composite_preview)
+        preview_grid.addWidget(self.composite_preview, 1, 1)
+
         self.composite_note = QLabel("No mapped compositing neighbour")
         self.composite_note.setWordWrap(True)
         self.composite_note.setObjectName("muted")
-        self.composite_note.setAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop
-        )
-        composite_col.addWidget(self.composite_note)
-        preview_row.addLayout(composite_col, 1)
-        editor_layout.addLayout(preview_row)
+        self.composite_note.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        preview_grid.addWidget(self.composite_note, 2, 1)
+
+        preview_grid.setColumnStretch(0, 1)
+        preview_grid.setColumnStretch(1, 1)
+        editor_layout.addLayout(preview_grid)
 
         self.swatch = SwatchButton()
         editor_layout.addWidget(self.swatch)
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.setHorizontalSpacing(10)
-        form.setVerticalSpacing(8)
         self.r_spin = self._channel_spin()
         self.g_spin = self._channel_spin()
         self.b_spin = self._channel_spin()
@@ -1572,7 +1574,6 @@ class ThemeFoundryWindow(QMainWindow):
         spin = QSpinBox()
         spin.setRange(0, 255)
         spin.setMinimumWidth(88)
-        spin.setMinimumHeight(30)
         return spin
 
     def _apply_internal_style(self) -> None:
@@ -1601,35 +1602,14 @@ class ThemeFoundryWindow(QMainWindow):
             QLabel#muted { color: #9fb2ad; }
             QLabel#previewLabel, QLabel#sectionHeading { color: #f4c66d; font-weight: 700; letter-spacing: 0.6px; }
             QLabel#tokenTitle { color: #f4f0e6; }
-            QLineEdit, QComboBox {
+            QLineEdit, QComboBox, QSpinBox {
                 background: #1f2626; color: #f4f0e6; border: 1px solid #8f7950;
                 border-radius: 7px; padding: 5px;
             }
-            QSpinBox {
-                background: #1f2626;
-                color: #f4f0e6;
-                border: 1px solid #8f7950;
-                border-radius: 7px;
-                min-height: 30px;
-                padding: 2px 29px 2px 8px;
-            }
             QSpinBox::up-button, QSpinBox::down-button {
-                subcontrol-origin: border;
-                width: 22px;
-                background: rgba(38, 59, 58, 220);
-                border-left: 1px solid rgba(143, 121, 80, 180);
-            }
-            QSpinBox::up-button {
-                subcontrol-position: top right;
-                border-top-right-radius: 6px;
-                border-bottom: 1px solid rgba(143, 121, 80, 100);
-            }
-            QSpinBox::down-button {
-                subcontrol-position: bottom right;
-                border-bottom-right-radius: 6px;
-            }
-            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-                background: #33504d;
+                background: transparent;
+                border: none;
+                width: 18px;
             }
             QTreeWidget#themeFoundryTree, QTreeWidget#layersTree {
                 background-color: rgba(10,15,17,218);

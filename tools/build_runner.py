@@ -1299,7 +1299,7 @@ class BuildRunnerApp:
         titlebar = tk.Frame(self._shell, bg=COLORS["titlebar"], height=40)
         titlebar.pack(fill="x")
         titlebar.pack_propagate(False)
-        icon_path = REPO_ROOT / "SRPSS.ico"
+        icon_path = REPO_ROOT / "images" / "foundries" / "SRPSSBuild.ico"
         try:
             if icon_path.is_file():
                 self._root.iconbitmap(default=str(icon_path))
