@@ -1,34 +1,33 @@
 # Current Plan — Qt Quick Production Migration
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
-## Source / reviewed checkpoints
+## Current reviewed checkpoint
 
-Original architecture/decision orientation anchor:
-
-```text
-18c8f26756df83bd0d8828becc740c72d5526b21
-4.7.2 - Pre-Quick Migration Docs v1
-```
-
-That SHA is historical orientation, not a required current HEAD.
-
-Latest Phase-C closure checkpoint reviewed before this plan revision:
+Independent review basis:
 
 ```text
-e0abcad316081802bce302b835a4f9d23f11af79
-Phase C plan: two-display closure complete (54/54); 3D-slab oracles deflaked
+91e2b5471dab6b64a90039c7272eb6d6785b0601
+Phase E2 audit correction 3
 ```
 
-Later documentation/test-workflow commits may exist. Always inspect exact current `main` before acting.
+Always inspect exact current `main` before acting. Repository state outranks this file if a later
+checkpoint has landed.
 
-The Qt Quick presenter decision and inline custom-GL primitive are closed by P0/Phase-A evidence.
-Do not reopen the presenter or `QSGRenderNode` selection without concrete contradictory implementation
-evidence.
+## What this file is for
 
-## Required routing before active work
+`Current_Plan.md` is the **active execution authority**, not a migration diary.
 
-For a migration slice use:
+Completed/validated migration implementation has been moved to:
+
+```text
+Docs/Historical_Plans/QtQuick_Migration_Completed_Through_2026-08-23.md
+```
+
+Do not read historical planning by default. Consult it only when a demonstrated regression reopens a
+closed phase or historical rationale is specifically needed.
+
+For active work use:
 
 ```text
 exact current source / pushed diff
@@ -44,25 +43,18 @@ ONLY the active Docs/QtQuick_Migration decomposition
 focused tests / current evidence
 ```
 
-`Index.md` is the routing authority when unsure where a contract lives.
-
-`Future_Work.md` is deferred new-feature/experiment scope, not migration work admission. Do not
-implement from it while the active plan or `Future_Cleanup.md` contains important work unless the
-operator explicitly selects an item.
+`Index.md` remains the routing authority when unsure where a contract lives.
 
 ---
 
 # Active execution window
 
-This file owns migration sequence and work admission. Technical decompositions under
-`Docs/QtQuick_Migration/` explain how to execute admitted work; they do not create parallel phases.
-
 | Phase | Current status | Implementation permission |
 | --- | --- | --- |
-| A — bootstrap/render-node proof | Structurally complete | Do not reopen; compiled smoke remains operator-scheduled later |
-| B — runtime-host decomposition | Structurally complete | Do not reopen without contradictory evidence |
-| C — base image + transitions | **IMPLEMENTATION COMPLETE; test-hardening/sign-off debt explicit** | Test/harness hardening may be explicitly selected; transition implementation changes only when stronger evidence exposes a real defect |
-| D — visualizer | **COMPLETE** — all five modes on the Quick boundary; documentation closure landed; physical cadence/eyes-on remain operator-scheduled acceptance debt | Do not reopen without contradictory evidence |
+| A — bootstrap/render-node proof | **CLOSED** | Do not reopen without contradictory evidence |
+| B — runtime-host decomposition | **CLOSED** | Do not reopen without contradictory evidence |
+| C — base image + transitions | **IMPLEMENTATION CLOSED** | Only explicit acceptance/test debt or a demonstrated regression may reopen it |
+| D — visualizer | **IMPLEMENTATION CLOSED** | Do not reopen renderer/mode architecture without contradictory evidence |
 | **E — widget presentation + capability setup foundation** | **IN PROGRESS** | **Normal implementation work belongs here now** |
 | F — widget families | Waiting for E | Reference only |
 | G — CUSTOM/input/auxiliary pixels | Waiting for F | Reference only |
@@ -70,20 +62,14 @@ This file owns migration sequence and work admission. Technical decompositions u
 | I — legacy presenter deletion | Waiting for H cutover | Reference only |
 | J — tooling/final validation/docs closure | Waiting for migration implementation | Reference only |
 
+Closed-phase physical/compiled/eyes-on acceptance debt remains operator-scheduled and does not require
+agents to reread the completed implementation history unless that evidence is actively being gathered.
+
 ## Phase promotion rule
 
-A phase may move forward when its **implementation dependencies** are structurally closed even if
-hardware-dependent/eyes-on acceptance remains explicitly deferred.
-
-Deferred evidence must be listed with runnable commands/criteria. A later failure reopens the smallest
-demonstrated owner/phase defect; it does not automatically roll the migration sequence backward or
-authorize compatibility architecture.
-
-Production cutover in Phase H still requires the full Quick implementation surface. Final release
-acceptance in Phase J still requires scheduled physical/compiled evidence.
-
-If the operator explicitly says **"continue from Phase C tests"** or equivalent, execute Section 7.5
-before returning to current normal work. Phase D is complete; current normal work is Phase E.
+A phase may move forward when its implementation dependencies are structurally closed even if
+hardware-dependent/eyes-on acceptance remains explicitly deferred. A later failure reopens the
+smallest demonstrated owner/phase defect; it does not roll the entire migration backward.
 
 ---
 
@@ -354,1007 +340,254 @@ authorities. Phase E2 makes this distinction explicit in Settings for transition
 
 ---
 
-# 5. Phase A — bootstrap/render-node proof
-
-Structurally complete for forward migration.
-
-Settled:
-
-- standalone QQuickWindow path;
-- threaded scene graph;
-- explicit OpenGL bootstrap;
-- inline Python QSGRenderNode OpenGL proof;
-- presentation pacer foundation;
-- lifecycle/teardown proof.
-
-Deferred A4 compiled smoke remains operator-scheduled after implementation unless explicitly
-requested earlier.
-
-Do not reopen Phase A merely to reconfirm the selected architecture.
-
 ---
 
-# 6. Phase B — runtime-host decomposition
+# 5–8. Closed implementation phases — routing only
 
-Structurally complete for forward migration.
+Phases A–D are closed for normal implementation work. Their detailed implementation chronology,
+checkpoint evidence, renderer inventories, test-hardening rationale and completed acceptance records
+live in the historical plan archive named at the top of this file.
 
-Settled properties:
+Current durable authorities remain:
 
-- one `QuickDisplayRuntime` per selected physical display;
-- per-runtime window/scene/pacer/input ownership;
-- generation-scoped lifecycle including generation 0;
-- queued Qt/C++ meta-call teardown for hide/release/close rather than blocking Python
-  render-thread inversion;
-- hide/wake behavior;
-- coordinated one-shot exit;
-- deterministic destruction barriers;
-- topology replacement harnesses;
-- unexpected QWindow screen displacement does not silently adopt a fallback display;
-- binding loss preserves original physical identity/pacer target, quiesces presentation/input, and
-  emits one-shot topology/binding loss.
+- Phase A/B host/lifecycle: `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md` plus current contracts;
+- Phase C transitions: `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`,
+  `Docs/Transition_Change_Checklist.md`, `Docs/TestSuite.md`, `Docs/Harness_Index.md`;
+- Phase D visualizer: `Docs/QtQuick_Migration/03_Visualizer.md`,
+  `Docs/Guardrails/Visualizer_Presentation.md`, `Docs/Guardrails/Bubble_Temporal_Fidelity.md`,
+  `Docs/Visualizer_Reference.md`.
 
-Production `DisplayManager -> QuickDisplayRuntime` ownership still waits for Phase H.
-
----
-
-# 7. Phase C — base image + transitions
-
-**Implementation status: complete. Deterministic test-hardening (Section 7.5, C-T1..C-T8) landed; only operator-scheduled real-GL/eyes-on sign-off remains.**
-
-Read:
-
-- `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`
-- `Docs/Transition_Change_Checklist.md`
-- `Docs/TestSuite.md`
-- `Docs/Harness_Index.md`
-
-## 7.1 Transition-neutral foundation
-
-Completed:
-
-- immutable/detached presentation image boundary;
-- `TransitionRequest` / `TransitionRun` lifecycle;
-- monotonic progress sampling;
-- generation/run fencing;
-- exactly-once completion/cancel;
-- shared image texture ownership;
-- common GL-state fence;
-- lazy static implementation registry;
-- GUI/runtime-side parameter/random/default resolution;
-- permanent canonical-registry ↔ Quick-registry parity gate.
-
-## 7.2 Canonical renderer inventory
-
-All 12 canonical production transitions have Quick renderers:
-
-- Crossfade
-- Slide
-- Wipe
-- Warp Dissolve
-- Block Puzzle Flip
-- 3D Block Spins
-- Blinds
-- Diffuse
-- Ripple / Raindrops
-- Crumble
-- Particle
-- Burn
-
-No Quick renderer depends on `GLCompositorWidget`.
-
-Canonical transitions remain catalog-visible as appropriate while application-level deactivation keeps
-implementation/shader/resource ownership dormant.
-
-## 7.3 Critical preserved contracts
-
-### Slide
-
-Four cardinal product directions only. Source/destination sampling and pixel ownership derive from
-one immutable eased sample in one draw, so missed physical frames may cause a larger positional jump
-but never a seam/gap.
-
-### 3D Block Spins
-
-Real thin 36-vertex rectangular-prism slab, depth-tested front/back/sides, black void, four authored
-axes/directions, correct destination UV orientation, cubic internal spin, dark sides, moving specular
-band, white edge rim, context-local resource teardown. No flat fallback.
-
-### Particle
-
-Canonical shader preserved with Directional/Swirl/Converge, directional/random-placement modes,
-trails, swirl settings/order, wobble, texture mapping, 3D shading, gloss/light controls, seed, and
-physical-framebuffer resolution semantics.
-
-### Burn
-
-Canonical rich shader preserved: ignition, six directions, four-octave/domain-warped noise, jagged
-front, heat distortion, glow, white-hot core, char/crackle/smoulder progression, sparks, smoke, ash,
-densities/toggles, per-run seed, run-clock animation time, delayed destination tail.
-
-## 7.4 Existing Phase-C acceptance debt
-
-Real-GL sign-off was driven on real hardware 2026-08-21/22 (MSI G321Q + LG TV, OpenGL threaded,
-`--size 480x270`), single- and two-display (`--windows 2`, both physical screens):
-
-- ✅ focused deterministic Phase-C tests green in the capable Windows worktree;
-- ✅ all 35 parameterized effect×case smokes green single- and two-display;
-- ✅ Blinds Horizontal / Vertical / Diagonal green single- and two-display;
-- ✅ mature transitions green two-display: Crossfade, Slide, Wipe, Warp, Block Flip and all six Block
-  Spins directions;
-- ✅ topology recreation green for Crossfade and Wipe;
-- ✅ **full two-display closure sweep: 54/54**.
-
-The two 3D-slab oracles (Block Spins and Block Flip) exposed timing fragility on the 60 Hz display.
-Those were corrected as **harness-only robustness changes**: production transition renderers were not
-changed, the precise geometry/UV fallbacks remain rejecting flat substitutes, and the shared sparse
-5×5 geometry grid remained unchanged for unrelated geometry oracles.
-
-Broad single-process real-GL runs can still show contention flakiness after hundreds of window
-creations. Chunk those runs rather than attributing unrelated teardown contention to the active slice.
-
-Remaining acceptance requiring the operator's own environment:
-
-- eyes-on old-vs-Quick authored-effect comparison where still useful;
-- mixed 60 Hz/high-refresh continuity and physical cadence only where it answers an unresolved
-  question.
-
-Phase D may proceed while those acceptance items remain explicit.
-
-## 7.5 Phase-C test/harness strengthening — explicit test-only debt
-
-**STATUS (2026-08-22): deterministic test-hardening C-T1..C-T8 is landed and the real-GL closure sweep is green 54/54 on two physical displays. Both 3D-slab harness timing defects were subsequently deflaked without production renderer changes. The C-T subsections remain durable rationale, not active unfinished work.**
-
-Landed evidence (focused gate, capable Windows worktree, HEAD after the C-T checkpoints):
-
-```text
-python -m pytest tests/test_qtquick_transition_controller.py \
-  tests/test_qtquick_transition_parameter_defaults.py \
-  tests/test_qtquick_transition_implementations.py \
-  tests/test_qtquick_transition_uniform_wiring.py \
-  tests/test_qtquick_transition_state_fence.py \
-  tests/test_qtquick_phase_c_registry_parity.py \
-  tests/test_qtquick_phase_c_effect_smoke.py
-```
-
-- C-T1: real-GL midpoint oracles now reject a plain wipe (all six axes) and a uniform crossfade
-  fallback; discriminators proven with deterministic synthetic fixtures.
-  (`tools/qtquick_phase_c_effect_smoke.py`, `tests/test_qtquick_phase_c_effect_smoke.py`)
-- C-T2: selected smoke cases proven to resolve to materially different request parameters
-  (Ripple counts, Crumble weighting, Particle direction/mode, Burn smoke/ash). Pixel-level pairwise
-  contrast remains the operator real-GL rerun.
-- C-T3: request-parameter → shader-uniform wiring matrix (`tests/test_qtquick_transition_uniform_wiring.py`).
-- C-T4: common GL-state fence + exception restoration (`tests/test_qtquick_transition_state_fence.py`).
-- C-T5: Blinds + Ripple sparse canonical-default coverage (`tests/test_qtquick_transition_parameter_defaults.py`).
-- C-T6: controller false-pass fixed (`tests/test_qtquick_transition_controller.py`).
-- C-T8: `_ALL_QUICK_TRANSITION_IDS` derived from the catalog (`tests/test_qtquick_transition_implementations.py`).
-- C-T7/C-T9: honoured (Crumble mosaic tested only as the optional uniform-upload contract; real-GL
-  harnesses kept real, fakes used only for wiring/state-contract level evidence).
-
-**If the operator says "continue from Phase C tests", Phase-C implementation/test hardening and the two-display real-GL closure sweep are complete; proceed to Phase D. Only operator-owned eyes-on/high-refresh acceptance remains.**
-
-The Phase-C test audit found real coverage holes. Improve the tests/harnesses first. Do **not**
-redesign transition implementation merely to satisfy the audit. If a stronger test exposes a real
-implementation defect, record the failure, fix the smallest demonstrated implementation defect in a
-separate bounded checkpoint, rerun the strengthened gate, then continue.
-
-### C-T1 — make real-GL midpoint oracles effect-discriminative
-
-The current Diffuse/Ripple/Crumble/Particle/Burn real-GL midpoint checks are too permissive. A generic
-spatial reveal can satisfy several because a simple mix of source/destination/effect-colored pixels is
-enough.
-
-Strengthen the existing real-GL harnesses so each effect is meaningfully distinguishable from a plain
-wipe/crossfade-style fallback.
-
-Do not replace the real-GL harnesses with mocks. Keep the real renderer/window/OpenGL path and add
-better discriminators.
-
-Useful principles:
-
-- use fixed synthetic source/destination patterns and deterministic seeds;
-- compare effect-specific spatial signatures, not merely "both images appear";
-- use paired/contrast cases from the same effect at the same progress where a parameter should change
-  the result;
-- prefer robust regional/statistical/geometry assertions over exact screenshot hashes.
-
-### C-T2 — prove selected smoke parameters materially change behavior
-
-Several smoke cases currently exercise settings without proving they alter rendering.
-
-Add pairwise/contrast evidence for at least:
-
-- Ripple `count1` vs `count3` vs `count8`;
-- Crumble weighting modes;
-- Particle directions and modes;
-- Burn smoke/ash toggle cases.
-
-The selected case must measurably change the intended output under fixed seed/input/progress.
-
-Examples of suitable discriminators:
-
-- Ripple: changed ring/front frequency or radial crossing structure;
-- Crumble: changed deterministic piece/old-vs-new distribution for weighting modes;
-- Particle: changed displacement centroid/orientation/radial-vs-angular behavior for
-  direction/mode choices;
-- Burn: smoke/ash toggles change their intended regions under the same seed/time without being the
-  only evidence for the core burn front.
-
-### C-T3 — direct request-parameter → shader-uniform wiring tests
-
-Add direct renderer-boundary tests proving resolved immutable request parameters reach the intended
-shader uniforms for:
-
-- Diffuse;
-- Ripple;
-- Crumble;
-- Particle;
-- Burn.
-
-A recording/fake GL uniform sink is appropriate for this **wiring** test, because the existing real-GL
-harness remains separately required for actual rendering.
-
-Particle must cover every authored control:
-
-- mode;
-- direction;
-- radius;
-- overlap;
-- trails;
-- swirl strength;
-- swirl turns;
-- swirl order;
-- 3D shading;
-- texture mapping;
-- wobble;
-- gloss;
-- light direction;
-- seed;
-- physical framebuffer resolution.
-
-Burn must cover all authored effect uniforms plus `u_time` derived from the immutable run clock.
-
-Do not let renderer defaults hide missing request fields.
-
-### C-T4 — direct common GL-state fence regression
-
-Add a focused regression test that starts from deliberately non-default GL state, allows a transition
-renderer to mutate it, and proves the host restores the previous values.
-
-Cover at least:
-
-- viewport;
-- scissor state where the current fence promises it;
-- current program;
-- VAO;
-- array buffer;
-- active texture;
-- texture units 0 and 1 bindings;
-- blend;
-- cull;
-- depth enable;
-- depth write mask;
-- depth function;
-- depth clear value;
-- stencil.
-
-Repeat the restoration assertion when `renderer.render()` raises. Exception cleanup is part of the
-state-fence contract.
-
-### C-T5 — complete sparse canonical-default coverage
-
-Existing sparse/default tests already cover Diffuse/Crumble/Particle/Burn.
-
-Add Blinds and Ripple so absent Settings values resolve from canonical defaults rather than renderer
-magic numbers.
-
-### C-T6 — remove the false-pass controller test shape
-
-Fix:
-
-```text
-tests/test_qtquick_transition_controller.py
-test_runs_require_explicit_interruption_and_are_generation_fenced
-```
-
-`cancel_current(...)` and the generation-mismatched `start(...)` must not sit in the same
-`pytest.raises` block.
-
-Only:
-
-```text
-start(_request(generation=8))
-```
-
-is the operation expected to raise.
-
-The cancellation call must execute and be asserted independently so a premature exception cannot make
-the generation-fence check falsely pass.
-
-### C-T7 — Crumble `mosaic_mode` testing must match the authored shader
-
-Do not invent a fake visual mosaic test.
-
-The canonical fragment shader declares `u_mosaic_mode` but currently does not consume it.
-
-Test only the renderer's optional uniform-upload contract when that uniform exists. Do not claim
-current authored visual mosaic behavior unless the shader is deliberately changed in a separate
-product decision.
-
-### C-T8 — remove duplicate hard-coded transition inventory
-
-`_ALL_QUICK_TRANSITION_IDS` duplicates canonical transition inventory in one test.
-
-Registry parity is already the independent inventory gate. Remove/derive the duplicate where practical
-so future canonical additions/removals do not require updating two supposedly authoritative lists.
-
-### C-T9 — preserve environment fidelity
-
-Do not weaken Windows/Qt/OpenGL/physical-display tests because another environment cannot run them.
-
-Keep real-GL harnesses real. Use mocks/fakes only for isolated wiring/state-contract tests where they
-are the correct level of evidence.
-
-### C-T10 — suggested checkpoint order
-
-Prefer bounded test-hardening checkpoints:
-
-```text
-controller false-pass + sparse defaults + duplicate inventory cleanup
--> request-to-uniform wiring matrix
--> GL-state fence + exception restoration
--> real-GL discriminator/parameter-sensitivity strengthening
--> rerun focused Phase-C gates and record exact evidence
-```
-
-If any strengthened test exposes a real renderer defect:
-
-```text
-record failing evidence
--> smallest implementation fix in separate commit
--> focused test + real-GL rerun
--> push
--> audit if high-risk
-```
-
-Do not broaden the repair into transition redesign.
-
----
-
-# 8. Phase D — visualizer — COMPLETE
-
-D1–D9 landed and Phase-D documentation closure is done (see Section 15). All five modes run on the Quick
-visualizer boundary; only operator-scheduled physical cadence/eyes-on acceptance debt remains. The
-decomposition below is retained as the durable contract; do not reopen it without contradictory
-evidence.
-
-Read:
-
-- `Docs/QtQuick_Migration/03_Visualizer.md`
-- `Docs/Guardrails/Visualizer_Presentation.md`
-- `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
-- `Docs/Visualizer_Reference.md`
-
-Phase D must preserve the current five visualizers **and** avoid baking the historical painted-card
-assumption into the new architecture.
-
-The final visualizer presentation is explicitly split into:
-
-```text
-mode/render state
-        +
-presentation shell policy
-        +
-content clip policy
-        +
-presentation geometry / viewport
-```
-
-All current five modes use the carded policy. No current visual result is intentionally changed by
-this architectural split.
-
-## D1 — presentation-neutral runtime/controller + mode presentation policy
-
-Separate the non-pixel visualizer owner from QWidget presentation without rewriting provider/business
-logic.
-
-Retain settings/mode/preset activation, playback state, BeatEngine/source,
-`VisualizerLogicalRuntime`, and latest logical publication.
-
-Do not instantiate a hidden QWidget merely to keep those owners alive.
-
-Extend the cheap canonical visualizer mode descriptor with presentation metadata rather than adding
-mode-specific `if/elif` branches to scene owners.
-
-Conceptually:
-
-```text
-VisualizerModePresentationPolicy
-    shell_policy = CARD | FRAMELESS
-    clip_policy  = CARD_INTERIOR | VIEWPORT_RECT
-    viewport_resize_capable = bool
-```
-
-Current five modes:
-
-```text
-shell_policy = CARD
-clip_policy  = CARD_INTERIOR
-```
-
-A future explicitly authored mode such as the post-migration deformable 3D sphere may use:
-
-```text
-shell_policy = FRAMELESS
-clip_policy  = VIEWPORT_RECT
-```
-
-`FRAMELESS` means no card fill, frame/border, or card shadow. It does **not** mean a second native
-window or permission to draw arbitrarily across the display.
-
-Checkpoint/push/audit this split.
-
-## D2 — immutable latest-state render bridge
-
-Publish bounded immutable current visualizer snapshots containing generation/activation identity,
-mode/playback identity, logical timestamp, fade/style, mode-specific render data, and the resolved
-presentation policy/geometry required for that committed frame.
-
-No render-thread reads from live QWidget/QObject/provider/Settings state or live mode-registry state.
-
-Latest state wins; no FIFO/catch-up replay. Protect short-lived authored edges explicitly.
-
-Checkpoint/push/audit the bridge separately.
-
-## D3 — Quick visualizer scene composition, clip owner, and card/frameless shell
-
-Use one sub-rect custom Quick item/QSGRenderNode inside the display QQuickWindow.
-
-Selected carded scene shape:
-
-```text
-VisualizerPresentationRoot  (one fade/visibility owner)
-    |
-    +-- retained card shadow        [CARD only]
-    +-- retained card background    [CARD only]
-    +-- visualizer content item
-    |       |
-    |       +-- QSGRenderNode / direct OpenGL
-    |               |
-    |               +-- one local SDF/stencil clip host
-    +-- retained card frame/border  [CARD only, above content]
-```
-
-For `FRAMELESS`, omit the card shadow/background/frame while retaining the same presentation root,
-content item, lifecycle, fade authority and display-scene ownership.
-
-### D3.1 — clipping policy
-
-The old architecture needed a rounded-card stencil because custom GL content had to remain above the
-card fill and below the visible border without bleeding through rounded corners.
-
-That **visual contract remains necessary for carded modes**. The old hand-written stencil mechanism
-does not automatically remain the best owner.
-
-The exact pinned PySide 6.9.1 proof is complete. The scene-graph clip-node handoff did not provide
-usable accumulated clip state to the Python render node: rounded cases exposed stencil state whose
-framebuffer contents did not match, while rectangular cases could expose an invalid sentinel scissor.
-Do not reopen or retain that failed path.
-
-The selected single Quick implementation is one render-node-local SDF/stencil clip host inside the
-same `QQuickWindow`/`QSGRenderNode` architecture:
-
-- `CARD_INTERIOR` uses rounded geometry matching the actual inner edge of retained Quick card chrome;
-- `VIEWPORT_RECT` uses the same host with zero corner radius;
-- shell, clip and custom GL derive from one immutable canonical geometry record and render-target
-  viewport;
-- the host nests above any incoming `RenderState` scissor/stencil value without clearing Qt's clip
-  contents;
-- the temporary stencil contents and every touched direct-GL state are restored before returning to
-  Qt;
-- there is no second selectable scene-graph clip implementation.
-
-Never solve clipping by shrinking the visualizer render rect or scaling the authored content smaller.
-Historical R-21 proved that changes mode geometry/amplitude/bar sizing rather than clipping pixels.
-
-### D3.2 — Quick border semantics
-
-Do not cargo-cult the old mask formula.
-
-The historical mask compensated for a centred QPainter border (`border_width / 2`) plus painted-card
-shadow tuning. Qt Quick `Rectangle` borders are rendered **inside** the rectangle bounds.
-
-The new card-interior clip must therefore be derived from the actual retained Quick chrome contract:
-
-```text
-outer card shape
-        ↓
-inside border width
-        ↓
-inner content path / inner corner radius
-```
-
-Any additional inset must be an explicit authored Quick card/style value, not a copied magic
-`1px + border/2` rule from the QWidget/QPainter era.
-
-## D4 — canonical geometry: one baseline aspect, uniform scale, separate viewport extent
-
-Create one committed presentation-neutral geometry record capable of expressing:
-
-```text
-outer_rect
-content_rect
-dpr
-baseline_viewport_size
-baseline_aspect_ratio
-uniform_visual_scale
-viewport_extent
-current_aspect_ratio
-shell_policy
-clip_policy
-```
-
-### D4.1 — retire the legacy per-mode card-height/growth system from Quick
-
-The old runtime carries per-mode presentation controls such as:
-
-```text
-spectrum_growth
-osc_growth
-sine_wave_growth
-bubble_growth
-devcurve_growth
-```
-
-They change preferred **outer card height** while width remains media-relative. CUSTOM already bypasses
-that preferred-height path once committed custom geometry owns the visualizer.
-
-These are legacy presentation customization and are **not part of the Qt Quick visualizer contract**.
-Do not port them into the Quick controller, immutable render snapshot, mode descriptor or retained
-card geometry.
-
-For the Quick-era normal/default layout:
-
-- all current visualizer modes share one canonical baseline viewport aspect ratio;
-- normal card width/placement may still follow the intended common layout owner, but height derives
-  from that one baseline aspect rather than a mode-specific growth multiplier;
-- switching Spectrum ↔ Oscilloscope ↔ Sine ↔ Bubble ↔ DevCurve does not resize the viewport merely
-  because the mode changed;
-- built-in presets may tune the mode's visual behavior but do not own viewport/card height;
-- screen-bound clamping preserves the baseline aspect by uniform scale/downsize rather than chopping
-  one axis independently.
-
-Do **not** invent a new numerical aspect ratio from an arbitrary old mode-growth value. D3/D4 should
-extract/freeze one explicit canonical ratio from the intended healthy CUSTOM/default visualizer
-baseline and give it one named authority. Once chosen, every current mode uses that authority.
-
-The destination should therefore behave like the clean part of current CUSTOM: legacy growth values
-are irrelevant to visualizer shape.
-
-The old settings/UI/preset keys may remain temporarily while the old presenter still exists, but the
-Quick implementation ignores them. H0 resets them away and Phase I/J0 remove their remaining current
-schema/UI/preset/default/tooling authority after caller proof.
-
-### D4.2 — uniform scale preserves the baseline aspect
-
-`uniform_visual_scale` is the ordinary whole-visualizer size control.
-
-It scales shell + viewport + authored content coherently and **preserves the canonical baseline aspect
-ratio**.
-
-This is the semantic used by:
-
-- existing/custom scroll-wheel resize;
-- corner-handle resize;
-- ordinary reset-to-size behavior.
-
-It is not an X/Y stretch.
-
-### D4.3 — viewport extent is a separate future operation
-
-`viewport_extent` changes how much visualizer world/layout is available at the current visual scale.
-It may intentionally produce a wide/tall aspect that differs from the baseline aspect.
-
-That deviation is allowed **only** through the explicit viewport-extent operation planned for Phase G,
-not through mode presets, legacy growth controls or ordinary corner/scroll resize.
-
-Do not bake these assumptions into the five renderer ports:
-
-- mode-specific preferred heights;
-- one fixed historical card size hidden inside a renderer;
-- non-uniform final-pixel stretching;
-- card existence as a precondition for drawing.
-
-Where logical simulation needs spatial bounds (Bubble in particular), viewport changes enter through a
-presentation-neutral viewport-metrics update owned outside the render thread. That update is
-configuration, not another clock.
-
-## D5 — prove baseline aspect independence and future viewport compatibility
-
-During the five mode ports, exercise at least:
-
-```text
-canonical baseline aspect at scale 1.0
-canonical baseline aspect at another uniform scale
-wide viewport extent at the same visual scale
-tall viewport extent at the same visual scale
-```
-
-The first two are migration requirements. Wide/tall cases are architectural compatibility probes for
-the later Phase-G QoL; Phase D does not ship the edit handles.
-
-Expected semantics:
-
-- Spectrum: redistribute bars/layout across available width; vertical limit follows content height;
-- Bubble: spatial bounds/aspect change without anisotropically stretching circles, radii, velocities
-  or trajectories;
-- Oscilloscope/Sine/DevCurve: recompute available domain/placement while preserving stroke thickness
-  and authored scale;
-- future 3D sphere: aspect-correct camera/projection so the sphere remains round.
-
-If one current mode cannot safely support free viewport extent without compromising authored behavior,
-keep the D4 geometry seam and mark that mode `viewport_resize_capable = false` for the later QoL. Do
-not block migration and do not fake support by stretching pixels.
-
-## D6 — sole authored logical clock
-
-`VisualizerLogicalRuntime` remains the sole mode-general authored logical clock.
-
-Non-negotiable:
-
-- every authored logical step survives;
-- latest-state semantics;
-- no FIFO/catch-up;
-- no paint acknowledgement;
-- no producer/display divisor;
-- no source/event decimation;
-- no display-refresh logical cap;
-- render cadence never becomes simulation cadence;
-- nonblocking media/GSMTC interaction;
-- generation/stale fencing;
-- clean worker join.
-
-## D7 — five mode ports
-
-Preserve all current authored **mode behavior** for the five modes below. The D4-retired per-mode card-height/growth presentation controls are explicitly excluded from parity:
-
-1. Spectrum — bars/peaks/ghosting, paused idle visibility, source freshness;
-2. Oscilloscope — waveform/line persistence/idle behavior;
-3. Sine — authored idle/layers/reactivity, no separate timer;
-4. Bubble — dedicated high-risk checkpoint with BTF, continuous positional evolution, collisions,
-   trails/tails, ghosts/pop/transients/protected edges, authored logical Hz;
-5. DevCurve — active layers/order/alpha/offsets/outline/ghosting/tuning.
-
-All five current modes remain `CARD + CARD_INTERIOR`.
-
-Do not retune modes to hide presentation problems.
-
-The observation that unrelated widgets can materially change measured Bubble-era GPU load supports
-retained-scene efficiency and true feature dormancy. It does not implicate Bubble collision logic by
-itself.
-
-## D8 — Pause/Play and lifecycle
-
-Preserve warm-source/expected-state behavior without recreating the window/item or inventing a second
-playback authority.
-
-One presentation-root fade authority covers both carded and frameless modes.
-
-Retirement must close publication, stop/join the logical runtime, invalidate activation/generation,
-remove snapshot admission, release GL resources on the render owner, and destroy roots cleanly.
-
-A background owner that prevents process/test shutdown is a defect.
-
-## D9 — checkpoint cadence
-
-Prefer pushed/audited checkpoints for:
-
-1. runtime/controller split + presentation policy;
-2. immutable bridge;
-3. item/node + clip/shell/geometry foundation;
-4. Spectrum;
-5. Oscilloscope;
-6. Sine;
-7. Bubble + BTF;
-8. DevCurve;
-9. all-five-mode lifecycle/source/pause + aspect-policy closure;
-10. Phase-D documentation closure.
-
-## D exit
-
-All five modes use the Quick visualizer boundary with the authored logical runtime intact, immutable
-latest-state publication, clean lifecycle/resources, and no old compositor/QWidget presentation
-dependency inside the new renderer.
-
-The renderer architecture must no longer assume every possible visualizer mode requires a card, and
-its geometry contract must preserve a clean later seam for viewport-extent resizing.
-
-Phase D does **not** need to ship the Phase-G freeform viewport-resize UI to exit.
-
-After implementation exit, rewrite visualizer/preset authoring guidance against the landed Quick
-contract. Explicit physical/eyes-on items may remain scheduled acceptance debt when they require the
-operator's actual display/GPU environment.
+Do not use the historical plan archive as current implementation authority.
 
 ---
 
 # 9. Phase E — widget presentation + capability setup foundation
 
-Read:
+Read for active Phase E work:
 
 - `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`
 - `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
+- current source and tests at exact `main`
 
-## E1 — presentation-neutral descriptor/runtime ownership
+## E2 — finish current capability/Settings slice first
 
-Make canonical widget identity/settings metadata independent of QWidget factories.
+E2's substantive architecture is landed. Independent audit of `91e2b547` found the three previous
+blockers GREEN:
 
-Create/rename `WidgetRuntimeManager` around provider/model lifecycle, activated/enabled/visible state,
-monitor participation, stacking inputs, settings updates, fade intent, generation/model registration,
-and actions.
+- final Random admission revalidates current saved-pool membership;
+- delayed remote CUSTOM Visualizer creation re-reads current Media + Visualizers capability state at
+  callback execution and final creation;
+- invalid persisted Media→Visualizers state is durably repaired at SettingsManager load.
 
-A disabled **instance** remains a configured capability but does not present.
+Detailed correction history and test lists are historicalized; do not repeat them here.
 
-A deactivated **family/module** must not own feature-specific provider/model/process/poll/timer/Quick
-component/resource solely because its files exist.
+### E2 remaining blocker — context-menu unresolved state must fail closed
 
-Shared infrastructure remains only while another activated capability needs it.
+One narrow blocker remains in `rendering/display_context_menu.py`.
 
-Do not create a giant Python `QuickBaseOverlayWidget` god object.
+Current callers can turn an unresolvable state into `{}` before calling
+`is_widget_family_effective(...)`. Because a **valid** mapping with absent activation keys intentionally
+means active for backwards compatibility, `{}` is permission rather than fail-closed.
 
-## E2 — application-level capability SETUP UI and lazy Settings navigation
+Required correction:
 
-This is a required migration-era QoL/wiring feature, not `Future_Work.md`.
+- missing SettingsManager -> Visualizer submenu unavailable and mode switch rejected;
+- failed widgets read -> unavailable/rejected;
+- malformed/non-mapping widgets root -> unavailable/rejected;
+- a valid widgets mapping with absent activation keys retains the canonical compatibility semantics;
+- keep `is_widget_family_effective(...)` as the dependency authority; do not hard-code a second
+  Media→Visualizers rule.
 
-The Settings GUI remains QWidget-based. Reuse the existing pill/subtab navigation style and lazy
-section construction.
+Tests must hit both real context-menu boundaries, not only a helper.
 
-### E2.1 Two separate state levels
+After a pushed correction, stop for independent audit. If GREEN, E2 implementation is closed; the
+remaining E2 acceptance is operator `python main.py --s` eyes-on confirmation of responsive Settings
+layout and Visualizers dependency UX across relevant widths.
 
-Do not conflate:
+### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — QUEUED, AUDIT REQUIRED
+
+This is a bounded current-product lifecycle/topology correction discovered while auditing E2. It is
+separate from the narrow E2 context-menu correction and must not be folded into that checkpoint.
+
+Historical context: `Docs/Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md` correctly
+records the June fix for partial startup display registration and immediate sleep/wake duplicate-owner
+fallbacks, but its current `SOLVED` classification is now too strong. The existing 1500 ms delayed
+fallback is not a human-scale monitor-wake grace, and current source has no independently proven
+event-driven hand-back from a temporary fallback to the configured CUSTOM display after that display
+returns. R-26 should be reopened/marked PARTIAL when this slice begins, preserving its original
+chronology.
+
+#### E2.7.1 Canonical owner vs temporary runtime fallback
+
+The **current persisted CUSTOM monitor selection remains the canonical/intended owner**.
+
+A fallback display is only a temporary runtime host. It must never become configuration authority.
+
+If the user configured the Visualizer for Display 1 and Display 1 is unavailable:
 
 ```text
-capability activated / loaded
+persisted intended owner = Display 1
+runtime temporary owner  = Display 0, if fallback is eventually needed
 ```
 
-with:
+The fallback must **not**:
+
+- overwrite/persist the configured monitor selection;
+- rewrite the saved Display-1 CUSTOM position/size/viewport geometry;
+- make fallback-relative/clamped geometry the new canonical geometry;
+- save a fallback display id because it happened to be available;
+- become the target used on the next startup merely because it hosted the temporary instance.
+
+Any positioning adjustment needed to make a fallback visible on another display is transient runtime
+state only. When the configured display returns, discard fallback-specific placement and restore the
+configured display using its saved authoritative CUSTOM geometry.
+
+If the operator changes the configured monitor in Settings while failover is active, the **new current
+persisted selection** becomes the intended owner; failover state must not preserve an obsolete target.
+
+#### E2.7.2 Human-scale 30-second grace
+
+Replace the current 1500 ms fallback grace with **30 seconds**.
+
+The grace exists to tolerate:
+
+- a real monitor waking and renegotiating HDMI/DisplayPort;
+- staggered Windows/Qt display participation;
+- a human physically turning on the remaining configured display(s).
+
+Do not immediately move the Visualizer merely because another display becomes ready first.
+
+The 30-second grace applies when the configured target is temporarily unavailable, including the
+meaningful current cases of:
+
+- runtime-known but non-participating target;
+- configured target absent/unavailable during startup or wake.
+
+If the configured target becomes usable inside the grace, invalidate the pending fallback and keep/use
+the configured target.
+
+#### E2.7.3 One-shot deadline, never timer-owned lifecycle
+
+The 30-second grace may use one token/generation-fenced single-shot deadline.
+
+Do **not** add:
+
+- recurring monitor polling;
+- a periodic ownership timer;
+- presentation/update timing tied to this lifecycle;
+- repeated "wait another N seconds" loops.
+
+After a temporary fallback has been created, it may remain there indefinitely **only until an actual
+display/topology event says the configured target has returned**. No timer is needed to discover that
+return.
+
+#### E2.7.4 Event-driven reclaim — even minutes or hours later
+
+Reclaim is not limited to the 30-second window.
+
+Example:
 
 ```text
-widget instance enabled
-transition selected / random-pool enabled
-```
-
-Activation is the application-level gate. It determines whether implementation/runtime/UI sections are
-resolved at all.
-
-Ordinary enablement/selection remains configuration **inside** an activated capability.
-
-Disabling/deactivating a capability does not erase its saved configuration. Re-activation restores the
-previous per-feature settings unless the operator explicitly resets them or H0 replaces the old
-settings epoch.
-
-Python modules already imported in the current process may remain in `sys.modules`; the runtime
-contract is immediate resource/lifecycle dormancy plus no import on a fresh process while deactivated.
-
-### E2.2 Widgets tab
-
-Add an always-present first pill/subtab:
-
-```text
-SETUP
-```
-
-The Setup page is built only from cheap presentation-neutral catalog metadata. It must not import
-family builders/providers/renderers merely to list available families.
-
-Show all canonical widget **families/capabilities** using the existing circle-checkbox visual style.
-
-Examples of family-level activation should follow final canonical family ownership rather than blindly
-mirroring instance ids:
-
-- Clocks may own Clock / Clock2 / Clock3;
-- Reddit may own Reddit / Reddit2;
-- Steam may own its related family cards/services;
-- other families follow their canonical `family_id`.
-
-Do not automatically treat the visualizer as a widget-family capability merely because some of its
-settings currently live in WidgetsTab; Phase D/final descriptor ownership decides that boundary.
-
-Bottom-right controls:
-
-```text
-Enable All
-Disable All
-```
-
-These buttons change **family activation**, not each family's internal `enabled` checkbox.
-
-For each deactivated family:
-
-- remove its settings pill/button from the navigation rows;
-- do not build/hydrate its Settings page;
-- do not resolve its runtime implementation/model/provider;
-- stop/retire any currently owned family runtime work at the normal safe settings-apply/recreate
-  boundary;
-- release family-specific Quick/GL resources;
-- keep stored per-family/per-instance settings intact.
-
-For each activated family:
-
-- show its pill/button;
-- build its page only when selected;
-- resolve runtime ownership only if the family/instance state actually requires it.
-
-The existing lazy-save hydration guard must survive this change. An unbuilt/deactivated settings page
-must never overwrite stored values with defaults simply because the Settings dialog was saved.
-
-### E2.3 Transitions tab
-
-Replace the old transition dropdown + monolithic eagerly-created transition groups with the same
-pill/subtab navigation pattern.
-
-Always-present first pill:
-
-```text
-SETUP
-```
-
-Each **activated** transition receives one settings pill. Deactivated transitions have no pill and
-their implementation remains out of runtime selection/resolution.
-
-The Setup page owns:
-
-- application-level transition activation checkboxes;
-- `Use Random Transitions` as one ordinary checkbox;
-- one random-pool list containing only activated transitions, with per-transition pool membership.
-
-The old per-transition "Include in Switch/Random Pool" control and old separate random-pool button/UI
-become obsolete.
-
-Keep these states distinct:
-
-```text
-transition activated
+Visualizer configured for Display 1
+Display 1 stays unavailable > 30 s
         ↓
-eligible to have a settings page / be selected at all
-
-random-pool member
+temporary fallback appears on Display 0
         ↓
-eligible only when random mode is active
-
-Use Random Transitions
+1 minute / 1 hour later Display 1 returns
         ↓
-runtime uses effective random pool
-
-manual transition selection
+existing display/topology event
         ↓
-used when random mode is off
+reconcile ownership immediately
+        ↓
+temporary Display-0 owner retired/fenced
+        ↓
+Visualizer resumes/creates on Display 1
+        ↓
+Display-1 saved CUSTOM geometry restored
 ```
 
-Effective random pool is:
+Use the existing display/topology event machinery rather than another timer. Inspect current
+`WM_DISPLAYCHANGE`, Qt screen lifecycle/screenChanged handling, DisplayManager/coordinator topology
+ownership and choose one centralized reconciliation seam. `WM_DISPLAYCHANGE` is known evidence that
+display return is eventful, but do not hard-code it as the sole mechanism if the existing topology
+owner already has a cleaner canonical event boundary.
 
-```text
-activated transition ids
-∩
-saved random-pool membership
-```
+Repeated display events must be idempotent.
 
-Random mode must not silently run with an empty effective pool. Prevent/resolve that state explicitly.
+#### E2.7.5 Exactly-one-owner transaction and race fencing
 
-The landed canonical normalization authority, `normalize_transition_capability_state(...)`, already
-owns the malformed persisted-state repairs:
+At every point there must be at most one live Visualizer owner.
 
-- zero activated transitions -> explicitly reactivate canonical recovery transition `Crossfade` in the
-  settings state and persist that repair;
-- Random enabled with an empty `activated ∩ saved-pool` set -> turn Random off and persist a
-  deterministic activated manual selection while preserving saved pool membership.
+Required behavior:
 
-Those are explicit settings-state normalization/recovery rules, not permission for a renderer/factory
-to run a deactivated implementation as a hidden fallback.
+- configured target returns before 30 s -> pending fallback invalidated; no fallback created;
+- configured target remains unavailable through 30 s -> exactly one temporary fallback may be created
+  on a participating display;
+- configured target returns after fallback creation -> retire/fence fallback and hand back to the
+  configured target as one reconciliation transaction;
+- return event racing the 30-second callback -> exactly one owner;
+- stale callback after reclaim -> cannot recreate fallback;
+- target disappears again after successful reclaim -> a fresh grace may be armed with a new token;
+- no participating fallback display -> fail closed; do not invent one.
 
-E2 also removes the historical dual Random-mode authority. Once E2 cuts over,
-`transitions.random_always` / `Use Random Transitions` is the one live Random-mode authority and
-`transitions.type` stores a concrete manual transition selection. A legacy persisted `type="Random"`
-must be normalized into that shape without losing pool preferences or the remembered concrete manual
-selection; runtime and normalization may not disagree about whether Random is active.
+The implementation must use generation/token fencing strong enough that stale delayed work cannot
+resurrect a retired fallback owner.
 
-When `Use Random Transitions` is off, the selected transition pill is the manual transition, preserving
-the old dropdown's practical selection behavior.
+#### E2.7.6 Capability admission remains current
 
-When random mode is on, selecting another transition pill changes **editing focus** and may remember
-the manual selection for later, but does not implicitly disable random mode.
+Every delayed fallback and every reclaim operation must re-read **current** canonical capability state.
 
-Deactivating the currently selected manual transition must choose/persist a deterministic activated
-replacement selection; it must not silently reactivate or run the transition the operator deactivated.
+If Media or Visualizers is deactivated:
 
-Deactivation may preserve that transition's saved random-pool preference so reactivation can restore
-the user's prior configuration, while the effective pool always filters by activation.
+- a pending fallback creates nothing;
+- a topology-return event does not recreate/reclaim a Visualizer;
+- stale Media QWidget/runtime objects and copied settings maps grant no permission.
 
-### E2.4 Settings implementation shape
+Do not introduce a second Media→Visualizers dependency authority.
 
-Do not make Settings import renderer implementations.
+#### E2.7.7 Required regression bar
 
-Use lightweight Settings metadata, conceptually:
+At minimum prove:
 
-```text
-CapabilityDescriptor
-    id
-    label
-    activation setting
-    settings builder module/factory
-    family/group identity
-    persisted settings ownership
-```
+- target returns inside 30 s -> zero fallback creation;
+- target unavailable through deadline -> exactly one temporary fallback;
+- target returns after temporary fallback -> fallback retired, configured target sole owner;
+- configured target's persisted monitor and saved CUSTOM geometry are unchanged by failover;
+- fallback-specific/clamped runtime geometry is never persisted as target geometry;
+- repeated return events are idempotent;
+- return-event/deadline race leaves exactly one owner;
+- capability deactivated during grace -> no fallback;
+- capability deactivated before/while reclaiming -> no stale creation;
+- target disappears again after reclaim -> fresh grace/token, no stale-token reuse;
+- no participating fallback target -> fail closed.
 
-For transitions, move transition-specific settings construction out of one giant eagerly-created
-`TransitionsTab` body into lazy per-transition builders/pages or an equivalently modular descriptor
-boundary.
+This slice is lifecycle/topology ownership and therefore requires a pushed checkpoint followed by
+independent audit before continuing.
 
-For widgets, extend the existing descriptor/lazy-section system rather than replacing it.
+## E1 — presentation-neutral runtime/model/provider ownership
 
-`SETUP` itself is never capability-gated and must be cheap to construct.
+After E2/E2.7 closure, complete the broader `WidgetRuntimeManager` ownership split.
 
-### E2.5 E2 tests
+Required destination:
 
-Prove:
+- canonical widget identity/settings metadata independent of QWidget factories;
+- presentation-neutral provider/model lifecycle ownership;
+- activated/enabled/visible state and monitor participation without QWidget presentation authority;
+- family deactivation retires exclusive provider/model/process/poll/timer/Quick/resource ownership;
+- shared infrastructure survives only while another activated consumer needs it;
+- deactivated capability before first use does not unnecessarily import/resolve heavy implementation;
+- ordinary instance-disabled state remains distinct from family deactivation;
+- no giant Python `QuickBaseOverlayWidget` replacement god object.
 
-- Setup pages list capabilities without importing heavy runtime/render modules;
-- deactivated capabilities have no settings pill/page construction;
-- activated capability page builds on first selection;
-- deactivating a built page does not corrupt its persisted settings;
-- reactivation restores previous settings;
-- Widget `Enable All` / `Disable All` affect activation only;
-- per-widget internal `enabled` values survive family deactivation/reactivation;
-- owners already migrated behind the activation boundary retire deactivated-family exclusive work;
-- broader provider/model/timer/process dormancy and last-consumer shared-service lifetime remain E1
-  ownership gates before Phase F, not something the E2 UI may fake by merely hiding a page;
-- transition activation removes implementation from effective selection and keeps renderer dormant;
-- random pool uses `activated ∩ pool-member`;
-- random mode cannot remain valid with an empty effective pool;
-- manual transition selection remains deterministic when its capability is deactivated;
-- direct normalization tests prove all-false activation explicitly repairs/persists Crossfade and empty
-  effective Random pool disables Random while preserving pool preferences;
-- legacy `type="Random"` is normalized to the one E2 Random authority plus a concrete manual type;
-- a pre-resolved/stale `transitions.random_choice` is revalidated at final factory admission and cannot
-  run after that transition is deactivated or becomes hardware-inadmissible;
-- engine Random selection, factory Random selection and C-key cycling never execute a literal/deactivated
-  `Crossfade` substitute when no valid candidate remains;
-- no lazy-save hydration regression;
-- Settings recreation correctly rebuilds only activated navigation/pages.
-
-### E2.6 Open transition-admission debt — blocks E2 exit
-
-Exact pushed source at the 2026-08-22 Phase-E partial checkpoint still has four narrow activation/Random
-seams that must be closed before E2 is marked complete or Phase F is allowed to rely on E2:
-
-1. `TransitionFactory._get_random_mode()` accepts an already-populated
-   `transitions.random_choice` after canonicalization without re-checking current activation and
-   hardware admission at the final factory seam. A choice prepared before a live Settings change must
-   not survive deactivation as an executable transition.
-2. The engine's hardware-filtered Random candidate path and the factory-side Random candidate path
-   still contain literal `Crossfade` last-resort branches. Those branches may not execute Crossfade
-   when Crossfade is deactivated; if no transition is both activated and hardware-admissible, fail
-   closed or resolve through one explicit canonical admission policy rather than silently substituting
-   a deactivated implementation.
-3. C-key cycling still has unconditional Crossfade recovery branches when no candidate survives pool /
-   hardware / activation filtering. The final cycle result must itself pass activation and hardware
-   admission; an empty valid set must not manufacture a deactivated Crossfade.
-4. Runtime Random detection still treats legacy `transitions.type == "Random"` as Random mode while
-   `normalize_transition_capability_state()` / `is_random_mode_effective()` reason only about
-   `random_always`. E2 must converge this to one authority: `Use Random Transitions` /
-   `random_always`, with `type` holding a concrete remembered manual selection. Normalize legacy
-   `type="Random"` state explicitly before the old dropdown authority is removed.
-
-The normalization helper itself also needs direct regression coverage for its all-false repair and
-empty-effective-pool repair; current focused tests exercise the surrounding pool semantics but do not
-directly pin those mutations.
-
-Fix only these demonstrated seams. Do not add another selector, compatibility presenter, or fallback
-architecture. Add focused regressions for each item, then checkpoint/push/audit E2 before Phase F
-family migration relies on it.
+This is broader than the creation-admission gate already landed and requires an audit checkpoint.
 
 ## E3 — shared retained Quick primitives
 
-Build small reusable primitives for cards/backgrounds, border/radius, foreground opacity, shadows,
-text/header shadow, image/artwork, separators, text, fades/visibility, click targets, controls.
+Build small reusable retained primitives for cards/backgrounds, border/radius, foreground opacity,
+shadows, text/header shadow, image/artwork, separators, text, fades/visibility, click targets and
+controls.
+
+Do not create another monolithic presentation base class.
 
 ## E4 — eight-direction shadow authority
 
@@ -1370,9 +603,41 @@ Eight outer directions; default `SE`; center is not a ninth mode.
 
 Direction changes signs while preserving each family's authored magnitude/blur/spread/opacity/color.
 Cover cards, text, headers, icons/artwork, controls, volume slider, visualizer, clocks, Weather, Media,
-Reddit/Gmail, Steam families, multiple DPRs, and CUSTOM geometry.
+Reddit/Gmail, Steam families, multiple DPRs and CUSTOM geometry.
 
 Do not reintroduce QWidget `QGraphicsDropShadowEffect`.
+
+## Phase E execution order
+
+Unless stronger current evidence forces a smaller corrective detour:
+
+```text
+E2 narrow context-menu correction
+-> independent audit
+-> E2.7 Visualizer CUSTOM failover/reclaim lifecycle
+-> independent audit
+-> E1 runtime/model/provider ownership
+-> independent audit
+-> E3 retained primitives
+-> E4 shadow authority
+-> Phase-E closure review
+-> Phase F
+```
+
+Do not start Phase F merely because E2 UI is visually usable; E1 ownership and E3/E4 foundation still
+belong to Phase E.
+
+### Known unrelated test watch items
+
+These were reported as pre-existing on the `4ac884f8` baseline and are not evidence against the narrow
+E2 correction unless current investigation proves otherwise:
+
+- `test_visualizer_settings_plumbing.py::TestVisualizerModeBinding::test_load_visualizer_mode_selection_falls_back_when_saved_mode_is_unknown`;
+- `test_sine_line4_builder_integration.py::test_actual_save_media_settings_includes_line4`;
+- `test_visualizer_doc_references.py::test_contracts_route_visualizer_shell_clip_and_geometry_owners`
+  (stale assertion around legitimate `QSGClipNode` historical/contract wording).
+
+Do not silently ignore new failures; isolate before attributing them.
 
 ---
 
@@ -1717,241 +982,31 @@ architecture.
 
 # 15. Current next work
 
-**Phase D is COMPLETE.** All five modes (Spectrum/Oscilloscope/Sine/Bubble/DevCurve) run on the Quick
-visualizer boundary with the sole `VisualizerLogicalRuntime`, mode-owned frame runtimes, immutable
-latest-state publication through `VisualizerSnapshotBridge`, one `QSGRenderNode`/lazy renderer,
-render-node-local SDF/stencil clip, retained shell, and clean generation-fenced lifecycle. Documentation
-closure landed (visualizer/preset authoring guidance, clip evidence accuracy, geometry semantics, fade
-authority, BTF coalescing). Do not reopen D1–D9 without contradictory evidence.
+Current normal sequence is the Phase-E execution order above.
 
-Phase-D closure verification also confirmed, without production behaviour change:
+Immediate next checkpoint from reviewed `91e2b547`:
 
-- fade authority is unambiguous — one authored authority resolves into two derived layer values
-  (`scene_fade` root/card, `content_fade` GL content); guarded by
-  `tests/test_qtquick_visualizer_fade_authority.py`;
-- the Bubble two-protected-results-before-one-sync BTF semantic holds by forward evolution; pinned by
-  `tests/test_bubble_btf_coalescing.py`;
-- Bubble keeps one-authored-step -> one-integration with no second logical clock;
-- the selected clip owner is the render-node-local SDF/stencil host (the failed `QSGClipNode` handoff is
-  not selectable);
-- baseline geometry authority = the 1.5 default aspect; literal `420x280` is an internal reference, not
-  a required runtime size.
+```text
+fix context-menu unresolved-state fail-open
+-> focused context-menu/capability tests
+-> diff/status
+-> commit + push
+-> independent audit
+```
 
-**Remaining Phase-D acceptance debt (operator-scheduled physical/eyes-on; do NOT fabricate here):**
+Do **not** implement E2.7 in that same tiny correction checkpoint.
 
-- installed screensaver Bubble wall-clock cadence on the operator's real display/GPU (deterministic
-  tests prove the logic preserves one-step->one-integration and the ~90 Hz authored cadence / >= ~88 Hz
-  recovery intent, but a bare-thread measurement here would not represent installed behaviour);
-- eyes-on old-vs-Quick authored-effect comparison and mixed-refresh continuity.
+Once the narrow E2 correction audits GREEN, E2.7 is the next bounded lifecycle/topology slice. Its
+central product rule is simple and non-negotiable:
 
-These do not block migration progress.
+```text
+persisted CUSTOM target = canonical owner forever until the user changes it
+fallback display        = temporary runtime host only
+```
 
-**Phase E is IN PROGRESS** (widget presentation + capability setup foundation), started under explicit
-operator direction.
-
-Landed E foundation slices (additive/inert at all-on defaults; no default runtime behaviour change):
-
-- **presentation-neutral widget family catalog** — `WIDGET_FAMILY_DESCRIPTORS` in
-  `core/settings/widget_family_catalog.py` is the single source of truth mapping stable `family_id` to
-  canonical member runtime widget ids. Family-level environment availability is neutral there;
-  `rendering/widget_descriptors.py` re-exports the catalog and retains member-level runtime
-  availability/legacy descriptor details such as `get_active_member_widget_ids()` — it is not the
-  membership source. (Visualizers was later added as a capability family requiring Media; see the E2
-  second audit-correction notes below.) Pinned by `tests/test_widget_family_catalog.py`.
-- **canonical capability-activation settings schema** — `widgets.family_activation.<family_id>` and
-  `transitions.activation.<setting_name>` in canonical defaults (all `True`, so behaviour is unchanged
-  until H0), plus `core/settings/capability_activation.py` presentation-neutral read/write/query and
-  normalization helpers (`is_widget_family_activated` / `is_transition_activated` /
-  `get_effective_random_pool` = activated ∩ pool-member / `is_random_mode_effective` /
-  `resolve_manual_transition_selection` / `get_default_activated_transition` /
-  `normalize_transition_capability_state`). Canonical normalization explicitly repairs all-false
-  activation by persisting Crossfade reactivation and disables Random when its effective pool is empty
-  while preserving saved pool preferences. Regenerated `defaults_snapshot.json` and both SST doc
-  artifacts. Pinned by `tests/test_capability_activation.py`.
-- **transition activation runtime foundation (admission fencing closed)** — engine Random preparation,
-  C-key cycling, manual selection and factory-side Random candidate generation filter activation in
-  their normal paths, and `normalize_transition_capability_state()` is the one canonical authority
-  (consumed by engine prep, factory admission, and C-key). The final-admission foundation corrections
-  are now landed and tested:
-  - a stale/pre-resolved `transitions.random_choice` is revalidated at final factory admission
-    (`TransitionFactory._is_admissible_random_choice`) and rejected if it became deactivated or
-    hardware-invalid;
-  - the engine, factory (`_pick_random_transition`), and C-key (`_resolve_cycle_fallback`)
-    empty-candidate paths no longer run a literal deactivated Crossfade — they pick a deterministic
-    activated hw-available transition, or perform the explicit canonical recovery repair
-    (`ensure_recovery_transition_activated`, persisted) and admit the now-activated recovery normally;
-  - zero-activated and empty-effective-Random-pool states are repaired by the one normalization
-    authority (Crossfade reactivation / Random-off + deterministic manual + preserved pool prefs).
-  Pinned by `tests/test_transition_activation_admission.py` (factory stale/hw-invalid/manual/never-run-
-  deactivated-Crossfade; engine empty-pool + zero-activated repair; C-key never selects deactivated
-  Crossfade) and `tests/test_capability_activation.py` (normalization / fallback / recovery units).
-  **E2.6 is complete** (see the E2 audit-correction notes below): `random_always` is the single live
-  Random authority; the factory and engine no longer treat legacy `type="Random"` as a live trigger.
-- **presentation-neutral capability authority (import boundary closed)** — the family catalog was
-  extracted to `core/settings/widget_family_catalog.py`; `core/settings/capability_activation.py` now
-  imports only that neutral catalog and the (neutral) transition registry. Importing the activation
-  authority no longer transitively pulls `PySide6.QtWidgets`, `rendering/widget_descriptors.py`,
-  WidgetsTab/settings builders, widget implementations/providers, or Quick renderers. Pinned by
-  `tests/test_capability_activation_neutrality.py` (subprocess import probe).
-- **widget-family activation runtime consequence (creation-admission dormancy only)** —
-  `_create_factory_widgets` skips a deactivated family before per-instance `enabled` handling and
-  expected-overlay accounting, so a deactivated family creates no runtime widget at that seam. This
-  proves **creation-admission dormancy only**; broader provider/model/service/timer/process/Quick-
-  resource dormancy and last-consumer shared-service lifetime remain the **E1 `WidgetRuntimeManager`
-  ownership responsibility**. Inert by default. Pinned by `tests/test_widget_manager_refresh.py`.
-
-The activation foundation (neutral catalog + schema + canonical normalization + closed runtime admission
-fencing) is landed and inert-by-default. E2 supplies the operator-facing toggle; its audit-correction
-work (lazy transition pages, mutation-boundary normalization, E2.6, context-menu activation, responsive
-layout) has landed and E2 remains at its audit gate.
-
-Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase F relies on E2):
-
-- **E1** — `WidgetRuntimeManager` presentation-neutral model/provider ownership split (broader than the
-  activation gate already landed above).
-- **E2** — Widgets and Transitions `SETUP` subtab UI + lazy navigation consuming the activation schema.
-  **Operator decision (2026-08-22): rebuild the nav live** — deactivating a capability while Settings is
-  open immediately removes its pill and reactivation re-adds it, matching doc 07 §5.3 literally (not a
-  deferred grey-out); default landing is the SETUP page; family rows use theme-matched tooltips.
-  - **Widgets SETUP — LANDED.** New always-present first `setup` section descriptor + `_build_setup_ui`
-    in `ui/tabs/widgets_tab.py`: one circle-checkbox activation row per available family (from the
-    neutral catalog) with description tooltips, `Enable All` / `Disable All` (activation only, never
-    per-instance `enabled`), live pill show/hide on toggle, fall-back-to-SETUP when the current family is
-    deactivated, activation persisted under `widgets.family_activation.*` through the normal save path
-    (SETUP is bootstrap-built so it never depends on lazy hydration and cannot corrupt hidden family
-    config). Pinned by `tests/test_widgets_tab_setup.py`; lazy-build index tests updated to stable ids.
-  - **Transitions SETUP — LANDED.** Pill/subtab nav on the Transitions tab (`ui/tabs/transitions_tab.py`):
-    a first `Setup` pill (default landing) + one pill per activated transition; the old visible dropdown
-    is retained only as a passive compatibility mirror (not a selection authority) and the old
-    per-transition "Include in Switch/Random
-    Pool" checkbox is removed. SETUP page owns transition activation rows + `Enable All`/`Disable All`,
-    `Use Random Transitions` (the single `random_always` authority), and a Random Pool list (only
-    activated transitions shown; edits `transitions.pool`). Deactivating a transition hides its pill and
-    pool row live and falls back to SETUP if it was the edited one; activation persists to
-    `transitions.activation.*`; `_save_settings` now also writes `activation` + `random_always` and
-    preserves engine-managed `random_choice`/`last_random_choice`. Pinned by
-    `tests/test_transitions_tab_setup.py`.
-  - **E2.6 `type="Random"` normalization — LANDED.** `normalize_transition_capability_state` now also
-    converts a legacy manual `type="Random"` into `random_always=True` + a concrete activated manual
-    type (invariants compose with the zero-activated and empty-effective-pool repairs). The Transitions
-    tab runs the normalizer on load (persisting any repair). Pinned by `tests/test_capability_activation.py`
-    and `tests/test_transitions_tab_setup.py`.
-
-  **E2 audit correction (independent audit of `ae9b95b1` found substantive gaps; corrected — E2 has NOT
-  self-promoted to complete).** The following corrective work landed on top of the earlier E2 slices:
-  - **Transitions settings are now genuinely lazy.** `TransitionsTab` builds SETUP eagerly and each
-    transition's specific-settings page only when its pill is first selected; a deactivated transition
-    page is never built, deactivating a built page retires it, reactivation restores the pill without
-    rebuilding, and selecting it later rebuilds + hydrates from preserved settings. The hidden legacy
-    `transition_combo` is a passive mirror only — `_current_transition` is the authoritative
-    manual/edited selection consumed by save/nav; unbuilt transition detail is preserved (not
-    reconstructed) across unrelated saves.
-  - **Invalid capability state is normalized at the E2 mutation boundary**, not deferred to a later
-    load/runtime seam: Disable All / final deactivation reactivates Crossfade and reflects it live;
-    Random-on with an empty effective pool disables Random + persists a deterministic activated manual
-    type live; a deactivated current manual type resolves to an activated replacement.
-  - **E2.6 completed:** `random_always` is the single live Random authority. `type="Random"` is migration
-    input only (normalized once); the factory `_get_random_mode` and engine
-    `_prepare_random_transition_if_needed` no longer treat `type="Random"` as a live trigger.
-  - **Random state parity + activation-aware context menu:** the screensaver context menu rebuilds its
-    transition submenu from current activation on show (only activated transitions; Random disabled when
-    the effective pool is empty), fails admission on stale deactivated selections, normalizes before
-    persist, and shares the single `transitions.random_always` state with Transitions SETUP; it never
-    writes `type="Random"`.
-  - **Responsive layout:** a shared `ui/flow_layout.py` (`FlowContainer`/`FlowLayout`) drives wrapping
-    pill navigation, responsive module grids (Widget Modules, Transition Modules, Random Pool — ≥2
-    columns at normal width, more when wider), and wrapping Enable/Disable All rows in BOTH tabs; Widget
-    Modules now uses the styled `QGroupBox` + circle-checkbox grammar. Frames stay horizontally contained
-    with no horizontal scrollbar.
-
-  Pinned by `tests/test_transitions_tab_setup.py`, `tests/test_capability_activation.py`,
-  `tests/test_context_menu_activation.py`, `tests/test_flow_layout.py`, `tests/test_widgets_tab_setup.py`,
-  and the transition admission suite.
-
-  **E2 second audit correction (independent audit of `ad2b0649` found five further substantive gaps;
-  corrected — E2 still NOT self-promoted).** Landed on top of the above:
-  - **Visualizers is now an application-level capability** (neutral catalog family `visualizers`, member
-    `spotify_visualizer`, `settings_section_id="visualizers"`) with a neutral dependency
-    `required_family_ids=("media",)`. Canonical default `widgets.family_activation.visualizers=True`;
-    snapshot + SST regenerated. Runtime/render ownership stays the Phase-D subsystem (not Phase-F, not
-    `WidgetRuntimeManager`).
-  - **Media→Visualizers dependency** enforced by the one neutral authority
-    `normalize_widget_capability_state` (`media=False` forces `visualizers=False`, never auto-reactivates
-    Media/Visualizers). Widgets SETUP shows a Visualizers row that is disabled + "Requires Media" while
-    Media is off, with the repair reflected live.
-  - **Explicit visualizer runtime admission**: local `_setup_spotify_visualizer` and remote
-    `_reconcile_remote_custom_visualizer` fence on `is_widget_family_effective(config, "visualizers")`
-    (activated + Media activated), so a stale/reused Media object cannot bypass the capability gate.
-  - **Context-menu visualizer admission**: the Change Visualizer submenu is hidden when Visualizers/Media
-    is deactivated (refreshed on show), and a stale mode-selection request is rejected.
-  - **Generic Widgets page retirement**: deactivating any family retires its built Settings section
-    (container destroyed, built/hydrated ownership + control attrs cleared) so it is genuinely
-    rebuildable; persisted per-family config is preserved; SETUP is never retired.
-  - **Live Random link**: `TransitionsTab` subscribes to `SettingsManager.settings_changed` and reflects
-    external `transitions` mutations (context-menu Random / concrete selection) into its live controls
-    with a write-reentrancy guard, so it can no longer resurrect a stale `random_always`/`type`.
-  - **Random can no longer escape the saved pool**: the engine random prep and factory
-    `_pick_random_transition` FAIL CLOSED when `activated ∩ saved pool ∩ hardware` is empty (no
-    broadening, no out-of-pool substitution, saved pool untouched); the context-menu Random availability
-    uses the same bounded rule.
-  - **Transitions programmatic-nav admission**: `_on_nav_selected` redirects a deactivated transition key
-    to SETUP before any selection/mirror/build/save.
-
-  Pinned by `tests/test_widget_family_catalog.py`, `tests/test_capability_activation.py`,
-  `tests/test_widgets_tab_setup.py`, `tests/test_visualizer_capability_admission.py`,
-  `tests/test_transitions_tab_setup.py`, `tests/test_transition_activation_admission.py`,
-  `tests/test_transition_distribution.py`, and `tests/test_context_menu_activation.py`.
-
-  **E2 third audit correction (independent audit of `4ac884f8` found three further contract gaps;
-  corrected — E2 still NOT self-promoted).** Landed on top of the above:
-  - **Final random admission revalidates the saved pool.** `TransitionFactory._is_admissible_random_choice`
-    now verifies ALL current admission dimensions of a pre-resolved `transitions.random_choice` —
-    activation, hardware, AND saved-pool membership — sharing one `_is_in_saved_pool` helper with
-    `_pick_random_transition`. A choice that was pooled when prepared but later removed from the pool is
-    rejected and re-resolved through the current bounded pool (or fails closed); it can no longer escape
-    the pool merely because it stays activated + hw-runnable.
-  - **Delayed remote CUSTOM visualizer rechecks capability.** The delayed fallback recheck
-    (`_run_remote_custom_visualizer_fallback_recheck`) and the single final creation boundary
-    (`_create_remote_custom_visualizer_on_target`) now re-read CURRENT canonical capability state via the
-    live `SettingsManager` (`_visualizer_capability_admitted_now`, fail-closed) rather than trusting the
-    config copied when the callback was scheduled. A Media/Visualizers deactivation during the delay is
-    honoured; a stale Media object cannot re-open the gate.
-  - **Persisted Media→Visualizers dependency repaired durably at load.** `SettingsManager.__init__` runs
-    `_normalize_persisted_widget_capability_state` after defaults merge, driving the one authority
-    (`normalize_widget_capability_state`) over the widgets root and persisting via the low-level store (no
-    `settings_changed` emission → no signal/save recursion). An invalid persisted/migrated state
-    (`media=False` with `visualizers` activated or its key missing) can no longer stay latent so a later
-    Media reactivation silently re-enables Visualizers.
-  - **Fail-closed capability checks:** the context-menu show path and `on_context_visualizer_selected`
-    now force the visualizer submenu unavailable / reject the mode switch when the capability state
-    cannot be resolved (an exception no longer becomes permission).
-  - **Doc reconciliation:** doc 04 now names `core/settings/widget_family_catalog.py` (not
-    `rendering/widget_descriptors.py`) as the membership authority; the catalog's
-    `get_family_id_for_widget` docstring records the visualizer's owning family.
-
-  Pinned additionally by `tests/test_remote_visualizer_capability_admission.py`,
-  `tests/test_widget_capability_persist_repair.py`, and the extended
-  `tests/test_transition_activation_admission.py` (stale out-of-pool random_choice cases).
-
-  **E2 remains at its independent-audit gate — do NOT self-promote to complete.** This third correction
-  (`4ac884f8` → the pushed checkpoint below) has not yet been independently audited, so operator eyes-on
-  is NOT yet the only remaining item. After this correction is audited green, the remaining acceptance
-  item is operator `python main.py --s` eyes-on confirmation of the responsive layout (already reported
-  "much better") and the Visualizers dependency UX across widths. Checkpoint/push/audit E2 before Phase F.
-- **E3** — shared retained Quick visual primitives.
-- **E4** — global eight-direction shadow authority (default `SE`).
-
-Pre-existing unrelated test failures observed during the E foundation sweep (NOT caused by E work; flag
-for separate triage): `test_visualizer_settings_plumbing.py::TestVisualizerModeBinding::test_load_visualizer_mode_selection_falls_back_when_saved_mode_is_unknown`
-(expects `bubble`, gets `devcurve`);
-`test_sine_line4_builder_integration.py::test_actual_save_media_settings_includes_line4`; and
-`test_visualizer_doc_references.py::test_contracts_route_visualizer_shell_clip_and_geometry_owners`
-(asserts `QSGClipNode` absent from `Docs/Contracts.md`, but the visualizer clip contract legitimately
-names it — the test, not the doc, is stale). All three fail identically on baseline `4ac884f8` with none
-of the E2 third-correction changes applied.
-
-If the operator instead explicitly says **continue from Phase C tests**, execute Section 7.5 test-only
-hardening first.
+A temporary fallback must never overwrite configured monitor selection or the configured target's
+saved CUSTOM geometry, even if the fallback remains active for minutes or hours. The configured target
+reclaims ownership whenever it later returns, using event-driven display/topology reconciliation.
 
 ---
 
