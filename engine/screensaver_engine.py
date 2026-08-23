@@ -1378,14 +1378,12 @@ class ScreensaverEngine(QObject):
             if normalize_transition_capability_state(transitions):
                 self.settings_manager.set('transitions', transitions)
                 self.settings_manager.save()
+            # random_always is the single live random-mode authority (E2.6). A
+            # legacy type="Random" is migrated once by the normalization above,
+            # never treated as a second live random trigger here.
             raw_rnd = transitions.get('random_always', self.settings_manager.get('transitions.random_always', False))
             rnd = SettingsManager.to_bool(raw_rnd, False)
-            # Also treat type="Random" (the canonical default) as random mode
-            trans_type = canonicalize_transition_name(
-                transitions.get('type', 'Random') if isinstance(transitions, dict) else 'Random',
-                fallback='Random',
-            )
-            if not rnd and trans_type != 'Random':
+            if not rnd:
                 return
             # Available transition types; include GL-only when HW is enabled and
             # restrict to those enabled in the per-transition pool map.
