@@ -64,15 +64,20 @@ MEDIA_OFF = {"family_activation": {"media": False, "visualizers": True}}
 def _neutralize_startup(monkeypatch):
     # The final-create helper touches startup/layout helpers that need real
     # widgets; neutralize them so the test isolates the capability admission.
+    from rendering.multi_monitor_coordinator import get_coordinator
+    get_coordinator().clear_visualizer_failover()
     monkeypatch.setattr(wsa, "_start_secondary_widget", lambda *a, **k: None)
     monkeypatch.setattr(wsa, "_reapply_saved_custom_layouts_after_startup", lambda *a, **k: None)
+    yield
+    get_coordinator().clear_visualizer_failover()
 
 
 def _fake_resolution_to(target):
     def _resolve(target_screen_index, current_display=None):
         return SimpleNamespace(
-            requested_display=SimpleNamespace(spotify_visualizer_widget=None),
+            requested_display=target,
             requested_is_participating=True,
+            requested_has_runtime_presence=True,
             chosen_display=target,
             fallback_display=None,
         )
@@ -119,6 +124,10 @@ def test_final_create_allowed_when_active():
 
 def _run_delayed(monkeypatch, mgr_settings, target):
     monkeypatch.setattr(wsa, "describe_visualizer_spawn_display", _fake_resolution_to(target))
+    # The recheck re-reads live CUSTOM routing from Settings; keep it CUSTOM-routed
+    # to monitor 2 so the capability outcome is what these tests isolate.
+    monkeypatch.setattr(wsa, "is_custom_position_selected_for_widget", lambda *a, **k: True)
+    monkeypatch.setattr(wsa, "get_effective_monitor_value_for_widget", lambda *a, **k: "2")
     mgr = _StubMgr(mgr_settings)
     # widgets_config here is the STALE copy captured at schedule time (active),
     # deliberately different from the live mgr settings.

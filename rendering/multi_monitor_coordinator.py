@@ -94,13 +94,17 @@ class MultiMonitorCoordinator(QObject):
         # Settings dialog active flag - prevents halo from showing
         self._settings_dialog_active: bool = False
 
-        # E2.7 Visualizer CUSTOM failover: runtime-only record of a *temporary*
-        # fallback visualizer owner. This is never persisted (a fallback must not
-        # become configuration authority); it is cleared on runtime teardown via
-        # cleanup(). Holds the configured/intended screen index and a weakref to
-        # the display currently hosting the temporary fallback.
-        self._visualizer_fallback_intended_index: Optional[int] = None
-        self._visualizer_fallback_host_ref: Optional[weakref.ref] = None
+        # E2.7 Visualizer CUSTOM failover: runtime-only record of the current
+        # failover state — either a pending 30 s grace (no temporary owner yet) or
+        # a live temporary fallback owner. Never persisted (a fallback must not
+        # become configuration authority); cleared on runtime teardown. Holds the
+        # configured/intended screen index, a weakref to the temporary host (if
+        # any), a weakref to the origin WidgetManager (to read live settings and
+        # fence its pending delayed callback), and the pending flag.
+        self._visualizer_failover_intended: Optional[int] = None
+        self._visualizer_failover_host_ref: Optional[weakref.ref] = None
+        self._visualizer_failover_origin_ref: Optional[weakref.ref] = None
+        self._visualizer_failover_pending: bool = False
 
         logger.debug("[MULTI_MONITOR] Coordinator initialized")
     
@@ -455,49 +459,98 @@ class MultiMonitorCoordinator(QObject):
     # Visualizer CUSTOM failover record (E2.7) — runtime-only, never persisted
     # =========================================================================
 
-    def set_visualizer_fallback(self, intended_screen_index: int, host_display: object) -> None:
-        """Record that a *temporary* fallback visualizer owner is live.
+    @staticmethod
+    def _weak_or_none(obj: object) -> Optional[weakref.ref]:
+        if obj is None:
+            return None
+        try:
+            return weakref.ref(obj)
+        except TypeError:
+            return None
 
-        ``intended_screen_index`` is the configured/canonical CUSTOM monitor that
-        should own the visualizer once it returns; ``host_display`` is the display
-        temporarily hosting it. Runtime-only: never written to settings.
+    def set_visualizer_failover(
+        self,
+        *,
+        intended_index: int,
+        host: object = None,
+        origin_manager: object = None,
+        pending: bool,
+    ) -> None:
+        """Record the current visualizer CUSTOM failover state (runtime-only).
+
+        Two states share one record so topology reconciliation can see *both*:
+
+        - ``pending=True`` (grace armed): a configured CUSTOM monitor is temporarily
+          unavailable and a one-shot 30 s deadline is scheduled; no temporary owner
+          exists yet (``host`` is ``None``). A configured display returning before
+          the deadline can then be restored immediately and the stale callback
+          fenced.
+        - ``pending=False`` (fallback active): a temporary owner is live on
+          ``host`` (a non-configured display) until the configured display returns.
+
+        ``intended_index`` is the configured CUSTOM monitor index resolved at
+        record time; reclaim always re-resolves the CURRENT configured monitor
+        from live settings, so a later Settings change supersedes this. Never
+        persisted; cleared on runtime teardown.
         """
         with self._state_lock:
             try:
-                self._visualizer_fallback_intended_index = int(intended_screen_index)
+                self._visualizer_failover_intended = int(intended_index)
             except Exception:
-                self._visualizer_fallback_intended_index = None
-                self._visualizer_fallback_host_ref = None
+                self._visualizer_failover_intended = None
+                self._visualizer_failover_host_ref = None
+                self._visualizer_failover_origin_ref = None
+                self._visualizer_failover_pending = False
                 return
-            self._visualizer_fallback_host_ref = (
-                weakref.ref(host_display) if host_display is not None else None
-            )
+            self._visualizer_failover_host_ref = self._weak_or_none(host)
+            self._visualizer_failover_origin_ref = self._weak_or_none(origin_manager)
+            self._visualizer_failover_pending = bool(pending)
         logger.debug(
-            "[MULTI_MONITOR] Visualizer fallback recorded intended_index=%s host=%s",
-            intended_screen_index,
-            getattr(host_display, "screen_index", None),
+            "[MULTI_MONITOR] Visualizer failover recorded intended_index=%s pending=%s host=%s",
+            intended_index,
+            pending,
+            getattr(host, "screen_index", None),
         )
 
-    def clear_visualizer_fallback(self) -> None:
-        """Clear any recorded temporary fallback visualizer owner."""
+    def update_visualizer_failover_intended(self, intended_index: int) -> None:
+        """Update the recorded intended index (a live Settings monitor change)."""
         with self._state_lock:
-            had = self._visualizer_fallback_intended_index is not None
-            self._visualizer_fallback_intended_index = None
-            self._visualizer_fallback_host_ref = None
+            if self._visualizer_failover_intended is None:
+                return
+            try:
+                self._visualizer_failover_intended = int(intended_index)
+            except Exception:
+                pass
+
+    def clear_visualizer_failover(self) -> None:
+        """Clear any recorded visualizer failover (grace or fallback) state."""
+        with self._state_lock:
+            had = self._visualizer_failover_intended is not None
+            self._visualizer_failover_intended = None
+            self._visualizer_failover_host_ref = None
+            self._visualizer_failover_origin_ref = None
+            self._visualizer_failover_pending = False
         if had:
-            logger.debug("[MULTI_MONITOR] Visualizer fallback record cleared")
+            logger.debug("[MULTI_MONITOR] Visualizer failover record cleared")
 
-    def get_visualizer_fallback(self) -> tuple[Optional[int], object]:
-        """Return (intended_screen_index, host_display) or (None, None).
+    def get_visualizer_failover(self) -> Optional[dict]:
+        """Return the current failover record, or None if there is none.
 
-        A dead host weakref collapses the record to (None, None).
+        Shape: ``{"intended_index": int, "host": obj|None,
+        "origin_manager": obj|None, "pending": bool}``. A collected host weakref
+        yields ``host=None`` (treated as pending grace by reclaim).
         """
         with self._state_lock:
-            intended = self._visualizer_fallback_intended_index
-            host = self._visualizer_fallback_host_ref() if self._visualizer_fallback_host_ref else None
-            if intended is None or host is None:
-                return None, None
-            return intended, host
+            if self._visualizer_failover_intended is None:
+                return None
+            host = self._visualizer_failover_host_ref() if self._visualizer_failover_host_ref else None
+            origin = self._visualizer_failover_origin_ref() if self._visualizer_failover_origin_ref else None
+            return {
+                "intended_index": self._visualizer_failover_intended,
+                "host": host,
+                "origin_manager": origin,
+                "pending": self._visualizer_failover_pending,
+            }
 
     def cleanup(self) -> None:
         """Clean up all coordinator state."""
@@ -508,8 +561,10 @@ class MultiMonitorCoordinator(QObject):
             self._event_filter_installed = False
             self._event_filter_owner_ref = None
             self._instances.clear()
-            self._visualizer_fallback_intended_index = None
-            self._visualizer_fallback_host_ref = None
+            self._visualizer_failover_intended = None
+            self._visualizer_failover_host_ref = None
+            self._visualizer_failover_origin_ref = None
+            self._visualizer_failover_pending = False
         logger.debug("[MULTI_MONITOR] Coordinator cleanup complete")
 
 
