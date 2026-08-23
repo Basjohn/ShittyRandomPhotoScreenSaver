@@ -1,6 +1,6 @@
 # Project Overview
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 ## What SRPSS is
 
@@ -35,12 +35,26 @@ Move the runtime **pixel scene/presentation owner** to one standalone `QQuickWin
 During migration, current `main` may still run through `DisplayWidget`/`GLCompositorWidget`/
 QRhiWidget.
 
-That is the current implementation and rollback/reference path.
+That path is **CURRENT-LEGACY — WILL BE OBSOLETE at Phase H/I cutover/deletion**. It remains current
+implementation/reference source only while live callers still exist.
 
-It is not the long-term architecture target.
+It is **not** a supported runtime rollback/fallback architecture. Source-control rollback for a bad
+checkpoint is a development operation and must not be confused with shipping two presenters.
 
-Do not spend migration time broadening or micro-optimizing that presenter unless the active plan
+Do not spend migration time broadening or micro-optimizing the old presenter unless the active plan
 requires a bounded compatibility fix.
+
+## Current migration position
+
+Phase E is in progress.
+
+- E2 application-level capability/Settings work is implementation-closed.
+- E2.7 Visualizer CUSTOM failover/reclaim implementation is independently audited GREEN; physical
+  dual-display wake/late-return remains deferred acceptance only.
+- **E1 presentation-neutral runtime/model/provider ownership is active next.**
+- E3 retained Quick primitives and E4 global shadow direction follow before Phase F family ports.
+
+`Current_Plan.md` owns exact sequencing.
 
 ## Visualizer cadence
 
@@ -75,8 +89,8 @@ FRAMELESS + VIEWPORT_RECT
 Current-mode geometry uses one canonical baseline viewport aspect. Mode switches and visualizer
 presets do not resize that baseline.
 
-The old per-mode visualizer card-height/growth controls are pre-Quick presentation customization and
-are deliberately retired from the destination architecture.
+The old per-mode visualizer card-height/growth controls are **CURRENT-LEGACY — WILL BE OBSOLETE**
+presentation customization and are deliberately retired from the destination architecture.
 
 CUSTOM keeps whole-size scaling distinct from viewport playroom:
 

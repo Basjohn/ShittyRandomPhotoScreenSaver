@@ -1,13 +1,14 @@
 # Transition Change Checklist
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 Use this checklist when adding, removing, renaming, retuning, activating/deactivating, selecting,
 randomizing or diagnosing a transition.
 
 Active migration sequence/work admission is owned by `Current_Plan.md`. Landed Qt Quick transition
-architecture is described in `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`. Application
-capability activation/E2 UX is described in `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`.
+architecture is described in `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`. The landed
+capability/`SETUP` contract is described in
+`Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`.
 
 ## 1. Canonical identity
 
@@ -20,7 +21,7 @@ capability activation/E2 UX is described in `Docs/QtQuick_Migration/07_Settings_
 
 ## 2. Activation, pool membership and manual selection are separate
 
-Phase-E application-level transition activation is a landed runtime authority.
+Application-level transition activation is landed runtime authority:
 
 ```text
 activated / deactivated
@@ -30,35 +31,60 @@ saved Random-pool membership
     = preference used only while activated + Random is effective
 
 manual transition selection
-    = ordinary choice used when Random is off
+    = ordinary concrete choice used when Random is off
 ```
 
 A deactivated transition is excluded from effective manual/cycle/random selection and must not gain
 renderer/runtime ownership merely because its implementation exists.
 
-Effective pool:
+Saved pool preference survives deactivation so reactivation restores user intent.
+
+The operator-facing `SETUP`/pill UI is **already landed E2 behavior**. Do not describe it as a future
+activation store or restore the old dropdown/pool UI as authority.
+
+Do not use “disabled” and “deactivated” interchangeably where the distinction matters.
+
+### 2.1 Random authority
+
+The one live Random authority is:
 
 ```text
-activated ids ∩ saved pool-member ids
+transitions.random_always
 ```
 
-Saved pool preference may remain while inactive so reactivation restores it.
+Legacy `type="Random"` is migration input only.
 
-E2 exposes this authority through Settings `SETUP`; it does not create a second activation state store.
+Effective runtime candidates are:
 
-Do not use the words “disabled” and “deactivated” interchangeably where the distinction matters.
+```text
+activated ∩ saved pool membership ∩ runnable/hardware
+```
 
-The zero-activated-transition policy is now explicit canonical state repair:
-`normalize_transition_capability_state(...)` reactivates Crossfade in persisted activation state before
-normal selection continues. That is not permission for a renderer/factory to execute a deactivated
-Crossfade directly.
+Do not silently broaden an empty effective Random pool.
+
+### 2.2 Invalid-state repair
+
+Canonical normalization is landed:
+
+```text
+zero activated transitions
+    -> activate Crossfade in canonical settings
+    -> persist repair
+
+Random on + empty activated saved pool
+    -> random_always = false
+    -> persist deterministic activated manual selection
+    -> preserve saved pool membership
+```
+
+This is state repair, not permission for a renderer/factory to execute a deactivated Crossfade.
 
 ## 3. Production presentation contract
 
 ```text
 Settings / transition selection
     -> canonical descriptor
-    -> application activation admission
+    -> activation admission
     -> GUI/runtime-side immutable request resolution
     -> TransitionRequest / TransitionRun
     -> lazy Quick renderer implementation
@@ -66,10 +92,11 @@ Settings / transition selection
     -> display QQuickWindow
 ```
 
-Until production cutover, the old compositor may remain current/reference implementation. New Quick
-code must not call back into `GLCompositorWidget`, QWidget presentation or a compatibility presenter.
+Until production cutover, the old compositor may still have live callers. It is
+**CURRENT-LEGACY — WILL BE OBSOLETE at H/I**, not destination authority.
 
-No transition may fall back from Quick to the old compositor.
+New Quick code must not call back into `GLCompositorWidget`, QWidget presentation or a compatibility
+presenter. No transition may fall back from Quick to the old compositor.
 
 ## 4. Lazy implementation boundary
 
@@ -92,7 +119,7 @@ The common host/controller owns:
 - shared GL-state fencing;
 - presentation frame demand.
 
-A deactivated transition is dormant: no implementation import, shader compile, GPU object,
+A deactivated transition is dormant: no heavy implementation import, shader compile, GPU object,
 transition-specific timer or transition-specific runtime state solely because code is installed.
 
 Internal modularity is static/plugin-shaped. Do not add dynamic discovery, manifests, hot loading, API
@@ -103,21 +130,31 @@ versioning, dependency resolution or a third-party transition SDK.
 Resolve Settings spelling, aliases, Random choices, clamps, colors and supported legacy fall-through
 behavior before render ownership.
 
-Canonical Settings defaults are the default-resolution authority. Do not duplicate constructor/default magic numbers
-in the renderer.
+Canonical Settings defaults are the default-resolution authority. Do not duplicate constructor/default
+magic numbers in the renderer.
 
 Parameterized Quick renderers reject missing/unresolved required values instead of silently inventing
 renderer defaults.
 
 Per-run values such as seeds resolve once into immutable request/run state.
 
-Activation filtering occurs before an implementation is admitted.
+Activation filtering occurs before implementation admission.
 
-At pushed `829446c8`, this final-admission rule is **not yet fully closed**: an already-populated
-`transitions.random_choice` can still reach the factory without an activation/hardware re-check, and
-engine/factory empty-candidate branches still contain literal Crossfade last-resorts. Before E2 exit,
-fence those seams so stale/deactivated/hardware-invalid choices are re-resolved or fail closed rather
-than silently substituting Crossfade. Add direct regressions for both paths.
+### 5.1 Final admission is LANDED
+
+The old `829446c8` pre-E2 gap is closed and must **not** be treated as current work.
+
+Current contract:
+
+- an already-populated `transitions.random_choice` is revalidated against current activation and
+  hardware/runnability before factory admission;
+- stale/deactivated/hardware-invalid choices are re-resolved or fail closed;
+- engine/factory/C-key empty-candidate paths do not silently execute a deactivated literal Crossfade;
+- the explicit Crossfade recovery path repairs canonical activation state first and then follows normal
+  admission.
+
+Retain the direct regressions. Do not re-open this merely because old phase prose says “before E2
+exit.”
 
 ## 6. Timing
 
@@ -194,7 +231,7 @@ Permanent regression must prove restoration on the normal path and when renderer
 
 ## 10. Landed Phase-C regression hardening
 
-The following are **already landed permanent obligations**, not work instructions to repeat:
+The following are **already landed permanent obligations**, not work instructions to repeat.
 
 ### 10.1 Effect-discriminative real-GL smoke
 
@@ -294,7 +331,7 @@ Repository connector/API writes are not the normal SRPSS mutation path.
 
 Phase-C **implementation and deterministic hardening are complete**.
 
-Current Plan owns the exact remaining operator-scheduled acceptance state. Preserve runnable real-GL
-harnesses and physical/eyes-on criteria without turning them back into implementation TODOs.
+Current Plan owns remaining operator-scheduled acceptance state. Preserve runnable real-GL harnesses
+and physical/eyes-on criteria without turning them back into implementation TODOs.
 
 A later failing acceptance result reopens only the smallest demonstrated transition/runtime defect.

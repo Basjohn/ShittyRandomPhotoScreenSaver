@@ -65,6 +65,36 @@ and imperative wording must not falsely advertise that completed phase as active
 
 Do not let temporary old implementation names silently redefine the destination.
 
+
+### 3.1 Forward-obsolescence labels
+
+During an active migration, current docs should state explicitly when an owner is real today but
+scheduled for removal. Use these meanings consistently:
+
+```text
+LANDED / PRESERVE
+    current/destination contract; do not retire merely because its originating phase is old
+
+CURRENT-LEGACY — WILL BE OBSOLETE: <phase>
+    still has live callers today, but must not become destination authority; retire when the named
+    caller/cutover gate is reached
+
+OBSOLETE NOW
+    no longer meaningful current authority; delete/retire rather than teaching it as a live option
+
+HISTORICAL ONLY
+    preserve evidence/chronology; status/owner wording inside it does not define current work
+```
+
+Do not label a live legacy owner `OBSOLETE NOW` if production still depends on it. Conversely, do not
+leave a current-legacy owner unlabeled when a reader could reasonably mistake its temporary existence
+for the migration destination.
+
+This applies to docs as well as tests. During the current migration, QRhiWidget/GLCompositor/
+`DisplayWidget` runtime presentation and QWidget runtime-pixel/shadow/effect owners are generally
+**CURRENT-LEGACY — WILL BE OBSOLETE** at their caller-proven H/I/F cutover gates, while their
+presentation-neutral provider/model/business contracts may survive.
+
 ## 4. Major owner migration sweep
 
 When a major presenter/owner changes, reconcile the relevant subset together:
@@ -78,12 +108,26 @@ When a major presenter/owner changes, reconcile the relevant subset together:
 - `Docs/Compositor_Architecture.md`;
 - relevant QtQuick migration decomposition(s);
 - visualizer/transition/widget reference/checklists where affected;
+- feature-specific implementation/design plans that name concrete runtime owners or presentation paths;
 - `Docs/TestSuite.md`;
 - `Docs/Harness_Index.md`;
 - `Docs/Defaults_Guide.md` where persisted/default schema changed;
-- `Future_Cleanup.md` where caller/deletion sequencing changed.
+- `Future_Cleanup.md` where caller/deletion sequencing changed;
+- `Docs/Historical_Bugs.md` + `Docs/Historical_Bugs/README.md` when incident status changes;
+- evidence/archive **navigation READMEs** when they still call an old phase/owner current.
+
+Do not rewrite historical evidence bodies merely to modernize names. Update their navigation/status
+wrappers when those wrappers would otherwise route readers into an obsolete epoch.
 
 Do not leave a future/spike document competing with a closed decision.
+
+Feature-specific plans require the same epoch discipline. A plan may remain valuable for provider,
+security, product, data or UX decisions while its old QWidget/painter/factory presentation map becomes
+**CURRENT-LEGACY — WILL BE OBSOLETE / REHOMED**. Fence that explicitly in the plan itself when practical
+or in `Index.md` plus the canonical focused owner doc if rewriting the historical body would destroy useful
+chronology. The current Steam family plan is the concrete example: its source/privacy/product decisions
+remain useful, but its `BaseOverlayWidget`/painter/runtime-pixel mapping cannot override the E1/F/I Quick
+ownership contracts.
 
 ## 5. Evidence
 
@@ -116,7 +160,12 @@ ACTIVE Phase-D
 current normal implementation phase: Phase D
 Phase D may proceed
 after E2 lands
+before E2 exits
+E2 remains active work
 disabled family
+current P2 work
+current Phase 5 work
+QRhi/single-surface design
 QSGClipNode preferred
 ```
 
@@ -234,4 +283,7 @@ Before calling a migration epoch complete:
 - evidence remains evidence-scoped;
 - defaults/settings docs match canonical persisted schema;
 - `Docs/TestSuite.md` matches the current test inventory/status for affected migration areas;
-- test/harness docs distinguish landed regression gates from unfinished work.
+- test/harness docs distinguish landed regression gates from unfinished work;
+- current-legacy owners that are scheduled for removal are labelled **WILL BE OBSOLETE** rather than
+  presented as durable alternatives;
+- evidence/archive navigation wrappers do not advertise old P2/P5/QRhi status as current.

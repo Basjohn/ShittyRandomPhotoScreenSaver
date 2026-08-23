@@ -1,10 +1,11 @@
 # SRPSS Specification
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 Canonical durable architecture and product-behaviour contracts for SRPSS.
 
-`Current_Plan.md` owns active sequencing. Evidence reports own volatile measurements. Exact current
+`Current_Plan.md` owns active sequencing and may retain compact, clearly marked completion rationale
+when that protects migration continuity. Evidence reports own volatile measurements. Exact current
 source remains implementation truth while a migration is in progress, but the accepted architecture
 decision below is the design target and must not be reopened without new contradictory evidence.
 
@@ -68,6 +69,9 @@ Durable rules:
 
 Until cutover is complete, current `main` may still contain the QRhiWidget reference presenter.
 That makes it the current implementation, not the accepted long-term design.
+
+The QRhiWidget/GLCompositor/`DisplayWidget` runtime-presentation path is therefore
+**CURRENT-LEGACY — WILL BE OBSOLETE at Phase H/I** once caller/cutover proof permits deletion.
 
 Do not deepen the QRhiWidget path merely because it still exists during migration.
 
@@ -418,12 +422,14 @@ wide/tall viewport compatibility probes.
 
 ## 14. Documentation authority
 
-- `Current_Plan.md`: unfinished migration execution only;
+- `Current_Plan.md`: active migration execution + compact clearly marked closure/rationale where useful;
 - this file + Guardrails/focused docs: durable contracts;
 - `Index.md` / `Docs/Contracts.md`: current routing and migration owner map;
+- `Docs/TestSuite.md`: canonical test inventory/retirement ledger + testing strategy;
 - current evidence reports: measurements and checkpoint evidence;
-- phase reports / Historical_Bugs: historical evidence only;
-- `Future_Cleanup.md`: deferred debt only.
+- phase reports / Historical_Bugs / Historical_Plans: historical evidence only;
+- `Future_Cleanup.md`: deferred debt/deletion only;
+- `Future_Work.md`: explicitly deferred feature/experiment work only.
 
 Old evidence may describe QOpenGLWidget, QRhiWidget, separate overlays, GUI-timer cadence, or
 per-mode visualizer card-height controls.

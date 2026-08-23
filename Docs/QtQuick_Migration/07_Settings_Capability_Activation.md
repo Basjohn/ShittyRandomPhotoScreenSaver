@@ -1,557 +1,423 @@
 # 07 — Settings Capability Activation and Lazy Navigation
 
-Status: **Phase-E activation foundation landed; E2 operator-facing Settings UI remains active work**  
-Last updated: 2026-08-22
+Status: **E2 + E2.7 implementation CLOSED / independently audited GREEN; E1 ownership ACTIVE next**  
+Last updated: 2026-08-23
 
 Cross-links:
 
-- sequence/permission: `Current_Plan.md`
-- transition catalog/rendering: `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`
-- widget descriptor/runtime split: `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`
-- settings tests: `Docs/TestSuite.md`
+- sequence/work admission: `Current_Plan.md`
+- widget runtime/model ownership: `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`
+- transition rendering: `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`
 - defaults: `Docs/Defaults_Guide.md`
-- H0/J0 sequencing: `Current_Plan.md`
+- tests and retirement ledger: `Docs/TestSuite.md`
+- harness routing: `Docs/Harness_Index.md`
 
-## 1. Purpose
+This document is now a **landed capability/Settings contract**, not an unfinished E2 implementation
+plan. E1 may extend runtime/model/provider ownership, but must not reopen the E2 UI/state model without
+contradictory evidence.
 
-SRPSS now has an application-level capability activation authority above ordinary feature settings.
+## 1. Durable capability model
 
-The durable model is:
+SRPSS has one application-level capability authority above ordinary feature configuration:
 
 ```text
-capability installed/catalogued
+capability installed / catalogued
         ↓
 capability ACTIVATED / LOADABLE?
-        ↓
+        ↓ yes
 implementation/runtime ownership may resolve
         ↓
-ordinary feature enabled/selected/pool state
+ordinary enabled / selected / pool configuration
         ↓
-runtime presentation/work
+runtime work / presentation
 ```
 
-Use terms precisely:
+Use terminology precisely:
 
 ```text
 activated / deactivated
     = application-level capability authority
 
 enabled / disabled
-    = ordinary widget/feature state inside an activated capability
+    = ordinary feature or widget-instance state inside an activated capability
 
-pool membership
-    = saved Random preference
+transition pool membership
+    = saved Random preference, independent of activation
 
 manual transition selection
-    = ordinary transition choice when Random is off
+    = ordinary concrete transition choice when Random is off
 ```
 
-The Settings GUI remains QWidget-based. This work does not migrate Settings to QML.
+Do not use `disabled family` when the state is application-level deactivation.
 
-## 2. What has already landed
+Settings remains QWidget-based. Capability metadata must remain cheap and presentation-neutral.
 
-At the current Phase-E foundation boundary, the following are real source/runtime mechanisms rather
-than future design prose.
+## 2. Canonical widget-family authority
 
-### 2.1 Presentation-neutral widget family catalog
+`core/settings/widget_family_catalog.py` is the canonical presentation-neutral authority for:
 
-`rendering/widget_descriptors.py` owns `WIDGET_FAMILY_DESCRIPTORS` and cheap family lookup helpers.
+- stable family ids;
+- member runtime widget ids;
+- family labels/cheap metadata;
+- family-level dependencies such as `visualizers requires media`.
 
-The catalog maps stable family ids to member runtime widget ids and derives availability from active
-runtime descriptors/environment gates. It does not import family Quick presenters/providers merely to
-list the catalog.
+`rendering/widget_descriptors.py` may consume/re-export this information for the current runtime, but
+it is **not** a competing membership authority.
 
-Visualizers participates in application-level capability activation via the neutral catalog (family
-`visualizers`, member `spotify_visualizer`), and it **requires** the `media` family
-(`required_family_ids = ("media",)`). Its runtime/render ownership remains the special Phase-D
-visualizer subsystem — being catalogued does not make it an ordinary Phase-F widget family or move it
-under `WidgetRuntimeManager`.
+Catalog construction must not import heavy family presenters/providers merely to list capabilities.
+Availability may still derive from the ordinary descriptor/environment gates where applicable.
 
-### 2.2 Canonical persisted activation schema
+### 2.1 Visualizers is a real capability family
 
-Canonical settings currently include:
+Canonical family:
+
+```text
+family_id = "visualizers"
+member_widget_ids = ("spotify_visualizer",)
+required_family_ids = ("media",)
+```
+
+Visualizers therefore participates in application-level family activation.
+
+That does **not** make the Visualizer an ordinary Phase-F widget presentation family and does not move
+its special `VisualizerLogicalRuntime` / Quick-render-node ownership under `WidgetRuntimeManager`.
+Capability membership and presentation/runtime architecture are separate concerns.
+
+Dependency normalization is canonical:
+
+```text
+media = false
+    -> visualizers = false
+```
+
+Reactivating Media never silently reactivates Visualizers. The user must explicitly reactivate it.
+
+## 3. Canonical persisted activation schema
+
+Canonical settings include:
 
 ```text
 widgets.family_activation.<family_id>
 transitions.activation.<canonical transition setting name>
 ```
 
-`core/settings/capability_activation.py` is the presentation-neutral read/write/query authority.
+`core/settings/capability_activation.py` is the read/write/normalization/query authority.
 
-Missing activation state resolves to `True` so existing/pre-Quick settings preserve current behavior.
-Current canonical activation defaults are all `True`; H0 owns the final Quick-era default selection.
+Missing activation state resolves compatibly to activated so pre-Quick/current installations do not
+silently lose features merely because the schema was introduced.
 
-### 2.3 Transition runtime consequence
+Current compatibility defaults remain all activated. **E2 UI is already landed. H0, not E2, owns the
+final Quick-era default activation/reset epoch.**
 
-Landed transition selection seams now include one canonical state-normalization authority:
+Deactivation is not reset. Preserve detailed configuration, including:
 
-```text
-normalize_transition_capability_state(...)
-```
+- ordinary widget `enabled` state;
+- detailed family settings;
+- CUSTOM geometry;
+- transition saved pool membership;
+- transition/manual configuration.
 
-It repairs malformed persisted capability state explicitly rather than letting renderer/factory code
-silently substitute another effect:
+An unbuilt/deactivated page must never write default control values over persisted configuration that
+it never hydrated.
 
-- if every transition is deactivated, it reactivates the deterministic recovery transition
-  (`Crossfade`) **in canonical settings state** and reports that the repaired state must be persisted;
-- if Random is on while `activated ∩ saved pool membership` is empty, it turns Random off, persists a
-  deterministic activated manual replacement selection, and preserves the saved pool preferences;
-- effective Random pool filtering, C-key/cycle selection, and ordinary manual selection all honor
-  activation at their current seams.
+## 4. Widgets `SETUP` — LANDED E2 contract
 
-This recovery is a state repair, not permission to execute a deactivated Crossfade.
-
-**Final transition admission is now closed (E2 audit correction).** The factory revalidates an
-already-resolved `transitions.random_choice` against activation + hardware at admission
-(`TransitionFactory._is_admissible_random_choice`) and re-resolves if stale; `_pick_random_transition`
-fails closed (no blanket `'Crossfade'` return); and the engine, factory, and C-key empty-candidate paths
-never run a *deactivated* Crossfade — they pick a deterministic activated hw-available transition or
-perform the explicit persisted recovery repair (`ensure_recovery_transition_activated`). `random_always`
-is the single live Random authority: the factory `_get_random_mode` and engine
-`_prepare_random_transition_if_needed` no longer treat `type="Random"` as a live trigger (E2.6).
-
-These mechanisms are inert while all activation defaults are on.
-
-### 2.4 Widget runtime creation consequence
-
-Current factory-backed widget creation filters a deactivated family before concrete runtime
-widget/model/provider creation and before ordinary per-instance `enabled` handling.
-
-This is a real runtime consequence, but it is **not** equivalent to the full E1
-`WidgetRuntimeManager` ownership split. Provider/model/shared-service retirement semantics must follow
-the owners that have actually migrated.
-
-## 3. Persisted configuration survives deactivation
-
-Application-level deactivation is not “reset this feature.”
-
-Do not erase detailed capability settings when it is deactivated.
-
-Reactivation restores previous detailed configuration and ordinary enabled/pool/manual state unless:
-
-- the user explicitly resets/defaults it;
-- H0 intentionally establishes the new Quick settings epoch;
-- a deliberate later schema migration says otherwise.
-
-This is critical for lazy Settings pages: an unbuilt/deactivated page must not save default control
-values over persisted configuration it never hydrated.
-
-Python may retain already imported bytecode in `sys.modules`; literal module unloading is not the
-contract. Runtime/resource dormancy is immediate at the legal owner boundary, and a clean process must
-not import heavy implementation solely for a deactivated capability.
-
-## 4. Widgets `SETUP` subtab — E2
-
-`WidgetsTab` already has descriptor-driven/lazy section infrastructure. Extend it rather than replacing
-Settings architecture.
-
-Add an always-present first pill:
+Widgets has an always-present first pill:
 
 ```text
 SETUP
 ```
 
-The Setup page is cheap and driven by presentation-neutral family catalog metadata.
+The Setup page is cheap and driven from canonical family metadata.
 
-### 4.1 Family activation rows
+### 4.1 Family rows
 
-Show one activation row per canonical available **family/capability**, not blindly one row per runtime
-instance.
+Show one activation row per available family/capability rather than one row per runtime instance.
 
-Current family ownership is source-owned. Examples include:
+Representative families include:
 
 ```text
-Clocks -> clock / clock2 / clock3
-Weather -> weather
-Media -> media + media-owned controls
-Reddit -> reddit / reddit2
-Gmail -> gmail
-Steam -> supported Steam family cards/services
+Clocks
+Weather
+Media
+Visualizers
+Reddit
+Gmail
+Steam
 ```
 
-Imgur may remain temporarily visible only under its current legacy/dev environment gate before Phase F
-removes it; it is not a Quick family target.
+Imgur may remain visible only while the legacy/dev-gated source still exists. It is
+**CURRENT-LEGACY — WILL BE REMOVED in Phase F0**, not a Quick family target.
 
-Visualizers is a widget-family activation row that requires Media: while Media is deactivated the
-Visualizers row is shown but disabled/unchecked with a "Requires Media" affordance, and canonical state
-is normalized so `visualizers` is never activated while `media` is not (`media=False` forces
-`visualizers=False`; reactivating Media never silently reactivates Visualizers).
+Visualizers remains visible while Media is off, but is disabled/unchecked with the dependency
+explained. Canonical state must already be normalized to `visualizers=False` in that condition.
 
 ### 4.2 Enable All / Disable All
 
-Widget Setup includes:
+These controls modify **family activation only**.
 
-```text
-Enable All
-Disable All
-```
-
-These change **family activation only**.
-
-They do not rewrite ordinary settings such as:
+They do not rewrite ordinary instance settings such as:
 
 ```text
 widgets.clock.enabled
 widgets.weather.enabled
-...
 ```
 
-After family deactivation, internal enabled/detail values remain stored. Reactivation restores them.
+Enable All must respect dependency ordering; Disable All leaves detailed configuration intact.
 
-### 4.3 Live navigation — operator decision
+### 4.3 Live navigation
 
-Navigation rebuilds **live while Settings is open**.
-
-Deactivating a family:
+Navigation changes immediately while Settings is open:
 
 ```text
-SETUP remains visible
-family row remains visible in SETUP
-family normal settings pill disappears immediately
-family page is no longer a live navigation target
+deactivate family
+    -> SETUP remains
+    -> family row remains in SETUP
+    -> family detail pill disappears immediately
+    -> built detail page is retired
+    -> if selected, navigate immediately to SETUP
+
+reactivate family
+    -> pill returns immediately
+    -> detail page remains lazy
+    -> selecting later rebuilds/hydrates preserved state
 ```
 
-If the removed family page is currently selected, navigate immediately to `SETUP`.
+A hidden/non-admitted page must not stay addressable through stale programmatic navigation.
 
-Reactivating the family immediately restores its normal settings pill.
+### 4.4 Lazy hydration / save safety
 
-This is not a grey-out/deferred-close design.
-
-Detailed page construction remains lazy; re-adding a pill does not require eagerly constructing the
-family page.
-
-### 4.4 Runtime consequence
-
-On the safe runtime/settings application boundary, a deactivated family must not be resolved by the
-current/final runtime owner.
-
-If it was live, retire its exclusive runtime ownership according to the owner that actually controls
-that resource. Shared services remain alive while another activated consumer still requires them.
-
-Do not perform unsafe provider/process teardown directly from a navigation-button callback merely to
-match immediate pill removal.
-
-### 4.5 Lazy hydration guard
-
-Required failure to prevent:
+Forbidden failure:
 
 ```text
 family deactivated
--> page never built/hydrated
--> user saves unrelated Settings
--> absent controls write canonical defaults over stored family config
+-> page not built/hydrated
+-> unrelated Save
+-> absent controls overwrite preserved family settings
 ```
 
-Setup activation state must be saveable without hydrating hidden family pages.
+Setup activation state must save independently of hidden detailed pages.
 
-## 5. Transitions `SETUP` subtab — E2
+## 5. Transitions `SETUP` — LANDED E2 contract
 
-Replace the old transition dropdown/eager transition-specific group ownership with the same
-`SETUP` + activated-transition pill model.
-
-Always-present first pill:
-
-```text
-SETUP
-```
-
-Only activated transitions expose normal settings pills.
-
-Do not import Quick renderer implementations to build Settings pages.
-
-### 5.1 Activation
-
-```text
-activated = capability may exist/load/run
-```
+Transitions uses the same always-present `SETUP` + activated-detail-pill model.
 
 A deactivated transition:
 
-- has no normal transition settings pill;
-- is excluded from explicit effective runtime selection;
-- is excluded from the effective Random pool;
-- does not resolve/import its Quick renderer solely for runtime use;
-- keeps its detailed saved settings and saved pool preference.
+- has no ordinary detail pill;
+- is excluded from manual/cycle/effective Random resolution;
+- does not gain implementation/shader/GPU ownership solely because code exists;
+- keeps detailed settings and saved pool membership.
 
-### 5.2 Random pool membership
+### 5.1 Random authority
 
-Pool membership is saved independently of activation.
-
-Effective runtime pool:
+The one live Random authority is:
 
 ```text
-effective_pool = activated_ids ∩ saved_pool_member_ids
+transitions.random_always = bool
 ```
 
-A deactivated transition may keep `pool_member=True` in storage so reactivation restores the user's
-preference; it contributes nothing to the effective pool while inactive.
-
-### 5.3 `Use Random Transitions`
-
-The Setup page owns one ordinary control:
+Legacy:
 
 ```text
-Use Random Transitions
+transitions.type = "Random"
 ```
 
-Random mode uses the effective pool and is separate from application activation.
+is migration input only. It must not become a second live Random switch.
 
-The old per-transition `Include in Switch/Random Pool` control and separate pool dialog/button should
-lose authority once E2 is complete.
+Saved pool membership remains separate from activation:
 
-### 5.4 Manual transition
+```text
+effective saved pool = activated ids ∩ saved pool-member ids
+```
 
-When Random is off, the selected transition pill represents/updates the manual transition selection.
+Runtime may additionally filter for runnable/hardware eligibility:
 
-When Random is on:
+```text
+effective runtime candidates
+    = activated ∩ saved pool ∩ runnable/hardware
+```
 
-- selecting a transition pill changes editing focus;
-- it does not implicitly turn Random off;
-- it may remember the manual selection that would be used later when Random is disabled.
+Do not broaden an empty effective pool into an unrelated transition and call that Random behavior.
 
-If the selected manual transition is deactivated, resolve and persist a deterministic **activated**
-replacement selection. Do not silently reactivate the transition the user disabled except through the
-explicit zero-activated-state normalization rule below, where Crossfade reactivation is the canonical
-persisted state repair for an otherwise invalid all-false transition set.
+### 5.2 Manual selection while Random is on
 
-### 5.5 Live transition navigation
+When Random is off, selecting a transition detail pill updates the manual selection.
 
-The same live-nav rule applies:
+When Random is on, selecting a detail pill changes editing focus and may remember the manual selection
+for later; it does **not** silently disable Random.
 
-- deactivate transition -> its settings pill disappears immediately;
-- if selected, navigate to `SETUP` immediately;
-- reactivate -> pill immediately returns;
-- builder remains lazy until selected.
+The screensaver context menu is intentionally different: choosing a concrete transition there disables
+Random and selects that concrete transition.
 
-### 5.6 Zero-activated / empty-effective-pool invariant
+### 5.3 Canonical invalid-state repair
 
-Do not confuse two different invalid states:
+Two invalid states are distinct:
 
 ```text
 zero activated transitions
 ```
 
-and
+and:
 
 ```text
-activated transitions exist, but none are Random-pool members
+Random on + empty activated saved pool
 ```
 
-The landed canonical normalization policy is explicit:
+Landed normalization is:
 
 ```text
 zero activated transitions
-    -> set Crossfade activation=True in canonical settings state
-    -> persist the repaired state
+    -> activate Crossfade in canonical settings state
+    -> persist repair
 
-Random on + empty effective pool
-    -> random_always=False
-    -> persist deterministic activated manual selection
-    -> preserve saved pool membership unchanged
+Random on + empty effective saved pool
+    -> random_always = false
+    -> persist deterministic activated manual transition
+    -> preserve saved pool membership
 ```
 
-This is deliberate **state normalization**, not a renderer/factory bypass. Once normalization has run,
-any selected/run transition must still pass activation admission normally.
+This is state repair, not a renderer/factory bypass. No renderer may simply execute a deactivated
+Crossfade.
 
-Hardware availability is a separate rendering-side filter. If hardware filtering leaves no valid
-activated candidate, do not silently execute a deactivated Crossfade or broaden into an unrelated
-Random pool. Fail closed or perform an explicit canonical state repair whose result is then admitted
-normally.
+Final runtime admission revalidates stale pre-resolved Random choices against current activation and
+hardware/runnability. Empty-candidate branches do not use a hidden literal Crossfade substitution.
 
-The final factory/engine/C-key admission paths described in §2.3 are now fenced and regressed (E2 audit
-correction). This normalization also runs at the E2 SETUP mutation boundary and in the context-menu
-selection handler, so an invalid capability state is repaired and reflected live rather than persisted
-and deferred.
+## 6. E2.7 Visualizer CUSTOM failover/reclaim — LANDED / GREEN
 
-## 6. Settings implementation shape
+The configured CUSTOM monitor remains the canonical owner. A fallback host is temporary runtime state
+only and never persists monitor/position/size/viewport authority.
 
-Keep cheap Settings descriptors separate from renderer implementations.
+### 6.1 Thirty-second grace
 
-Conceptually:
+If the configured target is unavailable — whether absent or runtime-known/non-participating — use one
+human-scale grace:
 
 ```text
-Capability / Settings descriptor
-    stable id
-    label
-    activation key
-    builder module/factory
-    persisted-key ownership
-    family/group identity
+30 seconds
 ```
 
-Builder modules resolve only when their page is selected.
+If the target becomes usable inside the grace, use/reclaim it and create no fallback.
 
-For transitions, do not replace one monolithic dropdown with a monolithic page that still constructs
-every transition's controls.
+If still unavailable at the deadline, at most one temporary fallback may be created on a participating
+display. If no participating fallback exists, fail closed.
 
-For widgets, extend the existing descriptor/lazy-section system.
+### 6.2 One global outage generation
 
-`SETUP` itself is never capability-gated.
+Visualizer ownership is global, so failover generation/deadline authority is global too.
 
-## 7. Transition Settings page decomposition
+Required properties:
 
-Transition-specific Settings builders may use lightweight metadata such as:
+- one effective grace per outage;
+- reconcile from another DisplayWidget does not restart/extend it;
+- every delayed callback validates the coordinator/global generation;
+- target return/reclaim invalidates the whole old generation;
+- a later genuinely new outage receives a fresh strictly-new generation and full 30-second grace;
+- stale scheduled callbacks may physically fire but are fenced no-ops.
+
+### 6.3 Event-driven late reclaim
+
+After fallback creation, return is event-driven rather than polling-timer-driven.
+
+If the configured target returns seconds, minutes or hours later:
 
 ```text
-TransitionSettingsSectionDescriptor
-    transition id
-    label
-    builder module/factory
-    persisted keys
-    shared-control metadata
+display/topology event
+    -> re-read current settings/capability
+    -> retire/fence temporary owner
+    -> only after confirmed retirement create/restore configured owner
+    -> restore configured target's saved CUSTOM geometry
 ```
 
-Keep renderer implementation imports out of Settings builders unless an exact measured/technical
-reason requires otherwise.
+Repeated return events are idempotent.
 
-Shared UI helpers may construct repeated controls such as duration rows, direction selectors, sliders,
-swatches and labels without making them runtime renderer authority.
+`screenAdded -> full topology rebuild` remains the authority for a physically absent display appearing.
+Runtime-known return/re-anchor paths perform the targeted reclaim where appropriate.
 
-Transition-specific pages are built lazily: each page is constructed only when its pill is first
-selected, a deactivated transition's page is never built, deactivation retires a built page, and
-reactivation rebuilds + hydrates from preserved settings on next selection. The authoritative
-edited/manual selection is a plain state value, not the hidden legacy dropdown (which survives, if at
-all, only as a non-authoritative mirror until Phase I).
+### 6.4 Capability deactivation retires failover lifecycle
 
-## 7A. E2 presentation rules (durable, not a pixel-spec)
+If Media or Visualizers becomes ineffective:
 
-Widgets SETUP and Transitions SETUP are sibling visual/interaction surfaces and share one grammar:
+- pending grace/global generation is invalidated;
+- stale callbacks cannot create fallback;
+- a live temporary fallback is retired;
+- its record is discarded only after retirement is confirmed;
+- failed retirement retains recoverable live-owner state;
+- later explicit reactivation with the target still absent starts a **fresh full 30-second grace**.
 
-- **Responsive pill navigation.** The top pill row wraps onto additional rows via the shared
-  `ui/flow_layout.py` (`FlowContainer`/`FlowLayout`) instead of clipping; canonical pill order is
-  preserved; pills never become horizontally unreachable; labels are not crushed to avoid wrapping.
-  Use consistent `SETUP` labelling across both tabs.
-- **Responsive module grids.** Activation lists (Widget Modules, Transition Modules) and the Transitions
-  Random Pool are responsive grids that fit at least two modules per row at ordinary Settings widths and
-  gain columns when width allows, collapsing toward one column only when genuinely too narrow. Column
-  count derives from available width / item min width / spacing, not a hardcoded breakpoint.
-- **Reachable action rows.** Enable All / Disable All reflow (wrap) so both stay visible/reachable while
-  the frame's right border remains visible; horizontal scrolling is never the workaround.
-- **Horizontal containment.** No page/frame/nav layout may force the scroll content wider than its
-  viewport; the styled frame's right border stays visible at every supported width; layout recomputes on
-  resize while Settings is open.
-- **Shared styling.** Module frames use the canonical styled `QGroupBox` (`style_group_box`) and
-  circle-checkbox language (`circleIndicator` + `CIRCLE_CHECKBOX_STYLE`); do not invent per-surface
-  checkbox styles. Mature Widget subsections keep their existing internal design and only gain outer
-  containment; specialized builders (e.g. the Visualizer) keep their internal UI but must fit inside the
-  same responsive shell.
+A stale Media/Visualizer QWidget/runtime object grants no permission after canonical capability state is
+off.
 
-`random_always` is the single Random authority shared by Transitions SETUP, the runtime, and the
-screensaver context menu. Legacy `type="Random"` is migration input only; no UI writes it.
+## 7. E1 boundary — ACTIVE next
 
-## 8. Defaults / H0
+E2 proved the activation and Settings/navigation authority. E1 must now move provider/model/runtime
+ownership to the presentation-neutral owner without changing the E2 state model.
 
-Activation state is canonical settings/default state. Do not derive default activation from whether a
-Python file happens to import.
+A deactivated family ultimately owns no family-exclusive:
 
-Current compatibility defaults are all activated so the foundation is inert.
+- model/provider;
+- helper process;
+- timer/poll/refresh callback;
+- worker;
+- presentation component;
+- family-specific render resource.
 
-H0 later selects final canonical Quick-era defaults for:
+Shared infrastructure remains until its last activated consumer retires.
 
+Fresh-process deactivation means heavy family implementation is not imported/resolved merely because
+cheap catalog metadata exists. Literal `sys.modules` unloading after prior use is not required; live
+ownership is what matters.
+
+Ordinary `enabled=False` remains distinct from family deactivation.
+
+The Visualizer remains special: its capability admission is governed here, while its logical/render
+ownership remains the dedicated visualizer subsystem.
+
+## 8. H0 defaults/settings epoch
+
+H0 later chooses the final Quick-era defaults/reset policy for:
+
+- family activation;
 - transition activation;
-- transition Random mode/pool;
-- widget-family activation;
-- other explicitly reset presentation-era state.
+- Random mode/pool;
+- explicitly retired presentation-era state.
 
-Do not pre-empt H0 values in E2 docs/code unless Current Plan explicitly selects them.
+Do not use E1/E3/E4/F work to silently pre-empt H0 choices.
 
-Deactivation preserves detailed configuration; H0's deliberate settings epoch is a separate event.
+Pre-Quick per-mode visualizer growth/card-height settings and other presentation state explicitly
+retired by the migration are **CURRENT-LEGACY — WILL BE OBSOLETE at H0/I caller cleanup**.
 
-## 9. Defaults Foundry
+## 9. Permanent test obligations
 
-J0/final tooling must understand the final activation schema without importing heavy runtime modules.
+Preserve direct proof for:
 
-The Foundry remains a standalone QWidget tool unless another explicit tooling decision changes it.
-
-Generated defaults/SST artifacts derive from canonical defaults rather than becoming a second
-activation authority.
-
-## 10. Tests
-
-### 10.1 Landed foundation tests
-
-Preserve proof for:
-
-- family catalog membership/environment gating;
-- visualizer excluded from widget-family activation;
+- canonical family membership/environment gating/dependencies;
+- Visualizers **included** as capability family and requiring Media;
 - missing activation keys resolve compatibly;
-- family and transition activation read/write helpers;
-- effective Random pool = activated ∩ saved pool membership;
-- transition selection/cycle/random seams exclude deactivated transitions when a valid activated choice
-  exists;
-- runtime factory widget creation filters deactivated family before per-instance enabled handling.
+- Media-off forces Visualizers-off; Media-on does not silently reactivate it;
+- activation read/write/normalization helpers;
+- family activation distinct from ordinary instance enabled state;
+- Widgets/Transitions `SETUP` first-pill/live-navigation/lazy hydration behavior;
+- built-page retirement and later rehydration;
+- Enable All/Disable All activation-only semantics;
+- transition activation/pool/manual/Random separation;
+- `random_always` as sole live Random authority;
+- zero-activated Crossfade canonical repair;
+- Random-empty-pool repair preserving saved membership;
+- stale pre-resolved Random choice final-admission recheck;
+- no deactivated Crossfade last-resort;
+- E2.7 one global outage generation, 30-second grace, event reclaim, retirement-failure retention,
+  capability-off retirement, stale-callback fencing and fresh-grace reactivation;
+- E1 owner dormancy/retirement as each real provider/model/process owner migrates.
 
-The normalization invariants are now directly pinned: `tests/test_capability_activation.py` covers the
-all-false Crossfade state repair, the legacy `type="Random"` migration, the deactivated-manual-type
-replacement, and the Random-empty-pool normalization; `tests/test_transitions_tab_setup.py` and
-`tests/test_context_menu_activation.py` prove these repairs are reflected live in both operator surfaces.
+`Docs/TestSuite.md` is the canonical file inventory/retirement ledger. Do not revive a stale E2-era test
+expectation merely because its filename sounds authoritative.
 
-### 10.2 E1 ownership tests
+## 10. E2 closure / do-not-reopen rule
 
-As E1 lands, prove the owner actually responsible for each family resource retires exclusive:
+E2 and E2.7 implementation are closed by independent audit. Remaining E2-related operator acceptance
+(such as responsive Settings eyes-on or physical dual-display wake/late-return for R-26) is acceptance
+debt, not unfinished E2 implementation.
 
-- models/providers;
-- timers/polls/refresh callbacks;
-- processes/workers;
-- Quick components/resources;
-
-while shared services remain until their last activated consumer retires.
-
-Do not claim a resource is dormant merely because factory widget creation was skipped if another old
-owner still starts it.
-
-### 10.3 Widgets E2 tests
-
-Prove:
-
-- first pill is `SETUP`;
-- only activated family pills exist;
-- live deactivation removes pill immediately;
-- deactivating current page navigates to Setup;
-- reactivation restores pill immediately;
-- family page builds only on demand;
-- Enable All/Disable All change activation only;
-- per-instance enabled/detail values survive family activation toggles;
-- lazy/unhydrated sections never overwrite stored settings.
-
-### 10.4 Transitions E2 tests
-
-Prove:
-
-- first pill is `SETUP`;
-- only activated transition pills exist;
-- live pill removal/re-addition works;
-- implementation registry remains dormant until runtime needs an activated effect;
-- effective Random pool is exactly activated ∩ saved membership;
-- inactive pool preference survives;
-- Random-on pill browsing does not disable Random;
-- manual replacement selection after deactivation is deterministic and activated;
-- all-false activation explicitly reactivates/persists Crossfade through the canonical normalization
-  authority rather than a renderer bypass;
-- Random-on + empty effective pool explicitly disables Random, persists an activated manual selection,
-  and preserves saved pool membership;
-- a stale pre-resolved `transitions.random_choice` is rejected/re-resolved if it becomes deactivated or
-  hardware-invalid before factory admission;
-- hardware filtering / empty candidate sets never reach a deactivated Crossfade last-resort;
-- old dropdown/pool-checkbox authority is gone once E2 cuts over.
-
-### 10.5 Recreate/lifecycle
-
-Prove activation changes survive Settings save/recreate and do not leave stale providers, models,
-callbacks, Quick items or render resources alive according to the owners that have landed.
-
-## 11. E2 exit
-
-E2 exits when:
-
-- Widgets and Transitions expose the new `SETUP`/pill contract;
-- activation is canonical/persisted;
-- live navigation removal/re-addition is deterministic;
-- hidden/unbuilt settings cannot corrupt persisted configuration;
-- transition Random/manual/activation semantics are deterministic and tested;
-- zero-activated-transition behavior is explicitly legal or prevented;
-- widget family activation remains separate from per-instance enabled state;
-- no old transition dropdown/random-pool authority remains;
-- Phase F can rely on the final application-level activation contract.
-
-`Current_Plan.md` owns the actual promotion decision.
+A failing future test/installed run reopens only the smallest demonstrated owner. Do not send an agent
+back to “finish E2” from old planning prose.

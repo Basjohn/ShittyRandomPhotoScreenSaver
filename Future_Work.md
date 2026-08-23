@@ -1,6 +1,6 @@
 # Future Work
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 Long-horizon feature / new-implementation backlog.
 
@@ -30,6 +30,19 @@ Future_Work.md new features / experiments
 This file exists so good ideas survive the migration without expanding migration scope. Technical
 notes are deliberately provisional; future implementation must inspect the final landed Qt Quick
 architecture before coding.
+
+Capability terminology must follow the final landed contract even in future designs:
+
+```text
+activated / deactivated
+    = application-level capability gate
+
+enabled / disabled
+    = ordinary feature/instance state inside an activated capability
+```
+
+Do not revive old presenter, disabled-family, or dual-authority terminology just because a future idea
+was originally written before those migration contracts landed.
 
 ---
 
@@ -69,9 +82,9 @@ implementation and tests.
 
 This remains internal plugin-shaped architecture, not a third-party plugin SDK.
 
-For a disabled transition: keep cheap metadata available, exclude it from Random/Cycle, do not import
-heavy implementation solely for catalog construction, do not compile effect shaders, do not create
-effect-specific GL resources, and do not run effect-specific timers/workers.
+For a **deactivated** transition: keep cheap metadata available, exclude it from Random/Cycle, do not
+import heavy implementation solely for catalog construction, do not compile effect shaders, do not
+create effect-specific GL resources, and do not run effect-specific timers/workers.
 
 Future transitions/options consume the final monotonic transition run. They may author internal
 deformation/easing/physics deterministically from that sample but do not become another clock.
@@ -432,7 +445,8 @@ history into depth, a few thousand vertices, displacement from compact data/text
 For a genuinely new transition/visualizer implementation:
 
 1. record visual contract here or in a focused note;
-2. add cheap descriptor metadata with feature disabled by default during development;
+2. add cheap descriptor metadata with the capability **deactivated/dev-gated by default** during
+   development;
 3. implement one isolated lazy renderer;
 4. use deterministic input/seed;
 5. add endpoint/lifecycle/state tests;

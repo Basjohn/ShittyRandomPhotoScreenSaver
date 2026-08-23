@@ -1,12 +1,15 @@
 # Historical Bugs
 
-Last updated: 2026-08-11
+Last updated: 2026-08-23
 
-Compact status/navigation index for significant SRPSS regressions. Full incident
-narratives are authoritative under `Docs/Historical_Bugs/`.
+Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
+`Docs/Historical_Bugs/`.
 
-Use [`Docs/Historical_Bugs/README.md`](Historical_Bugs/README.md) for the complete record
-set.
+Use [`Docs/Historical_Bugs/README.md`](Historical_Bugs/README.md) for the folder reading rule and
+complete record set.
+
+Historical incident bodies may name old owners. They are evidence for the failure/mechanism at the time,
+not automatic current architecture instructions.
 
 ## Open / Watchlist Records
 
@@ -14,11 +17,12 @@ set.
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](Historical_Bugs/U-06_MC_Shadow_Cache_Corruption.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](Historical_Bugs/U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
 
-## Active / Pending Records
+## Active / Pending Acceptance Records
 
-No R-series recreation/lifecycle incident is active. R-60 is solved by the current
-live repeated-transition evidence. Current Phase 5 performance and resource follow-up
-remains tracked by `Current_Plan.md`.
+- [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN; physical dual-display wake/late-return acceptance remains.
+
+No other R-series record is current implementation sequencing. Current migration work is owned by
+`Current_Plan.md` (**E1 active** at this reconciliation), not by old Phase/P-number status prose.
 
 ## Standalone R Records
 
@@ -70,7 +74,7 @@ remains tracked by `Current_Plan.md`.
 - [R-13 — Visualizer Sine/Oscilloscope Lines 4-6 Settings Never Persisted](Historical_Bugs/R-13_Sine_Oscilloscope_Lines_4_6_Persistence.md)
 - [R-12 — Runtime Custom Slot Replaced While Cycling Presets](Historical_Bugs/R-12_Runtime_Custom_Preset_Cycling.md)
 - [R-11 — Visualizer Preset Tooling Regression](Historical_Bugs/R-11_Visualizer_Preset_Tooling_Regression.md)
-- [R-10 — Widget C++ Object Already Deleted on Provider Switch](Historical_Bugs/R-10_Deleted_QObject_Provider_Switch_Callback.md)
+- [R-10 — Widget C++ Object Already Deleted on Provider Switch Callback](Historical_Bugs/R-10_Deleted_QObject_Provider_Switch_Callback.md)
 - [R-09 — Settings Spinbox/LineEdit Fill Regression](Historical_Bugs/R-09_Settings_Input_Fill_QSS_Specificity.md)
 - [R-08 — Pixel Shift Visualizer Bleed-Through](Historical_Bugs/R-08_Pixel_Shift_Visualizer_Bleed_Through.md)
 - [R-07 — Startup Fade / Visualizer Secondary-Stage Ownership Split](Historical_Bugs/R-07_Startup_Fade_Visualizer_Secondary_Stage.md)
@@ -83,8 +87,8 @@ remains tracked by `Current_Plan.md`.
 
 ### Historical numbering note
 
-`R-19` and `R-20` were aliases for `U-02` and `U-03`; no independent source bodies
-existed, so no duplicate records are manufactured.
+`R-19` and `R-20` were aliases for `U-02` and `U-03`; no independent source bodies existed, so no
+duplicate records are manufactured.
 
 ## U Records
 
@@ -109,5 +113,9 @@ existed, so no duplicate records are manufactured.
 
 ## Maintenance Rule
 
-Do not add full incident bodies here. New substantial incidents receive one standalone
-record, then links here and in the folder README.
+Do not add full incident bodies here. New substantial incidents receive one standalone record, then
+links here and in the folder README.
+
+When an incident changes from implementation-open to audit-green/acceptance-only/solved, update the
+status navigation here and in `Docs/Historical_Bugs/README.md` without rewriting its historical
+chronology.

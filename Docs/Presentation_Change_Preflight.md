@@ -1,6 +1,6 @@
 # Presentation / Cadence Change Preflight
 
-Last updated: 2026-08-20
+Last updated: 2026-08-23
 
 Read before changing physical presentation, visualizer delivery, cadence, or render-state ownership.
 
@@ -20,8 +20,8 @@ visualizer/runtime pixels
     -> layers/items inside the one Quick scene
 ```
 
-During migration the QRhiWidget presenter may still exist as the reference implementation. Do not
-treat it as the destination.
+During migration the QRhiWidget/GLCompositor presenter may still have live callers. It is
+**CURRENT-LEGACY — WILL BE OBSOLETE at H/I**, not a rollback/fallback destination.
 
 ## 2. Rejected mechanisms
 
@@ -37,6 +37,7 @@ treat it as the destination.
 | AnimationManager as visualizer simulation owner | rejected |
 | per-mode logical clock | rejected |
 | `QQuickWidget` runtime presenter | rejected |
+| old compositor/software presenter fallback | rejected destination architecture |
 | broad C++ physical-presenter phase two | not planned |
 
 ## 3. Logical / physical boundary
@@ -89,7 +90,8 @@ Before changing renderer primitive ask:
 4. Does it preserve one-surface-per-display?
 5. Does it preserve fidelity and lifecycle semantics?
 
-Do not jump from a local renderer issue to a native-window rewrite.
+Do not jump from a local renderer issue to a native-window rewrite or resurrect the old presenter as a
+compatibility escape hatch.
 
 ## 7. Instrumentation proportionality
 

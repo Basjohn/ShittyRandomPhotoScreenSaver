@@ -18,11 +18,16 @@ checkpoint has landed.
 
 `Current_Plan.md` is the **active execution authority**, not a migration diary.
 
-Completed/validated migration implementation has been moved to:
+Earlier completed migration chronology is archived at:
 
 ```text
 Docs/Historical_Plans/QtQuick_Migration_Completed_Through_2026-08-23.md
 ```
+
+That archive is a **historical snapshot**, not a continuously rewritten completion mirror. It was
+captured before the final E2/E2.7 closure checkpoints, so any wording inside it that calls E2/E2.7
+active, queued, awaiting audit, or next work is **OBSOLETE AS CURRENT STATUS**. The current plan,
+focused current docs and exact source own the later closure state.
 
 Do not read historical planning by default. Consult it only when a demonstrated regression reopens a
 closed phase or historical rationale is specifically needed.
@@ -853,29 +858,33 @@ architecture.
 
 **E2 implementation is CLOSED by independent audit at `b787c57a`.**
 
+**E2.7 implementation is CLOSED by independent audit at
+`5b3cbaef4d443c79941e5ac780252f82a4e77bc4`.**
+
+Physical dual-display sleep/wake/late-return acceptance for R-26 remains deferred hardware evidence;
+it does not reopen E2.7 implementation or block the next Phase-E slice.
+
 The active next checkpoint is:
 
 ```text
-E2.7 Visualizer CUSTOM display failover/reclaim lifecycle
--> focused lifecycle/topology regressions
+E1 presentation-neutral runtime/model/provider ownership
+-> focused ownership/dormancy/lifecycle regressions
 -> diff/status
 -> commit + push
 -> independent audit
 ```
 
-E2.7 is lifecycle/topology ownership work and remains audit-required. Its central product rule is:
+After E1 audit:
 
 ```text
-persisted CUSTOM target = canonical owner forever until the user changes it
-fallback display        = temporary runtime host only
+E3 retained Quick primitives
+-> E4 global eight-direction shadow authority
+-> Phase-E closure review
+-> Phase F
 ```
 
-Use a 30-second one-shot grace before temporary fallback. If the configured target returns at any
-later time — seconds, minutes or hours after fallback — existing display/topology events must reconcile
-the Visualizer home, retire/fence the temporary owner, and restore the configured target's saved CUSTOM
-geometry. No fallback-relative monitor or geometry state may become persisted authority.
-
-Do not add recurring monitor polling. Reclaim must be event-driven and exactly-one-owner.
+Do not send an implementation agent back into E2/E2.7 unless new source/runtime evidence demonstrates
+a specific regression.
 
 ---
 

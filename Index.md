@@ -44,10 +44,11 @@ Current normal implementation work is **Phase E — widget presentation + capabi
 - Phase C transition implementation/deterministic hardening: landed; remaining acceptance is explicit.
 - Phase D visualizer implementation/documentation closure: complete; remaining physical/eyes-on items
   are explicit acceptance debt.
-- Phase-E activation foundation: family catalog + canonical activation settings + transition runtime
-  admission + widget family creation admission have landed.
-- Broader E1 runtime ownership, E2 `SETUP`/live lazy navigation, E3 Quick primitives and E4 global
-  shadow direction remain governed by exact `Current_Plan.md`/source state.
+- Phase-E activation foundation and E2 `SETUP`/live lazy navigation are landed.
+- E2.7 Visualizer CUSTOM failover/reclaim implementation is independently audited GREEN; physical
+  dual-display wake/late-return remains deferred acceptance only.
+- **E1 presentation-neutral runtime/model/provider ownership is ACTIVE next.**
+- E3 retained Quick primitives and E4 global shadow direction remain after E1 and before Phase F.
 
 ## Start here
 
@@ -121,9 +122,23 @@ Until production cutover, `main` may still contain/run:
 - GUI-side presentation handoffs;
 - QWidget runtime widget presentation.
 
-Those files are current/reference migration source, not permission to expand old architecture.
+Those files are **CURRENT-LEGACY — WILL BE OBSOLETE at production cutover / Phase I**. They remain
+current/reference migration source only while callers still exist; they are not permission to expand
+old architecture or to preserve a compatibility presenter.
 
 No production runtime switch/fallback between old and Quick is to be introduced.
+
+### Known migration-epoch document traps
+
+- `Docs/SRPSS_Steam_Widget_Family_Implementation_Plan.md` contains valuable provider/security/product
+  decisions, but its QWidget/painter/runtime-pixel implementation mapping predates the Quick cutover.
+  Those presentation sections are **CURRENT-LEGACY — WILL BE OBSOLETE / REHOMED in E1/F/I**; do not
+  use them to override `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`.
+- `Docs/P2_Visualizer_Recovery_Contract.md` has a legacy phase name but its logical/runtime ownership
+  contract remains **LANDED / PRESERVE**.
+- `Docs/phase_reports/`, `Docs/Performance_Evidence/`, `Docs/Historical_Bugs/`,
+  `Docs/Historical_Plans/` and `Docs/audits/` are evidence/reference scopes. Status language inside an
+  old record may be obsolete as current sequencing even when its measurements/mechanism remain valid.
 
 ## Durable runtime owners/direction
 

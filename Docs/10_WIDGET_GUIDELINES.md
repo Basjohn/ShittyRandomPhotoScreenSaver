@@ -1,13 +1,13 @@
 # Widget Creation and Runtime Presentation Guide
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 Canonical guide for adding or deeply refactoring a non-visualizer widget during the Qt Quick runtime
 presentation migration.
 
-For current migration sequencing read `Current_Plan.md`. For the detailed Phase-E/F decomposition read
-`Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`; for application capability activation/E2
-read `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`.
+For current sequencing read `Current_Plan.md`. For the detailed E1/E3/E4/F decomposition read
+`Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`; for the **landed** application capability/
+E2 contract read `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`.
 
 ## 1. Split the widget into two concerns
 
@@ -26,8 +26,7 @@ because pixels move to Quick.
 
 ## 2. Family activation and instance enabled are separate
 
-Phase E has a presentation-neutral widget-family capability catalog and canonical application-level
-activation state.
+Canonical application-level family activation and the E2 `SETUP` UI are landed.
 
 Use the distinction consistently:
 
@@ -41,15 +40,17 @@ widget instance enabled / disabled
 
 Do not use “disabled family” when you mean application-level `deactivated`.
 
-Visualizers is a widget-family activation capability (family `visualizers`, member `spotify_visualizer`)
-that requires the `media` family; its runtime/render ownership remains the special Phase-D visualizer
-subsystem rather than an ordinary Phase-F widget family.
+Visualizers is a widget-family activation capability (family `visualizers`, member
+`spotify_visualizer`) that requires the `media` family; its runtime/render ownership remains the
+special visualizer subsystem rather than an ordinary Phase-F widget family.
 
 At the currently landed foundation, factory-backed widget creation is filtered by family activation
-before per-instance enabled handling. As E1 moves model/provider/service ownership under the final
-runtime manager, a deactivated family must ultimately own no family-exclusive model/provider/process/
-poll/timer/presentation resource. Shared infrastructure remains while another activated capability
-still needs it.
+before per-instance enabled handling. **E1 is active** to move model/provider/service ownership under
+the presentation-neutral final runtime owner.
+
+A deactivated family must ultimately own no family-exclusive model/provider/process/poll/timer/
+presentation resource. Shared infrastructure remains while another activated capability still needs
+it.
 
 Do not claim full dormancy for an owner that has not yet migrated merely because concrete widget
 creation was skipped.
@@ -71,9 +72,9 @@ Preserve lazy section construction and canonical SettingsManager/defaults owners
 Application-level deactivation preserves detailed stored configuration. An unbuilt/deactivated page
 must not overwrite persisted values on Save.
 
-E2 navigation rule is live: deactivation removes the family's normal settings pill immediately;
-reactivation restores it immediately; `SETUP` remains available. The detailed page still builds only
-when selected.
+The E2 navigation rule is landed and live: deactivation removes the family's normal settings pill
+immediately; reactivation restores it immediately; `SETUP` remains available. Detailed page
+construction remains lazy and built pages retire on deactivation.
 
 ## 4. Runtime presentation destination
 
@@ -94,17 +95,27 @@ No separate accelerated native window per widget.
 
 No `QQuickWidget` runtime workaround.
 
-## 5. Migration compatibility
+## 5. Current-legacy widget presentation
 
 Existing QWidget runtime widgets may remain temporarily while their Quick presentation equivalent is
 built/validated.
 
-Do not create permanent dual-presentation ownership.
+Those runtime-pixel owners are **CURRENT-LEGACY — WILL BE OBSOLETE / REHOMED in E3/E4/F/I**. This
+includes, where applicable:
+
+- `BaseOverlayWidget` runtime pixel/card ownership;
+- QWidget/QPainter card rendering;
+- runtime painted-shadow/static-frame caches;
+- old QWidget runtime effects/fades;
+- old factory presentation products whose only purpose is producing runtime QWidget pixels.
+
+Do not create permanent dual-presentation ownership and do not deepen these owners just because they
+still have production callers.
 
 A migration slice has a clear cutover after which only one presentation owner draws that widget.
 
-A legacy descriptor/factory surviving for the old path is migration source/reference, not permission to
-keep a parallel Quick-era factory architecture.
+A legacy descriptor/factory surviving for the old path is migration source/reference, not permission
+to keep a parallel Quick-era factory architecture.
 
 ## 6. Canonical descriptor/family metadata
 
@@ -124,8 +135,8 @@ base/inheritance keys
 service/runtime requirements
 ```
 
-Family membership comes from the canonical family catalog. Do not create a second family map in
-Settings or Quick presentation code.
+Family membership comes from `core/settings/widget_family_catalog.py`. Do not create a second family
+map in Settings, a widget factory or Quick presentation code.
 
 Internal extensibility may be static/plugin-shaped. Do not turn it into dynamic third-party discovery,
 manifests or hot loading without an explicit product decision.
@@ -160,6 +171,8 @@ Keep canonical Python owners for:
 
 Publish compact presentation state instead of letting render/QML code reach into provider internals.
 
+E1 should remove hidden QWidget construction as a prerequisite for retaining provider/model ownership.
+
 ## 9. Runtime update contract
 
 Prefer state-driven invalidation.
@@ -185,6 +198,9 @@ Live content refresh must not overwrite committed outer geometry.
 
 Save and Cancel remain distinct lifecycle actions.
 
+Phase G moves edit/session pixels away from old QWidget edit shells while preserving useful
+presentation-neutral persistence/math.
+
 ## 11. Input/actions
 
 Keep shared input semantics and business actions in Python routing where practical.
@@ -203,6 +219,9 @@ one presentation-style authority deliberately.
 
 Phase E4 owns the global eight-direction shadow orientation. Direction must not become a second shadow
 magnitude authority.
+
+Old QWidget runtime shadow/effect implementations are current-legacy; preserve appearance and rehome
+tests rather than preserving their implementation indefinitely.
 
 ## 13. Performance
 
@@ -233,14 +252,24 @@ On recreation/deactivation as applicable:
 
 ## 15. Deprecated Imgur
 
-Imgur is not a Quick migration target.
+Imgur is **CURRENT-LEGACY — WILL BE REMOVED in Phase F0**, not a Quick migration target.
 
-A legacy/dev-gated Imgur descriptor may still exist before Phase F cleanup, but new Quick widget work
-must not create an Imgur component or repair its provider merely to port it.
+A legacy/dev-gated Imgur descriptor may still exist before F0 cleanup, but new Quick widget work must
+not create an Imgur component or repair its provider merely to port it.
 
 Follow `Current_Plan.md` / `Future_Cleanup.md` for removal sequencing.
 
-## 16. Testing
+## 16. Feature-specific plans
+
+Feature plans written before the Quick decision may remain valuable for product/provider/security/data
+contracts while containing old runtime-pixel mappings.
+
+In particular, `Docs/SRPSS_Steam_Widget_Family_Implementation_Plan.md` retains valuable Steam
+provider/privacy/selection decisions, but its `BaseOverlayWidget`/painter/factory presentation mapping
+is **CURRENT-LEGACY — WILL BE REHOMED in E1/F/I**. This guide + the Phase-E/F decomposition override
+that old pixel-owner mapping.
+
+## 17. Testing
 
 Test separately and at the owner appropriate to the claim:
 
@@ -255,5 +284,8 @@ Test separately and at the owner appropriate to the claim:
 - lifecycle/recreation/deactivation;
 - multi-display/DPR;
 - installed visual parity.
+
+Before deleting an old presenter/widget test, check `Docs/TestSuite.md`: rehome surviving behavior to
+the destination owner, then retire tests whose implementation contract is intentionally gone.
 
 Do not call migration complete merely because legacy Python model tests still pass.

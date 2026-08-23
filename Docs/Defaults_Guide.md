@@ -1,6 +1,6 @@
 # Defaults Guide
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 Canonical guidance for defaults, reset behavior, snapshots, import safety and runtime application.
 
@@ -47,15 +47,15 @@ from UI code.
   acknowledgement where the current store contract requires one.
 - One process-scoped ordered writer owns routine JSON serialization/temp write/fsync/atomic replace for
   a profile path; do not create a second routine writer.
-- Startup migration/repair, Settings-dialog completion, reload and shutdown use the canonical bounded
+- Startup migration/repair, Settings-dialog completion, reload and shutdown use canonical bounded
   durability boundaries.
 - A failed write remains dirty/retryable rather than silently reporting durable success.
 - SST export is explicit synchronous user transport; SST import mutates canonical settings and then
   follows normal persistence ownership.
 
-## 3. Application capability activation defaults
+## 3. Application capability activation defaults — E2 LANDED
 
-Phase E has landed canonical application-level activation state:
+Canonical application-level activation state is landed:
 
 ```text
 widgets.family_activation.<family_id>
@@ -70,37 +70,49 @@ transition activation != Random-pool membership
 transition activation != manual selection
 ```
 
-Current compatibility defaults are intentionally all activated so the Phase-E foundation is inert for
-existing installations until the operator-facing E2 UI/H0 settings epoch deliberately changes state.
-A missing activation key also resolves compatibly to activated.
+The operator-facing E2 `SETUP`/lazy-navigation UI is already landed. Current compatibility defaults
+remain intentionally all activated so introducing the capability schema did not silently change
+existing installations. A missing activation key also resolves compatibly to activated.
 
-Deactivation is **not reset**. It preserves detailed saved configuration, including per-instance enabled
-values and saved transition pool preferences, unless an explicit reset/H0/schema migration says
-otherwise.
+**H0 owns the final Quick-era default/reset choices.** Do not describe E2 as still waiting to expose
+activation, and do not pre-empt H0 merely because E2 UI exists.
 
-Transition capability state has one canonical normalization rule:
+Deactivation is **not reset**. It preserves detailed saved configuration, including per-instance
+`enabled` values, CUSTOM layout and saved transition pool preferences, unless an explicit reset/H0/
+schema migration says otherwise.
 
-- malformed all-false activation explicitly reactivates Crossfade in canonical settings state and the
-  repair is persisted;
-- Random-on with an empty effective pool turns Random off, persists a deterministic activated manual
-  selection, and leaves saved pool preferences intact.
+### 3.1 Widget dependency normalization
 
-That is state repair, not a renderer/factory substitution. Runtime admission must still reject stale or
-deactivated selections after normalization.
+Canonical family dependency state includes:
 
-Generated defaults snapshots and SST artifacts must derive activation state from canonical defaults.
-Do not hand-maintain an activation list in UI code or a generated artifact.
+```text
+media = false
+    -> visualizers = false
+```
 
-H0 owns final Quick-era default activation choices. Do not pre-empt them merely because the schema now
-exists.
+Reactivating Media does not silently reactivate Visualizers.
+
+Generated defaults snapshots/SST artifacts derive activation state from canonical defaults rather than
+maintaining a second family list.
+
+### 3.2 Transition capability normalization
+
+Canonical repair includes:
+
+- all transitions deactivated -> activate Crossfade in canonical settings and persist repair;
+- Random on + empty activated saved pool -> turn Random off, persist deterministic activated manual
+  selection, preserve saved pool membership;
+- stale/deactivated manual/Random selections must still pass normal admission after repair.
+
+That is state repair, not renderer/factory substitution.
 
 ## 4. Reset and import preservation
 
 - Preserve-on-reset keys live in `core/settings/defaults.py`.
 - Reset/import flows reuse shared preservation and normalization contracts.
 - SST import/export is a transport layer over current JSON settings architecture.
-- Root `widgets` writes, widgets-map helpers and SST imports must share visualizer normalization/schema
-  behavior.
+- Root `widgets` writes, widgets-map helpers and SST imports must share visualizer/capability
+  normalization behavior.
 - Checked-in default SSTs are generated canonical artifacts, not snapshots of one installed machine.
 - User/runtime exports may contain operational metadata according to current transport rules; checked-in
   defaults must not leak credentials/private/machine-local state.
@@ -108,16 +120,39 @@ exists.
 Capability deactivation must not cause a hidden/unbuilt Settings page to overwrite detailed values with
 defaults. Activation state can be changed/saved without hydrating the detailed page.
 
-## 5. Legacy policy
+## 5. Migration-era / legacy policy
+
+Use the forward-obsolescence labels from `Docs/Documentation_Maintenance.md`.
+
+### 5.1 Presentation-era keys
 
 - Retired global preset keys such as `preset` / `custom_preset_backup` are migration inputs only.
+- Legacy `transitions.type="Random"` is migration input only; `random_always` is the live Random
+  authority.
 - Modern defaults/exports must not emit retired schema keys as current authority.
 - Persisted visualizer schema migration is version-gated and converges to current payloads rather than
   rerunning old normalization forever.
-- Pre-Quick per-mode visualizer growth/card-height settings are not Quick-era presentation defaults;
-  H0/later cleanup removes their remaining authority according to Current Plan.
-- Deprecated Imgur is not a Quick-era family default target; follow Phase-F/H0 cleanup rather than
-  perpetuating it in new default tooling.
+
+### 5.2 Visualizer growth/card-height controls
+
+Pre-Quick per-mode visualizer growth/card-height settings are **CURRENT-LEGACY — WILL BE OBSOLETE at
+H0/I caller cleanup**:
+
+```text
+spectrum_growth
+osc_growth
+sine_wave_growth
+bubble_growth
+devcurve_growth
+```
+
+They are not Quick-era presentation defaults and must not be copied into new Quick models/presets/
+geometry merely because old Settings/runtime callers still exist.
+
+### 5.3 Imgur
+
+Imgur is **CURRENT-LEGACY — WILL BE REMOVED in Phase F0**. Do not perpetuate its defaults/settings
+surface into Quick-era tooling.
 
 ## 6. Safe default change workflow
 
@@ -129,7 +164,8 @@ When changing a user-facing default:
 - regenerate defaults snapshot/SST artifacts;
 - run defaults parity tests;
 - add migration/import coverage if existing user settings are affected;
-- refresh `Spec.md`, `Index.md` or focused docs only when live contracts changed.
+- update `Docs/TestSuite.md` if test inventory/authority changes;
+- refresh `Spec.md`, `Index.md`, `Docs/Contracts.md` or focused docs when live contracts changed.
 
 A successful Defaults Foundry **Save and Regenerate Defaults** establishes the new authoritative Normal
 base and MC differential. Tests/artifacts/policy text follow that saved authority and reject it only when
@@ -159,7 +195,7 @@ Rules:
 When runtime recreation is genuinely required, use the one ordered lifecycle boundary rather than a
 partial teardown/rebuild side path.
 
-Add focused tests for:
+Add/retain focused tests for:
 
 - unchanged-value no-op behavior;
 - no provider/work dispatch during hydration;
@@ -184,13 +220,16 @@ Add focused tests for:
   artifacts.
 - Default artifact generation must not inspect/migrate/reset/rewrite installed `%APPDATA%/SRPSS*`
   settings files.
-- Regenerate current defaults artifacts with the canonical project tools after intentional source
-  changes and keep deterministic/parity tests green.
+- Regenerate current defaults artifacts with canonical project tools after intentional source changes
+  and keep deterministic/parity tests green.
 - Retired compatibility payloads remain hidden compatibility data only while their migration contract
   requires them.
 
 The Foundry consumes capability activation as ordinary canonical schema data. It must not import heavy
 widget/transition runtime implementations merely to expose/edit activation leaves.
+
+J/final tooling must understand the final activation schema without becoming a second activation
+catalog.
 
 ## 9. Visualizer defaults
 
@@ -219,3 +258,18 @@ not a required user-visible size or default resolution.
   mutated; persisted replay is not automatically required.
 - Family deactivation preserves CUSTOM/detail settings; it does not erase a family's saved layout
   merely because its runtime ownership is dormant.
+
+## 11. H0 settings epoch
+
+H0 is the deliberate boundary for final Quick-era presentation/default state. It may intentionally
+retire incompatible pre-Quick presentation state rather than carrying it forward indefinitely.
+
+H0 must be explicit about:
+
+- final family activation defaults;
+- final transition activation/Random/pool defaults;
+- retired presentation schema removal/ignore rules;
+- generated snapshots/SST regeneration;
+- migration/import behavior for old installed settings.
+
+Do not move this reset policy earlier merely to simplify E1/E3/E4/F implementation.
