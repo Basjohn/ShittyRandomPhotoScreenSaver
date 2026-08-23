@@ -93,7 +93,7 @@ def load_theme(widget) -> None:
                 }
                 
                 #tabButton {
-                    background-color: rgba(43, 43, 43, 90);
+                    background-color: rgba(20, 20, 20, 125);
                     color: #cccccc;
                     text-align: left;
                     padding: 10px 20px;
