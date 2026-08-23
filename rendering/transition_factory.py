@@ -287,22 +287,19 @@ class TransitionFactory:
     ) -> tuple[bool, Optional[str]]:
         """Get random mode state and choice.
 
-        Random mode is active when *either*:
-        - ``random_always`` is True in the transitions settings, **or**
-        - ``transition_type`` is literally ``"Random"`` (the canonical default
-          and the value stored when the user picks *Random* from the context
-          menu).
+        ``transitions.random_always`` is the single live random-mode authority
+        (E2.6). A legacy manual ``type="Random"`` is migration input handled once
+        by ``normalize_transition_capability_state`` (called at this factory's
+        admission boundary before this method), never a second live trigger here.
 
         When random mode is active we first try to read a pre-resolved
-        ``transitions.random_choice`` (set by the engine before each
-        rotation).  If that key is missing we fall back to picking a
-        concrete type ourselves so the factory never passes the bare
-        string ``"Random"`` into ``_create_by_type``.
+        ``transitions.random_choice`` (set by the engine before each rotation).
+        If it is missing or no longer admissible we pick a fresh concrete type.
         """
         rnd = SettingsManager.to_bool(settings.get('random_always', False), False)
-        random_mode = bool(rnd) or transition_type == 'Random'
-        if not random_mode:
+        if not rnd:
             return False, None
+        random_mode = True
 
         random_choice_value = None
         # A pre-resolved random_choice (prepared by the engine before a rotation)

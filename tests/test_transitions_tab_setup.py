@@ -35,6 +35,22 @@ def _make(qapp, settings_manager, qtbot):
     return tab
 
 
+def test_setup_module_grid_and_pills_are_responsive(qapp, settings_manager, qtbot):
+    tab = _make(qapp, settings_manager, qtbot)
+    tab.resize(1000, 700)
+    tab.show()
+    qapp.processEvents()
+    # Activation modules lay out as a responsive grid (>=2 columns when wide).
+    cbs = list(tab._activation_checkboxes.values())
+    assert all(c.width() > 0 and c.height() > 0 for c in cbs)
+    first_row_y = min(c.y() for c in cbs)
+    assert len([c for c in cbs if c.y() == first_row_y]) >= 2
+    # Pills lay out (wrap) rather than collapsing.
+    pills = [b for b in tab._nav_buttons.values() if not b.isHidden()]
+    assert all(b.width() > 0 for b in pills)
+    tab.hide()
+
+
 def test_setup_is_default_landing(qapp, settings_manager, qtbot):
     tab = _make(qapp, settings_manager, qtbot)
     assert _SETUP_NAV_KEY in tab._nav_buttons
@@ -69,13 +85,21 @@ def test_deactivate_transition_hides_pill_and_pool_row_and_persists(qapp, settin
     assert is_transition_activated(cfg, "Wipe") is True
 
 
-def test_enable_disable_all_affect_activation_only(qapp, settings_manager, qtbot):
+def test_disable_all_normalizes_to_crossfade_recovery(qapp, settings_manager, qtbot):
+    # Disable All would zero the activated set; the canonical normalization
+    # (§2A) immediately repairs it by reactivating Crossfade and reflects that
+    # in the live UI. Every OTHER transition is deactivated; pool prefs intact.
     tab = _make(qapp, settings_manager, qtbot)
     before_pool = dict(tab._pool_by_type)
 
     tab._set_all_transition_activation(False)
     cfg = settings_manager.get("transitions", {})
+    assert is_transition_activated(cfg, "Crossfade") is True
+    assert tab._activation_checkboxes["Crossfade"].isChecked() is True
+    assert tab._nav_buttons["Crossfade"].isHidden() is False
     for name in get_transition_setting_names():
+        if name == "Crossfade":
+            continue
         assert is_transition_activated(cfg, name) is False
     # Pool membership preferences untouched by activation.
     assert cfg.get("pool") == before_pool
@@ -124,6 +148,130 @@ def test_deactivating_current_transition_returns_to_setup(qapp, settings_manager
     # Editing a hidden transition is not allowed: nav falls back to SETUP.
     assert tab._nav_buttons[_SETUP_NAV_KEY].isChecked() is True
     assert not tab._setup_page.isHidden()
+
+
+def test_transition_page_is_lazy(qapp, settings_manager, qtbot):
+    tab = _make(qapp, settings_manager, qtbot)
+    # Nothing transition-specific is built at construction (SETUP landing).
+    assert tab._built_transition_pages == set()
+    assert not hasattr(tab, "burn_group")
+    assert not hasattr(tab, "particle_group")
+
+    # Selecting one pill builds only that page.
+    tab._on_nav_selected("Burn")
+    assert hasattr(tab, "burn_group")
+    assert tab._built_transition_pages == {"Burn"}
+    assert not hasattr(tab, "particle_group")
+
+    # Selecting a second builds only it (does not materialize all others).
+    tab._on_nav_selected("Particle")
+    assert hasattr(tab, "particle_group")
+    assert tab._built_transition_pages == {"Burn", "Particle"}
+    assert not hasattr(tab, "flip_group")
+
+
+def test_deactivated_transition_never_built(qapp, settings_manager, qtbot):
+    tab = _make(qapp, settings_manager, qtbot)
+    tab._activation_checkboxes["Burn"].setChecked(False)
+    # Even a programmatic selection must not build a deactivated page.
+    tab._on_nav_selected("Burn")
+    assert not hasattr(tab, "burn_group")
+    assert "Burn" not in tab._built_transition_pages
+
+
+def test_deactivate_selected_retires_page_then_reactivate_rebuilds(qapp, settings_manager, qtbot):
+    tab = _make(qapp, settings_manager, qtbot)
+    tab._on_nav_selected("Burn")
+    assert hasattr(tab, "burn_group")
+
+    # Deactivate the selected transition -> nav returns to SETUP, page retired.
+    tab._activation_checkboxes["Burn"].setChecked(False)
+    assert tab._nav_buttons[_SETUP_NAV_KEY].isChecked() is True
+    assert not hasattr(tab, "burn_group")
+    assert "Burn" not in tab._built_transition_pages
+
+    # Reactivation restores the pill but does NOT rebuild the page.
+    tab._activation_checkboxes["Burn"].setChecked(True)
+    assert tab._nav_buttons["Burn"].isHidden() is False
+    assert not hasattr(tab, "burn_group")
+
+    # Selecting it after reactivation rebuilds + hydrates.
+    tab._on_nav_selected("Burn")
+    assert hasattr(tab, "burn_group")
+
+
+def test_detailed_settings_survive_deactivate_reactivate(qapp, settings_manager, qtbot):
+    tab = _make(qapp, settings_manager, qtbot)
+    tab._on_nav_selected("Ripple")
+    tab.ripple_count_spin.setValue(7)
+    tab._save_settings()
+
+    tab._activation_checkboxes["Ripple"].setChecked(False)  # retire
+    tab._activation_checkboxes["Ripple"].setChecked(True)   # restore pill
+    tab._on_nav_selected("Ripple")                          # rebuild + hydrate
+    assert tab.ripple_count_spin.value() == 7
+    assert settings_manager.get("transitions", {}).get("ripple", {}).get("ripple_count") == 7
+
+
+def test_unrelated_save_preserves_unbuilt_transition_detail(qapp, settings_manager, qtbot):
+    # Persist a distinctive Burn detail, then construct the tab (Burn unbuilt).
+    cfg = dict(settings_manager.get("transitions", {}))
+    cfg["burn"] = dict(cfg.get("burn", {}))
+    cfg["burn"]["char_width"] = 0.99
+    settings_manager.set("transitions", cfg)
+    settings_manager.save()
+
+    tab = _make(qapp, settings_manager, qtbot)
+    assert not hasattr(tab, "burn_group")
+    # An unrelated SETUP mutation triggers a save while Burn is unbuilt.
+    tab._pool_checkboxes["Wipe"].setChecked(True)
+    # Burn detail preserved (not reconstructed from never-built controls).
+    assert settings_manager.get("transitions", {}).get("burn", {}).get("char_width") == 0.99
+
+
+def test_hidden_combo_is_not_a_second_authority(qapp, settings_manager, qtbot):
+    tab = _make(qapp, settings_manager, qtbot)
+    tab._on_nav_selected("Wipe")
+    assert settings_manager.get("transitions", {}).get("type") == "Wipe"
+    # Poking the hidden mirror combo must NOT change the authoritative manual type.
+    tab.transition_combo.setCurrentText("Burn")
+    tab._save_settings()
+    assert settings_manager.get("transitions", {}).get("type") == "Wipe"
+
+
+def test_empty_effective_pool_disables_random_live(qapp, settings_manager, qtbot):
+    # Random on; make the effective pool empty by clearing all pool membership.
+    tab = _make(qapp, settings_manager, qtbot)
+    tab._use_random_checkbox.setChecked(True)
+    for name in get_transition_setting_names():
+        cb = tab._pool_checkboxes[name]
+        if cb.isChecked():
+            cb.setChecked(False)
+    # Live UI reflects the normalization: Random turned off.
+    assert tab._use_random_checkbox.isChecked() is False
+    cfg = settings_manager.get("transitions", {})
+    assert cfg.get("random_always") is False
+    assert is_transition_activated(cfg, cfg.get("type")) is True
+
+
+def test_manual_deactivation_persists_activated_replacement(qapp, settings_manager, qtbot):
+    tab = _make(qapp, settings_manager, qtbot)
+    tab._use_random_checkbox.setChecked(False)
+    tab._on_nav_selected("Wipe")
+    assert settings_manager.get("transitions", {}).get("type") == "Wipe"
+    # Deactivating the current manual transition -> deterministic activated type.
+    tab._activation_checkboxes["Wipe"].setChecked(False)
+    cfg = settings_manager.get("transitions", {})
+    assert cfg.get("type") != "Wipe"
+    assert is_transition_activated(cfg, cfg.get("type")) is True
+
+
+def test_browsing_while_random_on_leaves_random_enabled(qapp, settings_manager, qtbot):
+    tab = _make(qapp, settings_manager, qtbot)
+    tab._use_random_checkbox.setChecked(True)
+    assert settings_manager.get("transitions", {}).get("random_always") is True
+    tab._on_nav_selected("Wipe")
+    assert settings_manager.get("transitions", {}).get("random_always") is True
 
 
 def test_e26_legacy_type_random_normalized_on_load(qapp, settings_manager, qtbot):

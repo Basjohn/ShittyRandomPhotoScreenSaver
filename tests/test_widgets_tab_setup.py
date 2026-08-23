@@ -28,6 +28,25 @@ def _family_pill(tab, family):
     return getattr(tab, descriptor.button_attr_name, None)
 
 
+def test_setup_module_grid_is_responsive(qt_app, settings_manager):
+    tab = _make_tab(settings_manager)
+    try:
+        tab.resize(1000, 700)
+        tab.show()
+        qt_app.processEvents()
+        cbs = list(tab._family_activation_checkboxes.values())
+        # Every module row is actually laid out (not clipped to an empty frame).
+        assert all(c.width() > 0 and c.height() > 0 for c in cbs)
+        # At a wide width, at least two modules share the first row (>=2 columns).
+        first_row_y = min(c.y() for c in cbs)
+        first_row = [c for c in cbs if c.y() == first_row_y]
+        assert len(first_row) >= 2
+        assert not tab._setup_container.isHidden()
+    finally:
+        tab.hide()
+        tab.deleteLater()
+
+
 def test_setup_is_default_landing_and_lists_families(qt_app, settings_manager):
     tab = _make_tab(settings_manager)
     try:

@@ -94,8 +94,12 @@ from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
     SCROLL_AREA_STYLE,
     FORM_ROW_LABEL_STYLE,
+    style_group_box,
     NoWheelSlider,  # noqa: F401 — re-exported
 )
+from ui.flow_layout import FlowContainer
+
+_WIDGET_MODULE_ROW_MIN_WIDTH = 220
 from ui.styled_popup import StyledColorPicker, StyledPopup
 from ui.widget_stack_predictor import WidgetType, get_position_status_for_widget
 from widgets.timezone_utils import get_local_timezone, get_common_timezones
@@ -947,8 +951,10 @@ class WidgetsTab(QWidget):
         title.setStyleSheet(PAGE_TITLE_STYLE)
         layout.addWidget(title)
 
-        # Subtab-style toggle buttons (Clocks / Weather / Media / Reddit / General)
-        subtab_row = QHBoxLayout()
+        # Subtab-style toggle buttons (Setup / Clocks / Weather / ...). A
+        # responsive FlowLayout wraps the pills onto extra rows instead of
+        # clipping at narrower Settings widths.
+        subtab_container = FlowContainer(h_spacing=8, v_spacing=8)
         self._subtab_group = QButtonGroup(self)
         self._subtab_group.setExclusive(True)
 
@@ -979,10 +985,9 @@ class WidgetsTab(QWidget):
             self._widget_section_descriptors,
         )
         for btn in buttons:
-            subtab_row.addWidget(btn)
+            subtab_container.addWidget(btn)
 
-        subtab_row.addStretch()
-        layout.addLayout(subtab_row)
+        layout.addWidget(subtab_container)
 
         self._subtab_group.idClicked.connect(self._on_subtab_changed)
         default_subtab = get_default_widget_section_index(self._widget_section_descriptors)
@@ -1067,10 +1072,6 @@ class WidgetsTab(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
-        heading = QLabel("Widget Modules")
-        heading.setStyleSheet(PAGE_TITLE_STYLE)
-        layout.addWidget(heading)
-
         blurb = QLabel(
             "Activate the widget families you want available. Deactivating a "
             "family hides its settings and stops it running; its saved settings "
@@ -1084,9 +1085,20 @@ class WidgetsTab(QWidget):
         if not isinstance(widgets_config, dict):
             widgets_config = {}
 
+        # Styled module frame, matching the Transitions SETUP / normal Settings
+        # grammar (§6C), with a responsive activation grid (§6D).
+        modules_group = QGroupBox("Widget Modules")
+        style_group_box(modules_group)
+        modules_layout = QVBoxLayout(modules_group)
+        modules_layout.setContentsMargins(0, 12, 0, 0)
+        modules_layout.setSpacing(8)
+
+        grid_host = FlowContainer(h_spacing=18, v_spacing=8)
         self._family_activation_checkboxes = {}
         for family in get_widget_family_descriptors():
             row = QCheckBox(family.label)
+            row.setProperty("circleIndicator", True)
+            row.setMinimumWidth(_WIDGET_MODULE_ROW_MIN_WIDTH)
             if family.description:
                 row.setToolTip(family.description)
             row.setChecked(is_widget_family_activated(widgets_config, family.family_id))
@@ -1094,20 +1106,22 @@ class WidgetsTab(QWidget):
                 lambda checked, fid=family.family_id: self._on_family_activation_toggled(fid, checked)
             )
             self._family_activation_checkboxes[family.family_id] = row
-            layout.addWidget(row)
+            grid_host.addWidget(row)
+        modules_layout.addWidget(grid_host)
 
-        layout.addSpacing(6)
-        button_row = QHBoxLayout()
-        button_row.addStretch()
+        # Enable/Disable All in a wrapping flow so they stay reachable (§6E).
+        action_host = FlowContainer(h_spacing=10, v_spacing=8)
         enable_all = QPushButton("Enable All")
         disable_all = QPushButton("Disable All")
         enable_all.setStyleSheet(SETUP_ACTION_BUTTON_STYLE)
         disable_all.setStyleSheet(SETUP_ACTION_BUTTON_STYLE)
         enable_all.clicked.connect(lambda: self._set_all_family_activation(True))
         disable_all.clicked.connect(lambda: self._set_all_family_activation(False))
-        button_row.addWidget(enable_all)
-        button_row.addWidget(disable_all)
-        layout.addLayout(button_row)
+        action_host.addWidget(enable_all)
+        action_host.addWidget(disable_all)
+        modules_layout.addWidget(action_host)
+
+        layout.addWidget(modules_group)
         layout.addStretch()
         return container
 

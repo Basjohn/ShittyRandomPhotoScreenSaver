@@ -40,8 +40,7 @@ def test_slide_and_wipe_directions_are_independent(qapp, settings_manager, qtbot
     assert wipe_cfg.get('direction') == canonical_wipe_direction
 
     # Set Slide to Left to Right, keep Wipe at its default
-    tab.transition_combo.setCurrentText("Slide")
-    tab._update_specific_settings()
+    tab._on_nav_selected("Slide")
     idx = tab.direction_combo.findText("Left to Right")
     assert idx >= 0
     tab.direction_combo.setCurrentIndex(idx)
@@ -56,8 +55,7 @@ def test_slide_and_wipe_directions_are_independent(qapp, settings_manager, qtbot
     assert wipe_cfg.get('direction') == canonical_wipe_direction
 
     # Now set Wipe to Top to Bottom, ensuring Slide stays as previously chosen
-    tab.transition_combo.setCurrentText("Wipe")
-    tab._update_specific_settings()
+    tab._on_nav_selected("Wipe")
     idx = tab.direction_combo.findText("Top to Bottom")
     assert idx >= 0
     tab.direction_combo.setCurrentIndex(idx)
@@ -120,6 +118,8 @@ def test_block_flip_grid_saves_the_canonical_rows_and_cols_contract(
 ):
     tab = TransitionsTab(settings_manager)
     qtbot.addWidget(tab)
+    # Block Flip's page is lazy; selecting its pill builds it.
+    tab._on_nav_selected("Block Puzzle Flip")
     tab.grid_rows_spin.setValue(7)
     tab.grid_cols_spin.setValue(9)
     tab._save_settings()

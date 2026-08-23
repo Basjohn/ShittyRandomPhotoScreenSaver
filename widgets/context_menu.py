@@ -182,27 +182,14 @@ class ScreensaverContextMenu(QMenu):
         
         self.addSeparator()
         
-        # Transition submenu - monochrome arrows
+        # Transition submenu - monochrome arrows. Entries are (re)built from the
+        # currently ACTIVATED transitions (E2), refreshed each time the menu is
+        # shown via refresh_transition_modes().
         self._transition_menu = QMenu("⟳  Change Transition", self)
         self._transition_menu.setStyleSheet(SUBMENU_STYLE)
         self._transition_actions: dict[str, QAction] = {}
-        
-        # Add 'Random' option at the top
-        random_action = self._transition_menu.addAction("Random")
-        random_action.setCheckable(True)
-        random_action.setChecked(self._random_enabled)
-        random_action.triggered.connect(lambda checked: self._on_transition_selected("Random"))
-        self._transition_actions["Random"] = random_action
-        
-        self._transition_menu.addSeparator()
-        
-        for trans_name in self._transition_types:
-            action = self._transition_menu.addAction(trans_name)
-            action.setCheckable(True)
-            action.setChecked(trans_name == self._current_transition)
-            action.triggered.connect(lambda checked, name=trans_name: self._on_transition_selected(name))
-            self._transition_actions[trans_name] = action
-        
+        self._random_selectable = True
+        self._populate_transition_submenu()
         self.addMenu(self._transition_menu)
         
         # Visualizer submenu — populated from active mode registry (gate-aware)
@@ -264,6 +251,47 @@ class ScreensaverContextMenu(QMenu):
         exit_action = self.addAction("✕  Exit Screensaver")
         exit_action.triggered.connect(self.exit_requested.emit)
     
+    def _populate_transition_submenu(self) -> None:
+        """Rebuild the transition submenu from the current activated set."""
+        self._transition_menu.clear()
+        self._transition_actions.clear()
+
+        # 'Random' option at the top (disabled when it cannot legally run).
+        random_action = self._transition_menu.addAction("Random")
+        random_action.setCheckable(True)
+        random_action.setChecked(self._random_enabled)
+        random_action.setEnabled(self._random_selectable)
+        random_action.triggered.connect(lambda checked: self._on_transition_selected("Random"))
+        self._transition_actions["Random"] = random_action
+
+        self._transition_menu.addSeparator()
+
+        for trans_name in self._transition_types:
+            action = self._transition_menu.addAction(trans_name)
+            action.setCheckable(True)
+            action.setChecked(not self._random_enabled and trans_name == self._current_transition)
+            action.triggered.connect(lambda checked, name=trans_name: self._on_transition_selected(name))
+            self._transition_actions[trans_name] = action
+
+    def refresh_transition_modes(
+        self,
+        activated_names: List[str],
+        current_transition: str,
+        random_enabled: bool,
+        *,
+        random_selectable: bool = True,
+    ) -> None:
+        """Rebuild the transition submenu from current activation + random state.
+
+        Only ACTIVATED transitions appear; the Random entry is disabled when the
+        effective pool is empty so it cannot be selected into an invalid state.
+        """
+        self._transition_types = list(activated_names)
+        self._current_transition = current_transition
+        self._random_enabled = bool(random_enabled)
+        self._random_selectable = bool(random_selectable)
+        self._populate_transition_submenu()
+
     def _on_transition_selected(self, name: str) -> None:
         """Handle transition selection."""
         # Update checkmarks
@@ -271,8 +299,8 @@ class ScreensaverContextMenu(QMenu):
             if trans_name == "Random":
                 action.setChecked(name == "Random")
             else:
-                action.setChecked(not self._random_enabled and trans_name == name)
-        self._current_transition = name
+                action.setChecked(name != "Random" and trans_name == name)
+        self._current_transition = name if name != "Random" else self._current_transition
         self._random_enabled = (name == "Random")
         self.transition_selected.emit(name)
         logger.debug("Context menu: transition selected: %s", name)

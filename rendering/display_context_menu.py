@@ -18,6 +18,12 @@ from core.logging.logger import get_logger
 from rendering.custom_layout_manager import CustomLayoutManager
 from rendering.transition_registry import canonicalize_transition_name
 from core.settings.settings_manager import SettingsManager
+from core.settings.capability_activation import (
+    get_activated_transition_names,
+    get_effective_random_pool,
+    is_transition_activated,
+    normalize_transition_capability_state,
+)
 from core.settings.visualizer_mode_registry import coerce_visualizer_mode_id
 from widgets.context_menu import ScreensaverContextMenu
 
@@ -122,6 +128,23 @@ def show_context_menu(widget, global_pos) -> None:
             interaction_mode=interaction_mode,
             current_vis=current_vis,
         )
+        # Rebuild the transition submenu from CURRENT activation each time the
+        # menu is shown (E2 §5): only activated transitions appear, and Random is
+        # only selectable when the effective pool is non-empty.
+        try:
+            trans_cfg = widget.settings_manager.get("transitions", {}) if widget.settings_manager else {}
+            if not isinstance(trans_cfg, dict):
+                trans_cfg = {}
+            activated_names = list(get_activated_transition_names(trans_cfg))
+            random_selectable = len(get_effective_random_pool(trans_cfg)) > 0
+            widget._context_menu.refresh_transition_modes(
+                activated_names,
+                current_transition,
+                random_enabled,
+                random_selectable=random_selectable,
+            )
+        except Exception:
+            logger.debug("[CONTEXT_MENU] Failed to refresh activated transitions", exc_info=True)
         widget._context_menu.update_transition_state(current_transition, random_enabled)
         widget._context_menu.update_dimming_state(dimming_enabled)
         widget._context_menu.update_interaction_mode_state(interaction_mode)
@@ -252,26 +275,40 @@ def on_context_transition_selected(widget, name: str) -> None:
             if not isinstance(trans_cfg, dict):
                 trans_cfg = {}
             
-            # Handle 'Random' selection - sync with random_always checkbox
+            # Handle 'Random' selection - random_always is the single authority.
             if name == "Random":
                 trans_cfg["random_always"] = True
-                # Keep current type as fallback
                 logger.info("Context menu: random transitions enabled")
                 widget._transition_random_enabled = True
             else:
                 canonical_name = canonicalize_transition_name(name, fallback="Crossfade")
+                # A stale/deactivated concrete selection must fail admission and
+                # must not be persisted.
+                if not is_transition_activated(trans_cfg, canonical_name):
+                    logger.info(
+                        "Context menu: ignoring deactivated transition selection %s",
+                        canonical_name,
+                    )
+                    return
                 trans_cfg["type"] = canonical_name
                 trans_cfg["random_always"] = False
                 logger.info("Context menu: transition changed to %s", canonical_name)
                 widget._transition_random_enabled = False
                 widget._transition_fallback_type = canonical_name
 
-            # Clear cached random selections from the dict itself so the
-            # subsequent set("transitions", trans_cfg) doesn't re-introduce
-            # stale values (the old remove() calls on flat keys were
-            # immediately overwritten by the nested dict write).
+            # Clear cached random selections so the subsequent set() does not
+            # re-introduce stale values.
             trans_cfg.pop("random_choice", None)
             trans_cfg.pop("last_random_choice", None)
+
+            # Canonical normalization: never persist type="Random", zero-activated,
+            # or Random-on with an empty effective pool. random_always stays the
+            # single authority shared with Transitions SETUP.
+            normalize_transition_capability_state(trans_cfg)
+            widget._transition_random_enabled = bool(trans_cfg.get("random_always", False))
+            resolved_type = canonicalize_transition_name(trans_cfg.get("type", ""), fallback="Crossfade")
+            if resolved_type and resolved_type != "Random":
+                widget._transition_fallback_type = resolved_type
 
             widget.settings_manager.set("transitions", trans_cfg)
             widget.settings_manager.save()

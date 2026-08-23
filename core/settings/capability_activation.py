@@ -285,6 +285,22 @@ def normalize_transition_capability_state(transitions_config: Dict[str, Any]) ->
         )
         changed = True
 
+    # Invariant 2b: the concrete manual type must itself be activated. A manual
+    # transition that was deactivated resolves to a deterministic activated
+    # replacement (never left pointing at a deactivated transition).
+    canonical_manual = canonicalize_transition_name(
+        transitions_config.get(TRANSITION_MANUAL_TYPE_KEY), fallback=""
+    )
+    if (
+        canonical_manual
+        and canonical_manual != "Random"
+        and not is_transition_activated(transitions_config, canonical_manual)
+    ):
+        transitions_config[TRANSITION_MANUAL_TYPE_KEY] = (
+            get_default_activated_transition(transitions_config)
+        )
+        changed = True
+
     # Invariant 3: Random not effective with an empty effective pool.
     if bool(transitions_config.get(TRANSITION_RANDOM_MODE_KEY, False)):
         if not get_effective_random_pool(transitions_config):

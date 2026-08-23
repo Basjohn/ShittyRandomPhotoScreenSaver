@@ -1784,9 +1784,8 @@ Landed E foundation slices (additive/inert at all-on defaults; no default runtim
   Pinned by `tests/test_transition_activation_admission.py` (factory stale/hw-invalid/manual/never-run-
   deactivated-Crossfade; engine empty-pool + zero-activated repair; C-key never selects deactivated
   Crossfade) and `tests/test_capability_activation.py` (normalization / fallback / recovery units).
-  One narrow seam remains for **E2.6**: runtime still recognizes legacy `type="Random"` as a second
-  Random-mode authority alongside `random_always`; E2 normalizes it to the single `random_always`
-  authority plus a concrete manual type.
+  **E2.6 is complete** (see the E2 audit-correction notes below): `random_always` is the single live
+  Random authority; the factory and engine no longer treat legacy `type="Random"` as a live trigger.
 - **presentation-neutral capability authority (import boundary closed)** — the family catalog was
   extracted to `core/settings/widget_family_catalog.py`; `core/settings/capability_activation.py` now
   imports only that neutral catalog and the (neutral) transition registry. Importing the activation
@@ -1801,8 +1800,9 @@ Landed E foundation slices (additive/inert at all-on defaults; no default runtim
   ownership responsibility**. Inert by default. Pinned by `tests/test_widget_manager_refresh.py`.
 
 The activation foundation (neutral catalog + schema + canonical normalization + closed runtime admission
-fencing) is landed and inert-by-default. E2 supplies the operator-facing toggle and must close the one
-remaining `type="Random"` seam (E2.6) before its exit gate can be accepted.
+fencing) is landed and inert-by-default. E2 supplies the operator-facing toggle; its audit-correction
+work (lazy transition pages, mutation-boundary normalization, E2.6, context-menu activation, responsive
+layout) has landed and E2 remains at its audit gate.
 
 Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase F relies on E2):
 
@@ -1835,11 +1835,40 @@ Remaining Phase-E work (audit-required at E1 runtime-ownership and before Phase 
     tab runs the normalizer on load (persisting any repair). Pinned by `tests/test_capability_activation.py`
     and `tests/test_transitions_tab_setup.py`.
 
-  **E2 is at its audit gate.** Both Settings tabs expose the SETUP/activation contract; activation is
-  canonical/persisted; deactivated-capability runtime dormancy is enforced (widget creation gate +
-  transition admission fencing); lazy pages cannot corrupt hidden config; transition random/manual
-  selection is deterministic; no old dropdown/pool-checkbox authority remains. Checkpoint/push/audit E2
-  before Phase F.
+  **E2 audit correction (independent audit of `ae9b95b1` found substantive gaps; corrected — E2 has NOT
+  self-promoted to complete).** The following corrective work landed on top of the earlier E2 slices:
+  - **Transitions settings are now genuinely lazy.** `TransitionsTab` builds SETUP eagerly and each
+    transition's specific-settings page only when its pill is first selected; a deactivated transition
+    page is never built, deactivating a built page retires it, reactivation restores the pill without
+    rebuilding, and selecting it later rebuilds + hydrates from preserved settings. The hidden legacy
+    `transition_combo` is a passive mirror only — `_current_transition` is the authoritative
+    manual/edited selection consumed by save/nav; unbuilt transition detail is preserved (not
+    reconstructed) across unrelated saves.
+  - **Invalid capability state is normalized at the E2 mutation boundary**, not deferred to a later
+    load/runtime seam: Disable All / final deactivation reactivates Crossfade and reflects it live;
+    Random-on with an empty effective pool disables Random + persists a deterministic activated manual
+    type live; a deactivated current manual type resolves to an activated replacement.
+  - **E2.6 completed:** `random_always` is the single live Random authority. `type="Random"` is migration
+    input only (normalized once); the factory `_get_random_mode` and engine
+    `_prepare_random_transition_if_needed` no longer treat `type="Random"` as a live trigger.
+  - **Random state parity + activation-aware context menu:** the screensaver context menu rebuilds its
+    transition submenu from current activation on show (only activated transitions; Random disabled when
+    the effective pool is empty), fails admission on stale deactivated selections, normalizes before
+    persist, and shares the single `transitions.random_always` state with Transitions SETUP; it never
+    writes `type="Random"`.
+  - **Responsive layout:** a shared `ui/flow_layout.py` (`FlowContainer`/`FlowLayout`) drives wrapping
+    pill navigation, responsive module grids (Widget Modules, Transition Modules, Random Pool — ≥2
+    columns at normal width, more when wider), and wrapping Enable/Disable All rows in BOTH tabs; Widget
+    Modules now uses the styled `QGroupBox` + circle-checkbox grammar. Frames stay horizontally contained
+    with no horizontal scrollbar.
+
+  Pinned by `tests/test_transitions_tab_setup.py`, `tests/test_capability_activation.py`,
+  `tests/test_context_menu_activation.py`, `tests/test_flow_layout.py`, `tests/test_widgets_tab_setup.py`,
+  and the transition admission suite.
+
+  **E2 remains at its audit gate — do NOT self-promote to complete.** Operator-scheduled `python main.py
+  --s` eyes-on confirmation of the responsive layout at multiple widths is the remaining acceptance item.
+  Checkpoint/push/audit E2 before Phase F.
 - **E3** — shared retained Quick visual primitives.
 - **E4** — global eight-direction shadow authority (default `SE`).
 

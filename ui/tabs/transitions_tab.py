@@ -41,6 +41,9 @@ from ui.tabs.shared_styles import (
 )
 from ui.styled_popup import ColorSwatchButton, StyledColorPicker
 from ui.widgets import StyledComboBox
+from ui.flow_layout import FlowContainer
+
+_MODULE_ROW_MIN_WIDTH = 220
 
 logger = get_logger(__name__)
 
@@ -99,6 +102,9 @@ class TransitionsTab(QWidget):
         self._duration_by_type = {}
         # Per-transition application-level capability activation (E2 SETUP).
         self._activation_by_type = {}
+        # Authoritative currently-edited / manual transition selection (E2). The
+        # hidden combo only mirrors this; it is never a second authority.
+        self._current_transition = ""
         self._loading = False
         self._setup_ui()
         self._load_settings()
@@ -110,6 +116,44 @@ class TransitionsTab(QWidget):
         self._load_settings()
         logger.debug("[TRANSITIONS_TAB] Reloaded from settings")
     
+    _LABEL_WIDTH = 160
+    _VALUE_LABEL_WIDTH = 72
+
+    def _aligned_row_widget(self, parent_layout, label_text, *, wrap: bool = True):
+        row_widget, content, _ = shared_add_aligned_row_widget(
+            parent_layout, label_text, label_width=self._LABEL_WIDTH, wrap=wrap,
+        )
+        return row_widget, content
+
+    def _aligned_row(self, parent_layout, label_text, *, wrap: bool = True):
+        content, _ = shared_add_aligned_row(
+            parent_layout, label_text, label_width=self._LABEL_WIDTH, wrap=wrap,
+        )
+        return content
+
+    def _swatch_row(self, parent_layout, label_text):
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 8, 0, 8)
+        row_layout.setSpacing(12)
+        add_swatch_label(row_layout, label_text, self._LABEL_WIDTH)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(12)
+        row_layout.addLayout(content, 1)
+        parent_layout.addWidget(row_widget)
+        return content
+
+    def _add_value_label(self, row_layout, text, *, width: int | None = None):
+        label = QLabel(text)
+        label.setMinimumWidth(self._VALUE_LABEL_WIDTH if width is None else width)
+        label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        row_layout.addWidget(label)
+        return label
+
+    def _style_group_box(self, box: QGroupBox) -> None:
+        style_group_box(box)
+
     def _setup_ui(self) -> None:
         """Setup tab UI with scroll area."""
         # Create scroll area
@@ -121,64 +165,14 @@ class TransitionsTab(QWidget):
         from ui.tabs.shared_styles import SCROLL_AREA_STYLE
         scroll.setStyleSheet(SCROLL_AREA_STYLE + SLIDER_STYLE)
         
-        LABEL_WIDTH = 160
-        VALUE_LABEL_WIDTH = 72
-
-        def _aligned_row_widget(
-            parent_layout: QVBoxLayout,
-            label_text: str,
-            *,
-            wrap: bool = True,
-        ) -> tuple[QWidget, QHBoxLayout]:
-            row_widget, content, _ = shared_add_aligned_row_widget(
-                parent_layout,
-                label_text,
-                label_width=LABEL_WIDTH,
-                wrap=wrap,
-            )
-            return row_widget, content
-
-        def _aligned_row(
-            parent_layout: QVBoxLayout,
-            label_text: str,
-            *,
-            wrap: bool = True,
-        ) -> QHBoxLayout:
-            content, _ = shared_add_aligned_row(
-                parent_layout,
-                label_text,
-                label_width=LABEL_WIDTH,
-                wrap=wrap,
-            )
-            return content
-
-        def _swatch_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
-            row_widget = QWidget()
-            row_layout = QHBoxLayout(row_widget)
-            row_layout.setContentsMargins(0, 8, 0, 8)
-            row_layout.setSpacing(12)
-            add_swatch_label(row_layout, label_text, LABEL_WIDTH)
-            content = QHBoxLayout()
-            content.setContentsMargins(0, 0, 0, 0)
-            content.setSpacing(12)
-            row_layout.addLayout(content, 1)
-            parent_layout.addWidget(row_widget)
-            return content
-
-        def _add_value_label(
-            row_layout: QHBoxLayout,
-            text: str,
-            *,
-            width: int = VALUE_LABEL_WIDTH,
-        ) -> QLabel:
-            label = QLabel(text)
-            label.setMinimumWidth(width)
-            label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-            row_layout.addWidget(label)
-            return label
-
-        def _style_group_box(box: QGroupBox) -> None:
-            style_group_box(box)
+        # Layout helpers are instance methods (see below) so lazy per-transition
+        # page builders can reuse them; local aliases keep the rest of this
+        # method unchanged.
+        _aligned_row_widget = self._aligned_row_widget
+        _aligned_row = self._aligned_row
+        _swatch_row = self._swatch_row
+        _add_value_label = self._add_value_label
+        _style_group_box = self._style_group_box
 
         # Create content widget
         content = QWidget()
@@ -198,11 +192,14 @@ class TransitionsTab(QWidget):
         # logic is migrated off it.
         self.transition_combo = StyledComboBox(size_variant="hero")
         self.transition_combo.addItems(_TRANSITION_SETTING_NAMES)
-        self.transition_combo.currentTextChanged.connect(self._on_transition_changed)
+        # No signal connection: the combo is a passive selection MIRROR only.
+        # ``_current_transition`` is the authoritative selection; the pill nav
+        # drives updates so the hidden combo can never be a second authority.
         self.transition_combo.setVisible(False)
 
         # Pill/subtab navigation: SETUP first, then one pill per transition.
-        nav_row = QHBoxLayout()
+        # A responsive FlowLayout wraps pills onto extra rows instead of clipping.
+        nav_container = FlowContainer(h_spacing=8, v_spacing=8)
         self._nav_group = QButtonGroup(self)
         self._nav_group.setExclusive(True)
         self._nav_buttons = {}
@@ -214,13 +211,12 @@ class TransitionsTab(QWidget):
             self._nav_buttons[key] = button
             self._nav_group.addButton(button)
             button.clicked.connect(lambda _checked=False, k=key: self._on_nav_selected(k))
-            nav_row.addWidget(button)
+            nav_container.addWidget(button)
 
         _add_nav_pill(_SETUP_NAV_KEY, "Setup")
         for name in _TRANSITION_SETTING_NAMES:
             _add_nav_pill(name, name)
-        nav_row.addStretch()
-        layout.addLayout(nav_row)
+        layout.addWidget(nav_container)
 
         # Duration group (slider: short → long)
         duration_group = QGroupBox("Timing")
@@ -255,13 +251,347 @@ class TransitionsTab(QWidget):
         direction_row.addStretch()
         
         layout.addWidget(self.direction_group)
-        
-        # Block flip specific settings
+
+        # Host for lazily-built per-transition specific settings groups. The
+        # groups themselves are built on demand (see _ensure_transition_page),
+        # not eagerly here, so a deactivated transition is never constructed.
+        self._specific_group_host = QWidget()
+        self._specific_group_host_layout = QVBoxLayout(self._specific_group_host)
+        self._specific_group_host_layout.setContentsMargins(0, 0, 0, 0)
+        self._specific_group_host_layout.setSpacing(20)
+        layout.addWidget(self._specific_group_host)
+        self._built_transition_pages: set[str] = set()
+
+        # Shared groups toggled as a set against the SETUP page. Per-transition
+        # specific groups live inside self._specific_group_host and are shown
+        # individually by _update_specific_settings once built.
+        self._transition_setting_groups = [
+            duration_group,
+            self.direction_group,
+            self._specific_group_host,
+        ]
+
+        # SETUP page (activation + Use Random + effective random pool).
+        self._setup_page = self._build_setup_page()
+        layout.addWidget(self._setup_page)
+
+        layout.addStretch()
+
+        # Set scroll area widget and add to main layout
+        scroll.setWidget(content)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+
+        # Update visibility based on default transition
+        self._update_specific_settings()
+        # Enforce GL-only availability on initial build
+        self._refresh_hw_dependent_options()
+        # Default landing is the SETUP page (E2.3).
+        setup_button = self._nav_buttons.get(_SETUP_NAV_KEY)
+        if setup_button is not None:
+            setup_button.setChecked(True)
+        self._on_nav_selected(_SETUP_NAV_KEY)
+
+        self.setStyleSheet(
+            self.styleSheet() + SPINBOX_STYLE + COMBOBOX_STYLE + CIRCLE_CHECKBOX_STYLE
+        )
+
+    # ---- E2 capability SETUP subtab ---------------------------------------
+
+    def _build_setup_page(self) -> QWidget:
+        """Build the Transitions SETUP page: activation, Use Random, random pool."""
+        page = QWidget()
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.setSpacing(16)
+
+        # Activation module list — a responsive grid that gains columns with width.
+        activation_group = QGroupBox("Transition Modules")
+        style_group_box(activation_group)
+        activation_layout = QVBoxLayout(activation_group)
+        activation_layout.setContentsMargins(0, 12, 0, 0)
+        activation_layout.setSpacing(8)
+
+        activation_grid_host = FlowContainer(h_spacing=18, v_spacing=8)
+        self._activation_checkboxes = {}
+        for name in _TRANSITION_SETTING_NAMES:
+            row = QCheckBox(name)
+            row.setProperty("circleIndicator", True)
+            row.setMinimumWidth(_MODULE_ROW_MIN_WIDTH)
+            row.setChecked(True)
+            row.toggled.connect(
+                lambda checked, n=name: self._on_transition_activation_toggled(n, checked)
+            )
+            self._activation_checkboxes[name] = row
+            activation_grid_host.addWidget(row)
+        activation_layout.addWidget(activation_grid_host)
+
+        # Enable/Disable All in a wrapping flow so they stay reachable at any width.
+        action_host = FlowContainer(h_spacing=10, v_spacing=8)
+        enable_all = QPushButton("Enable All")
+        disable_all = QPushButton("Disable All")
+        enable_all.setStyleSheet(_SETUP_ACTION_BUTTON_STYLE)
+        disable_all.setStyleSheet(_SETUP_ACTION_BUTTON_STYLE)
+        enable_all.clicked.connect(lambda: self._set_all_transition_activation(True))
+        disable_all.clicked.connect(lambda: self._set_all_transition_activation(False))
+        action_host.addWidget(enable_all)
+        action_host.addWidget(disable_all)
+        activation_layout.addWidget(action_host)
+        page_layout.addWidget(activation_group)
+
+        # Random mode + effective pool.
+        random_group = QGroupBox("Random Transitions")
+        style_group_box(random_group)
+        random_layout = QVBoxLayout(random_group)
+        random_layout.setContentsMargins(0, 12, 0, 0)
+        random_layout.setSpacing(8)
+
+        self._use_random_checkbox = QCheckBox("Use Random Transitions")
+        self._use_random_checkbox.setProperty("circleIndicator", True)
+        self._use_random_checkbox.toggled.connect(self._on_use_random_toggled)
+        random_layout.addWidget(self._use_random_checkbox)
+
+        pool_label = QLabel("Random Pool")
+        pool_label.setStyleSheet(PAGE_TITLE_STYLE)
+        random_layout.addWidget(pool_label)
+
+        pool_grid_host = FlowContainer(h_spacing=18, v_spacing=8)
+        self._pool_checkboxes = {}
+        for name in _TRANSITION_SETTING_NAMES:
+            row = QCheckBox(name)
+            row.setProperty("circleIndicator", True)
+            row.setMinimumWidth(_MODULE_ROW_MIN_WIDTH)
+            row.toggled.connect(
+                lambda checked, n=name: self._on_pool_membership_toggled(n, checked)
+            )
+            self._pool_checkboxes[name] = row
+            pool_grid_host.addWidget(row)
+        random_layout.addWidget(pool_grid_host)
+
+        page_layout.addWidget(random_group)
+        return page
+
+    # ---- Lazy per-transition settings pages -------------------------------
+    #
+    # Each transition with its own controls is built on demand the first time
+    # its pill is selected (doc 07 E2), not eagerly at tab construction. A
+    # deactivated transition's page is never built; deactivating a built page
+    # retires it; reactivation restores the pill without rebuilding until it is
+    # selected again. Directionless transitions (Crossfade, Warp Dissolve, and
+    # the directional Slide/Wipe which use the shared Direction group) have no
+    # entry here.
+
+    _TRANSITION_PAGE_BUILDERS = {
+        "Block Puzzle Flip": "_build_flip_group",
+        "3D Block Spins": "_build_blockspin_group",
+        "Blinds": "_build_blinds_group",
+        "Diffuse": "_build_diffuse_group",
+        "Ripple": "_build_ripple_group",
+        "Crumble": "_build_crumble_group",
+        "Particle": "_build_particle_group",
+        "Burn": "_build_burn_group",
+    }
+
+    _SPECIFIC_GROUP_ATTRS = {
+        "Block Puzzle Flip": "flip_group",
+        "3D Block Spins": "blockspin_group",
+        "Blinds": "blinds_group",
+        "Diffuse": "diffuse_group",
+        "Ripple": "ripple_group",
+        "Crumble": "crumble_group",
+        "Particle": "particle_group",
+        "Burn": "burn_group",
+    }
+
+    def _ensure_transition_page(self, name: str) -> None:
+        """Lazily build one transition's specific settings group + hydrate it."""
+        builder_name = self._TRANSITION_PAGE_BUILDERS.get(name)
+        if builder_name is None:
+            return
+        # A deactivated transition page is never built/hydrated.
+        if not self._transition_activated(name):
+            return
+        group_attr = self._SPECIFIC_GROUP_ATTRS.get(name)
+        if group_attr and hasattr(self, group_attr):
+            return  # already built
+        getattr(self, builder_name)()
+        self._built_transition_pages.add(name)
+        self._hydrate_transition_page(name)
+
+    def _retire_transition_page(self, name: str) -> None:
+        """Destroy a built transition page cleanly (on deactivation)."""
+        group_attr = self._SPECIFIC_GROUP_ATTRS.get(name)
+        if not group_attr or not hasattr(self, group_attr):
+            return
+        group = getattr(self, group_attr)
+        try:
+            self._specific_group_host_layout.removeWidget(group)
+            group.setParent(None)
+            group.deleteLater()
+        except Exception as e:
+            logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
+        delattr(self, group_attr)
+        self._built_transition_pages.discard(name)
+
+    def _hydrate_transition_page(self, name: str) -> None:
+        """Hydrate a just-built transition page from the current persisted settings."""
+        cfg = self._settings.get('transitions', {}) or {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+        canonical = get_default_settings().get('transitions', {}) or {}
+        previous_loading = getattr(self, "_loading", False)
+        self._loading = True
+        try:
+            self._hydrate_built_transition_groups(cfg, canonical)
+        finally:
+            self._loading = previous_loading
+
+    def _hydrate_built_transition_groups(self, transitions_config: dict, canonical_transitions: dict) -> None:
+        """Hydrate only the transition-specific groups that are currently built.
+
+        Called at load (before any specific group exists -> no-op for specifics)
+        and again whenever a transition page is lazily built. Guarded per group so
+        an unbuilt page never touches non-existent controls. Callers set
+        ``self._loading`` so control signals do not trigger saves during hydration.
+        """
+        if hasattr(self, 'flip_group'):
+            canonical_block_flip = canonical_transitions.get('block_flip', {})
+            block_flip = transitions_config.get('block_flip', {})
+            self.grid_rows_spin.setValue(block_flip.get('rows', canonical_block_flip.get('rows', 12)))
+            self.grid_cols_spin.setValue(block_flip.get('cols', canonical_block_flip.get('cols', 24)))
+            blockflip_dir = block_flip.get('direction', 'Random') or 'Random'
+            try:
+                idx = self.blockflip_direction_combo.findText(blockflip_dir)
+                if idx < 0:
+                    idx = self.blockflip_direction_combo.findText("Random")
+                self.blockflip_direction_combo.setCurrentIndex(max(0, idx))
+            except Exception as e:
+                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
+
+        if hasattr(self, 'blockspin_group'):
+            try:
+                idx = self.blockspin_direction_combo.findText(self._dir_blockspin)
+                if idx < 0:
+                    idx = 0
+                self.blockspin_direction_combo.setCurrentIndex(max(0, idx))
+            except Exception as e:
+                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
+
+        if hasattr(self, 'diffuse_group'):
+            canonical_diffuse = canonical_transitions.get('diffuse', {})
+            diffuse = transitions_config.get('diffuse', {})
+            self.block_size_spin.setValue(diffuse.get('block_size', canonical_diffuse.get('block_size', 18)))
+            shape = diffuse.get('shape', canonical_diffuse.get('shape', 'Rectangle'))
+            index = self.diffuse_shape_combo.findText(shape)
+            if index >= 0:
+                self.diffuse_shape_combo.setCurrentIndex(index)
+
+        if hasattr(self, 'blinds_group'):
+            canonical_blinds = canonical_transitions.get('blinds', {})
+            blinds = transitions_config.get('blinds', {})
+            if not isinstance(blinds, dict):
+                blinds = {}
+            self.blinds_feather_slider.setValue(int(blinds.get('feather', canonical_blinds.get('feather', 2))))
+            self.blinds_feather_label.setText(str(self.blinds_feather_slider.value()))
+            blinds_dir = blinds.get('direction', canonical_blinds.get('direction', 'Horizontal'))
+            try:
+                idx = self.blinds_direction_combo.findText(str(blinds_dir))
+                if idx < 0:
+                    idx = 0
+                self.blinds_direction_combo.setCurrentIndex(idx)
+            except Exception as e:
+                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
+
+        if hasattr(self, 'ripple_group'):
+            canonical_ripple = canonical_transitions.get('ripple', {})
+            ripple = transitions_config.get('ripple', {})
+            self.ripple_count_spin.setValue(int(ripple.get('ripple_count', canonical_ripple.get('ripple_count', 3))))
+
+        if hasattr(self, 'crumble_group'):
+            canonical_crumble = canonical_transitions.get('crumble', {})
+            crumble = transitions_config.get('crumble', {})
+            self.crumble_piece_count_spin.setValue(crumble.get('piece_count', canonical_crumble.get('piece_count', 14)))
+            self.crumble_complexity_spin.setValue(crumble.get('crack_complexity', canonical_crumble.get('crack_complexity', 1.0)))
+            weight = crumble.get('weighting', canonical_crumble.get('weighting', 'Random Choice'))
+            try:
+                idx = self.crumble_weight_combo.findText(weight)
+                if idx < 0:
+                    idx = 0
+                self.crumble_weight_combo.setCurrentIndex(idx)
+            except Exception as e:
+                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
+
+        if hasattr(self, 'particle_group'):
+            canonical_particle = canonical_transitions.get('particle', {})
+            particle = transitions_config.get('particle', {})
+            mode = particle.get('mode', canonical_particle.get('mode', 'Converge'))
+            idx = self.particle_mode_combo.findText(mode)
+            if idx >= 0:
+                self.particle_mode_combo.setCurrentIndex(idx)
+            direction = particle.get('direction', canonical_particle.get('direction', 'Left to Right'))
+            idx = self.particle_direction_combo.findText(direction)
+            if idx >= 0:
+                self.particle_direction_combo.setCurrentIndex(idx)
+            self.particle_radius_spin.setValue(int(particle.get('particle_radius', canonical_particle.get('particle_radius', 10))))
+            self.particle_trail_check.setChecked(particle.get('trail_strength', canonical_particle.get('trail_strength', 0.6)) > 0.01)
+            self.particle_3d_check.setChecked(particle.get('use_3d_shading', canonical_particle.get('use_3d_shading', True)))
+            self.particle_texture_check.setChecked(particle.get('texture_mapping', canonical_particle.get('texture_mapping', True)))
+            self.particle_wobble_check.setChecked(particle.get('wobble', canonical_particle.get('wobble', True)))
+            self.particle_gloss_spin.setValue(int(particle.get('gloss_size', canonical_particle.get('gloss_size', 72))))
+            light_idx = particle.get('light_direction', canonical_particle.get('light_direction', 0))
+            if 0 <= light_idx < self.particle_light_combo.count():
+                self.particle_light_combo.setCurrentIndex(light_idx)
+            self.particle_swirl_turns_spin.setValue(particle.get('swirl_turns', canonical_particle.get('swirl_turns', 3.0)))
+            swirl_order_idx = particle.get('swirl_order', canonical_particle.get('swirl_order', 0))
+            if 0 <= swirl_order_idx < self.particle_swirl_order_combo.count():
+                self.particle_swirl_order_combo.setCurrentIndex(swirl_order_idx)
+            self._update_particle_mode_visibility()
+
+        if hasattr(self, 'burn_group'):
+            canonical_burn = canonical_transitions.get('burn', {})
+            burn = transitions_config.get('burn', {})
+            if not isinstance(burn, dict):
+                burn = {}
+            burn_dir = burn.get('direction', canonical_burn.get('direction', 'Left to Right')) or 'Left to Right'
+            try:
+                idx = self.burn_direction_combo.findText(burn_dir)
+                if idx < 0:
+                    idx = 0
+                self.burn_direction_combo.setCurrentIndex(idx)
+            except Exception as e:
+                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
+            jag = int(round(burn.get('jaggedness', canonical_burn.get('jaggedness', 0.5)) * 100))
+            self.burn_jaggedness_slider.setValue(max(0, min(100, jag)))
+            self.burn_jaggedness_label.setText(f"{self.burn_jaggedness_slider.value()}%")
+            glow_i = int(round(burn.get('glow_intensity', canonical_burn.get('glow_intensity', 0.7)) * 100))
+            self.burn_glow_intensity_slider.setValue(max(0, min(100, glow_i)))
+            self.burn_glow_intensity_label.setText(f"{self.burn_glow_intensity_slider.value()}%")
+            char_w = int(round(burn.get('char_width', canonical_burn.get('char_width', 0.5)) * 100))
+            self.burn_char_width_slider.setValue(max(10, min(100, char_w)))
+            self.burn_char_width_label.setText(f"{self.burn_char_width_slider.value()}%")
+            glow_col = burn.get('glow_color', canonical_burn.get('glow_color', [255, 140, 30, 255]))
+            if isinstance(glow_col, (list, tuple)) and len(glow_col) >= 3:
+                self._burn_glow_color = QColor(int(glow_col[0]), int(glow_col[1]), int(glow_col[2]),
+                                               int(glow_col[3]) if len(glow_col) > 3 else 255)
+                self._apply_burn_glow_color_btn()
+            self.burn_smoke_check.setChecked(bool(burn.get('smoke_enabled', canonical_burn.get('smoke_enabled', True))))
+            smoke_d = int(round(burn.get('smoke_density', canonical_burn.get('smoke_density', 0.5)) * 100))
+            self.burn_smoke_density_slider.setValue(max(0, min(100, smoke_d)))
+            self.burn_smoke_density_label.setText(f"{self.burn_smoke_density_slider.value()}%")
+            self.burn_ash_check.setChecked(bool(burn.get('ash_enabled', canonical_burn.get('ash_enabled', True))))
+            ash_d = int(round(burn.get('ash_density', canonical_burn.get('ash_density', 0.5)) * 100))
+            self.burn_ash_density_slider.setValue(max(0, min(100, ash_d)))
+            self.burn_ash_density_label.setText(f"{self.burn_ash_density_slider.value()}%")
+
+    def _build_flip_group(self) -> None:
+        _aligned_row = self._aligned_row
         self.flip_group = QGroupBox("Block Flip Settings")
-        _style_group_box(self.flip_group)
+        self._style_group_box(self.flip_group)
         flip_layout = QVBoxLayout(self.flip_group)
         flip_layout.setContentsMargins(0, 12, 0, 0)
-        
+
         grid_rows_row = _aligned_row(flip_layout, "Grid Rows:")
         self.grid_rows_spin = QSpinBox()
         self.grid_rows_spin.setRange(2, 25)
@@ -294,12 +624,13 @@ class TransitionsTab(QWidget):
         self.blockflip_direction_combo.currentTextChanged.connect(self._save_settings)
         flip_dir_row.addWidget(self.blockflip_direction_combo)
         flip_dir_row.addStretch()
-        
-        layout.addWidget(self.flip_group)
 
-        # 3D Block Spins specific settings (single-slab only, no grid)
+        self._specific_group_host_layout.addWidget(self.flip_group)
+
+    def _build_blockspin_group(self) -> None:
+        _aligned_row = self._aligned_row
         self.blockspin_group = QGroupBox("3D Block Spins Settings")
-        _style_group_box(self.blockspin_group)
+        self._style_group_box(self.blockspin_group)
         blockspin_layout = QVBoxLayout(self.blockspin_group)
         blockspin_layout.setContentsMargins(0, 12, 0, 0)
 
@@ -318,11 +649,12 @@ class TransitionsTab(QWidget):
         bs_row.addWidget(self.blockspin_direction_combo)
         bs_row.addStretch()
 
-        layout.addWidget(self.blockspin_group)
+        self._specific_group_host_layout.addWidget(self.blockspin_group)
 
-        # Blinds specific settings
+    def _build_blinds_group(self) -> None:
+        _aligned_row = self._aligned_row
         self.blinds_group = QGroupBox("Blinds Settings")
-        _style_group_box(self.blinds_group)
+        self._style_group_box(self.blinds_group)
         blinds_layout = QVBoxLayout(self.blinds_group)
         blinds_layout.setContentsMargins(0, 12, 0, 0)
 
@@ -340,14 +672,15 @@ class TransitionsTab(QWidget):
         self.blinds_feather_slider.setValue(2)
         self.blinds_feather_slider.valueChanged.connect(self._save_settings)
         blinds_feather_row.addWidget(self.blinds_feather_slider, 1)
-        self.blinds_feather_label = _add_value_label(blinds_feather_row, "2")
+        self.blinds_feather_label = self._add_value_label(blinds_feather_row, "2")
         blinds_feather_row.addStretch()
 
-        layout.addWidget(self.blinds_group)
-        
-        # Diffuse specific settings
+        self._specific_group_host_layout.addWidget(self.blinds_group)
+
+    def _build_diffuse_group(self) -> None:
+        _aligned_row = self._aligned_row
         self.diffuse_group = QGroupBox("Diffuse Settings")
-        _style_group_box(self.diffuse_group)
+        self._style_group_box(self.diffuse_group)
         diffuse_layout = QVBoxLayout(self.diffuse_group)
         diffuse_layout.setContentsMargins(0, 12, 0, 0)
 
@@ -372,11 +705,12 @@ class TransitionsTab(QWidget):
         shape_row.addWidget(self.diffuse_shape_combo)
         shape_row.addStretch()
 
-        layout.addWidget(self.diffuse_group)
+        self._specific_group_host_layout.addWidget(self.diffuse_group)
 
-        # Ripple specific settings
+    def _build_ripple_group(self) -> None:
+        _aligned_row = self._aligned_row
         self.ripple_group = QGroupBox("Ripple Settings")
-        _style_group_box(self.ripple_group)
+        self._style_group_box(self.ripple_group)
         ripple_layout = QVBoxLayout(self.ripple_group)
         ripple_layout.setContentsMargins(0, 12, 0, 0)
 
@@ -388,11 +722,12 @@ class TransitionsTab(QWidget):
         ripple_count_row.addWidget(self.ripple_count_spin)
         ripple_count_row.addStretch()
 
-        layout.addWidget(self.ripple_group)
+        self._specific_group_host_layout.addWidget(self.ripple_group)
 
-        # Crumble specific settings
+    def _build_crumble_group(self) -> None:
+        _aligned_row = self._aligned_row
         self.crumble_group = QGroupBox("Crumble Settings")
-        _style_group_box(self.crumble_group)
+        self._style_group_box(self.crumble_group)
         crumble_layout = QVBoxLayout(self.crumble_group)
         crumble_layout.setContentsMargins(0, 12, 0, 0)
 
@@ -425,11 +760,12 @@ class TransitionsTab(QWidget):
         crumble_weight_row.addWidget(self.crumble_weight_combo)
         crumble_weight_row.addStretch()
 
-        layout.addWidget(self.crumble_group)
+        self._specific_group_host_layout.addWidget(self.crumble_group)
 
-        # Particle transition settings
+    def _build_particle_group(self) -> None:
+        _aligned_row = self._aligned_row
         self.particle_group = QGroupBox("Particle Settings")
-        _style_group_box(self.particle_group)
+        self._style_group_box(self.particle_group)
         particle_layout = QVBoxLayout(self.particle_group)
         particle_layout.setContentsMargins(0, 12, 0, 0)
 
@@ -536,11 +872,14 @@ class TransitionsTab(QWidget):
         particle_swirl_order_row.addWidget(self.particle_swirl_order_combo)
         particle_swirl_order_row.addStretch()
 
-        layout.addWidget(self.particle_group)
+        self._specific_group_host_layout.addWidget(self.particle_group)
+        self._update_particle_mode_visibility()
 
-        # Burn specific settings
+    def _build_burn_group(self) -> None:
+        _aligned_row = self._aligned_row
+        _swatch_row = self._swatch_row
         self.burn_group = QGroupBox("Burn Settings")
-        _style_group_box(self.burn_group)
+        self._style_group_box(self.burn_group)
         burn_layout = QVBoxLayout(self.burn_group)
         burn_layout.setContentsMargins(0, 12, 0, 0)
 
@@ -566,7 +905,7 @@ class TransitionsTab(QWidget):
         self.burn_jaggedness_slider.setToolTip("Edge noise amplitude (0 = smooth wipe, 100 = very jagged)")
         self.burn_jaggedness_slider.valueChanged.connect(self._save_settings)
         burn_jag_row.addWidget(self.burn_jaggedness_slider, 1)
-        self.burn_jaggedness_label = _add_value_label(burn_jag_row, "50%")
+        self.burn_jaggedness_label = self._add_value_label(burn_jag_row, "50%")
         self.burn_jaggedness_slider.valueChanged.connect(
             lambda v: self.burn_jaggedness_label.setText(f"{v}%")
         )
@@ -578,7 +917,7 @@ class TransitionsTab(QWidget):
         self.burn_glow_intensity_slider.setToolTip("Warm glow brightness on the burning edge")
         self.burn_glow_intensity_slider.valueChanged.connect(self._save_settings)
         burn_glow_row.addWidget(self.burn_glow_intensity_slider, 1)
-        self.burn_glow_intensity_label = _add_value_label(burn_glow_row, "70%")
+        self.burn_glow_intensity_label = self._add_value_label(burn_glow_row, "70%")
         self.burn_glow_intensity_slider.valueChanged.connect(
             lambda v: self.burn_glow_intensity_label.setText(f"{v}%")
         )
@@ -590,7 +929,7 @@ class TransitionsTab(QWidget):
         self.burn_char_width_slider.setToolTip("Width of the charred/blackened zone behind the burn front")
         self.burn_char_width_slider.valueChanged.connect(self._save_settings)
         burn_char_row.addWidget(self.burn_char_width_slider, 1)
-        self.burn_char_width_label = _add_value_label(burn_char_row, "50%")
+        self.burn_char_width_label = self._add_value_label(burn_char_row, "50%")
         self.burn_char_width_slider.valueChanged.connect(
             lambda v: self.burn_char_width_label.setText(f"{v}%")
         )
@@ -622,7 +961,7 @@ class TransitionsTab(QWidget):
         self.burn_smoke_density_slider.setValue(50)
         self.burn_smoke_density_slider.valueChanged.connect(self._save_settings)
         burn_smoke_density_row.addWidget(self.burn_smoke_density_slider, 1)
-        self.burn_smoke_density_label = _add_value_label(burn_smoke_density_row, "50%")
+        self.burn_smoke_density_label = self._add_value_label(burn_smoke_density_row, "50%")
         self.burn_smoke_density_slider.valueChanged.connect(
             lambda v: self.burn_smoke_density_label.setText(f"{v}%")
         )
@@ -642,122 +981,12 @@ class TransitionsTab(QWidget):
         self.burn_ash_density_slider.setValue(50)
         self.burn_ash_density_slider.valueChanged.connect(self._save_settings)
         burn_ash_density_row.addWidget(self.burn_ash_density_slider, 1)
-        self.burn_ash_density_label = _add_value_label(burn_ash_density_row, "50%")
+        self.burn_ash_density_label = self._add_value_label(burn_ash_density_row, "50%")
         self.burn_ash_density_slider.valueChanged.connect(
             lambda v: self.burn_ash_density_label.setText(f"{v}%")
         )
 
-        layout.addWidget(self.burn_group)
-
-        # Transition-settings groups toggled as a set against the SETUP page.
-        self._transition_setting_groups = [
-            duration_group,
-            self.direction_group,
-            self.flip_group,
-            self.blockspin_group,
-            self.blinds_group,
-            self.diffuse_group,
-            self.ripple_group,
-            self.crumble_group,
-            self.particle_group,
-            self.burn_group,
-        ]
-
-        # SETUP page (activation + Use Random + effective random pool).
-        self._setup_page = self._build_setup_page()
-        layout.addWidget(self._setup_page)
-
-        layout.addStretch()
-
-        # Set scroll area widget and add to main layout
-        scroll.setWidget(content)
-
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll)
-
-        # Update visibility based on default transition
-        self._update_specific_settings()
-        # Enforce GL-only availability on initial build
-        self._refresh_hw_dependent_options()
-        # Default landing is the SETUP page (E2.3).
-        setup_button = self._nav_buttons.get(_SETUP_NAV_KEY)
-        if setup_button is not None:
-            setup_button.setChecked(True)
-        self._on_nav_selected(_SETUP_NAV_KEY)
-
-        self.setStyleSheet(
-            self.styleSheet() + SPINBOX_STYLE + COMBOBOX_STYLE + CIRCLE_CHECKBOX_STYLE
-        )
-
-    # ---- E2 capability SETUP subtab ---------------------------------------
-
-    def _build_setup_page(self) -> QWidget:
-        """Build the Transitions SETUP page: activation, Use Random, random pool."""
-        page = QWidget()
-        page_layout = QVBoxLayout(page)
-        page_layout.setContentsMargins(0, 0, 0, 0)
-        page_layout.setSpacing(16)
-
-        # Activation module list.
-        activation_group = QGroupBox("Transition Modules")
-        style_group_box(activation_group)
-        activation_layout = QVBoxLayout(activation_group)
-        activation_layout.setContentsMargins(0, 12, 0, 0)
-        activation_layout.setSpacing(8)
-
-        self._activation_checkboxes = {}
-        for name in _TRANSITION_SETTING_NAMES:
-            row = QCheckBox(name)
-            row.setProperty("circleIndicator", True)
-            row.setChecked(True)
-            row.toggled.connect(
-                lambda checked, n=name: self._on_transition_activation_toggled(n, checked)
-            )
-            self._activation_checkboxes[name] = row
-            activation_layout.addWidget(row)
-
-        action_row = QHBoxLayout()
-        action_row.addStretch()
-        enable_all = QPushButton("Enable All")
-        disable_all = QPushButton("Disable All")
-        enable_all.setStyleSheet(_SETUP_ACTION_BUTTON_STYLE)
-        disable_all.setStyleSheet(_SETUP_ACTION_BUTTON_STYLE)
-        enable_all.clicked.connect(lambda: self._set_all_transition_activation(True))
-        disable_all.clicked.connect(lambda: self._set_all_transition_activation(False))
-        action_row.addWidget(enable_all)
-        action_row.addWidget(disable_all)
-        activation_layout.addLayout(action_row)
-        page_layout.addWidget(activation_group)
-
-        # Random mode + effective pool.
-        random_group = QGroupBox("Random Transitions")
-        style_group_box(random_group)
-        random_layout = QVBoxLayout(random_group)
-        random_layout.setContentsMargins(0, 12, 0, 0)
-        random_layout.setSpacing(8)
-
-        self._use_random_checkbox = QCheckBox("Use Random Transitions")
-        self._use_random_checkbox.setProperty("circleIndicator", True)
-        self._use_random_checkbox.toggled.connect(self._on_use_random_toggled)
-        random_layout.addWidget(self._use_random_checkbox)
-
-        pool_label = QLabel("Random Pool")
-        pool_label.setStyleSheet(PAGE_TITLE_STYLE)
-        random_layout.addWidget(pool_label)
-
-        self._pool_checkboxes = {}
-        for name in _TRANSITION_SETTING_NAMES:
-            row = QCheckBox(name)
-            row.setProperty("circleIndicator", True)
-            row.toggled.connect(
-                lambda checked, n=name: self._on_pool_membership_toggled(n, checked)
-            )
-            self._pool_checkboxes[name] = row
-            random_layout.addWidget(row)
-
-        page_layout.addWidget(random_group)
-        return page
+        self._specific_group_host_layout.addWidget(self.burn_group)
 
     def _on_nav_selected(self, key: str) -> None:
         """Show either the SETUP page or one transition's settings groups."""
@@ -767,18 +996,34 @@ class TransitionsTab(QWidget):
             group.setVisible(not show_setup)
         if show_setup:
             return
-        # Selecting a transition pill drives the internal selection model, which
-        # updates the per-transition groups and (via save) the remembered manual
-        # transition. Random mode is owned separately by the Use Random checkbox.
-        if self.transition_combo.currentText() != key:
+        # ``_current_transition`` is the authoritative edited/manual selection.
+        # The hidden combo is only a passive mirror kept for legacy readers.
+        self._current_transition = key
+        self.transition_combo.blockSignals(True)
+        try:
             self.transition_combo.setCurrentText(key)
-        else:
-            self._update_specific_settings()
+        finally:
+            self.transition_combo.blockSignals(False)
+        # Lazy-build this transition's page on first entry, then reflect it.
+        self._ensure_transition_page(key)
+        self._update_specific_settings()
+        cur_duration = self._duration_by_type.get(key, self.duration_slider.value())
+        self.duration_slider.blockSignals(True)
+        try:
+            self.duration_slider.setValue(cur_duration)
+            self.duration_value_label.setText(f"{cur_duration} ms")
+        finally:
+            self.duration_slider.blockSignals(False)
+        # Selecting a transition records it as the remembered manual selection.
+        # It never changes random_always (owned by the Use Random checkbox), so
+        # browsing while Random is on leaves Random enabled.
+        if not getattr(self, "_loading", False):
+            self._save_settings()
 
     def _apply_transition_pill_visibility(self) -> None:
         """Show/hide transition pills and pool rows to match activation."""
         deactivated_current = False
-        current = self.transition_combo.currentText()
+        current = self._current_transition or self.transition_combo.currentText()
         for name, button in self._nav_buttons.items():
             if name == _SETUP_NAV_KEY:
                 continue
@@ -804,6 +1049,9 @@ class TransitionsTab(QWidget):
 
     def _on_transition_activation_toggled(self, name: str, checked: bool) -> None:
         self._activation_by_type[name] = bool(checked)
+        if not checked:
+            # Retire a built page cleanly on deactivation.
+            self._retire_transition_page(name)
         self._apply_transition_pill_visibility()
         if not getattr(self, "_loading", False):
             self._save_settings()
@@ -816,6 +1064,8 @@ class TransitionsTab(QWidget):
                 checkbox.setChecked(activated)
                 checkbox.blockSignals(False)
                 self._activation_by_type[name] = bool(activated)
+                if not activated:
+                    self._retire_transition_page(name)
                 changed = True
         self._apply_transition_pill_visibility()
         if changed and not getattr(self, "_loading", False):
@@ -987,6 +1237,8 @@ class TransitionsTab(QWidget):
             index = self.transition_combo.findText(transition_type)
             if index >= 0:
                 self.transition_combo.setCurrentIndex(index)
+            # Authoritative manual/edited selection mirrors the persisted type.
+            self._current_transition = transition_type
 
             duration = self._duration_by_type.get(transition_type, default_duration)
             self.duration_slider.setValue(duration)
@@ -1014,134 +1266,15 @@ class TransitionsTab(QWidget):
             self._dir_blockspin = blockspin_dir
             
             # Note: GPU acceleration is controlled globally in Display tab
-            
-            # Load block flip settings - use canonical defaults from defaults.py
-            canonical_block_flip = canonical_transitions.get('block_flip', {})
-            block_flip = transitions_config.get('block_flip', {})
-            self.grid_rows_spin.setValue(block_flip.get('rows', canonical_block_flip.get('rows', 12)))
-            self.grid_cols_spin.setValue(block_flip.get('cols', canonical_block_flip.get('cols', 24)))
-            blockflip_dir = block_flip.get('direction', 'Random') or 'Random'
-            try:
-                idx = self.blockflip_direction_combo.findText(blockflip_dir)
-                if idx < 0:
-                    idx = self.blockflip_direction_combo.findText("Random")
-                self.blockflip_direction_combo.setCurrentIndex(max(0, idx))
-            except Exception as e:
-                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
-            # Load 3D Block Spins settings
-            try:
-                idx = self.blockspin_direction_combo.findText(self._dir_blockspin)
-                if idx < 0:
-                    idx = 0
-                self.blockspin_direction_combo.setCurrentIndex(max(0, idx))
-            except Exception as e:
-                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
+            # Remember the loaded config so a lazily-built transition page can be
+            # hydrated later from the same persisted state.
+            self._loaded_transitions_config = transitions_config
+            self._loaded_canonical_transitions = canonical_transitions
 
-            # Load diffuse settings - use canonical defaults from defaults.py
-            canonical_diffuse = canonical_transitions.get('diffuse', {})
-            diffuse = transitions_config.get('diffuse', {})
-            self.block_size_spin.setValue(diffuse.get('block_size', canonical_diffuse.get('block_size', 18)))
-            shape = diffuse.get('shape', canonical_diffuse.get('shape', 'Rectangle'))
-            index = self.diffuse_shape_combo.findText(shape)
-            if index >= 0:
-                self.diffuse_shape_combo.setCurrentIndex(index)
-
-            # Load blinds settings - use canonical defaults from defaults.py
-            canonical_blinds = canonical_transitions.get('blinds', {})
-            blinds = transitions_config.get('blinds', {})
-            if not isinstance(blinds, dict):
-                blinds = {}
-            self.blinds_feather_slider.setValue(int(blinds.get('feather', canonical_blinds.get('feather', 2))))
-            self.blinds_feather_label.setText(str(self.blinds_feather_slider.value()))
-            blinds_dir = blinds.get('direction', canonical_blinds.get('direction', 'Horizontal'))
-            try:
-                idx = self.blinds_direction_combo.findText(str(blinds_dir))
-                if idx < 0:
-                    idx = 0
-                self.blinds_direction_combo.setCurrentIndex(idx)
-            except Exception as e:
-                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-
-            # Load ripple settings
-            canonical_ripple = canonical_transitions.get('ripple', {})
-            ripple = transitions_config.get('ripple', {})
-            self.ripple_count_spin.setValue(int(ripple.get('ripple_count', canonical_ripple.get('ripple_count', 3))))
-
-            # Load crumble settings - use canonical defaults from defaults.py
-            canonical_crumble = canonical_transitions.get('crumble', {})
-            crumble = transitions_config.get('crumble', {})
-            self.crumble_piece_count_spin.setValue(crumble.get('piece_count', canonical_crumble.get('piece_count', 14)))
-            self.crumble_complexity_spin.setValue(crumble.get('crack_complexity', canonical_crumble.get('crack_complexity', 1.0)))
-            weight = crumble.get('weighting', canonical_crumble.get('weighting', 'Random Choice'))
-            try:
-                idx = self.crumble_weight_combo.findText(weight)
-                if idx < 0:
-                    idx = 0
-                self.crumble_weight_combo.setCurrentIndex(idx)
-            except Exception as e:
-                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-
-            # Load particle settings - use canonical defaults from defaults.py
-            canonical_particle = canonical_transitions.get('particle', {})
-            particle = transitions_config.get('particle', {})
-            mode = particle.get('mode', canonical_particle.get('mode', 'Converge'))
-            idx = self.particle_mode_combo.findText(mode)
-            if idx >= 0:
-                self.particle_mode_combo.setCurrentIndex(idx)
-            direction = particle.get('direction', canonical_particle.get('direction', 'Left to Right'))
-            idx = self.particle_direction_combo.findText(direction)
-            if idx >= 0:
-                self.particle_direction_combo.setCurrentIndex(idx)
-            self.particle_radius_spin.setValue(int(particle.get('particle_radius', canonical_particle.get('particle_radius', 10))))
-            self.particle_trail_check.setChecked(particle.get('trail_strength', canonical_particle.get('trail_strength', 0.6)) > 0.01)
-            self.particle_3d_check.setChecked(particle.get('use_3d_shading', canonical_particle.get('use_3d_shading', True)))
-            self.particle_texture_check.setChecked(particle.get('texture_mapping', canonical_particle.get('texture_mapping', True)))
-            self.particle_wobble_check.setChecked(particle.get('wobble', canonical_particle.get('wobble', True)))
-            self.particle_gloss_spin.setValue(int(particle.get('gloss_size', canonical_particle.get('gloss_size', 72))))
-            light_idx = particle.get('light_direction', canonical_particle.get('light_direction', 0))
-            if 0 <= light_idx < self.particle_light_combo.count():
-                self.particle_light_combo.setCurrentIndex(light_idx)
-            self.particle_swirl_turns_spin.setValue(particle.get('swirl_turns', canonical_particle.get('swirl_turns', 3.0)))
-            swirl_order_idx = particle.get('swirl_order', canonical_particle.get('swirl_order', 0))
-            if 0 <= swirl_order_idx < self.particle_swirl_order_combo.count():
-                self.particle_swirl_order_combo.setCurrentIndex(swirl_order_idx)
-
-            # Load burn settings
-            canonical_burn = canonical_transitions.get('burn', {})
-            burn = transitions_config.get('burn', {})
-            if not isinstance(burn, dict):
-                burn = {}
-            burn_dir = burn.get('direction', canonical_burn.get('direction', 'Left to Right')) or 'Left to Right'
-            try:
-                idx = self.burn_direction_combo.findText(burn_dir)
-                if idx < 0:
-                    idx = 0
-                self.burn_direction_combo.setCurrentIndex(idx)
-            except Exception as e:
-                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-            jag = int(round(burn.get('jaggedness', canonical_burn.get('jaggedness', 0.5)) * 100))
-            self.burn_jaggedness_slider.setValue(max(0, min(100, jag)))
-            self.burn_jaggedness_label.setText(f"{self.burn_jaggedness_slider.value()}%")
-            glow_i = int(round(burn.get('glow_intensity', canonical_burn.get('glow_intensity', 0.7)) * 100))
-            self.burn_glow_intensity_slider.setValue(max(0, min(100, glow_i)))
-            self.burn_glow_intensity_label.setText(f"{self.burn_glow_intensity_slider.value()}%")
-            char_w = int(round(burn.get('char_width', canonical_burn.get('char_width', 0.5)) * 100))
-            self.burn_char_width_slider.setValue(max(10, min(100, char_w)))
-            self.burn_char_width_label.setText(f"{self.burn_char_width_slider.value()}%")
-            glow_col = burn.get('glow_color', canonical_burn.get('glow_color', [255, 140, 30, 255]))
-            if isinstance(glow_col, (list, tuple)) and len(glow_col) >= 3:
-                self._burn_glow_color = QColor(int(glow_col[0]), int(glow_col[1]), int(glow_col[2]),
-                                               int(glow_col[3]) if len(glow_col) > 3 else 255)
-                self._apply_burn_glow_color_btn()
-            self.burn_smoke_check.setChecked(bool(burn.get('smoke_enabled', canonical_burn.get('smoke_enabled', True))))
-            smoke_d = int(round(burn.get('smoke_density', canonical_burn.get('smoke_density', 0.5)) * 100))
-            self.burn_smoke_density_slider.setValue(max(0, min(100, smoke_d)))
-            self.burn_smoke_density_label.setText(f"{self.burn_smoke_density_slider.value()}%")
-            self.burn_ash_check.setChecked(bool(burn.get('ash_enabled', canonical_burn.get('ash_enabled', True))))
-            ash_d = int(round(burn.get('ash_density', canonical_burn.get('ash_density', 0.5)) * 100))
-            self.burn_ash_density_slider.setValue(max(0, min(100, ash_d)))
-            self.burn_ash_density_label.setText(f"{self.burn_ash_density_slider.value()}%")
+            # Hydrate only the transition-specific groups that are already built
+            # (none at first load; the current pill's page is built afterward).
+            self._hydrate_built_transition_groups(transitions_config, canonical_transitions)
 
             # Now that in-memory per-type directions are loaded, update the direction combo
             self._update_specific_settings()
@@ -1175,8 +1308,12 @@ class TransitionsTab(QWidget):
         self._save_settings()
     
     def _update_specific_settings(self) -> None:
-        """Update visibility of transition-specific settings."""
-        transition = self.transition_combo.currentText()
+        """Update visibility of transition-specific settings.
+
+        Uses the authoritative ``_current_transition`` (not the hidden mirror
+        combo) and only touches specific groups that have been lazily built.
+        """
+        transition = self._current_transition or self.transition_combo.currentText()
 
         # Show/hide direction for directional transitions (Slide/Wipe only)
         show_direction = transition in ["Slide", "Wipe"]
@@ -1221,31 +1358,14 @@ class TransitionsTab(QWidget):
             finally:
                 self.direction_combo.blockSignals(False)
 
-        # Show/hide block flip settings
-        self.flip_group.setVisible(transition == "Block Puzzle Flip")
-        
-        # Show/hide diffuse settings
-        self.diffuse_group.setVisible(transition == "Diffuse")
-
-        # Show/hide ripple settings
-        self.ripple_group.setVisible(transition == "Ripple")
-
-        # Show/hide 3D Block Spins settings
-        self.blockspin_group.setVisible(transition == "3D Block Spins")
-
-        # Show/hide Blinds settings
-        self.blinds_group.setVisible(transition == "Blinds")
-        
-        # Show/hide Crumble settings
-        self.crumble_group.setVisible(transition == "Crumble")
-        
-        # Show/hide Particle settings
-        self.particle_group.setVisible(transition == "Particle")
-        if transition == "Particle":
+        # Show only the built specific group matching the current transition.
+        # Unbuilt groups (lazy) simply have nothing to show.
+        for group_transition, group_attr in self._SPECIFIC_GROUP_ATTRS.items():
+            group = getattr(self, group_attr, None)
+            if group is not None:
+                group.setVisible(transition == group_transition)
+        if transition == "Particle" and hasattr(self, "particle_group"):
             self._update_particle_mode_visibility()
-
-        # Show/hide Burn settings
-        self.burn_group.setVisible(transition == "Burn")
 
     def _on_particle_mode_changed(self, index: int) -> None:
         """Handle particle mode change - show/hide direction vs swirl settings."""
@@ -1294,30 +1414,37 @@ class TransitionsTab(QWidget):
         pass
     
     def _save_settings(self) -> None:
-        """Save current settings."""
-        cur_type = self.transition_combo.currentText()
+        """Persist transition settings, normalizing capability state first.
+
+        Lazy-safe: unbuilt transition pages keep their existing persisted detail
+        subdicts (never reconstructed from controls that were never built). Every
+        mutation passes through ``normalize_transition_capability_state`` before
+        persistence, and any repair is reflected back into the live UI (§2).
+        """
+        if getattr(self, "_loading", False):
+            return
+
+        existing = self._settings.get('transitions', {})
+        existing = existing if isinstance(existing, dict) else {}
+
+        def _existing_subdict(key: str) -> dict:
+            value = existing.get(key, {})
+            return dict(value) if isinstance(value, dict) else {}
+
+        cur_type = self._current_transition or canonicalize_transition_name(
+            existing.get('type', 'Ripple'), fallback='Ripple'
+        )
         cur_dir = self.direction_combo.currentText()
-        # Update in-memory per-type direction
         if cur_type == "Slide":
             self._dir_slide = cur_dir
         elif cur_type == "Wipe":
             self._dir_wipe = cur_dir
-
-        # 3D Block Spins use their own controls; always capture the latest
-        # choices from that group.
-        try:
+        if hasattr(self, 'blockspin_direction_combo'):
             self._dir_blockspin = self.blockspin_direction_combo.currentText() or "Left to Right"
-        except Exception as e:
-            logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
         cur_duration = self.duration_slider.value()
-        try:
-            self._duration_by_type[cur_type] = cur_duration
-        except Exception as e:
-            logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
+        self._duration_by_type[cur_type] = cur_duration
 
-        # Application-level activation + random-mode state are owned by the SETUP
-        # page checkboxes (E2.3). Pool membership is owned by the SETUP pool list.
         for name, checkbox in getattr(self, "_activation_checkboxes", {}).items():
             self._activation_by_type[name] = bool(checkbox.isChecked())
         try:
@@ -1326,37 +1453,46 @@ class TransitionsTab(QWidget):
             logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
             use_random = False
 
-        # Update blinds feather label
-        try:
-            self.blinds_feather_label.setText(str(self.blinds_feather_slider.value()))
-        except Exception:
-            pass
-
-        config = {
-            'type': cur_type,
-            'duration_ms': cur_duration,
-            'block_flip': {
+        # Build the section fresh (dropping retired/stale keys), preserving only
+        # the transient random-choice bookkeeping and any UNBUILT transition's
+        # detail subdict from the existing persisted state.
+        if hasattr(self, 'flip_group'):
+            block_flip = {
                 'rows': self.grid_rows_spin.value(),
                 'cols': self.grid_cols_spin.value(),
                 'direction': self.blockflip_direction_combo.currentText(),
-            },
-            'blinds': {
+            }
+        else:
+            block_flip = _existing_subdict('block_flip')
+        if hasattr(self, 'blinds_group'):
+            self.blinds_feather_label.setText(str(self.blinds_feather_slider.value()))
+            blinds = {
                 'feather': self.blinds_feather_slider.value(),
                 'direction': self.blinds_direction_combo.currentText(),
-            },
-            'diffuse': {
+            }
+        else:
+            blinds = _existing_subdict('blinds')
+        if hasattr(self, 'diffuse_group'):
+            diffuse = {
                 'block_size': self.block_size_spin.value(),
-                'shape': self.diffuse_shape_combo.currentText()
-            },
-            'ripple': {
-                'ripple_count': self.ripple_count_spin.value(),
-            },
-            'crumble': {
+                'shape': self.diffuse_shape_combo.currentText(),
+            }
+        else:
+            diffuse = _existing_subdict('diffuse')
+        if hasattr(self, 'ripple_group'):
+            ripple = {'ripple_count': self.ripple_count_spin.value()}
+        else:
+            ripple = _existing_subdict('ripple')
+        if hasattr(self, 'crumble_group'):
+            crumble = {
                 'piece_count': self.crumble_piece_count_spin.value(),
                 'crack_complexity': self.crumble_complexity_spin.value(),
                 'weighting': self.crumble_weight_combo.currentText(),
-            },
-            'particle': {
+            }
+        else:
+            crumble = _existing_subdict('crumble')
+        if hasattr(self, 'particle_group'):
+            particle = {
                 'mode': self.particle_mode_combo.currentText(),
                 'direction': self.particle_direction_combo.currentText(),
                 'particle_radius': float(self.particle_radius_spin.value()),
@@ -1371,8 +1507,11 @@ class TransitionsTab(QWidget):
                 'gloss_size': float(self.particle_gloss_spin.value()),
                 'light_direction': self.particle_light_combo.currentIndex(),
                 'swirl_order': self.particle_swirl_order_combo.currentIndex(),
-            },
-            'burn': {
+            }
+        else:
+            particle = _existing_subdict('particle')
+        if hasattr(self, 'burn_group'):
+            burn = {
                 'direction': self.burn_direction_combo.currentText(),
                 'jaggedness': self.burn_jaggedness_slider.value() / 100.0,
                 'glow_intensity': self.burn_glow_intensity_slider.value() / 100.0,
@@ -1387,45 +1526,77 @@ class TransitionsTab(QWidget):
                 'smoke_density': self.burn_smoke_density_slider.value() / 100.0,
                 'ash_enabled': self.burn_ash_check.isChecked(),
                 'ash_density': self.burn_ash_density_slider.value() / 100.0,
-            },
+            }
+        else:
+            burn = _existing_subdict('burn')
+
+        config = {
+            'type': cur_type,
+            'duration_ms': cur_duration,
             'durations': dict(self._duration_by_type),
             'pool': dict(self._pool_by_type),
-            # E2 capability-activation authority + single random-mode authority.
             'activation': dict(self._activation_by_type),
             'random_always': use_random,
-            # New nested per-transition direction settings
-            'slide': {
-                'direction': self._dir_slide,
-            },
-            'wipe': {
-                'direction': self._dir_wipe,
-            },
-            'blockspin': {
-                'direction': self._dir_blockspin,
-            },
+            'slide': {'direction': self._dir_slide},
+            'wipe': {'direction': self._dir_wipe},
+            'blockspin': {'direction': self._dir_blockspin},
+            'block_flip': block_flip,
+            'blinds': blinds,
+            'diffuse': diffuse,
+            'ripple': ripple,
+            'crumble': crumble,
+            'particle': particle,
+            'burn': burn,
         }
+        # Preserve engine-managed transient random-choice bookkeeping.
+        for transient_key in ('random_choice', 'last_random_choice'):
+            if transient_key in existing:
+                config[transient_key] = existing[transient_key]
 
-        # Preserve engine-managed transient random-choice bookkeeping across a
-        # wholesale section rewrite (the engine re-derives it each rotation).
-        existing = self._settings.get('transitions', {})
-        if isinstance(existing, dict):
-            for transient_key in ('random_choice', 'last_random_choice'):
-                if transient_key in existing:
-                    config[transient_key] = existing[transient_key]
+        # Canonical normalization at the mutation boundary (§2): repair
+        # zero-activated / empty-effective-pool / deactivated-manual / legacy
+        # type="Random" before persistence, then reflect the repair live.
+        normalize_transition_capability_state(config)
 
         self._settings.set('transitions', config)
-
         self._settings.save()
         self.transitions_changed.emit()
-        
+
+        self._reflect_capability_state(config)
         logger.debug(f"Saved transition settings: {config['type']}")
+
+    def _reflect_capability_state(self, config: dict) -> None:
+        """Reflect a (possibly normalized) capability state back into the UI."""
+        activation = config.get('activation', {})
+        if isinstance(activation, dict):
+            for name, checkbox in getattr(self, "_activation_checkboxes", {}).items():
+                desired = bool(activation.get(name, True))
+                if checkbox.isChecked() != desired:
+                    checkbox.blockSignals(True)
+                    checkbox.setChecked(desired)
+                    checkbox.blockSignals(False)
+                self._activation_by_type[name] = desired
+        use_random = bool(config.get('random_always', False))
+        cb = getattr(self, "_use_random_checkbox", None)
+        if cb is not None and cb.isChecked() != use_random:
+            cb.blockSignals(True)
+            cb.setChecked(use_random)
+            cb.blockSignals(False)
+        # Keep the mirror + authoritative manual selection aligned with any
+        # normalized concrete type.
+        new_type = canonicalize_transition_name(config.get('type', ''), fallback='')
+        if new_type and new_type != "Random":
+            self._current_transition = new_type
+            if self.transition_combo.currentText() != new_type:
+                self.transition_combo.blockSignals(True)
+                self.transition_combo.setCurrentText(new_type)
+                self.transition_combo.blockSignals(False)
+        self._apply_transition_pill_visibility()
 
     def _on_duration_changed(self, value: int) -> None:
         """Update label and persist duration to settings."""
         self.duration_value_label.setText(f"{value} ms")
-        try:
-            cur_type = self.transition_combo.currentText()
+        cur_type = self._current_transition or self.transition_combo.currentText()
+        if cur_type:
             self._duration_by_type[cur_type] = value
-        except Exception as e:
-            logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
         self._save_settings()

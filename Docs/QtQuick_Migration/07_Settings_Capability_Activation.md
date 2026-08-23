@@ -97,11 +97,14 @@ silently substitute another effect:
 
 This recovery is a state repair, not permission to execute a deactivated Crossfade.
 
-**Current source debt at `829446c8`: final transition admission is not yet fully closed.** The factory
-still accepts an already-populated `transitions.random_choice` without re-checking activation/hardware,
-and the engine/factory still contain literal Crossfade last-resorts on empty post-hardware/factory
-candidate sets. Those paths must be corrected/tested before E2 exit so a stale/deactivated choice can
-never instantiate merely because it was prepared earlier or because a candidate list became empty.
+**Final transition admission is now closed (E2 audit correction).** The factory revalidates an
+already-resolved `transitions.random_choice` against activation + hardware at admission
+(`TransitionFactory._is_admissible_random_choice`) and re-resolves if stale; `_pick_random_transition`
+fails closed (no blanket `'Crossfade'` return); and the engine, factory, and C-key empty-candidate paths
+never run a *deactivated* Crossfade — they pick a deterministic activated hw-available transition or
+perform the explicit persisted recovery repair (`ensure_recovery_transition_activated`). `random_always`
+is the single live Random authority: the factory `_get_random_mode` and engine
+`_prepare_random_transition_if_needed` no longer treat `type="Random"` as a live trigger (E2.6).
 
 These mechanisms are inert while all activation defaults are on.
 
@@ -348,9 +351,10 @@ activated candidate, do not silently execute a deactivated Crossfade or broaden 
 Random pool. Fail closed or perform an explicit canonical state repair whose result is then admitted
 normally.
 
-At `829446c8`, the final factory/engine admission paths still have the stale-choice/Crossfade-last-resort
-debt described in §2.3. E2 must not be considered complete until those exact paths are fenced and
-regressed.
+The final factory/engine/C-key admission paths described in §2.3 are now fenced and regressed (E2 audit
+correction). This normalization also runs at the E2 SETUP mutation boundary and in the context-menu
+selection handler, so an invalid capability state is repaired and reflected live rather than persisted
+and deferred.
 
 ## 6. Settings implementation shape
 
@@ -396,6 +400,38 @@ reason requires otherwise.
 Shared UI helpers may construct repeated controls such as duration rows, direction selectors, sliders,
 swatches and labels without making them runtime renderer authority.
 
+Transition-specific pages are built lazily: each page is constructed only when its pill is first
+selected, a deactivated transition's page is never built, deactivation retires a built page, and
+reactivation rebuilds + hydrates from preserved settings on next selection. The authoritative
+edited/manual selection is a plain state value, not the hidden legacy dropdown (which survives, if at
+all, only as a non-authoritative mirror until Phase I).
+
+## 7A. E2 presentation rules (durable, not a pixel-spec)
+
+Widgets SETUP and Transitions SETUP are sibling visual/interaction surfaces and share one grammar:
+
+- **Responsive pill navigation.** The top pill row wraps onto additional rows via the shared
+  `ui/flow_layout.py` (`FlowContainer`/`FlowLayout`) instead of clipping; canonical pill order is
+  preserved; pills never become horizontally unreachable; labels are not crushed to avoid wrapping.
+  Use consistent `SETUP` labelling across both tabs.
+- **Responsive module grids.** Activation lists (Widget Modules, Transition Modules) and the Transitions
+  Random Pool are responsive grids that fit at least two modules per row at ordinary Settings widths and
+  gain columns when width allows, collapsing toward one column only when genuinely too narrow. Column
+  count derives from available width / item min width / spacing, not a hardcoded breakpoint.
+- **Reachable action rows.** Enable All / Disable All reflow (wrap) so both stay visible/reachable while
+  the frame's right border remains visible; horizontal scrolling is never the workaround.
+- **Horizontal containment.** No page/frame/nav layout may force the scroll content wider than its
+  viewport; the styled frame's right border stays visible at every supported width; layout recomputes on
+  resize while Settings is open.
+- **Shared styling.** Module frames use the canonical styled `QGroupBox` (`style_group_box`) and
+  circle-checkbox language (`circleIndicator` + `CIRCLE_CHECKBOX_STYLE`); do not invent per-surface
+  checkbox styles. Mature Widget subsections keep their existing internal design and only gain outer
+  containment; specialized builders (e.g. the Visualizer) keep their internal UI but must fit inside the
+  same responsive shell.
+
+`random_always` is the single Random authority shared by Transitions SETUP, the runtime, and the
+screensaver context menu. Legacy `type="Random"` is migration input only; no UI writes it.
+
 ## 8. Defaults / H0
 
 Activation state is canonical settings/default state. Do not derive default activation from whether a
@@ -438,10 +474,10 @@ Preserve proof for:
   exists;
 - runtime factory widget creation filters deactivated family before per-instance enabled handling.
 
-The normalization implementation itself is now landed, but `tests/test_capability_activation.py` at
-`829446c8` does **not yet directly pin** the all-false Crossfade state repair or the Random-empty-pool
-normalization. Add those direct regressions before E2 exit rather than treating implementation presence
-as sufficient evidence.
+The normalization invariants are now directly pinned: `tests/test_capability_activation.py` covers the
+all-false Crossfade state repair, the legacy `type="Random"` migration, the deactivated-manual-type
+replacement, and the Random-empty-pool normalization; `tests/test_transitions_tab_setup.py` and
+`tests/test_context_menu_activation.py` prove these repairs are reflected live in both operator surfaces.
 
 ### 10.2 E1 ownership tests
 
