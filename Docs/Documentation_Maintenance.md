@@ -1,6 +1,6 @@
 # Documentation Maintenance
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 Rules for keeping SRPSS documentation useful to coding agents during and after architecture changes.
 
@@ -13,6 +13,8 @@ Rules for keeping SRPSS documentation useful to coding agents during and after a
 | `Docs/Compositor_Architecture.md` | accepted runtime presentation design |
 | `Docs/Guardrails.md` + focused guardrails | durable stop rules |
 | `Index.md`, `Docs/Contracts.md` | routing/current owner map |
+| `Docs/TestSuite.md` | canonical live test inventory + migration retirement/status ledger + testing strategy |
+| `Docs/Harness_Index.md` | recurring test/runtime harness routing; not the complete test inventory |
 | current evidence reports | measurements/checkpoint evidence |
 | phase reports/Historical_Bugs | historical evidence |
 | `Future_Cleanup.md` | deferred debt/deletion ledger |
@@ -170,7 +172,44 @@ Do not leave completed hardening worded as a TODO that a future agent may repeat
 
 Runnable commands may remain because they still have regression/acceptance value.
 
-## 9. Deleting completed planning docs
+## 9. Test inventory maintenance
+
+`Docs/TestSuite.md` is the canonical **live inventory and architectural status ledger for tests**.
+`Docs/Harness_Index.md` may point to useful recurring commands, but it must not become a competing or
+partial manifest treated as exhaustive.
+
+Update `Docs/TestSuite.md` in the same checkpoint/documentation sweep whenever a change:
+
+- adds a test module;
+- deletes a test module;
+- renames or rehomes a test module;
+- changes which runtime/presenter/owner the test asserts;
+- turns a current test into migration-only or destination coverage;
+- makes a test obsolete;
+- replaces an old-owner assertion with a destination-owner assertion;
+- discovers that an existing test is stale, vacuous, permanently skipped, a zero-test tombstone or
+  otherwise no longer meaningful authority.
+
+The ledger status describes **test authority**, not whether that file happened to pass in the latest
+run. Do not rewrite `KEEP` into “green” merely because one execution passed, and do not mark a useful
+test obsolete merely because it is temporarily red.
+
+Do not classify by filename age or phase prefix. A historical phase-named test may protect a permanent
+contract; a newly named test may still encode an owner scheduled for deletion.
+
+Before deleting a migration-sensitive test, establish one of:
+
+1. its protected contract is intentionally retired; or
+2. equivalent/current coverage has been rehomed to the destination owner.
+
+Do not preserve deleted-test placeholders or empty tombstone modules merely to remember history. If the
+history matters, capture it in the inventory/retirement note or historical evidence.
+
+When the complete `tests/` inventory is deliberately re-audited, refresh the reviewed source basis and
+module count recorded in `Docs/TestSuite.md`. Incremental test changes do not require pretending that
+all unrelated tests were re-audited; update the affected ledger row(s) truthfully.
+
+## 10. Deleting completed planning docs
 
 When a research/spike/planning document's decision has been fully absorbed into canonical architecture
 and the document no longer provides useful landed rationale, delete it rather than maintaining a
@@ -181,7 +220,7 @@ Do not delete the evidence supporting the decision.
 A technical decomposition that remains the best focused authoring/integration reference may survive its
 phase, but must be reclassified as landed/reference rather than active sequencing.
 
-## 10. Closure
+## 11. Closure
 
 Before calling a migration epoch complete:
 
@@ -194,4 +233,5 @@ Before calling a migration epoch complete:
 - `Future_Work.md` remains explicitly non-active;
 - evidence remains evidence-scoped;
 - defaults/settings docs match canonical persisted schema;
+- `Docs/TestSuite.md` matches the current test inventory/status for affected migration areas;
 - test/harness docs distinguish landed regression gates from unfinished work.

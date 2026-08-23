@@ -7,8 +7,8 @@ Last updated: 2026-08-23
 Independent review basis:
 
 ```text
-b787c57a4df9220385a33c81832999120bd45151
-Phase E2 context-menu fail-closed correction — independently audited GREEN
+5b3cbaef4d443c79941e5ac780252f82a4e77bc4
+Phase E2.7 Visualizer CUSTOM failover/reclaim lifecycle — independently audited GREEN; implementation closed
 ```
 
 Always inspect exact current `main` before acting. Repository state outranks this file if a later
@@ -390,272 +390,56 @@ Remaining operator eyes-on confirmation of responsive Settings layout / Visualiz
 deferred acceptance and does **not** block the next Phase-E implementation slice under the phase
 promotion rule.
 
-### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — AUDIT-CORRECTED (3), RE-AUDIT REQUIRED
+### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — IMPLEMENTATION CLOSED
 
-**Third audit-correction checkpoint (independent audit of `01a22e69` found one blocker; corrected — NOT
-self-promoted):**
+Independent audit of exact pushed checkpoint
+`5b3cbaef4d443c79941e5ac780252f82a4e77bc4` is **GREEN**. E2.7 implementation is closed and E1 is
+the active next Phase-E slice.
 
-- **Capability deactivation retires the GLOBAL failover lifecycle, not merely blocks creation.** New
-  canonical boundary reaction `retire_visualizer_failover_on_capability_change`, invoked from
-  `WidgetManager._handle_settings_changed` whenever `widgets` / `widgets.family_activation` changes: when
-  Media OFF or Visualizers OFF makes the capability ineffective, a pending grace has its record + global
-  generation invalidated (so stale delayed callbacks stay fenced), and a live temporary fallback owner is
-  retired — its record discarded only when retirement is CONFIRMED (a failed retirement retains the
-  live-owner record for retry). A later explicit reactivation with the target still absent therefore arms
-  a genuinely fresh generation and a full new 30 s grace. Covers both Visualizers-off and Media-off.
+Verified final invariants include:
 
-New regressions in `tests/test_visualizer_failover_reclaim.py`: pending grace → capability off →
-record/generation retired → stale callback no-op → reactivation → fresh grace/generation (Visualizers-off
-and Media-off); active fallback → capability off → owner retired + state retired; failed retirement on
-deactivation retains the live-owner record; no-op when capability still effective.
+- the persisted CUSTOM monitor remains canonical; temporary fallback ownership is runtime-only and does
+  not persist fallback monitor/position/size/viewport geometry;
+- an unavailable configured target, whether runtime-known/non-participating or absent, receives the same
+  **30-second one-shot grace** before any temporary fallback is created;
+- grace authority is global for the single Visualizer: one outage owns one coordinator generation,
+  repeated reconcile from another display cannot restart/extend it, and every delayed callback validates
+  that global generation before acting;
+- a configured target returning during grace is handled by event/topology reconciliation immediately;
+  reclaim/return invalidates the old generation so stale callbacks are no-ops;
+- if the target remains unavailable at the deadline, at most one temporary fallback may be created on a
+  participating display; no participating fallback fails closed;
+- reclaim re-reads current Settings, follows a changed current CUSTOM target, and retires the temporary
+  owner before creating/reusing the configured owner; unconfirmed retirement fails closed and retains
+  recoverable failover state;
+- a successful reclaim followed by a later target loss is a genuinely new outage with a fresh generation
+  and a fresh full 30-second grace;
+- Media/Visualizers capability admission is re-read at delayed, reclaim, final-create and live capability
+  change boundaries; effective capability deactivation retires pending global grace state and invalidates
+  its generation, while a live temporary owner is only forgotten after confirmed retirement;
+- later explicit reactivation with the configured target still unavailable can therefore arm a genuinely
+  fresh 30-second grace rather than inheriting stale failover state;
+- stale Media/runtime objects and copied settings maps do not grant permission to create/reclaim a
+  Visualizer; and
+- the pushed regression coverage exercises absent-target grace, event-before-deadline return, stale
+  generation fencing across multiple display origins, current-target changes, deadline fallback,
+  retire-before-create failure paths, capability-off retirement/reactivation and no-persistence behavior.
 
-Also brought the pre-existing `tests/test_widget_manager_refresh.py` remote-reconcile lifecycle tests
-onto the corrected E2/E2.7 contract (they had gone stale across the E2 capability gate and the E2.7
-grace/generation changes): the capability final-create boundary now requires a resolvable
-`SettingsManager`; an absent target gets the grace then falls back at the deadline; the grace constant is
-`REMOTE_CUSTOM_VISUALIZER_FALLBACK_GRACE_MS`; the delayed callback carries/validates the failover
-generation and re-resolves current CUSTOM routing from live Settings. Each test still asserts its
-original intended behavior (participating-target immediate create + saved-layout reapply, foreign-rect
-rejection/repair, defer-then-recover, deadline fallback) through the current API — no assertions weakened.
+The independent audit inspected the pushed source and regression intent. The coding agent reported its
+local focused E2/E2.7 sweep green; that Windows test execution was not independently rerun by the reviewer.
 
-### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — AUDIT-CORRECTED (2), RE-AUDIT REQUIRED
+Physical dual-display sleep/wake/late-return behavior remains **deferred hardware acceptance**. That does
+not block Phase-E promotion under the phase-promotion rule.
+`Docs/Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md` therefore remains
+**PARTIAL / AWAITING VALIDATION** until the corresponding physical evidence is gathered; do not mark it
+SOLVED from deterministic tests alone.
 
-**Second audit-correction checkpoint (independent audit of `e83d54ce` found two blockers; both
-corrected — NOT self-promoted):**
+Detailed E2.7 implementation/correction chronology is historical evidence, not active execution guidance.
+Do not reopen E2.7 without contradictory runtime/source evidence.
 
-1. **Grace authority is now GLOBAL per the single Visualizer, not per WidgetManager.** The coordinator
-   owns one failover generation authority: `arm_visualizer_grace` allocates a generation only when no
-   failover is active, so repeated reconcile from other DisplayWidgets during one outage cannot start or
-   reset a second grace. Every delayed grace callback validates the coordinator generation
-   (`is_visualizer_failover_generation_current`) — not merely its local manager token — so a straggler
-   from another display cannot act after reclaim or a new outage. Reclaim/target return clears the record
-   and invalidates the whole generation; a target disappearing again is a genuinely new outage with a
-   fresh full 30 s grace (strictly-greater generation).
-2. **Retirement failure is never discarded.** The reclaim "no longer CUSTOM" and "configured display
-   already owns" branches now retain the failover record (and leave the stray owner recorded) when
-   `_retire_visualizer_owner` does not confirm success, instead of clearing it. Ownership is never
-   declared normalized while an old Visualizer may still be alive; a later event retries.
+## E1 — presentation-neutral runtime/model/provider ownership — ACTIVE
 
-New regressions in `tests/test_visualizer_failover_reclaim.py`: only one grace is armed across multiple
-origins; an old-generation callback from another display is fenced even when its local token matches; the
-current-generation callback still acts; a new outage after reclaim gets a fresh generation; and both
-retirement-failure reclaim branches retain the record.
-
-### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — AUDIT-CORRECTED, RE-AUDIT REQUIRED
-
-**Audit-correction checkpoint (independent audit of `9058a5cb` found four gaps; all corrected — NOT
-self-promoted to closed):**
-
-1. **Absent target now gets the grace.** `_reconcile_remote_custom_visualizer` schedules the 30 s
-   one-shot grace for a configured CUSTOM monitor that is not participating whether it is
-   runtime-known-but-not-participating OR completely absent from runtime — no more immediate fallback for
-   the human-turns-the-monitor-on case. A truly-absent physical display *appearing* is still handled by
-   the existing `QGuiApplication.screenAdded → DisplayManager → ScreensaverEngine` full topology rebuild
-   (no second display-creation path was introduced).
-2. **Pending grace is visible to reconciliation.** The coordinator now records the failover state when
-   the grace is armed (pending, no owner yet), not only after a fallback is created. A configured target
-   returning before the deadline (`WM_DISPLAYCHANGE → reclaim_remote_custom_visualizer_owner`) is
-   restored immediately and the still-pending delayed callback is fenced (origin reconcile token bumped).
-3. **Current Settings always win.** The delayed recheck and reclaim both re-resolve the CURRENT canonical
-   CUSTOM monitor/config from live `SettingsManager` (not the index/config captured when the grace was
-   armed), so changing the configured monitor during grace/fallback supersedes the old target; a change
-   away from CUSTOM clears the failover.
-4. **Retire-before-create is now a hard guarantee.** `_retire_visualizer_owner` honors
-   `WidgetManager.cleanup_widget`'s explicit success/failure and does not unbind (orphan) a widget whose
-   cleanup failed; it returns confirmation. Reclaim creates the configured owner only when retirement is
-   confirmed, else it fails closed and defers to the next event.
-
-Strengthened regression bar (`tests/test_visualizer_failover_reclaim.py`) now exercises the real
-absent-target grace, the event-before-deadline restore + stale-callback fence, configured-monitor
-changes during grace and during fallback, the actual event/deadline race, and retirement failure.
-
-### E2.7 Visualizer CUSTOM display failover/reclaim lifecycle — IMPLEMENTED, AUDIT REQUIRED
-
-This is a bounded current-product lifecycle/topology correction discovered while auditing E2. It is
-separate from the narrow E2 context-menu correction and must not be folded into that checkpoint.
-
-Historical context: `Docs/Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md` preserves
-the June fix for partial startup display registration and immediate sleep/wake duplicate-owner
-fallbacks and is now correctly marked **PARTIAL / reopened**. The existing 1500 ms delayed fallback is
-not a human-scale monitor-wake grace, and current source has no independently proven event-driven
-hand-back from a temporary fallback to the configured CUSTOM display after that display returns.
-
-**Implementation landed (awaiting independent audit; NOT self-promoted to closed):**
-
-- **30 s one-shot grace.** `REMOTE_CUSTOM_VISUALIZER_FALLBACK_GRACE_MS = 30000` replaces the 1500 ms
-  recheck; a runtime-known-but-not-participating configured target defers via one token-fenced
-  `ThreadManager.single_shot` deadline — no recurring poll.
-- **Temporary fallback is runtime-only.** `MultiMonitorCoordinator` holds a runtime-only fallback record
-  (configured/intended screen index + weakref host); it is never persisted and is cleared on runtime
-  teardown. `_create_remote_custom_visualizer_on_target` records it when the host is not the configured
-  monitor and clears it when the configured monitor owns the visualizer. The configured monitor
-  selection and saved CUSTOM geometry are never rewritten by failover.
-- **Event-driven reclaim.** `reclaim_remote_custom_visualizer_owner()` is invoked from the centralized
-  `WM_DISPLAYCHANGE` re-anchor path (`rendering/display_native_events.py`) after all displays re-anchor.
-  When the configured display participates again — seconds, minutes, or hours later — it retires the
-  temporary owner (`_retire_visualizer_owner`, which also bumps the host reconcile token) and recreates
-  the visualizer on the configured display with its saved CUSTOM geometry, as one transaction. No timer.
-- **Exactly one owner / fencing.** Retire-before-create plus the existing "already owns a visualizer"
-  creation guard and per-manager token bump keep at most one live owner and fence stale delayed
-  callbacks; repeated return events are idempotent (record cleared after reclaim).
-- **Capability current.** Both the delayed fallback and reclaim re-read live Media+Visualizers
-  capability via `_visualizer_capability_admitted_now` and fail closed; a stale Media object grants no
-  permission. No second Media→Visualizers dependency authority is introduced.
-
-Regression bar `tests/test_visualizer_failover_reclaim.py` covers every E2.7.7 item. After independent
-audit of this checkpoint is GREEN, E2.7 is closed and E1 (the broader `WidgetRuntimeManager` ownership
-split) is the next slice.
-
-#### E2.7.1 Canonical owner vs temporary runtime fallback
-
-The **current persisted CUSTOM monitor selection remains the canonical/intended owner**.
-
-A fallback display is only a temporary runtime host. It must never become configuration authority.
-
-If the user configured the Visualizer for Display 1 and Display 1 is unavailable:
-
-```text
-persisted intended owner = Display 1
-runtime temporary owner  = Display 0, if fallback is eventually needed
-```
-
-The fallback must **not**:
-
-- overwrite/persist the configured monitor selection;
-- rewrite the saved Display-1 CUSTOM position/size/viewport geometry;
-- make fallback-relative/clamped geometry the new canonical geometry;
-- save a fallback display id because it happened to be available;
-- become the target used on the next startup merely because it hosted the temporary instance.
-
-Any positioning adjustment needed to make a fallback visible on another display is transient runtime
-state only. When the configured display returns, discard fallback-specific placement and restore the
-configured display using its saved authoritative CUSTOM geometry.
-
-If the operator changes the configured monitor in Settings while failover is active, the **new current
-persisted selection** becomes the intended owner; failover state must not preserve an obsolete target.
-
-#### E2.7.2 Human-scale 30-second grace
-
-Replace the current 1500 ms fallback grace with **30 seconds**.
-
-The grace exists to tolerate:
-
-- a real monitor waking and renegotiating HDMI/DisplayPort;
-- staggered Windows/Qt display participation;
-- a human physically turning on the remaining configured display(s).
-
-Do not immediately move the Visualizer merely because another display becomes ready first.
-
-The 30-second grace applies when the configured target is temporarily unavailable, including the
-meaningful current cases of:
-
-- runtime-known but non-participating target;
-- configured target absent/unavailable during startup or wake.
-
-If the configured target becomes usable inside the grace, invalidate the pending fallback and keep/use
-the configured target.
-
-#### E2.7.3 One-shot deadline, never timer-owned lifecycle
-
-The 30-second grace may use one token/generation-fenced single-shot deadline.
-
-Do **not** add:
-
-- recurring monitor polling;
-- a periodic ownership timer;
-- presentation/update timing tied to this lifecycle;
-- repeated "wait another N seconds" loops.
-
-After a temporary fallback has been created, it may remain there indefinitely **only until an actual
-display/topology event says the configured target has returned**. No timer is needed to discover that
-return.
-
-#### E2.7.4 Event-driven reclaim — even minutes or hours later
-
-Reclaim is not limited to the 30-second window.
-
-Example:
-
-```text
-Visualizer configured for Display 1
-Display 1 stays unavailable > 30 s
-        ↓
-temporary fallback appears on Display 0
-        ↓
-1 minute / 1 hour later Display 1 returns
-        ↓
-existing display/topology event
-        ↓
-reconcile ownership immediately
-        ↓
-temporary Display-0 owner retired/fenced
-        ↓
-Visualizer resumes/creates on Display 1
-        ↓
-Display-1 saved CUSTOM geometry restored
-```
-
-Use the existing display/topology event machinery rather than another timer. Inspect current
-`WM_DISPLAYCHANGE`, Qt screen lifecycle/screenChanged handling, DisplayManager/coordinator topology
-ownership and choose one centralized reconciliation seam. `WM_DISPLAYCHANGE` is known evidence that
-display return is eventful, but do not hard-code it as the sole mechanism if the existing topology
-owner already has a cleaner canonical event boundary.
-
-Repeated display events must be idempotent.
-
-#### E2.7.5 Exactly-one-owner transaction and race fencing
-
-At every point there must be at most one live Visualizer owner.
-
-Required behavior:
-
-- configured target returns before 30 s -> pending fallback invalidated; no fallback created;
-- configured target remains unavailable through 30 s -> exactly one temporary fallback may be created
-  on a participating display;
-- configured target returns after fallback creation -> retire/fence fallback and hand back to the
-  configured target as one reconciliation transaction;
-- return event racing the 30-second callback -> exactly one owner;
-- stale callback after reclaim -> cannot recreate fallback;
-- target disappears again after successful reclaim -> a fresh grace may be armed with a new token;
-- no participating fallback display -> fail closed; do not invent one.
-
-The implementation must use generation/token fencing strong enough that stale delayed work cannot
-resurrect a retired fallback owner.
-
-#### E2.7.6 Capability admission remains current
-
-Every delayed fallback and every reclaim operation must re-read **current** canonical capability state.
-
-If Media or Visualizers is deactivated:
-
-- a pending fallback creates nothing;
-- a topology-return event does not recreate/reclaim a Visualizer;
-- stale Media QWidget/runtime objects and copied settings maps grant no permission.
-
-Do not introduce a second Media→Visualizers dependency authority.
-
-#### E2.7.7 Required regression bar
-
-At minimum prove:
-
-- target returns inside 30 s -> zero fallback creation;
-- target unavailable through deadline -> exactly one temporary fallback;
-- target returns after temporary fallback -> fallback retired, configured target sole owner;
-- configured target's persisted monitor and saved CUSTOM geometry are unchanged by failover;
-- fallback-specific/clamped runtime geometry is never persisted as target geometry;
-- repeated return events are idempotent;
-- return-event/deadline race leaves exactly one owner;
-- capability deactivated during grace -> no fallback;
-- capability deactivated before/while reclaiming -> no stale creation;
-- target disappears again after reclaim -> fresh grace/token, no stale-token reuse;
-- no participating fallback target -> fail closed.
-
-This slice is lifecycle/topology ownership and therefore requires a pushed checkpoint followed by
-independent audit before continuing.
-
-## E1 — presentation-neutral runtime/model/provider ownership
-
-After E2/E2.7 closure, complete the broader `WidgetRuntimeManager` ownership split.
+E2 and E2.7 are implementation-closed. Complete the broader `WidgetRuntimeManager` ownership split.
 
 Required destination:
 
@@ -701,9 +485,7 @@ Do not reintroduce QWidget `QGraphicsDropShadowEffect`.
 Unless stronger current evidence forces a smaller corrective detour:
 
 ```text
-E2.7 Visualizer CUSTOM failover/reclaim lifecycle
--> independent audit
--> E1 runtime/model/provider ownership
+E1 runtime/model/provider ownership  <- ACTIVE
 -> independent audit
 -> E3 retained primitives
 -> E4 shadow authority
