@@ -164,8 +164,15 @@ The Phase-E destination owner is presentation-neutral and owns:
 
 It does **not** own QWidget instances or runtime pixels.
 
-This broader owner is not considered landed merely because the family catalog and creation-admission
-gate exist. E1 closes this owner split.
+E1 slice 1 has **established** this owner (`rendering/widget_runtime_manager.py`) by extracting the
+capability-**admission** authority (dependency-aware, the single shared-consumer accounting query),
+the capability-**deactivation** reaction dispatch (currently driving the E2.7 Visualizer failover
+retirement), and presentation-neutral runtime **lifecycle routing** out of the `WidgetManager`
+god-object; `_create_factory_widgets` admits through it and `WidgetManager` delegates. That slice is
+pushed and awaiting independent audit. The owner is **not** considered fully closed yet: no
+provider/model lifetime has been migrated off the member QWidgets, and live mid-runtime deactivation
+retirement / fresh-process import dormancy remain later bounded E1 slices. See `Current_Plan.md` for
+the slice ledger.
 
 ### 6.2 Per-display Quick widget presentation host
 

@@ -442,9 +442,10 @@ SOLVED from deterministic tests alone.
 Detailed E2.7 implementation/correction chronology is historical evidence, not active execution guidance.
 Do not reopen E2.7 without contradictory runtime/source evidence.
 
-## E1 — presentation-neutral runtime/model/provider ownership — ACTIVE
+## E1 — presentation-neutral runtime/model/provider ownership — ACTIVE (slice 1 pushed, RE-AUDIT REQUIRED)
 
-E2 and E2.7 are implementation-closed. Complete the broader `WidgetRuntimeManager` ownership split.
+E2 and E2.7 are implementation-closed. Complete the broader `WidgetRuntimeManager` ownership split
+across bounded, individually-audited slices (do not batch every provider into one commit).
 
 Required destination:
 
@@ -457,7 +458,35 @@ Required destination:
 - ordinary instance-disabled state remains distinct from family deactivation;
 - no giant Python `QuickBaseOverlayWidget` replacement god object.
 
-This is broader than the creation-admission gate already landed and requires an audit checkpoint.
+### E1 slice 1 — establish the owner by extraction (PUSHED, awaiting independent audit)
+
+`rendering/widget_runtime_manager.py` now hosts the presentation-neutral `WidgetRuntimeManager`,
+established by extracting responsibility **out of** the `WidgetManager` god-object (net −110 lines in
+`widget_manager.py`; owner is 252 lines; no provider migrated this slice). It owns:
+
+- capability **admission** authority — `family_for_widget`, `is_family_activated`,
+  `is_family_effective` (the single dependency-aware / shared-consumer accounting query) and
+  `admits_widget_family`; `_create_factory_widgets` now admits through it;
+- capability-**deactivation** reaction dispatch (`handle_capability_change`) — the extensible seam that
+  currently drives the E2.7 canonical Visualizer failover retirement; `WidgetManager` delegates here and
+  its `_retire_visualizer_failover_if_capability_off` method is removed;
+- presentation-neutral runtime **lifecycle routing** (initialize/activate/deactivate/cleanup + `_all`
+  variants + state queries) over the host registry; `WidgetManager` keeps thin delegating wrappers so
+  its public API and the E2.7 confirmed-retirement `cleanup_widget` bool are preserved.
+
+It imports no QWidget/Quick/provider/renderer code and creates/owns no QWidget instances. Regression:
+`tests/test_widget_runtime_manager.py`.
+
+### E1 remaining slices (not started)
+
+- live mid-runtime family-deactivation **retirement** of exclusive provider/model/process/poll/timer
+  ownership at the owner boundary, with shared-infra survival and the reactivation counterpart;
+- migrate provider/model lifetime ownership off the member QWidgets into the neutral owner (per family,
+  bounded);
+- fresh-process import dormancy (catalogued-but-deactivated resolves no heavy implementation);
+- hoist owner construction above `WidgetManager` where appropriate.
+
+Each remaining slice is an audit checkpoint.
 
 ## E3 — shared retained Quick primitives
 
@@ -864,17 +893,17 @@ architecture.
 Physical dual-display sleep/wake/late-return acceptance for R-26 remains deferred hardware evidence;
 it does not reopen E2.7 implementation or block the next Phase-E slice.
 
-The active next checkpoint is:
+**E1 slice 1 (establish `WidgetRuntimeManager` by extraction) is PUSHED and awaiting independent
+audit** — see the E1 section above. The active checkpoint is that re-audit:
 
 ```text
-E1 presentation-neutral runtime/model/provider ownership
--> focused ownership/dormancy/lifecycle regressions
--> diff/status
--> commit + push
--> independent audit
+audit E1 slice 1 pushed source/diff (widget_runtime_manager.py + WidgetManager delegation)
+-> confirm net reduction, preserved E2.7 cleanup_widget bool, no provider migrated, owner neutral
+-> correction if required
+-> then next bounded E1 slice (live deactivation retirement) as its own audit checkpoint
 ```
 
-After E1 audit:
+After E1 completes across its bounded slices:
 
 ```text
 E3 retained Quick primitives

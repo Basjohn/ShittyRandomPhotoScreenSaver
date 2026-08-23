@@ -21,11 +21,9 @@ from rendering.multi_monitor_coordinator import get_coordinator
 from rendering.widget_descriptors import (
     get_effective_monitor_value_for_widget,
     get_factory_widget_descriptors,
-    get_family_id_for_widget,
     is_custom_position_selected_for_widget,
 )
 from core.settings.capability_activation import (
-    is_widget_family_activated,
     is_widget_family_effective,
 )
 from rendering.spotify_display_participation import describe_visualizer_spawn_display
@@ -447,12 +445,14 @@ def _create_factory_widgets(
         # Application-level capability gate: a deactivated widget family owns no
         # runtime widget/model/provider. Distinct from the per-instance 'enabled'
         # checkbox below; inert while every family is activated by default.
-        family_id = get_family_id_for_widget(descriptor.settings_key)
-        if family_id is not None and not is_widget_family_activated(widgets_config, family_id):
+        # Admission authority is owned by WidgetRuntimeManager (Phase E1); the
+        # family id is resolved through it for the diagnostic below.
+        runtime_owner = mgr._runtime_manager
+        if not runtime_owner.admits_widget_family(descriptor.settings_key, widgets_config):
             logger.debug(
                 "[WIDGET_MANAGER] Descriptor %s skipped by deactivated family=%s",
                 descriptor.settings_key,
-                family_id,
+                runtime_owner.family_for_widget(descriptor.settings_key),
             )
             continue
 
