@@ -50,10 +50,12 @@ Phase E decomposes ownership; Phase F ports family pixels.
 ## 3. Landed presentation-neutral family catalog
 
 Phase E has already landed a cheap canonical family catalog in
-`rendering/widget_descriptors.py`.
+`core/settings/widget_family_catalog.py`.
 
-`WIDGET_FAMILY_DESCRIPTORS` is the single family-membership authority mapping stable `family_id` to
-member runtime widget ids. Current accessors include:
+`widget_family_catalog.py` is the single, presentation-neutral family-membership authority mapping
+stable `family_id` to member runtime widget ids (and family-level dependency metadata such as
+`visualizers requires media`). `rendering/widget_descriptors.py` re-exports/consumes it for runtime use
+but is **not** the membership source. Current accessors include:
 
 ```text
 get_widget_family_descriptors()

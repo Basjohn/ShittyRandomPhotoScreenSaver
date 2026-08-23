@@ -140,6 +140,14 @@ class SettingsManager(QObject):
         # Initialize defaults
         self._set_defaults()
 
+        # Repair invalid persisted widget-family capability dependencies (e.g.
+        # media=False must force visualizers=False) durably, after defaults are
+        # merged so a missing dependent key is resolved before normalization.
+        try:
+            self._normalize_persisted_widget_capability_state()
+        except Exception:
+            logger.debug("Widget capability dependency normalization failed", exc_info=True)
+
         try:
             self._run_persisted_visualizer_schema_migrations()
         except Exception:
@@ -397,6 +405,41 @@ class SettingsManager(QObject):
         self._settings.update_metadata(
             **{self._VISUALIZER_SCHEMA_METADATA_KEY: self._VISUALIZER_SCHEMA_VERSION}
         )
+
+    def _normalize_persisted_widget_capability_state(self) -> None:
+        """Durably repair invalid persisted widget-family capability deps at load.
+
+        A persisted/migrated state that violates a family dependency — most
+        importantly ``media=False`` with ``visualizers`` still activated (or its
+        activation key missing, which resolves to activated) — must not remain
+        latent, or a later Media reactivation would silently re-enable
+        Visualizers. This runs the ONE canonical dependency authority
+        (``capability_activation.normalize_widget_capability_state``) over the
+        current widgets root after defaults have been merged, and persists any
+        repair through the low-level store (no ``settings_changed`` emission, so
+        no signal/save recursion even if a Settings dialog is later open). It
+        never introduces a second dependency rule and never auto-activates a
+        dependency (Media is never turned back on to satisfy Visualizers).
+        """
+        import copy as _copy
+        from core.settings.capability_activation import (
+            normalize_widget_capability_state,
+        )
+
+        with self._lock:
+            widgets = self._settings.value('widgets', {})
+            if not isinstance(widgets, Mapping):
+                return
+            widgets_copy = _copy.deepcopy(dict(widgets))
+            if not normalize_widget_capability_state(widgets_copy):
+                return
+            self._store_widgets_root_locked(widgets_copy)
+            self._settings.sync()
+            self._clear_cache_locked()
+            logger.info(
+                "Repaired persisted widget capability dependency state "
+                "(e.g. media=False forces visualizers=False)"
+            )
 
     def _run_persisted_visualizer_schema_migrations(self) -> None:
         """Normalize persisted visualizer settings only when schema advances."""

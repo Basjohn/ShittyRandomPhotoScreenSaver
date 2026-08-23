@@ -340,13 +340,39 @@ class TransitionFactory:
             logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             return False
 
+    def _is_in_saved_pool(self, name: str, settings: dict) -> bool:
+        """Return whether ``name`` is a member of the saved Random pool.
+
+        Mirrors the pool-membership semantics used when picking a fresh random
+        transition (a missing key defaults to in-pool; ``Ripple`` honours the
+        legacy ``Rain Drops`` key), so final admission of a pre-resolved choice
+        applies the exact same pool definition the selection used.
+        """
+        pool_cfg = settings.get('pool', {})
+        if not isinstance(pool_cfg, dict):
+            pool_cfg = {}
+        if name == 'Ripple':
+            raw = pool_cfg.get('Ripple', pool_cfg.get('Rain Drops', True))
+        else:
+            raw = pool_cfg.get(name, True)
+        return bool(SettingsManager.to_bool(raw, True))
+
     def _is_admissible_random_choice(self, name: str, settings: dict) -> bool:
         """Return whether an already-resolved random choice may still be run.
 
         A pre-resolved ``transitions.random_choice`` must fail closed at this
-        seam if it became deactivated or hardware-invalid after it was prepared.
+        final admission seam if, after it was prepared, it became deactivated,
+        hardware-invalid, OR was removed from the saved Random pool. Verifying
+        ALL current admission dimensions here — including saved-pool membership —
+        closes the race where a pooled choice is resolved, the pool then changes
+        to exclude it, yet it stays activated + hw-runnable: without the pool
+        check that stale out-of-pool transition would still instantiate, breaking
+        the no-random-pool-escape contract. The engine having previously selected
+        from the pool is NOT trusted here.
         """
         if not is_transition_activated(settings, name):
+            return False
+        if not self._is_in_saved_pool(name, settings):
             return False
         return is_transition_available_for_hw(name, self._resolve_hw_accel())
 
@@ -366,23 +392,10 @@ class TransitionFactory:
         except Exception as e:
             logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             hw = False
-        pool_cfg = (
-            settings.get('pool', {})
-            if isinstance(settings.get('pool', {}), dict)
-            else {}
-        )
-
-        def _in_pool(name: str) -> bool:
-            if name == 'Ripple':
-                raw = pool_cfg.get('Ripple', pool_cfg.get('Rain Drops', True))
-            else:
-                raw = pool_cfg.get(name, True)
-            return bool(SettingsManager.to_bool(raw, True))
-
         available = [
             n for n in all_types
             if is_transition_available_for_hw(n, hw)
-            and _in_pool(n)
+            and self._is_in_saved_pool(n, settings)
             and is_transition_activated(settings, n)
         ]
         if not available:

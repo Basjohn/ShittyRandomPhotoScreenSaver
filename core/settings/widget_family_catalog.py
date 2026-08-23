@@ -193,8 +193,9 @@ def _get_widget_family_descriptor_map(
 def get_family_id_for_widget(widget_id: str) -> str | None:
     """Return the stable family id that owns a runtime widget id, if any.
 
-    The visualizer and any other widget not assigned to a capability family
-    return ``None``.
+    ``spotify_visualizer`` is owned by the ``visualizers`` family (which requires
+    the ``media`` family). Any widget not assigned to a capability family returns
+    ``None``.
     """
 
     if not isinstance(widget_id, str) or not widget_id:

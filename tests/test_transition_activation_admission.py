@@ -101,6 +101,69 @@ def test_factory_rejects_hardware_invalid_stale_random_choice(monkeypatch):
     assert is_transition_available_for_hw(chosen, False)
 
 
+def test_factory_rejects_stale_out_of_pool_random_choice(monkeypatch):
+    # Correction (E2 §10 final admission): a random choice (Burn) was prepared
+    # while Burn was pooled. The saved pool then changed to EXCLUDE Burn, but
+    # Burn stays activated AND hardware-runnable. Final admission must revalidate
+    # saved-pool membership and reject the stale out-of-pool Burn, re-resolving
+    # through the current pool. This exercises the pre-resolved random_choice
+    # branch (_is_admissible_random_choice), not _pick_random_transition alone.
+    names = get_transition_setting_names()
+    transitions = {
+        "random_always": True,
+        # Only Crossfade remains in the saved pool; Burn is explicitly excluded.
+        "pool": {name: (name == "Crossfade") for name in names},
+        # Burn is still activated (and hardware-runnable with hw on below), so
+        # only the pool check can reject it.
+        "activation": {name: (name in ("Burn", "Crossfade")) for name in names},
+        "random_choice": "Burn",
+    }
+    chosen, settings = _factory_selected_type(monkeypatch, transitions, hw=True)
+    # Distinguishes "stale Burn rejected, current in-pool candidate chosen" from
+    # "Burn silently accepted anyway".
+    assert chosen == "Crossfade"
+    assert chosen != "Burn"
+
+
+def test_factory_fails_closed_when_stale_choice_out_of_pool_and_no_candidate(monkeypatch):
+    # No-current-pooled-candidate case that still reaches the pre-resolved
+    # random_choice final-admission branch. The stale choice (Slide) is hw-safe
+    # and activated but was removed from the saved pool; the only explicitly
+    # pooled+activated transition (Burn) keeps the effective pool non-empty so
+    # normalization does NOT convert Random to manual first, yet Burn is hw-
+    # required and hardware is off. So: stale Slide is rejected by the POOL check
+    # (not hardware), re-resolution finds no current pooled hw-runnable candidate,
+    # and the factory FAILS CLOSED. Under the old activation+hardware-only
+    # admission, hw-safe Slide would have been instantiated instead.
+    from rendering.transition_factory import TransitionFactory
+
+    names = get_transition_setting_names()
+    calls: list[str] = []
+
+    def _fake_create_by_type(self, ttype, settings, duration_ms, easing):
+        calls.append(ttype)
+        return SimpleNamespace(set_resource_manager=lambda rm: None)
+
+    monkeypatch.setattr(TransitionFactory, "_create_by_type", _fake_create_by_type)
+
+    pool = {name: False for name in names}
+    pool["Burn"] = True  # keeps get_effective_random_pool non-empty (hw-ignored)
+    transitions = {
+        "random_always": True,
+        "pool": pool,
+        "activation": {name: (name in ("Slide", "Burn")) for name in names},
+        "random_choice": "Slide",  # activated + hw-safe, but out of pool
+    }
+    settings = _StubFactorySettings(transitions, hw=False)
+    factory = TransitionFactory(settings)
+
+    result = factory.create_transition()
+
+    assert result is None
+    assert "Slide" not in calls  # stale out-of-pool choice never instantiated
+    assert calls == []
+
+
 def test_factory_manual_selection_of_deactivated_transition_falls_back(monkeypatch):
     transitions = {
         "random_always": False,

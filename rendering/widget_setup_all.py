@@ -42,6 +42,33 @@ SPOTIFY_CUSTOM_LAYOUT_STABILIZE_VERIFY_MS = 250
 SPOTIFY_CUSTOM_LAYOUT_STABILIZE_CONFIRM_MS = 750
 
 
+def _visualizer_capability_admitted_now(settings_manager) -> bool:
+    """Return whether the visualizers capability is CURRENTLY admitted.
+
+    Reads the live canonical ``widgets`` config through the settings authority
+    (not a copy captured when a delayed callback was scheduled) and requires the
+    ``visualizers`` family to be effective — i.e. activated AND its ``media``
+    dependency activated. FAILS CLOSED: if the settings manager is missing or the
+    current capability state cannot be read for any reason, returns False so a
+    stale/delayed callback never creates or reuses a Visualizer after Media or
+    Visualizers was deactivated (a stale Media QWidget cannot re-open the gate).
+    """
+    if settings_manager is None:
+        return False
+    try:
+        current_widgets = settings_manager.get('widgets', {})
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] capability recheck failed closed (settings read)", exc_info=True)
+        return False
+    if not isinstance(current_widgets, dict):
+        return False
+    try:
+        return bool(is_widget_family_effective(current_widgets, "visualizers"))
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] capability recheck failed closed (evaluation)", exc_info=True)
+        return False
+
+
 def _passive_ref(value):
     try:
         return weakref.ref(value)
@@ -620,6 +647,17 @@ def _create_remote_custom_visualizer_on_target(
     target_manager = getattr(target, "_widget_manager", None)
     if target_manager is None:
         return
+    # Final capability admission (E2 §2): this is the single creation/reuse
+    # boundary shared by the immediate reconcile and the delayed fallback
+    # recheck. Re-read CURRENT canonical capability state here so a stale/delayed
+    # callback (scheduled while the capability was active) can never create a
+    # Visualizer after Media or Visualizers was deactivated. Fails closed.
+    if not _visualizer_capability_admitted_now(getattr(target_manager, "_settings_manager", None)):
+        logger.debug(
+            "[SPOTIFY_VIS] remote CUSTOM create skipped: visualizer capability "
+            "no longer admitted at final creation boundary"
+        )
+        return
     vis = target_manager.create_spotify_visualizer_widget(
         widgets_config,
         shadows_config,
@@ -711,6 +749,16 @@ def _run_remote_custom_visualizer_fallback_recheck(
         return
     current_display = getattr(mgr, "_parent", None)
     if current_display is None or bool(getattr(current_display, "_exiting", False)):
+        return
+    # This delayed callback captured a copy of widgets_config when it was
+    # scheduled; that copy can be stale. Re-read CURRENT canonical capability
+    # state before doing any resolution/creation work so a Media/Visualizers
+    # deactivation that happened during the delay is honoured. Fails closed.
+    if not _visualizer_capability_admitted_now(getattr(mgr, "_settings_manager", None)):
+        logger.debug(
+            "[SPOTIFY_VIS][FALLBACK] delayed recheck skipped: visualizer "
+            "capability no longer admitted"
+        )
         return
     resolution = describe_visualizer_spawn_display(
         target_screen_index,
