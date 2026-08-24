@@ -264,7 +264,7 @@ def test_ensure_widget_service_builds_and_injects_inert_weather_owner(monkeypatc
     assert service.is_retired() is True
 
 
-def test_ensure_widget_service_builds_only_abandonment_steam_owner():
+def test_ensure_widget_service_builds_abandonment_without_generic_steam_owner():
     owner = WidgetRuntimeManager(_Host())
     consumer = _WeatherConsumer()
 
@@ -279,7 +279,7 @@ def test_ensure_widget_service_builds_only_abandonment_steam_owner():
     assert service.is_running() is False
     assert service.is_retired() is False
     assert owner.get_widget_service("abandonment_issues") is service
-    assert owner.has_runtime_service("achievement_pulse") is False
+    assert owner.has_runtime_service("achievement_pulse") is True
     assert owner.has_runtime_service("steam_progress") is False
     assert owner.has_runtime_service("friend_pulse") is False
     assert owner.retire_widget_service("abandonment_issues") is True

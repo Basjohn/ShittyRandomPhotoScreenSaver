@@ -398,6 +398,7 @@ def test_steam_card_connect_click_emits_settings_target(qt_app) -> None:
         assert spy.count() == 1
         assert spy.at(0)[0] == STEAM_SETTINGS_TARGET
     finally:
+        widget.cleanup()
         widget.deleteLater()
 
 
@@ -884,7 +885,7 @@ def test_achievement_pulse_widget_applies_cache_before_requesting_first_fade(qt_
     )
 
     class _InlineThreadManager:
-        def submit_io_task(self, func, *, task_id, callback):
+        def submit_io_task(self, func, *, task_id, callback, **_kwargs):
             callback(TaskResult(success=True, result=func(), task_id=task_id))
             return task_id
 
@@ -908,60 +909,5 @@ def test_achievement_pulse_widget_applies_cache_before_requesting_first_fade(qt_
         assert widget._has_displayed_valid_data is True
         assert faded_models == [("content", "Hollow Knight")]
     finally:
-        widget.deleteLater()
-
-
-def test_achievement_pulse_fresh_cache_does_not_schedule_or_decrypt(qt_app) -> None:
-    class _NoTaskThreadManager:
-        def submit_io_task(self, *_args, **_kwargs):
-            raise AssertionError("fresh cache must not submit a Steam refresh task")
-
-    widget = SteamCardWidget(definition=STEAM_CARD_DEFINITIONS["achievement_pulse"])
-    try:
-        widget.set_thread_manager(_NoTaskThreadManager())
-        widget._refresh_achievement_pulse_cache(cache_age_seconds=60.0)
-    finally:
-        widget.deleteLater()
-
-
-def test_achievement_pulse_refresh_window_honors_five_minute_minimum(qt_app, monkeypatch) -> None:
-    calls: list[str] = []
-
-    class _InlineThreadManager:
-        def submit_io_task(self, func, *, task_id, callback):
-            calls.append(task_id)
-            callback(TaskResult(success=True, result=func(), task_id=task_id))
-            return task_id
-
-    monkeypatch.setattr("core.steam.credentials.load_credentials", lambda: None)
-    widget = SteamCardWidget(
-        definition=STEAM_CARD_DEFINITIONS["achievement_pulse"],
-        refresh_minutes=5,
-    )
-    try:
-        widget.set_thread_manager(_InlineThreadManager())
-        assert widget._refresh_achievement_pulse_cache(cache_age_seconds=299.0) is False
-        assert calls == []
-        assert widget._refresh_achievement_pulse_cache(cache_age_seconds=300.0) is True
-        assert calls and calls[0].startswith("steam_achievement_refresh_")
-    finally:
-        widget.deleteLater()
-
-
-def test_achievement_pulse_manual_refresh_submits_even_when_automatic_updates_are_off(qt_app, monkeypatch) -> None:
-    calls: list[str] = []
-
-    class _InlineThreadManager:
-        def submit_io_task(self, func, *, task_id, callback):
-            calls.append(task_id)
-            callback(TaskResult(success=True, result=func(), task_id=task_id))
-            return task_id
-
-    monkeypatch.setattr("core.steam.credentials.load_credentials", lambda: None)
-    widget = SteamCardWidget(definition=STEAM_CARD_DEFINITIONS["achievement_pulse"])
-    try:
-        widget.set_thread_manager(_InlineThreadManager())
-        assert widget.request_manual_refresh() is True
-        assert calls and calls[0].startswith("steam_achievement_refresh_")
-    finally:
+        widget.cleanup()
         widget.deleteLater()

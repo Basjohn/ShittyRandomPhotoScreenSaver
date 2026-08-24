@@ -5,15 +5,15 @@ dev-gated while Achievement Pulse resolves data through its bounded cache bridge
 """
 from __future__ import annotations
 
-import hashlib
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping, Optional
 
 from PySide6.QtCore import QPoint, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QPixmap
+from shiboken6 import Shiboken
 from widgets.shadow_utils import ShadowFadeProfile
 
 from core.logging.logger import get_logger
@@ -101,8 +101,12 @@ class SteamCardWidget(BaseOverlayWidget):
         achievement_capsule_fill_color: QColor | None = None,
         achievement_capsule_border_color: QColor | None = None,
         refresh_minutes: int = 10,
+        achievement_show_connection_info_icon: bool = True,
+        build_default_runtime: bool = True,
     ) -> None:
         super().__init__(parent=parent, position=position, overlay_name=definition.widget_id)
+        self._achievement_runtime_service: Optional[Any] = None
+        self._owns_achievement_runtime_service = False
         self.definition = definition
         self._achievement_selection = achievement_selection
         self._achievement_field_visibility = dict(achievement_field_visibility or {})
@@ -126,12 +130,19 @@ class SteamCardWidget(BaseOverlayWidget):
             achievement_capsule_border_color or QColor(*ACHIEVEMENT_CAPSULE_BORDER_RGBA)
         )
         self._refresh_minutes = max(5, int(refresh_minutes))
+        self._achievement_show_connection_info_icon = bool(
+            achievement_show_connection_info_icon
+        )
         self._achievement_artwork = QImage()
         self._achievement_scaled_artwork_cache = QImage()
         self._achievement_scaled_artwork_cache_key: tuple[int, int, int, float, str] | None = None
         self._achievement_latest_artwork = QImage()
         self._achievement_scaled_latest_artwork_cache = QImage()
         self._achievement_scaled_latest_artwork_cache_key: tuple[int, int, int, float] | None = None
+        self._achievement_artwork_identity = ""
+        self._achievement_latest_artwork_identity = ""
+        self._pending_achievement_manual_refresh = False
+        self._deferred_achievement_presentation = None
         self._content_opacity = 1.0
         self._content_transition_key: object | None = None
         self._content_transition_animation_id: str | None = None
@@ -149,6 +160,17 @@ class SteamCardWidget(BaseOverlayWidget):
         self.setMinimumSize(QSize(int(authored_size.width()), int(authored_size.height())))
         self._apply_base_styling()
         self._update_content()
+        if definition.widget_id == "achievement_pulse" and build_default_runtime:
+            from widgets.steam_achievement_runtime import (
+                AchievementPulseRuntimeService,
+            )
+
+            self.set_achievement_runtime_service(
+                AchievementPulseRuntimeService(
+                    runtime_generation=getattr(self, "_runtime_generation", None)
+                ),
+                owns_service=True,
+            )
 
     @staticmethod
     def _load_steam_logo() -> QPixmap:
@@ -392,18 +414,126 @@ class SteamCardWidget(BaseOverlayWidget):
             logger.debug("[STEAM] Could not cancel content transition", exc_info=True)
 
     def _deactivate_impl(self) -> None:
+        self._reset_deferred_achievement_state()
+        service = self._achievement_runtime_service
+        if service is not None and service.is_running():
+            service.stop()
         self._cancel_content_transition()
 
     def _cleanup_impl(self) -> None:
+        self._reset_deferred_achievement_state()
+        service = self._achievement_runtime_service
+        if service is not None and service.is_running():
+            service.stop()
+        self._release_achievement_runtime_service()
         self._cancel_content_transition()
 
     def set_achievement_selection(self, selection: AchievementPulseSelection) -> None:
         """Set persisted non-secret app selection before an activation refresh."""
         self._achievement_selection = selection
+        self._sync_achievement_runtime_config()
 
     def set_achievement_field_visibility(self, visibility: Mapping[str, bool]) -> None:
         """Apply persisted field preferences to later cache-derived card models."""
         self._achievement_field_visibility = {str(key): bool(value) for key, value in visibility.items()}
+        self._sync_achievement_runtime_config()
+
+    # ------------------------------------------------------------------
+    # Achievement runtime/model owner bridge
+    # ------------------------------------------------------------------
+    def _build_achievement_runtime_config(self):
+        from widgets.steam_achievement_preparation import (
+            AchievementPulseRuntimeConfig,
+        )
+
+        return AchievementPulseRuntimeConfig(
+            selection=self._achievement_selection,
+            field_visibility=dict(self._achievement_field_visibility),
+            latest_unlock_count=self._achievement_latest_unlock_count,
+            show_latest_artwork=self._achievement_show_latest_artwork,
+            show_artwork=self._achievement_show_artwork,
+            artwork_shape=self._achievement_artwork_shape,
+            refresh_minutes=self._refresh_minutes,
+            show_connection_info_icon=self._achievement_show_connection_info_icon,
+        )
+
+    def _sync_achievement_runtime_config(self) -> None:
+        service = self._achievement_runtime_service
+        if service is not None:
+            service.configure(self._build_achievement_runtime_config())
+
+    def set_achievement_runtime_service(
+        self,
+        service: Optional[Any],
+        *,
+        owns_service: bool = False,
+    ) -> None:
+        """Attach the presentation-neutral Achievement Pulse runtime owner."""
+
+        previous = self._achievement_runtime_service
+        previous_owned = self._owns_achievement_runtime_service
+        if previous is service:
+            owns_service = previous_owned or owns_service
+        if previous is not None and previous is not service:
+            if previous_owned:
+                previous.retire()
+            else:
+                previous.detach_consumer(self)
+
+        self._achievement_runtime_service = service
+        self._owns_achievement_runtime_service = bool(
+            service is not None and owns_service
+        )
+        if service is None:
+            return
+        try:
+            service.configure(self._build_achievement_runtime_config())
+            thread_manager = getattr(self, "_thread_manager", None)
+            if thread_manager is not None:
+                service.set_thread_manager(thread_manager)
+            service.attach_consumer(self)
+        except Exception:
+            self._achievement_runtime_service = None
+            self._owns_achievement_runtime_service = False
+            try:
+                service.detach_consumer(self)
+            except Exception:
+                pass
+            if owns_service:
+                service.retire()
+            raise
+
+    def _release_achievement_runtime_service(self) -> None:
+        service = self._achievement_runtime_service
+        owns_service = self._owns_achievement_runtime_service
+        self._achievement_runtime_service = None
+        self._owns_achievement_runtime_service = False
+        if service is None:
+            return
+        if owns_service:
+            service.retire()
+        else:
+            service.detach_consumer(self)
+
+    def set_thread_manager(self, manager) -> None:
+        super().set_thread_manager(manager)
+        service = self._achievement_runtime_service
+        if service is not None:
+            service.set_thread_manager(manager)
+
+    def is_achievement_consumer_alive(self) -> bool:
+        return bool(Shiboken.isValid(self))
+
+    def on_achievement_presentation(
+        self,
+        presentation: Any,
+        *,
+        animate: bool,
+    ) -> None:
+        self._apply_achievement_presentation(presentation, animate=animate)
+
+    def request_achievement_fade(self) -> None:
+        self._request_coordinated_fade()
 
     def last_layout(self) -> SteamCardLayout | None:
         """Return the most recent layout metrics, primarily for bars/tests."""
@@ -443,8 +573,14 @@ class SteamCardWidget(BaseOverlayWidget):
         """Apply cached Achievement Pulse content before the coordinated fade."""
 
         if self.definition.widget_id == "achievement_pulse":
-            if self._load_achievement_pulse_cache(start_fade_after_load=True):
-                return
+            service = self._achievement_runtime_service
+            if service is None:
+                raise RuntimeError("Achievement Pulse runtime service is not attached")
+            if not self._ensure_thread_manager("Achievement Pulse activation"):
+                raise RuntimeError("ThreadManager is not configured")
+            if not service.start(start_fade_after_load=True):
+                raise RuntimeError("Achievement Pulse runtime service failed to start")
+            return
         self._request_coordinated_fade()
 
     def _request_coordinated_fade(self) -> None:
@@ -476,158 +612,9 @@ class SteamCardWidget(BaseOverlayWidget):
         super().on_fade_complete()
         if self.definition.widget_id != "achievement_pulse":
             return
-        if not getattr(self, "_achievement_activation_cache_preloaded", False):
-            self._load_achievement_pulse_cache()
-            return
-        if (
-            getattr(self, "_achievement_activation_has_metadata", False)
-            and not getattr(self, "_achievement_activation_refresh_scheduled", False)
-        ):
-            self._achievement_activation_refresh_scheduled = True
-            self._refresh_achievement_pulse_cache(
-                cache_age_seconds=getattr(self, "_achievement_activation_cache_age_seconds", None)
-            )
-
-    def _load_achievement_pulse_cache(self, *, start_fade_after_load: bool = False) -> bool:
-        """Load a cached card model off-thread, optionally before first visibility."""
-        if getattr(self, "_achievement_cache_load_started", False):
-            if start_fade_after_load:
-                if getattr(self, "_achievement_activation_cache_preloaded", False):
-                    self._request_coordinated_fade()
-                else:
-                    self._achievement_start_fade_after_cache_load = True
-            return True
-        if not self._ensure_thread_manager("Achievement Pulse cache load"):
-            return False
-        self._achievement_cache_load_started = True
-        self._achievement_start_fade_after_cache_load = bool(start_fade_after_load)
-        generation = int(getattr(self, "_achievement_cache_generation", 0)) + 1
-        self._achievement_cache_generation = generation
-
-        def _load_snapshot():
-            from core.steam.achievement_pulse_cache import load_achievement_pulse_cache_snapshot
-            from core.steam.credentials import read_credential_metadata
-
-            metadata = read_credential_metadata()
-            if metadata is None:
-                return None, None
-            return metadata, load_achievement_pulse_cache_snapshot(
-                profile_key=metadata.profile_cache_key,
-                selection=self._achievement_selection,
-            )
-
-        def _finished(task_result) -> None:
-            from core.threading.manager import ThreadManager
-
-            def _apply_result() -> None:
-                if getattr(self, "_achievement_cache_generation", None) != generation:
-                    return
-                metadata, snapshot = task_result.result if task_result.success else (None, None)
-                cache_age_seconds = None
-                if snapshot is not None and snapshot.has_usable_cache:
-                    cache_age_seconds = snapshot.cache_age_seconds
-                    self._apply_achievement_pulse_snapshot(snapshot)
-                self._achievement_activation_cache_preloaded = True
-                self._achievement_activation_has_metadata = metadata is not None
-                self._achievement_activation_cache_age_seconds = cache_age_seconds
-                if getattr(self, "_achievement_start_fade_after_cache_load", False):
-                    self._request_coordinated_fade()
-                elif metadata is not None:
-                    self._achievement_activation_refresh_scheduled = True
-                    self._refresh_achievement_pulse_cache(cache_age_seconds=cache_age_seconds)
-
-            ThreadManager.run_on_ui_thread(_apply_result)
-
-        try:
-            self._thread_manager.submit_io_task(
-                _load_snapshot,
-                task_id=f"steam_achievement_cache_load_{generation}",
-                callback=_finished,
-            )
-        except Exception:
-            self._achievement_cache_load_started = False
-            logger.warning("[STEAM] Could not submit Achievement Pulse cache load", exc_info=True)
-            return False
-        return True
-
-    def _refresh_achievement_pulse_cache(
-        self,
-        *,
-        cache_age_seconds: float | None,
-        force: bool = False,
-    ) -> bool:
-        """Submit one startup refresh through the shared ThreadManager only."""
-        from core.runtime_flags import automatic_service_updates_enabled
-
-        if not force and not automatic_service_updates_enabled():
-            return False
-        if not force and cache_age_seconds is not None and cache_age_seconds < self._refresh_minutes * 60:
-            return False
-        if getattr(self, "_achievement_refresh_in_progress", False):
-            return True
-        if not self._ensure_thread_manager("Achievement Pulse refresh"):
-            return False
-        self._achievement_refresh_in_progress = True
-        generation = int(getattr(self, "_achievement_cache_generation", 0)) + 1
-        self._achievement_cache_generation = generation
-
-        def _refresh_snapshot():
-            from core.steam.achievement_pulse_cache import (
-                AchievementPulseRefreshOutcome,
-                load_achievement_pulse_cache_snapshot,
-                refresh_achievement_pulse_cache,
-            )
-            from core.steam.credentials import SteamCredentialError, load_credentials, read_credential_metadata
-
-            try:
-                credential = load_credentials()
-            except SteamCredentialError:
-                metadata = read_credential_metadata()
-                if metadata is None:
-                    return None
-                return AchievementPulseRefreshOutcome(
-                    snapshot=load_achievement_pulse_cache_snapshot(
-                        profile_key=metadata.profile_cache_key,
-                        selection=self._achievement_selection,
-                    ),
-                    connection_needs_attention=True,
-                )
-            if credential is None:
-                return None
-            return refresh_achievement_pulse_cache(
-                credential=credential,
-                selection=self._achievement_selection,
-                force=force,
-                source_fresh_seconds=self._refresh_minutes * 60,
-            )
-
-        def _finished(task_result) -> None:
-            from core.threading.manager import ThreadManager
-
-            def _apply_result() -> None:
-                if getattr(self, "_achievement_cache_generation", None) != generation:
-                    return
-                self._achievement_refresh_in_progress = False
-                outcome = task_result.result if task_result.success else None
-                if outcome is not None and getattr(outcome, "snapshot", None) is not None:
-                    self._apply_achievement_pulse_snapshot(
-                        outcome.snapshot,
-                        connection_needs_attention=bool(outcome.connection_needs_attention),
-                    )
-
-            ThreadManager.run_on_ui_thread(_apply_result)
-
-        try:
-            self._thread_manager.submit_io_task(
-                _refresh_snapshot,
-                task_id=f"steam_achievement_refresh_{generation}",
-                callback=_finished,
-            )
-        except Exception:
-            self._achievement_refresh_in_progress = False
-            logger.warning("[STEAM] Could not submit Achievement Pulse refresh", exc_info=True)
-            return False
-        return True
+        service = self._achievement_runtime_service
+        if service is not None:
+            service.on_presentation_fade_complete()
 
     def request_manual_refresh(self) -> bool:
         """Request a user-initiated refresh without bypassing provider backoff/dedupe."""
@@ -643,7 +630,8 @@ class SteamCardWidget(BaseOverlayWidget):
             log_message="[STEAM] Deferred manual Achievement Pulse refresh during parent transition",
         ):
             return True
-        return self._refresh_achievement_pulse_cache(cache_age_seconds=None, force=True)
+        service = self._achievement_runtime_service
+        return bool(service is not None and service.request_manual_refresh())
 
     def _schedule_deferred_manual_refresh(self) -> None:
         from core.threading.manager import ThreadManager
@@ -659,182 +647,90 @@ class SteamCardWidget(BaseOverlayWidget):
             self._schedule_deferred_manual_refresh()
             return
         self._pending_achievement_manual_refresh = False
-        self._refresh_achievement_pulse_cache(cache_age_seconds=None, force=True)
+        service = self._achievement_runtime_service
+        if service is not None:
+            service.request_manual_refresh()
 
-    def _apply_achievement_pulse_snapshot(self, snapshot, *, connection_needs_attention: bool = False) -> None:
-        """Apply a cache snapshot without repaint churn or transition interruption."""
+    def _reset_deferred_achievement_state(self) -> None:
+        self._pending_achievement_manual_refresh = False
+        self._deferred_achievement_presentation = None
+
+    def _apply_achievement_presentation(
+        self,
+        presentation: Any,
+        *,
+        animate: bool,
+    ) -> None:
         from widgets.service_widget_runtime import defer_value_if_transition
-        from widgets.steam_card_models import build_achievement_pulse_view_model
 
-        model = build_achievement_pulse_view_model(
-            snapshot.resolved,
-            cache_age_seconds=snapshot.cache_age_seconds,
-            connection_needs_attention=connection_needs_attention,
-            field_visibility=self._achievement_field_visibility,
-            latest_unlock_count=self._achievement_latest_unlock_count,
-        )
         if defer_value_if_transition(
             self,
-            attr_name="_deferred_achievement_view_model",
-            value=model,
+            attr_name="_deferred_achievement_presentation",
+            value=(presentation, animate),
             clear_attrs=(),
             schedule_callback=self._schedule_deferred_achievement_apply,
             logger=logger,
-            log_message="[STEAM] Deferred Achievement Pulse result during parent transition",
+            log_message="[STEAM] Deferred Achievement Pulse presentation during parent transition",
         ):
             return
-        self._apply_achievement_pulse_view_model(model)
+        self._commit_achievement_presentation(presentation, animate=animate)
 
     def _schedule_deferred_achievement_apply(self) -> None:
         from core.threading.manager import ThreadManager
 
-        ThreadManager.single_shot(250, self._apply_deferred_achievement_view_model)
+        ThreadManager.single_shot(250, self._apply_deferred_achievement_presentation)
 
-    def _apply_deferred_achievement_view_model(self) -> None:
+    def _apply_deferred_achievement_presentation(self) -> None:
         from widgets.service_widget_runtime import parent_transition_running
 
-        model = getattr(self, "_deferred_achievement_view_model", None)
-        if model is None:
+        deferred = self._deferred_achievement_presentation
+        if deferred is None:
             return
         if parent_transition_running(self):
             self._schedule_deferred_achievement_apply()
             return
-        self._deferred_achievement_view_model = None
-        self._apply_achievement_pulse_view_model(model)
+        self._deferred_achievement_presentation = None
+        presentation, animate = deferred
+        self._commit_achievement_presentation(
+            presentation,
+            animate=bool(animate),
+        )
 
-    def _apply_achievement_pulse_view_model(self, model: SteamCardViewModel) -> None:
+    def _commit_achievement_presentation(
+        self,
+        presentation: Any,
+        *,
+        animate: bool,
+    ) -> None:
+        # Achievement historically swaps accepted model/artwork without its own
+        # content fade. Parent-transition deferral above preserves that behavior;
+        # ``animate`` is retained for the future presenter contract.
+        _ = animate
+        changed = False
+        model = presentation.model
         if model.content_fingerprint() != self._view_model.content_fingerprint():
             self.set_view_model(model)
-        if self._achievement_show_artwork and model.appid is not None:
-            self._load_achievement_artwork(model.appid)
-        if self._achievement_show_latest_artwork and model.latest_unlock_icon_url:
-            self._load_latest_achievement_artwork(model.latest_unlock_icon_url)
-        else:
-            self._clear_latest_achievement_artwork()
+            changed = True
+
+        artwork_identity = str(presentation.artwork_identity or "")
+        if artwork_identity != self._achievement_artwork_identity:
+            self._achievement_artwork_identity = artwork_identity
+            self._achievement_artwork = QImage(presentation.artwork)
+            self._achievement_scaled_artwork_cache = QImage()
+            self._achievement_scaled_artwork_cache_key = None
+            changed = True
+
+        latest_identity = str(presentation.latest_artwork_identity or "")
+        if latest_identity != self._achievement_latest_artwork_identity:
+            self._achievement_latest_artwork_identity = latest_identity
+            self._achievement_latest_artwork = QImage(presentation.latest_artwork)
+            self._achievement_scaled_latest_artwork_cache = QImage()
+            self._achievement_scaled_latest_artwork_cache_key = None
+            changed = True
+
         self._has_displayed_valid_data = True
-
-    def _load_achievement_artwork(self, appid: int) -> None:
-        """Load one cached public header or portrait capsule for the selected app."""
-        artwork_identity = (appid, self._achievement_artwork_shape)
-        if getattr(self, "_achievement_artwork_identity", None) == artwork_identity:
-            return
-        if not self._ensure_thread_manager("Achievement Pulse artwork"):
-            return
-        self._achievement_artwork_identity = artwork_identity
-        generation = int(getattr(self, "_achievement_artwork_generation", 0)) + 1
-        self._achievement_artwork_generation = generation
-
-        def _load_artwork():
-            from core.settings.storage_paths import get_steam_cache_dir
-            from core.steam.assets import SteamAssetRecord, fetch_steam_app_artwork
-            from core.steam.credentials import read_credential_metadata
-
-            metadata = read_credential_metadata()
-            if metadata is None:
-                return None
-            asset = fetch_steam_app_artwork(
-                cache_dir=get_steam_cache_dir(profile_key=metadata.profile_cache_key) / "assets",
-                appid=appid,
-                artwork_shape=self._achievement_artwork_shape,
-            )
-            return asset.path if isinstance(asset, SteamAssetRecord) else None
-
-        def _finished(task_result) -> None:
-            from core.threading.manager import ThreadManager
-
-            def _apply_result() -> None:
-                if getattr(self, "_achievement_artwork_generation", None) != generation:
-                    return
-                asset_path = task_result.result if task_result.success else None
-                image = QImage(str(asset_path)) if asset_path else QImage()
-                if not image.isNull():
-                    self._achievement_artwork = image
-                    self._achievement_scaled_artwork_cache = QImage()
-                    self._achievement_scaled_artwork_cache_key = None
-                    self.update()
-
-            ThreadManager.run_on_ui_thread(_apply_result)
-
-        try:
-            self._thread_manager.submit_io_task(
-                _load_artwork,
-                task_id=f"steam_achievement_artwork_{self._achievement_artwork_shape}_{appid}_{generation}",
-                callback=_finished,
-            )
-        except Exception:
-            logger.warning("[STEAM] Could not submit Achievement Pulse artwork load", exc_info=True)
-
-    def _clear_latest_achievement_artwork(self) -> None:
-        if (
-            not getattr(self, "_achievement_latest_artwork_identity", "")
-            and self._achievement_latest_artwork.isNull()
-        ):
-            return
-        self._achievement_latest_artwork_generation = int(
-            getattr(self, "_achievement_latest_artwork_generation", 0)
-        ) + 1
-        self._achievement_latest_artwork_identity = ""
-        self._achievement_latest_artwork = QImage()
-        self._achievement_scaled_latest_artwork_cache = QImage()
-        self._achievement_scaled_latest_artwork_cache_key = None
-        self.update()
-
-    def _load_latest_achievement_artwork(self, icon_url: str) -> None:
-        """Load the schema-owned primary achievement icon through the asset cache."""
-        safe_url = str(icon_url or "").strip()
-        if not safe_url:
-            self._clear_latest_achievement_artwork()
-            return
-        if getattr(self, "_achievement_latest_artwork_identity", "") == safe_url:
-            return
-        if not self._ensure_thread_manager("Achievement Pulse latest artwork"):
-            return
-
-        self._achievement_latest_artwork_identity = safe_url
-        generation = int(getattr(self, "_achievement_latest_artwork_generation", 0)) + 1
-        self._achievement_latest_artwork_generation = generation
-        url_fingerprint = hashlib.sha256(safe_url.encode("utf-8")).hexdigest()[:12]
-
-        def _load_artwork():
-            from core.settings.storage_paths import get_steam_cache_dir
-            from core.steam.assets import SteamAssetRecord, fetch_steam_achievement_icon
-            from core.steam.credentials import read_credential_metadata
-
-            metadata = read_credential_metadata()
-            if metadata is None:
-                return None
-            asset = fetch_steam_achievement_icon(
-                cache_dir=get_steam_cache_dir(profile_key=metadata.profile_cache_key) / "assets",
-                url=safe_url,
-            )
-            return asset.path if isinstance(asset, SteamAssetRecord) else None
-
-        def _finished(task_result) -> None:
-            from core.threading.manager import ThreadManager
-
-            def _apply_result() -> None:
-                if getattr(self, "_achievement_latest_artwork_generation", None) != generation:
-                    return
-                asset_path = task_result.result if task_result.success else None
-                image = QImage(str(asset_path)) if asset_path else QImage()
-                self._achievement_latest_artwork = image
-                self._achievement_scaled_latest_artwork_cache = QImage()
-                self._achievement_scaled_latest_artwork_cache_key = None
-                self.update()
-
-            ThreadManager.run_on_ui_thread(_apply_result)
-
-        try:
-            self._thread_manager.submit_io_task(
-                _load_artwork,
-                task_id=f"steam_achievement_latest_artwork_{url_fingerprint}_{generation}",
-                callback=_finished,
-            )
-        except Exception:
-            logger.warning(
-                "[STEAM] Could not submit latest achievement artwork load",
-                exc_info=True,
-            )
+        if changed:
+            self.update()
 
     def _scaled_achievement_artwork(self, art_rect: QRectF, dpr: float) -> QImage:
         """Return a cached DPR-aware cover crop using Media's quality policy."""
