@@ -19,7 +19,6 @@ from PySide6.QtCore import Qt, Signal, QObject, QSize, QRect
 from PySide6.QtGui import QFont, QPainter, QColor, QFontMetrics, QPixmap
 
 from core.logging.logger import get_logger
-from core.settings.shadow_tuning import ICON_SHADOW_TUNING
 from weather.open_meteo_provider import OpenMeteoProvider
 from widgets.shadow_utils import PaintedShadowLabel, make_alpha_shadow_pixmap, shadow_config_enabled
 
@@ -141,8 +140,9 @@ class WeatherConditionIcon(QWidget):
             dpr = max(1.0, float(self.devicePixelRatioF()))
         except Exception:
             dpr = 1.0
-        tuning = ICON_SHADOW_TUNING
-        alpha = max(0, min(255, int(tuning.get("alpha", 80))))
+        # Authored weather icon-shadow alpha (formerly shadowtuning.json ``icon``;
+        # inlined when that sidecar authority was retired in F0.5).
+        alpha = 95
         key = (
             int(self._pixmap.cacheKey()),
             target.width(),
@@ -176,9 +176,10 @@ class WeatherConditionIcon(QWidget):
         return self._shadow_pixmap
 
     def _scaled_shadow_offsets(self, target: QRect) -> tuple[int, int]:
-        tuning = ICON_SHADOW_TUNING
-        base_x = int(tuning.get("offset_x", 3))
-        base_y = int(tuning.get("offset_y", 4))
+        # Authored weather icon-shadow base offsets (formerly shadowtuning.json
+        # ``icon``; inlined when that sidecar authority was retired in F0.5).
+        base_x = 3
+        base_y = 4
         shortest_edge = max(1, min(int(target.width()), int(target.height())))
         scale = max(0.4, min(1.0, shortest_edge / 96.0))
         return (
@@ -319,8 +320,7 @@ class WeatherDetailIcon(QWidget):
                 dpr = max(1.0, float(self.devicePixelRatioF()))
             except Exception:
                 dpr = 1.0
-            tuning = ICON_SHADOW_TUNING
-            alpha = max(0, min(255, int(tuning.get("alpha", 80))))
+            alpha = 95
             key = (int(self._pixmap.cacheKey()), round(dpr, 3), alpha)
             if (
                 self._shadow_pixmap is None
@@ -335,8 +335,8 @@ class WeatherDetailIcon(QWidget):
                 self._shadow_cache_key = key
             if self._shadow_pixmap is not None and not self._shadow_pixmap.isNull():
                 painter.drawPixmap(
-                    x + int(tuning.get("offset_x", 3)),
-                    y + int(tuning.get("offset_y", 4)),
+                    x + 3,
+                    y + 4,
                     self._shadow_pixmap,
                 )
         painter.drawPixmap(x, y, self._pixmap)

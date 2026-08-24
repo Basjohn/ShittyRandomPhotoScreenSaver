@@ -4,7 +4,6 @@ from __future__ import annotations
 from PySide6.QtGui import QColor
 
 from core.logging.logger import get_logger
-from core.settings.shadow_tuning import CARD_SHADOW_TUNING
 from widgets.spotify_visualizer.renderers.gl_helpers import set1f as _set1f, set1i as _set1i, set_color4 as _set_color4
 
 logger = get_logger(__name__)
@@ -24,7 +23,7 @@ def compute_bar_layout(
     gap: float = _SPECTRUM_GAP_PX,
     left_inset: float = _SPECTRUM_LEFT_INSET_PX,
     right_inset: float = _SPECTRUM_RIGHT_INSET_PX,
-    card_shrink_right: float = float(CARD_SHADOW_TUNING.get("card_shrink_right", 11)),
+    card_shrink_right: float = 11.0,
 ) -> dict[str, float] | None:
     """Compute the horizontal Spectrum bar field layout.
 

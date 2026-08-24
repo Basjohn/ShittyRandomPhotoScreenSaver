@@ -17,7 +17,6 @@ from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen, QPainterPath, QPi
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
-from core.settings.shadow_tuning import CONTROL_SHADOW_TUNING
 from core.threading.manager import ThreadManager
 from widgets.media.dependent_visibility import sync_anchor_dependent_visibility
 from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes
@@ -66,7 +65,7 @@ class MuteButtonWidget(QWidget):
 
         self._btn_width: int = 40
         self._btn_height: int = 36
-        self._shadow_margin: int = max(8, int(CONTROL_SHADOW_TUNING.get("spread", 8)))
+        self._shadow_margin: int = 8
         self._shadow_cache: Optional[QPixmap] = None
         self._shadow_cache_key: Optional[tuple] = None
 
@@ -569,12 +568,13 @@ class MuteButtonWidget(QWidget):
             dpr = max(1.0, float(self.devicePixelRatioF()))
         except Exception:
             dpr = 1.0
-        tuning = CONTROL_SHADOW_TUNING
-        offset_x = int(tuning.get("offset_x", 3))
-        offset_y = int(tuning.get("offset_y", 4))
-        spread = max(1, int(tuning.get("spread", 8)))
-        alpha = max(0, min(255, int(tuning.get("alpha", 80))))
-        passes = max(1, int(tuning.get("passes", 5)))
+        # Authored mute-button control shadow reference magnitudes (formerly
+        # shadowtuning.json ``control``; inlined when that sidecar was retired in F0.5).
+        offset_x = 3
+        offset_y = 4
+        spread = 8
+        alpha = 80
+        passes = 5
         key = (
             self.width(),
             self.height(),

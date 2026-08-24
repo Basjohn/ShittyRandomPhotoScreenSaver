@@ -5,6 +5,7 @@ import weakref
 from pathlib import Path
 from typing import TYPE_CHECKING, Mapping
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QGridLayout,
@@ -15,6 +16,12 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QVBoxLayout,
     QWidget,
+)
+
+from core.settings.shadow_direction import (
+    DEFAULT_SHADOW_DIRECTION,
+    ShadowDirection,
+    resolve_shadow_direction,
 )
 
 from core.cache_maintenance import (
@@ -219,6 +226,109 @@ def _on_clear_selected_caches(tab: WidgetsTab) -> None:
         logger.debug("[GENERAL_TAB] Failed to submit cache-clear task", exc_info=True)
 
 
+# Presentation-only layout for the compact 3x3 direction picker. The eight
+# outer cells edit the canonical ``widgets.shadows.direction`` token via the
+# single canonical ShadowDirection authority; the center is inert. This is not a
+# second direction enum/mapping.
+_SHADOW_DIRECTION_GRID: tuple[tuple[ShadowDirection, str] | None, ...] = (
+    (ShadowDirection.NW, "↖"), (ShadowDirection.N, "↑"), (ShadowDirection.NE, "↗"),
+    (ShadowDirection.W, "←"), None, (ShadowDirection.E, "→"),
+    (ShadowDirection.SW, "↙"), (ShadowDirection.S, "↓"), (ShadowDirection.SE, "↘"),
+)
+
+
+def _add_shadow_spin(
+    tab: "WidgetsTab",
+    layout: QVBoxLayout,
+    label_text: str,
+    attr: str,
+    *,
+    minimum: int,
+    maximum: int,
+    value: int,
+    suffix: str = "",
+    tooltip: str = "",
+) -> QSpinBox:
+    """Add one aligned integer spin control bound to the tab's debounced save."""
+
+    row, _ = add_aligned_row(layout, label_text, label_width=150, wrap=False)
+    spin = QSpinBox()
+    spin.setRange(minimum, maximum)
+    if suffix:
+        spin.setSuffix(suffix)
+    if tooltip:
+        spin.setToolTip(tooltip)
+    spin.setValue(max(minimum, min(maximum, int(value))))
+    spin.valueChanged.connect(tab._save_settings)
+    setattr(tab, attr, spin)
+    row.addWidget(spin)
+    row.addStretch()
+    return spin
+
+
+def _apply_shadow_direction(tab: "WidgetsTab", direction: ShadowDirection) -> None:
+    """Reflect the selected direction on the tab state and the picker buttons."""
+
+    tab._selected_shadow_direction = direction
+    for cell_direction, button in getattr(tab, "_shadow_direction_buttons", {}).items():
+        was_blocked = button.blockSignals(True)
+        button.setChecked(cell_direction is direction)
+        button.blockSignals(was_blocked)
+
+
+def _on_shadow_direction_selected(tab: "WidgetsTab", direction: ShadowDirection) -> None:
+    _apply_shadow_direction(tab, direction)
+    tab._save_settings()
+
+
+def _build_shadow_direction_picker(
+    tab: "WidgetsTab",
+    layout: QVBoxLayout,
+    current: ShadowDirection,
+) -> None:
+    """Build the compact styled 3x3 eight-direction shadow picker (center inert)."""
+
+    tab._selected_shadow_direction = current
+    tab._shadow_direction_buttons = {}
+
+    label = QLabel("Shadow Direction:")
+    label.setStyleSheet(FORM_ROW_LABEL_STYLE)
+    label.setMinimumWidth(150)
+
+    grid = QGridLayout()
+    grid.setContentsMargins(0, 0, 0, 0)
+    grid.setSpacing(2)
+    for index, cell in enumerate(_SHADOW_DIRECTION_GRID):
+        grid_row, grid_col = divmod(index, 3)
+        if cell is None:
+            center = QLabel("·")
+            center.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            center.setFixedSize(28, 28)
+            center.setEnabled(False)
+            grid.addWidget(center, grid_row, grid_col)
+            continue
+        direction, glyph = cell
+        button = QPushButton(glyph)
+        button.setCheckable(True)
+        button.setFixedSize(28, 28)
+        button.setProperty("shadowDirectionCell", True)
+        button.setToolTip(f"Shadow direction {direction.value}")
+        button.setChecked(direction is current)
+        button.clicked.connect(
+            lambda _checked=False, picked=direction: _on_shadow_direction_selected(tab, picked)
+        )
+        tab._shadow_direction_buttons[direction] = button
+        grid.addWidget(button, grid_row, grid_col)
+
+    row = QHBoxLayout()
+    row.setContentsMargins(0, 8, 0, 8)
+    row.setSpacing(12)
+    row.addWidget(label)
+    row.addLayout(grid)
+    row.addStretch()
+    layout.addLayout(row)
+
+
 def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     """Build the user-facing General section and attach controls to the tab instance."""
 
@@ -269,6 +379,43 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     row.addStretch()
     appearance_layout.addLayout(row)
 
+    _add_shadow_spin(
+        tab,
+        appearance_layout,
+        "Shadow Darkness:",
+        "widget_shadow_darkness_spin",
+        minimum=0,
+        maximum=100,
+        value=int(round(tab._default_float("shadows", "frame_opacity", 0.77) * 100)),
+        suffix="%",
+        tooltip="Card/frame drop-shadow darkness (opacity).",
+    )
+    _add_shadow_spin(
+        tab,
+        appearance_layout,
+        "Shadow Blur:",
+        "widget_shadow_blur_spin",
+        minimum=0,
+        maximum=40,
+        value=tab._default_int("shadows", "blur_radius", 18),
+        suffix=" px",
+        tooltip="Card/frame drop-shadow blur radius.",
+    )
+    _add_shadow_spin(
+        tab,
+        appearance_layout,
+        "Shadow Extra Offset:",
+        "widget_shadow_extra_offset_spin",
+        minimum=0,
+        maximum=40,
+        value=tab._default_int("shadows", "frame_extra_offset", 0),
+        suffix=" px",
+        tooltip=(
+            "Additional card/frame shadow distance added before the global "
+            "direction applies signs. 0 keeps the authored distance."
+        ),
+    )
+
     row = QHBoxLayout()
     row.setContentsMargins(0, 8, 0, 8)
     row.setSpacing(12)
@@ -283,6 +430,32 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     row.addStretch()
     appearance_layout.addLayout(row)
 
+    _add_shadow_spin(
+        tab,
+        appearance_layout,
+        "Text Shadow Darkness:",
+        "widget_text_shadow_darkness_spin",
+        minimum=0,
+        maximum=100,
+        value=int(round(tab._default_float("shadows", "text_opacity", 0.33) * 100)),
+        suffix="%",
+        tooltip="Text drop-shadow darkness (opacity). There is no text blur.",
+    )
+    _add_shadow_spin(
+        tab,
+        appearance_layout,
+        "Text Shadow Extra Offset:",
+        "widget_text_shadow_extra_offset_spin",
+        minimum=0,
+        maximum=40,
+        value=tab._default_int("shadows", "text_extra_offset", 0),
+        suffix=" px",
+        tooltip=(
+            "Additional text shadow distance added before the global direction "
+            "applies signs. 0 keeps the authored distance."
+        ),
+    )
+
     row = QHBoxLayout()
     row.setContentsMargins(0, 8, 0, 8)
     row.setSpacing(12)
@@ -296,6 +469,12 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     row.addWidget(tab.widget_header_shadows_enabled)
     row.addStretch()
     appearance_layout.addLayout(row)
+
+    _build_shadow_direction_picker(
+        tab,
+        appearance_layout,
+        resolve_shadow_direction(tab._default_str("shadows", "direction", DEFAULT_SHADOW_DIRECTION.value)),
+    )
 
     row = QHBoxLayout()
     row.setContentsMargins(0, 8, 0, 8)
@@ -404,9 +583,38 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
         tab.widget_text_shadows_enabled.setChecked(tab._config_bool("shadows", shadows_config, "text_enabled", True))
         tab.widget_header_shadows_enabled.setChecked(tab._config_bool("shadows", shadows_config, "header_enabled", True))
     else:
+        shadows_config = {}
         tab.widget_shadows_enabled.setChecked(True)
         tab.widget_text_shadows_enabled.setChecked(True)
         tab.widget_header_shadows_enabled.setChecked(True)
+
+    if hasattr(tab, "widget_shadow_darkness_spin"):
+        tab.widget_shadow_darkness_spin.setValue(
+            int(round(tab._config_float("shadows", shadows_config, "frame_opacity", 0.77) * 100))
+        )
+    if hasattr(tab, "widget_shadow_blur_spin"):
+        tab.widget_shadow_blur_spin.setValue(
+            max(0, min(40, tab._config_int("shadows", shadows_config, "blur_radius", 18)))
+        )
+    if hasattr(tab, "widget_shadow_extra_offset_spin"):
+        tab.widget_shadow_extra_offset_spin.setValue(
+            max(0, min(40, tab._config_int("shadows", shadows_config, "frame_extra_offset", 0)))
+        )
+    if hasattr(tab, "widget_text_shadow_darkness_spin"):
+        tab.widget_text_shadow_darkness_spin.setValue(
+            int(round(tab._config_float("shadows", shadows_config, "text_opacity", 0.33) * 100))
+        )
+    if hasattr(tab, "widget_text_shadow_extra_offset_spin"):
+        tab.widget_text_shadow_extra_offset_spin.setValue(
+            max(0, min(40, tab._config_int("shadows", shadows_config, "text_extra_offset", 0)))
+        )
+    if hasattr(tab, "_shadow_direction_buttons"):
+        _apply_shadow_direction(
+            tab,
+            resolve_shadow_direction(
+                tab._config_str("shadows", shadows_config, "direction", DEFAULT_SHADOW_DIRECTION.value)
+            ),
+        )
 
     global_cfg = widgets_config.get("global", {}) if isinstance(widgets_config, Mapping) else {}
     border_width = tab._config_int("global", global_cfg, "card_border_width_px", 3)
@@ -419,13 +627,44 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
 
 
 def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str, object]]:
-    """Build General-section persistence payloads for shadows/global settings."""
+    """Build General-section persistence payloads for shadows/global settings.
 
-    shadows_config = {
-        "enabled": tab.widget_shadows_enabled.isChecked(),
-        "text_enabled": tab.widget_text_shadows_enabled.isChecked(),
-        "header_enabled": tab.widget_header_shadows_enabled.isChecked(),
-    }
+    The General page owns only the enable toggles, darkness/blur/extra-offset and
+    the global direction. It must never erase other canonical or unknown-future
+    ``widgets.shadows`` keys, so it merges its edits onto the existing persisted
+    mapping rather than returning a partial one. The retired ``offset`` pair is
+    dropped here and never re-persisted.
+    """
+
+    existing_widgets = tab._settings.get("widgets", {})
+    existing_shadows = (
+        existing_widgets.get("shadows", {}) if isinstance(existing_widgets, Mapping) else {}
+    )
+    shadows_config: dict[str, object] = (
+        dict(existing_shadows) if isinstance(existing_shadows, Mapping) else {}
+    )
+    shadows_config.pop("offset", None)
+
+    shadows_config["enabled"] = tab.widget_shadows_enabled.isChecked()
+    shadows_config["text_enabled"] = tab.widget_text_shadows_enabled.isChecked()
+    shadows_config["header_enabled"] = tab.widget_header_shadows_enabled.isChecked()
+    if hasattr(tab, "widget_shadow_darkness_spin"):
+        shadows_config["frame_opacity"] = round(
+            tab.widget_shadow_darkness_spin.value() / 100.0, 2
+        )
+    if hasattr(tab, "widget_shadow_blur_spin"):
+        shadows_config["blur_radius"] = int(tab.widget_shadow_blur_spin.value())
+    if hasattr(tab, "widget_shadow_extra_offset_spin"):
+        shadows_config["frame_extra_offset"] = int(tab.widget_shadow_extra_offset_spin.value())
+    if hasattr(tab, "widget_text_shadow_darkness_spin"):
+        shadows_config["text_opacity"] = round(
+            tab.widget_text_shadow_darkness_spin.value() / 100.0, 2
+        )
+    if hasattr(tab, "widget_text_shadow_extra_offset_spin"):
+        shadows_config["text_extra_offset"] = int(tab.widget_text_shadow_extra_offset_spin.value())
+    selected_direction = getattr(tab, "_selected_shadow_direction", DEFAULT_SHADOW_DIRECTION)
+    shadows_config["direction"] = resolve_shadow_direction(selected_direction).value
+
     border_width = getattr(tab, "_global_card_border_width", tab._widget_default("global", "card_border_width_px", 3))
     global_config = {
         "card_border_width_px": int(border_width),

@@ -5,9 +5,8 @@ Last updated: 2026-08-24
 Reviewed source basis:
 
 ```text
-test-inventory basis = 19460a7a8ffe9e5134363267da3d61fe46cc23d4
-documentation basis = f049baedb80d6b7e7a74fb03395b06e94b870a1c
-Phase F0 CLOSED; 360 test modules; F0.5 shadow-authority cleanup + General controls next
+test-inventory basis = Phase F0.5 shadow-authority cleanup + Widgets → General controls (post-F0 35a3052f)
+Phase F0 CLOSED; 359 test modules; F0.5 landed — F1 Clock next
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -28,9 +27,16 @@ The F0 reconciliation at `19460a7` removes deprecated Imgur from current product
 `test_imgur_cache.py`, `test_imgur_scraper.py` and `test_imgur_widget.py`, and de-Imgurs mixed surviving
 tests. Independent source audit also found no tracked path containing `imgur`. The audit found only two stale Imgur-era requirement pins (`beautifulsoup4`, `soupsieve`) with no current code consumer; the closure reconciliation removes them. The reviewer did not independently rerun Claude's focused Windows test commands.
 
+The F0.5 reconciliation retires the hidden `shadowtuning.json` / `core.settings.shadow_tuning` authority
+and its exported tuning dictionaries (inlining each family's authored reference magnitudes), retires the
+old `widgets.shadows.offset` pair, and completes the Widgets → General canonical shadow controls
+(3×3 direction picker + card/text Darkness/Blur/Extra Offset) with the mandatory save-preservation fix.
+It deletes `test_shadow_tuning_paths.py` and `test_base_overlay_shadow_cache.py`, trims the tuning-payload
+assertion from `test_shadow_utils.py`, and adds `tests/test_f0_5_shadow_controls.py`.
+
 At the reviewed checkpoint the repository contains:
 
-- **360 test-module files**: 359 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **359 test-module files**: 358 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -41,7 +47,7 @@ Inventory status is **not an execution result**. `KEEP` does not mean a test was
 
 This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
 
-This is deliberately **not** a claim that every assertion in all 360 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
+This is deliberately **not** a claim that every assertion in all 359 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
 
 ### Status vocabulary
 
@@ -61,7 +67,7 @@ This is deliberately **not** a claim that every assertion in all 360 modules was
 | Status | Files |
 | --- | ---: |
 | `KEEP` | 116 |
-| `KEEP — MIGRATION PERMANENT` | 87 |
+| `KEEP — MIGRATION PERMANENT` | 88 |
 | `MIGRATION-CRITICAL — H/I` | 48 |
 | `WILL BE OBSOLETE — H/I` | 23 |
 | `MIGRATION-CRITICAL — F` | 39 |
@@ -71,9 +77,9 @@ This is deliberately **not** a claim that every assertion in all 360 modules was
 | `WILL BE OBSOLETE — J` | 4 |
 | `UPDATE REQUIRED NOW` | 3 |
 | `WILL BE OBSOLETE — E4/F` | 2 |
-| `OBSOLETE NOW` | 4 |
+| `OBSOLETE NOW` | 2 |
 | `MIGRATION-CRITICAL — E3/F` | 1 |
-| **Total** | **360** |
+| **Total** | **359** |
 
 ## 2. Standard commands and evidence levels
 
@@ -235,7 +241,7 @@ not executable dead tests, becomes the old-pixel reference.
 
 Do not port QWidget-era effect carriers, dummy shadow widgets, `QGraphicsOpacityEffect`/`ShadowFadeProfile` staged shadow attachment, or equivalent wrapper choreography into Quick. Whole-widget family fade is the retained presentation-root opacity and composites the card, cached card shadow, text-shadow glyphs and content together. Intermediate Quick `Item`s require a real layout/transform/clipping/z/input/lifecycle purpose, not an old one-effect-per-QWidget workaround. F1 Clock must explicitly prove this rule and the real E4 settings→Python resolver→retained-family wiring.
 
-F0.5 permanent Settings regressions must protect: complete removal of the `shadowtuning.json` loader/path/profile-copy authority and old `widgets.shadows.offset`; `ShadowSettings` fallback/default parity; all eight direction selections and inert center; default/reset/fallback `SE`; existing shadow enable toggles; Card Darkness/Blur/Extra Offset and Text Darkness/Extra Offset canonical persistence; no negative Extra Offset; no Intense keys/UI; no text blur; and, critically, General-section save **merging/preservation** so a partial edit cannot erase unedited canonical or unknown-future `widgets.shadows` keys. Do not add tests that require legacy QWidget shadow visual parity. After deleting `test_shadow_tuning_paths.py` and `test_base_overlay_shadow_cache.py`, reconcile the exact module count (358 before any newly added F0.5 module). If F0.5 adds a new test module, add it to this inventory in the same checkpoint and update the count.
+F0.5 permanent Settings regressions must protect: complete removal of the `shadowtuning.json` loader/path/profile-copy authority and old `widgets.shadows.offset`; `ShadowSettings` fallback/default parity; all eight direction selections and inert center; default/reset/fallback `SE`; existing shadow enable toggles; Card Darkness/Blur/Extra Offset and Text Darkness/Extra Offset canonical persistence; no negative Extra Offset; no Intense keys/UI; no text blur; and, critically, General-section save **merging/preservation** so a partial edit cannot erase unedited canonical or unknown-future `widgets.shadows` keys. Do not add tests that require legacy QWidget shadow visual parity. F0.5 deleted `test_shadow_tuning_paths.py` and `test_base_overlay_shadow_cache.py` (358 top-level modules) and added `tests/test_f0_5_shadow_controls.py` (359 total), which covers these regressions.
 
 ### G — CUSTOM/input/auxiliary pixels
 
@@ -270,7 +276,7 @@ These statuses describe test maintenance. They are not permission to change prod
 High-value groups that must **not** become destination authority:
 
 - **F0 (done):** the three Imgur test modules were deleted with the Imgur removal.
-- **F0.5 immediate retirement:** delete `test_shadow_tuning_paths.py` and `test_base_overlay_shadow_cache.py`; trim tuning-backed painter assertions from `test_shadow_utils.py`.
+- **F0.5 (done):** deleted `test_shadow_tuning_paths.py` and `test_base_overlay_shadow_cache.py`; trimmed the tuning-payload assertion from `test_shadow_utils.py`.
 - **E4/F remaining:** QWidget opacity/effect implementations such as `test_widget_effects.py`, `test_widget_effects_contract.py`; remaining `ShadowFadeProfile` coverage retires with its presentation owners.
 - **H/I:** legacy renderer backend/software fallback (`test_rendering_backends.py`, `test_gl_fallback_policy.py`), GLCompositor retained-base/fallback/presenter tests, QRhiWidget P4 surface tests, old SpotifyBarsGLOverlay presentation tests.
 - **J:** architecture-selection/spike benchmark suites where no ongoing product regression remains.
@@ -463,8 +469,8 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_overlay_uniforms.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_pixel_shift.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
 | `tests/test_service_widget_runtime.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
-| `tests/test_shadow_tuning_paths.py` | **OBSOLETE NOW** | Delete in F0.5 with `core/settings/shadow_tuning.py`; the sidecar/profile-copy/tuning-dictionary authority is explicitly retired and must not survive into Quick. |
-| `tests/test_shadow_utils.py` | **MIGRATION-CRITICAL — F** | Mixed legacy file. F0.5 deletes tuning-payload/tuning-backed painter-shadow assertions; remaining `ShadowFadeProfile`/QGraphicsOpacityEffect assertions survive only until their legacy presentation owners are removed. Do not preserve sidecar semantics or port staged effect-carrier fades. |
+| `tests/test_f0_5_shadow_controls.py` | **KEEP — MIGRATION PERMANENT** | F0.5 canonical shadow cleanup + Widgets → General controls: sidecar retirement, model/default parity, retired-`offset` drop, 3×3 direction picker, and the save-preservation merge. |
+| `tests/test_shadow_utils.py` | **MIGRATION-CRITICAL — F** | Mixed legacy file. F0.5 removed the tuning-payload assertion; remaining `ShadowFadeProfile`/QGraphicsOpacityEffect assertions survive only until their legacy presentation owners are removed. Do not preserve sidecar semantics or port staged effect-carrier fades. |
 | `tests/test_startup_black_flash.py` | **MIGRATION-CRITICAL — G/H** | Rehome display/input/topology behavior to Quick runtime. |
 | `tests/test_weather_widget.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_widget_capability_persist_repair.py` | **KEEP** | Retain; no migration-specific retirement identified. |
@@ -596,7 +602,6 @@ no current test inventory row or product gate should restore the family.
 
 | File | Status | Note |
 | --- | --- | --- |
-| `tests/test_base_overlay_shadow_cache.py` | **OBSOLETE NOW** | Delete in F0.5. The old painted-frame shadow cache exists only to preserve QWidget shadow presentation, which no longer requires migration-time parity once the sidecar authority is retired. |
 | `tests/test_cache_maintenance.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_display_image_ops.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_image_cache_accounting.py` | **KEEP** | Retain; no migration-specific retirement identified. |

@@ -189,13 +189,18 @@ class ShadowSettings:
     text_enabled: bool = True
     header_enabled: bool = True
     color: str = "#000000"
-    offset: list[int] = field(default_factory=lambda: [4, 4])
-    blur_radius: int = 10
-    text_opacity: float = 0.6
-    frame_opacity: float = 0.4
+    blur_radius: int = 18
+    text_opacity: float = 0.33
+    frame_opacity: float = 0.77
     # Canonical eight-direction shadow orientation (Phase E4). Orientation only;
-    # per-class magnitudes stay in their own tuning. Default SE.
+    # per-class magnitudes are family-authored. Default SE.
     direction: str = "SE"
+    # Optional additive Extra Offset scalars (Phase F0.5). Non-negative logical
+    # pixels added to the applicable authored magnitude before the canonical E4
+    # direction resolver applies signs/axis zeroing. Default 0. The retired
+    # ``widgets.shadows.offset`` pair is NOT this control and is not migrated.
+    frame_extra_offset: int = 0
+    text_extra_offset: int = 0
 
     @classmethod
     def from_settings(cls, settings: "SettingsManager") -> "ShadowSettings":
@@ -205,11 +210,12 @@ class ShadowSettings:
             text_enabled=settings.get("widgets.shadows.text_enabled", True),
             header_enabled=settings.get("widgets.shadows.header_enabled", True),
             color=settings.get("widgets.shadows.color", "#000000"),
-            offset=settings.get("widgets.shadows.offset", [4, 4]),
-            blur_radius=settings.get("widgets.shadows.blur_radius", 10),
-            text_opacity=settings.get("widgets.shadows.text_opacity", 0.6),
-            frame_opacity=settings.get("widgets.shadows.frame_opacity", 0.4),
+            blur_radius=settings.get("widgets.shadows.blur_radius", 18),
+            text_opacity=settings.get("widgets.shadows.text_opacity", 0.33),
+            frame_opacity=settings.get("widgets.shadows.frame_opacity", 0.77),
             direction=settings.get("widgets.shadows.direction", "SE"),
+            frame_extra_offset=settings.get("widgets.shadows.frame_extra_offset", 0),
+            text_extra_offset=settings.get("widgets.shadows.text_extra_offset", 0),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -219,11 +225,12 @@ class ShadowSettings:
             "widgets.shadows.text_enabled": self.text_enabled,
             "widgets.shadows.header_enabled": self.header_enabled,
             "widgets.shadows.color": self.color,
-            "widgets.shadows.offset": self.offset,
             "widgets.shadows.blur_radius": self.blur_radius,
             "widgets.shadows.text_opacity": self.text_opacity,
             "widgets.shadows.frame_opacity": self.frame_opacity,
             "widgets.shadows.direction": self.direction,
+            "widgets.shadows.frame_extra_offset": self.frame_extra_offset,
+            "widgets.shadows.text_extra_offset": self.text_extra_offset,
         }
 
 
