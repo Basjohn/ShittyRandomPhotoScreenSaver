@@ -9,6 +9,13 @@ from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPixmap
 
 from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
+from widgets.steam_card_models import (
+    SteamCardField,
+    build_mock_steam_view_model,
+    build_steam_connect_required_view_model,
+    with_long_title,
+    with_unavailable_state,
+)
 from widgets.steam_components import (
     ACHIEVEMENT_PULSE_AUTHORED_SIZE,
     ACHIEVEMENT_PULSE_PORTRAIT_AUTHORED_SIZE,
@@ -17,17 +24,12 @@ from widgets.steam_components import (
     ACHIEVEMENT_SQUARE_ARTWORK_MAX,
     ACHIEVEMENT_SQUARE_ARTWORK_MIN,
     STEAM_CARD_AUTHORED_SIZE,
-    SteamCardField,
     _draw_bottom_right_outside_shadow,
     achievement_capsule_geometry,
     achievement_field_rail_count,
     achievement_pulse_authored_size,
-    build_mock_steam_view_model,
-    build_steam_connect_required_view_model,
     layout_steam_card,
     render_steam_card,
-    with_long_title,
-    with_unavailable_state,
 )
 
 

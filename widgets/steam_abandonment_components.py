@@ -22,15 +22,17 @@ from PySide6.QtGui import (
 
 from core.steam.abandonment_issues import AbandonmentResolved, LAST_PLAYED_VERIFIED
 from widgets.shadow_utils import draw_text_rect_with_shadow
-from widgets.steam_components import (
+from widgets.steam_card_models import (
     SteamCardField,
     SteamCardViewModel,
+    with_stale_connection_info,
+)
+from widgets.steam_components import (
     _cover_source_rect,
     _draw_elided_text,
     _draw_header_badge,
     _draw_soft_rounded_shadow,
     _draw_underlined_text,
-    with_stale_connection_info,
 )
 
 

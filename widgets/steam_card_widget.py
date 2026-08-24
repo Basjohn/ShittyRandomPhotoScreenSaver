@@ -19,6 +19,11 @@ from widgets.shadow_utils import ShadowFadeProfile
 from core.logging.logger import get_logger
 from core.steam.achievement_pulse import AchievementPulseSelection
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
+from widgets.steam_card_models import (
+    SteamCardViewModel,
+    build_mock_steam_view_model,
+    build_steam_connect_required_view_model,
+)
 from widgets.steam_components import (
     ACHIEVEMENT_CAPSULE_BORDER_RGBA,
     ACHIEVEMENT_CAPSULE_FILL_RGBA,
@@ -26,12 +31,9 @@ from widgets.steam_components import (
     ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
     STEAM_CARD_AUTHORED_SIZE,
     SteamCardLayout,
-    SteamCardViewModel,
     achievement_capsule_geometry,
     achievement_field_rail_count,
     achievement_pulse_authored_size,
-    build_mock_steam_view_model,
-    build_steam_connect_required_view_model,
     layout_steam_card,
     normalize_achievement_artwork_shape,
     normalize_achievement_capsule_font_size,
@@ -662,7 +664,7 @@ class SteamCardWidget(BaseOverlayWidget):
     def _apply_achievement_pulse_snapshot(self, snapshot, *, connection_needs_attention: bool = False) -> None:
         """Apply a cache snapshot without repaint churn or transition interruption."""
         from widgets.service_widget_runtime import defer_value_if_transition
-        from widgets.steam_components import build_achievement_pulse_view_model
+        from widgets.steam_card_models import build_achievement_pulse_view_model
 
         model = build_achievement_pulse_view_model(
             snapshot.resolved,

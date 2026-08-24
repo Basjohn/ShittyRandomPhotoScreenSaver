@@ -23,7 +23,7 @@ from widgets.steam_abandonment_components import (
     render_abandonment_card,
 )
 from widgets.steam_card_widget import SteamCardDefinition, SteamCardWidget
-from widgets.steam_components import SteamCardViewModel
+from widgets.steam_card_models import SteamCardViewModel
 
 
 logger = get_logger(__name__)
