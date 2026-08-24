@@ -284,6 +284,7 @@ class TestMediaWidgetFactory:
         assert widget._playback_progress_glow_enabled is True
         assert widget._playback_progress_glow_color.getRgb() == (40, 180, 255, 170)
         assert not hasattr(widget, "_playback_progress_timer")
+        assert widget._runtime_service is None
         widget.deleteLater()
 
 
