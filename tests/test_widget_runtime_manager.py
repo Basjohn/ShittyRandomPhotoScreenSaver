@@ -11,8 +11,9 @@ Covers the responsibility extracted out of the WidgetManager god-object:
   preserving the E2.7 confirmed-retirement contract (explicit ``cleanup_widget``
   bool) and failing closed once the host edge is released.
 
-These cross the real production seam: ``WidgetRuntimeManager`` is the same owner
-``WidgetManager`` constructs and ``_create_factory_widgets`` admits through.
+These cross the real production seam: ``WidgetRuntimeManager`` is the owner the
+display runtime injects into ``WidgetManager`` and ``_create_factory_widgets``
+admits through.
 """
 from __future__ import annotations
 
@@ -32,6 +33,9 @@ class _Host:
 
     def __init__(self, widgets=None):
         self._widgets = widgets or {}
+
+    def get_runtime_widget_registry(self):
+        return self._widgets
 
 
 class _Settings:
@@ -198,6 +202,43 @@ def test_cleanup_releases_host_and_fails_closed():
     assert owner.initialize_widget("a") is False
     assert owner.initialize_all_widgets() == 0
     assert owner.get_all_lifecycle_states() == {}
+
+
+def test_host_binding_is_explicit_transferable_and_single_owner():
+    first = _Host({"a": _LifecycleWidget()})
+    second = _Host({"b": _LifecycleWidget()})
+    owner = WidgetRuntimeManager()
+
+    assert owner.bind_host(first) is True
+    assert owner.bind_host(first) is False
+    with pytest.raises(RuntimeError, match="already has a bound host"):
+        owner.bind_host(second)
+
+    assert owner.detach_host(first) is True
+    assert owner.bind_host(second) is True
+    assert owner.initialize_widget("b") is True
+
+
+def test_host_binding_rejects_invalid_or_mismatched_hosts():
+    owner = WidgetRuntimeManager()
+    with pytest.raises(TypeError, match="get_runtime_widget_registry"):
+        owner.bind_host(object())
+
+    first = _Host()
+    second = _Host()
+    owner.bind_host(first)
+    with pytest.raises(RuntimeError, match="different"):
+        owner.detach_host(second)
+
+
+def test_terminal_cleanup_prevents_rebind_and_service_recreation():
+    owner = WidgetRuntimeManager(_Host())
+    owner.cleanup()
+
+    assert owner.is_retired is True
+    with pytest.raises(RuntimeError, match="retired"):
+        owner.bind_host(_Host())
+    assert owner.ensure_widget_service("reddit", _ProviderConsumer(), {}) is None
 
 
 # --------------------------------------------------------------------------- #

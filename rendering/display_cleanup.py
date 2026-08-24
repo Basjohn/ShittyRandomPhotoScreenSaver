@@ -47,6 +47,14 @@ def cleanup_runtime(widget: "DisplayWidget", *, reason: str) -> None:
         manager.cleanup()
         widget._widget_manager = None
 
+    # Presentation widgets detach first; the display-runtime boundary then
+    # terminally retires their neutral services exactly once. WidgetManager is
+    # only the injected registry host on this production path.
+    widget_runtime_manager = getattr(widget, "_widget_runtime_manager", None)
+    if widget_runtime_manager is not None:
+        widget_runtime_manager.cleanup()
+        widget._widget_runtime_manager = None
+
     # Some overlays predate WidgetManager ownership. Their lifecycle methods
     # are idempotent, so clean them explicitly after the managed set.
     widget._cleanup_widget("media_widget", "MEDIA", "cleanup")

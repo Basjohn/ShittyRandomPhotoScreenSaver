@@ -58,6 +58,7 @@ from transitions.overlay_manager import (
 from core.mc import is_mc_build
 from rendering.backends import BackendSelectionResult
 from rendering.backends.base import RendererBackend, RenderSurface, SurfaceDescriptor
+from rendering.widget_runtime_manager import WidgetRuntimeManager
 
 if TYPE_CHECKING:
     from widgets.clock_widget import ClockWidget
@@ -366,12 +367,25 @@ class DisplayWidget(QWidget):
         # Central ThreadManager wiring (optional, provided by engine)
         self._thread_manager = thread_manager
         
+        # The current display runtime owns exactly one presentation-neutral
+        # widget owner. WidgetManager is only the temporary QWidget registry /
+        # presenter host injected into that owner.
+        self._widget_runtime_manager: Optional[WidgetRuntimeManager] = (
+            WidgetRuntimeManager()
+        )
+
         # WidgetManager for centralized overlay widget lifecycle (Phase E refactor)
         self._widget_manager: Optional[WidgetManager] = None
         try:
-            self._widget_manager = WidgetManager(self, self._resource_manager)
+            self._widget_manager = WidgetManager(
+                self,
+                self._resource_manager,
+                runtime_manager=self._widget_runtime_manager,
+            )
         except Exception:
             logger.debug("[DISPLAY_WIDGET] Failed to create WidgetManager", exc_info=True)
+            self._widget_runtime_manager.cleanup()
+            self._widget_runtime_manager = None
         
         # InputHandler for centralized input event handling (Phase E refactor)
         self._input_handler: Optional[InputHandler] = None
@@ -1592,6 +1606,16 @@ class DisplayWidget(QWidget):
                 logger.debug("[LIFECYCLE] WidgetManager cleanup complete")
             except Exception:
                 logger.debug("[LIFECYCLE] WidgetManager cleanup failed", exc_info=True)
+        if self._widget_runtime_manager is not None:
+            try:
+                self._widget_runtime_manager.cleanup()
+                self._widget_runtime_manager = None
+                logger.debug("[LIFECYCLE] WidgetRuntimeManager cleanup complete")
+            except Exception:
+                logger.debug(
+                    "[LIFECYCLE] WidgetRuntimeManager cleanup failed",
+                    exc_info=True,
+                )
         
         super().closeEvent(event)
 

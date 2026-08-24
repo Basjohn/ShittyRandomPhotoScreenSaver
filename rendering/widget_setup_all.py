@@ -512,7 +512,7 @@ def _ensure_secondary_runtime_service(
     """Attach/reuse one required service for an explicit Media secondary."""
 
     descriptor = get_widget_runtime_descriptor(widget_id)
-    runtime_owner = getattr(mgr, "_runtime_manager", None)
+    runtime_owner = mgr.runtime_manager
     if descriptor is None or runtime_owner is None:
         logger.error(
             "[WIDGET_MANAGER] Missing runtime owner/descriptor for %s; failing closed",
@@ -562,7 +562,13 @@ def _create_factory_widgets(
         # checkbox below; inert while every family is activated by default.
         # Admission authority is owned by WidgetRuntimeManager (Phase E1); the
         # family id is resolved through it for the diagnostic below.
-        runtime_owner = mgr._runtime_manager
+        runtime_owner = mgr.runtime_manager
+        if runtime_owner is None:
+            logger.error(
+                "[WIDGET_MANAGER] Missing runtime owner during factory admission; "
+                "failing closed"
+            )
+            return
         if not runtime_owner.admits_widget_family(descriptor.settings_key, widgets_config):
             logger.debug(
                 "[WIDGET_MANAGER] Descriptor %s skipped by deactivated family=%s",

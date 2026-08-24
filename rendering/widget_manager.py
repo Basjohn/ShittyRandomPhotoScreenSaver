@@ -145,13 +145,21 @@ class WidgetManager:
     RAISE_RATE_LIMIT_MS = 100
     PRESET_PERSIST_DELAY_MS = 120
     
-    def __init__(self, parent: "DisplayWidget", resource_manager: Optional[ResourceManager] = None):
+    def __init__(
+        self,
+        parent: "DisplayWidget",
+        resource_manager: Optional[ResourceManager] = None,
+        *,
+        runtime_manager: Optional[WidgetRuntimeManager] = None,
+    ):
         """
         Initialize the WidgetManager.
         
         Args:
             parent: The DisplayWidget that owns these widgets
             resource_manager: Optional ResourceManager for lifecycle tracking
+            runtime_manager: Display-runtime-owned neutral owner. Direct callers
+                may omit it to retain isolated standalone/test ownership.
         """
         self._parent = parent
         self._runtime_generation = getattr(parent, "_runtime_generation", None)
@@ -160,11 +168,14 @@ class WidgetManager:
         # Widget references
         self._widgets: Dict[str, QWidget] = {}
 
-        # Phase-E1 presentation-neutral runtime owner. Owns capability admission
-        # (dependency-aware) and lifecycle routing; this manager delegates to it
-        # and keeps thin wrappers for its public API. Constructed after the
-        # widget registry so the owner can route over it.
-        self._runtime_manager: Optional[WidgetRuntimeManager] = WidgetRuntimeManager(self)
+        # Phase-E1 presentation-neutral runtime owner. Production injects the
+        # display-runtime-owned instance; direct/standalone construction retains
+        # one isolated convenience owner for compatibility.
+        self._owns_runtime_manager = runtime_manager is None
+        self._runtime_manager: Optional[WidgetRuntimeManager] = (
+            runtime_manager or WidgetRuntimeManager()
+        )
+        self._runtime_manager.bind_host(self)
 
         # Rate limiting for raise operations
         self._last_raise_time: float = 0.0
@@ -233,6 +244,17 @@ class WidgetManager:
         self._visualizer_preset_save_token: int = 0
         
         logger.debug("[WIDGET_MANAGER] Initialized")
+
+    @property
+    def runtime_manager(self) -> Optional[WidgetRuntimeManager]:
+        """Return the injected neutral owner without transferring its lifetime."""
+
+        return self._runtime_manager
+
+    def get_runtime_widget_registry(self) -> Mapping[str, QWidget]:
+        """Expose the current presenter registry to the neutral lifecycle owner."""
+
+        return self._widgets
 
     def _own_runtime_callback(self, callback: Callable) -> Callable:
         """Attach retiring-generation ownership to a manager closure.
@@ -2192,9 +2214,21 @@ class WidgetManager:
         self._compositor_ready_callback = None
         self._settings_changed_callback = None
         self._resource_manager = None
-        if self._runtime_manager is not None:
-            self._runtime_manager.cleanup()
-            self._runtime_manager = None
+        runtime_manager = self._runtime_manager
+        owns_runtime_manager = self._owns_runtime_manager
+        self._runtime_manager = None
+        self._owns_runtime_manager = False
+        if runtime_manager is not None:
+            if owns_runtime_manager:
+                runtime_manager.cleanup()
+            else:
+                try:
+                    runtime_manager.detach_host(self)
+                except Exception:
+                    logger.error(
+                        "[WIDGET_MANAGER] Failed to detach injected runtime owner",
+                        exc_info=True,
+                    )
         self._parent = None
         logger.debug("[WIDGET_MANAGER] Cleanup complete")
 

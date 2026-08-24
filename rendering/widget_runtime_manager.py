@@ -8,8 +8,8 @@ activation + required-family satisfaction, not shared-provider consumer counting
 and presentation-neutral runtime **lifecycle routing**.
 
 It deliberately does **not** create or own QWidget/Quick instances or runtime
-pixels. The host (currently ``WidgetManager``) still owns the widget registry;
-this owner *admits* families, *routes* lifecycle/capability reactions, and owns
+pixels. The current presenter host supplies a small runtime-widget registry
+contract; this owner *admits* families, *routes* lifecycle/capability reactions, and owns
 presentation-neutral runtime *service* (provider/model) lifetimes on behalf of
 runtime widgets. At module top it imports no QWidget/Quick/provider/renderer
 code — only the neutral capability/catalog authorities and logging; the
@@ -30,7 +30,7 @@ and hoist ownership above the host.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, Mapping, Optional, Protocol, Tuple, TYPE_CHECKING
 
 from core.logging.logger import get_logger
 from core.settings.capability_activation import (
@@ -40,26 +40,70 @@ from core.settings.capability_activation import (
 from core.settings.widget_family_catalog import get_family_id_for_widget
 
 if TYPE_CHECKING:
-    from rendering.widget_manager import WidgetManager
     from rendering.widget_runtime_services import RuntimeServiceSpec
 
 logger = get_logger(__name__)
 
 
+class RuntimeWidgetRegistryHost(Protocol):
+    """Minimal presenter registry surface consumed by the neutral owner."""
+
+    def get_runtime_widget_registry(self) -> Mapping[str, Any]: ...
+
+
 class WidgetRuntimeManager:
     """Presentation-neutral capability-admission, lifecycle and service owner."""
 
-    def __init__(self, host: "WidgetManager") -> None:
-        # Transitional package-internal coupling: the host still owns the widget
-        # registry (``host._widgets``). This owner routes lifecycle/admission and
-        # never creates or retains QWidget instances of its own. A later E1 slice
-        # hoists registry ownership; keep this edge weak of intent, not identity.
-        self._host = host
+    def __init__(self, host: RuntimeWidgetRegistryHost | None = None) -> None:
+        self._host: RuntimeWidgetRegistryHost | None = None
+        self._retired = False
         # Presentation-neutral runtime services (provider/model lifetimes) owned
         # on behalf of runtime widgets, keyed by widget id. Each entry is the
         # (service, spec) pair so retirement uses the spec's retire hook exactly
         # once, independently of QWidget pixel ownership.
         self._services: Dict[str, Tuple[Any, "RuntimeServiceSpec"]] = {}
+        if host is not None:
+            self.bind_host(host)
+
+    @property
+    def is_retired(self) -> bool:
+        return self._retired
+
+    @property
+    def has_bound_host(self) -> bool:
+        return self._host is not None
+
+    def bind_host(self, host: RuntimeWidgetRegistryHost) -> bool:
+        """Bind one current presenter registry without transferring ownership."""
+
+        if self._retired:
+            raise RuntimeError("cannot bind a retired WidgetRuntimeManager")
+        if host is None:
+            raise TypeError("runtime widget registry host is required")
+        if self._host is host:
+            return False
+        if self._host is not None:
+            raise RuntimeError("WidgetRuntimeManager already has a bound host")
+        provider = getattr(host, "get_runtime_widget_registry", None)
+        if not callable(provider):
+            raise TypeError(
+                "runtime widget registry host must expose get_runtime_widget_registry"
+            )
+        registry = provider()
+        if not isinstance(registry, Mapping):
+            raise TypeError("runtime widget registry host returned a non-mapping")
+        self._host = host
+        return True
+
+    def detach_host(self, host: RuntimeWidgetRegistryHost) -> bool:
+        """Detach the current presenter while retaining neutral service ownership."""
+
+        if self._host is None:
+            return False
+        if self._host is not host:
+            raise RuntimeError("cannot detach a different runtime widget registry host")
+        self._host = None
+        return True
 
     # ------------------------------------------------------------------ #
     # Capability admission authority (activation + dependency satisfaction) #
@@ -147,6 +191,9 @@ class WidgetRuntimeManager:
         and fail closed — a failed build/injection never leaves an owned service
         behind, so the widget cannot silently run on a QWidget-owned default.
         """
+        if self._retired:
+            return None
+
         from rendering.widget_runtime_services import get_runtime_service_spec
 
         spec = get_runtime_service_spec(widget_id)
@@ -275,11 +322,22 @@ class WidgetRuntimeManager:
     # ------------------------------------------------------------------ #
     # Runtime lifecycle routing (presentation-neutral)                   #
     # ------------------------------------------------------------------ #
-    def _registry(self) -> Dict[str, Any]:
+    def _registry(self) -> Mapping[str, Any]:
         host = self._host
         if host is None:
             return {}
-        return getattr(host, "_widgets", {}) or {}
+        provider = getattr(host, "get_runtime_widget_registry", None)
+        if not callable(provider):
+            return {}
+        try:
+            registry = provider()
+        except Exception:
+            logger.debug(
+                "[WIDGET_RUNTIME] Runtime widget registry lookup failed",
+                exc_info=True,
+            )
+            return {}
+        return registry if isinstance(registry, Mapping) else {}
 
     def initialize_widget(self, name: str) -> bool:
         """Initialize a widget using the lifecycle system."""
@@ -405,5 +463,8 @@ class WidgetRuntimeManager:
 
     def cleanup(self) -> None:
         """Retire owned services and release the host edge; terminal."""
+        if self._retired:
+            return
         self.retire_all_services()
         self._host = None
+        self._retired = True
