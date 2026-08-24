@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
 Reviewed source basis:
 
@@ -8,6 +8,9 @@ Reviewed source basis:
 origin/main = 5b3cbaef4d443c79941e5ac780252f82a4e77bc4
 tests/ tree = 0a93e6dbba3006456c57251b09b605b2bb1f2196
 ```
+
+Focused E1 Weather ownership status below was refreshed against `25f6ca4e` without claiming a new
+full-inventory recount.
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
 
@@ -424,7 +427,7 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_shadow_tuning_paths.py` | **MIGRATION-CRITICAL — E4** | Mostly persistence/schema/profile path; likely survives E4 with direction/default updates. |
 | `tests/test_shadow_utils.py` | **MIGRATION-CRITICAL — E4** | Mixed: useful tuning/fade semantics plus QPainter/QGraphicsOpacityEffect implementation. |
 | `tests/test_startup_black_flash.py` | **MIGRATION-CRITICAL — G/H** | Rehome display/input/topology behavior to Quick runtime. |
-| `tests/test_weather_widget.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
+| `tests/test_weather_widget.py` | **MIGRATION-CRITICAL — E1/F** | Weather runtime-service ownership/cache/cadence/stale-result coverage is separated from the temporary QWidget presentation assertions; preserve and rehome the latter as the family ports. |
 | `tests/test_widget_capability_persist_repair.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_widget_descriptors.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_effects.py` | **WILL BE OBSOLETE — E4/F** | Keep only until owning QWidget effect/shadow path is replaced. |
@@ -433,9 +436,9 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_widget_family_catalog.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_lifecycle.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_manager.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
-| `tests/test_widget_manager_refresh.py` | **MIGRATION-CRITICAL — E1/F** | Current E2/E2.7 lifecycle/admission regression owner; six stale tests were corrected at 5b3cbaef. Update with E1/F ownership. |
+| `tests/test_widget_manager_refresh.py` | **MIGRATION-CRITICAL — E1/F** | Current capability admission plus production factory/service-injection seam coverage, including Reddit/Weather E1 ownership; continue updating with later E1/F slices. |
 | `tests/test_widget_performance.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
-| `tests/test_widget_runtime_manager.py` | **MIGRATION-CRITICAL — E1** | E1 owner regression bar (`WidgetRuntimeManager` admission/deactivation-dispatch/lifecycle routing). Extend as each E1 slice migrates provider/model ownership. |
+| `tests/test_widget_runtime_manager.py` | **MIGRATION-CRITICAL — E1** | E1 owner regression bar (`WidgetRuntimeManager` admission, service build/inject/fail-closed/retire, deactivation dispatch and lifecycle routing). Extend as each E1 slice migrates real ownership. |
 | `tests/test_widget_positioner.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
 | `tests/test_widget_positioning_comprehensive.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
 | `tests/test_widget_setup.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |

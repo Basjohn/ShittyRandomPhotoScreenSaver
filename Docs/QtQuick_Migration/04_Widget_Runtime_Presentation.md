@@ -1,6 +1,6 @@
 # 04 — Runtime Widgets, Retained Quick Presentation, Shadows and Full Customization
 
-Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — slices 1–2 audited GREEN; Weather slice next**  
+Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — slices 1–2 audited GREEN; Weather slice 3 self-audited GREEN at `25f6ca4e`**
 Last updated: 2026-08-24
 
 Cross-links:
@@ -8,6 +8,8 @@ Cross-links:
 - sequence/work admission: `Current_Plan.md`
 - landed capability activation / E2 UI: `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
 - canonical widget authoring guidance: `Docs/10_WIDGET_GUIDELINES.md`
+- runtime ownership/cardinality/threading: `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md`
+- Quick widget state/model/assets/actions bridge: `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
 - style history: `Docs/Custom_Style_Implementation.md`
 - deletion ledger: `Future_Cleanup.md`
 - test retirement/rehome ledger: `Docs/TestSuite.md`
@@ -213,7 +215,7 @@ capability/dependency query; it is not generic shared-provider last-consumer acc
 The current `handle_capability_change()` lazy bridge into the E2.7 Visualizer failover retirement
 remains transitional. Do not turn it into a central family-specific presenter/runtime switchboard.
 
-#### Next ordinary-family owner seam: Weather
+#### Landed ordinary-family owner seam: Weather
 
 Reviewer inspection after Reddit selected Weather as the next bounded E1 migration:
 
@@ -223,11 +225,11 @@ Reviewer inspection after Reddit selected Weather as the next bounded E1 migrati
 - Media has a real QWidget-owned controller but is deliberately deferred to a high-risk dedicated
   checkpoint because of Spotify/Visualizer/transport/shared-state coupling;
 - Imgur is removed in F0 rather than migrated;
-- Weather still couples provider construction, cache/startup flow, refresh/retry cadence and async
-  request-generation ownership directly to `WeatherWidget`.
+- before slice 3, Weather coupled provider construction, cache/startup flow, refresh/retry cadence and
+  async request-generation ownership directly to `WeatherWidget`.
 
-The Weather slice should leave one coherent presentation-neutral Weather runtime-data service/model,
-not merely move the `OpenMeteoProvider(...)` line.
+Slice 3 leaves one coherent presentation-neutral `WeatherRuntimeService`, rather than merely moving the
+`OpenMeteoProvider(...)` line.
 
 Destination shape:
 
@@ -239,8 +241,8 @@ WidgetRuntimeManager
     -> WeatherWidget (temporary legacy pixel consumer)
 ```
 
-`WeatherWidget` may retain old pixel/layout/icon/fade interaction until Phase F, but production Weather
-provider/network/timer ownership must no longer exist merely because the QWidget exists.
+`WeatherWidget` retains old pixel/layout/icon/fade interaction until Phase F, while production Weather
+provider/network/timer ownership no longer exists merely because the QWidget exists.
 
 `widgets.weather_components.WeatherFetcher` is not a production-owner candidate by default: current
 production uses the `WeatherWidget` ThreadManager fetch path, and repository search found no separate
@@ -280,9 +282,74 @@ owners.
 
 This is internal modularity, not an external plugin SDK.
 
+### 6.4 Owner scope, service cardinality and threads
+
+`WidgetRuntimeManager` being one-per-display does **not** mean every provider/backend must also become
+one-per-display.
+
+Choose the narrowest correct lifetime/cardinality for the actual behavior:
+
+```text
+process/shared backend
+family/shared runtime owner
+per-display runtime state
+per-instance runtime owner
+presentation-only Quick item
+render-thread-only resource
+```
+
+Do not manufacture a `FooRuntimeService` simply because a family exists. A family whose useful runtime
+logic is already presentation-neutral may need only a presentation model/projection; a pure retained
+visual may need no new service object at all.
+
+A runtime service is also **not a thread**. Prefer the existing `ThreadManager` / legal shared execution
+owners for detached I/O or computation. E1 must move timers/providers/workers, not multiply them.
+
+For every owner migration, compare the expensive-owner cardinality before and after:
+
+```text
+provider/controller instances
+timers/poll loops
+threads/workers
+subscriptions
+processes
+```
+
+Unexpected increases require a concrete reason and regression coverage.
+
+See `08_Widget_Runtime_Ownership_Threading.md` for the complete lifetime, threading, stale-result,
+standalone-compatibility and shared-owner contract.
+
 ## 7. Widget model contract
 
 Each family exposes only the state required for its visual and actions.
+
+The destination boundary is not merely “some Python object exposed to QML.” Use a stable,
+presentation-oriented model shape appropriate to the data:
+
+```text
+scalar/card state
+    -> stable explicit presentation properties
+
+repeating rows/cards
+    -> stable row identity + bounded list-model semantics
+
+dynamic image/artwork
+    -> detached image identity/payload through one proven Quick image-delivery seam
+
+user interaction
+    -> semantic action back to the Python runtime owner
+```
+
+Do not expose `SettingsManager`, providers/backends, QWidget objects, or arbitrary mutable business
+objects directly to QML.
+
+Presentation updates are event/state driven. Static retained widgets do not earn a Python callback or
+QML timer every physical frame. Repeated state identical to the current presentation state should be a
+no-op.
+
+See `09_Widget_Quick_Presentation_Bridge.md` for the full Phase-E3/F state/list/image/action/update
+decomposition and per-family port checklist.
 
 ### Clock family
 

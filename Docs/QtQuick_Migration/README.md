@@ -1,7 +1,7 @@
 # Qt Quick Production Migration — Technical Decomposition Index
 
 Status: subordinate technical notes for `Current_Plan.md`  
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
 These documents are **not independent plans**. Sequence and work admission come only from
 `Current_Plan.md`; deferred deletion/accounting comes from `Future_Cleanup.md`.
@@ -17,7 +17,8 @@ Within Phase E:
 - activation/catalog foundation: landed;
 - **E2 `SETUP`/live lazy navigation: implementation CLOSED**;
 - **E2.7 Visualizer CUSTOM failover/reclaim: implementation CLOSED / audit GREEN**;
-- **E1 presentation-neutral runtime/model/provider ownership: ACTIVE next**;
+- **E1 presentation-neutral runtime/model/provider ownership: ACTIVE**; Weather slice 3 is
+  self-audited GREEN at `25f6ca4e`;
 - E3 retained Quick primitives: waiting for E1;
 - E4 global eight-direction shadow authority: waiting for E3;
 - Phase F waits for Phase-E closure.
@@ -40,6 +41,13 @@ focused tests / current evidence
 
 `Current_Plan.md` decides what is admitted **now**. A decomposition may retain landed rationale from an
 earlier phase without reopening that phase.
+
+For active E1 ordinary-widget ownership, read `04_Widget_Runtime_Presentation.md` and
+`08_Widget_Runtime_Ownership_Threading.md` together. `08` defines owner scope/cardinality/threading; it
+does not authorize a family not admitted by `Current_Plan.md`.
+
+For Phase E3/F ordinary-widget Quick presentation, `09_Widget_Quick_Presentation_Bridge.md` defines the
+state/list/image/action/update boundary subordinate to `04`.
 
 For visualizer work, `Docs/Guardrails/Visualizer_Presentation.md` is binding; for Bubble also read
 `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
@@ -97,6 +105,8 @@ when their owner is explicitly rehomed.
 | `05_Custom_Layout_Input_Interaction.md` | Phase-G CUSTOM Save/Cancel, edit overlays, cross-monitor transfer, interaction/context |
 | `06_Build_Tooling_Validation.md` | packaging, tools, tests, compiled/runtime/perf gates |
 | `07_Settings_Capability_Activation.md` | **landed E2/E2.7 capability/Settings contract** + E1 dormancy boundary |
+| `08_Widget_Runtime_Ownership_Threading.md` | **E1 cross-cutting owner scope/cardinality/threading/async-retirement contract**; service is not thread, not every family needs a service |
+| `09_Widget_Quick_Presentation_Bridge.md` | **E3/F ordinary-widget state/list/image/action/update bridge and family-port decomposition** |
 
 ## Off-rails rule
 

@@ -1,6 +1,6 @@
 # SRPSS Index
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
 Navigation and architecture-epoch routing.
 
@@ -47,7 +47,9 @@ Current normal implementation work is **Phase E — widget presentation + capabi
 - Phase-E activation foundation and E2 `SETUP`/live lazy navigation are landed.
 - E2.7 Visualizer CUSTOM failover/reclaim implementation is independently audited GREEN; physical
   dual-display wake/late-return remains deferred acceptance only.
-- **E1 presentation-neutral runtime/model/provider ownership is ACTIVE next.**
+- **E1 presentation-neutral runtime/model/provider ownership is ACTIVE.** Weather slice 3 is
+  self-audited GREEN at `25f6ca4e`; the next admitted work is a source assessment of Gmail/Steam
+  residual ownership before another implementation slice is selected.
 - E3 retained Quick primitives and E4 global shadow direction remain after E1 and before Phase F.
 
 ## Start here
@@ -61,7 +63,8 @@ Current normal implementation work is **Phase E — widget presentation + capabi
 | Cross-cutting safety | `Docs/Guardrails.md` |
 | Stable architecture | `Spec.md` |
 | Capability activation / E2 SETUP | `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md` |
-| Widget/runtime presentation | `Docs/10_WIDGET_GUIDELINES.md`, `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
+| Widget runtime ownership/threading | `Docs/10_WIDGET_GUIDELINES.md`, `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`, `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md` |
+| Quick widget state/models/actions | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`, `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md` |
 | Transition authoring/runtime | `Docs/Transition_Change_Checklist.md`, `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md` |
 | Visualizer presentation/cadence | `Docs/Guardrails/Visualizer_Presentation.md` |
 | Bubble feel / timing | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
@@ -89,6 +92,8 @@ These are subordinate technical decompositions/references, not parallel plans:
 - `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`
 - `Docs/QtQuick_Migration/06_Build_Tooling_Validation.md`
 - `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
+- `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md`
+- `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
 
 Some decompositions describe landed earlier-phase architecture because they remain the best focused
 reference. `Current_Plan.md` alone decides whether work is admitted now.
@@ -154,7 +159,7 @@ No production runtime switch/fallback between old and Quick is to be introduced.
 | Capability activation | canonical settings + presentation-neutral family/transition catalog/query authority |
 | Providers / service logic | existing/refactored Python owners |
 | Persistence | existing settings/store owners |
-| Widget models/providers | current owners migrating toward presentation-neutral `WidgetRuntimeManager` |
+| Widget models/providers | migrated per-instance services through presentation-neutral `WidgetRuntimeManager`; preserve already-correct shared/family owners while E1 continues |
 | Runtime widget pixels | destination: display Quick scene |
 | Thread/task ownership | `ThreadManager` for general async work |
 | Resource accounting | `ResourceManager`; accounting only, never deletion owner |
