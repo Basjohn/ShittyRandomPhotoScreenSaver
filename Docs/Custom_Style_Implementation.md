@@ -80,22 +80,23 @@ unless `Current_Plan.md` explicitly retires that **control/behavior itself**. Th
 presentation-era state deliberately retired by the migration, such as the old per-mode visualizer
 card-height/growth controls.
 
-### 4.1 Widgets → General shadow-direction picker — REQUIRED F0.5 UI
+### 4.1 Widgets → General shadow controls — REQUIRED F0.5 UI
 
-E4 landed the canonical `widgets.shadows.direction` setting/runtime authority but intentionally did not
-add its user-facing Settings control. F0.5 supplies that editor before the first retained family port.
+E4 landed canonical shadow direction/settings authority but intentionally did not add the complete
+user-facing editor. F0.5 completes it in the existing **Widgets → General → Appearance** section.
+Settings remains QWidget. This is not a runtime-family/QML slice.
 
-Location:
+The existing General page already owns:
 
-```text
-Settings
-  -> Widgets
-      -> General
-          -> Shadow Direction
-```
+- Enable Widget Drop Shadows;
+- Enable Text Shadows;
+- Enable Widget Header Drop Shadows.
 
-Use a **compact custom-styled 3×3 arrow-picker box** rather than a combo box or a vertical bank of eight
-radio buttons:
+Keep those controls and place the new controls beside them as one coherent Shadow group.
+
+#### Direction — mandatory
+
+Use a compact custom-styled 3×3 arrow picker:
 
 ```text
 ┌─────────────┐
@@ -105,45 +106,111 @@ radio buttons:
 └─────────────┘
 ```
 
-The eight selectable cells map to the existing canonical tokens:
+The eight cells map to `NW/N/NE/W/E/SW/S/SE`. The center cell is empty/inert. There is no ninth
+`center`, `none`, `automatic` or zero-offset direction. Fresh/Reset-to-Defaults selects `SE`; malformed
+persisted input displays the canonical E4 fallback `SE`.
 
-```text
-NW  N  NE
- W     E
-SW  S  SE
-```
-
-The center cell is deliberately empty/inert. There is no center, none, automatic, or zero-offset
-shadow-direction mode. Do not add a ninth semantic merely because the control uses a 3×3 layout.
-
-Style/UX requirements:
+Style/UX:
 
 - match existing SRPSS dark custom Settings chrome and spacing;
-- remain compact enough to sit naturally inside Widgets → General rather than becoming a large panel;
-- arrows/icons are the primary presentation, not `NW`/`SE` text labels;
-- selected direction is immediately obvious without requiring focus;
-- provide normal hover and pressed feedback consistent with nearby custom controls;
-- keyboard focus/navigation must remain usable;
-- expose tooltip/accessibility names such as `North West`, `North`, `South East`;
-- fresh profile / Reset to Defaults selects `SE`;
-- loading an invalid persisted token displays the canonical E4 fallback (`SE`) rather than inventing a
-  separate UI repair policy.
+- arrows/icons are primary, not raw token text;
+- selected state is visible without focus; normal hover/pressed/focus states remain clear;
+- expose tooltip/accessibility names (`North West`, `North`, etc.);
+- remain compact enough to live naturally in General → Appearance.
 
-Authority requirements:
+#### Widget / Card Shadows
 
-- read/write the existing canonical `widgets.shadows.direction` value;
-- reuse the E4 canonical token vocabulary/resolution policy; do not define a second direction enum or
-  independent mapping table with different semantics;
-- Settings remains QWidget; this control does not justify QML Settings UI;
-- do not expose `SettingsManager` to runtime QML;
-- do not directly reach into a retained family item from the picker. Use the normal Settings
-  apply/save/recreate/update path used by shared visual settings;
-- the picker controls **orientation only**. It does not alter card/text/header magnitude, blur, spread,
-  opacity, color, or enabled state.
+```text
+Enable Widget Drop Shadows
+Darkness
+Blur
+Extra Offset
+Enable Widget Header Drop Shadows
+```
 
-Focused F0.5 tests should cover all eight choices, center-cell inertness, canonical persistence/reload,
-Reset to Defaults => `SE`, invalid-token fallback display, and normal Widgets → General lazy-page/save
-behavior. F0.5 does not port Clock or another runtime widget family.
+Canonical settings:
+
+- `enabled` — existing toggle;
+- `frame_opacity` — user-facing **Darkness** (0–100% UI mapped to normalized opacity);
+- `blur_radius` — user-facing **Blur**, bounded logical-pixel value;
+- `frame_extra_offset` — new non-negative logical-pixel scalar, default `0`;
+- `header_enabled` — existing header-shadow toggle.
+
+Card blur affects the retained card/drop shadow only. A later retained-family style update changes the
+existing `RectangularShadow` property and lets Qt invalidate its cache naturally; it does not create a
+second cache/effect carrier.
+
+#### Text Shadows
+
+```text
+Enable Text Shadows
+Darkness
+Extra Offset
+```
+
+Canonical settings:
+
+- `text_enabled` — existing toggle;
+- `text_opacity` — user-facing **Darkness** (0–100% UI mapped to normalized opacity);
+- `text_extra_offset` — new non-negative logical-pixel scalar, default `0`.
+
+**There is no Text Blur control or text-blur destination property.** Ordinary, large and header text
+shadows stay duplicate retained glyphs. Header text may retain class-specific baseline alpha/magnitude
+inside the style resolver, but there is no third user-facing Header tuning system; global direction and
+the Text user modifier path apply consistently.
+
+#### Extra Offset semantics
+
+Extra Offset augments the authored/class baseline before E4 direction resolution:
+
+```text
+authored/base magnitude + user Extra Offset
+        ↓
+canonical ShadowDirection resolver
+        ↓
+signed X/Y retained properties
+```
+
+E/W activate X, N/S activate Y, diagonals add the scalar to both authored axes before signs are applied.
+Extra Offset is non-negative; direction owns orientation. Do not create signed offset sliders.
+
+Do **not** reinterpret legacy `widgets.shadows.offset` as either new Extra Offset field. That old pair is
+not the E4 magnitude authority and can remain compatibility debris until the later settings epoch.
+
+#### No Intense mode
+
+Do not restore an `Intense Shadow` toggle/profile. `intense_shadow`, `analog_shadow_intense` and
+`digital_shadow_intense` are already retired settings keys. The old painter `shadowtuning.json` values
+(`blur_steps`, per-pass alpha, etc.) are implementation-specific visual-reference evidence, not Quick UI
+units. The destination has one normal shadow system with canonical defaults plus these direct controls.
+
+#### Settings authority / save safety
+
+- read/write the existing canonical `widgets.shadows` mapping;
+- reuse E4 direction vocabulary/resolver; no UI-local direction semantics;
+- extend `ShadowSettings` rather than creating a second shadow settings/model owner;
+- do not expose `SettingsManager` to runtime QML or poke retained QML items directly from the picker;
+- no per-family shadow editor in F0.5;
+- preserve normal Settings apply/save/recreate/update ownership.
+
+**Mandatory bug fix:** the current General save helper builds a partial `shadows` dictionary with only
+the enable booleans, and the section-save layer assigns that dictionary wholesale. F0.5 must merge into
+the existing `widgets.shadows` mapping (or equivalent) so any General save preserves unedited direction,
+color, legacy offset, opacity, blur, extra-offset and unknown future keys.
+
+Focused F0.5 tests cover:
+
+- all eight direction choices and inert center;
+- selected/hover/pressed/focus/accessibility behavior where deterministic;
+- canonical persistence/reload, default/reset `SE`, malformed-token fallback;
+- card Darkness/Blur/Extra Offset and Text Darkness/Extra Offset round-trip/defaults/clamping;
+- non-negative Extra Offset;
+- **save-preservation:** changing Border Width or one shadow toggle cannot erase another shadow key;
+- no Intense UI/keys and no text-blur setting/property/effect;
+- generated defaults/SST parity after adding the two new scalar defaults;
+- normal Widgets → General lazy-page/save behavior.
+
+F0.5 does not port Clock or another runtime widget family.
 
 ## 5. Shadow history and Phase E4 destination
 

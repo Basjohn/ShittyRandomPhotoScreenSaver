@@ -1,6 +1,6 @@
 # 09 — Ordinary Widget Qt Quick Presentation State Bridge
 
-Status: **Phase-F technical bridge; E3/E4 landed and independently GREEN; F0 active next**  
+Status: **Phase-F technical bridge; E3/E4 landed; F0 closed by source audit + reconciliation; F0.5 active next**  
 Last updated: 2026-08-24  
 Reviewed source basis: `3a5626325891ec10343d53b0e88d5fd3c4b6469d`
 
@@ -316,6 +316,27 @@ MultiEffect/layer capture to reproduce ordinary text parity.
 Global shadow direction is resolved before QML and changes only the signs/axis of each authored shadow
 magnitude.
 
+F0.5 adds two global user tuning buckets without creating a second style owner:
+
+```text
+Widget/Card: frame_opacity, blur_radius, frame_extra_offset
+Text:        text_opacity, text_extra_offset
+All:         direction
+```
+
+A family presentation projection combines canonical settings with its authored class baseline and exposes
+resolved presentation fields, conceptually:
+
+```text
+cardShadowEnabled / cardShadowAlpha / cardShadowBlur / cardShadowOffsetX/Y
+textShadowEnabled / textShadowAlpha / textShadowOffsetX/Y
+headerShadowEnabled / resolved header alpha/offset where authored distinct
+```
+
+QML does not know `frame_extra_offset`, `text_extra_offset`, legacy offset pairs, Intense modes or the
+direction token. It receives final values only. Extra Offset is applied before direction/sign resolution.
+Text has no blur field.
+
 ### Whole-widget fade / no effect-carrier bridge
 
 The retained family shell has one whole-widget fade authority: outer `OverlayWidget` opacity.
@@ -349,8 +370,7 @@ The main time/numerals may legitimately resolve through large-text tuning if the
 resolver selects it by font size. That is different from inventing blur.
 
 Clock is also the first **real family wiring gate** for E4: its Python style projection must read the
-canonical global direction, resolve the applicable card/text/large-text magnitudes to signed offsets,
-and update the existing retained Clock item in place when direction changes. Do not leave E4 as a
+canonical global direction and F0.5 user modifiers, resolve the applicable card/text/large-text magnitudes to signed offsets, and update the existing retained Clock item in place when direction/darkness/blur/extra-offset changes. Do not leave E4 as a
 pure helper that family code bypasses with hard-coded signs.
 
 ---

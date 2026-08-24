@@ -5,8 +5,8 @@ Last updated: 2026-08-24
 Reviewed source basis:
 
 ```text
-test-inventory basis = Phase F0 deprecated-Imgur removal (post-E4 3a562632)
-Phase E CLOSED; Phase F active — F0 removes deprecated Imgur from current product authority
+test-inventory basis = 19460a7a8ffe9e5134363267da3d61fe46cc23d4
+Phase F0 deprecated Imgur deletion — source-audited GREEN; stale scraping dependency pins removed by closure reconciliation; 360 test modules; F0.5 next
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -23,10 +23,9 @@ The E4 closure reconciliation through `3a562632` adds `tests/test_shadow_directi
 verifies the canonical eight-direction resolver/settings boundary and the retained card/text-shadow
 normalization, marks E4 **CLOSED / independently GREEN**, and closes Phase E structurally.
 
-The Phase F0 reconciliation removes deprecated Imgur from current product authority and deletes its
-three test modules (`test_imgur_cache.py`, `test_imgur_scraper.py`, `test_imgur_widget.py`); the
-surviving mixed modules that referenced Imgur are de-Imgured in place without losing their real
-coverage.
+The F0 reconciliation at `19460a7` removes deprecated Imgur from current product authority, deletes
+`test_imgur_cache.py`, `test_imgur_scraper.py` and `test_imgur_widget.py`, and de-Imgurs mixed surviving
+tests. Independent source audit also found no tracked path containing `imgur`. The audit found only two stale Imgur-era requirement pins (`beautifulsoup4`, `soupsieve`) with no current code consumer; the closure reconciliation removes them. The reviewer did not independently rerun Claude's focused Windows test commands.
 
 At the reviewed checkpoint the repository contains:
 
@@ -200,7 +199,7 @@ Preserve:
   - new outage after reclaim → fresh full 30 s grace/global generation;
   - capability OFF retires pending failover state and only discards live-fallback state after confirmed retirement.
 
-E2/E2.7, E1, E3 and E4 implementation are closed and Phase E is structurally **CLOSED**. Phase F is active; F0 removed deprecated Imgur, and F0.5 (the Widgets → General shadow-direction picker) is next. Do not write “after E1/E3/E4 lands” tests as future work.
+E2/E2.7, E1, E3 and E4 are closed and Phase E is structurally **CLOSED**. F0 deprecated Imgur deletion is source-audited GREEN from `19460a7`, with its stale scraping dependency pins removed by the closure reconciliation. Phase F remains active with F0.5 Widgets → General canonical shadow controls next. Do not write “after E1/E3/E4/F0 lands” tests as future work.
 
 ## 5. Active migration gates by next phase
 
@@ -224,11 +223,13 @@ Permanent E4 coverage protects: one canonical eight-direction authority; all eig
 
 The E4 host test necessarily injects already-resolved signed offsets because no real family is Quick-presented yet. F1 Clock is the first required end-to-end proof that an actual family projection reads the canonical direction, resolves class-specific magnitudes in Python, and updates its retained card/text properties without presentation or runtime-owner recreation.
 
-### F — widget family ports — ACTIVE; F0 NEXT
+### F — widget family ports — ACTIVE; F0.5 NEXT
 
-For each family, preserve provider/model/behavior/settings tests. Rehome direct QWidget painting/geometry/presentation assertions to retained Quick items. F0 deletes Imgur and its tests instead of porting them.
+F0 deleted deprecated Imgur instead of porting it. F0.5 is the bounded QWidget Settings slice that completes the canonical global shadow controls before F1 Clock. For each later family, preserve provider/model/behavior/settings tests and rehome direct QWidget presentation assertions to retained Quick items.
 
 Do not port QWidget-era effect carriers, dummy shadow widgets, `QGraphicsOpacityEffect`/`ShadowFadeProfile` staged shadow attachment, or equivalent wrapper choreography into Quick. Whole-widget family fade is the retained presentation-root opacity and composites the card, cached card shadow, text-shadow glyphs and content together. Intermediate Quick `Item`s require a real layout/transform/clipping/z/input/lifecycle purpose, not an old one-effect-per-QWidget workaround. F1 Clock must explicitly prove this rule and the real E4 settings→Python resolver→retained-family wiring.
+
+F0.5 permanent Settings regressions must protect: all eight direction selections and inert center; default/reset/fallback `SE`; existing shadow enable toggles; Card Darkness/Blur/Extra Offset and Text Darkness/Extra Offset canonical persistence; no negative Extra Offset; no Intense keys/UI; no text blur; and, critically, General-section save **merging/preservation** so a partial edit cannot erase unedited or unknown `widgets.shadows` keys. If F0.5 adds a new test module, add it to this inventory in the same checkpoint and update the count.
 
 ### G — CUSTOM/input/auxiliary pixels
 
@@ -575,12 +576,10 @@ The inventory below accounts for every executable test file present at the revie
 
 ### 10.10 Imgur — removed in F0
 
-Deprecated Imgur has been removed from current product authority. Its three test modules
-(`test_imgur_cache.py`, `test_imgur_scraper.py`, `test_imgur_widget.py`) were deleted, and the mixed
-modules that referenced Imgur (`test_widget_descriptors.py`, `test_widget_family_catalog.py`,
-`test_custom_layout_manager.py`, `test_storage_paths.py`, `test_cache_maintenance.py`,
-`test_base_overlay_shadow_cache.py`, `test_widgets_tab.py`, `test_widget_manager_refresh.py`,
-`test_capability_activation.py`, `test_p2_custom_cancel_media_state.py`) were de-Imgured in place.
+Deprecated Imgur has been removed from current product authority. Its three dedicated test modules
+(`test_imgur_cache.py`, `test_imgur_scraper.py`, `test_imgur_widget.py`) were deleted. Mixed surviving
+modules were de-Imgured in place rather than weakened. Historical references may remain as evidence but
+no current test inventory row or product gate should restore the family.
 
 ### 10.11 Image/source/cache/providers
 

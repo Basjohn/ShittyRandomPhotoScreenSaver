@@ -1,12 +1,10 @@
 # 10 — Qt Quick Ordinary Widget Family Port Decomposition
 
-Status: **Phase-F ACTIVE decomposition; Phase E independently GREEN/CLOSED; F0 active next**  
+Status: **Phase-F ACTIVE decomposition; F0 deletion audited GREEN and packaging residue closed here; F0.5 active next**  
 Last updated: 2026-08-24  
-Source/decomposition basis: Phase E closed through independently GREEN E4 @ `3a562632`
+Source/decomposition basis: `19460a7a8ffe9e5134363267da3d61fe46cc23d4` + this closure reconciliation
 
-This is subordinate to `Current_Plan.md`. Phase E is closed. `Current_Plan.md` currently admits F0
-only; F0.5 adds the missing Widgets → General shadow-direction picker after F0 is independently GREEN,
-and F1 Clock follows after F0.5 is GREEN.
+This is subordinate to `Current_Plan.md`. Phase E is closed; F0 deletion is source-audited GREEN at `19460a7` and this reconciliation removes its final stale scraping dependency pins. `Current_Plan.md` currently admits F0.5 only: complete Widgets → General canonical shadow controls, then audit before F1 Clock.
 
 Cross-links:
 
@@ -50,8 +48,8 @@ Do not delete useful neutral Python behavior merely because it lived next to QWi
 Recommended bounded order:
 
 ```text
-F0    Imgur removal
-F0.5  Widgets → General shadow-direction picker
+F0    Imgur removal — CLOSED after reconciliation
+F0.5  Widgets → General shadow controls — ACTIVE NEXT
 F1    Clock / Clock2 / Clock3
 F2  Weather
 F3  Media core
@@ -78,7 +76,7 @@ families merely to dodge an architecture issue discovered by the first family.
 
 ---
 
-# 3. F0 — remove deprecated Imgur
+# 3. F0 — remove deprecated Imgur — CLOSED after reconciliation
 
 Imgur is not a Quick target.
 
@@ -96,7 +94,11 @@ Remove, as applicable to exact current source:
 
 Do not break historical evidence documents merely to erase the name.
 
-Gate removal with fresh-process/catalog/settings tests.
+Source audit confirms the current tracked tree has no Imgur path and the family/catalog/default/Settings/
+factory/runtime/CUSTOM/input/cache/assets/test surfaces were deleted. The audit also found
+`beautifulsoup4`/`soupsieve` left in `requirements.txt` with no current `BeautifulSoup`/`bs4` consumer; this
+closure reconciliation removes those stale Imgur-era pins. Test execution evidence remains the implementing
+agent's report unless rerun independently. Exit documentation is reconciled in the same pack.
 
 ---
 
@@ -130,18 +132,15 @@ plain retained card/fade/shadow architecture across real families.
 
 ---
 
-# 4. F0.5 — Widgets → General shadow-direction picker
+# 4. F0.5 — Widgets → General canonical shadow controls — ACTIVE NEXT
 
-E4 landed the canonical runtime/settings direction authority but intentionally did not add the Settings
-control. Do not let Phase-E closure orphan the user-facing customization.
+F0.5 is a bounded QWidget Settings slice. It does not create a runtime family component. The existing
+Widgets → General → Appearance page already owns the three shadow enable toggles; extend that existing
+owner rather than adding another page/model.
 
-Implement the picker in the existing QWidget Settings UI at:
+Detailed UI/style contract: `Docs/Custom_Style_Implementation.md`.
 
-```text
-Widgets → General → Shadow Direction
-```
-
-Detailed visual/interaction contract lives in `Docs/Custom_Style_Implementation.md`. In summary:
+## F0.5.1 Mandatory global direction picker
 
 ```text
 ┌─────────────┐
@@ -151,26 +150,70 @@ Detailed visual/interaction contract lives in `Docs/Custom_Style_Implementation.
 └─────────────┘
 ```
 
-Requirements:
+- canonical tokens `NW/N/NE/W/E/SW/S/SE`; default/fallback `SE`;
+- center inert; no ninth semantic;
+- existing `widgets.shadows.direction` only;
+- no UI-local resolver and no QML Settings reader.
 
-- compact SRPSS-styled 3×3 arrow-picker box, not a combo box or eight stacked radio buttons;
-- center cell is deliberately inert/empty; there is no center/none shadow direction;
-- clear hover, pressed and selected states, with `SE` selected for a fresh/default profile;
-- arrows/icons are the primary visual language; accessible/tooltip names use North West, North, etc.;
-- load/save the existing canonical `widgets.shadows.direction` token directly;
-- use the canonical resolver/token vocabulary already landed in E4 rather than defining UI-local mapping
-  semantics;
-- Settings remains QWidget; do not expose `SettingsManager` to runtime QML and do not directly poke
-  retained QML items from the control;
-- preserve the normal Settings apply/save/recreate path used by other shared visual settings;
-- no Clock/family port in this slice.
+## F0.5.2 Two user tuning buckets
 
-Gate all eight selections, persistence/reload, Reset to Defaults => `SE`, invalid persisted token display
-through the canonical fallback, inert center behavior, and normal Widgets → General construction/lazy-page
-semantics.
+Widget/Card:
 
-F0.5 should be a small bounded Settings slice. Push and stop for independent audit because it establishes
-the only user-facing editor for the new global direction authority.
+```text
+enabled             existing
+frame_opacity       Darkness
+blur_radius         Blur
+frame_extra_offset  Extra Offset (new, >=0 logical px, default 0)
+header_enabled      existing header toggle
+```
+
+Text:
+
+```text
+text_enabled        existing
+text_opacity        Darkness
+text_extra_offset   Extra Offset (new, >=0 logical px, default 0)
+```
+
+No Text Blur. No per-family editor. No third Header tuning panel. Header may retain authored internal
+baseline alpha/magnitude but consumes the shared direction/Text modifier path.
+
+`Extra Offset` is additive to class/base magnitude before the canonical direction resolver. Do not
+repurpose legacy `widgets.shadows.offset`; do not add signed X/Y user controls.
+
+## F0.5.3 Retired Intense semantics stay retired
+
+Do not reintroduce `intense_shadow`, `analog_shadow_intense`, `digital_shadow_intense`, an Intense
+checkbox, or an Intense preset/profile. The destination is one shadow system. Old painter tuning numbers
+are reference evidence only and are not Quick UI slider values.
+
+## F0.5.4 Mandatory persistence repair
+
+Exact current source has a dangerous partial-section pattern: `save_defaults_settings()` emits only the
+three enable booleans under `shadows`, while `apply_widget_section_save_results()` assigns the returned
+section mapping wholesale. This can erase E4's `direction` and other shadow values on an unrelated
+General save.
+
+Fix the owner, not the symptom: merge edited values into the existing canonical `widgets.shadows`
+mapping or otherwise preserve every unedited/unknown key. Do not create a second shadow persistence
+store. Add a regression that saves an unrelated General field and proves arbitrary sentinel shadow keys
+survive.
+
+## F0.5.5 Focused gate
+
+Prove:
+
+- all eight directions, inert center, SE reset/default/fallback;
+- existing three enable toggles still round-trip;
+- Card Darkness/Blur/Extra Offset and Text Darkness/Extra Offset round-trip and clamp;
+- Extra Offset cannot become negative;
+- unedited/unknown shadow keys survive every General save path;
+- `ShadowSettings`, canonical defaults and generated defaults/SST artifacts stay in parity;
+- no Intense key/UI and no text-blur property/effect;
+- Settings lazy-page/save behavior remains intact;
+- no runtime family/provider is constructed merely by opening/saving General.
+
+Push and stop for independent audit. **Do not begin Clock in this checkpoint.**
 
 ---
 
