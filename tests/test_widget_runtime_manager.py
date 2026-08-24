@@ -239,6 +239,24 @@ class _MediaConsumer:
         return True
 
 
+class _GmailConsumer:
+    """Plain presenter that accepts one runtime-managed Gmail lease."""
+
+    def __init__(self):
+        self.injected = None
+        self._runtime_service = None
+        self._runtime_generation = 73
+        self._thread_manager = None
+
+    def set_runtime_service(self, service):
+        self.injected = service
+        self._runtime_service = service
+        service.attach_consumer(self)
+
+    def is_gmail_consumer_alive(self):
+        return True
+
+
 def test_ensure_widget_service_builds_owns_and_injects_reddit_provider():
     # The provider owner exists independently of any QWidget pixel ownership:
     # a plain consumer stub (not a QWidget) receives the built provider, and the
@@ -325,6 +343,75 @@ def test_ensure_widget_service_builds_inert_shared_media_lease() -> None:
     assert owner.retire_widget_service("media") is True
     assert service.is_retired() is True
     assert shared_media_owner_count() == 0
+
+
+def test_ensure_widget_service_builds_inert_shared_gmail_lease(monkeypatch) -> None:
+    from widgets import gmail_runtime
+    from widgets.gmail_runtime import (
+        reset_shared_gmail_runtime_for_tests,
+        shared_gmail_owner_count,
+    )
+
+    backend = object()
+    monkeypatch.setattr(
+        gmail_runtime.GmailBackend,
+        "instance",
+        classmethod(lambda _cls: backend),
+    )
+    reset_shared_gmail_runtime_for_tests()
+    owner = WidgetRuntimeManager(_Host())
+    consumer = _GmailConsumer()
+
+    service = owner.ensure_widget_service(
+        "gmail",
+        consumer,
+        {
+            "gmail": {
+                "refresh_minutes": 9,
+                "play_sound_on_new_mail": True,
+                "sound_volume_percent": 31,
+            }
+        },
+    )
+
+    assert service is not None
+    assert consumer.injected is service
+    assert service.config.refresh_minutes == 9
+    assert service.config.play_sound_on_new_mail is True
+    assert service.config.sound_volume_percent == 31
+    assert service.is_running() is False
+    assert service.shared_owner is not None
+    assert shared_gmail_owner_count() == 1
+    assert owner.has_runtime_service("gmail") is True
+    assert owner.retire_widget_service("gmail") is True
+    assert service.is_retired() is True
+    assert shared_gmail_owner_count() == 0
+
+
+def test_detached_gmail_lease_is_not_reused_for_inactive_presenter(
+    monkeypatch,
+) -> None:
+    from widgets import gmail_runtime
+    from widgets.gmail_runtime import reset_shared_gmail_runtime_for_tests
+
+    monkeypatch.setattr(
+        gmail_runtime.GmailBackend,
+        "instance",
+        classmethod(lambda _cls: object()),
+    )
+    reset_shared_gmail_runtime_for_tests()
+    owner = WidgetRuntimeManager(_Host())
+    consumer = _GmailConsumer()
+    service = owner.ensure_widget_service("gmail", consumer, {"gmail": {}})
+
+    assert service is not None
+    service.detach_consumer(consumer)
+    assert service.shared_owner is None
+    assert service.is_retired() is False
+
+    assert owner.get_reusable_widget_service("gmail", consumer) is None
+    assert owner.get_widget_service("gmail") is None
+    assert service.is_retired() is True
 
 
 def test_ensure_widget_service_none_for_unregistered_widget():

@@ -988,7 +988,12 @@ class GmailWidgetFactory(WidgetFactory):
             }
             position = corner_map.get(raw_pos, GmailPosition.TOP_LEFT)
 
-            widget = GmailWidget(parent=parent, position=position, settings=config)
+            widget = GmailWidget(
+                parent=parent,
+                position=position,
+                settings=config,
+                build_default_runtime=False,
+            )
 
             # Thread manager (required — Gmail performs network I/O)
             if self._thread_manager and hasattr(widget, "set_thread_manager"):

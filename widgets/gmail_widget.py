@@ -1,14 +1,11 @@
 """Gmail overlay widget for screensaver."""
 from __future__ import annotations
 
-import threading
 import math
 import sys
-import time
-import weakref
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import (
@@ -25,24 +22,15 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QMenu, QWidget
 from shiboken6 import Shiboken
 
-from core.gmail.gmail_backend import GmailBackend, GmailBackendMode
-from core.gmail.gmail_client import EmailMetadata, GmailFetchCancelled, GmailLabel
+from core.gmail.gmail_client import EmailMetadata, GmailLabel
 from core.gmail.gmail_deeplinks import gmail_inbox_url
-from core.gmail.gmail_preparation import (
-    PreparedGmailStartup,
-    load_gmail_startup_snapshot,
-    reserve_gmail_cache_write,
-    write_gmail_email_cache,
-)
 from core.logging.logger import get_logger
-from core.performance import record_widget_timer_result, widget_paint_sample, widget_timer_sample
+from core.performance import widget_paint_sample, widget_timer_sample
 from core.settings.widget_capacity_policy import (
-    LIST_WIDGET_MAX_CAPACITY,
     LIST_WIDGET_MIN_CAPACITY,
     clamp_list_capacity,
 )
 from core.audio.sound_paths import default_notification_sound_path
-from core.settings.storage_paths import resolve_app_data_dir
 from core.threading.manager import ThreadManager
 from core.windows.secure_url_launcher import open_url
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition, WidgetLifecycleState
@@ -55,21 +43,23 @@ from widgets.gmail_components import (
     shorten_subject,
     smart_title_case_subject,
 )
-from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from widgets.service_widget_runtime import (
-    begin_fetch_guard,
     defer_refresh_if_transition,
     defer_value_if_transition,
-    end_fetch_guard,
     ensure_single_shot_timer,
-    get_automatic_startup_refresh_decision,
     parent_transition_running,
     preserve_visible_fallback,
     reset_deferred_runtime_state,
-    stop_overlay_timer_pair,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
-    trigger_manual_refresh,
+)
+from widgets.gmail_runtime import (
+    CACHE_DIR as CACHE_DIR,
+    CACHE_MAX_AGE_HOURS as CACHE_MAX_AGE_HOURS,
+    CACHE_PATH,
+    GmailRuntimeConfig,
+    GmailRuntimeService,
+    GmailRuntimeSnapshot,
 )
 from widgets.shadow_utils import (
     ShadowFadeProfile,
@@ -79,14 +69,10 @@ from widgets.shadow_utils import (
     header_shadows_enabled,
     text_shadows_enabled,
 )
-from core.runtime_flags import automatic_service_updates_enabled
 
 logger = get_logger(__name__)
 
 
-CACHE_MAX_AGE_HOURS = 24 * 14
-CACHE_DIR = resolve_app_data_dir() / "cache"
-CACHE_PATH = CACHE_DIR / "gmail_cache.json"
 GMAIL_IMAGE_ASSETS = (
     "images/google-gmail.png",
     "images/gmail-envelope.png",
@@ -132,17 +118,18 @@ class GmailWidget(BaseOverlayWidget):
         parent: Optional[QWidget] = None,
         position: GmailPosition = GmailPosition.TOP_CENTER,
         settings: Optional[Any] = None,
+        *,
+        build_default_runtime: bool = True,
     ) -> None:
         overlay_pos = OverlayPosition.from_string(position.value)
         super().__init__(parent, position=overlay_pos, overlay_name="gmail")
         self._gmail_position = position
 
-        self._backend: GmailBackend = GmailBackend.instance()
-        self._backend_ready = self._backend.is_initialized
-        self._backend_initializing = False
-        self._backend_request_id = 0
-        self._pending_fetch_after_backend_ready = False
-        self._gmail_client = None  # GmailClient or GmailImapClient
+        # Runtime/model ownership is attached after settings are normalized.
+        # Production suppresses the convenience owner and receives a lease from
+        # WidgetRuntimeManager before lifecycle start.
+        self._runtime_service: Optional[GmailRuntimeService] = None
+        self._owns_runtime_service = False
         self._emails: List[EmailMetadata] = []
         self._display_rows: List[DisplayRow] = []
         self._unread_count = 0
@@ -151,9 +138,7 @@ class GmailWidget(BaseOverlayWidget):
 
         self._configured_capacity = LIST_WIDGET_MIN_CAPACITY
         self._effective_visible_capacity = self._configured_capacity
-        self._fetch_window_capacity = LIST_WIDGET_MAX_CAPACITY
         self._refresh_interval = timedelta(minutes=5)
-        self._filter_label = GmailLabel.INBOX.value
         self._group_threads = False
         self._show_sender = True
         self._show_subject = True
@@ -211,15 +196,10 @@ class GmailWidget(BaseOverlayWidget):
         self._action_hit_rects: List[Tuple[QRect, str]] = []
         self._active_action_menu: Optional[QMenu] = None
 
-        self._update_timer_handle: Optional[OverlayTimerHandle] = None
-        self._update_timer: Optional[QTimer] = None
-        self._fetch_in_progress = False
-        self._fetch_lock = threading.Lock()
-        self._fetch_generation = 0
-        self._startup_cache_request_id = 0
-        self._content_revision = 0
         self._cancelled = False
         self._refreshing = False
+        self._last_received_runtime_revision = 0
+        self._last_applied_runtime_revision = 0
         self._refresh_spin_angle = 0
         self._refresh_spin_timer: Optional[QTimer] = None
         self._refresh_spinner_suspended_for_transition = False
@@ -229,11 +209,6 @@ class GmailWidget(BaseOverlayWidget):
         self._deferred_fetch_result: Optional[Tuple[List[EmailMetadata], int, Optional[int]]] = None
         self._deferred_fetch_error: Optional[Tuple[str, Optional[int]]] = None
 
-        # New-mail detection: only fire sound for messages that arrive after
-        # the first fetch of this session. Pre-existing unread on first fetch
-        # is silently absorbed.
-        self._seen_message_ids: Set[str] = set()
-        self._seen_initialised: bool = False
         self._play_sound_on_new_mail: bool = False
         self._sound_file_path: str = default_notification_sound_path()
         self._sound_volume_percent: int = 50
@@ -245,6 +220,133 @@ class GmailWidget(BaseOverlayWidget):
         self._load_envelope_pixmap()
         self._load_action_icons()
         self._invalidate_content_cache()
+
+        if build_default_runtime:
+            self.set_runtime_service(
+                GmailRuntimeService(
+                    config=self._gmail_runtime_config(cache_path=CACHE_PATH),
+                    shared=False,
+                    runtime_generation=getattr(self, "_runtime_generation", None),
+                ),
+                owns_service=True,
+            )
+
+    # ------------------------------------------------------------------
+    # Presentation-neutral Gmail runtime consumer boundary
+    # ------------------------------------------------------------------
+    def _gmail_runtime_config(
+        self,
+        *,
+        cache_path: Path = CACHE_PATH,
+        filter_label: str | None = None,
+    ) -> GmailRuntimeConfig:
+        return GmailRuntimeConfig(
+            refresh_minutes=max(
+                1, int(self._refresh_interval.total_seconds() // 60)
+            ),
+            filter_label=(
+                filter_label
+                if filter_label is not None
+                else GmailLabel.INBOX.value
+            ),
+            play_sound_on_new_mail=self._play_sound_on_new_mail,
+            sound_file_path=self._sound_file_path,
+            sound_volume_percent=self._sound_volume_percent,
+            cache_path=cache_path,
+        ).normalized()
+
+    def _sync_runtime_config(self) -> None:
+        service = self._runtime_service
+        if service is None:
+            return
+        service.configure(
+            self._gmail_runtime_config(
+                cache_path=service.config.cache_path,
+                filter_label=service.config.filter_label,
+            )
+        )
+
+    def set_thread_manager(self, manager: "ThreadManager") -> None:
+        super().set_thread_manager(manager)
+        service = self._runtime_service
+        if service is not None:
+            service.set_thread_manager(manager)
+
+    def set_runtime_service(
+        self,
+        service: Optional[GmailRuntimeService],
+        *,
+        owns_service: bool = False,
+    ) -> None:
+        """Attach the neutral Gmail lease before lifecycle activation."""
+
+        previous = self._runtime_service
+        previous_owned = self._owns_runtime_service
+        if previous is service:
+            owns_service = previous_owned or owns_service
+        if previous is not None and previous is not service:
+            if previous_owned:
+                previous.retire()
+            else:
+                previous.detach_consumer(self)
+
+        self._runtime_service = service
+        self._owns_runtime_service = bool(service is not None and owns_service)
+        if service is None:
+            return
+        try:
+            tm = getattr(self, "_thread_manager", None)
+            if tm is not None:
+                service.set_thread_manager(tm)
+            service.attach_consumer(self)
+        except Exception:
+            self._runtime_service = None
+            self._owns_runtime_service = False
+            if owns_service:
+                service.retire()
+            raise
+
+    def _release_runtime_service(self) -> None:
+        service = self._runtime_service
+        owns_service = self._owns_runtime_service
+        self._runtime_service = None
+        self._owns_runtime_service = False
+        if service is None:
+            return
+        if owns_service:
+            service.retire()
+        else:
+            service.detach_consumer(self)
+
+    def is_gmail_consumer_alive(self) -> bool:
+        return bool(Shiboken.isValid(self))
+
+    def on_gmail_runtime_snapshot(self, snapshot: GmailRuntimeSnapshot) -> None:
+        """Project one accepted neutral snapshot into this display's pixels."""
+
+        if not Shiboken.isValid(self) or self._cancelled:
+            return
+        if snapshot.revision <= self._last_received_runtime_revision:
+            return
+        self._last_received_runtime_revision = snapshot.revision
+        self._set_refreshing(snapshot.refreshing)
+        if snapshot.source in {"refreshing", "dispatch_error"}:
+            # Cadence feedback is presentation state, but it is not an accepted
+            # empty inbox revision and must never trigger the first-show fade.
+            return
+        if snapshot.error is not None:
+            self._on_fetch_error(
+                snapshot.error,
+                snapshot.revision,
+                defer_for_transition=True,
+            )
+            return
+        self._on_emails_fetched(
+            list(snapshot.emails),
+            snapshot.unread_count,
+            snapshot.revision,
+            defer_for_transition=True,
+        )
 
     def _setup_ui(self) -> None:
         self._apply_base_styling()
@@ -421,32 +523,26 @@ class GmailWidget(BaseOverlayWidget):
 
     def _activate_impl(self) -> None:
         self._cancelled = False
-        if self._backend.is_initialized and self._backend.is_authenticated:
-            self._gmail_client = self._backend.client
         self._update_card_height_from_content(1)
         if not self._ensure_thread_manager("GmailWidget._activate_impl"):
-            logger.error("[GMAIL] Startup cache load unavailable: ThreadManager is not configured")
-            logger.debug("[LIFECYCLE] GmailWidget activated without background services")
-            return
-        if automatic_service_updates_enabled():
-            self._schedule_timer()
-        else:
-            logger.info("[GMAIL] Automatic updates disabled via --noupdates; manual refresh only")
-        self._begin_backend_initialization()
-        self._begin_startup_cache_load()
+            raise RuntimeError("ThreadManager is not configured")
+        service = self._runtime_service
+        if service is None:
+            raise RuntimeError("Gmail runtime service is not attached")
+        service.set_thread_manager(self._thread_manager)
+        if not service.start():
+            raise RuntimeError("Gmail runtime service failed to start")
         logger.debug("[LIFECYCLE] GmailWidget activated")
 
     def _deactivate_impl(self) -> None:
-        self._stop_polling_timers(delete_qtimers=True)
+        service = self._runtime_service
+        if service is not None:
+            service.stop()
         self._reset_deferred_runtime_state(delete_qtimers=False)
         self._set_refreshing(False)
         self._cancelled = True
-        self._fetch_generation += 1
-        self._startup_cache_request_id += 1
-        self._backend_request_id += 1
-        self._backend_initializing = False
-        self._backend_ready = False
-        self._pending_fetch_after_backend_ready = False
+        self._last_received_runtime_revision = 0
+        self._last_applied_runtime_revision = 0
         self._emails.clear()
         self._display_rows.clear()
         self._row_hit_rects.clear()
@@ -456,6 +552,7 @@ class GmailWidget(BaseOverlayWidget):
 
     def _cleanup_impl(self) -> None:
         self._deactivate_impl()
+        self._release_runtime_service()
         logger.debug("[LIFECYCLE] GmailWidget cleaned up")
 
     def start(self) -> None:
@@ -467,35 +564,9 @@ class GmailWidget(BaseOverlayWidget):
             self.deactivate()
 
     def cleanup(self) -> None:
-        # Reset new-mail detection state so a subsequent start() re-absorbs
-        # the existing inbox without firing the sound for old messages.
-        self._seen_message_ids = set()
-        self._seen_initialised = False
-        self._cancelled = True
-        self._fetch_generation += 1
-        self._startup_cache_request_id += 1
-        self._backend_request_id += 1
-        self._backend_initializing = False
-        self._backend_ready = False
-        self._pending_fetch_after_backend_ready = False
-        # Explicit timer cleanup for safety (also covered by _cleanup_impl → _deactivate_impl)
-        self._stop_polling_timers(delete_qtimers=True)
         self._reset_deferred_runtime_state(delete_qtimers=True)
         self._set_refreshing(False)
-        self._emails.clear()
-        self._row_hit_rects.clear()
-        self._action_hit_rects.clear()
-        self._refresh_hit_rect = None
-        self._clear_content_cache()
         super().cleanup()
-
-    def _stop_polling_timers(self, *, delete_qtimers: bool) -> None:
-        stop_overlay_timer_pair(
-            self,
-            handle_attr="_update_timer_handle",
-            qtimer_attr="_update_timer",
-            delete_qtimers=delete_qtimers,
-        )
 
     def _stop_deferred_timers(self, *, delete_qtimers: bool) -> None:
         for attr_name in ("_deferred_fetch_timer", "_deferred_refresh_timer"):
@@ -513,137 +584,11 @@ class GmailWidget(BaseOverlayWidget):
             delete_qtimers=delete_qtimers,
         )
 
-    # ------------------------------------------------------------------
-    # Timer & Fetch
-    # ------------------------------------------------------------------
-
-    def _begin_backend_initialization(self) -> None:
-        if self._cancelled or self._backend_initializing:
-            return
-        if self._backend.is_initialized:
-            self._backend_ready = True
-            self._gmail_client = (
-                self._backend.client if self._backend.is_authenticated else None
-            )
-            if self._pending_fetch_after_backend_ready:
-                self._pending_fetch_after_backend_ready = False
-                self._fetch_emails(defer_for_transition=False)
-            return
-        if not self._ensure_thread_manager("GmailWidget._begin_backend_initialization"):
-            logger.error("[GMAIL] Backend bootstrap unavailable: ThreadManager is not configured")
-            return
-
-        self._backend_initializing = True
-        self._backend_request_id += 1
-        request_id = self._backend_request_id
-        owner_ref = weakref.ref(self)
-        runtime_generation = getattr(self, "_runtime_generation", None)
-
-        def _ready(success: bool) -> None:
-            owner = owner_ref()
-            if owner is None or not Shiboken.isValid(owner):
-                return
-            owner._commit_backend_initialization(request_id, bool(success))
-
-        _ready._srpss_runtime_generation = runtime_generation
-        if not self._backend.ensure_initialized(self._thread_manager, _ready):
-            self._backend_initializing = False
-
-    def _commit_backend_initialization(self, request_id: int, success: bool) -> None:
-        if (
-            not Shiboken.isValid(self)
-            or self._cancelled
-            or request_id != self._backend_request_id
-        ):
-            return
-        self._backend_initializing = False
-        self._backend_ready = bool(success and self._backend.is_initialized)
-        if not self._backend_ready:
-            logger.warning("[GMAIL] Backend bootstrap did not complete")
-            return
-        self._gmail_client = (
-            self._backend.client if self._backend.is_authenticated else None
-        )
-        if self._pending_fetch_after_backend_ready:
-            self._pending_fetch_after_backend_ready = False
-            self._fetch_emails(defer_for_transition=False)
-
-    def _schedule_timer(self) -> None:
-        interval_ms = int(self._refresh_interval.total_seconds() * 1000)
-        try:
-            self._update_timer_handle = create_overlay_timer(
-                self, interval_ms, self._fetch_emails,
-                description="gmail_refresh",
-            )
-        except Exception:
-            self._update_timer = QTimer(self)
-            self._update_timer.timeout.connect(self._fetch_emails)
-            self._register_resource(self._update_timer, "gmail_update_timer_fallback")
-            self._update_timer.start(interval_ms)
-
     def _fetch_emails(self, *, defer_for_transition: bool = True) -> bool:
-        start_time = time.perf_counter()
         if defer_for_transition and self._defer_refresh_if_transition():
-            record_widget_timer_result(
-                self._perf_widget_name(),
-                "gmail.refresh.dispatch",
-                (time.perf_counter() - start_time) * 1000.0,
-                None,
-            )
             return True
-        try:
-            if not self._backend_ready or not self._backend.is_initialized:
-                self._pending_fetch_after_backend_ready = True
-                self._begin_backend_initialization()
-                return True
-            if not begin_fetch_guard(
-                self,
-                lock_attr="_fetch_lock",
-                logger=logger,
-                busy_message="[GMAIL] Fetch already in progress, skipping",
-            ):
-                return False
-            self._set_refreshing(True)
-            # Re-acquire client from backend each fetch in case mode/credentials changed
-            self._gmail_client = self._backend.client if self._backend.is_authenticated else None
-            if self._gmail_client is None:
-                end_fetch_guard(self, lock_attr="_fetch_lock")
-                self._set_refreshing(False)
-                logger.debug("[GMAIL] Not authenticated, skipping fetch")
-                self._last_error = "auth"
-                self._invalidate_content_cache_and_update(prepare_now=True)
-                return False
-            try:
-                if not self._ensure_thread_manager("GmailWidget._fetch_emails"):
-                    raise RuntimeError("ThreadManager is not configured")
-                generation = self._fetch_generation
-                self._thread_manager.submit_io_task(
-                    self._fetch_emails_async,
-                    generation,
-                    category="gmail_fetch",
-                )
-            except Exception as exc:
-                end_fetch_guard(self, lock_attr="_fetch_lock")
-                self._set_refreshing(False)
-                logger.error("[GMAIL] Fetch IO dispatch failed; request dropped: %s", exc)
-                return False
-            return True
-        finally:
-            record_widget_timer_result(
-                self._perf_widget_name(),
-                "gmail.refresh.dispatch",
-                (time.perf_counter() - start_time) * 1000.0,
-                None,
-            )
-
-    def _perf_widget_name(self) -> str:
-        try:
-            overlay_name = getattr(self, "_overlay_name", None)
-            if overlay_name:
-                return str(overlay_name)
-        except Exception:
-            pass
-        return "GmailWidget"
+        service = self._runtime_service
+        return bool(service is not None and service.refresh())
 
     def _set_refreshing(self, refreshing: bool) -> None:
         refreshing = bool(refreshing)
@@ -780,79 +725,6 @@ class GmailWidget(BaseOverlayWidget):
             self._deferred_fetch_result = None
             self._on_emails_fetched(emails, unread_count, generation, defer_for_transition=False)
 
-    def _fetch_is_retired(self, generation: int) -> bool:
-        """Whether this fetch no longer owns its runtime generation.
-
-        Checked continuously by the client, not just at entry. An installed
-        CUSTOM Save proved why: cleanup set _cancelled and advanced the fetch
-        generation, but a fetch already inside list/metadata traversal did not
-        observe it, stayed alive for the whole runtime destruction barrier, and
-        the application exited fail-closed with retiring-generation gmail_fetch
-        work still registered.
-        """
-        return bool(self._cancelled or generation != self._fetch_generation)
-
-    def _fetch_emails_async(self, generation: int) -> None:
-        try:
-            if self._fetch_is_retired(generation):
-                return
-            label_ids = [self._filter_label]
-            emails = self._gmail_client.list_messages(
-                max_results=self._fetch_window_capacity,
-                label_ids=label_ids,
-                should_cancel=lambda: self._fetch_is_retired(generation),
-            )
-            if self._fetch_is_retired(generation):
-                return
-            unread = sum(1 for e in emails if e.is_unread)
-            try:
-                ThreadManager.run_on_ui_thread(
-                    self._on_emails_fetched, emails, unread, generation
-                )
-            except Exception:
-                logger.critical("[GMAIL] run_on_ui_thread failed, dropping fetch result")
-        except GmailFetchCancelled:
-            # Not an error: this fetch stopped because its owner retired. No
-            # result is published and no UI callback is queued for a generation
-            # that no longer exists.
-            logger.debug(
-                "[GMAIL] Fetch abandoned for retired generation=%s", generation
-            )
-        except TypeError as exc:
-            # A client without the cancellation seam (older/foreign backend).
-            if "should_cancel" not in str(exc):
-                raise
-            logger.debug("[GMAIL] Client lacks cancellation seam; fetching without it")
-            self._fetch_emails_async_uncancellable(generation)
-        except Exception as exc:
-            logger.error("[GMAIL] Fetch failed: %s", exc)
-            try:
-                ThreadManager.run_on_ui_thread(
-                    self._on_fetch_error, str(exc), generation
-                )
-            except Exception:
-                logger.critical("[GMAIL] run_on_ui_thread failed, dropping error")
-        finally:
-            end_fetch_guard(self, lock_attr="_fetch_lock")
-
-    def _fetch_emails_async_uncancellable(self, generation: int) -> None:
-        """Legacy path for a client that does not accept a cancellation token."""
-        if self._fetch_is_retired(generation):
-            return
-        emails = self._gmail_client.list_messages(
-            max_results=self._fetch_window_capacity,
-            label_ids=[self._filter_label],
-        )
-        if self._fetch_is_retired(generation):
-            return
-        unread = sum(1 for e in emails if e.is_unread)
-        try:
-            ThreadManager.run_on_ui_thread(
-                self._on_emails_fetched, emails, unread, generation
-            )
-        except Exception:
-            logger.critical("[GMAIL] run_on_ui_thread failed, dropping fetch result")
-
     def _on_emails_fetched(
         self,
         emails: List[EmailMetadata],
@@ -879,7 +751,14 @@ class GmailWidget(BaseOverlayWidget):
     ) -> None:
         if self._cancelled:
             return
-        if generation is not None and generation != self._fetch_generation:
+        if (
+            generation is not None
+            and generation
+            < max(
+                self._last_applied_runtime_revision,
+                self._last_received_runtime_revision,
+            )
+        ):
             return
         self._set_refreshing(False)
         if defer_for_transition and self._defer_fetch_result_if_transition(emails, unread_count, generation):
@@ -891,7 +770,11 @@ class GmailWidget(BaseOverlayWidget):
             and display_emails == self._emails
             and unread_count == self._unread_count
         ):
-            logger.debug("[GMAIL] Fetched mail unchanged; skipping cache write and repaint")
+            if generation is not None:
+                self._last_applied_runtime_revision = max(
+                    self._last_applied_runtime_revision, generation
+                )
+            logger.debug("[GMAIL] Gmail projection unchanged; skipping repaint")
             return
         if not display_emails and preserve_visible_fallback(
             self,
@@ -899,20 +782,24 @@ class GmailWidget(BaseOverlayWidget):
             logger=logger,
             log_message="[GMAIL] Empty fetch result received; keeping cached/displayed content visible",
         ):
+            if generation is not None:
+                self._last_applied_runtime_revision = max(
+                    self._last_applied_runtime_revision, generation
+                )
             return
-        self._content_revision += 1
-        self._startup_cache_request_id += 1
         self._emails = display_emails
         self._last_error = None
         self._rebuild_display_rows()
-        self._detect_new_mail(emails)
         if unread_count != self._unread_count:
             self._unread_count = unread_count
             self.unread_count_changed.emit(unread_count)
+        if generation is not None:
+            self._last_applied_runtime_revision = max(
+                self._last_applied_runtime_revision, generation
+            )
         visible_count = len(self._display_rows)
         if display_emails:
             self._has_displayed_valid_data = True
-            self._write_email_cache_deferred(display_emails)
             self._update_card_height_from_content(visible_count)
             self._invalidate_content_cache_and_update(prepare_now=True)
             if not self.isVisible():
@@ -931,47 +818,6 @@ class GmailWidget(BaseOverlayWidget):
         else:
             self._display_rows = [DisplayRow(email=e) for e in emails]
         self._effective_visible_capacity = max(1, len(self._display_rows) or self._configured_capacity)
-
-    def _detect_new_mail(self, emails: List[EmailMetadata]) -> None:
-        """Detect newly-arrived unread messages and play notification sound.
-
-        First fetch of the session populates the seen set without playing
-        sound (suppresses startup blast for pre-existing unread).
-        """
-        try:
-            current_unread_ids = {e.id for e in emails if getattr(e, "is_unread", False)}
-        except Exception as exc:
-            logger.debug("[GMAIL] _detect_new_mail id collection failed: %s", exc)
-            return
-
-        if not self._seen_initialised:
-            # Absorb the existing inbox quietly.
-            self._seen_message_ids = current_unread_ids
-            self._seen_initialised = True
-            return
-
-        new_ids = current_unread_ids - self._seen_message_ids
-        # Always update the seen set so messages don't re-trigger.
-        self._seen_message_ids = current_unread_ids
-
-        if not new_ids:
-            return
-        if not self._play_sound_on_new_mail:
-            return
-
-        try:
-            from core.audio.notification_sound import NotificationSoundPlayer
-            player = NotificationSoundPlayer.instance()
-            # Push current settings on every play in case the user changed
-            # path/volume mid-session.
-            if player.file_path != self._sound_file_path:
-                player.set_file_path(self._sound_file_path)
-            if player.volume_percent != self._sound_volume_percent:
-                player.set_volume(self._sound_volume_percent)
-            player.play()
-            logger.info("[GMAIL] New mail detected (%d new) — sound played", len(new_ids))
-        except Exception as exc:
-            logger.warning("[GMAIL] Notification sound failed: %s", exc)
 
     def _on_fetch_error(
         self,
@@ -996,195 +842,37 @@ class GmailWidget(BaseOverlayWidget):
     ) -> None:
         if self._cancelled:
             return
-        if generation is not None and generation != self._fetch_generation:
+        if (
+            generation is not None
+            and generation
+            < max(
+                self._last_applied_runtime_revision,
+                self._last_received_runtime_revision,
+            )
+        ):
             return
         self._set_refreshing(False)
         if defer_for_transition and self._defer_fetch_error_if_transition(error_msg, generation):
             return
-        if preserve_visible_fallback(
+        if error_msg.lower() != "auth" and preserve_visible_fallback(
             self,
             content_attr="_emails",
             logger=logger,
             log_message=f"[GMAIL] Fetch failed but keeping cached/displayed content visible: {error_msg}",
         ):
+            if generation is not None:
+                self._last_applied_runtime_revision = max(
+                    self._last_applied_runtime_revision, generation
+                )
             return
         self._last_error = error_msg
+        if generation is not None:
+            self._last_applied_runtime_revision = max(
+                self._last_applied_runtime_revision, generation
+            )
         logger.warning("[GMAIL] Displaying error state: %s", error_msg)
         self._update_card_height_from_content(1)
         self._invalidate_content_cache_and_update(prepare_now=True)
-
-    # ------------------------------------------------------------------
-    # Email Cache
-    # ------------------------------------------------------------------
-
-    def _begin_startup_cache_load(self) -> None:
-        """Prepare one detached Gmail cache snapshot on shared I/O."""
-
-        tm = self._thread_manager
-        if tm is None:
-            logger.error("[GMAIL] Startup cache load unavailable: ThreadManager is not configured")
-            return
-
-        self._startup_cache_request_id += 1
-        request_id = self._startup_cache_request_id
-        content_revision = self._content_revision
-        runtime_generation = getattr(self, "_runtime_generation", None)
-        owner_ref = weakref.ref(self)
-        cache_path = CACHE_PATH
-
-        def _load_snapshot() -> PreparedGmailStartup:
-            return load_gmail_startup_snapshot(
-                cache_path,
-                max_age_hours=CACHE_MAX_AGE_HOURS,
-            )
-
-        _load_snapshot._srpss_runtime_generation = runtime_generation
-
-        def _on_result(result) -> None:
-            snapshot = None
-            error = None
-            if getattr(result, "success", False):
-                candidate = getattr(result, "result", None)
-                if isinstance(candidate, PreparedGmailStartup):
-                    snapshot = candidate
-                else:
-                    error = "No Gmail startup snapshot returned"
-            else:
-                error = str(getattr(result, "error", None) or "Gmail startup cache load failed")
-
-            def _deliver() -> None:
-                owner = owner_ref()
-                if owner is None or not Shiboken.isValid(owner):
-                    return
-                if snapshot is not None:
-                    owner._commit_startup_cache(
-                        request_id,
-                        content_revision,
-                        snapshot,
-                    )
-                else:
-                    owner._on_startup_cache_error(
-                        request_id,
-                        content_revision,
-                        str(error),
-                    )
-
-            _deliver._srpss_runtime_generation = runtime_generation
-            ThreadManager.run_on_ui_thread(_deliver)
-
-        _on_result._srpss_runtime_generation = runtime_generation
-
-        try:
-            tm.submit_io_task(
-                _load_snapshot,
-                callback=_on_result,
-                category="gmail_startup_cache",
-            )
-        except Exception as exc:
-            self._on_startup_cache_error(
-                request_id,
-                content_revision,
-                str(exc),
-            )
-
-    def _commit_startup_cache(
-        self,
-        request_id: int,
-        content_revision: int,
-        snapshot: PreparedGmailStartup,
-    ) -> None:
-        """Accept the current worker snapshot and make the refresh decision."""
-
-        if (
-            not Shiboken.isValid(self)
-            or self._cancelled
-            or request_id != self._startup_cache_request_id
-            or content_revision != self._content_revision
-        ):
-            return
-
-        if snapshot.emails:
-            self._last_error = None
-            self._emails = list(snapshot.emails)
-            self._rebuild_display_rows()
-            self._unread_count = sum(1 for email in self._emails if email.is_unread)
-            self._has_displayed_valid_data = True
-            self._update_card_height_from_content(len(self._display_rows))
-            self._invalidate_content_cache_and_update(prepare_now=True)
-            self._request_fade_in()
-            logger.info("[GMAIL] Loaded %d cached emails", len(self._emails))
-        else:
-            self._update_card_height_from_content(1)
-            if snapshot.state == "stale":
-                logger.debug("[GMAIL] Cache stale (>%dh), ignoring", CACHE_MAX_AGE_HOURS)
-
-        self._complete_startup_refresh(snapshot.cache_timestamp)
-
-    def _on_startup_cache_error(
-        self,
-        request_id: int,
-        content_revision: int,
-        error: str,
-    ) -> None:
-        if (
-            not Shiboken.isValid(self)
-            or self._cancelled
-            or request_id != self._startup_cache_request_id
-            or content_revision != self._content_revision
-        ):
-            return
-        logger.warning("[CACHE][GMAIL] Startup cache snapshot failed: %s", error)
-        self._complete_startup_refresh(None)
-
-    def _complete_startup_refresh(self, cache_timestamp: Optional[datetime]) -> None:
-        if not automatic_service_updates_enabled():
-            return
-        decision = get_automatic_startup_refresh_decision(
-            cache_timestamp=cache_timestamp,
-        )
-        logger.info(
-            "[CACHE][GMAIL] Startup refresh %s (%s%s)",
-            "allowed" if decision.run else "skipped",
-            decision.reason,
-            f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
-        )
-        if decision.run:
-            self._fetch_emails()
-
-    def _write_email_cache_deferred(self, emails: List[EmailMetadata]) -> None:
-        cache_emails = tuple(emails)
-        try:
-            if self._ensure_thread_manager("GmailWidget._write_email_cache"):
-                cache_path = CACHE_PATH
-                write_id = reserve_gmail_cache_write(cache_path)
-                widget_name = self._perf_widget_name()
-                runtime_generation = getattr(self, "_runtime_generation", None)
-
-                def _persist() -> None:
-                    started = time.perf_counter()
-                    try:
-                        write_gmail_email_cache(
-                            cache_path,
-                            cache_emails,
-                            write_id=write_id,
-                        )
-                    finally:
-                        record_widget_timer_result(
-                            widget_name,
-                            "gmail.cache.write",
-                            (time.perf_counter() - started) * 1000.0,
-                            None,
-                        )
-
-                _persist._srpss_runtime_generation = runtime_generation
-                self._thread_manager.submit_io_task(
-                    _persist,
-                    category="gmail_cache_persist",
-                )
-                return
-        except Exception as exc:
-            logger.debug("[GMAIL] Cache write IO dispatch failed: %s", exc)
-        logger.warning("[GMAIL] Cache persistence skipped because shared I/O dispatch was unavailable")
 
     # ------------------------------------------------------------------
     # Card Height
@@ -1922,10 +1610,10 @@ class GmailWidget(BaseOverlayWidget):
                 email = next((e for e in self._emails if e.id == message_id), None)
                 if email is not None and email.open_url:
                     open_url(email.open_url)
-                elif self._gmail_client:
-                    self._gmail_client.open_message_in_browser(message_id)
                 else:
-                    open_url(gmail_inbox_url(self._account_slot))
+                    service = self._runtime_service
+                    if service is None or not service.open_message_in_browser(message_id):
+                        open_url(gmail_inbox_url(self._account_slot))
                 return True
 
         return False
@@ -1967,20 +1655,22 @@ class GmailWidget(BaseOverlayWidget):
 
     def _trigger_auth_flow(self) -> None:
         logger.info("[GMAIL] Requesting authentication")
-        try:
-            self._backend.start_oauth_flow()
-        except Exception as e:
-            logger.error("[GMAIL] Auth flow failed: %s", e)
+        service = self._runtime_service
+        if service is None or not service.start_auth_flow():
+            logger.error("[GMAIL] Auth flow was not admitted by the Gmail runtime")
 
     def _trigger_manual_refresh(self) -> bool:
-        return trigger_manual_refresh(
-            self,
-            defer_refresh=self._defer_refresh_if_transition,
-            fetch_callback=self._fetch_emails,
-            logger=logger,
-            busy_message="[GMAIL] Manual refresh ignored; fetch already in progress",
-            failure_message="[GMAIL] Manual refresh failed",
-        )
+        if not self._enabled:
+            return False
+        service = self._runtime_service
+        if service is None:
+            return False
+        if service.is_refresh_in_progress():
+            logger.debug("[GMAIL] Manual refresh ignored; fetch already in progress")
+            return True
+        if self._defer_refresh_if_transition():
+            return True
+        return bool(service.refresh())
 
     def _show_action_menu(self, message_id: str, local_pos: QPoint) -> None:
         if self._active_action_menu is not None:
@@ -2002,39 +1692,38 @@ class GmailWidget(BaseOverlayWidget):
         if not email:
             return
 
-        widget_ref = self
         action_message_id = self._action_message_id(email)
 
         if email.is_unread:
             action_read = menu.addAction("Mark as Read")
             action_read.setIcon(self._action_icon("read"))
             action_read.triggered.connect(
-                lambda _checked=False, mid=action_message_id: self._dispatch_action(widget_ref, self._do_mark_as_read, mid)
+                lambda _checked=False, mid=action_message_id: self._dispatch_action("mark_read", mid)
             )
         else:
             action_unread = menu.addAction("Mark as Unread")
             action_unread.setIcon(self._action_icon("unread"))
             action_unread.triggered.connect(
-                lambda _checked=False, mid=action_message_id: self._dispatch_action(widget_ref, self._do_mark_as_unread, mid)
+                lambda _checked=False, mid=action_message_id: self._dispatch_action("mark_unread", mid)
             )
 
         if self._should_show_archive_action(email):
             action_archive = menu.addAction("Archive")
             action_archive.setIcon(self._action_icon("archive"))
             action_archive.triggered.connect(
-                lambda _checked=False, mid=action_message_id: self._dispatch_action(widget_ref, self._do_archive, mid)
+                lambda _checked=False, mid=action_message_id: self._dispatch_action("archive", mid)
             )
 
         action_spam = menu.addAction("Mark as Spam")
         action_spam.setIcon(self._action_icon("spam"))
         action_spam.triggered.connect(
-            lambda _checked=False, mid=action_message_id: self._dispatch_action(widget_ref, self._do_spam, mid)
+            lambda _checked=False, mid=action_message_id: self._dispatch_action("spam", mid)
         )
 
         action_trash = menu.addAction("Delete")
         action_trash.setIcon(self._action_icon("trash"))
         action_trash.triggered.connect(
-            lambda _checked=False, mid=action_message_id: self._dispatch_action(widget_ref, self._do_trash, mid)
+            lambda _checked=False, mid=action_message_id: self._dispatch_action("trash", mid)
         )
 
         global_pos = self.mapToGlobal(local_pos)
@@ -2050,93 +1739,24 @@ class GmailWidget(BaseOverlayWidget):
 
     def _should_show_archive_action(self, email: EmailMetadata) -> bool:
         """Hide Archive for IMAP; keep the action code for future OAuth/diagnostic work."""
-        try:
-            if self._backend.mode == GmailBackendMode.IMAP:
-                return False
-        except Exception:
-            pass
-        try:
-            client_name = type(self._gmail_client).__name__.lower()
-            if "imap" in client_name:
-                return False
-        except Exception:
-            pass
+        service = self._runtime_service
+        if service is not None and service.is_imap_backend():
+            return False
         return email.provider != "imap"
 
-    @staticmethod
-    def _dispatch_action(widget_ref, action_fn, message_id: str) -> None:
-        try:
-            from shiboken6 import isValid
-            if not isValid(widget_ref):
-                logger.warning("[GMAIL] Widget destroyed before action dispatch")
-                return
-        except ImportError:
-            pass
-        try:
-            if widget_ref._ensure_thread_manager("GmailWidget._dispatch_action"):
-                widget_ref._thread_manager.submit_io_task(lambda: action_fn(message_id))
-            else:
-                action_fn(message_id)
-        except Exception:
-            action_fn(message_id)
+    def _dispatch_action(self, action: str, message_id: str) -> bool:
+        """Send one semantic action to the neutral serialized action owner."""
 
-    def _do_mark_as_read(self, message_id: str) -> None:
-        if self._gmail_client and self._gmail_client.mark_as_read(message_id):
-            logger.info("[GMAIL] Marked %s as read", message_id)
-            try:
-                ThreadManager.run_on_ui_thread(self._fetch_emails)
-            except Exception:
-                pass
-        else:
-            logger.warning("[GMAIL] Mark as read failed for %s", message_id)
-
-    def _do_mark_as_unread(self, message_id: str) -> None:
-        if self._gmail_client and self._gmail_client.mark_as_unread(message_id):
-            logger.info("[GMAIL] Marked %s as unread", message_id)
-            try:
-                ThreadManager.run_on_ui_thread(self._fetch_emails)
-            except Exception:
-                pass
-        else:
-            logger.warning("[GMAIL] Mark as unread failed for %s", message_id)
-
-    def _do_archive(self, message_id: str) -> None:
-        """Archive action code is retained for OAuth/future diagnostics, but hidden for IMAP."""
-        if self._gmail_client and self._gmail_client.archive_message(message_id):
-            logger.info("[GMAIL] Archived %s", message_id)
-            try:
-                ThreadManager.run_on_ui_thread(self._fetch_emails)
-            except Exception:
-                pass
-        else:
-            logger.warning("[GMAIL] Archive failed for %s", message_id)
-
-    def _do_spam(self, message_id: str) -> None:
-        if self._gmail_client and self._gmail_client.spam_message(message_id):
-            logger.info("[GMAIL] Marked %s as spam", message_id)
-            try:
-                ThreadManager.run_on_ui_thread(self._fetch_emails)
-            except Exception:
-                pass
-        else:
-            logger.warning("[GMAIL] Spam failed for %s", message_id)
-
-    def _do_trash(self, message_id: str) -> None:
-        if self._gmail_client and self._gmail_client.trash_message(message_id):
-            logger.info("[GMAIL] Trashed %s", message_id)
-            try:
-                ThreadManager.run_on_ui_thread(self._fetch_emails)
-            except Exception:
-                pass
-        else:
-            logger.warning("[GMAIL] Trash failed for %s", message_id)
+        service = self._runtime_service
+        return bool(
+            service is not None and service.dispatch_action(action, message_id)
+        )
 
     # ------------------------------------------------------------------
     # Settings
     # ------------------------------------------------------------------
 
     def apply_settings(self, settings: Any) -> None:
-        self._fetch_generation += 1
         if isinstance(settings, dict):
             self._apply_settings_dict(settings)
             return
@@ -2375,10 +1995,15 @@ class GmailWidget(BaseOverlayWidget):
         self._invalidate_content_cache_and_update()
 
     def set_refresh_interval(self, minutes: int) -> None:
-        next_interval = timedelta(minutes=max(1, minutes))
+        try:
+            normalized_minutes = max(1, int(minutes))
+        except (TypeError, ValueError):
+            normalized_minutes = 5
+        next_interval = timedelta(minutes=normalized_minutes)
         if self._refresh_interval == next_interval:
             return
         self._refresh_interval = next_interval
+        self._sync_runtime_config()
 
     def set_group_threads(self, enabled: bool) -> None:
         enabled = bool(enabled)
@@ -2492,19 +2117,18 @@ class GmailWidget(BaseOverlayWidget):
     # ------------------------------------------------------------------
 
     def set_play_sound_on_new_mail(self, enabled: bool) -> None:
-        self._play_sound_on_new_mail = bool(enabled)
+        value = bool(enabled)
+        if self._play_sound_on_new_mail == value:
+            return
+        self._play_sound_on_new_mail = value
+        self._sync_runtime_config()
 
     def set_sound_file_path(self, path: str) -> None:
         path = str(path or "")
         if path == self._sound_file_path:
             return
         self._sound_file_path = path
-        # Push to singleton so the next play() picks up the change.
-        try:
-            from core.audio.notification_sound import NotificationSoundPlayer
-            NotificationSoundPlayer.instance().set_file_path(path)
-        except Exception as exc:
-            logger.debug("[GMAIL] sound set_file_path defer failed: %s", exc)
+        self._sync_runtime_config()
 
     def set_sound_volume_percent(self, percent: int) -> None:
         try:
@@ -2514,8 +2138,4 @@ class GmailWidget(BaseOverlayWidget):
         if value == self._sound_volume_percent:
             return
         self._sound_volume_percent = value
-        try:
-            from core.audio.notification_sound import NotificationSoundPlayer
-            NotificationSoundPlayer.instance().set_volume(value)
-        except Exception as exc:
-            logger.debug("[GMAIL] sound set_volume defer failed: %s", exc)
+        self._sync_runtime_config()
