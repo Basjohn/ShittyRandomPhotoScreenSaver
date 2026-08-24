@@ -1,9 +1,8 @@
 """Spotify-specific vertical volume widget.
 
 This widget renders a slim vertical volume slider styled to match the
-Spotify/media card. It delegates actual volume changes to
-:class:`core.media.spotify_volume.SpotifyVolumeController`, which uses
-pycaw/Core Audio when available.
+Spotify/media card. It delegates accepted state and Core Audio work to the
+presentation-neutral Media volume runtime service.
 
 The widget itself is non-interactive in Qt hit-testing terms
 (``WA_TransparentForMouseEvents``); DisplayWidget is responsible for
@@ -14,24 +13,25 @@ from __future__ import annotations
 
 from typing import Optional
 
-import weakref
 import time
 
-from PySide6.QtCore import Qt, QTimer, QPoint, QRect, QRectF
+from PySide6.QtCore import Qt, QPoint, QRect, QRectF
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging
 from core.media.provider_registry import (
-    get_provider_process_exe_name_for_source,
     preserve_provider_setting,
     provider_supports_app_volume,
 )
-from core.media.spotify_volume import SpotifyVolumeController
 from core.settings.shadow_tuning import VOLUME_SLIDER_SHADOW_TUNING
 from core.threading.manager import ThreadManager
 from widgets.media.dependent_visibility import sync_anchor_dependent_visibility
+from widgets.media_volume_runtime import (
+    MediaVolumeRuntimeService,
+    MediaVolumeRuntimeSnapshot,
+)
 from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes, shadow_config_enabled
 
 logger = get_logger(__name__)
@@ -47,27 +47,29 @@ class SpotifyVolumeWidget(QWidget):
     interaction mode is active.
     """
 
-    _instances = weakref.WeakSet()
-    _broadcasting: bool = False
-
-    def __init__(self, parent: Optional[QWidget] = None, provider: str = "spotify") -> None:
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        provider: str = "spotify",
+        *,
+        build_default_runtime: bool = True,
+    ) -> None:
         super().__init__(parent)
 
         self._provider = preserve_provider_setting(provider)
         self._provider_volume_supported = provider_supports_app_volume(self._provider)
-        self._controller = SpotifyVolumeController(provider=self._provider)
         self._browser_volume_process: Optional[str] = None
+        self._runtime_available: bool = False
         self._thread_manager: Optional[ThreadManager] = None
+        self._runtime_service: MediaVolumeRuntimeService | None = None
+        self._owns_runtime_service = False
         self._shadow_config = None
         self._enabled: bool = False
 
         self._volume: float = 1.0
         self._dragging: bool = False
-        self._pending_volume: Optional[float] = None
-        self._flush_timer: Optional[QTimer] = None
         self._has_faded_in: bool = False
         self._anchor_media: Optional[QWidget] = None
-        self._last_volume_sync_request_ts: float = 0.0
         self._spotify_secondary_stage_started: bool = False
         self._custom_layout_geometry_reapply_pending: bool = False
         self._painted_frame_shadow_enabled: bool = True
@@ -75,11 +77,6 @@ class SpotifyVolumeWidget(QWidget):
         self._painted_frame_shadow_cache_key: Optional[tuple] = None
         self._track_shadow_pixmap: Optional[QPixmap] = None
         self._track_shadow_cache_key: Optional[tuple] = None
-
-        try:
-            SpotifyVolumeWidget._instances.add(self)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
 
         # Geometry constants (logical pixels)
         self._track_margin: int = 6
@@ -94,35 +91,30 @@ class SpotifyVolumeWidget(QWidget):
 
         self._setup_ui()
 
+        if build_default_runtime:
+            service = MediaVolumeRuntimeService(provider=self._provider, shared=False)
+            self._install_runtime_service(service, owns_service=True)
+
     def set_provider_runtime(self, provider: object) -> bool:
         """Retarget the underlying Core Audio session filter without recreating the widget."""
 
-        normalized = preserve_provider_setting(provider)
-        if normalized == self._provider:
+        service = self._runtime_service
+        if service is None:
             return False
-        self._provider = normalized
-        self._browser_volume_process = None
-        try:
-            configured = bool(self._controller.configure_volume_target(normalized))
-        except Exception:
-            logger.debug("[SPOTIFY_VOL] Failed to retarget provider runtime", exc_info=True)
-            configured = False
-        self._provider_volume_supported = bool(
-            provider_supports_app_volume(normalized) and configured
-        )
-        if not self._provider_volume_supported:
-            self._reset_flush_state(delete_timer=False)
+        changed = bool(service.set_provider_runtime(provider))
+        if not changed:
+            return False
+        self._sync_runtime_snapshot()
+        if not self._provider_volume_supported or not self._runtime_available:
             self.hide()
             logger.info(
                 "[SPOTIFY_VOL] Volume target unavailable for provider=%s; widget hidden",
-                normalized,
+                self._provider,
             )
             return True
-        logger.info("[SPOTIFY_VOL] Runtime provider switch applied: %s", normalized)
+        logger.info("[SPOTIFY_VOL] Runtime provider switch applied: %s", self._provider)
         if self._enabled:
-            self._ensure_flush_timer()
             self.sync_visibility_with_anchor()
-        self._request_volume_sync(force=True)
         return True
 
     def set_runtime_volume_source(
@@ -132,37 +124,16 @@ class SpotifyVolumeWidget(QWidget):
     ) -> bool:
         """Apply the generation-accepted GSMTC host as a runtime-only target."""
 
-        normalized = preserve_provider_setting(provider)
-        if normalized != self._provider or normalized != "spotify_browser":
+        service = self._runtime_service
+        if service is None:
             return False
-
-        browser_process = get_provider_process_exe_name_for_source(
-            normalized,
-            source_app_user_model_id,
+        changed = bool(
+            service.set_runtime_volume_source(provider, source_app_user_model_id)
         )
-        if (
-            browser_process == self._browser_volume_process
-            and self._provider_volume_supported == (browser_process is not None)
-        ):
+        if not changed:
             return False
-
-        # A pending drag/write belongs to the previous exact process identity.
-        # Never let it spill into a newly selected browser host.
-        self._reset_flush_state(delete_timer=False)
-        try:
-            configured = bool(
-                self._controller.configure_volume_target(
-                    normalized,
-                    source_app_user_model_id,
-                )
-            )
-        except Exception:
-            logger.debug("[SPOTIFY_VOL] Failed to configure Browser volume target", exc_info=True)
-            configured = False
-
-        self._browser_volume_process = browser_process if configured else None
-        self._provider_volume_supported = bool(browser_process is not None and configured)
-        if not self._provider_volume_supported:
+        self._sync_runtime_snapshot()
+        if not self._provider_volume_supported or not self._runtime_available:
             self.hide()
             logger.debug(
                 "[SPOTIFY_VOL] Browser volume disabled; no exact accepted GSMTC host"
@@ -171,11 +142,9 @@ class SpotifyVolumeWidget(QWidget):
 
         logger.info(
             "[SPOTIFY_VOL] Browser volume target accepted: spotify.exe -> %s fallback",
-            browser_process,
+            self._browser_volume_process,
         )
         if self._enabled:
-            self._ensure_flush_timer()
-            self._request_volume_sync(force=True)
             self.sync_visibility_with_anchor()
         return True
 
@@ -185,6 +154,68 @@ class SpotifyVolumeWidget(QWidget):
 
     def set_thread_manager(self, thread_manager: Optional[ThreadManager]) -> None:
         self._thread_manager = thread_manager
+        service = self._runtime_service
+        if service is not None:
+            service.set_thread_manager(thread_manager)
+
+    def set_runtime_service(self, service: MediaVolumeRuntimeService) -> None:
+        """Attach the registry-owned neutral service before presentation start."""
+
+        self._install_runtime_service(service, owns_service=False)
+
+    def _install_runtime_service(
+        self,
+        service: MediaVolumeRuntimeService,
+        *,
+        owns_service: bool,
+    ) -> None:
+        if service is self._runtime_service:
+            return
+        prior = self._runtime_service
+        prior_owned = self._owns_runtime_service
+        if prior is not None:
+            prior.stop()
+            prior.detach_consumer(self)
+            if prior_owned:
+                prior.retire()
+        self._runtime_service = service
+        self._owns_runtime_service = bool(owns_service)
+        if self._thread_manager is not None:
+            service.set_thread_manager(self._thread_manager)
+        service.attach_consumer(self)
+        self._sync_runtime_snapshot()
+
+    def _sync_runtime_snapshot(self) -> None:
+        service = self._runtime_service
+        snapshot = service.current_snapshot() if service is not None else None
+        if snapshot is not None:
+            self._apply_runtime_snapshot(snapshot)
+
+    def is_media_volume_consumer_alive(self) -> bool:
+        try:
+            return bool(Shiboken.isValid(self))
+        except Exception:
+            return False
+
+    def on_media_volume_runtime_snapshot(
+        self, snapshot: MediaVolumeRuntimeSnapshot
+    ) -> None:
+        self._apply_runtime_snapshot(snapshot)
+
+    def _apply_runtime_snapshot(self, snapshot: MediaVolumeRuntimeSnapshot) -> None:
+        self._provider = snapshot.provider
+        self._browser_volume_process = snapshot.browser_process
+        self._provider_volume_supported = bool(snapshot.supported)
+        self._runtime_available = bool(snapshot.available)
+        self._apply_volume(snapshot.level)
+        if not self._provider_volume_supported or not self._runtime_available:
+            try:
+                self.hide()
+            except Exception:
+                pass
+
+    def is_lifecycle_active(self) -> bool:
+        return bool(self._enabled)
 
     def set_shadow_config(self, config) -> None:
         self._shadow_config = config
@@ -316,6 +347,7 @@ class SpotifyVolumeWidget(QWidget):
             if (
                 self._enabled
                 and self._provider_volume_supported
+                and self._runtime_available
                 and self._is_anchor_visible()
                 and self._is_parent_secondary_stage_ready()
             ):
@@ -332,7 +364,11 @@ class SpotifyVolumeWidget(QWidget):
             visible = sync_anchor_dependent_visibility(
                 self,
                 anchor=self._anchor_media,
-                enabled=self._enabled and self._provider_volume_supported,
+                enabled=(
+                    self._enabled
+                    and self._provider_volume_supported
+                    and self._runtime_available
+                ),
                 has_faded_in=self._has_faded_in,
                 start_fade_in=self._start_widget_fade_in,
                 missing_anchor_visible=None,
@@ -379,7 +415,11 @@ class SpotifyVolumeWidget(QWidget):
 
     def begin_spotify_secondary_stage(self) -> None:
         """Join the shared Spotify secondary reveal stage explicitly."""
-        if not self._enabled or not self._provider_volume_supported:
+        if (
+            not self._enabled
+            or not self._provider_volume_supported
+            or not self._runtime_available
+        ):
             return
         parent = self.parent()
         if parent is not None:
@@ -433,50 +473,52 @@ class SpotifyVolumeWidget(QWidget):
     
     def _activate_impl(self) -> None:
         """Activate volume widget (lifecycle hook)."""
-        if not self._provider_volume_supported or not self._controller.is_available():
-            logger.debug("[LIFECYCLE] SpotifyVolumeWidget controller unavailable")
-            return
-        
-        self._ensure_flush_timer()
-        self._request_volume_sync(force=True)
-        
+        self.start()
         logger.debug("[LIFECYCLE] SpotifyVolumeWidget activated")
     
     def _deactivate_impl(self) -> None:
         """Deactivate volume widget (lifecycle hook)."""
-        self._reset_flush_state(delete_timer=False)
+        self.stop()
         logger.debug("[LIFECYCLE] SpotifyVolumeWidget deactivated")
     
     def _cleanup_impl(self) -> None:
         """Clean up volume widget resources (lifecycle hook)."""
-        self._deactivate_impl()
-        self._reset_flush_state(delete_timer=True)
+        self.cleanup()
         logger.debug("[LIFECYCLE] SpotifyVolumeWidget cleaned up")
 
     # ------------------------------------------------------------------
     # Legacy Lifecycle Methods (for backward compatibility)
     # ------------------------------------------------------------------
 
-    def start(self) -> None:
-        """Initialise volume from the controller when available."""
+    def start(self) -> bool:
+        """Activate the neutral volume lease and begin local presentation."""
 
         if self._enabled:
-            return
+            return True
+        service = self._runtime_service
+        if service is None:
+            logger.error(
+                "[SPOTIFY_VOL] Missing required runtime service; activation failed closed"
+            )
+            return False
         self._enabled = True
+        if not service.start():
+            self._enabled = False
+            logger.error("[SPOTIFY_VOL] Runtime service start failed closed")
+            return False
+        self._sync_runtime_snapshot()
 
         try:
             self.hide()
         except Exception as e:
             logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
 
-        if not self._provider_volume_supported or not self._controller.is_available():
+        if not self._provider_volume_supported or not self._runtime_available:
             if is_verbose_logging():
                 logger.info("[SPOTIFY_VOL] Controller unavailable; widget will remain hidden")
-            return
+            return True
 
-        self._ensure_flush_timer()
-        
-        # Only show if anchor media widget is visible (Spotify is active)
+        # Only show if anchor media widget is visible (Spotify is active).
         anchor = self._anchor_media
         anchor_visible = True
         if anchor is not None:
@@ -485,22 +527,20 @@ class SpotifyVolumeWidget(QWidget):
             except Exception as e:
                 logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
                 anchor_visible = True
-        
+
         if not anchor_visible:
-            # Media widget not visible - don't show volume widget yet
             if is_verbose_logging():
                 logger.debug("[SPOTIFY_VOL] Anchor not visible during start; deferring fade-in")
-            return
+            return True
 
-        # Align visibility with the anchor before we attempt to fade in so any
-        # delayed media fade requests have the correct starting state.
         self.sync_visibility_with_anchor()
 
-        self._request_volume_sync(force=True)
-
-        # Participate in coordinated overlay fade sync like other widgets
         def _starter() -> None:
-            if not self._enabled or not self._provider_volume_supported:
+            if (
+                not self._enabled
+                or not self._provider_volume_supported
+                or not self._runtime_available
+            ):
                 return
             self._start_widget_fade_in()
 
@@ -513,6 +553,7 @@ class SpotifyVolumeWidget(QWidget):
                 _starter()
         else:
             _starter()
+        return True
 
     def stop(self) -> None:
         if not self._enabled:
@@ -520,7 +561,9 @@ class SpotifyVolumeWidget(QWidget):
         self._enabled = False
         self._spotify_secondary_stage_started = False
         self._has_faded_in = False
-        self._reset_flush_state(delete_timer=False)
+        service = self._runtime_service
+        if service is not None:
+            service.stop()
         try:
             self.hide()
         except Exception as e:
@@ -528,6 +571,14 @@ class SpotifyVolumeWidget(QWidget):
 
     def cleanup(self) -> None:
         self.stop()
+        service = self._runtime_service
+        owns_service = self._owns_runtime_service
+        if service is not None:
+            service.detach_consumer(self)
+            if owns_service:
+                service.retire()
+        self._runtime_service = None
+        self._owns_runtime_service = False
 
     # ------------------------------------------------------------------
     # Interaction handlers (called from DisplayWidget)
@@ -578,8 +629,7 @@ class SpotifyVolumeWidget(QWidget):
         direction = 1 if delta_y > 0 else -1
         unclamped = self._volume + (step * direction)
         clamped = max(0.0, min(1.0, unclamped))
-        self._apply_volume_and_broadcast(clamped)
-        self._schedule_set_volume(clamped)
+        self._set_runtime_volume(clamped)
         return True
 
     # ------------------------------------------------------------------
@@ -841,84 +891,10 @@ class SpotifyVolumeWidget(QWidget):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _ensure_flush_timer(self) -> None:
-        if self._flush_timer is not None:
-            return
-        timer = QTimer(self)
-        timer.setSingleShot(True)
-        timer.setInterval(80)
-
-        def _on_timeout() -> None:
-            level = self._pending_volume
-            self._pending_volume = None
-            if level is None:
-                return
-            self._submit_volume_set(level)
-
-        timer.timeout.connect(_on_timeout)
-        self._flush_timer = timer
-        try:
-            from core.resources.manager import ResourceManager
-            ResourceManager.get_or_create_app_shared().register_qt(
-                timer, description="SpotifyVolumeWidget flush debounce timer",
-            )
-        except Exception:
-            pass
-
     def _request_volume_sync(self, *, force: bool = False) -> None:
-        if not self._provider_volume_supported or not self._controller.is_available():
-            return
-        now = time.monotonic()
-        if not force and (now - self._last_volume_sync_request_ts) < 1.25:
-            return
-        self._last_volume_sync_request_ts = now
-
-        if self._thread_manager is None:
-            try:
-                current = self._controller.get_volume()
-            except Exception:
-                logger.debug("[SPOTIFY_VOL] Direct volume sync failed", exc_info=True)
-                current = None
-            if isinstance(current, float):
-                self._apply_volume(current)
-            return
-
-        def _do_read() -> Optional[float]:
-            return self._controller.get_volume()
-
-        def _on_result(result) -> None:
-            def _apply(val: Optional[float]) -> None:
-                if isinstance(val, float):
-                    self._apply_volume(val)
-
-            val: Optional[float] = None
-            try:
-                if getattr(result, "success", False):
-                    val = getattr(result, "result", None)
-            except Exception as e:
-                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-                val = None
-            ThreadManager.run_on_ui_thread(_apply, val)
-
-        try:
-            self._thread_manager.submit_io_task(_do_read, callback=_on_result)
-        except Exception:
-            logger.debug("[SPOTIFY_VOL] Failed to schedule volume sync", exc_info=True)
-
-    def _reset_flush_state(self, *, delete_timer: bool) -> None:
-        """Stop pending flush work and optionally destroy the debounce timer."""
-        if self._flush_timer is not None:
-            try:
-                self._flush_timer.stop()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-            if delete_timer:
-                try:
-                    self._flush_timer.deleteLater()
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-                self._flush_timer = None
-        self._pending_volume = None
+        service = self._runtime_service
+        if service is not None:
+            service.request_sync(force=force)
 
     def _apply_volume(self, level: float) -> None:
         if not Shiboken.isValid(self):
@@ -931,42 +907,6 @@ class SpotifyVolumeWidget(QWidget):
             self.update()
         except Exception as e:
             logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-
-    def _apply_volume_and_broadcast(self, level: float) -> None:
-        """Apply a new volume locally and mirror it to sibling sliders.
-
-        The originating widget is responsible for scheduling the Core Audio
-        write; peers only update their visuals to stay in sync.
-        """
-
-        self._apply_volume(level)
-
-        cls = self.__class__
-        try:
-            broadcasting = getattr(cls, "_broadcasting", False)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-            broadcasting = False
-        if broadcasting:
-            return
-
-        try:
-            cls._broadcasting = True
-            try:
-                instances = list(getattr(cls, "_instances", []))
-            except Exception as e:
-                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-                instances = []
-            for other in instances:
-                if other is self:
-                    continue
-                try:
-                    other._apply_volume(level)
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-                    continue
-        finally:
-            cls._broadcasting = False
 
     def _set_volume_from_pos(self, local_pos: QPoint) -> None:
         rect = self.rect().adjusted(
@@ -983,48 +923,17 @@ class SpotifyVolumeWidget(QWidget):
         ratio = 0.0
         if rect.height() > 0:
             ratio = float(rect.bottom() - y) / float(rect.height())
-        self._apply_volume_and_broadcast(ratio)
-        self._schedule_set_volume(ratio)
+        self._set_runtime_volume(ratio)
 
-    def _schedule_set_volume(self, level: float) -> None:
-        if not self._provider_volume_supported:
-            return
-        self._pending_volume = float(max(0.0, min(1.0, level)))
-        self._ensure_flush_timer()
-        if self._flush_timer is not None:
-            try:
-                self._flush_timer.start()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-
-    def _submit_volume_set(self, level: float) -> None:
-        if not self._provider_volume_supported or not self._controller.is_available():
-            logger.debug("[SPOTIFY_VOL] Controller not available, cannot set volume")
-            return
-
+    def _set_runtime_volume(self, level: float) -> None:
         clamped = float(max(0.0, min(1.0, level)))
-
-        if self._thread_manager is None:
-            try:
-                result = self._controller.set_volume(clamped)
-                if is_verbose_logging():
-                    logger.debug("[SPOTIFY_VOL] set_volume direct: %.2f -> %s", clamped, result)
-            except Exception:
-                logger.debug("[SPOTIFY_VOL] set_volume direct call failed", exc_info=True)
+        service = self._runtime_service
+        if service is not None and service.set_volume_optimistic(clamped):
             return
-
-        def _do_set(target: float) -> None:
-            try:
-                result = self._controller.set_volume(target)
-                if is_verbose_logging():
-                    logger.debug("[SPOTIFY_VOL] set_volume async: %.2f -> %s", target, result)
-            except Exception:
-                logger.debug("[SPOTIFY_VOL] set_volume task failed", exc_info=True)
-
-        try:
-            self._thread_manager.submit_io_task(_do_set, clamped)
-        except Exception:
-            logger.debug("[SPOTIFY_VOL] Failed to submit set_volume task", exc_info=True)
+        # Preserve local standalone/input feedback if the optional Core Audio
+        # backend is unavailable. Production wiring still fails closed before a
+        # service-less presenter can be registered or started.
+        self._apply_volume(clamped)
 
     def _start_widget_fade_in(self, duration_ms: Optional[int] = None) -> None:
         """Fade the widget in using the shared ShadowFadeProfile.

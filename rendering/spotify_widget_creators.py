@@ -795,7 +795,13 @@ def create_spotify_volume_widget(
 
     try:
         provider = str(getattr(media_model, 'provider', 'spotify') or 'spotify')
-        vol = SpotifyVolumeWidget(mgr._parent, provider=provider)
+        # Production ownership is injected by WidgetRuntimeManager in the
+        # explicit Media-dependent setup phase.
+        vol = SpotifyVolumeWidget(
+            mgr._parent,
+            provider=provider,
+            build_default_runtime=False,
+        )
 
         if thread_manager is not None and hasattr(vol, "set_thread_manager"):
             try:
