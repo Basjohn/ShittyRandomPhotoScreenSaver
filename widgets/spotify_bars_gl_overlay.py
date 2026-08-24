@@ -60,7 +60,9 @@ from widgets.spotify_visualizer.overlay_frame_shell import (
 )
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
 from widgets.base_overlay_widget import (
-    PAINTED_FRAME_SHADOW_TUNING,
+    PAINTED_FRAME_CARD_SHRINK_RIGHT,
+    PAINTED_FRAME_CARD_SHRINK_BOTTOM,
+    PAINTED_FRAME_RADIUS_EXTRA,
 )
 
 logger = get_logger(__name__)
@@ -1861,9 +1863,9 @@ class SpotifyBarsGLOverlay(QWidget):
             rect,
             dpr=dpr,
             border_width_px=self._border_width_px,
-            shrink_right=int(PAINTED_FRAME_SHADOW_TUNING["card_shrink_right"]),
-            shrink_bottom=int(PAINTED_FRAME_SHADOW_TUNING["card_shrink_bottom"]),
-            radius_extra=int(PAINTED_FRAME_SHADOW_TUNING.get("radius_extra", 0)),
+            shrink_right=PAINTED_FRAME_CARD_SHRINK_RIGHT,
+            shrink_bottom=PAINTED_FRAME_CARD_SHRINK_BOTTOM,
+            radius_extra=PAINTED_FRAME_RADIUS_EXTRA,
         )
 
         # The mask shader reads gl_FragCoord, which is WINDOW space. When this

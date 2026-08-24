@@ -61,32 +61,8 @@ def test_shared_fade_honors_explicit_duration_override(qt_app, qtbot):
     assert anim.duration() == 321
 
 
-def test_shadow_tuning_payload_backfills_new_sections_without_clobbering_existing_values(tmp_path):
-    from core.settings import shadow_tuning
-
-    payload, needs_refresh = shadow_tuning._canonicalized_tuning_payload(
-        {
-            "card": {"offset_x": 9},
-            "text": {"offset_x": 3},
-            "header": {"alpha": 70},
-        }
-    )
-
-    assert needs_refresh is True
-    assert payload["card"]["offset_x"] == 9
-    assert payload["text"]["offset_x"] == 3
-    assert "text_large" in payload
-    assert payload["text_large"]["offset_x"] == shadow_tuning._TEXT_LARGE_DEFAULTS["offset_x"]
-    assert payload["header"]["alpha"] == 70
-    assert "icon" in payload
-    assert payload["icon"]["alpha"] == shadow_tuning._ICON_DEFAULTS["alpha"]
-    assert payload["icon"]["scale"] == shadow_tuning._ICON_DEFAULTS["scale"]
-    assert "control" in payload
-    assert payload["control"]["spread"] == shadow_tuning._CONTROL_DEFAULTS["spread"]
-
-
 @pytest.mark.qt
-def test_text_shadow_helpers_render_from_tuning_backed_paths(qt_app):
+def test_text_shadow_helpers_render_inlined_offset_pass(qt_app):
     pixmap = QPixmap(180, 80)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)

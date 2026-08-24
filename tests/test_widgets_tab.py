@@ -1135,11 +1135,22 @@ class TestWidgetsTab:
             tab._save_settings_now()
 
             widgets_cfg = settings_manager.get("widgets", {})
-            assert widgets_cfg["shadows"] == {
-                "enabled": True,
-                "text_enabled": True,
-                "header_enabled": False,
-            }
+            saved_shadows = widgets_cfg["shadows"]
+            # Edited enable toggles land.
+            assert saved_shadows["enabled"] is True
+            assert saved_shadows["text_enabled"] is True
+            assert saved_shadows["header_enabled"] is False
+            # F0.5: the General save now writes the full canonical shadow mapping
+            # (direction + darkness/blur/extra-offset) instead of a 3-key partial
+            # map that erased direction/opacity/blur, and never re-persists the
+            # retired ``offset`` pair.
+            assert saved_shadows["direction"] == "SE"
+            assert saved_shadows["frame_opacity"] == pytest.approx(0.77)
+            assert saved_shadows["blur_radius"] == 18
+            assert saved_shadows["frame_extra_offset"] == 0
+            assert saved_shadows["text_opacity"] == pytest.approx(0.33)
+            assert saved_shadows["text_extra_offset"] == 0
+            assert "offset" not in saved_shadows
             assert widgets_cfg["global"]["card_border_width_px"] == 4
             assert widgets_cfg["global"]["stacking_enabled"] is True
         finally:

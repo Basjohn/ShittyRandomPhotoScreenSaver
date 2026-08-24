@@ -23,12 +23,6 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap, QTextDo
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging
-from core.settings.shadow_tuning import (
-    HEADER_SHADOW_TUNING,
-    ICON_SHADOW_TUNING,
-    TEXT_SHADOW_TUNING,
-    TEXT_LARGE_SHADOW_TUNING,
-)
 
 logger = get_logger(__name__)
 
@@ -387,20 +381,27 @@ class ShadowFadeProfile:
 # ---------------------------------------------------------------------------
 # Text Shadow Helpers for QPainter-based rendering
 # ---------------------------------------------------------------------------
+#
+# These are the authored ordinary/large/header text-shadow reference magnitudes
+# for not-yet-ported QWidget families. They were formerly sourced from the shared
+# shadowtuning.json ``text``/``text_large``/``header`` sidecar; that hidden tuning
+# authority was retired in F0.5, so the values are inlined here as this helper's
+# own constants. There is no text blur. The canonical destination text shadow is
+# the retained duplicate-glyph ShadowedText primitive under the global direction.
 
-TEXT_SHADOW_OFFSET_X: float = float(TEXT_SHADOW_TUNING["offset_x"])
-TEXT_SHADOW_OFFSET_Y: float = float(TEXT_SHADOW_TUNING["offset_y"])
-TEXT_SHADOW_COLOR: QColor = QColor(0, 0, 0, int(TEXT_SHADOW_TUNING["alpha"]))
-TEXT_SHADOW_MIN_FONT_SIZE: int = int(TEXT_SHADOW_TUNING["min_font_size"])
-TEXT_SHADOW_SMALL_FONT_MIN_SCALE: float = float(TEXT_SHADOW_TUNING["small_font_min_scale"])
-TEXT_LARGE_SHADOW_OFFSET_X: float = float(TEXT_LARGE_SHADOW_TUNING["offset_x"])
-TEXT_LARGE_SHADOW_OFFSET_Y: float = float(TEXT_LARGE_SHADOW_TUNING["offset_y"])
-TEXT_LARGE_SHADOW_COLOR: QColor = QColor(0, 0, 0, int(TEXT_LARGE_SHADOW_TUNING["alpha"]))
-TEXT_LARGE_SHADOW_MIN_FONT_SIZE: int = int(TEXT_LARGE_SHADOW_TUNING["min_font_size"])
-TEXT_LARGE_SHADOW_SMALL_FONT_MIN_SCALE: float = float(TEXT_LARGE_SHADOW_TUNING["small_font_min_scale"])
-HEADER_SHADOW_OFFSET_X: float = float(HEADER_SHADOW_TUNING["offset_x"])
-HEADER_SHADOW_OFFSET_Y: float = float(HEADER_SHADOW_TUNING["offset_y"])
-HEADER_SHADOW_COLOR: QColor = QColor(0, 0, 0, int(HEADER_SHADOW_TUNING["alpha"]))
+TEXT_SHADOW_OFFSET_X: float = 3.0
+TEXT_SHADOW_OFFSET_Y: float = 3.0
+TEXT_SHADOW_COLOR: QColor = QColor(0, 0, 0, 180)
+TEXT_SHADOW_MIN_FONT_SIZE: int = 10
+TEXT_SHADOW_SMALL_FONT_MIN_SCALE: float = 0.3
+TEXT_LARGE_SHADOW_OFFSET_X: float = 4.0
+TEXT_LARGE_SHADOW_OFFSET_Y: float = 4.0
+TEXT_LARGE_SHADOW_COLOR: QColor = QColor(0, 0, 0, 100)
+TEXT_LARGE_SHADOW_MIN_FONT_SIZE: int = 20
+TEXT_LARGE_SHADOW_SMALL_FONT_MIN_SCALE: float = 0.3
+HEADER_SHADOW_OFFSET_X: float = 2.0
+HEADER_SHADOW_OFFSET_Y: float = 2.0
+HEADER_SHADOW_COLOR: QColor = QColor(0, 0, 0, 220)
 
 
 def _resolve_text_shadow_params(
@@ -767,9 +768,11 @@ def draw_pixmap_drop_shadow(
         dpr = 1.0
     dpr = max(1.0, dpr)
 
-    offset_x = int(ICON_SHADOW_TUNING.get("offset_x", 3))
-    offset_y = int(ICON_SHADOW_TUNING.get("offset_y", 4))
-    alpha = max(0, min(255, int(ICON_SHADOW_TUNING.get("alpha", 67))))
+    # Authored icon-shadow reference magnitudes (formerly shadowtuning.json
+    # ``icon``; inlined when that sidecar authority was retired in F0.5).
+    offset_x = 3
+    offset_y = 4
+    alpha = 95
     target_w = int(target.width())
     target_h = int(target.height())
     cache_key = (

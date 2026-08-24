@@ -1233,7 +1233,7 @@ def test_gmail_widget_refresh_spiral_can_be_hidden(qt_app):
 
 def test_gmail_uses_shared_painted_shadow_without_drop_effect(qt_app):
     """Gmail should use the shared painted-card shadow path at runtime."""
-    from widgets.base_overlay_widget import PAINTED_FRAME_SHADOW_TUNING
+    from widgets.base_overlay_widget import PAINTED_FRAME_BLUR_STEPS
     from widgets.gmail_widget import GmailWidget
 
     widget = GmailWidget()
@@ -1245,7 +1245,7 @@ def test_gmail_uses_shared_painted_shadow_without_drop_effect(qt_app):
         shared_pixmap = widget._ensure_painted_frame_shadow_pixmap()
         assert shared_pixmap is not None
         assert not shared_pixmap.isNull()
-        assert PAINTED_FRAME_SHADOW_TUNING["blur_steps"] > 0
+        assert PAINTED_FRAME_BLUR_STEPS > 0
         assert widget.uses_painted_frame_shadow() is True
         assert widget.graphicsEffect() is None
     finally:

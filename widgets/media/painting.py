@@ -23,7 +23,6 @@ from PySide6.QtGui import (
 
 from core.logging.logger import get_logger
 from widgets.media.artwork_layout import compute_artwork_frame_size
-from core.settings.shadow_tuning import CONTROL_SHADOW_TUNING
 from core.media.media_controller import MediaPlaybackState
 from widgets.shadow_utils import (
     draw_pixmap_drop_shadow,
@@ -65,12 +64,13 @@ def _ensure_controls_shadow_pixmap(widget: "MediaWidget", row_rect: QRect) -> tu
     except Exception:
         dpr = 1.0
 
-    tuning = CONTROL_SHADOW_TUNING
-    offset_x = int(tuning.get("offset_x", 2))
-    offset_y = int(tuning.get("offset_y", 2))
-    alpha = max(0, min(255, int(tuning.get("alpha", 80))))
-    spread = max(1, int(tuning.get("spread", max(5, int(widget._controls_row_radius * 0.65)))))
-    passes = max(1, int(tuning.get("passes", 5)))
+    # Authored media control-row shadow reference magnitudes (formerly
+    # shadowtuning.json ``control``; inlined when that sidecar was retired in F0.5).
+    offset_x = 3
+    offset_y = 4
+    alpha = 80
+    spread = 8
+    passes = 5
     radius = max(1.0, float(widget._controls_row_radius))
     shadow_w = row_rect.width() + spread * 2 + abs(offset_x)
     shadow_h = row_rect.height() + spread * 2 + abs(offset_y)

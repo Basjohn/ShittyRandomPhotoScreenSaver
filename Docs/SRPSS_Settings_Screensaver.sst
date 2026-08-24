@@ -859,13 +859,11 @@
         ],
         "direction": "SE",
         "enabled": true,
+        "frame_extra_offset": 0,
         "frame_opacity": 0.77,
         "header_enabled": true,
-        "offset": [
-          4,
-          4
-        ],
         "text_enabled": true,
+        "text_extra_offset": 0,
         "text_opacity": 0.33
       },
       "spotify_visualizer": {

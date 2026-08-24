@@ -61,6 +61,9 @@ class SettingsManager(QObject):
         "widgets.reddit2.intense_shadow",
         "widgets.imgur.intense_shadow",
         "widgets.gmail.intense_shadow",
+        # F0.5: the old global magnitude pair is retired; direction + per-bucket
+        # Extra Offset replace it. It is dropped on load, never migrated.
+        "widgets.shadows.offset",
     })
     _LEGACY_KEY_ALIASES = {
         "input.hard_exit": "input.interaction_mode",

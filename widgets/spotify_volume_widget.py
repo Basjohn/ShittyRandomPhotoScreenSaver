@@ -25,7 +25,6 @@ from core.media.provider_registry import (
     preserve_provider_setting,
     provider_supports_app_volume,
 )
-from core.settings.shadow_tuning import VOLUME_SLIDER_SHADOW_TUNING
 from core.threading.manager import ThreadManager
 from widgets.media.dependent_visibility import sync_anchor_dependent_visibility
 from widgets.media_volume_runtime import (
@@ -35,6 +34,18 @@ from widgets.media_volume_runtime import (
 from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes, shadow_config_enabled
 
 logger = get_logger(__name__)
+
+# Authored volume-slider shadow reference magnitudes (formerly the shared
+# shadowtuning.json ``volume_slider`` sidecar; inlined as this widget's own
+# constants when that hidden tuning authority was retired in F0.5).
+_VOL_SHADOW_CARD_SHRINK_RIGHT = 7
+_VOL_SHADOW_CARD_SHRINK_BOTTOM = 7
+_VOL_SHADOW_OFFSET_X = 4
+_VOL_SHADOW_OFFSET_Y = 4
+_VOL_SHADOW_BLUR_STEPS = 60
+_VOL_SHADOW_SPREAD = 3
+_VOL_SHADOW_MAX_ALPHA = 4
+_VOL_SHADOW_RADIUS_EXTRA = 0
 
 
 class SpotifyVolumeWidget(QWidget):
@@ -658,12 +669,11 @@ class SpotifyVolumeWidget(QWidget):
         self._track_shadow_cache_key = None
 
     def _painted_frame_shadow_card_rect(self) -> QRectF:
-        tuning = VOLUME_SLIDER_SHADOW_TUNING
         return QRectF(
             0.0,
             0.0,
-            max(1.0, float(self.width() - int(tuning["card_shrink_right"]))),
-            max(1.0, float(self.height() - int(tuning["card_shrink_bottom"]))),
+            max(1.0, float(self.width() - _VOL_SHADOW_CARD_SHRINK_RIGHT)),
+            max(1.0, float(self.height() - _VOL_SHADOW_CARD_SHRINK_BOTTOM)),
         )
 
     def _ensure_painted_frame_shadow_pixmap(self) -> Optional[QPixmap]:
@@ -673,12 +683,10 @@ class SpotifyVolumeWidget(QWidget):
             dpr = max(1.0, float(self.devicePixelRatioF()))
         except Exception:
             dpr = 1.0
-        tuning = VOLUME_SLIDER_SHADOW_TUNING
         key = (
             self.width(),
             self.height(),
             round(dpr, 3),
-            tuple(sorted(tuning.items())),
         )
         if (
             self._painted_frame_shadow_pixmap is not None
@@ -694,12 +702,12 @@ class SpotifyVolumeWidget(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         try:
             card_rect = self._painted_frame_shadow_card_rect().adjusted(1.0, 1.0, -1.0, -1.0)
-            radius = max(0.0, float(10 + int(tuning["radius_extra"])))
-            offset_x = float(tuning["offset_x"])
-            offset_y = float(tuning["offset_y"])
-            steps = max(1, int(tuning["blur_steps"]))
-            spread = max(0.0, float(tuning["spread"]))
-            max_alpha = max(0, min(255, int(tuning["max_alpha"])))
+            radius = max(0.0, float(10 + _VOL_SHADOW_RADIUS_EXTRA))
+            offset_x = float(_VOL_SHADOW_OFFSET_X)
+            offset_y = float(_VOL_SHADOW_OFFSET_Y)
+            steps = max(1, _VOL_SHADOW_BLUR_STEPS)
+            spread = max(0.0, float(_VOL_SHADOW_SPREAD))
+            max_alpha = max(0, min(255, _VOL_SHADOW_MAX_ALPHA))
 
             for layer in range(steps, 0, -1):
                 frac = layer / float(steps)
@@ -748,11 +756,10 @@ class SpotifyVolumeWidget(QWidget):
             dpr = max(1.0, float(self.devicePixelRatioF()))
         except Exception:
             dpr = 1.0
-        tuning = VOLUME_SLIDER_SHADOW_TUNING
-        offset_x = int(tuning["offset_x"])
-        offset_y = int(tuning["offset_y"])
-        spread = max(3, int(float(tuning["spread"])))
-        alpha = max(0, min(255, int(tuning["max_alpha"]) * 8))
+        offset_x = _VOL_SHADOW_OFFSET_X
+        offset_y = _VOL_SHADOW_OFFSET_Y
+        spread = max(3, _VOL_SHADOW_SPREAD)
+        alpha = max(0, min(255, _VOL_SHADOW_MAX_ALPHA * 8))
         origin_x = spread + max(0, -offset_x)
         origin_y = spread + max(0, -offset_y)
         shadow_w = track_rect.width() + spread * 2 + abs(offset_x)

@@ -21,10 +21,17 @@ from PySide6.QtGui import QFont, QFontMetrics, QColor, QPainter, QPen, QPaintEve
 from PySide6.QtCore import QRectF
 from shiboken6 import Shiboken
 
-from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
+from widgets.base_overlay_widget import (
+    BaseOverlayWidget,
+    OverlayPosition,
+    PAINTED_FRAME_OFFSET_X,
+    PAINTED_FRAME_OFFSET_Y,
+    PAINTED_FRAME_BLUR_STEPS,
+    PAINTED_FRAME_SPREAD,
+    PAINTED_FRAME_MAX_ALPHA,
+)
 from widgets.shadow_utils import PaintedShadowLabel, ShadowFadeProfile
 from widgets.clock_ticker import GlobalClockTicker, get_global_clock_ticker
-from core.settings.shadow_tuning import CARD_SHADOW_TUNING as PAINTED_FRAME_SHADOW_TUNING
 from core.logging.logger import get_logger
 from core.performance import widget_paint_sample
 from rendering.custom_layout_contract import (
@@ -1943,12 +1950,11 @@ class ClockWidget(BaseOverlayWidget):
         )
 
         if self.uses_painted_frame_shadow():
-            tuning = PAINTED_FRAME_SHADOW_TUNING
-            offset_x = float(tuning["offset_x"])
-            offset_y = float(tuning["offset_y"])
-            steps = max(1, int(tuning["blur_steps"]))
-            spread = max(0.0, float(tuning["spread"]))
-            max_alpha = max(0, min(255, int(tuning["max_alpha"])))
+            offset_x = float(PAINTED_FRAME_OFFSET_X)
+            offset_y = float(PAINTED_FRAME_OFFSET_Y)
+            steps = max(1, PAINTED_FRAME_BLUR_STEPS)
+            spread = max(0.0, float(PAINTED_FRAME_SPREAD))
+            max_alpha = max(0, min(255, PAINTED_FRAME_MAX_ALPHA))
 
             painter.save()
             painter.setPen(Qt.PenStyle.NoPen)

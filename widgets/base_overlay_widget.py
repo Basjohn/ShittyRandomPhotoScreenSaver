@@ -32,7 +32,6 @@ from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.performance import widget_timer_sample
 from core.resources.manager import ResourceManager
 from core.resources.types import ResourceType
-from core.settings.shadow_tuning import CARD_SHADOW_TUNING as PAINTED_FRAME_SHADOW_TUNING
 from core.threading.manager import ThreadManager
 from widgets.shadow_utils import (
     configure_overlay_widget_attributes,
@@ -47,8 +46,21 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-# PAINTED_FRAME_SHADOW_TUNING is imported at module level above from
-# core.settings.shadow_tuning (aliased from CARD_SHADOW_TUNING).
+# Authored QWidget painted-frame card-shadow reference magnitudes. These were
+# formerly sourced from the shared shadowtuning.json ``card`` sidecar. That
+# hidden tuning authority was retired in F0.5, so the values are inlined as this
+# base widget's own constants — the painted-frame QWidget card shadow is the
+# reference for not-yet-ported families only; the canonical destination card
+# shadow is OverlayCard/RectangularShadow. There is no replacement sidecar/
+# loader/file.
+PAINTED_FRAME_CARD_SHRINK_RIGHT = 11
+PAINTED_FRAME_CARD_SHRINK_BOTTOM = 11
+PAINTED_FRAME_OFFSET_X = 4
+PAINTED_FRAME_OFFSET_Y = 6
+PAINTED_FRAME_BLUR_STEPS = 55
+PAINTED_FRAME_SPREAD = 8
+PAINTED_FRAME_MAX_ALPHA = 8
+PAINTED_FRAME_RADIUS_EXTRA = 0
 
 
 class WidgetLifecycleState(Enum):
@@ -875,7 +887,6 @@ class BaseOverlayWidget(QLabel):
             self._bg_border_color.getRgb(),
             int(self._bg_border_width),
             int(self._bg_corner_radius),
-            tuple(sorted(PAINTED_FRAME_SHADOW_TUNING.items())),
             int(self._painted_frame_shadow_revision),
         )
 
@@ -897,16 +908,14 @@ class BaseOverlayWidget(QLabel):
         """
         if not self.uses_painted_frame_shadow():
             return (0, 0)
-        tuning = PAINTED_FRAME_SHADOW_TUNING
-        return (int(tuning["card_shrink_right"]), int(tuning["card_shrink_bottom"]))
+        return (PAINTED_FRAME_CARD_SHRINK_RIGHT, PAINTED_FRAME_CARD_SHRINK_BOTTOM)
 
     def _painted_frame_shadow_card_rect(self) -> QRectF:
-        tuning = PAINTED_FRAME_SHADOW_TUNING
         return QRectF(
             0.0,
             0.0,
-            max(1.0, float(self.width() - int(tuning["card_shrink_right"]))),
-            max(1.0, float(self.height() - int(tuning["card_shrink_bottom"]))),
+            max(1.0, float(self.width() - PAINTED_FRAME_CARD_SHRINK_RIGHT)),
+            max(1.0, float(self.height() - PAINTED_FRAME_CARD_SHRINK_BOTTOM)),
         )
 
     def _prepared_painted_frame_shadow_pixmap_for_paint(self) -> Optional[QPixmap]:
@@ -945,7 +954,6 @@ class BaseOverlayWidget(QLabel):
             return self._painted_frame_shadow_pixmap
 
         dpr = float(key[2])
-        tuning = PAINTED_FRAME_SHADOW_TUNING
         with widget_timer_sample(self, "overlay.frame_shadow.regen"):
             pixmap = QPixmap(max(1, int(self.width() * dpr)), max(1, int(self.height() * dpr)))
             pixmap.setDevicePixelRatio(dpr)
@@ -954,12 +962,12 @@ class BaseOverlayWidget(QLabel):
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             try:
                 card_rect = self._painted_frame_shadow_card_rect().adjusted(1.0, 1.0, -1.0, -1.0)
-                radius = max(0.0, float(self._bg_corner_radius + int(tuning["radius_extra"])))
-                offset_x = float(tuning["offset_x"])
-                offset_y = float(tuning["offset_y"])
-                steps = max(1, int(tuning["blur_steps"]))
-                spread = max(0.0, float(tuning["spread"]))
-                max_alpha = max(0, min(255, int(tuning["max_alpha"])))
+                radius = max(0.0, float(self._bg_corner_radius + PAINTED_FRAME_RADIUS_EXTRA))
+                offset_x = float(PAINTED_FRAME_OFFSET_X)
+                offset_y = float(PAINTED_FRAME_OFFSET_Y)
+                steps = max(1, PAINTED_FRAME_BLUR_STEPS)
+                spread = max(0.0, float(PAINTED_FRAME_SPREAD))
+                max_alpha = max(0, min(255, PAINTED_FRAME_MAX_ALPHA))
 
                 for layer in range(steps, 0, -1):
                     frac = layer / float(steps)

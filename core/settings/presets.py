@@ -204,7 +204,6 @@ PRESET_DEFINITIONS: Dict[str, PresetDefinition] = {
             "widgets.shadows.blur_radius": 18,
             "widgets.shadows.color": [0, 0, 0, 255],
             "widgets.shadows.frame_opacity": 0.77,
-            "widgets.shadows.offset": [4, 4],
             "widgets.shadows.text_opacity": 0.33,
             # Clock: Analog, Top Right, all displays
             "widgets.clock.enabled": True,
