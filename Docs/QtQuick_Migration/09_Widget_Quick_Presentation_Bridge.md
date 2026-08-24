@@ -541,8 +541,8 @@ QML does not own Gmail backend/session/auth.
 Preserve the existing provider/cache/model strengths. The landed Achievement owner publishes a prepared
 card model plus source-resolution decoded `QImage` artwork/icon state with stable identities. Its current
 QWidget presenter owns DPR-specific scaling/cropping caches; the future Quick presenter must own its own
-equivalent projection. The active bounded Abandonment correction establishes the same boundary without
-duplicating its decode/fetch path.
+equivalent projection. The bounded Abandonment correction at `9ab4f47e` established the same boundary
+without duplicating its decode/fetch path.
 
 Quick consumes normalized card/view-model state; do not move ranking/cache/security/product logic into
 QML merely because the visual is being replaced. Rebinding or recreating a Quick item must replay the

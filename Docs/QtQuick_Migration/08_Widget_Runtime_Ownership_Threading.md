@@ -586,14 +586,15 @@ owner is landed as one per-card/display `AbandonmentRuntimeService` at `86872ab9
 cache/source/manual-refresh/model/unscaled-artwork owner is separately landed per card/display at
 `51948dc3` and adds no recurring timer. Both continue to use the existing process-scoped `core.steam`
 caches, backend locks, credentials and asset helpers. Preserve those distinct cardinalities rather than
-forcing the family through a Reddit-shaped or generic shared-Steam service. The current bounded
-Abandonment correction moves only logical/DPR projection back to its presenter; it does not create a
+forcing the family through a Reddit-shaped or generic shared-Steam service. The bounded Abandonment
+correction at `9ab4f47e` moved only logical/DPR projection back to its presenter and did not create a
 second decode/fetch path.
 
 ### Media
 
-Media has a genuine controller/runtime ownership seam, but its shared/cross-display/provider/transport
-semantics require deliberate cardinality review before extraction.
+Media has a genuine controller/runtime ownership seam. Its shared/cross-display/provider/transport
+semantics are the active deliberate cardinality review before extraction; a per-display manager must
+not imply one controller/poll loop per display when the logical state is shared.
 
 ### Imgur
 

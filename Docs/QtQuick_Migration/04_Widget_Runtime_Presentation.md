@@ -1,6 +1,6 @@
 # 04 — Runtime Widgets, Retained Quick Presentation, Shadows and Full Customization
 
-Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — Achievement Pulse slice 5 self-audited GREEN at `51948dc3`; bounded Abandonment/Weather corrections active**
+Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — Achievement Pulse slice 5 GREEN at `51948dc3`; Abandonment/Weather correction GREEN at `9ab4f47e`; Media audit active**
 Last updated: 2026-08-24
 
 Cross-links:
@@ -310,10 +310,10 @@ The service uses the shared `ThreadManager` and introduces no recurring cadence.
 or future presenter replays accepted model/images without another source/cache/image fetch. Progress and
 Friend Pulse remain provider/task/timer-inert and unregistered.
 
-Before the dedicated Media owner slice, complete only the bounded Abandonment artwork projection and
-Weather compatibility-proxy corrections admitted by `Current_Plan.md`. Then continue real ownership
-migrations, prove closure dormancy and hoist the per-display owner only when its final display-runtime
-boundary is safe.
+The bounded Abandonment artwork projection and Weather compatibility-proxy corrections are GREEN at
+`9ab4f47e`. The dedicated Media owner slice now begins with exact controller/poll/shared-state
+cardinality and Visualizer/E2.7 dependency review. Then continue real ownership migrations, prove
+closure dormancy and hoist the per-display owner only when its final display-runtime boundary is safe.
 
 ### 6.2 Per-display Quick widget presentation host
 

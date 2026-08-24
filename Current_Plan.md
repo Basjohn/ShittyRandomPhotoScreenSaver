@@ -7,8 +7,8 @@ Last updated: 2026-08-24
 Latest pushed/self-audited implementation basis:
 
 ```text
-51948dc3956bc10549eb3e8440b2c3e25857f952
-Phase E1 slice 5 — Steam Achievement Pulse runtime/model/artwork ownership — self-audited GREEN; reused-agent ownership review GREEN
+9ab4f47e6e7c081710a046ae38e6f310467249ca
+Phase E1 post-slice-5 boundary correction — Abandonment artwork projection + Weather compatibility narrowing — self-audited GREEN; reused-agent reviews GREEN
 ```
 
 Independent review basis:
@@ -628,12 +628,8 @@ Focused Abandonment/Steam/factory/setup/runtime-owner/lifecycle gate: `426 passe
 fresh-process registry and deactivated-family import dormancy, structural old-owner search and
 `git diff --check` clean. Exact-diff self-audit and reused-agent repeated-setup audit were GREEN.
 
-### E1 remaining after slice 5
+### E1 remaining after the post-slice-5 correction
 
-After Achievement Pulse is GREEN:
-
-- land the bounded post-slice-5 Abandonment artwork-boundary and Weather compatibility-proxy
-  corrections before beginning another ownership migration;
 - perform Media as the next high-risk ownership checkpoint, deriving process/shared/per-display/
   per-instance cardinality from exact source and preserving Visualizer/E2.7 contracts;
 - continue only the **real** remaining provider/model/runtime-data ownership migrations. Gmail remains
@@ -1093,25 +1089,49 @@ fresh-process registry/deactivated-family dormancy, structural old-owner search 
 clean. Exact-diff self-audit and reused-agent ownership review were GREEN; the review's suggested real
 queued-UI stop fence was added and passed before checkpoint.
 
-### E1 bounded post-slice-5 correction checkpoint — ACTIVE
+### E1 bounded post-slice-5 correction checkpoint — CLOSED / SELF-AUDITED GREEN
 
-These independent-review YELLOWs are behavior-preserving boundary corrections, not a general refactor.
-Land them together before Media.
+Pushed checkpoint: `9ab4f47e6e7c081710a046ae38e6f310467249ca`.
+
+The completed checklist is pruned. Abandonment now keeps source-resolution decoded artwork plus stable
+identity in its neutral runtime while its temporary QWidget presenter owns logical-size/DPR cover
+scaling, centered cropping and projection caching. Fetch, fallback, desaturation and decode remain one
+unchanged path. Weather no longer exposes private cache/request/generation/timer properties as a model
+API; only the real standalone/test forwarding methods remain and are explicitly transitional.
+
+Focused Abandonment and Weather files plus their owner/factory/setup/lifecycle dependencies: `547
+passed`, plus `py_compile`, structural owner searches, exact old/new QPainter pixel comparison (`0`
+differing pixels), `git diff --check` and exact-diff self-audit clean. Both reused-agent boundary reviews
+were GREEN.
+
+### E1 slice 6 — Media runtime ownership — SOURCE/CARDINALITY AUDIT ACTIVE
+
+Media is the next admitted ownership family. The source/cardinality audit is part of this slice, not a
+separate phase. Resolve the exact owner graph before editing so a per-display `WidgetRuntimeManager`
+does not accidentally multiply or retire genuinely shared Media state.
 
 Live checklist:
 
-- [ ] move Abandonment logical-size/DPR scaling, cropping and prepared-image caching out of neutral
-  runtime/preparation and into the current QWidget presenter; leave one fetch/decode path, unscaled
-  decoded artwork plus stable identity in the service, and preserve shape/fallback/desaturation behavior;
-- [ ] inspect every WeatherWidget compatibility proxy caller/test; remove private cache/request/
-  generation proxies that are no longer required, narrow any legitimate standalone/test seam and mark
-  unavoidable compatibility explicitly transitional rather than destination model API;
-- [ ] add/update only focused regressions needed to prove behavior/cardinality/lifecycle preservation;
-  run exact affected gates, `py_compile`, structural searches and `git diff --check`, self-audit the exact
-  diff, correct every finding, then commit/push the bounded checkpoint.
+- [ ] inventory the exact current owners and call paths for controller/provider construction, polling
+  cadence, refresh/provider/playback/artwork generations, retained/shared media snapshots, provider
+  failover, optimistic transport confirmation, commands, progress/control state, artwork decoding and
+  presenter projection, related timers and terminal cleanup;
+- [ ] classify each owner as process/application, family-shared, per-display projection, per-widget
+  instance or presentation-only, recording before/after controller, poll, timer, worker and subscriber
+  cardinality; preserve the real multi-display shared-state behavior rather than copying Weather/Steam;
+- [ ] trace Media/Visualizer/E2.7 capability, playback-state, visibility, input, volume/mute and runtime-
+  destruction contracts; identify any dependency that must land before extraction and document any
+  deliberate transitional presenter edge;
+- [ ] turn the proven map into the smallest safe implementation checklist and focused regression gate,
+  including production suppression of any standalone default, exact active presenter/service reuse,
+  fresh-process/deactivated-family dormancy, stale result/command/timer fencing and last-consumer
+  retirement where shared ownership is real;
+- [ ] implement only the admitted Media owner seam, preserve QWidget presentation and authored behavior,
+  self-audit the exact diff, correct findings, then commit/push the coherent checkpoint.
 
-Non-goals: provider/cache rewrites, duplicate fetch/decode paths, Quick pixels, Media implementation,
-Gmail, WidgetRuntimeManager hoist, E3/E4 and unrelated cleanup.
+Non-goals: Visualizer or E2.7 redesign, generic Media god-service, new thread/scheduler, provider or
+volume/cache rewrite, Quick pixels, Gmail, premature `WidgetRuntimeManager` hoist, E3/E4 and unrelated
+cleanup.
 
 After E1 completes across bounded owner slices:
 
