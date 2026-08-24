@@ -1,6 +1,6 @@
 # 04 — Runtime Widgets, Retained Quick Presentation, Shadows and Full Customization
 
-Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — slices 1–2 audited GREEN; Weather slice 3 self-audited GREEN at `25f6ca4e`**
+Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — slices 1–3 GREEN; Steam Abandonment slice 4 self-audited GREEN with reuse check GREEN at `86872ab9`**
 Last updated: 2026-08-24
 
 Cross-links:
@@ -176,6 +176,15 @@ the neutral runtime-service registry/owner. Production Reddit widgets suppress t
 provider until neutral injection; required service build/injection failure fails closed; standalone
 construction retains its compatibility default.
 
+E1 slice 3 is self-audited **GREEN** at `25f6ca4e7cdcaf82409a184c1d2999c01a7283e4`:
+Weather provider/network/cache/refresh/retry/request-generation ownership now lives in one neutral
+`WeatherRuntimeService` per card/display.
+
+E1 slice 4 is self-audited **GREEN**, with its repeated-setup/reuse seam separately reviewed GREEN, at
+`86872ab92a6b0960f2a3746d43dc6056cb013d47`: Steam Abandonment cache/source/rotation/prepared-state
+ownership now lives in one neutral `AbandonmentRuntimeService` per card/display while the existing
+process-scoped Steam cache/backend/credential/asset authorities remain unchanged.
+
 Treat the current host edge as transitional:
 
 ```text
@@ -215,13 +224,19 @@ capability/dependency query; it is not generic shared-provider last-consumer acc
 The current `handle_capability_change()` lazy bridge into the E2.7 Visualizer failover retirement
 remains transitional. Do not turn it into a central family-specific presenter/runtime switchboard.
 
+Repeated production setup must preserve and revalidate the exact live presenter/service edge. Never
+replace the service beneath an already-active presenter with a stopped owner. Retire stale registry
+entries; fail a stale/mismatched active edge closed; allow an inactive presenter to rebuild only through
+the ordinary activation boundary.
+
 #### Landed ordinary-family owner seam: Weather
 
 Reviewer inspection after Reddit selected Weather as the next bounded E1 migration:
 
 - Clock's shared ticker is already presentation-neutral;
 - Gmail's backend is already a neutral singleton and its residual orchestration is a larger later seam;
-- Steam card constructors are currently provider-inert/cache-bridge based;
+- Steam Progress and Friend Pulse constructors are provider/task/timer-inert; source inspection found
+  real residual QWidget ownership in Achievement Pulse and Abandonment Issues;
 - Media has a real QWidget-owned controller but is deliberately deferred to a high-risk dedicated
   checkpoint because of Spotify/Visualizer/transport/shared-state coupling;
 - Imgur is removed in F0 rather than migrated;
@@ -253,9 +268,27 @@ For a genuinely shared future service, preserve/reuse its actual legal owner and
 consumer/lease accounting only when inspection of that concrete seam proves it is necessary. Weather
 itself does not justify generic shared-consumer machinery.
 
-After Weather, continue bounded real ownership migrations, then prove fresh-process import dormancy and
-hoist the per-display owner out of the legacy `WidgetManager` as the Quick display-runtime boundary
-lands.
+#### Landed ordinary-family owner seam: Steam Abandonment
+
+Slice 4 preserves separate Steam-card semantics instead of inventing a generic shared-Steam owner:
+
+```text
+WidgetRuntimeManager
+    -> AbandonmentRuntimeService (one per Abandonment card/display)
+           -> existing core.steam caches/backend/credential/asset helpers
+           -> cache-first/source-refresh/cache-only-rotation ownership
+           -> recurring cadence, request generations and prepared model/QImage state
+    -> AbandonmentIssuesWidget (temporary legacy pixel/transition consumer)
+```
+
+The widget retains authored geometry, QPainter pixels, fade/content-transition timing,
+transition-only deferral and input routing. Production suppresses the standalone convenience owner,
+injects the required registry service before activation and fails closed on build/injection/reuse
+failure. Every detached task/callback is runtime-generation tagged; retirement fences late work and
+stops the sole recurring rotation timer.
+
+Continue bounded real ownership migrations, then prove fresh-process import dormancy and hoist the
+per-display owner out of the legacy `WidgetManager` as the Quick display-runtime boundary lands.
 
 ### 6.2 Per-display Quick widget presentation host
 
@@ -683,8 +716,10 @@ background/border and current sound behavior. Sound/provider logic remains Pytho
 Preserve each supported card's artwork, selection state, accent, capsules, desaturation, metadata rows
 and current dev-gate behavior.
 
-Shared Steam services must follow activated capabilities and remaining consumers rather than being
-silently duplicated per card.
+Existing process-scoped Steam caches, backend locks and credential/asset helpers remain shared and must
+follow their real consumer lifetime. Per-card orchestration such as landed Abandonment rotation/source
+state stays per card/display; do not silently duplicate shared authorities or force distinct cards into
+one generic Steam service.
 
 ### 17.7 Imgur — remove, do not port
 

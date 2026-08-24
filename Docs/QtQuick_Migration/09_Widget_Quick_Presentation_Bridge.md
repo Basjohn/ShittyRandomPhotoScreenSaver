@@ -538,10 +538,13 @@ QML does not own Gmail backend/session/auth.
 
 ### Steam
 
-Preserve the existing provider-inert/cache/model strengths.
+Preserve the existing provider/cache/model strengths. The landed Abandonment owner already publishes a
+prepared card model plus decoded `QImage` artwork with stable identity; that is the input seam for its
+future Quick presenter, not a reason to recreate cache/source/timer ownership in QML.
 
 Quick consumes normalized card/view-model state; do not move ranking/cache/security/product logic into
-QML merely because the visual is being replaced.
+QML merely because the visual is being replaced. Rebinding or recreating a Quick item must replay the
+service's current prepared state without starting another provider, cache load, timer or image fetch.
 
 ---
 

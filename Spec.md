@@ -367,6 +367,12 @@ During the migration, an admitted presentation-neutral service may be owned thro
 not a thread: detached work continues through `ThreadManager`, and retired/superseded results must be
 fenced before commit.
 
+Production construction must suppress any standalone convenience service before registry injection.
+Repeated setup must preserve and revalidate the exact live presenter-to-service edge: it must not
+replace the owner beneath an already-active presenter with a stopped service. A stale, detached or
+mismatched active edge fails closed; an inactive presenter may rebuild only through the normal
+activation boundary.
+
 During the migration, separate:
 
 ```text

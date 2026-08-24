@@ -419,6 +419,20 @@ neutral service failure
 
 That is fail-open ownership regression.
 
+Repeated setup/reconciliation is part of the same boundary:
+
+```text
+active presenter + valid attached service
+    -> preserve the exact live edge
+
+stale / detached / mismatched edge
+    -> retire the registry entry
+    -> active presenter fails closed
+    -> inactive presenter may rebuild through normal activation
+```
+
+Never manufacture a fresh stopped service and install it beneath a presenter that is already active.
+
 ---
 
 ## 11. Shared services and consumer accounting
@@ -567,8 +581,11 @@ for symmetry.
 
 ### Steam
 
-Current card constructors are deliberately provider-inert/cache-bridge oriented. Preserve good neutral
-seams rather than forcing the family through a Reddit-shaped service abstraction.
+Progress and Friend Pulse remain provider/task/timer-inert. Steam Abandonment's cache/source/rotation/
+prepared-state owner is landed as one per-card/display `AbandonmentRuntimeService` at `86872ab9`; it
+continues to use the existing process-scoped `core.steam` caches, backend locks, credentials and asset
+helpers. Achievement Pulse remains a separate residual cache/artwork owner. Preserve those distinct
+cardinalities rather than forcing the family through a Reddit-shaped or generic shared-Steam service.
 
 ### Media
 
@@ -597,5 +614,7 @@ At minimum answer with source/tests:
 10. Does standalone compatibility, if retained, stay outside production?
 11. Did thread/timer/provider/subscription count unexpectedly increase?
 12. If shared, what proves remaining consumers keep the owner alive?
+13. Does repeated setup preserve/revalidate the exact live presenter/service edge and reject stale
+    active reuse?
 
 Do not declare ownership migrated merely because a neutral class exists.
