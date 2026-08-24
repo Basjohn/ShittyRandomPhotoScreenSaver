@@ -1,6 +1,6 @@
 """Display widget for OpenGL/software rendered screensaver overlays."""
 from collections import defaultdict
-from typing import Optional, Iterable, Tuple, Callable, Dict, Any, List, Set
+from typing import Optional, Iterable, Tuple, Callable, Dict, Any, List, Set, TYPE_CHECKING
 import logging
 import time
 import sys
@@ -38,16 +38,6 @@ from rendering.gl_compositor import GLCompositorWidget
 from transitions.base_transition import BaseTransition
 from rendering.transition_factory import TransitionFactory
 from rendering.transition_registry import canonicalize_transition_name
-from widgets.clock_widget import ClockWidget
-from widgets.weather_widget import WeatherWidget
-from widgets.media_widget import MediaWidget
-from widgets.reddit_widget import RedditWidget
-from widgets.pixel_shift_manager import PixelShiftManager
-from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
-from widgets.spotify_volume_widget import SpotifyVolumeWidget
-from widgets.context_menu import ScreensaverContextMenu
-from widgets.cursor_halo import CursorHaloWidget
 from rendering.widget_manager import WidgetManager
 from rendering.input_handler import InputHandler
 from rendering.transition_controller import TransitionController
@@ -68,6 +58,18 @@ from transitions.overlay_manager import (
 from core.mc import is_mc_build
 from rendering.backends import BackendSelectionResult
 from rendering.backends.base import RendererBackend, RenderSurface, SurfaceDescriptor
+
+if TYPE_CHECKING:
+    from widgets.clock_widget import ClockWidget
+    from widgets.context_menu import ScreensaverContextMenu
+    from widgets.cursor_halo import CursorHaloWidget
+    from widgets.media_widget import MediaWidget
+    from widgets.pixel_shift_manager import PixelShiftManager
+    from widgets.reddit_widget import RedditWidget
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+    from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+    from widgets.spotify_volume_widget import SpotifyVolumeWidget
+    from widgets.weather_widget import WeatherWidget
 
 
 logger = get_logger(__name__)
@@ -270,17 +272,17 @@ class DisplayWidget(QWidget):
         self.current_image_path: Optional[str] = None
         self.previous_pixmap: Optional[QPixmap] = None
         self.error_message: Optional[str] = None
-        self.clock_widget: Optional[ClockWidget] = None
-        self.clock2_widget: Optional[ClockWidget] = None
-        self.clock3_widget: Optional[ClockWidget] = None
-        self.weather_widget: Optional[WeatherWidget] = None
-        self.media_widget: Optional[MediaWidget] = None
-        self.spotify_visualizer_widget: Optional[SpotifyVisualizerWidget] = None
-        self.spotify_volume_widget: Optional[SpotifyVolumeWidget] = None
-        self._spotify_bars_overlay: Optional[SpotifyBarsGLOverlay] = None
-        self.reddit_widget: Optional[RedditWidget] = None
-        self.reddit2_widget: Optional[RedditWidget] = None
-        self._pixel_shift_manager: Optional[PixelShiftManager] = None
+        self.clock_widget: Optional["ClockWidget"] = None
+        self.clock2_widget: Optional["ClockWidget"] = None
+        self.clock3_widget: Optional["ClockWidget"] = None
+        self.weather_widget: Optional["WeatherWidget"] = None
+        self.media_widget: Optional["MediaWidget"] = None
+        self.spotify_visualizer_widget: Optional["SpotifyVisualizerWidget"] = None
+        self.spotify_volume_widget: Optional["SpotifyVolumeWidget"] = None
+        self._spotify_bars_overlay: Optional["SpotifyBarsGLOverlay"] = None
+        self.reddit_widget: Optional["RedditWidget"] = None
+        self.reddit2_widget: Optional["RedditWidget"] = None
+        self._pixel_shift_manager: Optional["PixelShiftManager"] = None
         self._current_transition: Optional[BaseTransition] = None
         self._current_transition_overlay_key: Optional[str] = None
         self._current_transition_started_at: float = 0.0
@@ -308,7 +310,7 @@ class DisplayWidget(QWidget):
         self._overlay_timeouts: dict[str, float] = {}
         self._transitions_enabled: bool = True
         self._ctrl_held: bool = False
-        self._ctrl_cursor_hint: Optional[CursorHaloWidget] = None
+        self._ctrl_cursor_hint: Optional["CursorHaloWidget"] = None
         self._halo_forwarding: bool = False  # Guard flag: True when halo is forwarding events
         self._last_halo_activity_ts: float = 0.0
         self._halo_last_local_pos: Optional[QPoint] = None
@@ -334,7 +336,7 @@ class DisplayWidget(QWidget):
         self._custom_layout_edit_active: bool = False
 
         # Context menu for right-click actions
-        self._context_menu: Optional[ScreensaverContextMenu] = None
+        self._context_menu: Optional["ScreensaverContextMenu"] = None
         self._context_menu_active: bool = False
         self._context_menu_prewarmed: bool = False
         self._pending_effect_invalidation: bool = False
@@ -1593,7 +1595,7 @@ class DisplayWidget(QWidget):
         
         super().closeEvent(event)
 
-    def _resolve_media_widget_for_transport(self) -> Optional[MediaWidget]:
+    def _resolve_media_widget_for_transport(self) -> Optional["MediaWidget"]:
         """Return the best media widget candidate across active displays."""
         media_widget = getattr(self, "media_widget", None)
         if media_widget is not None:
@@ -1615,7 +1617,7 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Cross-display media widget lookup failed", exc_info=True)
         return None
 
-    def _resolve_volume_widget_for_hotkeys(self) -> Optional[SpotifyVolumeWidget]:
+    def _resolve_volume_widget_for_hotkeys(self) -> Optional["SpotifyVolumeWidget"]:
         """Return the best Spotify volume widget candidate across active displays."""
         volume_widget = getattr(self, "spotify_volume_widget", None)
         if volume_widget is not None:

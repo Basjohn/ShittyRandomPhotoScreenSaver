@@ -1,16 +1,6 @@
-"""Overlay widgets for screensaver."""
+"""Overlay widget package.
 
-from .clock_widget import ClockWidget, TimeFormat, ClockPosition, PYTZ_AVAILABLE
-from .weather_widget import WeatherWidget, WeatherPosition
-from .media_widget import MediaWidget, MediaPosition
-
-__all__ = [
-    'ClockWidget',
-    'TimeFormat',
-    'ClockPosition',
-    'PYTZ_AVAILABLE',
-    'WeatherWidget',
-    'WeatherPosition',
-    'MediaWidget',
-    'MediaPosition',
-]
+Runtime implementations are resolved through their explicit submodules only.
+Keeping package import inert prevents a lightweight helper such as
+``widgets.shadow_utils`` from activating unrelated widget families.
+"""
