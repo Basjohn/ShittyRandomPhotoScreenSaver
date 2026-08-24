@@ -60,7 +60,7 @@ This is deliberately **not** a claim that every assertion in all 360 modules was
 | Status | Files |
 | --- | ---: |
 | `KEEP` | 116 |
-| `KEEP — MIGRATION PERMANENT` | 88 |
+| `KEEP — MIGRATION PERMANENT` | 87 |
 | `MIGRATION-CRITICAL — H/I` | 48 |
 | `WILL BE OBSOLETE — H/I` | 23 |
 | `MIGRATION-CRITICAL — F` | 39 |
@@ -69,8 +69,8 @@ This is deliberately **not** a claim that every assertion in all 360 modules was
 | `KEEP — PERMANENT` | 5 |
 | `WILL BE OBSOLETE — J` | 4 |
 | `UPDATE REQUIRED NOW` | 3 |
-| `WILL BE OBSOLETE — E4/F` | 3 |
-| `OBSOLETE NOW` | 2 |
+| `WILL BE OBSOLETE — E4/F` | 2 |
+| `OBSOLETE NOW` | 4 |
 | `MIGRATION-CRITICAL — E3/F` | 1 |
 | **Total** | **360** |
 
@@ -221,7 +221,7 @@ unclipped signed offsets, and no second engine/window. Preserve it across cutove
 
 Permanent E4 coverage protects: one canonical eight-direction authority; all eight sign mappings and axis-only zeroing; deterministic malformed-token fallback to SE; canonical settings/model/default plumbing; QML consuming signed offsets without parsing settings/direction; cached retained card shadows; ordinary text shadows as duplicate retained glyphs with no MultiEffect/layer/text blur; root fade that does not rewrite shadow style; and retained-item offset mutation without a new item/engine/window. Preserve these bars through the family ports.
 
-The E4 host test necessarily injects already-resolved signed offsets because no real family is Quick-presented yet. F1 Clock is the first required end-to-end proof that an actual family projection reads the canonical direction, resolves class-specific magnitudes in Python, and updates its retained card/text properties without presentation or runtime-owner recreation.
+The E4 host test necessarily injects already-resolved signed offsets because no real family is Quick-presented yet. F1 Clock is the first required end-to-end proof that an actual family projection reads the canonical direction plus the two canonical user buckets, applies the deliberate destination card/text base-distance policy in Python, and updates retained properties without presentation or runtime-owner recreation. Do not resurrect sidecar-era `text_large`/header tuning profiles to satisfy this gate.
 
 ### F — widget family ports — ACTIVE; F0.5 NEXT
 
@@ -229,7 +229,7 @@ F0 deleted deprecated Imgur instead of porting it. F0.5 is the bounded QWidget S
 
 Do not port QWidget-era effect carriers, dummy shadow widgets, `QGraphicsOpacityEffect`/`ShadowFadeProfile` staged shadow attachment, or equivalent wrapper choreography into Quick. Whole-widget family fade is the retained presentation-root opacity and composites the card, cached card shadow, text-shadow glyphs and content together. Intermediate Quick `Item`s require a real layout/transform/clipping/z/input/lifecycle purpose, not an old one-effect-per-QWidget workaround. F1 Clock must explicitly prove this rule and the real E4 settings→Python resolver→retained-family wiring.
 
-F0.5 permanent Settings regressions must protect: all eight direction selections and inert center; default/reset/fallback `SE`; existing shadow enable toggles; Card Darkness/Blur/Extra Offset and Text Darkness/Extra Offset canonical persistence; no negative Extra Offset; no Intense keys/UI; no text blur; and, critically, General-section save **merging/preservation** so a partial edit cannot erase unedited or unknown `widgets.shadows` keys. If F0.5 adds a new test module, add it to this inventory in the same checkpoint and update the count.
+F0.5 permanent Settings regressions must protect: complete removal of the `shadowtuning.json` loader/path/profile-copy authority and old `widgets.shadows.offset`; `ShadowSettings` fallback/default parity; all eight direction selections and inert center; default/reset/fallback `SE`; existing shadow enable toggles; Card Darkness/Blur/Extra Offset and Text Darkness/Extra Offset canonical persistence; no negative Extra Offset; no Intense keys/UI; no text blur; and, critically, General-section save **merging/preservation** so a partial edit cannot erase unedited canonical or unknown-future `widgets.shadows` keys. Do not add tests that require legacy QWidget shadow visual parity. After deleting `test_shadow_tuning_paths.py` and `test_base_overlay_shadow_cache.py`, reconcile the exact module count (358 before any newly added F0.5 module). If F0.5 adds a new test module, add it to this inventory in the same checkpoint and update the count.
 
 ### G — CUSTOM/input/auxiliary pixels
 
@@ -260,7 +260,8 @@ These statuses describe test maintenance. They are not permission to change prod
 High-value groups that must **not** become destination authority:
 
 - **F0 (done):** the three Imgur test modules were deleted with the Imgur removal.
-- **E4/F:** QWidget painted-frame/effect implementations such as `test_base_overlay_shadow_cache.py`, `test_widget_effects.py`, `test_widget_effects_contract.py`; split `test_shadow_utils.py`.
+- **F0.5 immediate retirement:** delete `test_shadow_tuning_paths.py` and `test_base_overlay_shadow_cache.py`; trim tuning-backed painter assertions from `test_shadow_utils.py`.
+- **E4/F remaining:** QWidget opacity/effect implementations such as `test_widget_effects.py`, `test_widget_effects_contract.py`; remaining `ShadowFadeProfile` coverage retires with its presentation owners.
 - **H/I:** legacy renderer backend/software fallback (`test_rendering_backends.py`, `test_gl_fallback_policy.py`), GLCompositor retained-base/fallback/presenter tests, QRhiWidget P4 surface tests, old SpotifyBarsGLOverlay presentation tests.
 - **J:** architecture-selection/spike benchmark suites where no ongoing product regression remains.
 
@@ -452,8 +453,8 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_overlay_uniforms.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_pixel_shift.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
 | `tests/test_service_widget_runtime.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
-| `tests/test_shadow_tuning_paths.py` | **KEEP — MIGRATION PERMANENT** | Canonical class-specific shadow tuning/profile defaults survive; Quick family projections consume these magnitudes under the E4 direction resolver. |
-| `tests/test_shadow_utils.py` | **MIGRATION-CRITICAL — F** | Mixed legacy file: preserve useful tuning semantics while family ports rehome/delete QPainter text-shadow and `ShadowFadeProfile`/QGraphicsOpacityEffect presentation assertions. Do not port staged effect-carrier fade mechanics. |
+| `tests/test_shadow_tuning_paths.py` | **OBSOLETE NOW** | Delete in F0.5 with `core/settings/shadow_tuning.py`; the sidecar/profile-copy/tuning-dictionary authority is explicitly retired and must not survive into Quick. |
+| `tests/test_shadow_utils.py` | **MIGRATION-CRITICAL — F** | Mixed legacy file. F0.5 deletes tuning-payload/tuning-backed painter-shadow assertions; remaining `ShadowFadeProfile`/QGraphicsOpacityEffect assertions survive only until their legacy presentation owners are removed. Do not preserve sidecar semantics or port staged effect-carrier fades. |
 | `tests/test_startup_black_flash.py` | **MIGRATION-CRITICAL — G/H** | Rehome display/input/topology behavior to Quick runtime. |
 | `tests/test_weather_widget.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_widget_capability_persist_repair.py` | **KEEP** | Retain; no migration-specific retirement identified. |
@@ -585,7 +586,7 @@ no current test inventory row or product gate should restore the family.
 
 | File | Status | Note |
 | --- | --- | --- |
-| `tests/test_base_overlay_shadow_cache.py` | **WILL BE OBSOLETE — E4/F** | QWidget painted-frame shadow cache/prewarm implementation; Quick retained primitives replace this owner. |
+| `tests/test_base_overlay_shadow_cache.py` | **OBSOLETE NOW** | Delete in F0.5. The old painted-frame shadow cache exists only to preserve QWidget shadow presentation, which no longer requires migration-time parity once the sidecar authority is retired. |
 | `tests/test_cache_maintenance.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_display_image_ops.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_image_cache_accounting.py` | **KEEP** | Retain; no migration-specific retirement identified. |

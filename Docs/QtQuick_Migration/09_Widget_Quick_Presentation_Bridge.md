@@ -330,12 +330,17 @@ resolved presentation fields, conceptually:
 ```text
 cardShadowEnabled / cardShadowAlpha / cardShadowBlur / cardShadowOffsetX/Y
 textShadowEnabled / textShadowAlpha / textShadowOffsetX/Y
-headerShadowEnabled / resolved header alpha/offset where authored distinct
+headerShadowEnabled / same resolved Text-bucket alpha/offset policy
 ```
 
-QML does not know `frame_extra_offset`, `text_extra_offset`, legacy offset pairs, Intense modes or the
+QML does not know `frame_extra_offset`, `text_extra_offset`, retired offset pairs, Intense modes or the
 direction token. It receives final values only. Extra Offset is applied before direction/sign resolution.
 Text has no blur field.
+
+F0.5 deletes `shadowtuning.json` / `core.settings.shadow_tuning`; the bridge must never gain a sidecar,
+legacy tuning dictionary, fallback constants table or profile-copy dependency. F1 Clock establishes the
+first deliberate destination card/text baseline magnitudes and later ordinary families reuse that Quick
+presentation policy.
 
 ### Whole-widget fade / no effect-carrier bridge
 
@@ -366,8 +371,9 @@ Destination rule:
 - digital and analogue secondary text should agree unless a deliberate authored exception is later
   specified.
 
-The main time/numerals may legitimately resolve through large-text tuning if the canonical text-shadow
-resolver selects it by font size. That is different from inventing blur.
+The main time/numerals use the same Text shadow bucket. If visual validation earns a deterministic
+font-size-based base-distance scale for very large glyphs, keep that inside the destination style policy;
+do not recreate a separate `text_large` tuning profile or invent blur.
 
 Clock is also the first **real family wiring gate** for E4: its Python style projection must read the
 canonical global direction and F0.5 user modifiers, resolve the applicable card/text/large-text magnitudes to signed offsets, and update the existing retained Clock item in place when direction/darkness/blur/extra-offset changes. Do not leave E4 as a

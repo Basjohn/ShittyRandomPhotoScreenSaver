@@ -132,13 +132,37 @@ plain retained card/fade/shadow architecture across real families.
 
 ---
 
-# 4. F0.5 — Widgets → General canonical shadow controls — ACTIVE NEXT
+# 4. F0.5 — canonical shadow cleanup + Widgets → General controls — ACTIVE NEXT
 
-F0.5 is a bounded QWidget Settings slice. It does not create a runtime family component. The existing
-Widgets → General → Appearance page already owns the three shadow enable toggles; extend that existing
-owner rather than adding another page/model.
+F0.5 is a bounded shadow-authority/Settings slice. It does not create a runtime family component. The
+existing Widgets → General → Appearance page already owns the three shadow enable toggles; extend that
+existing owner rather than adding another page/model.
 
 Detailed UI/style contract: `Docs/Custom_Style_Implementation.md`.
+
+## F0.5.0 Retire `shadowtuning.json` and the stale offset pair first
+
+Before building the picker, remove the hidden QWidget painter-tuning authority:
+
+- delete `core/settings/shadow_tuning.py` and `tests/test_shadow_tuning_paths.py`;
+- remove `shadowtuning.json` from current storage layout/path authority;
+- remove all direct/transitive runtime imports/aliases of the exported tuning dictionaries;
+- do not create a replacement legacy/fallback tuning module/table/file or preserve old values as
+  compatibility constants;
+- legacy QWidget shadow visuals may disappear during migration; delete/simplify shadow-only painter
+  branches instead of designing temporary parity plumbing;
+- keep non-shadow business/runtime logic and required migration seams importable;
+- leave stale on-disk sidecar files ignored; do not add migration/copy/delete machinery for them.
+
+Also remove/retire unused `widgets.shadows.offset` from model/defaults/presets/generated artifacts. Current
+source has no runtime consumer. Do not migrate it into Extra Offset.
+
+Normalize `ShadowSettings` at this boundary: its missing-key fallbacks/types must agree with canonical
+shadow defaults rather than the stale `10 / 0.6 / 0.4` literals currently present. F0.5 adds the two
+Extra Offset defaults (`0`) and preserves canonical direction `SE`.
+
+No replacement hidden baseline authority is created in F0.5. F1 Clock establishes the first deliberate
+Quick card/text baseline magnitudes in the destination presentation style seam.
 
 ## F0.5.1 Mandatory global direction picker
 
@@ -175,17 +199,21 @@ text_opacity        Darkness
 text_extra_offset   Extra Offset (new, >=0 logical px, default 0)
 ```
 
-No Text Blur. No per-family editor. No third Header tuning panel. Header may retain authored internal
-baseline alpha/magnitude but consumes the shared direction/Text modifier path.
+No Text Blur. No per-family editor. No third Header tuning panel or hidden header-alpha profile. Header,
+ordinary text and large text all consume the shared Text enable/darkness/extra-offset bucket. A later
+deterministic font-size distance scale may be earned for very large glyphs, but it remains one Text style
+policy rather than a separate tuning source.
 
-`Extra Offset` is additive to class/base magnitude before the canonical direction resolver. Do not
-repurpose legacy `widgets.shadows.offset`; do not add signed X/Y user controls.
+`Extra Offset` is additive to the destination class/base magnitude before the canonical direction
+resolver. The legacy `widgets.shadows.offset` pair is removed in F0.5 and is not migrated. Do not add
+signed X/Y user controls.
 
 ## F0.5.3 Retired Intense semantics stay retired
 
 Do not reintroduce `intense_shadow`, `analog_shadow_intense`, `digital_shadow_intense`, an Intense
-checkbox, or an Intense preset/profile. The destination is one shadow system. Old painter tuning numbers
-are reference evidence only and are not Quick UI slider values.
+checkbox, or an Intense preset/profile. The destination is one shadow system. The old painter sidecar and
+its tuning numbers are deleted from current authority rather than carried as reference/fallback runtime
+values.
 
 ## F0.5.4 Mandatory persistence repair
 
@@ -203,6 +231,9 @@ survive.
 
 Prove:
 
+- deletion of sidecar loader/path test/current source dependencies with no replacement compatibility tuning source;
+- retirement of `widgets.shadows.offset` with no migration into Extra Offset;
+- `ShadowSettings` fallback/type parity with canonical shadow defaults;
 - all eight directions, inert center, SE reset/default/fallback;
 - existing three enable toggles still round-trip;
 - Card Darkness/Blur/Extra Offset and Text Darkness/Extra Offset round-trip and clamp;
@@ -428,18 +459,20 @@ Digital and analogue must agree on this semantic.
 F1 must also prove the real E4 wiring path:
 
 ```text
-widgets.shadows.direction
+canonical widgets.shadows direction + Card/Text user buckets
+    -> destination Clock shadow style policy
+    -> deliberate card/text base distance + Extra Offset
     -> canonical Python ShadowDirection resolver
-    -> Clock card / ordinary-text / large-text authored magnitudes
-    -> signed offsets in Clock presentation style
+    -> signed card/text offsets + opacity/blur properties
     -> existing retained Clock shell/content properties
 ```
 
-Changing direction must not recreate the Clock item, its presentation model, `GlobalClockTicker`,
-engine or top-level window.
+Changing direction/darkness/blur/extra-offset must not recreate the Clock item, its presentation model,
+`GlobalClockTicker`, engine or top-level window.
 
-Main time/numerals may resolve through canonical large-text tuning if the font-size resolver calls for
-it; that does not authorize a separate arbitrary mode offset.
+Main time/numerals use the same canonical Text user bucket. If F1 visual validation earns a deterministic
+font-size-based base-distance scale for very large glyphs, encode it in the destination style policy; do
+not recreate the deleted `text_large` sidecar profile or authorize a separate arbitrary mode offset.
 
 Required eyes-on comparison:
 

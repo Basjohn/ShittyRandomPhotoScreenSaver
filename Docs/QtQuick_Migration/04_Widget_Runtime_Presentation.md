@@ -311,9 +311,9 @@ For `(mx, my)`:
 
 Resolve in presentation-neutral Python before QML.
 
-Do not preserve the old ineffective generic `widgets.shadows.offset` as a second user-facing magnitude
-authority if current settings decomposition already marks it obsolete. Keep actual class tuning
-(card/text/header/etc.) independent.
+F0.5 removes the old ineffective `widgets.shadows.offset` pair outright. It has no current runtime
+consumer and must not survive as a second magnitude authority or be migrated into the new Extra Offset
+fields.
 
 ## 9.1 F0.5 global user modifiers over authored class baselines
 
@@ -342,12 +342,21 @@ direction: one shared widgets.shadows.direction
 applicable scalar to the authored X/Y magnitude before `ShadowDirection` resolves signs/axis. Axis-only
 directions still zero the perpendicular axis.
 
-There is no text blur. Card blur updates the retained `RectangularShadow`; text remains duplicate glyphs.
-Header/large-text may preserve internal class-specific baseline alpha/magnitude, but do not expose
-separate direction or a third user tuning system.
+There is no text blur. Card/non-text blur updates the retained `RectangularShadow` or earned non-text
+shadow primitive; text remains duplicate glyphs. Ordinary/header/large text all consume the same Text
+opacity/extra-offset bucket. Do not recreate sidecar-era per-header alpha profiles. Very large text may
+use deterministic destination font-size distance scaling if visual validation earns it, but it is not a
+separate settings authority.
 
-Do not restore retired Intense modes. Do not copy numeric painter `shadowtuning.json` internals into the
-Quick UI. Do not reinterpret legacy `widgets.shadows.offset` as either new Extra Offset field.
+Do not restore retired Intense modes. F0.5 deletes the painter `shadowtuning.json` loader/sidecar/path
+tests and removes its current runtime imports; do not copy those numbers into Quick UI or a replacement
+compatibility module. The old `widgets.shadows.offset` pair is retired at the same boundary and is not
+migrated into either Extra Offset field.
+
+F0.5 leaves no hidden runtime magnitude/tuning provider behind. F1 Clock establishes the first deliberate
+destination card/text baseline magnitudes in the Quick presentation style seam; later ordinary families
+reuse that destination policy. E4's resolver remains capable of distinct magnitudes, but historical
+painter dictionaries are not their authority.
 
 When real retained families arrive, changing direction/darkness/blur/extra-offset mutates existing retained
 style properties. It must not recreate provider/model/item/engine/window merely because a shadow style

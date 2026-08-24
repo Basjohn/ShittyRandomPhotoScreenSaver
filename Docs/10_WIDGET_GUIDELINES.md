@@ -247,8 +247,13 @@ existing General → Appearance shadow controls remain the owner; extend them wi
 - existing widget/text/header enable toggles.
 
 There is **no text blur** and no revived Intense mode. Do not reintroduce retired
-`intense_shadow`/`analog_shadow_intense`/`digital_shadow_intense` keys. Do not repurpose legacy
-`widgets.shadows.offset` as Extra Offset.
+`intense_shadow`/`analog_shadow_intense`/`digital_shadow_intense` keys. F0.5 removes the unused legacy
+`widgets.shadows.offset` pair; do not migrate it into Extra Offset.
+
+F0.5 also deletes the old `shadowtuning.json` / `core.settings.shadow_tuning` authority and its path test.
+Do not create a replacement legacy/fallback tuning table or preserve the old painter numbers. Legacy
+QWidget shadows may disappear while migration is incomplete; destination Quick families use the
+canonical settings and the deliberate Quick style baseline first established with Clock.
 
 Extra Offset is a non-negative logical-pixel scalar added to authored class magnitude before the E4
 direction resolver. Direction remains the only orientation authority.
