@@ -764,6 +764,32 @@ def test_reddit_provider_lifetime_owned_by_runtime_manager():
     assert getattr(service, "provider_id", None) == "public_json"
 
 
+def test_repeated_setup_preserves_hoisted_owner_and_service_edge():
+    # E1 slice 10 hoist: the neutral owner is held above the presenter and is
+    # never reconstructed by setup. A second setup_all_widgets() on the same
+    # manager must keep the identical owner (accessor and transitional private
+    # alias in agreement) and still expose exactly one live reddit provider
+    # service. The presenter replacing its widget is allowed to retire the stale
+    # detached owner and build a fresh one (the reuse_is_valid contract); what
+    # the hoist must guarantee is that no second neutral owner appears and the
+    # owner/service edge stays live rather than leaking or duplicating.
+    manager = _create_manager()
+    settings = _StubSettingsManager(_reddit_config(provider="public_json"))
+
+    manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
+    owner_first = manager.runtime_manager
+    service_first = owner_first.get_widget_service("reddit")
+    assert service_first is not None
+
+    manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
+    owner_second = manager.runtime_manager
+    service_second = owner_second.get_widget_service("reddit")
+
+    assert owner_second is owner_first
+    assert manager._runtime_manager is owner_first
+    assert service_second is not None
+
+
 def test_deactivated_reddit_family_owns_no_provider():
     # Family capability deactivated: no widget AND no owned provider lifetime.
     manager, created = _setup_widgets(_reddit_config(reddit=False))
