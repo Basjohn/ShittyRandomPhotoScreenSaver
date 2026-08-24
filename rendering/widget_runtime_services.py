@@ -7,12 +7,16 @@ that owns a presentation-neutral runtime service (provider/model/etc.) registers
 a small :class:`RuntimeServiceSpec` here describing how to build, inject and
 retire that service. The owner drives those specs generically.
 
-E1 slice 2 introduces the first entry: the branded Reddit widget's post
+E1 slice 2 introduced the first entry: the branded Reddit widget's post
 *provider* (``core.reddit_post_provider``), which was previously constructed and
 owned by the ``RedditWidget``/factory (i.e. owned merely because a QWidget
 existed). Its lifetime now belongs to the neutral owner, which creates it from
 canonical settings, injects it into the widget for use, and retires it on runtime
 teardown independently of QWidget pixel ownership.
+
+E1 slice 3 adds the per-instance Weather runtime-data service. It owns provider
+fetch/cache/refresh/retry/request-generation lifetime while the legacy
+``WeatherWidget`` remains only a prepared-state presentation consumer.
 
 Heavy provider implementation is imported lazily inside the build callable so a
 process that never activates/creates the family does not resolve it merely
@@ -90,9 +94,42 @@ _REDDIT_SERVICE_SPEC = RuntimeServiceSpec(
 )
 
 
+def _build_weather_service(widget_id: str, widgets_config: Mapping[str, Any]) -> Any:
+    # Lazy import preserves deactivated-family import dormancy. Construction is
+    # provider/network/filesystem inert; the service starts work only after
+    # injection and the normal widget start boundary.
+    from widgets.weather_runtime import WeatherRuntimeService
+
+    return WeatherRuntimeService()
+
+
+def _inject_weather_service(widget: Any, service: Any) -> None:
+    setter = getattr(widget, "set_runtime_service", None)
+    if not callable(setter):
+        raise AttributeError(
+            "runtime widget cannot accept Weather service (missing set_runtime_service)"
+        )
+    setter(service)
+
+
+def _retire_weather_service(service: Any) -> None:
+    retire = getattr(service, "retire", None)
+    if not callable(retire):
+        raise AttributeError("Weather runtime service has no retire method")
+    retire()
+
+
+_WEATHER_SERVICE_SPEC = RuntimeServiceSpec(
+    build=_build_weather_service,
+    inject=_inject_weather_service,
+    retire=_retire_weather_service,
+)
+
+
 _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
     "reddit": _REDDIT_SERVICE_SPEC,
     "reddit2": _REDDIT_SERVICE_SPEC,
+    "weather": _WEATHER_SERVICE_SPEC,
 }
 
 

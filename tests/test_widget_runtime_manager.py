@@ -213,6 +213,16 @@ class _ProviderConsumer:
         self.injected = provider
 
 
+class _WeatherConsumer:
+    """Plain presentation consumer for the neutral Weather registry seam."""
+
+    def __init__(self):
+        self.injected = None
+
+    def set_runtime_service(self, service):
+        self.injected = service
+
+
 def test_ensure_widget_service_builds_owns_and_injects_reddit_provider():
     # The provider owner exists independently of any QWidget pixel ownership:
     # a plain consumer stub (not a QWidget) receives the built provider, and the
@@ -226,6 +236,32 @@ def test_ensure_widget_service_builds_owns_and_injects_reddit_provider():
     assert getattr(service, "provider_id", None) == "public_json"
     assert consumer.injected is service
     assert owner.get_widget_service("reddit") is service
+
+
+def test_ensure_widget_service_builds_and_injects_inert_weather_owner(monkeypatch):
+    import widgets.weather_runtime as weather_runtime
+
+    monkeypatch.setattr(
+        weather_runtime,
+        "OpenMeteoProvider",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("provider constructed during service build")
+        ),
+    )
+    owner = WidgetRuntimeManager(_Host())
+    consumer = _WeatherConsumer()
+
+    service = owner.ensure_widget_service(
+        "weather", consumer, {"weather": {"location": "London"}}
+    )
+
+    assert service is not None
+    assert consumer.injected is service
+    assert owner.get_widget_service("weather") is service
+    assert service.is_running() is False
+    assert service.is_retired() is False
+    assert owner.retire_widget_service("weather") is True
+    assert service.is_retired() is True
 
 
 def test_ensure_widget_service_none_for_unregistered_widget():
@@ -303,3 +339,56 @@ def test_ensure_widget_service_build_failure_fails_closed(monkeypatch):
     owner = WidgetRuntimeManager(_Host())
     assert owner.ensure_widget_service("svc", _ProviderConsumer(), {}) is None
     assert owner.get_widget_service("svc") is None
+
+
+def test_ensure_widget_service_injection_exception_retires_and_fails_closed(monkeypatch):
+    from rendering import widget_runtime_services as wrs
+
+    calls = {"retire": 0}
+    service = object()
+
+    def _inject(_widget, _service):
+        raise RuntimeError("injection failed")
+
+    def _retire(_service):
+        calls["retire"] += 1
+
+    spec = wrs.RuntimeServiceSpec(
+        build=lambda _widget_id, _widgets_config: service,
+        inject=_inject,
+        retire=_retire,
+    )
+    monkeypatch.setattr(
+        wrs, "get_runtime_service_spec", lambda widget_id: spec if widget_id == "svc" else None
+    )
+    owner = WidgetRuntimeManager(_Host())
+
+    assert owner.ensure_widget_service("svc", object(), {}) is None
+    assert owner.get_widget_service("svc") is None
+    assert calls["retire"] == 1
+
+
+def test_confirmed_widget_cleanup_retires_owned_service(monkeypatch):
+    calls = _install_counting_spec(monkeypatch)
+    widget = _LifecycleWidget()
+    owner = WidgetRuntimeManager(_Host({"svc": widget}))
+    owner.ensure_widget_service("svc", widget, {})
+
+    assert owner.cleanup_widget("svc") is True
+    assert calls["retire"] == 1
+    assert owner.get_widget_service("svc") is None
+
+
+def test_failed_widget_cleanup_retains_owned_service(monkeypatch):
+    class _Explodes:
+        def cleanup(self):
+            raise RuntimeError("cleanup failed")
+
+    calls = _install_counting_spec(monkeypatch)
+    widget = _Explodes()
+    owner = WidgetRuntimeManager(_Host({"svc": widget}))
+    service = owner.ensure_widget_service("svc", widget, {})
+
+    assert owner.cleanup_widget("svc") is False
+    assert calls["retire"] == 0
+    assert owner.get_widget_service("svc") is service

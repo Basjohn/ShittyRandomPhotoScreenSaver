@@ -237,11 +237,13 @@ class _StubClockWidget(_BaseStubWidget):
 
 
 class _StubWeatherWidget(_BaseStubWidget):
-    def __init__(self, parent, location, position):
+    def __init__(self, parent, location, position, build_default_runtime=True):
         super().__init__()
         self.parent = parent
         self.location = location
         self.position = position
+        self.build_default_runtime = build_default_runtime
+        self.runtime_service = object() if build_default_runtime else None
         self.thread_manager = None
         self.font_family = None
         self.font_size = None
@@ -255,6 +257,18 @@ class _StubWeatherWidget(_BaseStubWidget):
 
     def set_thread_manager(self, manager):
         self.thread_manager = manager
+        if self.runtime_service is not None and hasattr(self.runtime_service, "set_thread_manager"):
+            self.runtime_service.set_thread_manager(manager)
+
+    def set_runtime_service(self, service):
+        self.runtime_service = service
+        service.attach_consumer(self)
+        service.set_location(self.location)
+        if self.thread_manager is not None:
+            service.set_thread_manager(self.thread_manager)
+
+    def is_weather_consumer_alive(self):
+        return True
 
     def set_font_family(self, value):
         self.font_family = value
@@ -536,7 +550,7 @@ def test_weather_widget_creation_handles_prefixed_positions():
         "shadows": {"enabled": True},
     }
 
-    _manager, created = _setup_widgets(widgets_config)
+    manager, created = _setup_widgets(widgets_config)
     widget = created['weather_widget']
 
     assert isinstance(widget, _StubWeatherWidget)
@@ -547,6 +561,68 @@ def test_weather_widget_creation_handles_prefixed_positions():
     assert widget.background_opacity == 0.75
     assert widget.raised is True
     assert widget.started is True
+    assert widget.build_default_runtime is False
+    service = manager._runtime_manager.get_widget_service("weather")
+    assert service is widget.runtime_service
+    assert service.location == "Berlin"
+
+
+def test_deactivated_weather_family_owns_no_runtime_service():
+    config = {
+        "weather": {
+            "enabled": True,
+            "monitor": "ALL",
+            "position": "WidgetPosition.TOP_LEFT",
+            "location": "London",
+        },
+        "family_activation": {"weather": False},
+    }
+
+    manager, created = _setup_widgets(config)
+
+    assert "weather_widget" not in created
+    assert manager._runtime_manager.get_widget_service("weather") is None
+
+
+def test_disabled_weather_instance_is_distinct_from_family_deactivation():
+    config = {
+        "weather": {
+            "enabled": False,
+            "monitor": "ALL",
+            "position": "WidgetPosition.TOP_LEFT",
+            "location": "London",
+        },
+        "family_activation": {"weather": True},
+    }
+
+    manager, created = _setup_widgets(config)
+
+    assert manager._runtime_manager.admits_widget_family("weather", config) is True
+    assert "weather_widget" not in created
+    assert manager._runtime_manager.get_widget_service("weather") is None
+
+
+def test_weather_fails_closed_when_runtime_service_build_fails(monkeypatch):
+    import widgets.weather_runtime as weather_runtime
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("Weather service build failed")
+
+    monkeypatch.setattr(weather_runtime, "WeatherRuntimeService", _boom)
+    config = {
+        "weather": {
+            "enabled": True,
+            "monitor": "ALL",
+            "position": "WidgetPosition.TOP_LEFT",
+            "location": "London",
+        }
+    }
+
+    manager, created = _setup_widgets(config)
+
+    assert "weather_widget" not in created
+    assert manager.get_widget("weather") is None
+    assert manager._runtime_manager.get_widget_service("weather") is None
 
 
 def _clock_config(**family_activation):
