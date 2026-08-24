@@ -1,7 +1,7 @@
 # 05 — CUSTOM Layout, Input, Interaction and Auxiliary Runtime Pixels
 
-Status: technical decomposition only  
-Last updated: 2026-08-22
+Status: **Phase-G technical decomposition; Clock multi-geometry contract predeclared by Phase F**  
+Last updated: 2026-08-24
 
 Cross-links:
 
@@ -9,57 +9,46 @@ Cross-links:
 - `rendering/custom_layout_contract.py`
 - `Docs/10_WIDGET_GUIDELINES.md`
 - `Docs/QtQuick_Migration/03_Visualizer.md`
+- `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
+- `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md`
 - `Docs/Guardrails/Visualizer_Presentation.md`
-- `Future_Cleanup.md`
 
-## 1. Preserve CUSTOM data contracts
+`Current_Plan.md` owns work admission. This file defines the Phase-G destination so Phase F does not
+build presentation interfaces that G cannot preserve.
 
-Do **not** rewrite the existing custom-layout persistence/math unless a focused bug proves it
-necessary.
+---
 
-Keep:
+## 1. Preserve useful CUSTOM data contracts
+
+Do not rewrite existing presentation-neutral CUSTOM math without evidence.
+
+Preserve or deliberately rehome:
 
 - screen signatures/aliases;
 - normalize/denormalize;
 - clamp;
 - snap;
 - gutters/grid;
-- monitor ownership;
+- display ownership;
 - restore maps;
-- Save/Cancel semantics;
-- slot persistence.
+- Save/Cancel;
+- slot persistence;
+- family-specific size payload semantics.
 
-Change presentation/session ownership.
+Change presentation/session ownership away from QWidget edit shells.
 
-The H0 Quick settings epoch means old QWidget geometry does not need heroic translation into the new
-visualizer scale/viewport schema.
+---
 
-## 2. Current CUSTOM problem seam
+## 2. Destination `CustomLayoutSession`
 
-`CustomLayoutManager` currently owns:
-
-- QWidget live widgets;
-- `EditShellWidget`;
-- `EditGridOverlayWidget`;
-- QPixmap previews;
-- global key filter;
-- widget hide/restore;
-- special visualizer suspension;
-- multi-display shell transfer.
-
-Quick gives a cleaner final shape.
-
-## 3. Destination session
-
-Refactor to a presentation-neutral `CustomLayoutSession`.
-
-Plain session state per widget:
+Presentation-neutral session state per edited item:
 
 ```text
 widget_id
-model identity
+model/presentation identity
 source display
 current display
+geometry variant
 baseline global rect
 current global rect
 baseline size payload
@@ -68,351 +57,299 @@ resize scale
 removed flag
 ```
 
-For the visualizer, the final size payload may additionally carry the new-schema distinction between:
+The session does not require QWidget.
+
+For a widget with multiple presentation geometry variants, the active session names the variant it is
+editing. An inactive variant is not collateral mutable state.
+
+---
+
+## 3. Geometry-variant contract — REQUIRED
+
+The migration must not assume every widget has exactly one durable CUSTOM rect.
+
+A family may define stable geometry variants when modes have materially different shapes.
+
+Canonical operations conceptually become:
+
+```text
+read committed geometry(widget_id, display_identity, variant)
+write committed geometry(widget_id, display_identity, variant, rect, size_payload)
+```
+
+A missing/empty variant may fall back through documented default initialization. A present variant must
+be restored exactly subject only to current-screen validity/clamping rules.
+
+Do not repeatedly derive one saved variant from another during ordinary mode switches.
+
+---
+
+## 4. Clock digital/analogue geometry
+
+Clock is the first required multi-geometry family:
+
+```text
+Clock instance + display
+    ├── digital -> committed rect A
+    └── analog  -> committed rect B
+```
+
+### First use of a target variant
+
+If the target mode has never had a committed rect:
+
+1. take the current visual center as the intent;
+2. obtain the target mode's natural initial size from the presentation/geometry owner;
+3. center that size on the current center;
+4. clamp to the target display;
+5. establish the result as the target variant's baseline.
+
+This is an initialization event, not the permanent switch algorithm.
+
+### Later mode switches
+
+Once both exist:
+
+```text
+digital A
+-> analog B
+-> digital A
+-> analog B
+```
+
+No accumulating center/size drift is allowed.
+
+### Editing
+
+- moving/resizing digital updates digital only;
+- moving/resizing analogue updates analogue only;
+- changing font/style may reflow content inside the committed rect but must not silently rewrite the
+  inactive variant's committed rect;
+- an explicit reset-size/reset-layout action may deliberately recompute the active variant according to
+  its own contract.
+
+### Persistence
+
+Recreate/restart must restore both variants.
+
+Display identity scopes the variant set. Cross-display transfer and topology changes must resolve the
+target display's variant state deliberately rather than aliasing unrelated monitor geometry.
+
+### Testing
+
+At minimum:
+
+- 50+ digital↔analogue round trips preserve exact A/B rects;
+- manual digital resize does not change B;
+- manual analogue resize does not change A;
+- save/recreate restores A/B;
+- Cancel restores the active variant baseline and leaves inactive variant untouched;
+- two displays retain independent A/B pairs;
+- clamping due to a changed display bounds is deterministic and does not create cumulative drift on
+  subsequent switches.
+
+The current legacy Clock `_rebuild_custom_rect_for_mode()` center-derived behavior is migration source
+only, not destination authority.
+
+---
+
+## 5. Edit the real Quick presentation
+
+Preferred behavior:
+
+- live retained Quick widget stays visible;
+- edit overlay/handles live above it in the same Quick window;
+- session geometry temporarily overrides normal placement;
+- model/provider may keep publishing current state;
+- persistence is unchanged until Save.
+
+Benefits:
+
+- WYSIWYG;
+- no screenshot shell;
+- no duplicate visual owner;
+- exact shadows/fade/content;
+- Cancel does not rebuild untouched runtime/provider state.
+
+The Visualizer follows the same one-live-pixel-owner rule despite using a `QSGRenderNode`.
+
+---
+
+## 6. Save
+
+Save:
+
+1. identify the active widget + geometry variant;
+2. resolve final display from current global rect;
+3. compute canonical local rect/size payload;
+4. write only the active variant's committed state;
+5. update canonical monitor/position settings through the existing route where product semantics require
+   it;
+6. remove session override;
+7. let normal runtime geometry resolve to the just-committed variant.
+
+For visualizer viewport work, scale and viewport extent remain separate values.
+
+Do not recreate a whole runtime merely to adopt geometry already displayed unless current product
+semantics require recreation.
+
+---
+
+## 7. Cancel
+
+Cancel:
+
+- discard session-only active-variant changes;
+- restore that variant's baseline;
+- do not mutate inactive variants;
+- restore visualizer scale + viewport together where applicable;
+- do not replay destructive config setters for state never committed;
+- do not recreate provider/model state.
+
+---
+
+## 8. Resize
+
+Quick edit handles emit deltas; Python session/geometry math owns persistence semantics.
+
+Resolve:
+
+- min size;
+- aspect constraints;
+- anchor semantics;
+- family-specific size payload;
+- active geometry variant;
+- display/DPR projection.
+
+Do not invent QML-only persisted geometry.
+
+### Visualizer remains special
+
+Keep the established distinction:
 
 ```text
 uniform_visual_scale
 content_viewport_size
 ```
 
-The session does not require QWidget.
+Corner/wheel may change uniform scale; edge-only resize may change viewport extent where the mode
+supports it. Never anisotropically stretch finished pixels.
 
-## 4. Edit the real Quick presentation
+---
 
-Preferred behavior:
-
-- the live retained Quick widget remains visible content;
-- edit mode adds outline/handles above it;
-- session geometry overrides normal placement temporarily;
-- provider/model content may continue updating;
-- persistence is untouched until Save.
-
-Benefits:
-
-- WYSIWYG;
-- no stale screenshot shell;
-- no duplicate visual;
-- no Cancel rebuild of untouched content;
-- shadows/opacity/content remain exact.
-
-The visualizer follows the same one-live-pixel-owner rule even though its content is a custom
-QSGRenderNode.
-
-## 5. Save
-
-Save:
-
-1. resolve current screen ownership from final rect;
-2. compute canonical local/custom payload using existing contract;
-3. write canonical custom layout;
-4. update monitor/position keys only through existing canonical route;
-5. remove temporary session override;
-6. let normal runtime geometry resolve to the just-committed layout.
-
-For visualizer viewport-resize support, commit scale and viewport extent together so a recreated
-runtime cannot confuse "make content bigger" with "show more content."
-
-No full runtime recreate merely to make the item adopt what it already displays unless current product
-semantics require it.
-
-## 6. Cancel
-
-Cancel:
-
-- discard session-only geometry/size;
-- restore baseline presentation geometry;
-- restore baseline visualizer scale + viewport extent together;
-- do not replay destructive config setters for state that never changed;
-- resume any explicitly suspended visualizer behavior;
-- no provider/model recreation.
-
-## 7. Resize
-
-Retain current family-specific resize payload rules.
-
-The Quick edit shell/handles emit deltas.
-
-Python session math resolves:
-
-- min size;
-- aspect constraints;
-- top-center or other anchor semantics;
-- family-specific font/artwork/visualizer size payload.
-
-Do not invent QML-only persisted geometry.
-
-### 7.1 Visualizer: whole-size scale and viewport resize are different operations
-
-Phase D establishes:
-
-```text
-canonical_baseline_viewport
-uniform_visual_scale
-viewport_extent
-```
-
-The baseline aspect is shared by all current modes. The retired per-mode `*_growth` settings do not
-participate.
-
-Preferred interactions:
-
-```text
-mouse wheel over resize/edit target
-    -> uniform whole-visualizer scale
-    -> baseline aspect preserved
-
-corner handles
-    -> uniform whole-visualizer scale
-    -> baseline aspect preserved
-
-left/right edge handles
-    -> viewport width only
-    -> visual scale unchanged
-
-top/bottom edge handles
-    -> viewport height only
-    -> visual scale unchanged
-```
-
-This keeps the successful current CUSTOM behavior for ordinary resizing while giving edge-only drag a
-new, explicit meaning: more/less playroom rather than stretching the visualizer.
-
-At constant visual scale:
-
-- Spectrum recomputes bar distribution/layout across the viewport;
-- Bubble changes spatial bounds/aspect while preserving isotropic circles, radii, velocity units and
-  BTF behavior;
-- Oscilloscope/Sine/DevCurve recompute usable domain/placement while preserving line/stroke scale;
-- future frameless 3D modes use aspect-correct projection.
-
-The card shell, when present, follows the viewport geometry. A frameless mode retains the same edit
-rect/handles with no card chrome.
-
-`Reset Size` restores uniform scale and viewport extent to canonical baseline geometry unless a later
-UX decision deliberately splits those reset actions.
-
-Persist scale and viewport extent separately. Never map them back onto legacy `spectrum_growth`,
-`osc_growth`, `sine_wave_growth`, `bubble_growth`, or `devcurve_growth`.
-
-### 7.2 Spatial logical modes
-
-If Bubble or another logical mode needs viewport bounds, route committed geometry changes through the
-presentation-neutral viewport-metrics seam established in Phase D.
-
-Do not let mouse-move frequency, edit repaint frequency, or physical refresh become the logical
-simulation clock.
-
-During drag, coalesce geometry application as needed for responsiveness, but final committed geometry
-must be exact and deterministic.
-
-### 7.3 Non-blocking migration rule
-
-Freeform visualizer viewport resizing is a preferred QoL, not a cutover blocker.
-
-If focused evidence shows one current mode would require major retuning or violate BTF/fidelity:
-
-- keep ordinary uniform-scale resize;
-- hide/disable viewport-edge resize handles for that mode;
-- preserve the underlying scale/viewport-capable geometry contract;
-- record the mode-specific deferred work;
-- do not fake compatibility by stretching rendered pixels.
-
-This exception is mode-specific. It is not permission to collapse scale and viewport geometry
-globally.
-
-## 8. Cross-monitor transfer
+## 9. Cross-monitor transfer
 
 One live pixel owner at a time.
 
-When an edited widget transfers screens:
+1. session chooses target display using existing global-rect contract;
+2. source presentation is detached/retired;
+3. target display scene creates/reparents presentation;
+4. Python runtime/model owner survives unless product semantics say otherwise;
+5. target-local active-variant rect is applied;
+6. session updates current display identity.
 
-1. session chooses target using existing global-rect contract;
-2. detach/destroy source scene presentation item;
-3. create/reparent the presentation into target display scene;
-4. keep the same Python runtime model/provider owner;
-5. apply target-local rect;
-6. update session current display identity.
+Do not leave simultaneous source/target copies.
 
-Never leave simultaneous source and target visual copies after transfer.
+For multi-variant families, transfer must define whether an existing target-display variant is restored
+or whether the incoming active rect initializes/replaces that target variant. The choice must be
+deterministic and tested; never silently overwrite every variant on the target display.
 
-Do not transfer GL numeric resources between windows; visualizer render resources recreate/retarget
-through normal scene ownership if needed.
+---
 
-Preserve visualizer scale/viewport semantics across the transfer and recompute DPR from the target
-QQuickWindow/QScreen.
-
-## 9. Edit overlays
+## 10. Edit overlays
 
 Port to retained Quick:
 
 - grid;
 - snap guides;
 - selection outline;
-- corner resize handles;
-- edge resize handles where the widget/mode supports them;
-- widget label/control chrome if currently present.
+- corner handles;
+- edge handles where supported;
+- widget label/control chrome.
 
-These are runtime edit pixels and belong inside Quick windows.
+Use one shared edit-overlay layer per display.
 
-Use one shared edit overlay layer per display.
+---
 
-## 10. Global keys
+## 11. Input/action ownership
 
-Keep Enter=Save, Esc=Cancel semantics.
+Refactor old DisplayWidget/QWidget-probing input seams toward a runtime-neutral input controller.
 
-A global QObject/event-filter owner may remain Python.
+Quick may own hit regions/pointer handlers. It emits semantic actions.
 
-It targets the active `CustomLayoutSession`, not a QWidget manager list.
+Python owns:
 
-## 11. Input controller refactor
+- mode changes;
+- provider actions;
+- persistence;
+- CUSTOM session commands;
+- context/global shortcuts.
 
-Current `InputHandler` is conceptually separated but takes `DisplayWidget` and probes QWidget
-instances.
+Enter=Save and Esc=Cancel remain.
 
-Refactor it into a runtime-neutral `RuntimeInputController`.
+Clock double-click/toggle becomes a semantic mode action; QML does not write geometry or Settings.
 
-Inputs:
+---
 
-- SettingsManager;
-- screen/runtime identity;
-- command callbacks/signals;
-- widget action router;
-- MultiMonitorCoordinator state.
+## 12. Context menu
 
-It should not need to import `DisplayWidget`.
+A QWidget context menu may remain temporarily as a control surface if it does not become a second
+runtime presenter or lifecycle blocker.
 
-`QuickDisplayWindow` forwards:
+Decouple it from `DisplayWidget` API. Pass runtime/display identity and action/state owners explicitly.
 
-- key press/release;
-- mouse press/release/move;
-- wheel;
-- focus/activation;
-- relevant native Windows messages.
+If QWidget popup focus is proven to be a blocker, migrate the menu once. Do not maintain permanent dual
+menu implementations.
 
-## 12. Widget hit testing / actions
+---
 
-Retained Quick items own visual hit regions.
+## 13. Halo, dimming, pixel shift
 
-Use Quick pointer/tap handlers or QQuickItem containment to emit semantic actions:
+These are runtime pixels and belong in the Quick scene.
 
-```text
-open link
-refresh
-media previous/play/next
-volume
-mute
-widget-specific action
-```
+- halo follows the correct display pointer and uses retained animation;
+- dimming is a retained scene layer at the correct z;
+- pixel shift is a transform/offset of intended presentation items, not a moved window or rebuilt
+  texture.
 
-Python provider/business owners execute the action.
+No extra translucent top-level windows.
 
-Do not put provider logic in QML event handlers.
+---
 
-## 13. Context menu
+## 14. Media Center / focus gates
 
-The existing QWidget context menu may remain a transient control surface.
-
-It is not an accelerated runtime presenter.
-
-Refactor it so it does not require a `DisplayWidget` parent API.
-
-Pass:
-
-- runtime/display identity;
-- action owner;
-- current settings/model state;
-- global popup position.
-
-Gate focus/activation carefully, especially MC and the old shadow-corruption trigger.
-
-If retaining QWidget popup becomes an actual focus/lifecycle blocker, migrate the menu once as a Quick
-control. Do not maintain both.
-
-## 14. Cursor halo
-
-Port visual halo pixels to Quick.
-
-Keep global Ctrl/focus ownership in `MultiMonitorCoordinator` or an explicit replacement.
-
-The halo item:
-
-- follows pointer in the correct display;
-- uses retained animation;
-- respects interaction mode;
-- disappears deterministically on release/focus loss.
-
-No separate translucent top-level halo window.
-
-## 15. Dimming
-
-Use a Quick scene rectangle/layer at the correct z.
-
-Properties:
-
-- enabled;
-- opacity;
-- synchronized across displays through current product action;
-- no per-frame rebuild.
-
-Ensure dimming does not unintentionally dim control UI if current semantics exclude it.
-
-## 16. Pixel shift
-
-Apply pixel shift as a presentation transform/offset to the intended widget group/items.
-
-Do not move the QQuickWindow.
-
-Do not rebuild textures/content for a small positional offset.
-
-Preserve bleed/visualizer historical regression coverage.
-
-## 17. Media Center / focus gate
-
-Required stress:
+Stress:
 
 - two displays;
-- focus click A -> B -> A;
+- focus A -> B -> A;
 - Ctrl interaction;
 - context menu;
-- media controls;
-- volume;
-- taskbar/Alt+Tab behavior;
+- Clock live mode switching;
+- media controls/volume;
 - halo;
 - shadows;
 - repeated activation/deactivation;
-- Settings/CUSTOM transition.
+- Settings/CUSTOM transition;
+- cross-monitor transfers.
 
-No return of the old focus-driven shadow corruption class.
+Do not reintroduce the old focus-driven shadow corruption class.
 
-## 18. Visualizer resize gates
+---
 
-If viewport-resize QoL is implemented, prove:
+## 15. Checkpoints
 
-- scroll-wheel resize changes uniform scale and preserves canonical baseline aspect;
-- corner resize changes uniform scale and preserves canonical baseline aspect;
-- horizontal edge resize changes width without changing visual scale;
-- vertical edge resize changes height without changing visual scale;
-- no anisotropic final-pixel stretch;
-- current five carded modes preserve inner clipping/frame alignment;
-- frameless-policy test object remains frameless while resizing;
-- Bubble circles remain circular and BTF timing/trajectory invariants hold;
-- Save/recreate preserves scale and viewport extent;
-- Cancel restores both exactly;
-- cross-monitor transfer preserves intent across DPR changes.
+Suggested Phase-G audit boundaries:
 
-A mode marked viewport-resize-incapable must still retain correct ordinary scale resize.
+```text
+G1 CustomLayoutSession + multi-variant data contract
+G2 Quick edit overlays + ordinary geometry
+G3 Save/Cancel + exact variant persistence
+G4 resize semantics
+G5 cross-monitor transfer
+G6 runtime-neutral input/action routing
+G7 context/halo/dimming/pixel-shift
+G8 MC/focus closure
+```
 
-## 19. Checkpoints
-
-Push separately after:
-
-- session data refactor;
-- Quick edit overlays;
-- Save/Cancel;
-- ordinary resize;
-- visualizer viewport-resize QoL if implemented;
-- cross-monitor transfer;
-- input controller;
-- context menu decoupling;
-- halo/dimming/pixel shift;
-- MC/focus closure.
+Visualizer viewport-resize QoL remains separately scoped if it proves expensive; ordinary safe scale
+resize must still work.
