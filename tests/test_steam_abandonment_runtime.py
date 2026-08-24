@@ -36,9 +36,6 @@ class _Consumer:
     def is_abandonment_consumer_alive(self) -> bool:
         return self.alive
 
-    def capture_abandonment_artwork_target(self) -> tuple[int, int]:
-        return 80, 120
-
     def on_abandonment_presentation(self, presentation, *, animate: bool) -> None:
         self.presentations.append((presentation, animate))
 
@@ -631,3 +628,20 @@ def test_legacy_widget_contains_no_abandonment_source_or_cadence_owner() -> None
         "_abandonment_rotation_timer",
     ):
         assert forbidden not in source
+
+
+def test_neutral_abandonment_owner_contains_no_presenter_geometry_contract() -> None:
+    runtime_source = Path("widgets/steam_abandonment_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    preparation_source = Path("widgets/steam_abandonment_preparation.py").read_text(
+        encoding="utf-8"
+    )
+
+    for forbidden in (
+        "capture_abandonment_artwork_target",
+        "artwork_target",
+        "devicePixelRatio",
+    ):
+        assert forbidden not in runtime_source
+        assert forbidden not in preparation_source

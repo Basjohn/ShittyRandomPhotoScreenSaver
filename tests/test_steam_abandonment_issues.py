@@ -53,9 +53,12 @@ from core.threading.manager import TaskResult
 from widgets.abandonment_issues_widget import AbandonmentIssuesWidget
 from widgets.base_overlay_widget import OverlayPosition
 from widgets.steam_abandonment_runtime import (
+    AbandonmentPreparedPresentation,
     achievement_evidence_requested as _achievement_evidence_requested,
     prepare_abandonment_presentation,
-    prepare_cover_image as _prepare_cover_image,
+)
+from widgets.steam_abandonment_preparation import (
+    decode_abandonment_artwork as _decode_abandonment_artwork,
 )
 from widgets.steam_abandonment_components import (
     ABANDONMENT_ALTERNATE_REDISCOVERY_MESSAGES,
@@ -1046,7 +1049,7 @@ def test_abandonment_failed_refresh_preserves_valid_cached_library(tmp_path) -> 
     assert preserved.fetched_at == NOW - 1000
 
 
-def test_guilt_desaturater_is_smooth_capped_and_prepared_outside_paint(tmp_path) -> None:
+def test_guilt_desaturater_is_smooth_capped_and_decoded_outside_paint(tmp_path) -> None:
     Image = pytest.importorskip("PIL.Image")
     source = tmp_path / "source.png"
     Image.new("RGB", (32, 48), (230, 70, 40)).save(source)
@@ -1085,9 +1088,9 @@ def test_guilt_desaturater_is_smooth_capped_and_prepared_outside_paint(tmp_path)
         cache_dir=tmp_path,
         desaturation_percent=later,
     ) == prepared
-    cover = _prepare_cover_image(prepared, target_width=40, target_height=56)
-    assert (cover.width(), cover.height()) == (40, 56)
-    assert not hasattr(AbandonmentIssuesWidget, "_scaled_artwork_for")
+    decoded = _decode_abandonment_artwork(prepared)
+    assert (decoded.width(), decoded.height()) == (32, 48)
+    assert hasattr(AbandonmentIssuesWidget, "_scaled_abandonment_artwork")
 
 
 def test_abandonment_preparation_hydrates_one_missing_selected_artwork(
@@ -1142,12 +1145,11 @@ def test_abandonment_preparation_hydrates_one_missing_selected_artwork(
             _Snapshot(),
             profile_key="profile_fixture",
             allow_asset_network=True,
-            artwork_target=(80, 80),
         )
 
         assert fetches == [resolved.appid]
         assert presentation.artwork_identity == str(source)
-        assert (presentation.artwork.width(), presentation.artwork.height()) == (80, 80)
+        assert (presentation.artwork.width(), presentation.artwork.height()) == (120, 180)
     finally:
         widget.cleanup()
 
@@ -1210,12 +1212,11 @@ def test_abandonment_preparation_falls_back_to_wide_artwork_after_portrait_404(
             _Snapshot(),
             profile_key="profile_fixture",
             allow_asset_network=True,
-            artwork_target=(80, 80),
         )
 
         assert fetch_shapes == ["portrait", "wide"]
         assert presentation.artwork_identity == str(source)
-        assert not presentation.artwork.isNull()
+        assert (presentation.artwork.width(), presentation.artwork.height()) == (180, 100)
     finally:
         widget.cleanup()
 
@@ -1263,11 +1264,71 @@ def test_abandonment_preparation_does_not_retry_transient_artwork_failure(
             _Snapshot(),
             profile_key="profile_fixture",
             allow_asset_network=True,
-            artwork_target=(80, 80),
         )
 
         assert fetch_shapes == ["portrait"]
         assert presentation.artwork.isNull()
+    finally:
+        widget.cleanup()
+
+
+def test_abandonment_widget_owns_dpr_cover_crop_cache(qt_app) -> None:
+    widget = AbandonmentIssuesWidget(
+        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
+        position=OverlayPosition.BOTTOM_RIGHT,
+        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
+        show_artwork=True,
+        artwork_shape="portrait",
+        build_default_runtime=False,
+    )
+    try:
+        source = QImage(120, 180, QImage.Format.Format_RGB32)
+        source.fill(QColor(190, 90, 45))
+        presentation = AbandonmentPreparedPresentation(
+            model=widget._view_model,
+            artwork=source,
+            artwork_identity="source-resolution-fixture",
+            desaturation_bucket=0,
+        )
+        widget._commit_prepared_presentation(presentation, animate=False)
+
+        assert (presentation.artwork.width(), presentation.artwork.height()) == (120, 180)
+        assert (widget._abandonment_artwork.width(), widget._abandonment_artwork.height()) == (
+            120,
+            180,
+        )
+
+        first = widget._scaled_abandonment_artwork(QRectF(0.0, 0.0, 80.0, 80.0), 2.0)
+        assert (first.width(), first.height()) == (160, 160)
+        assert first.devicePixelRatio() == 2.0
+        first_cache_key = first.cacheKey()
+
+        replay = widget._scaled_abandonment_artwork(
+            QRectF(0.0, 0.0, 80.0, 80.0),
+            2.0,
+        )
+        assert replay.cacheKey() == first_cache_key
+
+        resized = widget._scaled_abandonment_artwork(
+            QRectF(0.0, 0.0, 60.0, 90.0),
+            2.0,
+        )
+        assert (resized.width(), resized.height()) == (120, 180)
+        assert resized.cacheKey() != first_cache_key
+
+        replacement = QImage(120, 180, QImage.Format.Format_RGB32)
+        replacement.fill(QColor(45, 90, 190))
+        widget._commit_prepared_presentation(
+            AbandonmentPreparedPresentation(
+                model=widget._view_model,
+                artwork=replacement,
+                artwork_identity="source-resolution-fixture",
+                desaturation_bucket=0,
+            ),
+            animate=False,
+        )
+        assert widget._abandonment_scaled_artwork_cache.isNull()
+        assert widget._abandonment_scaled_artwork_cache_key is None
     finally:
         widget.cleanup()
 

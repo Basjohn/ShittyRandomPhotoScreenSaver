@@ -4,7 +4,6 @@ Weather widget for screensaver overlay.
 Displays current weather information using Open-Meteo API (no API key needed).
 """
 from typing import Optional, Dict, Any, Tuple, List
-from datetime import datetime
 from pathlib import Path
 from PySide6.QtWidgets import QWidget, QSizePolicy, QHBoxLayout, QVBoxLayout, QLabel
 from PySide6.QtCore import QPoint, QRect, Qt, Signal, QSize
@@ -203,7 +202,7 @@ class WeatherWidget(BaseOverlayWidget):
         logger.debug(f"WeatherWidget created (location={location}, position={position.value})")
 
     # -------------------------------------------------------------------------
-    # Runtime-data ownership: attach + presentation-neutral proxies
+    # Runtime-data ownership: attach + presentation consumer read boundary
     # -------------------------------------------------------------------------
     def set_runtime_service(
         self,
@@ -256,57 +255,16 @@ class WeatherWidget(BaseOverlayWidget):
         else:
             service.detach_consumer(self)
 
-    # Presentation-neutral runtime-data state lives in the service. These proxies
-    # preserve the historical attribute surface (tests/compat) without the widget
-    # owning the lifetime.
-    @property
-    def _cached_data(self) -> Optional[Dict[str, Any]]:
-        svc = self._runtime_service
-        return svc.get_cached_data() if svc is not None else None
+    def _current_weather_data(self) -> Optional[Dict[str, Any]]:
+        """Read accepted data through the consumer API for presentation redraws."""
 
-    @_cached_data.setter
-    def _cached_data(self, value: Optional[Dict[str, Any]]) -> None:
-        svc = self._runtime_service
-        if svc is not None:
-            svc._cached_data = value
+        service = self._runtime_service
+        return service.get_cached_data() if service is not None else None
 
-    @property
-    def _cache_time(self) -> Optional[datetime]:
-        svc = self._runtime_service
-        return svc._cache_time if svc is not None else None
-
-    @_cache_time.setter
-    def _cache_time(self, value: Optional[datetime]) -> None:
-        svc = self._runtime_service
-        if svc is not None:
-            svc._cache_time = value
-
-    @property
-    def _fetch_request_id(self) -> int:
-        svc = self._runtime_service
-        return svc._fetch_request_id if svc is not None else 0
-
-    @_fetch_request_id.setter
-    def _fetch_request_id(self, value: int) -> None:
-        svc = self._runtime_service
-        if svc is not None:
-            svc._fetch_request_id = value
-
-    @property
-    def _startup_cache_request_id(self) -> int:
-        svc = self._runtime_service
-        return svc._startup_cache_request_id if svc is not None else 0
-
-    @_startup_cache_request_id.setter
-    def _startup_cache_request_id(self, value: int) -> None:
-        svc = self._runtime_service
-        if svc is not None:
-            svc._startup_cache_request_id = value
-
-    @property
-    def _update_timer_handle(self) -> Optional[Any]:
-        svc = self._runtime_service
-        return svc._update_timer_handle if svc is not None else None
+    def _refresh_current_weather_presentation(self) -> None:
+        data = self._current_weather_data()
+        if data:
+            self._update_display(data)
 
     # -------------------------------------------------------------------------
     # Consumer protocol (WeatherRuntimeService -> presentation)
@@ -700,8 +658,8 @@ class WeatherWidget(BaseOverlayWidget):
         """Required by BaseOverlayWidget - update weather display."""
         if not self._location.strip():
             self._show_missing_location_state()
-        elif self._cached_data:
-            self._update_display(self._cached_data)
+        else:
+            self._refresh_current_weather_presentation()
 
     def _request_fade_in(self) -> None:
         """Join the normal coordinated fade without duplicating lifecycle branches."""
@@ -901,8 +859,9 @@ class WeatherWidget(BaseOverlayWidget):
             logger.debug("[WEATHER] Double-click refresh failed", exc_info=True)
             return False
 
-    # Compatibility forwarding for direct callers while the QWidget presenter
-    # remains live. Runtime-data behavior and state stay owned by the service.
+    # TRANSITIONAL QWidget/standalone forwarding only; this is not the runtime
+    # model API inherited by the future Quick presenter. Runtime-data behavior
+    # and state stay owned by WeatherRuntimeService.
     def _fetch_weather(self) -> None:
         service = self._runtime_service
         if service is not None:
@@ -1245,8 +1204,7 @@ class WeatherWidget(BaseOverlayWidget):
             show: True to show forecast line when data is available
         """
         self._show_forecast = show
-        if self._cached_data:
-            self._update_display(self._cached_data)
+        self._refresh_current_weather_presentation()
 
     def set_forecast_data(self, forecast: Optional[str]) -> None:
         """Set the forecast text to display.
@@ -1255,14 +1213,13 @@ class WeatherWidget(BaseOverlayWidget):
             forecast: Forecast text (e.g. "Tomorrow: 18°C, Partly Cloudy")
         """
         self._forecast_data = forecast
-        if self._show_forecast and self._cached_data:
-            self._update_display(self._cached_data)
+        if self._show_forecast:
+            self._refresh_current_weather_presentation()
 
     def set_show_condition_icon(self, show: bool) -> None:
         """Enable or disable the condition icon display."""
         self._show_condition_icon = show
-        if self._cached_data:
-            self._update_display(self._cached_data)
+        self._refresh_current_weather_presentation()
 
     def set_icon_alignment(self, alignment: str) -> None:
         """Set icon alignment ('LEFT', 'RIGHT', 'NONE')."""
@@ -1276,8 +1233,7 @@ class WeatherWidget(BaseOverlayWidget):
             # Rebuild the primary row layout
             self._rebuild_primary_layout()
         
-        if self._cached_data:
-            self._update_display(self._cached_data)
+        self._refresh_current_weather_presentation()
 
     def _apply_text_alignment(self) -> None:
         """Right-align city/condition labels when icon is on the left so
@@ -1377,20 +1333,17 @@ class WeatherWidget(BaseOverlayWidget):
         self._icon_size = max(32, int(size))
         if self._condition_icon_widget:
             self._condition_icon_widget.set_icon_size(self._icon_size)
-        if self._cached_data:
-            self._update_display(self._cached_data)
+        self._refresh_current_weather_presentation()
 
     def set_show_details_row(self, show: bool) -> None:
         """Enable or disable the detail metrics row."""
         self._show_details_row = show
-        if self._cached_data:
-            self._update_display(self._cached_data)
+        self._refresh_current_weather_presentation()
 
     def set_detail_icon_size(self, size: int) -> None:
         """Set the detail row icon size in pixels."""
         self._detail_icon_size = max(16, int(size))
-        if self._cached_data:
-            self._update_display(self._cached_data)
+        self._refresh_current_weather_presentation()
 
     def set_icon_monochrome(self, enabled: bool) -> None:
         """Enable/disable monochrome (grayscale) weather icon.

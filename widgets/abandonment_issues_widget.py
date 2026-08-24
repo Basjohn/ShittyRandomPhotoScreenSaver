@@ -15,9 +15,9 @@ from widgets.steam_abandonment_components import (
     ABANDONMENT_ARTWORK_SIZE_DEFAULT,
     ABANDONMENT_FIELD_DEFAULTS,
     AbandonmentCardLayout,
-    abandonment_artwork_dimensions,
     abandonment_authored_size,
     abandonment_field_slot_count,
+    layout_abandonment_card,
     normalize_abandonment_artwork_shape,
     normalize_abandonment_artwork_size,
     render_abandonment_card,
@@ -75,6 +75,11 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         self._abandonment_show_connection_info_icon = bool(show_connection_info_icon)
         self._abandonment_show_rediscovery_message = bool(show_rediscovery_message)
         self._abandonment_artwork = QImage()
+        self._abandonment_artwork_identity = ""
+        self._abandonment_scaled_artwork_cache = QImage()
+        self._abandonment_scaled_artwork_cache_key: tuple[
+            int, int, int, float, str
+        ] | None = None
         self._pending_abandonment_manual_refresh = False
         self._pending_abandonment_rotation = False
         self._deferred_abandonment_presentation = None
@@ -356,34 +361,54 @@ class AbandonmentIssuesWidget(SteamCardWidget):
 
         def _commit() -> None:
             self._view_model = model
-            self._abandonment_artwork = QImage(presentation.artwork)
+            next_identity = str(presentation.artwork_identity or "")
+            next_artwork_key = int(presentation.artwork.cacheKey())
+            if (
+                next_identity != self._abandonment_artwork_identity
+                or next_artwork_key != int(self._abandonment_artwork.cacheKey())
+            ):
+                self._abandonment_artwork_identity = next_identity
+                self._abandonment_artwork = QImage(presentation.artwork)
+                self._abandonment_scaled_artwork_cache = QImage()
+                self._abandonment_scaled_artwork_cache_key = None
             self._has_displayed_valid_data = True
 
         self.apply_content_transition(transition_key, _commit, animate=animate)
 
-    def capture_abandonment_artwork_target(self) -> tuple[int, int]:
-        """Capture logical geometry/DPR on UI before worker image preparation."""
+    def _scaled_abandonment_artwork(self, art_rect: QRectF, dpr: float) -> QImage:
+        """Return the presenter's cached DPR-aware smooth cover crop."""
 
-        dimensions = abandonment_artwork_dimensions(
-            show_artwork=self._abandonment_show_artwork,
-            artwork_shape=self._abandonment_artwork_shape,
-            artwork_size=self._abandonment_artwork_size,
+        if self._abandonment_artwork.isNull() or art_rect.isNull():
+            return QImage()
+        scale_dpr = max(1.0, float(dpr))
+        target_width = max(1, int(round(art_rect.width() * scale_dpr)))
+        target_height = max(1, int(round(art_rect.height() * scale_dpr)))
+        cache_key = (
+            int(self._abandonment_artwork.cacheKey()),
+            target_width,
+            target_height,
+            scale_dpr,
+            self._abandonment_artwork_shape,
         )
-        if dimensions.isEmpty():
-            return 0, 0
-        authored = self._authored_content_size()
-        shrink_r, shrink_b = self.painted_frame_shadow_card_shrink()
-        target_width = max(1.0, float(self.width() - shrink_r))
-        target_height = max(1.0, float(self.height() - shrink_b))
-        layout_scale = max(
-            0.05,
-            min(target_width / authored.width(), target_height / authored.height()),
+        if (
+            self._abandonment_scaled_artwork_cache_key == cache_key
+            and not self._abandonment_scaled_artwork_cache.isNull()
+        ):
+            return self._abandonment_scaled_artwork_cache
+
+        scaled = self._abandonment_artwork.scaled(
+            target_width,
+            target_height,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
         )
-        dpr = max(1.0, float(self.devicePixelRatioF()))
-        return (
-            max(1, int(round(dimensions.width() * layout_scale * dpr))),
-            max(1, int(round(dimensions.height() * layout_scale * dpr))),
-        )
+        crop_x = max(0, (scaled.width() - target_width) // 2)
+        crop_y = max(0, (scaled.height() - target_height) // 2)
+        prepared = scaled.copy(crop_x, crop_y, target_width, target_height)
+        prepared.setDevicePixelRatio(scale_dpr)
+        self._abandonment_scaled_artwork_cache = prepared
+        self._abandonment_scaled_artwork_cache_key = cache_key
+        return prepared
 
     def _paint_before_native_text(self) -> None:
         painter = None
@@ -396,6 +421,20 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 max(1.0, float(self.width() - shrink_r)),
                 max(1.0, float(self.height() - shrink_b)),
             )
+            preview_layout = layout_abandonment_card(
+                self._view_model,
+                target,
+                show_artwork=self._abandonment_show_artwork,
+                artwork_shape=self._abandonment_artwork_shape,
+                artwork_size=self._abandonment_artwork_size,
+                field_slot_count=self._abandonment_field_slots,
+            )
+            dpr = max(1.0, float(self.devicePixelRatioF()))
+            artwork = (
+                self._scaled_abandonment_artwork(preview_layout.art_rect, dpr)
+                if self._abandonment_show_artwork
+                else QImage()
+            )
             self._last_layout = render_abandonment_card(
                 painter,
                 self._view_model,
@@ -404,7 +443,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 font_size=self.get_font_size(),
                 text_color=self.get_text_color(),
                 logo_pixmap=self._steam_logo,
-                artwork_image=self._abandonment_artwork,
+                artwork_image=artwork,
                 show_artwork=self._abandonment_show_artwork,
                 artwork_shape=self._abandonment_artwork_shape,
                 artwork_size=self._abandonment_artwork_size,

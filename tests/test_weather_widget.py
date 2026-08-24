@@ -39,6 +39,12 @@ def _run_queued_io_task(task) -> None:
         task.callback(result)
 
 
+def _weather_runtime(widget: WeatherWidget):
+    service = widget._runtime_service
+    assert service is not None
+    return service
+
+
 @pytest.fixture(autouse=True)
 def isolated_weather_cache(tmp_path, monkeypatch):
     """Ensure each test uses a fresh on-disk cache."""
@@ -108,6 +114,18 @@ def test_weather_creation(qapp, parent_widget):
     assert weather._weather_position == WeatherPosition.BOTTOM_LEFT
     assert weather.get_position().value == WeatherPosition.BOTTOM_LEFT.value
     assert weather.is_running() is False
+
+
+def test_weather_widget_exposes_no_runtime_internal_state_proxies() -> None:
+    runtime_private_state = {
+        "_cached_data",
+        "_cache_time",
+        "_fetch_request_id",
+        "_startup_cache_request_id",
+        "_update_timer_handle",
+    }
+
+    assert runtime_private_state.isdisjoint(WeatherWidget.__dict__)
 
 
 def test_weather_standalone_service_inherits_valid_zero_runtime_generation(
@@ -382,7 +400,7 @@ def test_weather_cache(qapp, parent_widget, mock_weather_data):
     
     # Cache should be valid
     assert weather._is_cache_valid() is True
-    assert weather._cached_data == mock_weather_data
+    assert _weather_runtime(weather).get_cached_data() == mock_weather_data
 
 
 def test_weather_constructor_and_initialize_are_filesystem_inert(qapp, parent_widget, monkeypatch):
@@ -400,7 +418,7 @@ def test_weather_constructor_and_initialize_are_filesystem_inert(qapp, parent_wi
     weather._initialize_impl()
 
     assert calls == []
-    assert weather._cached_data is None
+    assert _weather_runtime(weather).get_cached_data() is None
 
 
 def test_weather_startup_cache_load_runs_on_io_then_commits_on_gui(
@@ -458,7 +476,7 @@ def test_weather_startup_cache_load_runs_on_io_then_commits_on_gui(
 
     weather.start()
 
-    assert weather._cached_data is None
+    assert _weather_runtime(weather).get_cached_data() is None
     assert schedule_calls == []
     assert [task.category for task in manager.tasks] == ["weather_startup_cache"]
 
@@ -467,7 +485,7 @@ def test_weather_startup_cache_load_runs_on_io_then_commits_on_gui(
     worker.join()
 
     assert loader_threads and loader_threads[0] != main_thread_id
-    assert weather._cached_data is None
+    assert _weather_runtime(weather).get_cached_data() is None
     assert len(queued_ui) == 1
     callback, args, kwargs = queued_ui.pop(0)
     callback(*args, **kwargs)
@@ -475,12 +493,13 @@ def test_weather_startup_cache_load_runs_on_io_then_commits_on_gui(
     assert ui_threads == [main_thread_id]
     assert schedule_calls == [main_thread_id]
     assert fade_calls == [main_thread_id]
-    assert weather._cached_data is not None
-    assert weather._cached_data["location"] == "London"
-    assert weather._cached_data["temperature"] == 18.5
-    assert weather._cached_data["weather_code"] == 0
-    assert weather._cached_data["is_day"] == 1
-    assert weather._cache_time is not None
+    cached_data = _weather_runtime(weather).get_cached_data()
+    assert cached_data is not None
+    assert cached_data["location"] == "London"
+    assert cached_data["temperature"] == 18.5
+    assert cached_data["weather_code"] == 0
+    assert cached_data["is_day"] == 1
+    assert _weather_runtime(weather)._cache_time is not None
 
 
 def test_weather_legacy_start_preserves_immediate_refresh_after_cache_miss(
@@ -601,7 +620,7 @@ def test_weather_location_change_rejects_late_startup_snapshot(
     callback, args, kwargs = queued_ui.pop(0)
     callback(*args, **kwargs)
 
-    assert weather._cached_data is None
+    assert _weather_runtime(weather).get_cached_data() is None
     assert scheduled == []
 
 
@@ -648,7 +667,7 @@ def test_weather_fetch_accepts_only_latest_request_and_persists_off_gui(
         location_key,
         PreparedWeatherFetch(older, persist_provider=True),
     )
-    assert weather._cached_data is None
+    assert _weather_runtime(weather).get_cached_data() is None
     assert cache_path.exists() is False
 
     service.commit_weather_fetch(
@@ -656,7 +675,7 @@ def test_weather_fetch_accepts_only_latest_request_and_persists_off_gui(
         location_key,
         PreparedWeatherFetch(newer, persist_provider=True),
     )
-    assert weather._cached_data["temperature"] == 20.0
+    assert _weather_runtime(weather).get_cached_data()["temperature"] == 20.0
     assert emitted[-1]["condition"] == "Clear"
     assert cache_path.exists() is False
 
@@ -913,7 +932,7 @@ def test_weather_deactivation_rejects_late_fetch_commit(qapp, parent_widget, mon
         PreparedWeatherFetch(sample, persist_provider=True),
     )
 
-    assert weather._cached_data is None
+    assert _weather_runtime(weather).get_cached_data() is None
     assert [task.category for task in manager.tasks] == []
 
 
@@ -997,7 +1016,7 @@ def test_weather_set_location(qapp, parent_widget):
         mock_fetch.assert_called_once()
 
     # Cache should be cleared
-    assert weather._cached_data is None
+    assert _weather_runtime(weather).get_cached_data() is None
 
 
 def test_weather_set_font_size(qapp, parent_widget):
@@ -1275,12 +1294,14 @@ def test_weather_start_uses_same_refresh_schedule_for_cached_startup(qapp, paren
     weather = WeatherWidget(parent=parent_widget)
     mock_thread_manager = Mock()
     weather.set_thread_manager(mock_thread_manager)
-    weather._cached_data = {"temperature": 20, "condition": "Clear", "location": "London"}
-    weather._cache_time = object()
+    service = _weather_runtime(weather)
+    # Seed the actual runtime owner; WeatherWidget intentionally has no state proxy.
+    service._cached_data = {"temperature": 20, "condition": "Clear", "location": "London"}
+    service._cache_time = object()
 
     calls = []
     monkeypatch.setattr(
-        weather._runtime_service,
+        service,
         "schedule_refresh_cycle",
         lambda: calls.append("scheduled"),
     )
@@ -1305,10 +1326,12 @@ def test_weather_cached_startup_stays_hidden_until_fade_starter_runs(qapp, monke
     show_calls = []
     mock_thread_manager = Mock()
     weather.set_thread_manager(mock_thread_manager)
-    weather._cached_data = {"temperature": 20, "condition": "Clear", "location": "London"}
-    weather._cache_time = object()
+    service = _weather_runtime(weather)
+    # Seed the actual runtime owner; WeatherWidget intentionally has no state proxy.
+    service._cached_data = {"temperature": 20, "condition": "Clear", "location": "London"}
+    service._cache_time = object()
 
-    monkeypatch.setattr(weather._runtime_service, "schedule_refresh_cycle", lambda: None)
+    monkeypatch.setattr(service, "schedule_refresh_cycle", lambda: None)
     monkeypatch.setattr(weather, "show", lambda: show_calls.append("show"))  # type: ignore[method-assign]
 
     assert weather.isVisible() is False

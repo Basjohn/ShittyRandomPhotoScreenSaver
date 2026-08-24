@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage
 
 from core.logging.logger import get_logger
@@ -57,28 +56,13 @@ def achievement_evidence_requested(field_visibility: Mapping[str, bool]) -> bool
     )
 
 
-def prepare_cover_image(
-    source_path: Path | None,
-    *,
-    target_width: int,
-    target_height: int,
-) -> QImage:
-    """Decode, smooth-scale and crop artwork in the caller's worker job."""
+def decode_abandonment_artwork(source_path: Path | None) -> QImage:
+    """Decode source-resolution artwork in the caller's worker job."""
 
-    if source_path is None or target_width <= 0 or target_height <= 0:
+    if source_path is None:
         return QImage()
     image = QImage(str(source_path))
-    if image.isNull():
-        return QImage()
-    scaled = image.scaled(
-        int(target_width),
-        int(target_height),
-        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-        Qt.TransformationMode.SmoothTransformation,
-    )
-    crop_x = max(0, (scaled.width() - int(target_width)) // 2)
-    crop_y = max(0, (scaled.height() - int(target_height)) // 2)
-    return scaled.copy(crop_x, crop_y, int(target_width), int(target_height))
+    return image if not image.isNull() else QImage()
 
 
 def prepare_abandonment_presentation(
@@ -87,7 +71,6 @@ def prepare_abandonment_presentation(
     *,
     profile_key: str,
     allow_asset_network: bool,
-    artwork_target: tuple[int, int],
     connection_needs_attention: bool = False,
 ) -> AbandonmentPreparedPresentation:
     """Build one semantic model and decoded artwork payload off the GUI thread."""
@@ -206,11 +189,7 @@ def prepare_abandonment_presentation(
             )
 
     artwork_identity = str(asset_path or "")
-    artwork = prepare_cover_image(
-        asset_path,
-        target_width=artwork_target[0],
-        target_height=artwork_target[1],
-    )
+    artwork = decode_abandonment_artwork(asset_path)
     if asset_path is not None and artwork.isNull():
         artwork_outcome = "decode_failed"
     if config.show_artwork and model.appid is not None:

@@ -19,7 +19,6 @@ card/display.
 The temporary QWidget presentation implements a small consumer protocol:
 
 - ``is_abandonment_consumer_alive()``
-- ``capture_abandonment_artwork_target()``
 - ``on_abandonment_presentation(presentation, *, animate)``
 - ``request_abandonment_fade()``
 - ``on_abandonment_rotation_due()``
@@ -42,7 +41,6 @@ from widgets.steam_abandonment_preparation import (
     AbandonmentRuntimeConfig,
     achievement_evidence_requested,
     prepare_abandonment_presentation,
-    prepare_cover_image,
 )
 
 
@@ -181,17 +179,6 @@ class AbandonmentRuntimeService:
             return bool(consumer.is_abandonment_consumer_alive())
         except Exception:
             return False
-
-    def _capture_artwork_target(self) -> tuple[int, int]:
-        consumer = self._consumer()
-        if consumer is None or not self._consumer_alive():
-            return 0, 0
-        try:
-            width, height = consumer.capture_abandonment_artwork_target()
-            return max(0, int(width)), max(0, int(height))
-        except Exception:
-            logger.debug("[STEAM] Could not capture Abandonment artwork target", exc_info=True)
-            return 0, 0
 
     def _deliver_presentation(
         self,
@@ -338,7 +325,6 @@ class AbandonmentRuntimeService:
         owner_generation = self._owner_generation
         runtime_generation = self._runtime_generation
         config = self._config
-        artwork_target = self._capture_artwork_target()
         allow_asset_network = automatic_service_updates_enabled()
         owner_ref = weakref.ref(self)
 
@@ -360,7 +346,6 @@ class AbandonmentRuntimeService:
                 snapshot,
                 profile_key=metadata.profile_cache_key,
                 allow_asset_network=allow_asset_network,
-                artwork_target=artwork_target,
             )
             return metadata, snapshot, presentation
 
@@ -481,7 +466,6 @@ class AbandonmentRuntimeService:
         owner_generation = self._owner_generation
         runtime_generation = self._runtime_generation
         config = self._config
-        artwork_target = self._capture_artwork_target()
         owner_ref = weakref.ref(self)
 
         def _refresh_snapshot() -> Any:
@@ -518,7 +502,6 @@ class AbandonmentRuntimeService:
                     snapshot,
                     profile_key=metadata.profile_cache_key,
                     allow_asset_network=False,
-                    artwork_target=artwork_target,
                     connection_needs_attention=True,
                 )
                 return outcome, presentation
@@ -541,7 +524,6 @@ class AbandonmentRuntimeService:
                 outcome.snapshot,
                 profile_key=profile_key,
                 allow_asset_network=outcome.snapshot.resolved.ok,
-                artwork_target=artwork_target,
                 connection_needs_attention=outcome.connection_needs_attention,
             )
             return outcome, presentation
@@ -638,7 +620,6 @@ class AbandonmentRuntimeService:
         owner_generation = self._owner_generation
         runtime_generation = self._runtime_generation
         config = self._config
-        artwork_target = self._capture_artwork_target()
         allow_asset_network = automatic_service_updates_enabled()
         owner_ref = weakref.ref(self)
 
@@ -687,7 +668,6 @@ class AbandonmentRuntimeService:
                 snapshot,
                 profile_key=metadata.profile_cache_key,
                 allow_asset_network=allow_asset_network,
-                artwork_target=artwork_target,
                 connection_needs_attention=connection_needs_attention,
             )
 
