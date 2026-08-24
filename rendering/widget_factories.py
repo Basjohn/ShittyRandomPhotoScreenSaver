@@ -1262,6 +1262,14 @@ class SteamCardFactory(WidgetFactory):
                     achievement_capsule_fill_color=achievement_capsule_fill,
                     achievement_capsule_border_color=achievement_capsule_border,
                     refresh_minutes=int(shared_steam_settings.get("refresh_minutes", 10)),
+                    achievement_show_connection_info_icon=SettingsManager.to_bool(
+                        shared_steam_settings.get("show_connection_info_icon", True),
+                        True,
+                    ),
+                    # Production injects the registry-owned neutral service
+                    # before activation. Direct construction retains one
+                    # explicitly owned convenience service.
+                    build_default_runtime=False,
                 )
 
             if hasattr(widget, "set_font_family"):

@@ -21,7 +21,10 @@ fetch/cache/refresh/retry/request-generation lifetime while the legacy
 E1 slice 4 adds a separate per-card/display Abandonment runtime/model service.
 It owns that Steam card's cache/source/rotation cadence and prepared state while
 preserving the existing neutral ``core.steam`` cache/backend authorities. Other
-Steam cards remain unregistered; no generic/shared Steam service is implied.
+Steam cards remain separate; no generic/shared Steam service is implied.
+
+E1 slice 5 adds the distinct per-card/display Achievement Pulse runtime/model/
+artwork service. Progress and Friend Pulse remain unregistered and source-inert.
 
 Heavy provider implementation is imported lazily inside the build callable so a
 process that never activates/creates the family does not resolve it merely
@@ -229,11 +232,56 @@ _ABANDONMENT_SERVICE_SPEC = RuntimeServiceSpec(
 )
 
 
+def _build_achievement_service(
+    widget_id: str, widgets_config: Mapping[str, Any]
+) -> Any:
+    # Construction is provider/network/filesystem inert. The temporary
+    # presenter synchronizes already-normalized factory configuration during
+    # injection; start remains the first work-admission boundary.
+    from widgets.steam_achievement_runtime import AchievementPulseRuntimeService
+
+    return AchievementPulseRuntimeService()
+
+
+def _inject_achievement_service(widget: Any, service: Any) -> None:
+    setter = getattr(widget, "set_achievement_runtime_service", None)
+    if not callable(setter):
+        raise AttributeError(
+            "runtime widget cannot accept Achievement Pulse service "
+            "(missing set_achievement_runtime_service)"
+        )
+    setter(service)
+
+
+def _retire_achievement_service(service: Any) -> None:
+    retire = getattr(service, "retire", None)
+    if not callable(retire):
+        raise AttributeError("Achievement Pulse runtime service has no retire method")
+    retire()
+
+
+def _achievement_service_reuse_is_valid(widget: Any, service: Any) -> bool:
+    if getattr(widget, "_achievement_runtime_service", None) is not service:
+        return False
+    if _service_is_retired(service):
+        return False
+    return not _widget_is_active(widget) or _service_is_running(service)
+
+
+_ACHIEVEMENT_SERVICE_SPEC = RuntimeServiceSpec(
+    build=_build_achievement_service,
+    inject=_inject_achievement_service,
+    retire=_retire_achievement_service,
+    reuse_is_valid=_achievement_service_reuse_is_valid,
+)
+
+
 _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
     "reddit": _REDDIT_SERVICE_SPEC,
     "reddit2": _REDDIT_SERVICE_SPEC,
     "weather": _WEATHER_SERVICE_SPEC,
     "abandonment_issues": _ABANDONMENT_SERVICE_SPEC,
+    "achievement_pulse": _ACHIEVEMENT_SERVICE_SPEC,
 }
 
 
