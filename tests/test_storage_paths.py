@@ -70,12 +70,6 @@ class TestPathResolution:
         assert d.exists()
         assert d.name == "rss"
 
-    def test_get_imgur_cache_dir(self, tmp_base: Path, monkeypatch):
-        monkeypatch.setattr(storage_paths, "_appdata_root", lambda: tmp_base)
-        d = storage_paths.get_imgur_cache_dir("Screensaver")
-        assert d.exists()
-        assert d.name == "imgur"
-
     def test_get_weather_cache_file(self, tmp_base: Path, monkeypatch):
         monkeypatch.setattr(storage_paths, "_appdata_root", lambda: tmp_base)
         f = storage_paths.get_weather_cache_file("Screensaver")
@@ -209,11 +203,6 @@ class TestRunAllMigrations:
         weather_old = fake_temp / "screensaver_weather_cache.json"
         weather_old.write_text('{"cached": true}')
 
-        # Create legacy imgur cache
-        imgur_old = fake_temp / "imgur_cache"
-        imgur_old.mkdir()
-        (imgur_old / "pic.png").write_bytes(b"\x89")
-
         storage_paths.run_all_migrations("Screensaver")
 
         # Verify new paths
@@ -222,7 +211,6 @@ class TestRunAllMigrations:
         assert (app_dir / "state" / "feed_health.json").exists()
         assert json.loads((app_dir / "state" / "feed_health.json").read_text()) == {"url": {"failures": 2}}
         assert (app_dir / "cache" / "weather.json").exists()
-        assert (app_dir / "cache" / "imgur" / "pic.png").exists()
 
     def test_idempotent(self, tmp_path: Path, monkeypatch):
         """Calling run_all_migrations twice should not fail or duplicate."""

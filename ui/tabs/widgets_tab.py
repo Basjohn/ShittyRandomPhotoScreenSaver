@@ -6,11 +6,10 @@ Allows users to configure overlay widgets:
 - Weather widget (enable, position, location, API key, size, font, style)
 - Media/Spotify widget
 - Reddit widget
-- Imgur widget (dev-only)
 
 Per-widget UI, load, and save logic is delegated to extraction modules:
   widgets_tab_clock.py, widgets_tab_weather.py, widgets_tab_media.py,
-  widgets_tab_reddit.py, widgets_tab_imgur.py
+  widgets_tab_reddit.py
 """
 import os
 import time
@@ -1388,27 +1387,6 @@ class WidgetsTab(QWidget):
         elapsed_ms = (time.perf_counter() - start_time) * 1000.0
         logger.info("[PERF][SETTINGS][WidgetsTab] %s in %.1f ms", label, elapsed_ms)
     
-    def _on_imgur_tag_changed(self, tag: str) -> None:
-        """Handle imgur tag selection change - enable/disable custom tag field."""
-        if not hasattr(self, 'imgur_custom_tag'):
-            return
-        try:
-            self.imgur_custom_tag.setEnabled(tag == "custom")
-        except Exception:
-            pass
-    
-    def _update_imgur_grid_total(self) -> None:
-        """Update the grid total label."""
-        if not hasattr(self, 'imgur_grid_total'):
-            return
-        try:
-            rows = self.imgur_grid_rows.value()
-            cols = self.imgur_grid_cols.value()
-            total = rows * cols
-            self.imgur_grid_total.setText(f"= {total} images")
-        except Exception:
-            pass
-
     def get_view_state(self) -> Dict[str, Any]:
         current_subtab = int(getattr(self, "_current_subtab", 0))
         state: Dict[str, Any] = {"subtab": current_subtab}
@@ -1922,33 +1900,6 @@ class WidgetsTab(QWidget):
         color = StyledColorPicker.get_color(self._reddit_border_color, self, "Choose Reddit Border Color")
         if color is not None:
             self._reddit_border_color = color
-            self._save_settings()
-
-    def _choose_imgur_color(self) -> None:
-        """Choose Imgur text color."""
-        if not hasattr(self, '_imgur_color'):
-            return
-        color = StyledColorPicker.get_color(self._imgur_color, self, "Choose Imgur Text Color")
-        if color is not None:
-            self._imgur_color = color
-            self._save_settings()
-
-    def _choose_imgur_bg_color(self) -> None:
-        """Choose Imgur background color."""
-        if not hasattr(self, '_imgur_bg_color'):
-            return
-        color = StyledColorPicker.get_color(self._imgur_bg_color, self, "Choose Imgur Background Color")
-        if color is not None:
-            self._imgur_bg_color = color
-            self._save_settings()
-
-    def _choose_imgur_border_color(self) -> None:
-        """Choose Imgur border color."""
-        if not hasattr(self, '_imgur_border_color'):
-            return
-        color = StyledColorPicker.get_color(self._imgur_border_color, self, "Choose Imgur Border Color")
-        if color is not None:
-            self._imgur_border_color = color
             self._save_settings()
 
     _SAVE_COALESCE_MS = 200

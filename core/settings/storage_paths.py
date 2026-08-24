@@ -12,7 +12,6 @@ Directory layout under the application data root::
     ├── shadowtuning.json
     ├── cache/
     │   ├── rss/
-    │   ├── imgur/
     │   └── weather.json
     ├── state/
     │   └── feed_health.json
@@ -122,13 +121,6 @@ def get_cache_dir(profile: Optional[str] = None) -> Path:
 def get_rss_cache_dir(profile: Optional[str] = None) -> Path:
     """Return ``<app_data>/cache/rss/`` for RSS image caching."""
     d = get_cache_dir(profile) / "rss"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-def get_imgur_cache_dir(profile: Optional[str] = None) -> Path:
-    """Return ``<app_data>/cache/imgur/`` for Imgur image caching."""
-    d = get_cache_dir(profile) / "imgur"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -258,11 +250,6 @@ def run_all_migrations(profile: Optional[str] = None) -> None:
     old_weather = tmp / "screensaver_weather_cache.json"
     new_weather = get_weather_cache_file(profile)
     migrate_file(old_weather, new_weather)
-
-    # Imgur cache: %TEMP%/imgur_cache/ -> <app_data>/cache/imgur/
-    old_imgur = tmp / "imgur_cache"
-    new_imgur = get_imgur_cache_dir(profile)
-    migrate_directory(old_imgur, new_imgur)
 
 
 def reset_module_cache() -> None:

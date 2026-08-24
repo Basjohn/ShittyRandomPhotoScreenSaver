@@ -1221,7 +1221,6 @@ class TestWidgetsTab:
             assert isinstance(tab._media_color, QColor)
             assert isinstance(tab._reddit_color, QColor)
             assert isinstance(tab._gmail_color, QColor)
-            assert isinstance(tab._imgur_color, QColor)
         finally:
             tab.deleteLater()
 

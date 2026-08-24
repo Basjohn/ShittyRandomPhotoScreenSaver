@@ -238,9 +238,8 @@ def test_shared_frame_cleanup_cancels_and_clears(qtbot):
     assert widget._painted_frame_shadow_cache_cancelled is True
 
 
-def test_clock_analogue_and_imgur_custom_painters_do_not_build_base_frame(qtbot):
+def test_clock_analogue_custom_painter_does_not_build_base_frame(qtbot):
     from widgets.clock_widget import ClockWidget
-    from widgets.imgur.widget import ImgurWidget
 
     clock = ClockWidget()
     qtbot.addWidget(clock)
@@ -254,14 +253,6 @@ def test_clock_analogue_and_imgur_custom_painters_do_not_build_base_frame(qtbot)
     clock.set_display_mode("digital")
     assert clock.uses_shared_painted_frame_shadow_cache() is True
     assert clock._ensure_painted_frame_shadow_pixmap() is not None
-
-    imgur = ImgurWidget()
-    qtbot.addWidget(imgur)
-    imgur.resize(360, 180)
-    imgur.set_show_background(True)
-    assert imgur.uses_painted_frame_shadow() is True
-    assert imgur.uses_shared_painted_frame_shadow_cache() is False
-    assert imgur._ensure_painted_frame_shadow_pixmap() is None
 
 
 @pytest.mark.parametrize("family", ["gmail", "reddit", "weather", "clock"])

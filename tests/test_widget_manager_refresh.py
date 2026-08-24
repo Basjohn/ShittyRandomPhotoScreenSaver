@@ -907,8 +907,6 @@ def test_factory_widget_descriptors_cover_factory_backed_widget_families():
         "achievement_pulse",
         "abandonment_issues",
     ]
-    if any(descriptor.settings_key == "imgur" for descriptor in descriptors):
-        expected.insert(7, "imgur")
 
     assert descriptor_names == expected
 
@@ -2151,7 +2149,6 @@ def test_display_setup_apply_widget_stacking_includes_gmail_widget():
         reddit_widget=None,
         reddit2_widget=None,
         gmail_widget=SimpleNamespace(),
-        imgur_widget=None,
     )
 
     display_setup.apply_widget_stacking(widget, {"gmail": {"enabled": True}})

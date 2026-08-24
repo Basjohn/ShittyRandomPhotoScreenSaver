@@ -690,7 +690,6 @@ def test_widget_default_init_descriptors_cover_standard_widgets_tab_attrs():
     assert "_media_color" in attr_names
     assert "_reddit_color" in attr_names
     assert "_gmail_color" in attr_names
-    assert "_imgur_color" in attr_names
 
 
 def test_widget_runtime_descriptors_capture_capability_and_refresh_ownership():
@@ -737,7 +736,6 @@ def test_service_runtime_contract_queries_follow_descriptor_contract():
         "single_shot_timer_reuse",
         "timer_stop_cleanup",
     )
-    assert get_service_runtime_contracts("imgur") == ()
     assert get_service_runtime_contracts("clock") == ()
     assert get_widget_ids_for_service_runtime_contract("visible_fallback") == (
         "reddit",
@@ -1005,8 +1003,6 @@ def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract(monkey
     assert descriptors["media"].custom_layout_resize_mode == "media_scale"
 
     assert descriptors["gmail"].supports_layout_resize_edit is True
-    assert descriptors["imgur"].supports_layout_resize_edit is True
-    assert descriptors["imgur"].custom_layout_resize_mode == "imgur_scale"
     assert descriptors["reddit"].requires_size_reset_affordance is True
 
 

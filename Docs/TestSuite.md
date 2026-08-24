@@ -5,8 +5,8 @@ Last updated: 2026-08-24
 Reviewed source basis:
 
 ```text
-test-inventory basis = 3a5626325891ec10343d53b0e88d5fd3c4b6469d
-Phase E4 eight-direction shadow authority + retained shadow normalization (independently GREEN); Phase E CLOSED
+test-inventory basis = Phase F0 deprecated-Imgur removal (post-E4 3a562632)
+Phase E CLOSED; Phase F active — F0 removes deprecated Imgur from current product authority
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -21,12 +21,16 @@ primitives and marks E3 **CLOSED / independently GREEN**.
 
 The E4 closure reconciliation through `3a562632` adds `tests/test_shadow_direction.py`, independently
 verifies the canonical eight-direction resolver/settings boundary and the retained card/text-shadow
-normalization, marks E4 **CLOSED / independently GREEN**, closes Phase E structurally, and makes Phase F
-active with F0 deprecated Imgur removal next.
+normalization, marks E4 **CLOSED / independently GREEN**, and closes Phase E structurally.
+
+The Phase F0 reconciliation removes deprecated Imgur from current product authority and deletes its
+three test modules (`test_imgur_cache.py`, `test_imgur_scraper.py`, `test_imgur_widget.py`); the
+surviving mixed modules that referenced Imgur are de-Imgured in place without losing their real
+coverage.
 
 At the reviewed checkpoint the repository contains:
 
-- **363 test-module files**: 362 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **360 test-module files**: 359 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -37,7 +41,7 @@ Inventory status is **not an execution result**. `KEEP` does not mean a test was
 
 This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
 
-This is deliberately **not** a claim that every assertion in all 363 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
+This is deliberately **not** a claim that every assertion in all 360 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
 
 ### Status vocabulary
 
@@ -67,10 +71,9 @@ This is deliberately **not** a claim that every assertion in all 363 modules was
 | `WILL BE OBSOLETE — J` | 4 |
 | `UPDATE REQUIRED NOW` | 3 |
 | `WILL BE OBSOLETE — E4/F` | 3 |
-| `WILL BE OBSOLETE — F0` | 3 |
 | `OBSOLETE NOW` | 2 |
 | `MIGRATION-CRITICAL — E3/F` | 1 |
-| **Total** | **363** |
+| **Total** | **360** |
 
 ## 2. Standard commands and evidence levels
 
@@ -197,7 +200,7 @@ Preserve:
   - new outage after reclaim → fresh full 30 s grace/global generation;
   - capability OFF retires pending failover state and only discards live-fallback state after confirmed retirement.
 
-E2/E2.7, E1, E3 and E4 implementation are closed and Phase E is structurally **CLOSED**. Phase F is active with F0 deprecated Imgur removal next. Do not write “after E1/E3/E4 lands” tests as future work.
+E2/E2.7, E1, E3 and E4 implementation are closed and Phase E is structurally **CLOSED**. Phase F is active; F0 removed deprecated Imgur, and F0.5 (the Widgets → General shadow-direction picker) is next. Do not write “after E1/E3/E4 lands” tests as future work.
 
 ## 5. Active migration gates by next phase
 
@@ -255,7 +258,7 @@ These statuses describe test maintenance. They are not permission to change prod
 
 High-value groups that must **not** become destination authority:
 
-- **F0:** `test_imgur_cache.py`, `test_imgur_scraper.py`, `test_imgur_widget.py`.
+- **F0 (done):** the three Imgur test modules were deleted with the Imgur removal.
 - **E4/F:** QWidget painted-frame/effect implementations such as `test_base_overlay_shadow_cache.py`, `test_widget_effects.py`, `test_widget_effects_contract.py`; split `test_shadow_utils.py`.
 - **H/I:** legacy renderer backend/software fallback (`test_rendering_backends.py`, `test_gl_fallback_policy.py`), GLCompositor retained-base/fallback/presenter tests, QRhiWidget P4 surface tests, old SpotifyBarsGLOverlay presentation tests.
 - **J:** architecture-selection/spike benchmark suites where no ongoing product regression remains.
@@ -570,13 +573,14 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_steam_profile_assets_events.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_steam_request_policy.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 
-### 10.10 Imgur
+### 10.10 Imgur — removed in F0
 
-| File | Status | Note |
-| --- | --- | --- |
-| `tests/test_imgur_cache.py` | **WILL BE OBSOLETE — F0** | Delete with Imgur removal. |
-| `tests/test_imgur_scraper.py` | **WILL BE OBSOLETE — F0** | Delete with Imgur removal. |
-| `tests/test_imgur_widget.py` | **WILL BE OBSOLETE — F0** | Delete with Imgur removal. |
+Deprecated Imgur has been removed from current product authority. Its three test modules
+(`test_imgur_cache.py`, `test_imgur_scraper.py`, `test_imgur_widget.py`) were deleted, and the mixed
+modules that referenced Imgur (`test_widget_descriptors.py`, `test_widget_family_catalog.py`,
+`test_custom_layout_manager.py`, `test_storage_paths.py`, `test_cache_maintenance.py`,
+`test_base_overlay_shadow_cache.py`, `test_widgets_tab.py`, `test_widget_manager_refresh.py`,
+`test_capability_activation.py`, `test_p2_custom_cancel_media_state.py`) were de-Imgured in place.
 
 ### 10.11 Image/source/cache/providers
 

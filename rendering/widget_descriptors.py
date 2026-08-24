@@ -210,12 +210,6 @@ FACTORY_WIDGET_DESCRIPTORS: tuple[FactoryWidgetDescriptor, ...] = (
         factory_shadows_kwarg=True,
     ),
     FactoryWidgetDescriptor(
-        settings_key="imgur",
-        attr_name="imgur_widget",
-        factory_name="imgur",
-        dev_feature_env="SRPSS_ENABLE_DEV",
-    ),
-    FactoryWidgetDescriptor(
         settings_key="gmail",
         attr_name="gmail_widget",
         factory_name="gmail",
@@ -585,28 +579,6 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         signal_block_attrs=GMAIL_SIGNAL_BLOCK_ATTRS,
     ),
     WidgetSettingsSectionDescriptor(
-        section_id="imgur",
-        button_label="Imgur",
-        button_attr_name="_btn_imgur",
-        container_attr_name="_imgur_container",
-        builder_module="ui.tabs.widgets_tab_imgur",
-        builder_name="build_imgur_ui",
-        loader_module="ui.tabs.widgets_tab_imgur",
-        loader_name="load_imgur_settings",
-        loader_guard_attrs=("imgur_enabled",),
-        saver_module="ui.tabs.widgets_tab_imgur",
-        saver_name="save_imgur_settings",
-        saver_guard_attrs=("imgur_enabled",),
-        persisted_widget_keys=("imgur",),
-        signal_block_attrs=(
-            "imgur_enabled", "imgur_position", "imgur_monitor_combo",
-            "imgur_update_interval", "imgur_grid_rows", "imgur_grid_cols",
-            "imgur_show_background", "imgur_bg_opacity", "imgur_border_opacity",
-            "imgur_margin",
-        ),
-        dev_feature_env="SRPSS_ENABLE_DEV",
-    ),
-    WidgetSettingsSectionDescriptor(
         section_id="steam",
         button_label="Steam",
         button_attr_name="_btn_steam",
@@ -805,7 +777,6 @@ WIDGET_CUSTOM_POSITION_OPTION_DESCRIPTORS: tuple[WidgetCustomPositionOptionDescr
     WidgetCustomPositionOptionDescriptor("reddit", "reddit_position", "Bottom Right"),
     WidgetCustomPositionOptionDescriptor("reddit2", "reddit2_position", "Top Left"),
     WidgetCustomPositionOptionDescriptor("gmail", "gmail_position", "Top Left"),
-    WidgetCustomPositionOptionDescriptor("imgur", "imgur_position", "Top Right"),
     WidgetCustomPositionOptionDescriptor("steam_progress", "steam_progress_position", "Top Right"),
     WidgetCustomPositionOptionDescriptor("achievement_pulse", "achievement_pulse_position", "Middle Right"),
     WidgetCustomPositionOptionDescriptor("abandonment_issues", "abandonment_issues_position", "Bottom Right"),
@@ -1595,21 +1566,6 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         custom_layout_runtime_vertical_content_resize=True,
     ),
     WidgetRuntimeDescriptor(
-        widget_id="imgur",
-        attr_name="imgur_widget",
-        settings_section_id="imgur",
-        settings_prefixes=("widgets.imgur",),
-        startup_stage="primary",
-        service_backed=True,
-        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
-        supports_layout_edit_mode=True,
-        supports_custom_position_slot=True,
-        supports_layout_resize_edit=True,
-        requires_size_reset_affordance=True,
-        custom_layout_resize_mode="imgur_scale",
-        dev_feature_env="SRPSS_ENABLE_DEV",
-    ),
-    WidgetRuntimeDescriptor(
         widget_id="steam_progress",
         attr_name="steam_progress_widget",
         settings_section_id="steam",
@@ -1938,8 +1894,6 @@ def get_custom_layout_family_widget_ids(widget_id: str) -> tuple[str, ...]:
         return ("weather",)
     if widget_id == "gmail":
         return ("gmail",)
-    if widget_id == "imgur":
-        return ("imgur",)
     return (str(widget_id),)
 
 
@@ -2272,9 +2226,6 @@ WIDGET_DEFAULT_INIT_DESCRIPTORS: tuple[WidgetDefaultInitDescriptor, ...] = (
     WidgetDefaultInitDescriptor("_gmail_border_color", "gmail", "border_color", "color", [255, 255, 255, 255]),
     WidgetDefaultInitDescriptor("_gmail_separator_color", "gmail", "separator_color", "color", [200, 200, 200, 40]),
     WidgetDefaultInitDescriptor("_gmail_boundary_separator_color", "gmail", "boundary_separator_color", "color", [180, 180, 180, 80]),
-    WidgetDefaultInitDescriptor("_imgur_color", "imgur", "color", "color", [255, 255, 255, 230]),
-    WidgetDefaultInitDescriptor("_imgur_bg_color", "imgur", "bg_color", "color", [35, 35, 35, 255]),
-    WidgetDefaultInitDescriptor("_imgur_border_color", "imgur", "border_color", "color", [255, 255, 255, 255]),
     WidgetDefaultInitDescriptor("_media_artwork_size", "media", "artwork_size", "int", 200),
 )
 

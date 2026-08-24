@@ -725,54 +725,6 @@
         "sound_volume_percent": 25,
         "width": 600
       },
-      "imgur": {
-        "bg_color": [
-          35,
-          35,
-          35,
-          255
-        ],
-        "bg_opacity": 0.3,
-        "border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "border_opacity": 1.0,
-        "click_opens_browser": true,
-        "color": [
-          255,
-          255,
-          255,
-          230
-        ],
-        "custom_tag": "",
-        "enabled": false,
-        "font_family": "Inter",
-        "font_size": 11,
-        "grid_columns": 4,
-        "grid_rows": 2,
-        "header_font_size": 14,
-        "image_border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "image_border_enabled": true,
-        "image_border_radius": 4,
-        "image_border_width": 2,
-        "image_spacing": 4,
-        "layout_mode": "hybrid",
-        "margin": 30,
-        "monitor": 2,
-        "position": "Top Right",
-        "show_background": true,
-        "show_header": true,
-        "tag": "most_viral",
-        "update_interval": 600
-      },
       "layout_slots": {
         "slots": {},
         "version": 1

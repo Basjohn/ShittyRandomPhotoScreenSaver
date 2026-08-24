@@ -62,8 +62,8 @@ def test_dependency_helpers():
 def test_canonical_defaults_activate_every_family():
     widgets = get_default_settings()["widgets"]
     for family in get_widget_family_descriptors():
-        # imgur is dev-only and omitted from defaults; it must still read as
-        # activated via the True fallback.
+        # A family omitted from the explicit activation defaults must still read
+        # as activated via the True fallback.
         assert ca.is_widget_family_activated(widgets, family.family_id) is True
 
 
