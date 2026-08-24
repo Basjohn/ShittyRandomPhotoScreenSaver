@@ -1,6 +1,6 @@
 # 04 — Runtime Widgets, Retained Quick Presentation, Shadows and Full Customization
 
-Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — Achievement Pulse slice 5 GREEN at `51948dc3`; Abandonment/Weather correction GREEN at `9ab4f47e`; Media audit active**
+Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — shared Media owner GREEN at `4680130b`; Gmail shared orchestration/model/action slice active**
 Last updated: 2026-08-24
 
 Cross-links:
@@ -190,6 +190,11 @@ Achievement Pulse cache/source/manual-refresh/model/artwork ownership now lives 
 `AchievementPulseRuntimeService` per card/display. It adds no recurring timer and continues to use the
 same process-scoped Steam authorities.
 
+E1 slice 6 is self-audited **GREEN** at `4680130b8371adf74452eb76f64318e8fc6571a9`:
+one `MediaRuntimeService` lease per display joins one runtime-generation shared owner for the controller,
+provider target, adaptive poll/query/cache/retained state, optimistic playback confirmation and one
+source-resolution artwork decode per stable identity. Presenters retain QPixmap/DPR/layout/fade/input.
+
 Treat the current host edge as transitional:
 
 ```text
@@ -311,9 +316,10 @@ or future presenter replays accepted model/images without another source/cache/i
 Friend Pulse remain provider/task/timer-inert and unregistered.
 
 The bounded Abandonment artwork projection and Weather compatibility-proxy corrections are GREEN at
-`9ab4f47e`. The dedicated Media owner slice now begins with exact controller/poll/shared-state
-cardinality and Visualizer/E2.7 dependency review. Then continue real ownership migrations, prove
-closure dormancy and hoist the per-display owner only when its final display-runtime boundary is safe.
+`9ab4f47e`; shared Media ownership is GREEN at `4680130b`. Exact-source closure review proves Gmail's
+remaining per-display poll/fetch/cache/model/notification/action duplication is the next real owner
+slice over its existing neutral singleton backend. Residual Media accessories and production import
+dormancy then require bounded closure checkpoints before a safe display-runtime owner hoist.
 
 ### 6.2 Per-display Quick widget presentation host
 
@@ -454,6 +460,10 @@ style/config
 ```
 
 Keep GSMTC/provider/control command logic in Python.
+
+The current shared owner publishes one coherent runtime revision to per-display leases. Source artwork
+is decoded once into `QImage` plus stable identity; current and future presenters own their own
+logical/DPR texture projection. Volume/mute remain a separate residual E1 accessory seam.
 
 ### Reddit / Gmail / Steam
 

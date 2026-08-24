@@ -7,8 +7,8 @@ Last updated: 2026-08-24
 Latest pushed/self-audited implementation basis:
 
 ```text
-9ab4f47e6e7c081710a046ae38e6f310467249ca
-Phase E1 post-slice-5 boundary correction — Abandonment artwork projection + Weather compatibility narrowing — self-audited GREEN; reused-agent reviews GREEN
+4680130b8371adf74452eb76f64318e8fc6571a9
+Phase E1 slice 6 — shared Media runtime ownership — self-audited GREEN; reused-agent reviews GREEN
 ```
 
 Independent review basis:
@@ -628,19 +628,21 @@ Focused Abandonment/Steam/factory/setup/runtime-owner/lifecycle gate: `426 passe
 fresh-process registry and deactivated-family import dormancy, structural old-owner search and
 `git diff --check` clean. Exact-diff self-audit and reused-agent repeated-setup audit were GREEN.
 
-### E1 remaining after the post-slice-5 correction
+### E1 remaining after Media slice 6
 
-- perform Media as the next high-risk ownership checkpoint, deriving process/shared/per-display/
-  per-instance cardinality from exact source and preserving Visualizer/E2.7 contracts;
-- continue only the **real** remaining provider/model/runtime-data ownership migrations. Gmail remains
-  a broader per-display orchestration/model seam over its neutral singleton backend and must be
-  completed if exact source proves it is still required for E1 closure;
+- complete Gmail's now-proven shared orchestration/model/action seam without wrapping or replacing the
+  existing neutral `GmailBackend` singleton;
+- classify and extract the still-real Media accessory ownership: app-volume controller/read/write/
+  debounce state and system-mute polling/toggle state must not remain QWidget-owned at E1 closure, but
+  must stay separate from the landed primary Media owner rather than turning it into a god service;
 - keep Steam Progress and Friend Pulse as E1 no-ops unless current source later gains a real runtime
   owner;
-- fresh-process import dormancy: catalogued-but-deactivated capability resolves no unnecessary heavy
-  family implementation before first use;
-- hoist the per-display runtime owner out of legacy `WidgetManager` into the final display-runtime
-  boundary as that boundary lands.
+- close fresh-process import dormancy: catalogued-but-deactivated capability resolves no unnecessary
+  heavy family implementation before first use, including removal of type-annotation-only eager family
+  imports from the current host path;
+- hoist the per-display runtime owner out of legacy `WidgetManager` into an injected display-runtime
+  boundary only after exact construction/lifecycle dependencies prove one owner serves the current
+  presenter and can transfer to `QuickDisplayRuntime` without creating a duplicate proof-only owner.
 
 A live in-place family retirement mechanism is **not** an E1 deliverable unless exact current source
 introduces a real live activation writer or another demonstrated product flow requires it.
@@ -699,6 +701,9 @@ E2 correction unless current investigation proves otherwise:
 - `test_sine_line4_builder_integration.py::test_actual_save_media_settings_includes_line4`;
 - `test_visualizer_doc_references.py::test_contracts_route_visualizer_shell_clip_and_geometry_owners`
   (stale assertion around legitimate `QSGClipNode` historical/contract wording).
+- `test_spotify_visualizer_widget.py::test_on_tick_does_not_double_throttle_when_timer_already_paces`
+  (synthetic Bubble harness omits the required `runtime_controller`; reproduced before Media slice 6 and
+  recorded in `Future_Cleanup.md`).
 
 Do not silently ignore new failures; isolate before attributing them.
 
@@ -1068,6 +1073,9 @@ it does not reopen E2.7 implementation or block the next Phase-E slice.
 **E1 slice 5 is CLOSED / SELF-AUDITED GREEN at
 `51948dc3956bc10549eb3e8440b2c3e25857f952`.**
 
+**E1 slice 6 is CLOSED / SELF-AUDITED GREEN at
+`4680130b8371adf74452eb76f64318e8fc6571a9`.**
+
 The earlier generic live family-retirement prescription remains superseded. Current production family
 activation is applied through Settings-owned full runtime teardown/recreation.
 
@@ -1104,85 +1112,85 @@ passed`, plus `py_compile`, structural owner searches, exact old/new QPainter pi
 differing pixels), `git diff --check` and exact-diff self-audit clean. Both reused-agent boundary reviews
 were GREEN.
 
-### E1 slice 6 — Media shared runtime ownership — IMPLEMENTATION ACTIVE
+### E1 slice 6 — Media shared runtime ownership — CLOSED / SELF-AUDITED GREEN
 
-Media is the next admitted ownership family. The source/cardinality audit is part of this slice, not a
-separate phase. Resolve the exact owner graph before editing so a per-display `WidgetRuntimeManager`
-does not accidentally multiply or retire genuinely shared Media state.
+Pushed checkpoint: `4680130b8371adf74452eb76f64318e8fc6571a9`.
 
-The exact-source audit is complete. The current per-display QWidget creates one GSMTC controller, poll
-loop, timeout/retained cache, request/optimistic-playback state and artwork decode path per visible
-Media card, then uses a class cache to repair cross-display desynchronization. The provider setting,
-selected GSMTC session, transport target and accepted track/artwork state are application/family-shared;
-preserving one owner is both the product semantic and a reduction of accidental duplicate work.
+The completed checklist is pruned. One `MediaRuntimeService` lease per participating display now joins
+one runtime-generation shared owner for controller/provider lifetime, adaptive polling, query/cache/
+retained state, provider/request/runtime/playback generations, optimistic transport confirmation and
+one source-resolution artwork decode per stable identity. First/last active and attached lease
+accounting prevents one display from stopping another and retires the family owner exactly once.
+
+`MediaWidget` is now the temporary QWidget projection: it retains metadata/progress/control pixels,
+QPixmap/DPR scaling/crop caches, transition deferral/fades and local keyboard/feedback presentation
+timing. Production suppresses standalone construction and fails closed on service injection/reuse;
+direct construction retains an isolated compatibility owner. No new thread or scheduler was added.
+Visualizer seeding now reads the neutral accepted snapshot while the existing `media_updated` and
+`refresh_playback_state` contracts remain intact.
+
+Focused Media gate: `191 passed`; owner/factory/setup/runtime-destruction gate: `99 passed`; relevant
+Visualizer bridge gate: `228 passed, 7 skipped, 1 deselected`. `py_compile`, focused Ruff, fresh-process
+registry/deactivated-family dormancy, structural owner searches and `git diff --check` were clean. The
+exact-diff self-audit and both reused-agent lifecycle/wiring reviews were GREEN after adding explicit
+activation rollback, stop/restart freshness, real production reuse, worker/UI-boundary and
+runtime-generation regressions.
+
+The deselected Visualizer synthetic Bubble harness failure reproduces before this slice and is recorded
+in `Future_Cleanup.md`; it is not being repaired inside the landed Media owner checkpoint.
+
+### E1 slice 7 — Gmail shared runtime/model/action ownership — IMPLEMENTATION ACTIVE
+
+Exact-source review proves Gmail is a real remaining E1 seam. `GmailBackend.instance()` is already the
+correct process-scoped backend/client/bootstrap authority and must remain unchanged. The problem is that
+each visible `GmailWidget` independently owns another poll/fetch/cache-startup/cache-write/model/
+notification/action lifecycle over that singleton. With monitor `ALL`, `N` presenters therefore create
+`N` equivalent data cadences and can make duplicate new-mail sound decisions.
 
 Accepted destination:
 
 ```text
 per-display WidgetRuntimeManager
-    -> one presentation-neutral Media consumer lease/projection
-           -> one runtime-generation-scoped shared Media family owner
-                  -> one controller/provider target
-                  -> one poll/query cadence + accepted/retained snapshot
-                  -> request/provider/playback generations + optimistic confirmation
-                  -> one source-resolution artwork decode/identity
-    -> MediaWidget (temporary QWidget presenter)
-           -> metadata/progress/control projection
-           -> QPixmap + logical/DPR scaling/crop/transition/fade
-           -> local keyboard-alias and control-feedback presentation timing
+    -> one presentation-neutral Gmail consumer lease/projection
+           -> one runtime-generation-scoped shared Gmail family owner
+                  -> existing GmailBackend singleton (unchanged)
+                  -> one cache-first startup + poll/fetch cadence
+                  -> one accepted raw-email/unread/error/refresh snapshot
+                  -> fetch/startup/action/runtime generations
+                  -> one new-mail seen/notification decision
+                  -> serialized backend actions + post-action refresh
+    -> GmailWidget (temporary QWidget presenter)
+           -> DisplayRow grouping/text formatting and visible capacity
+           -> transition-safe snapshot deferral + spinner/fade
+           -> QPixmap/QPainter/layout/hit regions/menu/input
 ```
-
-Before/after expensive cardinality for `N` participating displays:
-
-```text
-controller/provider instances: N -> 1
-poll loops/recurring data timers: N -> 1
-in-flight query/cache writers: N -> 1
-source artwork decodes per accepted key: up to N -> 1
-per-display presenters/QPixmap/DPR caches: N -> N
-shared feedback timer: 1 -> 1
-new threads/schedulers: 0
-```
-
-The shared owner needs explicit active-consumer accounting because each per-display manager retires its
-own lease. The first active lease starts the owner; removing one display must not stop remaining
-consumers; the last active/attached lease stops/retires the owner. This is Media-specific ownership, not
-generic refcount machinery. No Gmail or other family seam must precede it.
 
 Live checklist:
 
-- [ ] add the family-specific shared owner plus one presentation-neutral lease per display; acquire it
-  through the existing runtime-service registry, preserve exact live-edge reuse and fail closed on
-  build/injection mismatch without changing the generic manager into a shared-service switchboard;
-- [ ] make production `MediaWidgetFactory` suppress standalone controller/service construction; retain
-  direct `MediaWidget(...)` convenience for real tools/tests, with explicit-controller injection using
-  an isolated owner rather than joining the production shared registry;
-- [ ] move controller/provider, one adaptive poll timer, in-flight/cache/retained state, failover,
-  request/provider/runtime fencing, optimistic playback confirmation and raw progress/control snapshot
-  ownership into the shared owner using the existing `ThreadManager` only;
-- [ ] decode each accepted artwork key once into source-resolution `QImage` plus stable identity in the
-  shared owner; keep QPixmap creation, logical/DPR scaling/crop caches, transition deferral and fades in
-  each QWidget presenter, with replay to a new/rebound presenter and no duplicate decode/fetch path;
-- [ ] preserve per-anchor `media_updated`, `_last_info` transitional seed compatibility,
-  `refresh_playback_state`, provider failover persistence, per-display volume-target sync, input command
-  routing, visibility/setup order and all Visualizer/E2.7 behavior without moving their owners;
-- [ ] prove `N -> 1` controller/poll/decode cardinality, first/last-consumer lifetime, remaining-display
-  survival, standalone separation, deactivated-family dormancy, active reuse, stale result rejection
-  across stop/retire/provider/runtime generations and shared optimistic state; run focused Media plus
-  owner/factory/setup/lifecycle/runtime-destruction and Visualizer bridge gates;
-- [ ] run `py_compile`, fresh-process import/construction probes, structural old-owner searches and
-  `git diff --check`; self-audit the exact diff for feature loss and duplicate work, correct every
-  finding, then commit/push the coherent Media checkpoint.
+- [ ] add a Gmail-specific shared owner plus one per-display neutral lease through the existing static
+  runtime-service registry; do not wrap, replace, shut down or duplicate `GmailBackend`;
+- [ ] make production `GmailWidgetFactory` suppress standalone runtime ownership and fail closed on
+  build/injection/reuse mismatch while preserving direct `GmailWidget(...)` compatibility through an
+  isolated owner;
+- [ ] move backend-bootstrap coordination, cache-first startup decision, one recurring refresh timer,
+  fetch guard/client acquisition, accepted raw-email/unread/error/refresh state, cache persistence
+  submission, generations, new-mail detection/sound and backend action dispatch/post-action refresh out
+  of the QWidget; use only the existing `ThreadManager` and existing atomic Gmail cache helpers;
+- [ ] keep presentation grouping/formatting/capacity, transition deferral, spinner/fade, geometry,
+  QPixmap/QPainter caches, hit testing, menu construction and browser deep links in the presenter;
+- [ ] preserve `--noupdates`, manual refresh/auth flow, empty/error visible fallback, startup cache age
+  policy, detached accepted cache writes, IMAP-vs-OAuth action visibility/IDs and current Settings
+  behavior; tag/fence every detached fetch/startup/action callback without retaining a QWidget;
+- [ ] prove `N -> 1` poll/fetch/startup/cache-write/new-mail cardinality, first/last-consumer lifetime,
+  remaining-display survival, active reuse, isolated standalone behavior, stale result rejection,
+  deactivated-family import/construction dormancy and no duplicate notification/action effects;
+- [ ] run focused Gmail/backend/cache/retiring-runtime plus owner/factory/setup/lifecycle/destruction
+  gates, `py_compile`, fresh-process probes, structural old-owner searches and `git diff --check`;
+  self-audit the exact diff for feature loss/duplicate work, correct every finding, then commit/push the
+  coherent Gmail checkpoint.
 
-Non-goals: Visualizer or E2.7 redesign, generic Media/Spotify god-service, volume/mute controller or
-widget migration, new thread/scheduler, provider/cache rewrite, Quick pixels, Gmail, premature
-`WidgetRuntimeManager` hoist, E3/E4 and unrelated cleanup.
-
-Volume/mute remain unchanged during this primary shared-owner extraction so their independent
-controller/flush/presentation behavior cannot destabilize the slice. They are not silently waived:
-the E1 structural-closure audit must classify their residual non-pixel ownership and migrate only what
-is genuinely required before E1 closes. The same closure audit owns broader import dormancy after the
-Media production path itself proves deactivated-family construction dormancy.
+Non-goals: Gmail backend/auth/cache format rewrite, generic mail service, Quick pixels, Gmail UI/style
+redesign, Media accessory migration, manager hoist, E3/E4 or unrelated cleanup.
 
 After E1 completes across bounded owner slices:
 

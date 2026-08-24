@@ -47,9 +47,9 @@ Current normal implementation work is **Phase E — widget presentation + capabi
 - Phase-E activation foundation and E2 `SETUP`/live lazy navigation are landed.
 - E2.7 Visualizer CUSTOM failover/reclaim implementation is independently audited GREEN; physical
   dual-display wake/late-return remains deferred acceptance only.
-- **E1 presentation-neutral runtime/model/provider ownership is ACTIVE.** Achievement Pulse slice 5 is
-  self-audited GREEN at `51948dc3`; the bounded Abandonment artwork/Weather compatibility correction is
-  GREEN at `9ab4f47e`; the dedicated Media source/cardinality audit is now active before extraction.
+- **E1 presentation-neutral runtime/model/provider ownership is ACTIVE.** Shared Media ownership is
+  self-audited GREEN at `4680130b`; the exact-source closure audit proved Gmail's shared orchestration/
+  model/action seam is the next required slice, followed by residual Media accessories and dormancy.
 - E3 retained Quick primitives and E4 global shadow direction remain after E1 and before Phase F.
 
 ## Start here
@@ -159,7 +159,7 @@ No production runtime switch/fallback between old and Quick is to be introduced.
 | Capability activation | canonical settings + presentation-neutral family/transition catalog/query authority |
 | Providers / service logic | existing/refactored Python owners |
 | Persistence | existing settings/store owners |
-| Widget models/providers | migrated services through presentation-neutral `WidgetRuntimeManager`; Weather/Reddit and per-card/display Steam Abandonment/Achievement ownership are landed, their artwork/compatibility boundary correction is complete, and Media cardinality is the active audit |
+| Widget models/providers | migrated services/leases through presentation-neutral `WidgetRuntimeManager`; Weather/Reddit, Steam Abandonment/Achievement and the runtime-generation shared Media owner are landed; Gmail shared orchestration/model/action ownership is active |
 | Runtime widget pixels | destination: display Quick scene |
 | Thread/task ownership | `ThreadManager` for general async work |
 | Resource accounting | `ResourceManager`; accounting only, never deletion owner |

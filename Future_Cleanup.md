@@ -1,6 +1,6 @@
 # Future Cleanup
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
 Deferred/deletion ledger. Active sequencing remains in `Current_Plan.md`.
 
@@ -31,6 +31,9 @@ but they are already classified by the TestSuite audit:
       `QGraphicsEffect` investigation scaffolding rather than meaningful current regression coverage;
 - [ ] update the three `UPDATE REQUIRED NOW` tests listed in `Docs/TestSuite.md` when their owning
       implementation/test slice is next touched; do not weaken assertions merely to make them green.
+- [ ] repair `tests/test_spotify_visualizer_widget.py::test_on_tick_does_not_double_throttle_when_timer_already_paces`
+      when the synthetic Bubble harness is next touched: it omits the now-required `runtime_controller`
+      and reproduces on the pre-Media-owner baseline; do not interrupt an E1 ownership checkpoint for it.
 
 If these test files change, update `Docs/TestSuite.md` in the same checkpoint.
 
