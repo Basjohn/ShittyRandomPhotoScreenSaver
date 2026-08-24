@@ -22,24 +22,22 @@ neutral runtime/model
 ## Sequence
 
 ```text
-F0.5 correction   remove relocated generic shadow-sidecar tuning
+F0.5 correction   remove remaining relocated sidecar-only shadow tuning
 F1                Clock / Clock2 / Clock3
 F2                Weather
 F3                Media core
 F4                Media controls / volume / mute / progress
 F5                Reddit / Reddit2
 F6                Gmail
-F7                Steam Progress
-F8                Achievement Pulse
-F9                Abandonment Issues
-F10               Friend Pulse
+F7                Achievement Pulse
+F8                Abandonment Issues
 ```
 
 Do not reorder merely to dodge an architecture issue. Exact source may justify smaller sub-slices.
 
 ## Family retirement
 
-For F1–F10:
+For F1–F8:
 
 ```text
 inspect old family reference
@@ -264,37 +262,63 @@ Notification detection/sound remains Python/business-owned.
 
 ---
 
-# F7–F10 — Steam family
+# F7–F8 — substantive Steam family
 
-Use current neutral Steam models/runtime and current wrapper:
+Use current neutral Steam models/runtime and:
 `Docs/SRPSS_Steam_Widget_Family_Implementation_Plan.md`.
+
+Current source reality:
+
+```text
+Achievement Pulse   -> substantive implemented runtime/widget
+Abandonment Issues  -> substantive implemented runtime/widget
+
+Steam Journey       -> unfinished dev-gated scaffold
+Friend Pulse        -> unfinished dev-gated scaffold
+```
+
+Only the first two are migration ports.
 
 Do not parse the historical 123 KB pre-Quick plan as current presentation architecture.
 
-All four cards share appropriate Steam data/runtime ownership but remain separate presentation
-identities.
+Do not build Quick components for Steam Journey/Progress or Friend Pulse merely because scaffold ids,
+settings, mock tests or descriptors exist.
 
-### F7 Steam Progress
+### F7 Achievement Pulse
 
-Before changing product/data semantics, verify current supported source/feasibility state. Presentation
-migration must not invent a data source merely to complete the card.
-
-### F8 Achievement Pulse
-
-Current source already has especially strong neutral foundations:
+Current source already has strong neutral foundations:
 
 - immutable `SteamCardViewModel`;
 - dedicated Achievement resolution;
 - dedicated runtime/preparation path.
 
-Therefore F8 should be predominantly a presentation mapping/visual fidelity task once shared family
-seams exist.
+This should be predominantly presentation mapping/visual fidelity once shared family seams exist.
 
-### F9 Abandonment Issues / F10 Friend Pulse
+Preserve existing cache/privacy/provenance behavior and do not duplicate Steam data ownership.
+
+After GREEN, caller-proof and delete old Achievement Pulse runtime pixels.
+
+### F8 Abandonment Issues
+
+Use the existing substantive Abandonment runtime/data path.
 
 Preserve current privacy/provenance/selection semantics. Unknown/private data remains explicit.
 
-No duplicate Steam data source per component.
+Do not duplicate Steam provider/cache ownership per component.
+
+After GREEN, caller-proof and delete old Abandonment Issues runtime pixels.
+
+### Deferred Steam stubs
+
+Steam Journey/Progress and Friend Pulse are future product work, not migration slices.
+
+During migration:
+
+- do not invent their missing product/data behavior;
+- do not port scaffold/mock pixels;
+- leave them dev-gated if harmless;
+- if their scaffold presenter blocks shared old-pixel deletion later, retire the scaffold rather than
+  manufacturing a Quick parity implementation.
 
 ---
 

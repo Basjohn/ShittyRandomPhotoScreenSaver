@@ -1,31 +1,77 @@
 # SRPSS Steam Widget Family — Quick-Era Reference Index
 
-Status: **CURRENT WRAPPER — pre-Quick implementation plan archived in Git history**  
+Status: **CURRENT WRAPPER — two substantive migration families; two deferred stubs**  
 Updated: 2026-08-24
 
-## Why this file is short now
+## Current source reality
 
-The original 2026-07 Steam plan was ~123 KB and mixed two kinds of information:
+The Steam family contains four registered identities, but they are not four implemented product widgets.
 
-1. valuable Steam product/data/privacy/security/visual decisions;
-2. now-obsolete QWidget/`BaseOverlayWidget`/QPainter runtime-presentation architecture.
-
-During the Qt Quick migration, feeding that entire old plan to coding agents is actively dangerous.
-Its old presenter map must not override current Phase-F architecture.
-
-The full historical plan remains available in Git at:
+Current source explicitly treats:
 
 ```text
-a586801d2ffe0868710fc23da1a649df1d122d29
-Docs/SRPSS_Steam_Widget_Family_Implementation_Plan.md
+steam_progress / Steam Journey -> unfinished dev-gated scaffold
+friend_pulse                  -> unfinished dev-gated scaffold
 ```
 
-Use targeted `git show`/history inspection only when a detailed historical product/visual decision is
-needed.
+Both are dev-gated prototype/scaffold presentation and have no substantive product/runtime behavior that
+needs a Qt Quick pixel port.
+
+Current substantive implemented families are:
+
+```text
+achievement_pulse   -> Achievement Pulse
+abandonment_issues  -> Abandonment Issues
+```
+
+Achievement Pulse has dedicated cache-first runtime/resolution/preparation behavior.
+Abandonment Issues has its own substantive runtime/widget/data path.
+
+Therefore the Qt Quick migration has only two Steam presentation slices:
+
+```text
+F7 Achievement Pulse
+F8 Abandonment Issues
+```
+
+Steam Journey/Progress and Friend Pulse are **not Phase-F work**.
+
+Do not manufacture Quick versions of placeholder cards just because their ids exist in descriptors,
+settings, mock visuals or old plans.
+
+## Deferred stub policy
+
+The existing Steam Journey/Progress and Friend Pulse stubs may remain dev-gated during migration if they
+do not obstruct cleanup.
+
+Do not:
+
+- fill in their missing product/data semantics;
+- create provider/runtime architecture for them;
+- create retained Quick components for them;
+- treat mock/scaffold presentation as a fidelity target;
+- expand migration scope merely to make the four-family catalog symmetrical.
+
+Their actual product implementation belongs to future feature work after the migration or to an explicit
+operator-requested product slice.
+
+If their old scaffold pixels later block removal of a shared QWidget presentation owner, caller-proof
+and retire the scaffold rather than porting it for parity.
+
+## Why this file is short
+
+The original 2026-07 Steam plan was ~123 KB and mixed:
+
+1. useful Steam product/data/privacy/security/visual decisions;
+2. obsolete QWidget/`BaseOverlayWidget`/QPainter presentation architecture;
+3. speculative designs for the unfinished Steam Journey and Friend Pulse concepts.
+
+The full historical plan remains available in Git history for targeted lookup. It is not current
+presentation architecture.
 
 ## Current implementation authority
 
-For F7–F10 read:
+For substantive Steam migration work read:
 
 - `Current_Plan.md`
 - `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md`
@@ -34,24 +80,11 @@ For F7–F10 read:
 - `Docs/10_WIDGET_GUIDELINES.md`
 - current source under `core/steam/`, `widgets/steam_*`, and `widgets/steam_card_models.py`
 
-`widgets/steam_card_models.py` is already a Qt-free immutable semantic/presentation-state seam and is
-preferred evidence over old painter architecture.
+`widgets/steam_card_models.py` is preferred neutral presentation-state evidence over old painter code.
 
-## Stable family identities
+## Product/data rules retained from historical planning
 
-```text
-steam_progress       -> Steam Journey
-achievement_pulse    -> Achievement Pulse
-abandonment_issues   -> Abandonment Issues
-friend_pulse         -> Friend Pulse
-```
-
-They remain independently configurable/movable cards while sharing appropriate Steam data/cache/runtime
-ownership.
-
-## Product/data rules retained from the historical plan
-
-Keep these as durable constraints:
+For implemented Steam features:
 
 - no Steam password/Steam Guard handling;
 - no globally bundled developer API key;
@@ -59,27 +92,23 @@ Keep these as durable constraints:
 - no fabricated last-played/session/rarity/ownership/completion facts;
 - unknown/private/unavailable source state remains explicit;
 - cache/provider work is bounded and privacy-safe;
-- secrets never enter settings exports/logs/tests/screenshots/repository;
-- shared data does not become four duplicate provider/fetch streams;
-- presentation must not invent a fallback data source silently;
-- Steam cards remain separately identified and separately enabled;
-- useful cached state may remain visible with clear stale/connection status where product semantics
-  already define that behavior.
+- secrets never enter exports/logs/tests/screenshots/repository;
+- shared data must not become duplicate provider/fetch streams per Quick component;
+- presentation must not silently invent a fallback data source.
 
-Current source/contracts outrank this summary if a later product implementation deliberately changed one
-of these rules.
+Current source/contracts outrank historical planning where implementation deliberately changed product
+semantics.
 
 ## Current presentation rule
 
-Runtime Steam pixels are Phase-F retained Quick presentation.
+Substantive Steam runtime pixels migrate to retained Quick presentation.
 
-Do not implement or deepen:
+Do not deepen or reproduce:
 
 - `BaseOverlayWidget` as destination;
 - QPainter card/text/header shadow architecture;
 - QGraphics effects;
 - old widget-factory pixel ownership as final presentation;
-- old Custom QWidget pixels as destination;
 - separate provider/runtime ownership per Quick component.
 
 Use the shared retained shell, explicit presentation model, semantic action routing and existing Quick
@@ -87,26 +116,19 @@ engine/window.
 
 ## Historical visual reference
 
-The old plan and current QWidget Steam pixels may be consulted for:
+For Achievement Pulse and Abandonment Issues, old implemented QWidget pixels may be consulted for:
 
-- card content hierarchy;
+- actual content hierarchy;
 - labels/fields;
-- silhouettes;
 - artwork placement;
 - spacing;
 - interaction intent;
 - empty/error/private states.
 
-That visual reference does not make the old painter mechanics authoritative.
+That reference does not make painter mechanics authoritative.
 
-After each Steam family's Quick port is GREEN, caller-proof and delete that family's old runtime pixels;
-Git remains the detailed historical reference.
+For Steam Journey/Progress and Friend Pulse, scaffold/mock visuals are concept evidence only, not a
+migration fidelity contract.
 
-## Relative implementation complexity
-
-Achievement Pulse currently has especially strong neutral foundations (`SteamCardViewModel` plus
-dedicated Achievement resolution/runtime/preparation paths), so its presentation port should not rebuild
-provider/business logic.
-
-Steam Progress/Steam Journey must not gain unsupported data semantics merely to make its presentation
-port appear complete; verify current source/data-feasibility authority before changing its product state.
+After each substantive Steam Quick port is GREEN, caller-proof and delete that family's old runtime
+pixels. Git remains historical reference.

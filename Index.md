@@ -13,8 +13,8 @@ exact current source
 -> tests/evidence for the claim
 ```
 
-Current migration state: **Phase F active; F0.5 is YELLOW pending one narrow sidecar-relocation
-correction; F1 Clock follows after GREEN.**
+Current migration state: **Phase F active; F0.5 is YELLOW pending removal of the remaining relocated
+sidecar-only text/icon/control/volume shadow profiles; F1 Clock follows after GREEN.**
 
 Do not read the whole history tree by default.
 
@@ -71,10 +71,11 @@ Current Quick-era routing:
 
 - `Docs/SRPSS_Steam_Widget_Family_Implementation_Plan.md` — **Quick-era wrapper/reference index**
 - `widgets/steam_card_models.py` and current neutral Steam runtime/preparation source
-- Phase-F decomposition for F7–F10
+- Phase-F decomposition for substantive Steam ports F7–F8
 
 The large pre-Quick Steam plan is historical product/UX/data evidence, not current presentation
-architecture.
+architecture. Steam Journey/Progress and Friend Pulse are unfinished dev-gated scaffolds and are not
+Phase-F migration ports.
 
 ## Historical evidence
 

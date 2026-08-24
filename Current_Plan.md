@@ -4,60 +4,118 @@ Last updated: 2026-08-24
 
 ## Current checkpoint
 
-Exact pushed source reviewed:
+Reviewed pushed implementation basis:
 
 ```text
-a586801d2ffe0868710fc23da1a649df1d122d29
-F0.5 implementation pushed
+84b2cfb1f00d0f1fe362024c913e25a0903178ef
+documentation reconciliation + first F0.5 audit correction applied
 Independent audit: YELLOW
 ```
 
-F0.5's canonical Settings/model work is sound. One narrow correction remains before F1: values whose
-only authority was the retired `shadowtuning.json` sidecar were copied into legacy painter constants.
-That is relocation of obsolete generic tuning, not valid family-reference preservation.
+F0.5's canonical Settings/model work is sound, and the first correction correctly removed the generic
+painted-card profile from `BaseOverlayWidget`/Clock/old visualizer card paths.
+
+One bounded correction still remains before F1: current production source still carries values copied
+directly from the retired global `shadowtuning.json` sections and labels them local/family-authored
+reference. Current remaining provenance is in:
+
+```text
+widgets/shadow_utils.py          -> text / text_large / header / icon
+widgets/weather_components.py    -> icon
+widgets/media/painting.py        -> control
+widgets/mute_button_widget.py    -> control
+widgets/spotify_volume_widget.py -> volume_slider
+```
+
+Those profiles were globally sidecar-authored. They are not family-authored simply because the old
+widget consumes them.
 
 Source outranks this plan if a later checkpoint has landed.
 
 ## Immediate work
 
-### F0.5 audit correction — ACTIVE
+### F0.5 final audit correction — ACTIVE
 
-Do only this:
+Do only this before F1.
 
-1. inspect every constant/value introduced by F0.5 whose provenance is `shadowtuning.json`;
-2. remove/simplify values that were only generic sidecar implementation tuning;
-3. preserve genuinely family-authored reference behavior required to port an unproven family;
-4. keep the completed direction picker / canonical settings / save-merge work intact;
-5. do not begin F1 in the same checkpoint.
+Remove or simplify the **remaining** production shadow behavior whose numeric/style authority came only
+from the retired global `shadowtuning.json` profiles:
 
-Mandatory correction: the F0.5-added generic `BaseOverlayWidget` painted-card profile
-(`PAINTED_FRAME_*`, including old blur-step/spread/max-alpha/shrink/offset tuning) must not survive merely
-to preserve the intermediate QWidget appearance.
+```text
+text
+text_large
+header
+icon
+control
+volume_slider
+```
 
-### Definition: family-authored reference
+The current known production-source sites are:
 
-A visual relationship is **family-authored reference** only when that family itself owns the
-relationship/geometry independently of the retired global sidecar.
+```text
+widgets/shadow_utils.py
+widgets/weather_components.py
+widgets/media/painting.py
+widgets/mute_button_widget.py
+widgets/spotify_volume_widget.py
+```
 
-Examples:
+The previous correction already removed the generic painted-card profile. Do not redo completed
+Settings/model/picker/save work.
+
+### Family-authored reference definition
+
+A visual relationship is family-authored only when that family itself owned the relationship/geometry
+independently of the retired global sidecar.
 
 ```text
 KEEP AS REFERENCE UNTIL FAMILY GREEN:
-Clock analogue ring/marker hard shadow geometry
+Clock analogue ring/marker hard-shadow geometry
 Clock Roman-numeral two-pass shadow relationship
 Clock hand-shadow geometry
+other independently-authored family layout/animation/interaction
 
 NOT FAMILY-AUTHORED:
-shadowtuning.json card profile
-shadowtuning.json text/text_large/header profile
-shadowtuning.json icon profile
-shadowtuning.json control profile
-shadowtuning.json volume_slider profile
+sidecar card profile
+sidecar text / text_large / header profile
+sidecar icon profile
+sidecar control profile
+sidecar volume_slider profile
 ```
 
-A global sidecar value does not become family-authored because a family consumed it.
+A sidecar value does not become family-authored because it was copied into a family module.
 
-Push the narrow correction and STOP for independent audit.
+### Correction behavior
+
+For the remaining sidecar-derived paths:
+
+- remove the copied tuning constants/profile values;
+- remove/simplify legacy shadow-only branches and caches when they have no independent product meaning;
+- preserve visible widget content, interaction, provider/runtime behavior and genuinely family-authored
+  visual structure;
+- do not build a new compatibility shadow layer;
+- do not translate the old values into canonical Quick settings;
+- do not preserve the half-migrated QWidget look merely for temporary parity.
+
+It is acceptable for an unported QWidget widget to temporarily lose a generic sidecar-driven text/icon/
+control/volume drop shadow. The retained Quick family will establish destination presentation from the
+canonical shadow controls.
+
+Protect the analogue Clock contract in
+`Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md`.
+
+### Gate
+
+- no `shadowtuning.json` loader/file authority;
+- no production local constants/comments retaining the retired `text`, `text_large`, `header`, `icon`,
+  `control`, or `volume_slider` profile as migrated authority;
+- no replacement hidden/shared tuning table;
+- no resurrection of old `widgets.shadows.offset`, Intense mode or Text Blur;
+- canonical F0.5 picker/model/default/save tests remain green;
+- legacy shadow-only tests are retired/updated rather than forcing old rendering back in;
+- `Docs/TestSuite.md` changes only if test ownership/module inventory actually changes.
+
+Push and STOP for independent audit.
 
 After GREEN: **F1 Clock becomes active immediately.**
 
@@ -67,22 +125,25 @@ After GREEN: **F1 Clock becomes active immediately.**
 
 ```text
 F0    Imgur removal                              CLOSED
-F0.5  shadow authority + General controls        YELLOW — correction active
+F0.5  shadow authority + General controls        YELLOW — final correction active
 F1    Clock / Clock2 / Clock3                    NEXT
 F2    Weather
 F3    Media core
 F4    Media controls / volume / mute / progress
 F5    Reddit / Reddit2
 F6    Gmail
-F7    Steam Progress
-F8    Achievement Pulse
-F9    Abandonment Issues
-F10   Friend Pulse
+F7    Achievement Pulse
+F8    Abandonment Issues
 G     CUSTOM/input/auxiliary pixels
 H     settings epoch + production cutover + old physical presenter deletion
 I     residual debris sweep only
 J     final installed/physical validation + docs closure
 ```
+
+Steam Progress / Steam Journey and Friend Pulse are **not migration phases**. Current source describes
+them as unfinished dev-gated scaffolds. Do not create Quick ports for placeholder widgets. Their actual
+product implementation is deferred outside the migration; leave the dev-gated stubs alone unless they
+block a shared cleanup boundary.
 
 Closed A–E implementation history does not belong in this file. See
 `Docs/Historical_Plans/QtQuick_Migration_Phase_E_Closure_2026-08-24.md` only when historical closure
@@ -162,7 +223,7 @@ Hard rules:
 
 Keep old code only while it is useful evidence for an unproven destination owner.
 
-For each ordinary family:
+For each substantive ordinary family admitted above:
 
 ```text
 old family pixels/source = temporary visual/behavioral reference
