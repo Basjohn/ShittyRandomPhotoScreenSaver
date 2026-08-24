@@ -1,8 +1,8 @@
 # 04 — Runtime Widgets, Retained Quick Presentation, Shadows and Full Customization
 
-Status: **Phase-E CLOSED through independently GREEN E4; Phase-F technical authority / F0 active next**  
+Status: **Phase-E CLOSED; F0 closed by source audit + reconciliation; Phase-F technical authority / F0.5 active next**  
 Last updated: 2026-08-24  
-Reviewed source basis: `3a5626325891ec10343d53b0e88d5fd3c4b6469d` — E4 independently GREEN
+Reviewed source basis: `19460a7a8ffe9e5134363267da3d61fe46cc23d4` + F0 closure reconciliation
 
 Cross-links:
 
@@ -314,6 +314,44 @@ Resolve in presentation-neutral Python before QML.
 Do not preserve the old ineffective generic `widgets.shadows.offset` as a second user-facing magnitude
 authority if current settings decomposition already marks it obsolete. Keep actual class tuning
 (card/text/header/etc.) independent.
+
+## 9.1 F0.5 global user modifiers over authored class baselines
+
+F0.5 adds Settings controls; it does **not** replace the class-specific style model established above.
+Resolve them in Python as a small user layer over the authored/base class values:
+
+```text
+canonical class/base style
+    + global user bucket (card or text)
+    + global direction
+        ↓
+presentation-neutral style projection
+        ↓
+final signed retained QML properties
+```
+
+Canonical user-facing fields:
+
+```text
+card: frame_opacity, blur_radius, frame_extra_offset
+text: text_opacity, text_extra_offset
+direction: one shared widgets.shadows.direction
+```
+
+`frame_extra_offset` and `text_extra_offset` are non-negative logical-pixel scalars, default `0`. Add the
+applicable scalar to the authored X/Y magnitude before `ShadowDirection` resolves signs/axis. Axis-only
+directions still zero the perpendicular axis.
+
+There is no text blur. Card blur updates the retained `RectangularShadow`; text remains duplicate glyphs.
+Header/large-text may preserve internal class-specific baseline alpha/magnitude, but do not expose
+separate direction or a third user tuning system.
+
+Do not restore retired Intense modes. Do not copy numeric painter `shadowtuning.json` internals into the
+Quick UI. Do not reinterpret legacy `widgets.shadows.offset` as either new Extra Offset field.
+
+When real retained families arrive, changing direction/darkness/blur/extra-offset mutates existing retained
+style properties. It must not recreate provider/model/item/engine/window merely because a shadow style
+value changed. Card blur/style mutation invalidates the Qt cache naturally; root fade remains independent.
 
 ### E4 mutation boundary
 

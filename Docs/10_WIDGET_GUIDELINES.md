@@ -235,18 +235,34 @@ Measure whole-scene GPU/frame impact with multiple real widgets, not only local 
 
 ---
 
-## 9.1 Global shadow-direction Settings control
+## 9.1 Widgets → General canonical shadow controls
 
-E4 landed the canonical `widgets.shadows.direction` runtime/settings authority without its editor. Before
-Clock/F1, F0.5 adds one compact 3×3 arrow picker in **Widgets → General**. Detailed styling/interaction
-belongs to `Docs/Custom_Style_Implementation.md`. The UI edits the canonical token only; it does not
-create another direction resolver or directly own runtime QML state.
+F0 deletion is source-audited GREEN from `19460a7`; the closure reconciliation removes stale Imgur-only scraping pins. F0.5 is the active Settings slice before Clock. The
+existing General → Appearance shadow controls remain the owner; extend them with:
+
+- mandatory compact 3×3 global direction picker (`NW/N/NE/W/E/SW/S/SE`, center inert, default `SE`);
+- Widget/Card Darkness (`frame_opacity`), Blur (`blur_radius`) and Extra Offset
+  (`frame_extra_offset`, default 0);
+- Text Darkness (`text_opacity`) and Extra Offset (`text_extra_offset`, default 0);
+- existing widget/text/header enable toggles.
+
+There is **no text blur** and no revived Intense mode. Do not reintroduce retired
+`intense_shadow`/`analog_shadow_intense`/`digital_shadow_intense` keys. Do not repurpose legacy
+`widgets.shadows.offset` as Extra Offset.
+
+Extra Offset is a non-negative logical-pixel scalar added to authored class magnitude before the E4
+direction resolver. Direction remains the only orientation authority.
+
+Settings save code must merge/preserve the complete `widgets.shadows` mapping. A partial General save
+must never erase direction/tuning/unknown future keys. Detailed UI and regression contract lives in
+`Docs/Custom_Style_Implementation.md`; runtime projection semantics live in
+`04_Widget_Runtime_Presentation.md` and `09_Widget_Quick_Presentation_Bridge.md`.
 
 ---
 
 ## 10. Clock family authoring rules
 
-Clock is the first retained Phase-F family after F0 and the F0.5 Widgets → General shadow-direction picker.
+Clock is the first retained Phase-F family after F0 and the independently audited F0.5 Widgets → General shadow-controls slice.
 
 Preserve the shared Python ticker/timezone logic.
 

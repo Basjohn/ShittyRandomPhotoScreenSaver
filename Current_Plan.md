@@ -7,16 +7,19 @@ Last updated: 2026-08-24
 Independent review basis:
 
 ```text
-3a5626325891ec10343d53b0e88d5fd3c4b6469d
-Phase E4 global eight-direction shadow authority + retained shadow normalization — independently audited GREEN; Phase E CLOSED
+19460a7a8ffe9e5134363267da3d61fe46cc23d4
+Phase F0 deprecated Imgur removal — deletion/source audit GREEN; stale Imgur-only dependency pins corrected by this closure reconciliation
 ```
 
-The E4 audit verified the actual pushed source rather than relying on implementation prose. The
-canonical `ShadowDirection` resolver owns orientation only, QML consumes signed offsets rather than
-settings, `OverlayCard` caches its ordinary static `RectangularShadow`, and `ShadowedText` now matches
-the surviving offset-duplicate-glyph semantic with no `MultiEffect`/layer/text-blur path. Direction
-updates can mutate an existing retained shell without creating a new engine/window/item. No family was
-ported during E4.
+The F0 audit inspected the actual pushed deletion rather than relying on the implementation summary.
+Imgur is absent from the current widget-family catalog, its Settings/factory/descriptor/runtime/CUSTOM/
+input/cache/assets package paths are removed, its three dedicated test modules are deleted, and a recursive
+tracked-tree scan at `19460a7` finds no remaining path containing `imgur`. The independent audit found one
+small packaging residue: `beautifulsoup4`/`soupsieve` remained pinned even though current code has no
+`BeautifulSoup`/`bs4` consumer. This reconciliation removes those two Imgur-era pins from `requirements.txt`.
+This is a **source/deletion audit**; the reviewer did not independently rerun Claude's focused Windows tests.
+
+Phase E remains independently GREEN/CLOSED through E4 at `3a562632`.
 
 Earlier independently closed Phase-E checkpoints remain:
 
@@ -89,7 +92,7 @@ and use the smallest environment capable of proving the claim.
 | C — base image + transitions | **IMPLEMENTATION CLOSED** | Explicit acceptance debt or demonstrated regression only |
 | D — visualizer | **IMPLEMENTATION CLOSED** | Demonstrated regression only |
 | E — widget presentation + capability setup foundation | **CLOSED / independently GREEN through E4** | Reopen only on contradictory evidence |
-| **F — widget families** | **IN PROGRESS: F0 ACTIVE NEXT** | **Normal implementation work belongs in F0 now** |
+| **F — widget families** | **IN PROGRESS: F0.5 ACTIVE NEXT** | **Normal implementation work belongs in F0.5 now** |
 | G — CUSTOM/input/auxiliary pixels | Waiting for F | Decomposition/reference only |
 | H — settings epoch + production cutover | Waiting for A–G implementation | Reference only |
 | I — legacy presenter deletion | Waiting for H cutover | Reference only |
@@ -419,7 +422,7 @@ reopen Phase E by itself.
 
 ---
 
-# 7. Phase F — ordinary widget families — ACTIVE / F0 NEXT
+# 7. Phase F — ordinary widget families — ACTIVE / F0.5 NEXT
 
 Detailed family-port decomposition:
 
@@ -428,8 +431,8 @@ Detailed family-port decomposition:
 High-level sequence:
 
 ```text
-F0  remove deprecated Imgur
-F0.5  Widgets → General shadow-direction picker
+F0    remove deprecated Imgur — CLOSED after this reconciliation (base deletion @ `19460a7`)
+F0.5  Widgets → General shadow controls — ACTIVE NEXT
 F1  Clock / Clock2 / Clock3
 F2  Weather
 F3  Media core
@@ -484,33 +487,101 @@ Frosted/backdrop-glass card customization is deliberately **not** Phase-F migrat
 shared-per-display/lazy backdrop architecture is recorded in `Future_Work.md`; do not introduce backdrop
 capture, blur layers or glass-specific effect machinery while proving the ordinary retained families.
 
-## F0 — remove Imgur instead of porting it
+## F0 — remove Imgur instead of porting it — CLOSED by this reconciliation (base deletion @ `19460a7`)
 
-Remove the live gate/defaults/settings controls/descriptor/runtime/provider/CUSTOM/tests/package/current
-authority references that exist solely for deprecated Imgur. Do not create an Imgur Quick component.
+F0 removed the deprecated Imgur family instead of migrating it. Verified current-source result:
 
-## F0.5 — Widgets → General shadow-direction picker
+- no Imgur family/catalog gate or canonical defaults remain;
+- no Imgur Settings section, descriptor/factory, runtime/provider package, CUSTOM/input route or cache path remains;
+- Imgur assets and the `widgets/imgur/` implementation package are deleted;
+- `test_imgur_cache.py`, `test_imgur_scraper.py` and `test_imgur_widget.py` are deleted;
+- mixed surviving tests were de-Imgured rather than weakened;
+- a recursive tracked-tree scan at `19460a7` contains no path with `imgur`;
+- this closure reconciliation removes stale Imgur-only `beautifulsoup4` and `soupsieve` requirement pins after confirming no current code consumer.
 
-E4 deliberately landed runtime/settings authority before Settings UI. After F0 is independently GREEN,
-add the missing user-facing control before the first real family port.
+Historical documents may still mention Imgur as history; that is not live product authority.
 
-Location:
+## F0.5 — Widgets → General shadow controls — ACTIVE NEXT
+
+E4 deliberately landed canonical shadow runtime/settings authority before its complete Settings editor.
+F0.5 completes the **existing QWidget Widgets → General → Appearance** surface before the first retained
+family port. This is one bounded Settings slice; do not port Clock or any runtime family here.
+
+Mandatory global control:
 
 ```text
-Settings
-  -> Widgets
-      -> General
-          -> Shadow Direction
+Shadow Direction
+┌─────────────┐
+│ ↖   ↑   ↗  │
+│ ←       →  │
+│ ↙   ↓   ↘  │
+└─────────────┘
 ```
 
-Use the compact custom-styled 3×3 arrow-picker contract defined in
-`Docs/Custom_Style_Implementation.md`. The center cell is inert because there is no center/none direction.
-The picker edits the existing canonical `widgets.shadows.direction` setting; it must not introduce a
-second token/mapping authority or expose SettingsManager to runtime QML.
+The center is inert. The eight cells edit the existing canonical `widgets.shadows.direction`; no second
+enum, mapping table, QML settings reader, `none` direction or per-family direction is allowed.
 
-This is a Settings QWidget slice, not a runtime family port. Gate canonical load/save/reset/default `SE`,
-all eight selections, selected/hover/pressed state, inert center behavior, and normal Settings persistence.
-Do not begin Clock in the same checkpoint.
+Keep the existing three enable toggles and group the optional tuning immediately with them:
+
+```text
+Widget / Card Shadows
+  Enable Widget Drop Shadows
+  Darkness        -> widgets.shadows.frame_opacity
+  Blur            -> widgets.shadows.blur_radius
+  Extra Offset    -> widgets.shadows.frame_extra_offset   (new scalar, default 0)
+  Enable Widget Header Drop Shadows
+
+Text Shadows
+  Enable Text Shadows
+  Darkness        -> widgets.shadows.text_opacity
+  Extra Offset    -> widgets.shadows.text_extra_offset    (new scalar, default 0)
+```
+
+There is **no text blur**. Ordinary/large/header text shadows remain duplicate retained glyphs. Header
+shadows may preserve authored class-specific baseline alpha/magnitude internally, but there is no third
+user-facing Header tuning system; they consume the global direction and Text user modifier path.
+
+`Intense Shadow` must not return. `intense_shadow`, `analog_shadow_intense` and
+`digital_shadow_intense` are retired compatibility debris. The old `shadowtuning.json` painter numbers
+are visual/reference baselines, not Quick slider units. Do not recreate an Intense preset or mode.
+
+### F0.5 offset semantics
+
+`Extra Offset` is additive to the applicable authored/base magnitude **before** the canonical E4
+direction resolver applies signs/axis zeroing. It is one non-negative logical-pixel scalar per bucket:
+
+- E/W add it to the active X magnitude;
+- N/S add it to the active Y magnitude;
+- diagonals add it to both authored axis magnitudes before sign resolution.
+
+Do **not** reinterpret legacy `widgets.shadows.offset = [4, 4]` as this new user control. E4 deliberately
+did not make that legacy key a second magnitude authority; leave its retirement/migration to the later
+settings epoch unless exact source proves it safe to remove separately.
+
+### F0.5 persistence correction — mandatory
+
+Current `widgets_tab_defaults.save_defaults_settings()` returns a partial `shadows` mapping containing
+only the three enable flags, while the section-save path assigns that mapping wholesale. An ordinary
+Widgets → General save can therefore erase `direction`, opacity/blur and future shadow keys.
+
+F0.5 must fix this owner boundary: **merge General shadow edits into the existing canonical
+`widgets.shadows` mapping or otherwise preserve every unedited key**. A save that changes only Border
+Width or a shadow checkbox must not delete direction, color, legacy offset, opacity, blur, extra-offset
+or unknown future keys. Do not create a second persistence owner to work around this.
+
+Focused F0.5 gates:
+
+- all eight direction choices, center inert, default/reset `SE`, malformed-token canonical fallback;
+- load/save/reload through the real Widgets → General section;
+- save-preservation regression proving unrelated General edits cannot erase shadow keys;
+- existing enable toggles preserved;
+- card Darkness/Blur/Extra Offset and Text Darkness/Extra Offset canonical round-trip/defaults;
+- bounded/clamped numeric input; no negative Extra Offset;
+- no retired Intense keys or UI; no text-blur setting/property/effect;
+- generated defaults/SST parity if canonical defaults gain the two extra-offset keys;
+- normal lazy-page/save behavior and no provider/runtime construction.
+
+Push and stop for independent audit. Do not begin F1 in the same checkpoint.
 
 ## F1 — Clock family: first retained family seam
 
@@ -635,8 +706,9 @@ archive obsolete migration-only evidence.
 - Physical widget-shadow visual parity remains an eyes-on gate once real retained family content exists.
 - Card-shadow caching is architectural default; measure whole-scene GPU/memory behavior with several real
   retained widgets once Phase F supplies them.
-- F1 must prove the real settings/resolver/style-to-QML direction path; E4 intentionally had no family
-  consumer to exercise that end-to-end.
+- F0 deletion/source is independently GREEN from `19460a7`; this closure reconciliation also removes the two stale Imgur-only scraping dependency pins. The reviewer did not independently rerun Claude's focused Windows tests.
+- F1 must prove the real settings/resolver/style-to-QML path for direction **and** the F0.5 user modifiers;
+  E4/F0.5 intentionally do not have a retained family consumer to exercise that end-to-end.
 - Do not convert performance measurements into permission to remove authored visuals.
 
 ---
@@ -644,23 +716,27 @@ archive obsolete migration-only evidence.
 # 11. Immediate next checkpoint
 
 ```text
-F0 — remove deprecated Imgur instead of porting it
+F0.5 — Widgets → General canonical shadow controls
 
 Scope:
-- inspect exact current Imgur family/gate/default/settings/descriptors/runtime/provider/CUSTOM/package refs
-- remove only current-authority Imgur product surface and its three Imgur test modules
-- preserve historical evidence docs unless they falsely claim Imgur is current
-- update canonical family/catalog/default/settings/test inventory after deletion
-- prove fresh-process/catalog/settings/package integrity
+- fix partial-shadow-save replacement so General edits preserve the complete widgets.shadows mapping
+- add the compact styled 3×3 global direction picker; center inert; canonical default/fallback SE
+- retain the three existing shadow enable toggles
+- add Widget/Card Darkness, Blur and Extra Offset
+- add Text Darkness and Extra Offset; NO text blur
+- add only frame_extra_offset/text_extra_offset as new scalar settings, default 0
+- keep retired Intense keys retired; do not repurpose legacy widgets.shadows.offset
+- update ShadowSettings/defaults/generated artifacts and focused Settings tests as needed
 
-Do not begin F0.5 or Clock/F1 in the same checkpoint.
-Do not alter surviving provider families.
-Do not run full/Nuitka/installed builds as routine validation.
+No QML Settings rewrite.
+No retained family/Clock port.
+No new ShadowManager/bridge/settings authority.
+No routine full/Nuitka/installed build.
 
 commit + push
-STOP for independent audit because this is a broad deletion boundary
+STOP for independent audit
 ```
 
-After F0 GREEN, implement and audit F0.5 (the Widgets → General compact shadow-direction picker).
-After F0.5 GREEN, F1 Clock is the first retained family port and must obey the no-effect-carrier/root-fade
-rule above.
+After F0.5 GREEN, F1 Clock is the first retained family port. It must prove the real canonical shadow
+settings → Python style projection → signed retained QML path, including direction and both tuning buckets,
+without recreating the item/model/ticker/engine/window and without reviving dummy/effect-carrier fades.
