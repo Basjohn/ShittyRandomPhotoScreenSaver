@@ -5,8 +5,8 @@ Last updated: 2026-08-24
 Reviewed source basis:
 
 ```text
-test-inventory basis = 1f25a791a2af822aff707f1e64ff836d0fc6f070
-Phase E3 slice 1 retained ordinary-widget host + shell primitives (independently GREEN)
+test-inventory basis = 3a5626325891ec10343d53b0e88d5fd3c4b6469d
+Phase E4 eight-direction shadow authority + retained shadow normalization (independently GREEN); Phase E CLOSED
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -17,11 +17,16 @@ presenter-host edges are rehomed in later F/H/I work.
 
 The subsequent E3 reconciliation (through `1f25a791`) adds
 `tests/test_qtquick_ordinary_widget_host.py` for the retained ordinary-widget host and shared shell
-primitives, marks E3 **CLOSED / independently GREEN**, and makes E4 the active shadow-authority phase.
+primitives and marks E3 **CLOSED / independently GREEN**.
+
+The E4 closure reconciliation through `3a562632` adds `tests/test_shadow_direction.py`, independently
+verifies the canonical eight-direction resolver/settings boundary and the retained card/text-shadow
+normalization, marks E4 **CLOSED / independently GREEN**, closes Phase E structurally, and makes Phase F
+active with F0 deprecated Imgur removal next.
 
 At the reviewed checkpoint the repository contains:
 
-- **362 test-module files**: 361 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **363 test-module files**: 362 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -32,7 +37,7 @@ Inventory status is **not an execution result**. `KEEP` does not mean a test was
 
 This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
 
-This is deliberately **not** a claim that every assertion in all 362 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
+This is deliberately **not** a claim that every assertion in all 363 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
 
 ### Status vocabulary
 
@@ -52,10 +57,10 @@ This is deliberately **not** a claim that every assertion in all 362 modules was
 | Status | Files |
 | --- | ---: |
 | `KEEP` | 116 |
-| `KEEP — MIGRATION PERMANENT` | 86 |
+| `KEEP — MIGRATION PERMANENT` | 88 |
 | `MIGRATION-CRITICAL — H/I` | 48 |
 | `WILL BE OBSOLETE — H/I` | 23 |
-| `MIGRATION-CRITICAL — F` | 38 |
+| `MIGRATION-CRITICAL — F` | 39 |
 | `MIGRATION-CRITICAL — G/H` | 16 |
 | `MIGRATION-CRITICAL — G` | 12 |
 | `KEEP — PERMANENT` | 5 |
@@ -63,10 +68,9 @@ This is deliberately **not** a claim that every assertion in all 362 modules was
 | `UPDATE REQUIRED NOW` | 3 |
 | `WILL BE OBSOLETE — E4/F` | 3 |
 | `WILL BE OBSOLETE — F0` | 3 |
-| `MIGRATION-CRITICAL — E4` | 2 |
 | `OBSOLETE NOW` | 2 |
 | `MIGRATION-CRITICAL — E3/F` | 1 |
-| **Total** | **362** |
+| **Total** | **363** |
 
 ## 2. Standard commands and evidence levels
 
@@ -193,7 +197,7 @@ Preserve:
   - new outage after reclaim → fresh full 30 s grace/global generation;
   - capability OFF retires pending failover state and only discards live-fallback state after confirmed retirement.
 
-E2/E2.7, E1 and E3 implementation are closed. E4 (global eight-direction shadow authority + retained shadow normalization) is the active phase. Do not write “after E1 lands” or “after E3 lands” tests as future work.
+E2/E2.7, E1, E3 and E4 implementation are closed and Phase E is structurally **CLOSED**. Phase F is active with F0 deprecated Imgur removal next. Do not write “after E1/E3/E4 lands” tests as future work.
 
 ## 5. Active migration gates by next phase
 
@@ -211,13 +215,17 @@ background/border/radius/padding, signed-offset card shadow, offset-pass text sh
 proves package-path component loading, create/update/retire without retaining the display generation,
 unclipped signed offsets, and no second engine/window. Preserve it across cutover.
 
-### E4 — retained primitives and shadow authority — ACTIVE
+### E4 — retained primitives and shadow authority — CLOSED / independently GREEN @ `3a562632`
 
-Retain semantic/style/configuration coverage while replacing QWidget-painted frame caches, `QGraphicsOpacityEffect`, `QGraphicsDropShadowEffect`, and QPainter-only shadow helpers with retained Quick equivalents. E4 must cover one global 8-direction shadow direction authority without reintroducing QWidget graphics effects.
+Permanent E4 coverage protects: one canonical eight-direction authority; all eight sign mappings and axis-only zeroing; deterministic malformed-token fallback to SE; canonical settings/model/default plumbing; QML consuming signed offsets without parsing settings/direction; cached retained card shadows; ordinary text shadows as duplicate retained glyphs with no MultiEffect/layer/text blur; root fade that does not rewrite shadow style; and retained-item offset mutation without a new item/engine/window. Preserve these bars through the family ports.
 
-### F — widget family ports
+The E4 host test necessarily injects already-resolved signed offsets because no real family is Quick-presented yet. F1 Clock is the first required end-to-end proof that an actual family projection reads the canonical direction, resolves class-specific magnitudes in Python, and updates its retained card/text properties without presentation or runtime-owner recreation.
+
+### F — widget family ports — ACTIVE; F0 NEXT
 
 For each family, preserve provider/model/behavior/settings tests. Rehome direct QWidget painting/geometry/presentation assertions to retained Quick items. F0 deletes Imgur and its tests instead of porting them.
+
+Do not port QWidget-era effect carriers, dummy shadow widgets, `QGraphicsOpacityEffect`/`ShadowFadeProfile` staged shadow attachment, or equivalent wrapper choreography into Quick. Whole-widget family fade is the retained presentation-root opacity and composites the card, cached card shadow, text-shadow glyphs and content together. Intermediate Quick `Item`s require a real layout/transform/clipping/z/input/lifecycle purpose, not an old one-effect-per-QWidget workaround. F1 Clock must explicitly prove this rule and the real E4 settings→Python resolver→retained-family wiring.
 
 ### G — CUSTOM/input/auxiliary pixels
 
@@ -299,7 +307,8 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_qtquick_image_boundary.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_image_textures.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_input_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
-| `tests/test_qtquick_ordinary_widget_host.py` | **KEEP — MIGRATION PERMANENT** | E3 retained ordinary-widget host + shared shell primitives; destination architecture, retain through cutover. |
+| `tests/test_qtquick_ordinary_widget_host.py` | **KEEP — MIGRATION PERMANENT** | E3/E4 retained ordinary-widget host + shared shell primitives; root fade, cached card shadow, signed offsets and offset-only text shadow are destination architecture. |
+| `tests/test_shadow_direction.py` | **KEEP — MIGRATION PERMANENT** | E4 canonical direction/settings/resolver/QML-boundary contract; retain through cutover. |
 | `tests/test_qtquick_p0_presentation_benchmark.py` | **WILL BE OBSOLETE — J** | Architecture-selection benchmark, not a forever product regression. |
 | `tests/test_qtquick_particle_transition.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_phase_c_effect_smoke.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
@@ -439,8 +448,8 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_overlay_uniforms.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_pixel_shift.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
 | `tests/test_service_widget_runtime.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
-| `tests/test_shadow_tuning_paths.py` | **MIGRATION-CRITICAL — E4** | Mostly persistence/schema/profile path; likely survives E4 with direction/default updates. |
-| `tests/test_shadow_utils.py` | **MIGRATION-CRITICAL — E4** | Mixed: useful tuning/fade semantics plus QPainter/QGraphicsOpacityEffect implementation. |
+| `tests/test_shadow_tuning_paths.py` | **KEEP — MIGRATION PERMANENT** | Canonical class-specific shadow tuning/profile defaults survive; Quick family projections consume these magnitudes under the E4 direction resolver. |
+| `tests/test_shadow_utils.py` | **MIGRATION-CRITICAL — F** | Mixed legacy file: preserve useful tuning semantics while family ports rehome/delete QPainter text-shadow and `ShadowFadeProfile`/QGraphicsOpacityEffect presentation assertions. Do not port staged effect-carrier fade mechanics. |
 | `tests/test_startup_black_flash.py` | **MIGRATION-CRITICAL — G/H** | Rehome display/input/topology behavior to Quick runtime. |
 | `tests/test_weather_widget.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_widget_capability_persist_repair.py` | **KEEP** | Retain; no migration-specific retirement identified. |

@@ -220,6 +220,17 @@ A migrated widget must not:
 
 Retained static effects should exploit the scene graph's retained/cached behavior where appropriate.
 
+### Do not port effect-carrier/dummy widgets
+
+Legacy QWidget code may wrap content or stage shadow/fade attachment because one widget has one
+`QGraphicsEffect` slot. That workaround is not a destination pattern.
+
+For ordinary Quick widgets, whole-widget fade belongs to the outer retained root opacity and naturally
+includes its cached card shadow and text-shadow glyphs. Do not create a second shadow fade, dummy effect
+carrier, or staged `ShadowFadeProfile` equivalent.
+
+A Quick `Item` wrapper is justified only by a real layout/transform/clip/z/input/lifecycle role.
+
 Measure whole-scene GPU/frame impact with multiple real widgets, not only local callback time.
 
 ---
@@ -238,6 +249,8 @@ Intentional Quick-port visual improvements:
 - separator applies in analogue mode too when selected;
 - calendar/day/date shadow uses the same ordinary-text shadow style as timezone;
 - no text blur/MultiEffect for Clock text;
+- no QWidget-era dummy/effect-carrier or separate shadow-fade stage;
+- canonical E4 direction must be resolved in Python and actually drive Clock card/text signed offsets;
 - digital/analogue are geometry variants with exact round-trip restoration.
 
 Do not let a one-second clock tick rebuild static face decoration every physical frame.

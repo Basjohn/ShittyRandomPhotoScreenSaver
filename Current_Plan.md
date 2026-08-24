@@ -7,15 +7,16 @@ Last updated: 2026-08-24
 Independent review basis:
 
 ```text
-1f25a791a2af822aff707f1e64ff836d0fc6f070
-Phase E3 retained ordinary-widget host + shell primitives — independently audited GREEN; implementation closed
+3a5626325891ec10343d53b0e88d5fd3c4b6469d
+Phase E4 global eight-direction shadow authority + retained shadow normalization — independently audited GREEN; Phase E CLOSED
 ```
 
-The E3.1 audit verified the actual pushed source rather than relying on implementation prose. The
-landed substrate uses the existing process-level `QuickSceneFactory` / `QQmlEngine`, one
-`QuickSceneController` per display, one retained `ordinaryWidgetHost` inside `DisplayScene.qml`, and a
-presentation-only Python host that creates/retires retained `OverlayWidget` items under the current
-display context. No new window, engine, provider owner or family dispatcher was introduced.
+The E4 audit verified the actual pushed source rather than relying on implementation prose. The
+canonical `ShadowDirection` resolver owns orientation only, QML consumes signed offsets rather than
+settings, `OverlayCard` caches its ordinary static `RectangularShadow`, and `ShadowedText` now matches
+the surviving offset-duplicate-glyph semantic with no `MultiEffect`/layer/text-blur path. Direction
+updates can mutate an existing retained shell without creating a new engine/window/item. No family was
+ported during E4.
 
 Earlier independently closed Phase-E checkpoints remain:
 
@@ -23,6 +24,7 @@ Earlier independently closed Phase-E checkpoints remain:
 4466c306...  — E1 presentation-neutral widget runtime/model/provider ownership
 b787c57a...  — E2 capability activation + SETUP foundation
 5b3cbaef...  — E2.7 Visualizer CUSTOM failover/reclaim
+1f25a791...  — E3 retained ordinary-widget host + shell primitives
 ```
 
 Always inspect exact current `main` before acting. Repository state outranks this file if a later
@@ -86,8 +88,8 @@ and use the smallest environment capable of proving the claim.
 | B — runtime-host decomposition | **CLOSED** | Do not reopen without contradictory evidence |
 | C — base image + transitions | **IMPLEMENTATION CLOSED** | Explicit acceptance debt or demonstrated regression only |
 | D — visualizer | **IMPLEMENTATION CLOSED** | Demonstrated regression only |
-| **E — widget presentation + capability setup foundation** | **IN PROGRESS: E4 ACTIVE NEXT** | **Normal implementation work belongs in E4 now** |
-| F — widget families | Waiting for Phase-E closure | Decomposition/reference only |
+| E — widget presentation + capability setup foundation | **CLOSED / independently GREEN through E4** | Reopen only on contradictory evidence |
+| **F — widget families** | **IN PROGRESS: F0 ACTIVE NEXT** | **Normal implementation work belongs in F0 now** |
 | G — CUSTOM/input/auxiliary pixels | Waiting for F | Decomposition/reference only |
 | H — settings epoch + production cutover | Waiting for A–G implementation | Reference only |
 | I — legacy presenter deletion | Waiting for H cutover | Reference only |
@@ -199,17 +201,18 @@ The first real family may establish the smallest missing component/model binding
 
 E3 proved the retained seam; it did not freeze every provisional primitive property forever.
 
-Current legacy text-shadow evidence has **no authored text-blur control**. Ordinary text and header
-shadows are offset duplicate-text passes with color/alpha and font-size-dependent magnitude. Therefore
-the E3 `ShadowedText.qml` `MultiEffect`/`shadowBlur` path is over-capable and should be normalized in E4
-rather than becoming accidental destination behavior.
+Legacy text-shadow evidence has **no authored text-blur control**. Ordinary text and header shadows are
+offset duplicate-text passes with color/alpha and font-size-dependent magnitude. E4 therefore removed
+the provisional E3 `ShadowedText.qml` `MultiEffect`/`shadowBlur` path rather than canonizing unearned
+behavior.
 
-Current `OverlayCard.qml` also authors `RectangularShadow.cached: false`. SRPSS card shadows are
-overwhelmingly static; the destination policy is cached-by-default and E4 owns that correction.
+E3 initially landed `RectangularShadow.cached: false` as a conservative substrate default. E4 corrected
+the retained card primitive to `cached: true`, matching the overwhelmingly static SRPSS card-shadow
+workload while allowing Qt to invalidate the cache naturally on style/geometry/direction changes.
 
 ---
 
-# 5. E4 — global shadow authority + retained shadow normalization — ACTIVE NEXT
+# 5. E4 — global shadow authority + retained shadow normalization — CLOSED / independently GREEN @ `3a562632`
 
 Read together:
 
@@ -225,7 +228,7 @@ This is an architecture/style-authority slice and therefore **audit-required**.
 
 ## E4.1 One eight-direction authority
 
-Restore one canonical token:
+Landed canonical token:
 
 ```text
 NW  N  NE
@@ -370,27 +373,34 @@ At minimum prove:
 
 Do not port a widget family during E4.
 
-### E4 checkpoint
+### E4 closure evidence
 
-```text
-inspect exact main
--> implement E4 only
--> focused settings/resolver/QML/runtime tests
--> inspect diff/status
--> commit intended paths
--> push
--> STOP for independent audit
-```
+Independent source audit at `3a562632` is **GREEN**.
 
-If GREEN, perform the Phase-E closure review. Do not extend E4 into Phase F to avoid a checkpoint.
+Verified structural result:
+
+- canonical eight-direction `ShadowDirection`, default `SE`, deterministic malformed-token fallback;
+- direction changes signs/axis only and cannot overwrite per-class authored magnitude;
+- canonical settings/default/model persistence path exists; QML contains no direction/settings parser;
+- `OverlayCard` ordinary static shadow is `cached: true`;
+- `ShadowedText` is retained duplicate glyph + signed offset only;
+- root fade leaves shadow magnitude/blur/spread/direction properties untouched;
+- retained direction/style update keeps the same shell item, engine and top-level window;
+- E3 host/lifecycle/signed-offset invariants remain intact.
+
+The retained direction test necessarily supplies already-resolved offsets because no real family exists
+yet. This is not unfinished E4 work. F1 Clock is the first required end-to-end proof that a family
+style projection reads the canonical direction, resolves it in Python and publishes signed card/text
+offsets to retained QML.
 
 ---
 
-# 6. Phase-E closure review
+# 6. Phase-E closure review — CLOSED
 
-Phase E may close when E4 is independently GREEN and no current evidence contradicts E1/E2/E2.7/E3.
+Phase E is **CLOSED** at `3a562632`. Independent review found no current evidence contradicting
+E1/E2/E2.7/E3/E4.
 
-Closure review asks:
+Closure invariants:
 
 - capability activation still gates implementation/runtime ownership before family-heavy resolution;
 - runtime/model/provider owners remain presentation-neutral;
@@ -399,13 +409,17 @@ Closure review asks:
 - one canonical shadow direction maps to signed presentation offsets;
 - ordinary text shadows retain their actual offset-pass semantics without unearned blur machinery;
 - no widget family has been prematurely moved into QML business logic;
-- no extra top-level presentation surface exists.
+- no extra top-level presentation surface exists;
+- QWidget-era dummy/effect-carrier objects and staged shadow-fade workarounds are not destination
+  architecture: Quick whole-widget fade is one outer retained-root opacity applied to the complete
+  composition, including its cached card shadow and text-shadow glyphs.
 
-Physical visual tuning can remain explicit acceptance debt if structural implementation is proven.
+Physical visual tuning remains explicit acceptance debt until real retained families exist. It does not
+reopen Phase E by itself.
 
 ---
 
-# 7. Phase F — ordinary widget families — WAITING FOR E4 + Phase-E closure
+# 7. Phase F — ordinary widget families — ACTIVE / F0 NEXT
 
 Detailed family-port decomposition:
 
@@ -429,6 +443,45 @@ F10 Friend Pulse
 
 The order may be narrowed by exact-source evidence, but do not jump to a complex family merely to avoid
 finishing the first generic family binding seam.
+
+## Phase-F hard rule — do not port QWidget effect-carrier/dummy architecture
+
+The first real family must start from the retained Quick composition model, not mechanically reproduce
+QWidget/QGraphicsEffect workarounds.
+
+Forbidden destination pattern:
+
+```text
+real widget/content
+    -> dummy/wrapper only to own opacity/effect
+        -> dummy/wrapper only to own shadow/effect
+```
+
+Do not port `ShadowFadeProfile`/`QGraphicsOpacityEffect`-style staged fade/shadow attachment, dummy
+shadow carriers, or equivalent wrapper choreography into Quick families merely because current QWidget
+code needs it.
+
+Destination whole-widget fade is:
+
+```text
+OverlayWidget.fadeOpacity
+    -> outer retained root opacity
+    -> card + cached card shadow + text-shadow glyphs + content fade coherently as one subtree
+```
+
+Card-shadow alpha, text-shadow alpha, background alpha and border alpha remain independent authored
+style controls. They are **not separate fade stages**.
+
+An intermediate Quick `Item` is valid when it owns a real responsibility such as layout, transform,
+clipping, z grouping, input or lifecycle composition. It is not justified solely to work around the
+old one-graphics-effect-per-QWidget limitation.
+
+Every Phase-F family audit must explicitly check that no legacy effect-carrier/dummy/staged-shadow-fade
+structure was copied into the retained presentation.
+
+Frosted/backdrop-glass card customization is deliberately **not** Phase-F migration work. Its future
+shared-per-display/lazy backdrop architecture is recorded in `Future_Work.md`; do not introduce backdrop
+capture, blur layers or glass-specific effect machinery while proving the ordinary retained families.
 
 ## F0 — remove Imgur instead of porting it
 
@@ -458,6 +511,12 @@ These are intentional improvements, not accidental parity drift:
    timezone text unless a demonstrated authored exception exists. The timezone appearance is the
    reference; do not preserve an independently over-offset day/date shadow.
 6. **No text blur:** Clock text, calendar and timezone shadows are offset duplicate glyphs under E4.
+7. **No legacy fade carrier:** Clock whole-widget fade uses the retained `OverlayWidget` root opacity;
+   do not create a separate shadow fade, dummy carrier or staged effect attachment.
+8. **First real E4 wiring proof:** Clock style projection reads the canonical global direction in
+   Python, resolves the Clock card/ordinary-text/large-text magnitudes to signed offsets, and publishes
+   those offsets to the retained item. A direction change must update the existing Clock presentation
+   without recreating its item/model/ticker/engine/window.
 
 The legacy persisted key may remain `show_digital_separator` as migration input until the H0 settings
 epoch. The presentation model should expose a semantic property such as `showSeparator`; do not let the
@@ -545,13 +604,15 @@ archive obsolete migration-only evidence.
 
 # 10. Known evidence limits / watch items
 
-- E3.1 source and architecture are independently audited GREEN. The reviewer did not independently rerun
-  Claude's full Windows Quick test command set; the pushed source/tests were independently inspected.
-- The previously reported real-two-display topology timing flake passed in isolation and is not currently
-  evidence against E3.
+- E4 source/architecture is independently audited GREEN at `3a562632`. The reviewer independently
+  inspected pushed source/tests/contracts but did not independently rerun Claude's Windows test commands.
+- The previously reported real-two-display topology timing flake remains historical/non-blocking evidence
+  unless it reproduces against current work.
 - Physical widget-shadow visual parity remains an eyes-on gate once real retained family content exists.
-- Card-shadow caching policy is now an architectural default, but actual GPU/memory behavior should still
-  be measured with several real retained widgets rather than inferred from one synthetic item.
+- Card-shadow caching is architectural default; measure whole-scene GPU/memory behavior with several real
+  retained widgets once Phase F supplies them.
+- F1 must prove the real settings/resolver/style-to-QML direction path; E4 intentionally had no family
+  consumer to exercise that end-to-end.
 - Do not convert performance measurements into permission to remove authored visuals.
 
 ---
@@ -559,21 +620,22 @@ archive obsolete migration-only evidence.
 # 11. Immediate next checkpoint
 
 ```text
-E4 — global eight-direction shadow authority + retained shadow normalization
+F0 — remove deprecated Imgur instead of porting it
 
 Scope:
-- canonical direction token/resolver/default
-- signed-offset publication
-- cached RectangularShadow
-- remove unearned MultiEffect/text-blur path
-- preserve alpha/fade distinctions
-- focused settings/QML/retained-item/lifecycle regressions
+- inspect exact current Imgur family/gate/default/settings/descriptors/runtime/provider/CUSTOM/package refs
+- remove only current-authority Imgur product surface and its three Imgur test modules
+- preserve historical evidence docs unless they falsely claim Imgur is current
+- update canonical family/catalog/default/settings/test inventory after deletion
+- prove fresh-process/catalog/settings/package integrity
 
-No family port.
-No dynamic artwork seam.
-No CUSTOM implementation.
-No full/compiled routine build.
+Do not begin Clock/F1 in the same checkpoint.
+Do not alter surviving provider families.
+Do not run full/Nuitka/installed builds as routine validation.
 
 commit + push
-STOP for independent audit
+STOP for independent audit because this is a broad deletion boundary
 ```
+
+After F0 GREEN, F1 Clock is the first retained family port and must obey the no-effect-carrier/root-fade
+rule above.

@@ -1,11 +1,11 @@
 # 10 — Qt Quick Ordinary Widget Family Port Decomposition
 
-Status: **Phase-F technical decomposition; waiting for Phase-E closure**  
+Status: **Phase-F ACTIVE decomposition; Phase E independently GREEN/CLOSED; F0 active next**  
 Last updated: 2026-08-24  
-Source/decomposition basis: E1 closed @ `4466c306`, E3 closed/audited GREEN @ `1f25a791`
+Source/decomposition basis: Phase E closed through independently GREEN E4 @ `3a562632`
 
-This is subordinate to `Current_Plan.md`. It does not admit Phase-F work before E4 and the Phase-E
-closure review are complete.
+This is subordinate to `Current_Plan.md`. Phase E is closed. `Current_Plan.md` currently admits F0
+only; F1 Clock follows after F0 is independently GREEN.
 
 Cross-links:
 
@@ -95,6 +95,36 @@ Remove, as applicable to exact current source:
 Do not break historical evidence documents merely to erase the name.
 
 Gate removal with fresh-process/catalog/settings tests.
+
+---
+
+# 3.1 Phase-F presentation hard rule — no QWidget effect-carrier/dummy ports
+
+Do not preserve a workaround merely because it is present in legacy pixels.
+
+In particular, the QWidget shadow/fade architecture may contain `ShadowFadeProfile`,
+`QGraphicsOpacityEffect`, dummy/effect-carrier widgets and staged widget-vs-shadow attachment/fade
+because one QWidget can own only one graphics effect. Qt Quick does not require that structure for the
+retained family shell.
+
+Required retained shape:
+
+```text
+OverlayWidget root opacity
+    -> OverlayCard + cached RectangularShadow
+    -> ShadowedText duplicate glyphs
+    -> family content
+```
+
+One root opacity fades the composition together. Do not add another shadow-fade timeline or a wrapper
+whose only job is carrying an effect.
+
+Intermediate Quick Items must have a real responsibility (layout, transform, clipping, z grouping,
+input or lifecycle composition). This rule applies to every family, beginning with Clock.
+
+Frosted/backdrop-glass cards are explicitly deferred to `Future_Work.md`. Do not add shared backdrop
+capture, blur layers or glass customization while migrating ordinary family pixels; first prove the
+plain retained card/fade/shadow architecture across real families.
 
 ---
 
@@ -212,7 +242,7 @@ Preserve/implement:
 - shared/two-line calendar formatting;
 - timezone;
 - card/background/border;
-- root fade;
+- one retained-root whole-widget fade (no dummy/effect carrier or separate shadow fade);
 - ordinary offset text shadows;
 - separator when enabled;
 - font fitting inside assigned rect without rewriting outer committed geometry.
@@ -305,6 +335,19 @@ The current timezone appearance is the visual reference for the day/date shadow.
 over-separated day/date shadow if the old modes diverge accidentally.
 
 Digital and analogue must agree on this semantic.
+
+F1 must also prove the real E4 wiring path:
+
+```text
+widgets.shadows.direction
+    -> canonical Python ShadowDirection resolver
+    -> Clock card / ordinary-text / large-text authored magnitudes
+    -> signed offsets in Clock presentation style
+    -> existing retained Clock shell/content properties
+```
+
+Changing direction must not recreate the Clock item, its presentation model, `GlobalClockTicker`,
+engine or top-level window.
 
 Main time/numerals may resolve through canonical large-text tuning if the font-size resolver calls for
 it; that does not authorize a separate arbitrary mode offset.
@@ -399,9 +442,11 @@ Deterministic:
 - one-second ticker cadence/angles;
 - family component uses existing engine/window;
 - item recreate without ticker recreate;
-- root fade;
+- one root fade with no staged/dummy shadow fade;
 - card alpha/border/shadow;
 - text shadow no MultiEffect;
+- canonical direction setting resolves through Python into real Clock card/text signed offsets;
+- direction changes update the existing Clock item/model/ticker topology in place;
 - separator thickness/ratio/symmetric geometry;
 - separator visible in digital and analogue when enabled;
 - day/date shadow == timezone shadow semantic;

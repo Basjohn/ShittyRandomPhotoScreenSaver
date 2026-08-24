@@ -1,6 +1,6 @@
 # Future Work
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
 Long-horizon feature / new-implementation backlog.
 
@@ -470,8 +470,71 @@ single existing implementation/descriptor rather than manufacturing a new transi
 4. **Glass Shatter**;
 5. **Exploding Tiles**;
 6. **Organic Growth / Ink Bloom** prototype;
-7. other 3D visualizer experiments after final migration validation.
+7. other 3D visualizer experiments after final migration validation;
+8. **Frosted / glass ordinary-widget cards** only after the widget migration/cutover architecture is stable.
 
 Glass Shatter, Directional Pixel Accretion and the Deformable 3D Sphere are worth preserving even if
 their first prototypes are abandoned. Their intended identities should not collapse into generic
 `shatter`, `pixel dissolve`, or `audio sphere` effects.
+
+---
+
+# 10. Frosted / glass ordinary-widget cards
+
+**Status: far-future optional customization. This is not migration parity and is not admitted merely
+because Qt Quick makes it possible.** The ordinary-widget migration should first finish on the simple
+retained `OverlayCard` path.
+
+Goal: optionally let the transparent/translucent area of an ordinary widget card blur the screensaver
+image/transition behind it so the card reads as real frosted/glass material rather than only a tinted
+transparent rectangle.
+
+Conceptual destination:
+
+```text
+base image / transition scene for one display
+        ↓
+one lazy shared per-display backdrop source
+        ↓
+optional bounded downsample / shared blur representation
+        ↓
+card-local crop/sample + rounded mask
+        ↓
+translucent tint + border
+        ↓
+normal cached card shadow + retained family content
+```
+
+The important optimization is **shared per display, not one full-screen capture per widget**.
+
+Rules for a future implementation:
+
+- do not create one full-display `ShaderEffectSource`, FBO/capture or equivalent backdrop copy for every
+  glass widget;
+- when at least one glass card is active, establish the smallest legal shared backdrop source for that
+  display and let cards sample bounded regions from it;
+- if all active glass cards use the same blur policy/radius, prefer one blurred/downsampled backdrop per
+  display and crop/sample it per card rather than repeating the blur pass for each widget;
+- if authored cards genuinely require different blur strengths, still share the underlying backdrop
+  source and bound any per-card effect work to the card region where practical;
+- the backdrop represents the scene **below ordinary widgets** (normally base image/transition pixels),
+  not an already-composited capture of the widgets themselves; avoid feedback recursion, double-blur,
+  and accidentally blurring later z-layers such as the Visualizer/control overlays;
+- no glass-enabled cards means no backdrop capture/layer/effect work: the optional feature should return
+  to the ordinary `OverlayCard` cost when disabled;
+- keep the path GPU/Quick-native. Do not introduce Python pixel readback, QWidget screenshots, QPixmap
+  bridges or a second app-managed FBO/pixmap cache merely to create glass;
+- `MultiEffect`, a purpose-built shader/effect, or another final-Qt-Quick mechanism may be used if final
+  architecture/performance evidence earns it. This future permission does not reopen ordinary text
+  shadow blur or the QWidget one-effect workaround architecture;
+- preserve the single production `QQuickWindow`/retained-scene architecture and normal root-fade
+  semantics;
+- measure full-scene GPU time, offscreen-pass cost, texture memory, batching impact and p95/p99/tails on
+  representative multi-display/DPR setups with several simultaneous glass cards;
+- bound blur radius/sample count and consider deliberate backdrop downsampling when the visual result is
+  acceptable;
+- only add polished Settings controls after the visual path is proven worthwhile and cheap enough.
+
+The final implementation should inspect the then-current Qt/PySide capabilities before selecting
+`ShaderEffectSource`, `MultiEffect`, custom shader composition or another mechanism. The durable product
+contract is the shared/lazy/bounded architecture above, not a particular provisional Qt type.
