@@ -5,18 +5,18 @@ Last updated: 2026-08-24
 Reviewed source basis:
 
 ```text
-origin/main = 86872ab92a6b0960f2a3746d43dc6056cb013d47
-tests/ tree = 0d93fb81fd219eb7f4c1aab4e9f2955887589e2f
+origin/main = 51948dc3956bc10549eb3e8440b2c3e25857f952
+tests/ tree = 4af6ae5388ebf29cf0e1b50d34b846f266e55f7c
 ```
 
-Focused E1 Abandonment ownership and the two E1 test modules added since the prior inventory were
-refreshed against `86872ab9`; unchanged classifications were not semantically recounted.
+Focused E1 Achievement ownership and its new runtime test module were refreshed against `51948dc3`;
+unchanged classifications were not semantically recounted.
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
 
 At the reviewed checkpoint the repository contains:
 
-- **354 test-module files**: 353 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **355 test-module files**: 354 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -27,7 +27,7 @@ Inventory status is **not an execution result**. `KEEP` does not mean a test was
 
 This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
 
-This is deliberately **not** a claim that every assertion in all 354 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
+This is deliberately **not** a claim that every assertion in all 355 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
 
 ### Status vocabulary
 
@@ -53,7 +53,7 @@ This is deliberately **not** a claim that every assertion in all 354 modules was
 | `MIGRATION-CRITICAL — F` | 18 |
 | `MIGRATION-CRITICAL — G/H` | 16 |
 | `MIGRATION-CRITICAL — G` | 12 |
-| `MIGRATION-CRITICAL — E1/F` | 15 |
+| `MIGRATION-CRITICAL — E1/F` | 16 |
 | `MIGRATION-CRITICAL — E1` | 1 |
 | `KEEP — PERMANENT` | 5 |
 | `WILL BE OBSOLETE — J` | 4 |
@@ -63,7 +63,7 @@ This is deliberately **not** a claim that every assertion in all 354 modules was
 | `MIGRATION-CRITICAL — E4` | 2 |
 | `OBSOLETE NOW` | 2 |
 | `MIGRATION-CRITICAL — E3/F` | 1 |
-| **Total** | **354** |
+| **Total** | **355** |
 
 ## 2. Standard commands and evidence levels
 
@@ -530,7 +530,8 @@ The inventory below accounts for every executable test file present at the revie
 | --- | --- | --- |
 | `tests/test_steam_abandonment_issues.py` | **MIGRATION-CRITICAL — E1/F** | Source/cadence/preparation ownership is separated from the temporary QWidget pixels; preserve behavior and rehome presenter assertions in F. |
 | `tests/test_steam_abandonment_runtime.py` | **MIGRATION-CRITICAL — E1/F** | Destination-owner/generation/cardinality/repeated-setup/real-ThreadManager-timer/lifecycle bar; preserve the neutral contract and rehome only its QWidget integration edge in F. |
-| `tests/test_steam_achievement_pulse.py` | **MIGRATION-CRITICAL — E1/F** | Residual cache/refresh/artwork ownership still requires E1 extraction; rehome temporary presenter assertions in F. |
+| `tests/test_steam_achievement_pulse.py` | **MIGRATION-CRITICAL — E1/F** | Source/cache/resolver behavior remains authority; Achievement ownership is separated and temporary presenter assertions rehome in F. |
+| `tests/test_steam_achievement_runtime.py` | **MIGRATION-CRITICAL — E1/F** | Destination-owner/generation/cardinality/reuse/dormancy/lifecycle bar, including real queued UI delivery fencing; preserve the neutral contract and rehome only its QWidget integration edge in F. |
 | `tests/test_steam_backend.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_steam_cache.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_steam_credentials.py` | **KEEP** | Retain; no migration-specific retirement identified. |

@@ -373,6 +373,11 @@ replace the owner beneath an already-active presenter with a stopped service. A 
 mismatched active edge fails closed; an inactive presenter may rebuild only through the normal
 activation boundary.
 
+For dynamic artwork, a presentation-neutral runtime/preparation owner may fetch/decode and retain the
+source-resolution image plus stable identity. Logical-size/DPR-specific scaling, cropping and prepared-
+image caching belong to the active presenter (current QWidget or future Quick), not to the neutral
+runtime; rebinding a presenter must replay accepted artwork without a duplicate fetch/decode path.
+
 During the migration, separate:
 
 ```text

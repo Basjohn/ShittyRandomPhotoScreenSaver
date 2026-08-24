@@ -7,8 +7,8 @@ Last updated: 2026-08-24
 Latest pushed/self-audited implementation basis:
 
 ```text
-86872ab92a6b0960f2a3746d43dc6056cb013d47
-Phase E1 slice 4 — Steam Abandonment runtime/model ownership — self-audited GREEN; reused-agent reuse check GREEN
+51948dc3956bc10549eb3e8440b2c3e25857f952
+Phase E1 slice 5 — Steam Achievement Pulse runtime/model/artwork ownership — self-audited GREEN; reused-agent ownership review GREEN
 ```
 
 Independent review basis:
@@ -577,9 +577,9 @@ Reasoning:
   a real per-display poll/cache/fetch/model/action-controller seam to migrate later, but it is broader
   than the next bounded owner extraction; preserve the singleton rather than wrapping it.
 - **Steam card families:** Progress and Friend Pulse are provider/task/timer-inert. Source inspection
-  after Weather proved that Achievement Pulse and Abandonment Issues are not: both still own detached
-  cache/refresh request generations in QWidget code, and Abandonment additionally owns a recurring
-  cache-backed rotation timer. Preserve separate card semantics rather than forcing a generic Steam
+  after Weather proved that Achievement Pulse and Abandonment Issues then owned detached cache/refresh
+  request generations in QWidget code, with Abandonment additionally owning recurring cache-backed
+  rotation. Slices 4–5 have since migrated those separate owners; do not force them into a generic Steam
   provider/service shape.
 - **Media:** `MediaWidget` really does construct/hold a `BaseMediaController`, so Media is a substantial
   later E1 owner migration. It is deliberately **not next** because it is high-blast-radius: Spotify
@@ -628,15 +628,17 @@ Focused Abandonment/Steam/factory/setup/runtime-owner/lifecycle gate: `426 passe
 fresh-process registry and deactivated-family import dormancy, structural old-owner search and
 `git diff --check` clean. Exact-diff self-audit and reused-agent repeated-setup audit were GREEN.
 
-### E1 remaining after slice 4
+### E1 remaining after slice 5
 
-After Abandonment is GREEN:
+After Achievement Pulse is GREEN:
 
-- migrate the demonstrated Achievement Pulse cache/refresh/model/artwork seam as the next bounded Steam
-  owner while preserving the process-shared core Steam cache/locking/backoff authorities;
+- land the bounded post-slice-5 Abandonment artwork-boundary and Weather compatibility-proxy
+  corrections before beginning another ownership migration;
+- perform Media as the next high-risk ownership checkpoint, deriving process/shared/per-display/
+  per-instance cardinality from exact source and preserving Visualizer/E2.7 contracts;
 - continue only the **real** remaining provider/model/runtime-data ownership migrations. Gmail remains
-  a broader per-display orchestration/model seam over its neutral singleton backend; Media requires its
-  own deliberately high-risk checkpoint rather than being casually folded into another family;
+  a broader per-display orchestration/model seam over its neutral singleton backend and must be
+  completed if exact source proves it is still required for E1 closure;
 - keep Steam Progress and Friend Pulse as E1 no-ops unless current source later gains a real runtime
   owner;
 - fresh-process import dormancy: catalogued-but-deactivated capability resolves no unnecessary heavy
@@ -1067,64 +1069,49 @@ it does not reopen E2.7 implementation or block the next Phase-E slice.
 **E1 slice 4 is CLOSED / SELF-AUDITED GREEN at
 `86872ab92a6b0960f2a3746d43dc6056cb013d47`.**
 
+**E1 slice 5 is CLOSED / SELF-AUDITED GREEN at
+`51948dc3956bc10549eb3e8440b2c3e25857f952`.**
+
 The earlier generic live family-retirement prescription remains superseded. Current production family
 activation is applied through Settings-owned full runtime teardown/recreation.
 
-### E1 slice 5 — Steam Achievement Pulse runtime/model/artwork ownership — ACTIVE
+### E1 slice 5 — Steam Achievement Pulse runtime/model/artwork ownership — CLOSED
 
-The post-Abandonment source audit is complete. Achievement Pulse is the smallest next residual owner:
-`SteamCardWidget` still owns cache-first load, stale/source/manual refresh, request generations,
-semantic model creation, app artwork and latest-achievement icon fetch/preparation, plus deferred
-refresh/model callbacks. Those detached callables are not runtime-generation tagged; deactivation does
-not invalidate them, so late work can still commit after the widget stops.
+The completed checklist is pruned. The durable result is one per-card/display, registry-owned
+`AchievementPulseRuntimeService` over the existing process-shared Steam cache/backend/credential/asset
+authorities. It owns cache-first load, source/manual refresh, semantic model creation, request fencing,
+unscaled decoded app/icon artwork with stable identity, replay and retirement. `SteamCardWidget` retains
+only geometry, QPainter/fade/input/style concerns and DPR-specific image scaling/cropping caches.
 
-Current cardinality is one QWidget-owned Achievement pipeline per enabled display over process-shared
-Steam cache locks/coalescing/backoff. Target cardinality is one neutral service per enabled Achievement
-card/display over those same shared authorities, with zero QWidget-owned provider/cache/task/model
-pipelines. Blocking Steam transport remains non-cancellable; correctness therefore comes from tagged
-runtime destruction-barrier drainage plus service/request/config fencing, not callback cancellation.
+Production suppresses the standalone convenience owner, injects exactly one required service and
+validates the live presenter/service edge on repeated setup. Progress and Friend Pulse remain
+unregistered and source-inert. All detached tasks/callbacks are runtime-generation tagged and weak-owner
+fenced; the service adds no recurring timer or alternate Steam cache/backend path.
 
-Destination:
+Focused Achievement/Steam/factory/setup/runtime-owner/lifecycle gate: `471 passed`, plus `py_compile`,
+fresh-process registry/deactivated-family dormancy, structural old-owner search and `git diff --check`
+clean. Exact-diff self-audit and reused-agent ownership review were GREEN; the review's suggested real
+queued-UI stop fence was added and passed before checkpoint.
 
-- `AchievementPulseRuntimeService` is a per-card/display, registry-owned presentation-neutral owner in
-  a dedicated Steam-Achievement runtime module;
-- it owns cache-first load, stale/source refresh, forced manual refresh, request generations, semantic
-  view-model creation, source artwork/icon fetch and decoded `QImage` prepared state, replay and
-  idempotent retirement;
-- it reuses the existing `core.steam.achievement_pulse_cache`, resolver, credentials, backend,
-  request-policy, cache-lock/coalescing/backoff and asset helpers rather than wrapping/replacing them;
-- `SteamCardWidget` becomes the temporary Achievement pixel/transition consumer: authored geometry,
-  QPainter rendering, fade/content-transition deferral, hit routing, style/logo state and DPR/scaled
-  artwork caches stay presentation-owned;
-- production suppresses the standalone convenience owner, injects exactly one required neutral service
-  through `WidgetRuntimeManager`, and fails closed if build/injection fails.
+### E1 bounded post-slice-5 correction checkpoint — ACTIVE
+
+These independent-review YELLOWs are behavior-preserving boundary corrections, not a general refactor.
+Land them together before Media.
 
 Live checklist:
 
-- [ ] add the neutral Achievement owner plus bounded consumer/configuration protocols with no QWidget,
-  QPainter, provider singleton or competing Steam cache/backend abstraction;
-- [ ] move cache load, source/manual refresh, semantic model creation, request/config fencing and
-  prepared unscaled artwork/icon state out of `SteamCardWidget`; tag every detached callable/callback
-  with the display runtime generation;
-- [ ] preserve cache-before-first-fade, fresh-cache suppression, five-minute refresh minimum,
-  `--noupdates`, provider backoff/dedupe, credential/error preservation, artwork fallback/desaturation
-  and transition-only deferral semantics;
-- [ ] keep QPainter/layout/fade/input/style/logo and DPR-aware scaled-image caches in the temporary
-  presenter while replaying the service's current prepared model/images without refetching;
-- [ ] wire factory suppression plus lazy registry build/injection/retirement; keep direct construction on
-  one explicitly owned convenience service; add only Achievement and keep Progress/Friend unregistered;
-- [ ] prove before/after cardinality, deactivated-family fresh-process import dormancy, ordinary
-  instance-disabled behavior, two-display service/task identity, repeated-setup edge reuse, manual
-  force-refresh and idempotent teardown;
-- [ ] prove late cache/refresh/artwork/icon completions and deferred manual-refresh/model single-shots
-  cannot mutate a stopped/retired/reattached service or consumer; keep all source/network/image decode
-  work off the GUI thread and leave no QWidget runtime-data owner;
-- [ ] run focused Achievement/Steam/factory/setup/runtime-owner/lifecycle gates, `py_compile`, import
-  dormancy, `git diff --check`, then self-audit the exact diff and correct every finding before checkpoint.
+- [ ] move Abandonment logical-size/DPR scaling, cropping and prepared-image caching out of neutral
+  runtime/preparation and into the current QWidget presenter; leave one fetch/decode path, unscaled
+  decoded artwork plus stable identity in the service, and preserve shape/fallback/desaturation behavior;
+- [ ] inspect every WeatherWidget compatibility proxy caller/test; remove private cache/request/
+  generation proxies that are no longer required, narrow any legitimate standalone/test seam and mark
+  unavoidable compatibility explicitly transitional rather than destination model API;
+- [ ] add/update only focused regressions needed to prove behavior/cardinality/lifecycle preservation;
+  run exact affected gates, `py_compile`, structural searches and `git diff --check`, self-audit the exact
+  diff, correct every finding, then commit/push the bounded checkpoint.
 
-Non-goals: Gmail, Abandonment redesign, Progress/Friend, generic shared-Steam services, profile
-refcounts, recurring cadence, Media, Visualizer, Quick pixels, E3/E4, hot reload and cache/provider
-redesign.
+Non-goals: provider/cache rewrites, duplicate fetch/decode paths, Quick pixels, Media implementation,
+Gmail, WidgetRuntimeManager hoist, E3/E4 and unrelated cleanup.
 
 After E1 completes across bounded owner slices:
 

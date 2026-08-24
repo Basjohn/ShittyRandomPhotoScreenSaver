@@ -581,11 +581,14 @@ for symmetry.
 
 ### Steam
 
-Progress and Friend Pulse remain provider/task/timer-inert. Steam Abandonment's cache/source/rotation/
-prepared-state owner is landed as one per-card/display `AbandonmentRuntimeService` at `86872ab9`; it
-continues to use the existing process-scoped `core.steam` caches, backend locks, credentials and asset
-helpers. Achievement Pulse remains a separate residual cache/artwork owner. Preserve those distinct
-cardinalities rather than forcing the family through a Reddit-shaped or generic shared-Steam service.
+Progress and Friend Pulse remain provider/task/timer-inert. Steam Abandonment's cache/source/rotation
+owner is landed as one per-card/display `AbandonmentRuntimeService` at `86872ab9`. Achievement Pulse's
+cache/source/manual-refresh/model/unscaled-artwork owner is separately landed per card/display at
+`51948dc3` and adds no recurring timer. Both continue to use the existing process-scoped `core.steam`
+caches, backend locks, credentials and asset helpers. Preserve those distinct cardinalities rather than
+forcing the family through a Reddit-shaped or generic shared-Steam service. The current bounded
+Abandonment correction moves only logical/DPR projection back to its presenter; it does not create a
+second decode/fetch path.
 
 ### Media
 
