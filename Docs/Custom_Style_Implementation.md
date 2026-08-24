@@ -45,6 +45,25 @@ General save must merge into the existing `widgets.shadows` mapping so unrelated
 
 `shadowtuning.json` is retired and must not survive by relocation.
 
+The first correction removed the old generic painted-card profile. The remaining known production
+relocations are now explicitly:
+
+```text
+widgets/shadow_utils.py          -> text / text_large / header / icon
+widgets/weather_components.py    -> icon
+widgets/media/painting.py        -> control
+widgets/mute_button_widget.py    -> control
+widgets/spotify_volume_widget.py -> volume_slider
+```
+
+These remaining copies must be removed/simplified before F1.
+
+It is acceptable for the temporary QWidget presenter to lose those generic sidecar-driven shadows.
+Preserve the real content/interaction/layout and independently-authored family behavior; do not create a
+compatibility tuning layer.
+
+`shadowtuning.json` is retired and must not survive by relocation.
+
 Do not copy its generic sections into another module/file/local constant profile:
 
 ```text
