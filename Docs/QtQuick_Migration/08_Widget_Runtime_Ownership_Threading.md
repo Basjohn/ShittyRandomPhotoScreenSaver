@@ -575,9 +575,11 @@ registry injection, and detached work reuses `ThreadManager` rather than gaining
 
 ### Gmail
 
-`GmailBackend.instance()` is already a neutral backend. E1 should inspect and rehome only residual
-QWidget-owned orchestration/model state that still matters; do not create another backend layer merely
-for symmetry.
+`GmailBackend.instance()` is already the correct neutral process backend. Exact-source closure review
+proved a separate real seam: every current presenter owns another cache-first startup, poll/fetch,
+accepted email/error state, cache-write submission, new-mail decision and action/post-action refresh.
+The active E1 slice therefore adds one runtime-generation shared Gmail owner with per-display leases;
+it must not wrap, replace or shut down the existing backend singleton.
 
 ### Steam
 
@@ -592,9 +594,11 @@ second decode/fetch path.
 
 ### Media
 
-Media has a genuine controller/runtime ownership seam. Its shared/cross-display/provider/transport
-semantics are the active deliberate cardinality review before extraction; a per-display manager must
-not imply one controller/poll loop per display when the logical state is shared.
+Media's primary controller/runtime seam is landed at `4680130b`: per-display leases join one
+runtime-generation owner for controller/provider target, polling/query/cache/retention, playback
+generations/optimistic confirmation and source-resolution artwork decode. `MediaWidget` retains
+per-display QPixmap/DPR/layout/fade/input projection. App-volume and system-mute accessories remain a
+separate closure seam; do not fold them into a generic Media god service.
 
 ### Imgur
 
