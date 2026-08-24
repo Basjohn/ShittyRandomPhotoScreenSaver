@@ -12,11 +12,10 @@ The application then exited code 1 under the fail-closed lifecycle policy. The
 barrier was doing its job: it refuses to build a replacement while retired work
 is still alive.
 
-`GmailWidget` cleanup already set `_cancelled` and advanced `_fetch_generation`,
-but `GmailClient.list_messages()` never looked at that state again once it was
-inside its traversal - one list request plus one metadata request per message,
-each with its own timeout and retry budget. So the fetch kept an IO worker for
-the whole barrier window.
+The original correction taught `GmailClient.list_messages()` to observe its
+owner during traversal. Phase E1 moved that cancellation authority out of
+`GmailWidget`: the neutral shared Gmail owner now fences every traversal with
+runtime-generation and request identity while presenters own no network task.
 
 The correction is cancellation ownership, not a longer timeout and not ignoring
 the task. These bars hold a controllable request in flight across the retirement
@@ -142,37 +141,62 @@ class TestClientCancellation:
 
 
 class _FetchOwner:
-    """The GmailWidget fetch-ownership surface, with the real methods bound."""
+    """The neutral Gmail owner fetch surface with a controllable client."""
 
     def __init__(self, client, capacity=8):
-        from widgets.gmail_widget import GmailWidget
+        from widgets.gmail_runtime import GmailRuntimeConfig, _SharedGmailRuntimeOwner
 
-        self._cancelled = False
-        self._fetch_generation = 5
-        self._gmail_client = client
-        self._fetch_window_capacity = capacity
-        self._filter_label = "INBOX"
-        self._fetch_lock = threading.Lock()
-        self._fetch_in_progress = False
+        backend = SimpleNamespace(
+            is_initialized=True,
+            is_authenticated=True,
+            client=client,
+        )
+        self.runtime = _SharedGmailRuntimeOwner(
+            config=GmailRuntimeConfig(fetch_window_capacity=capacity),
+            thread_manager=SimpleNamespace(),
+            runtime_generation=5,
+            backend=backend,
+        )
+        self.runtime._running = True
+        self.runtime._owner_generation = 5
+        self.runtime._fetch_request_id = 1
         self.published: list[tuple] = []
         self.errors: list[str] = []
 
-        self._fetch_is_retired = GmailWidget._fetch_is_retired.__get__(self)
-        self._fetch_emails_async = GmailWidget._fetch_emails_async.__get__(self)
-        self._fetch_emails_async_uncancellable = (
-            GmailWidget._fetch_emails_async_uncancellable.__get__(self)
+        original_commit = self.runtime._commit_fetch
+        original_error = self.runtime._commit_fetch_error
+
+        def _commit(generation, request_id, emails, unread):
+            self.published.append((tuple(emails), unread, generation))
+            original_commit(generation, request_id, emails, unread)
+
+        def _error(generation, request_id, message):
+            self.errors.append(message)
+            original_error(generation, request_id, message)
+
+        self.runtime._commit_fetch = _commit
+        self.runtime._commit_fetch_error = _error
+
+    @property
+    def _fetch_in_progress(self):
+        return self.runtime._fetch_in_progress
+
+    @_fetch_in_progress.setter
+    def _fetch_in_progress(self, value):
+        self.runtime._fetch_in_progress = bool(value)
+
+    def _fetch_is_retired(self, generation: int) -> bool:
+        return self.runtime._fetch_is_retired(generation, 1)
+
+    def _fetch_emails_async(self, generation: int) -> None:
+        self.runtime._fetch_emails_async(
+            self.runtime._backend.client,
+            generation,
+            1,
         )
 
-    def _on_emails_fetched(self, emails, unread, generation):
-        self.published.append((tuple(emails), unread, generation))
-
-    def _on_fetch_error(self, message, generation):
-        self.errors.append(message)
-
     def retire(self):
-        """Exactly what _deactivate_impl/cleanup do to fetch ownership."""
-        self._cancelled = True
-        self._fetch_generation += 1
+        self.runtime.stop()
 
 
 @pytest.fixture
@@ -185,13 +209,13 @@ def ui_thread(monkeypatch):
         func(*args, **kwargs)
 
     monkeypatch.setattr(
-        "widgets.gmail_widget.ThreadManager.run_on_ui_thread",
+        "widgets.gmail_runtime.ThreadManager.run_on_ui_thread",
         staticmethod(_run_on_ui_thread),
     )
     return calls
 
 
-class TestWidgetFetchOwnership:
+class TestRuntimeFetchOwnership:
     def test_a_live_fetch_publishes_normally(self, ui_thread):
         transport = _ControllableTransport(message_count=3)
         transport.release()
@@ -219,16 +243,16 @@ class TestWidgetFetchOwnership:
         transport.release()
         owner = _FetchOwner(_client(transport), capacity=20)
 
-        original = owner._fetch_is_retired
+        original = owner.runtime._fetch_is_retired
         calls = {"n": 0}
 
-        def _retire_after_two(generation):
+        def _retire_after_two(generation, request_id):
             calls["n"] += 1
             if calls["n"] == 3:
                 owner.retire()
-            return original(generation)
+            return original(generation, request_id)
 
-        owner._fetch_is_retired = _retire_after_two
+        owner.runtime._fetch_is_retired = _retire_after_two
 
         owner._fetch_emails_async(5)
 
@@ -239,7 +263,7 @@ class TestWidgetFetchOwnership:
         )
 
     def test_the_fetch_guard_is_released_on_the_cancelled_path(self, ui_thread):
-        """A retired fetch must not leave the widget marked as fetching."""
+        """A retired fetch must not leave the neutral owner marked as fetching."""
         transport = _ControllableTransport(message_count=2)
         transport.release()
         owner = _FetchOwner(_client(transport))

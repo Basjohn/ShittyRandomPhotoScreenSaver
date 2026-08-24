@@ -31,6 +31,12 @@ generation join one family-shared owner for controller/provider, polling,
 accepted state and source-resolution artwork decode; QWidget presenters retain
 only their per-display projection and QPixmap/DPR work.
 
+E1 slice 7 adds one Gmail lease per display. Leases in the same runtime
+generation join one Gmail-specific shared owner for backend bootstrap
+coordination, cache-first startup, polling/fetch, accepted raw-email state,
+notification decisions and serialized actions. ``GmailBackend.instance()``
+remains the unchanged process singleton.
+
 Heavy provider implementation is imported lazily inside the build callable so a
 process that never activates/creates the family does not resolve it merely
 because this registry is imported.
@@ -328,11 +334,60 @@ _MEDIA_SERVICE_SPEC = RuntimeServiceSpec(
 )
 
 
+def _build_gmail_service(widget_id: str, widgets_config: Mapping[str, Any]) -> Any:
+    from widgets.gmail_runtime import GmailRuntimeConfig, GmailRuntimeService
+
+    config = (
+        widgets_config.get(widget_id, {})
+        if isinstance(widgets_config, Mapping)
+        else {}
+    )
+    model = GmailRuntimeConfig.from_mapping(
+        config if isinstance(config, Mapping) else {}
+    )
+    return GmailRuntimeService(config=model, shared=True)
+
+
+def _inject_gmail_service(widget: Any, service: Any) -> None:
+    setter = getattr(widget, "set_runtime_service", None)
+    if not callable(setter):
+        raise AttributeError(
+            "runtime widget cannot accept Gmail service (missing set_runtime_service)"
+        )
+    setter(service)
+
+
+def _retire_gmail_service(service: Any) -> None:
+    retire = getattr(service, "retire", None)
+    if not callable(retire):
+        raise AttributeError("Gmail runtime service has no retire method")
+    retire()
+
+
+def _gmail_service_reuse_is_valid(widget: Any, service: Any) -> bool:
+    if getattr(widget, "_runtime_service", None) is not service:
+        return False
+    if _service_is_retired(service):
+        return False
+    if getattr(service, "shared_owner", None) is None:
+        return False
+    return not _widget_is_active(widget) or _service_is_running(service)
+
+
+_GMAIL_SERVICE_SPEC = RuntimeServiceSpec(
+    build=_build_gmail_service,
+    inject=_inject_gmail_service,
+    retire=_retire_gmail_service,
+    reuse_is_valid=_gmail_service_reuse_is_valid,
+)
+
+
 _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
     "reddit": _REDDIT_SERVICE_SPEC,
     "reddit2": _REDDIT_SERVICE_SPEC,
     "weather": _WEATHER_SERVICE_SPEC,
     "media": _MEDIA_SERVICE_SPEC,
+    "gmail": _GMAIL_SERVICE_SPEC,
     "abandonment_issues": _ABANDONMENT_SERVICE_SPEC,
     "achievement_pulse": _ACHIEVEMENT_SERVICE_SPEC,
 }

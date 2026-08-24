@@ -1297,13 +1297,13 @@ class ThreadManager:
 
     # UI dispatch utilities ----------------------------------------------
     @staticmethod
-    def run_on_ui_thread(func: Callable, *args, **kwargs) -> None:
-        """Dispatch a callable to the Qt UI thread"""
+    def run_on_ui_thread(func: Callable, *args, **kwargs) -> bool:
+        """Dispatch a callable to the Qt UI thread and report admission."""
         try:
             app = QCoreApplication.instance()
             if app is None or QCoreApplication.closingDown():
                 logger.debug("run_on_ui_thread called without a live Qt event loop")
-                return
+                return False
             _owner, _owner_class, _owner_id, generation = (
                 _callable_runtime_identity(func)
             )
@@ -1313,7 +1313,7 @@ class ThreadManager:
                     generation,
                     _callable_debug_name(func),
                 )
-                return
+                return False
             
             if QThread.currentThread() is app.thread():
                 _run_tracked_ui_callable(
@@ -1322,15 +1322,17 @@ class ThreadManager:
                     dict(kwargs or {}),
                     was_queued=False,
                 )
-                return
+                return True
             
             inv = _ensure_ui_invoker()
             if inv is None:
                 raise RuntimeError("UI invoker unavailable")
             _record_ui_queue(func)
             inv.invoke.emit(func, args, kwargs or {})
+            return True
         except Exception as e:
             logger.exception("run_on_ui_thread dispatch failed: %s", e)
+            return False
 
     @staticmethod
     def single_shot(delay_ms: int, func: Callable, *args, **kwargs) -> None:

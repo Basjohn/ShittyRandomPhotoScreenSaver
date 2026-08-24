@@ -903,11 +903,12 @@ class TestUiThreadDispatch:
             called.append(True)
             thread_ids.append(QThread.currentThread())
 
-        ThreadManager.run_on_ui_thread(_fn)
+        admitted = ThreadManager.run_on_ui_thread(_fn)
         after = manager.get_frame_delivery_snapshot()
         manager.shutdown()
 
         assert called == [True]
+        assert admitted is True
         assert thread_ids[0] is qt_app.thread()
         assert after["ui_delivered"] == before["ui_delivered"] + 1
         assert after["ui_active"] == 0
@@ -937,6 +938,20 @@ class TestUiThreadDispatch:
 
         assert called == [True]
         assert thread_ids[0] is qt_app.thread()
+
+    def test_run_on_ui_thread_reports_missing_event_loop(self, monkeypatch):
+        class _NoApplication:
+            @staticmethod
+            def instance():
+                return None
+
+            @staticmethod
+            def closingDown():
+                return False
+
+        monkeypatch.setattr(manager_module, "QCoreApplication", _NoApplication)
+
+        assert ThreadManager.run_on_ui_thread(lambda: None) is False
 
 
 class TestRecurringTimers:
