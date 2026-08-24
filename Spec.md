@@ -1,6 +1,6 @@
 # SRPSS Specification
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
 Canonical durable architecture and product-behaviour contracts for SRPSS.
 
@@ -104,8 +104,9 @@ If native code is ever earned, preserve the one-`QQuickWindow`-per-display prese
 - `DisplayManager` owns active-display/topology decisions.
 - every physical display owns one runtime presentation window;
 - display 0 is never implicit global geometry/DPR/presentation authority;
-- `WidgetManager` and related model/provider owners may continue to own non-pixel widget lifecycle
-  during migration;
+- presentation-neutral widget services/models may be extracted from legacy pixel owners during
+  migration; `WidgetRuntimeManager` is the current per-display owner seam, while provider/backend
+  cardinality still follows the actual family semantics rather than presentation count;
 - Settings/Edit/topology recreation use ordered generations/lifetimes;
 - visualizer audio analysis, logical simulation, render-state publication, shell policy, geometry,
   content clipping, and physical presentation remain separate concerns.
@@ -360,6 +361,11 @@ No `glFinish()`, `DwmFlush()`, GUI sleeps, nested event pumping, or fence pollin
 ## 11. Widgets and runtime overlays
 
 Widget provider/model/settings logic is not required to migrate merely because runtime pixels do.
+
+During the migration, an admitted presentation-neutral service may be owned through
+`WidgetRuntimeManager` while a QWidget remains only a temporary presentation consumer. A service is
+not a thread: detached work continues through `ThreadManager`, and retired/superseded results must be
+fenced before commit.
 
 During the migration, separate:
 
