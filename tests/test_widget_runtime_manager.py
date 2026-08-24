@@ -264,6 +264,28 @@ def test_ensure_widget_service_builds_and_injects_inert_weather_owner(monkeypatc
     assert service.is_retired() is True
 
 
+def test_ensure_widget_service_builds_only_abandonment_steam_owner():
+    owner = WidgetRuntimeManager(_Host())
+    consumer = _WeatherConsumer()
+
+    service = owner.ensure_widget_service(
+        "abandonment_issues",
+        consumer,
+        {"abandonment_issues": {"selection_mode": "smart_rotation"}},
+    )
+
+    assert service is not None
+    assert consumer.injected is service
+    assert service.is_running() is False
+    assert service.is_retired() is False
+    assert owner.get_widget_service("abandonment_issues") is service
+    assert owner.has_runtime_service("achievement_pulse") is False
+    assert owner.has_runtime_service("steam_progress") is False
+    assert owner.has_runtime_service("friend_pulse") is False
+    assert owner.retire_widget_service("abandonment_issues") is True
+    assert service.is_retired() is True
+
+
 def test_ensure_widget_service_none_for_unregistered_widget():
     owner = WidgetRuntimeManager(_Host())
     assert owner.ensure_widget_service("clock", _ProviderConsumer(), {}) is None
@@ -366,6 +388,62 @@ def test_ensure_widget_service_injection_exception_retires_and_fails_closed(monk
     assert owner.ensure_widget_service("svc", object(), {}) is None
     assert owner.get_widget_service("svc") is None
     assert calls["retire"] == 1
+
+
+@pytest.mark.parametrize("invalid_state", ("edge_missing", "stopped"))
+def test_reused_widget_service_rejects_and_retires_stale_owner(
+    monkeypatch,
+    invalid_state,
+):
+    from rendering import widget_runtime_services as wrs
+
+    class _Service:
+        running = True
+        retired = False
+
+    class _Consumer:
+        injected = None
+
+    service = _Service()
+    consumer = _Consumer()
+    retire_calls: list[object] = []
+
+    def _inject(widget, candidate):
+        widget.injected = candidate
+
+    def _retire(candidate):
+        candidate.retired = True
+        retire_calls.append(candidate)
+
+    spec = wrs.RuntimeServiceSpec(
+        build=lambda _widget_id, _widgets_config: service,
+        inject=_inject,
+        retire=_retire,
+        reuse_is_valid=lambda widget, candidate: (
+            widget.injected is candidate
+            and candidate.running
+            and not candidate.retired
+        ),
+    )
+    monkeypatch.setattr(
+        wrs,
+        "get_runtime_service_spec",
+        lambda widget_id: spec if widget_id == "svc" else None,
+    )
+    owner = WidgetRuntimeManager(_Host())
+
+    assert owner.ensure_widget_service("svc", consumer, {}) is service
+    assert owner.get_reusable_widget_service("svc", consumer) is service
+
+    if invalid_state == "edge_missing":
+        consumer.injected = None
+    else:
+        service.running = False
+
+    assert owner.get_reusable_widget_service("svc", consumer) is None
+    assert owner.get_widget_service("svc") is None
+    assert retire_calls == [service]
+    assert service.retired is True
 
 
 def test_confirmed_widget_cleanup_retires_owned_service(monkeypatch):

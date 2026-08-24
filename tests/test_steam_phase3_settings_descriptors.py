@@ -659,6 +659,8 @@ def test_promoted_factories_are_public_while_unfinished_factories_are_dev_gated(
             )
             assert abandonment_widget is not None
             assert abandonment_widget.objectName() == "abandonment_issues_overlay"
+            assert abandonment_widget._runtime_service is None
+            assert abandonment_widget._owns_runtime_service is False
             assert getattr(abandonment_widget, "_abandonment_selection").mode == "pinned_game"
             assert getattr(abandonment_widget, "_abandonment_selection").pinned_appid == 101
             assert getattr(abandonment_widget, "_abandonment_selection").minimum_playtime_minutes == 20
@@ -736,13 +738,109 @@ def test_steam_cards_flow_through_descriptor_widget_setup_when_enabled(qt_app) -
             abandonment_widget = created["abandonment_issues_widget"]
             assert getattr(abandonment_widget, "_refresh_minutes") == 5
             assert not hasattr(abandonment_widget, "_abandonment_rotation_interval_minutes")
+            service = manager._runtime_manager.get_widget_service("abandonment_issues")
+            assert service is abandonment_widget._runtime_service
+            assert abandonment_widget._owns_runtime_service is False
 
             created_again = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
             assert created_again["steam_progress_widget"] is created["steam_progress_widget"]
+            assert created_again["abandonment_issues_widget"] is abandonment_widget
+            assert (
+                manager._runtime_manager.get_widget_service("abandonment_issues")
+                is service
+            )
+            assert abandonment_widget._runtime_service is service
         finally:
             parent.deleteLater()
     finally:
         _restore_steam_gate(prior)
+
+
+def test_deactivated_steam_family_builds_no_abandonment_runtime_service(qt_app) -> None:
+    parent = QWidget()
+    parent.resize(1280, 720)
+    manager = WidgetManager(parent, ResourceManager())
+    settings = _SteamSetupSettings({
+        "steam": {"enabled": True, "refresh_minutes": 5},
+        "abandonment_issues": {
+            "enabled": True,
+            "monitor": "ALL",
+            "position": "Bottom Right",
+            "show_artwork": False,
+        },
+        "family_activation": {"steam": False},
+        "shadows": {"enabled": True},
+    })
+    try:
+        created = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
+
+        assert "abandonment_issues_widget" not in created
+        assert manager._runtime_manager.get_widget_service("abandonment_issues") is None
+    finally:
+        parent.deleteLater()
+
+
+def test_disabled_abandonment_instance_is_distinct_from_family_deactivation(qt_app) -> None:
+    parent = QWidget()
+    parent.resize(1280, 720)
+    manager = WidgetManager(parent, ResourceManager())
+    settings = _SteamSetupSettings({
+        "steam": {"enabled": True, "refresh_minutes": 5},
+        "abandonment_issues": {
+            "enabled": False,
+            "monitor": "ALL",
+            "position": "Bottom Right",
+        },
+        "family_activation": {"steam": True},
+        "shadows": {"enabled": True},
+    })
+    try:
+        created = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
+
+        assert manager._runtime_manager.admits_widget_family(
+            "abandonment_issues", settings.get_widgets_map()
+        ) is True
+        assert "abandonment_issues_widget" not in created
+        assert manager._runtime_manager.get_widget_service("abandonment_issues") is None
+    finally:
+        parent.deleteLater()
+
+
+def test_abandonment_fails_closed_when_required_runtime_service_build_fails(
+    qt_app,
+    monkeypatch,
+) -> None:
+    import widgets.steam_abandonment_runtime as abandonment_runtime
+
+    monkeypatch.setattr(
+        abandonment_runtime,
+        "AbandonmentRuntimeService",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("Abandonment service build failed")
+        ),
+    )
+    parent = QWidget()
+    parent.resize(1280, 720)
+    manager = WidgetManager(parent, ResourceManager())
+    settings = _SteamSetupSettings({
+        "steam": {"enabled": True, "refresh_minutes": 5},
+        "abandonment_issues": {
+            "enabled": True,
+            "monitor": "ALL",
+            "position": "Bottom Right",
+            "show_artwork": False,
+        },
+        "family_activation": {"steam": True},
+        "shadows": {"enabled": True},
+    })
+    try:
+        created = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
+
+        assert "abandonment_issues_widget" not in created
+        assert manager.get_widget("abandonment_issues") is None
+        assert manager._runtime_manager.get_widget_service("abandonment_issues") is None
+    finally:
+        parent.deleteLater()
 
 
 def test_steam_master_gate_suppresses_enabled_cards_and_fade_expectations(qt_app) -> None:

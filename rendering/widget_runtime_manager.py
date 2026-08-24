@@ -185,6 +185,41 @@ class WidgetRuntimeManager:
         entry = self._services.get(widget_id)
         return entry[0] if entry is not None else None
 
+    def get_reusable_widget_service(self, widget_id: str, widget: Any) -> Any:
+        """Return a still-valid existing owner for setup reconciliation.
+
+        A stale manager entry is retired before returning ``None``.  The setup
+        path can then recreate it for an inactive presentation or fail closed
+        when an already-active presentation cannot cross a fresh activation
+        boundary safely.
+        """
+
+        entry = self._services.get(widget_id)
+        if entry is None:
+            return None
+        service, spec = entry
+        validator = spec.reuse_is_valid
+        if validator is None:
+            return service
+        try:
+            reusable = bool(validator(widget, service))
+        except Exception:
+            reusable = False
+            logger.debug(
+                "[WIDGET_RUNTIME] Reuse validation failed for %s",
+                widget_id,
+                exc_info=True,
+            )
+        if reusable:
+            return service
+        logger.error(
+            "[WIDGET_RUNTIME] Existing runtime service for %s is detached or "
+            "not live; retiring stale owner",
+            widget_id,
+        )
+        self.retire_widget_service(widget_id)
+        return None
+
     def retire_widget_service(self, widget_id: str) -> bool:
         """Retire and drop the owned runtime service for a widget id.
 
