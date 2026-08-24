@@ -116,7 +116,6 @@ class _DisplayStub(QWidget):
         self.reddit_widget = None
         self.reddit2_widget = None
         self.gmail_widget = None
-        self.imgur_widget = None
         self.spotify_visualizer_widget = None
         self.spotify_volume_widget = None
         self.mute_button_widget = None
@@ -194,28 +193,6 @@ class _ConstrainedOverlayWidget(BaseOverlayWidget):
         self._update_font()
         self.setMinimumWidth(600)
         self.setMinimumHeight(320)
-
-
-class _ImgurLikeTestWidget(_EditableTestWidget):
-    def __init__(self, parent: QWidget) -> None:
-        super().__init__(parent, font_size=14)
-        self._header_font_size = 14
-        self._image_spacing = 4
-        self._cell_base_width = 120
-        self._image_border_width = 2
-        self.setGeometry(60, 80, 520, 260)
-
-    def set_header_font_size(self, size: int) -> None:
-        self._header_font_size = int(size)
-
-    def set_image_spacing(self, spacing: int) -> None:
-        self._image_spacing = int(spacing)
-
-    def set_cell_base_width(self, width: int) -> None:
-        self._cell_base_width = int(width)
-
-    def set_image_border_width(self, width: int) -> None:
-        self._image_border_width = int(width)
 
 
 class _VisualizerLikeTestWidget(_EditableTestWidget):
@@ -2900,42 +2877,6 @@ def test_custom_layout_manager_marks_runtime_reload_pending_during_save(qtbot):
     assert manager.save_session() is True
     assert settings_stub.flags_seen == [True]
     assert getattr(display, "_custom_layout_runtime_reload_pending", False) is False
-
-
-def test_custom_layout_manager_saves_and_reapplies_imgur_scale_resize(qtbot, monkeypatch):
-    monkeypatch.setenv("SRPSS_ENABLE_DEV", "true")
-    _reset_custom_layout_manager_state()
-    settings_stub = _SettingsStub()
-    settings_stub._widgets_map = {"imgur": {"position": "Top Right"}}
-    display = _DisplayStub(settings_stub)
-    qtbot.addWidget(display)
-    display.show()
-
-    imgur = _ImgurLikeTestWidget(display)
-    display.imgur_widget = imgur
-    qtbot.addWidget(imgur)
-
-    manager = CustomLayoutManager(display)
-    _attach_manager(display, manager)
-    assert manager.start_session() is True
-
-    state = manager._shell_states["imgur"]
-    state.current_size_payload = {
-        "header_font_size": 18,
-        "image_spacing": 6,
-        "cell_base_width": 150,
-        "image_border_width": 3,
-    }
-    state.resize_scale = 1.25
-    state.current_global_rect = QRect(state.current_global_rect.x(), state.current_global_rect.y(), 640, 320)
-
-    assert manager.save_session() is True
-    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["imgur"]
-    assert payload["size_payload"]["header_font_size"] == 18
-    assert payload["size_payload"]["image_spacing"] == 6
-    assert payload["size_payload"]["cell_base_width"] == 150
-    assert payload["size_payload"]["image_border_width"] == 3
-    assert payload["resize_mode"] == "imgur_scale"
 
 
 def test_custom_layout_manager_visualizer_shell_snapshot_uses_compositor_scene(qtbot):

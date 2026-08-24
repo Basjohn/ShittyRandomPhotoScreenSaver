@@ -16,8 +16,8 @@ Membership vs availability:
 
 - *Membership* (which widget ids belong to which family) lives here and is
   environment-independent.
-- Family-level *availability* (e.g. Imgur is dev-only) is expressed here via the
-  neutral ``core.dev_gates`` / env authority.
+- Family-level *availability* (a family may be gated to a specific env) is
+  expressed here via the neutral ``core.dev_gates`` / env authority.
 - Member-level runtime availability (e.g. the ``--devsteam``-only Steam members)
   is a runtime concern resolved from the runtime widget descriptors, so
   ``rendering.widget_descriptors.get_active_member_widget_ids`` — not this module —
@@ -122,14 +122,6 @@ WIDGET_FAMILY_DESCRIPTORS: tuple[WidgetFamilyDescriptor, ...] = (
         description="Unread inbox summary with sender, subject and timestamps.",
     ),
     WidgetFamilyDescriptor(
-        family_id="imgur",
-        label="Imgur",
-        member_widget_ids=("imgur",),
-        settings_section_id="imgur",
-        description="Imgur image grid (deprecated).",
-        dev_feature_env="SRPSS_ENABLE_DEV",
-    ),
-    WidgetFamilyDescriptor(
         family_id="steam",
         label="Steam",
         member_widget_ids=(
@@ -154,8 +146,8 @@ def get_widget_family_descriptors() -> tuple[WidgetFamilyDescriptor, ...]:
     """Return widget family capabilities available in this environment.
 
     A family is available when it is environment-enabled at the family level
-    (e.g. Imgur requires the dev env). Member-level runtime gating is resolved
-    separately by the runtime descriptors.
+    (a family may require a specific env). Member-level runtime gating is
+    resolved separately by the runtime descriptors.
     """
 
     return _get_active_widget_family_descriptors(_family_env_signature())

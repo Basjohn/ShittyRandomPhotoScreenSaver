@@ -130,7 +130,6 @@ _TEXT_OPTIONS_BY_PATH: dict[tuple[str, ...], tuple[str, ...]] = {
         "custom",
     ),
     ("widgets", "gmail", "date_display_mode"): ("relative", "numeric", "words"),
-    ("widgets", "imgur", "layout_mode"): ("grid", "featured", "hybrid"),
     ("widgets", "media", "provider"): ("spotify", "musicbee"),
     ("widgets", "reddit", "provider"): ("rss", "html", "pullpush", "public_json"),
     ("widgets", "steam", "privacy_mode"): ("Strict", "Balanced", "Rich"),

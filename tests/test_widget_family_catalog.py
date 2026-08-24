@@ -92,21 +92,6 @@ def test_clocks_family_owns_all_three_clocks():
     assert family.member_widget_ids == ("clock", "clock2", "clock3")
 
 
-def test_imgur_family_follows_dev_env_gating(monkeypatch):
-    # Imgur is deprecated/dev-gated: absent without SRPSS_ENABLE_DEV, present with.
-    # The neutral catalog caches are keyed on an environment signature, so a
-    # monkeypatched env is reflected without reloading modules.
-    from core.settings import widget_family_catalog as wfc
-
-    monkeypatch.delenv("SRPSS_ENABLE_DEV", raising=False)
-    assert wfc.get_widget_family_descriptor("imgur") is None
-    assert wfc.get_family_id_for_widget("imgur") is None
-
-    monkeypatch.setenv("SRPSS_ENABLE_DEV", "true")
-    assert wfc.get_widget_family_descriptor("imgur") is not None
-    assert wfc.get_family_id_for_widget("imgur") == "imgur"
-
-
 def test_steam_family_gating_matches_active_members():
     # Steam owns ungated members (achievement_pulse, abandonment_issues) so the
     # family is always available; --devsteam only adds the gated members. The

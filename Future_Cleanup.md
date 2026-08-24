@@ -111,22 +111,7 @@ After the corresponding Quick primitive/family/cutover caller proof:
 
 Do not retain screenshot-to-texture adapters or dual presentation registries "for safety."
 
-## 4. Phase F0 — Imgur removal
-
-Imgur is **CURRENT-LEGACY — WILL BE REMOVED**, not a Quick migration target.
-
-When Phase F reaches F0:
-
-- [ ] remove Imgur descriptor/family/catalog entry;
-- [ ] remove runtime/provider/settings/CUSTOM/build surface with no surviving caller;
-- [ ] delete Imgur tests rather than porting them;
-- [ ] remove/ignore obsolete persisted Imgur state through the canonical settings epoch/cleanup route;
-- [ ] do not repair or redesign Imgur merely to make it migrate.
-
-Any leftover caller-proven debris found later belongs here, but Imgur itself is active Phase-F removal
-work when admitted by `Current_Plan.md`, not a permanent deferred feature.
-
-## 5. Transition legacy deletion — Phase I
+## 4. Transition legacy deletion — Phase I
 
 All canonical transitions already have Quick renderers. The old presentation implementation may still
 have live pre-cutover callers and is therefore **CURRENT-LEGACY — WILL BE OBSOLETE at I**.
@@ -138,7 +123,7 @@ After production cutover/caller proof:
 - [ ] remove old compositor-specific transition watchdog/animation glue;
 - [ ] preserve canonical transition registry/settings identity and Quick renderer regressions.
 
-## 6. Phase G/I — CUSTOM/input/auxiliary pixel deletion
+## 5. Phase G/I — CUSTOM/input/auxiliary pixel deletion
 
 After retained Quick edit/input ownership lands and callers are proven absent:
 
@@ -150,7 +135,7 @@ After retained Quick edit/input ownership lands and callers are proven absent:
 
 Cross-monitor/CUSTOM retirement must not delete the saved geometry authority it was meant to preserve.
 
-## 7. Native code
+## 6. Native code
 
 There is no deferred "rewrite presenter in C++" task.
 
@@ -161,7 +146,7 @@ If later profiling finds a specific Quick renderer Python bottleneck:
 - [ ] preserve the same QQuickWindow topology;
 - [ ] preserve state/lifecycle/fidelity contracts.
 
-## 8. Logical-runtime cleanup
+## 7. Logical-runtime cleanup
 
 After migration/correctness work:
 
@@ -173,7 +158,7 @@ After migration/correctness work:
 Do **not** delete `VisualizerLogicalRuntime` or its permanent tests merely because some files retain old
 P2/Phase-D names.
 
-## 9. Test / harness debt
+## 8. Test / harness debt
 
 `Docs/TestSuite.md` is authoritative for exact file status.
 
@@ -191,7 +176,7 @@ General retirement rules:
 
 Do not preserve an empty tombstone test module as historical documentation.
 
-## 10. Post-migration Media artwork framing
+## 9. Post-migration Media artwork framing
 
 This is **nonblocking post-migration presentation cleanup**, not a reason to alter the active migration
 sequence or add a second Media acquisition path.
@@ -222,14 +207,14 @@ This cleanup may be generalized beyond Spotify only if other GSMTC providers dem
 transport-letterboxing behavior. Do not make Spotify-specific presentation architecture unless source
 evidence requires it.
 
-## 11. Long-run resources
+## 10. Long-run resources
 
 Repeat long-soak resource work on final Quick architecture.
 
 Keep memory/handle retention separate from the physical-presentation decision unless evidence connects
 them.
 
-## 12. Repository / compatibility debris
+## 11. Repository / compatibility debris
 
 - [ ] remove generated preview debris after clean-checkout proof;
 - [ ] collapse deprecated class-global input authority after Quick input owner lands;
@@ -237,7 +222,7 @@ them.
 - [ ] remove migration-only compatibility aliases after caller proof rather than carrying them as a
       permanent translation layer.
 
-## 13. Documentation hygiene — through J
+## 12. Documentation hygiene — through J
 
 At each owner/cutover change:
 
@@ -251,7 +236,7 @@ At each owner/cutover change:
 - [ ] remove temporary migration decomposition docs only once their durable contracts are absorbed;
 - [ ] never create a second live roadmap hierarchy.
 
-## 14. New feature / implementation backlog
+## 13. New feature / implementation backlog
 
 New features and deliberately deferred new implementations belong in `Future_Work.md`, not this
 cleanup ledger.

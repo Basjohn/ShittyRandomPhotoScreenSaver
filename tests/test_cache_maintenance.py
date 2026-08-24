@@ -10,7 +10,7 @@ def _write(path: Path, payload: bytes) -> None:
     path.write_bytes(payload)
 
 
-def test_cache_family_inventory_excludes_credentials_settings_and_imgur(tmp_path: Path) -> None:
+def test_cache_family_inventory_excludes_credentials_and_settings(tmp_path: Path) -> None:
     app_root = tmp_path / "SRPSS"
     reddit_root = tmp_path / "repo" / "cache" / "reddit"
 
@@ -35,7 +35,6 @@ def test_cache_family_inventory_excludes_credentials_settings_and_imgur(tmp_path
     assert app_root / "steam" / "cache" in target_paths
     assert app_root / "steam" / "credentials.bin" not in target_paths
     assert app_root / "settings_v2.json" not in target_paths
-    assert all("imgur" not in str(path).lower() for path in target_paths)
 
 
 def test_clear_cache_families_removes_only_allowlisted_files(tmp_path: Path) -> None:

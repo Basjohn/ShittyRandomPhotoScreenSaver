@@ -598,7 +598,6 @@ def apply_widget_stacking(widget, widgets_config: Dict[str, Any]) -> None:
         (getattr(widget, 'reddit_widget', None), 'reddit_widget'),
         (getattr(widget, 'reddit2_widget', None), 'reddit2_widget'),
         (getattr(widget, 'gmail_widget', None), 'gmail_widget'),
-        (getattr(widget, 'imgur_widget', None), 'imgur_widget'),
     ]
     widget._widget_manager.apply_widget_stacking(
         widget_list,

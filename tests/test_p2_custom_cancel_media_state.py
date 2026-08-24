@@ -139,7 +139,7 @@ def test_cancel_restore_set_excludes_preview_only_widgets():
     assert "spotify_visualizer" in _CANCEL_RESTORE_WIDGET_IDS, (
         "the visualizer runtime is genuinely suspended and must be restored"
     )
-    for preview_only in ("media", "clock", "weather", "reddit", "gmail", "imgur"):
+    for preview_only in ("media", "clock", "weather", "reddit", "gmail"):
         assert preview_only not in _CANCEL_RESTORE_WIDGET_IDS, (
             f"{preview_only} is preview-only; Cancel must not replay into it"
         )
