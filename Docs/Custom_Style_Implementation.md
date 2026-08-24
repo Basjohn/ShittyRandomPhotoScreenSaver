@@ -1,6 +1,6 @@
 # Custom Style Implementation
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
 Guidance for SRPSS Settings UI and runtime visual styling during the Qt Quick migration.
 
@@ -79,6 +79,71 @@ Do not remove a user-facing visual control merely because its QWidget implementa
 unless `Current_Plan.md` explicitly retires that **control/behavior itself**. The known exception is
 presentation-era state deliberately retired by the migration, such as the old per-mode visualizer
 card-height/growth controls.
+
+### 4.1 Widgets → General shadow-direction picker — REQUIRED F0.5 UI
+
+E4 landed the canonical `widgets.shadows.direction` setting/runtime authority but intentionally did not
+add its user-facing Settings control. F0.5 supplies that editor before the first retained family port.
+
+Location:
+
+```text
+Settings
+  -> Widgets
+      -> General
+          -> Shadow Direction
+```
+
+Use a **compact custom-styled 3×3 arrow-picker box** rather than a combo box or a vertical bank of eight
+radio buttons:
+
+```text
+┌─────────────┐
+│ ↖   ↑   ↗  │
+│ ←       →  │
+│ ↙   ↓   ↘  │
+└─────────────┘
+```
+
+The eight selectable cells map to the existing canonical tokens:
+
+```text
+NW  N  NE
+ W     E
+SW  S  SE
+```
+
+The center cell is deliberately empty/inert. There is no center, none, automatic, or zero-offset
+shadow-direction mode. Do not add a ninth semantic merely because the control uses a 3×3 layout.
+
+Style/UX requirements:
+
+- match existing SRPSS dark custom Settings chrome and spacing;
+- remain compact enough to sit naturally inside Widgets → General rather than becoming a large panel;
+- arrows/icons are the primary presentation, not `NW`/`SE` text labels;
+- selected direction is immediately obvious without requiring focus;
+- provide normal hover and pressed feedback consistent with nearby custom controls;
+- keyboard focus/navigation must remain usable;
+- expose tooltip/accessibility names such as `North West`, `North`, `South East`;
+- fresh profile / Reset to Defaults selects `SE`;
+- loading an invalid persisted token displays the canonical E4 fallback (`SE`) rather than inventing a
+  separate UI repair policy.
+
+Authority requirements:
+
+- read/write the existing canonical `widgets.shadows.direction` value;
+- reuse the E4 canonical token vocabulary/resolution policy; do not define a second direction enum or
+  independent mapping table with different semantics;
+- Settings remains QWidget; this control does not justify QML Settings UI;
+- do not expose `SettingsManager` to runtime QML;
+- do not directly reach into a retained family item from the picker. Use the normal Settings
+  apply/save/recreate/update path used by shared visual settings;
+- the picker controls **orientation only**. It does not alter card/text/header magnitude, blur, spread,
+  opacity, color, or enabled state.
+
+Focused F0.5 tests should cover all eight choices, center-cell inertness, canonical persistence/reload,
+Reset to Defaults => `SE`, invalid-token fallback display, and normal Widgets → General lazy-page/save
+behavior. F0.5 does not port Clock or another runtime widget family.
 
 ## 5. Shadow history and Phase E4 destination
 

@@ -18,7 +18,7 @@ Within Phase E:
 - E3 retained ordinary-widget substrate: **CLOSED / audit GREEN @ `1f25a791`**
 - **E4 global eight-direction shadow authority: CLOSED / independently GREEN @ `3a562632`**;
 - **Phase E: CLOSED**;
-- **Phase F: ACTIVE; F0 Imgur removal is next, then F1 Clock**.
+- **Phase F: ACTIVE; F0 Imgur removal is next, then F0.5 shadow-direction Settings picker, then F1 Clock**.
 
 ## Required routing
 
@@ -48,7 +48,7 @@ operator's real local worktree. Do not add hosted CI unless explicitly requested
 | C | implementation closed |
 | D | implementation closed |
 | E | **closed / independently GREEN through E4** |
-| **F** | **active: F0 next; F1 Clock follows** |
+| **F** | **active: F0 next; F0.5 Settings picker follows; then F1 Clock** |
 | G | waiting for F |
 | H | waiting for A–G implementation |
 | I | waiting for H |
@@ -71,8 +71,9 @@ operator's real local worktree. Do not add hosted CI unless explicitly requested
 
 For active Phase-F work read `10_Widget_Family_Port_Decomposition.md` plus `04_Widget_Runtime_Presentation.md` and `09_Widget_Quick_Presentation_Bridge.md`. F0 is the current admitted slice.
 
-For F1 Clock after F0 is independently GREEN, read `09_Widget_Quick_Presentation_Bridge.md` and
-`10_Widget_Family_Port_Decomposition.md` together.
+After F0 is independently GREEN, implement F0.5 using `Docs/Custom_Style_Implementation.md` plus
+`10_Widget_Family_Port_Decomposition.md`. For F1 Clock after F0.5 is GREEN, read
+`09_Widget_Quick_Presentation_Bridge.md` and `10_Widget_Family_Port_Decomposition.md` together.
 
 ## Current-legacy warning
 

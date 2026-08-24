@@ -39,7 +39,7 @@ Current normal implementation work is **Phase F0 — remove deprecated Imgur bef
 - E1 presentation-neutral runtime/model/provider ownership: independently GREEN / closed @ `4466c306`.
 - E3 retained ordinary-widget host + shell primitives: independently GREEN / closed @ `1f25a791`.
 - **E4 is independently GREEN / CLOSED at `3a562632`; Phase E is CLOSED.**
-- **Phase F is active: F0 Imgur removal is next; F1 Clock follows.**
+- **Phase F is active: F0 Imgur removal is next; F0.5 adds the Widgets → General shadow-direction picker; F1 Clock follows.**
 
 ## Start here
 
@@ -54,6 +54,7 @@ Current normal implementation work is **Phase F0 — remove deprecated Imgur bef
 | Capability activation / SETUP | `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md` |
 | Widget runtime ownership/threading | `Docs/10_WIDGET_GUIDELINES.md`, `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md` |
 | Widget retained shell + shadows | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
+| Widgets → General visual controls / shadow-direction picker | `Docs/Custom_Style_Implementation.md` |
 | Widget state/models/actions/assets | `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md` |
 | Detailed family ports / Clock | `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md` |
 | CUSTOM/input/geometry variants | `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md` |
@@ -123,7 +124,7 @@ not another fade timeline. Intermediate Items need a real composition responsibi
 
 ## Clock migration direction
 
-Clock is the first Phase-F family after F0.
+Clock is the first retained Phase-F family after F0 and the F0.5 shadow-direction Settings picker.
 
 Its Quick port intentionally includes:
 

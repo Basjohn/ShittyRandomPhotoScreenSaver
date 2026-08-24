@@ -235,9 +235,18 @@ Measure whole-scene GPU/frame impact with multiple real widgets, not only local 
 
 ---
 
+## 9.1 Global shadow-direction Settings control
+
+E4 landed the canonical `widgets.shadows.direction` runtime/settings authority without its editor. Before
+Clock/F1, F0.5 adds one compact 3×3 arrow picker in **Widgets → General**. Detailed styling/interaction
+belongs to `Docs/Custom_Style_Implementation.md`. The UI edits the canonical token only; it does not
+create another direction resolver or directly own runtime QML state.
+
+---
+
 ## 10. Clock family authoring rules
 
-Clock is first Phase-F family after F0.
+Clock is the first retained Phase-F family after F0 and the F0.5 Widgets → General shadow-direction picker.
 
 Preserve the shared Python ticker/timezone logic.
 

@@ -5,7 +5,8 @@ Last updated: 2026-08-24
 Source/decomposition basis: Phase E closed through independently GREEN E4 @ `3a562632`
 
 This is subordinate to `Current_Plan.md`. Phase E is closed. `Current_Plan.md` currently admits F0
-only; F1 Clock follows after F0 is independently GREEN.
+only; F0.5 adds the missing Widgets → General shadow-direction picker after F0 is independently GREEN,
+and F1 Clock follows after F0.5 is GREEN.
 
 Cross-links:
 
@@ -49,8 +50,9 @@ Do not delete useful neutral Python behavior merely because it lived next to QWi
 Recommended bounded order:
 
 ```text
-F0  Imgur removal
-F1  Clock / Clock2 / Clock3
+F0    Imgur removal
+F0.5  Widgets → General shadow-direction picker
+F1    Clock / Clock2 / Clock3
 F2  Weather
 F3  Media core
 F4  Media volume / mute / progress / controls
@@ -128,7 +130,51 @@ plain retained card/fade/shadow architecture across real families.
 
 ---
 
-# 4. F1 — Clock family
+# 4. F0.5 — Widgets → General shadow-direction picker
+
+E4 landed the canonical runtime/settings direction authority but intentionally did not add the Settings
+control. Do not let Phase-E closure orphan the user-facing customization.
+
+Implement the picker in the existing QWidget Settings UI at:
+
+```text
+Widgets → General → Shadow Direction
+```
+
+Detailed visual/interaction contract lives in `Docs/Custom_Style_Implementation.md`. In summary:
+
+```text
+┌─────────────┐
+│ ↖   ↑   ↗  │
+│ ←       →  │
+│ ↙   ↓   ↘  │
+└─────────────┘
+```
+
+Requirements:
+
+- compact SRPSS-styled 3×3 arrow-picker box, not a combo box or eight stacked radio buttons;
+- center cell is deliberately inert/empty; there is no center/none shadow direction;
+- clear hover, pressed and selected states, with `SE` selected for a fresh/default profile;
+- arrows/icons are the primary visual language; accessible/tooltip names use North West, North, etc.;
+- load/save the existing canonical `widgets.shadows.direction` token directly;
+- use the canonical resolver/token vocabulary already landed in E4 rather than defining UI-local mapping
+  semantics;
+- Settings remains QWidget; do not expose `SettingsManager` to runtime QML and do not directly poke
+  retained QML items from the control;
+- preserve the normal Settings apply/save/recreate path used by other shared visual settings;
+- no Clock/family port in this slice.
+
+Gate all eight selections, persistence/reload, Reset to Defaults => `SE`, invalid persisted token display
+through the canonical fallback, inert center behavior, and normal Widgets → General construction/lazy-page
+semantics.
+
+F0.5 should be a small bounded Settings slice. Push and stop for independent audit because it establishes
+the only user-facing editor for the new global direction authority.
+
+---
+
+# 5. F1 — Clock family
 
 Clock is the first real family port and the first proof of the generic family-content seam.
 
@@ -469,7 +515,7 @@ Eyes-on:
 
 ---
 
-# 5. F2 — Weather
+# 6. F2 — Weather
 
 ## Preserve owner
 
@@ -511,7 +557,7 @@ location and provider error. No network is needed for pixel tests.
 
 ---
 
-# 6. F3 — Media core
+# 7. F3 — Media core
 
 Media is a higher-risk family due to shared controller/provider ownership, artwork, progress, playback
 state and Visualizer relationship.
@@ -554,7 +600,7 @@ Audit this seam separately if it changes process/display resource ownership.
 
 ---
 
-# 7. F4 — Media controls / volume / mute / progress
+# 8. F4 — Media controls / volume / mute / progress
 
 Build on Media core state/action routing.
 
@@ -572,7 +618,7 @@ Prove:
 
 ---
 
-# 8. F5 — Reddit / Reddit2
+# 9. F5 — Reddit / Reddit2
 
 Use E1-neutral post-provider ownership.
 
@@ -590,7 +636,7 @@ Any dynamic imagery should reuse the shared image seam already established if co
 
 ---
 
-# 9. F6 — Gmail
+# 10. F6 — Gmail
 
 Reuse the shared Gmail backend/runtime owner.
 
@@ -607,7 +653,7 @@ Notification detection/sound stays Python/business-owned and cannot depend on QM
 
 ---
 
-# 10. F7–F10 — Steam family
+# 11. F7–F10 — Steam family
 
 Order:
 
@@ -629,7 +675,7 @@ destination ownership authority.
 
 ---
 
-# 11. Shared primitive admission rule during F
+# 12. Shared primitive admission rule during F
 
 Do not pre-build a library of hypothetical widgets.
 
@@ -652,7 +698,7 @@ Do not add a generic `HeaderRow`/`UniversalWidgetContent` merely to make file na
 
 ---
 
-# 12. Family checkpoint policy
+# 13. Family checkpoint policy
 
 A low-risk family may be sliced:
 
@@ -680,7 +726,7 @@ family may copy.
 
 ---
 
-# 13. Phase-F closure criteria
+# 14. Phase-F closure criteria
 
 Before F closes:
 
