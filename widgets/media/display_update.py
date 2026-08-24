@@ -1,19 +1,18 @@
-"""Display update logic for the MediaWidget.
+"""Pure QWidget projection for accepted Media runtime snapshots.
 
-Extracted from media_widget.py (M-5 refactor) to reduce monolith size.
-Contains the core _update_display method that processes media track info,
-builds HTML metadata, handles artwork decoding, and manages visibility.
+The neutral owner has already resolved provider/query/cache state and decoded
+changed artwork into a source-resolution QImage. This module performs only the
+per-display metadata, progress, visibility, layout and prepared-artwork handoff.
 """
 from __future__ import annotations
 
-from dataclasses import replace
 import time
 from typing import Optional, TYPE_CHECKING
 
 from PySide6.QtCore import Qt, SIGNAL
 from shiboken6 import Shiboken
 
-from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.media.media_controller import MediaTrackInfo
 from utils.text_utils import smart_title_case
 
@@ -71,61 +70,6 @@ def _suppress_unchanged_refresh(
         )
 
 
-def _norm_metadata_text(value: Optional[str]) -> str:
-    return (value or "").strip().lower()
-
-
-def _coalesce_partial_same_track_metadata(
-    widget: "MediaWidget",
-    info: Optional[MediaTrackInfo],
-    prev_info: Optional[MediaTrackInfo],
-) -> Optional[MediaTrackInfo]:
-    """Preserve known same-track visible metadata when a poll returns a partial snapshot.
-
-    GSMTC can briefly report a title/state/artwork snapshot without artist text
-    during unrelated UI churn. That snapshot is not authoritative enough to
-    erase already-visible artist metadata for the same track.
-    """
-    if info is None:
-        return None
-    if (info.artist or "").strip():
-        return info
-
-    title_key = _norm_metadata_text(info.title)
-    if not title_key:
-        return info
-
-    candidates: list[Optional[MediaTrackInfo]] = [prev_info]
-    try:
-        candidates.append(widget.get_retained_display_info())
-    except Exception as e:
-        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-    try:
-        candidates.append(type(widget)._get_shared_valid_info())
-    except Exception as e:
-        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-
-    for candidate in candidates:
-        if candidate is None:
-            continue
-        if _norm_metadata_text(candidate.title) != title_key:
-            continue
-        artist = (candidate.artist or "").strip()
-        if not artist:
-            continue
-        try:
-            return replace(
-                info,
-                artist=candidate.artist,
-                album=info.album or candidate.album,
-                album_artist=info.album_artist or candidate.album_artist,
-                artwork=info.artwork if info.artwork is not None else candidate.artwork,
-            )
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Failed to coalesce partial metadata snapshot: %s", e)
-            return info
-
-    return info
 
 
 def _accept_prepared_artwork_for_info(
@@ -416,201 +360,42 @@ def update_display(
     prepared_artwork=None,
     artwork_generation: int | None = None,
 ) -> None:
-    """Process a media track snapshot and update the widget display.
+    """Project one accepted neutral runtime snapshot into QWidget state."""
 
-    This is the main update path — called after each poll cycle. It handles:
-    - Lifetime guard (widget may be destroyed by async callback)
-    - Shared info cache for multi-display desync prevention
-    - Smart polling: diff gating, idle detection, adaptive intervals
-    - HTML metadata rendering (title, artist, SPOTIFY header)
-    - Artwork decoding and fade-in
-    - First-track capture and coordinated fade-in
-    """
-    # Lifetime guard: async callbacks may fire after the widget has been
-    # destroyed. Bail out early and stop timers/handles if the underlying
-    # Qt object is no longer valid.
     try:
         if not Shiboken.isValid(widget):
-            if getattr(widget, "_update_timer_handle", None) is not None:
-                try:
-                    widget._update_timer_handle.stop()
-                except Exception as e:
-                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                widget._update_timer_handle = None
-
-            if getattr(widget, "_update_timer", None) is not None:
-                try:
-                    widget._update_timer.stop()
-                    widget._update_timer.deleteLater()
-                except Exception as e:
-                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                widget._update_timer = None
-
-            widget._enabled = False
-            widget._refresh_in_flight = False
             return
-    except Exception as e:
-        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+    except Exception as exc:
+        logger.debug("[MEDIA_WIDGET] Lifetime check failed: %s", exc)
         return
 
     widget._perf_media_display_total = (
         int(getattr(widget, "_perf_media_display_total", 0) or 0) + 1
     )
-
-    # Cache last track snapshot for diagnostics/interaction
     prev_info = widget._last_info
-    info = _coalesce_partial_same_track_metadata(widget, info, prev_info)
     widget._last_info = info
 
-    # Update shared cache when we have valid info
-    if info is not None:
-        cls = type(widget)
-        cls._shared_last_valid_info = info
-        cls._shared_last_valid_info_ts = time.monotonic()
-        try:
-            widget.cache_retained_display_info(info)
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-
-    # Smart polling: diff gating - compute track identity
-    metadata_changed = False
-    artwork_changed = False
-    artwork_snapshot_processed = False
-    progress_changed = False
-
-    if info is not None:
-        progress_changed = _update_progress_paint_state(widget, info)
-        current_identity = widget._compute_track_identity(info)
-        current_metadata_identity = widget._compute_metadata_identity(info)
-        metadata_changed = current_metadata_identity != widget._last_metadata_identity
-
-        # Artwork ownership must be processed before the metadata early-return.
-        # During a transition, unchanged follow-up polls carry the same artwork
-        # key without another decoded QImage. Promoting the existing pending
-        # image to the current request generation keeps idle flush authoritative.
-        if (
-            prepared_artwork is not None
-            and artwork_generation is not None
-            and _prepared_artwork_requires_acceptance(
-                widget,
-                info,
-                prepared_artwork,
-            )
-        ):
-            artwork_changed = _accept_prepared_artwork_for_info(
-                widget,
-                info,
-                prepared_artwork,
-                int(artwork_generation),
-            )
-        artwork_snapshot_processed = prepared_artwork is not None
-
-        # Reset idle counter when we get valid track info
-        if widget._consecutive_none_count > 0 or widget._is_idle:
-            if is_perf_metrics_enabled():
-                logger.debug("[PERF] Media widget exiting idle (track detected)")
-            widget._consecutive_none_count = 0
-            was_idle = widget._is_idle
-            widget._is_idle = False
-            # Reset activation time to get fresh grace period after recovery
-            widget._activation_time = time.monotonic()
-            # Reset to fast polling when resuming from idle
-            if was_idle:
-                widget._reset_poll_stage()
-                # Update timer interval from idle (5s) to fast (1s)
-                widget._ensure_timer(force=True)
-
-        # Adaptive polling: advance to slower interval after 2 successful polls
-        widget._polls_at_current_stage += 1
-        if widget._polls_at_current_stage >= 2:
-            widget._advance_poll_stage()
-
-        # Diff gating: skip update if track identity unchanged
-        if (
-            current_identity == widget._last_track_identity
-            and widget._last_track_identity is not None
-            and not artwork_changed
-            and (
-                (
-                    widget._fade_in_completed
-                    and _has_stable_visible_presentation(widget)
-                )
-                # The first track has already established the fixed card
-                # contract.  It can be deliberately hidden while the
-                # coordinator owns its fade, which must not turn a same-track
-                # poll into a metadata publication or a geometry/repaint pass.
-                or (
-                    not metadata_changed
-                    and _has_fixed_metadata_presentation(widget)
-                )
-            )
-        ):
-            widget._skipped_identity_updates += 1
-            budget_exhausted = (
-                widget._skipped_identity_updates > widget._max_identity_skip
-            )
-            if not budget_exhausted:
-                if is_perf_metrics_enabled():
-                    logger.debug(
-                        "[PERF] Media widget update skipped (diff gating - %d/%d)",
-                        widget._skipped_identity_updates,
-                        widget._max_identity_skip,
-                    )
-            else:
-                widget._skipped_identity_updates = 0
-            _suppress_unchanged_refresh(
-                widget,
-                budget_exhausted=budget_exhausted,
-            )
-            if progress_changed:
-                safe_update = getattr(widget, "_safe_update", None)
-                if callable(safe_update):
-                    safe_update()
-            return
-
-        # Track changed - update identity and proceed
-        widget._last_track_identity = current_identity
-        widget._last_metadata_identity = current_metadata_identity
+    if info is None:
+        widget._last_track_identity = None
+        widget._last_metadata_identity = None
         widget._skipped_identity_updates = 0
         widget._unchanged_refresh_diag_pending = False
-        widget._last_display_update_ts = time.monotonic()
-        if is_perf_metrics_enabled():
-            logger.debug("[PERF] Media widget update applied (track changed)")
-    else:
-        metadata_changed = False
+        _update_progress_paint_state(widget, None)
+        _hide_missing_media_presentation(widget)
+        return
 
-    if info is None:
-        # MULTI-DISPLAY FIX: Check if other widgets have valid info
-        cls = type(widget)
-        shared_info = cls._get_shared_valid_info()
-        if shared_info is not None:
-            logger.debug("[MEDIA_WIDGET] Using shared info from another display")
-            info = shared_info
-            widget._last_info = info
-            try:
-                widget.cache_retained_display_info(info)
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        # else: No shared info - proceed with normal None handling
+    progress_changed = _update_progress_paint_state(widget, info)
+    current_identity = widget._compute_track_identity(info)
+    current_metadata_identity = widget._compute_metadata_identity(info)
+    metadata_changed = current_metadata_identity != widget._last_metadata_identity
+    artwork_changed = False
 
-    if info is None:
-        retained_info = _handle_no_media(widget)
-        if retained_info is None:
-            _update_progress_paint_state(widget, None)
-            return
-        info = retained_info
-        widget._last_info = info
-
-    # Shared/retained fallback may replace the original empty snapshot.
-    _update_progress_paint_state(widget, info)
-
-    # Apply only the worker-prepared artwork that belongs to the final snapshot.
-    # A raw ``None`` result may have been replaced by retained/shared metadata,
-    # so its empty artwork result must not clear that retained card.
+    # The neutral owner supplies a source-resolution QImage plus stable key.
+    # QPixmap creation, transition deferral and per-display caches stay here.
     if (
-        not artwork_snapshot_processed
-        and prepared_artwork is not None
+        prepared_artwork is not None
         and artwork_generation is not None
+        and _prepared_artwork_requires_acceptance(widget, info, prepared_artwork)
     ):
         artwork_changed = _accept_prepared_artwork_for_info(
             widget,
@@ -619,110 +404,66 @@ def update_display(
             int(artwork_generation),
         )
 
-    # --- Build metadata HTML ---
-    final_metadata_identity = widget._compute_metadata_identity(info)
-    metadata_changed = bool(
-        metadata_changed
-        or artwork_changed
-        or (final_metadata_identity != widget._last_metadata_identity)
+    if (
+        current_identity == widget._last_track_identity
+        and widget._last_track_identity is not None
+        and not artwork_changed
+        and (
+            (
+                widget._fade_in_completed
+                and _has_stable_visible_presentation(widget)
+            )
+            or (
+                not metadata_changed
+                and _has_fixed_metadata_presentation(widget)
+            )
+        )
+    ):
+        widget._skipped_identity_updates += 1
+        budget_exhausted = (
+            widget._skipped_identity_updates > widget._max_identity_skip
+        )
+        if budget_exhausted:
+            widget._skipped_identity_updates = 0
+        elif is_perf_metrics_enabled():
+            logger.debug(
+                "[PERF] Media widget update skipped (diff gating - %d/%d)",
+                widget._skipped_identity_updates,
+                widget._max_identity_skip,
+            )
+        _suppress_unchanged_refresh(
+            widget,
+            budget_exhausted=budget_exhausted,
+        )
+        if progress_changed:
+            safe_update = getattr(widget, "_safe_update", None)
+            if callable(safe_update):
+                safe_update()
+        return
+
+    widget._last_track_identity = current_identity
+    widget._last_metadata_identity = current_metadata_identity
+    widget._skipped_identity_updates = 0
+    widget._unchanged_refresh_diag_pending = False
+    widget._last_display_update_ts = time.monotonic()
+    if is_perf_metrics_enabled():
+        logger.debug("[PERF] Media widget accepted runtime snapshot")
+
+    _build_and_apply_metadata(
+        widget,
+        info,
+        prev_info,
+        metadata_changed=bool(metadata_changed or artwork_changed),
     )
-    widget._last_metadata_identity = final_metadata_identity
-
-    _build_and_apply_metadata(widget, info, prev_info, metadata_changed=metadata_changed)
 
 
-def _update_app_process_state(widget: "MediaWidget") -> None:
-    """Check whether the target media app process is running and update widget state.
+def _hide_missing_media_presentation(widget: "MediaWidget") -> None:
+    """Hide an empty accepted snapshot without owning runtime/retention policy."""
 
-    Called during idle mode to choose between normal idle (5s) and deep idle (30s).
-    The actual check is delegated to the media controller's lightweight process
-    detection (ctypes Toolhelp32 on Windows) — no GSMTC overhead.
-    """
-    try:
-        controller = getattr(widget, "_controller", None)
-        if controller is not None and hasattr(controller, "is_app_process_running"):
-            widget._app_process_running = controller.is_app_process_running()
-        else:
-            widget._app_process_running = False
-    except Exception as e:
-        logger.debug("[MEDIA_WIDGET] Process detection failed: %s", e)
-        widget._app_process_running = False
+    last_visibility = widget._telemetry_last_visibility
+    if last_visibility or last_visibility is None:
+        logger.info("[MEDIA_WIDGET] No accepted media snapshot; hiding media card")
 
-
-def _handle_no_media(widget: "MediaWidget") -> Optional[MediaTrackInfo]:
-    """Handle case where no media info is available.
-
-    Returns a retained display snapshot when the widget should stay visible,
-    otherwise returns ``None`` after performing hide/idle logic.
-    """
-    # Check grace period after activation - don't hide immediately
-    time_since_activation = time.monotonic() - widget._activation_time
-    if widget._activation_time > 0 and time_since_activation < widget._post_activation_grace_sec:
-        if is_verbose_logging():
-            logger.debug(
-                "[MEDIA_WIDGET] In grace period after activation (%.1fs), skipping hide",
-                time_since_activation,
-            )
-        return widget.get_retained_display_info()
-
-    # Smart polling: idle detection - track consecutive None results
-    widget._consecutive_none_count += 1
-    try:
-        widget.note_missing_session()
-    except Exception as e:
-        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-
-    # Enter idle mode after threshold consecutive None results (~30s)
-    if widget._consecutive_none_count >= widget._idle_threshold and not widget._is_idle:
-        widget._is_idle = True
-        widget._last_track_identity = None
-        # Check if the media app process is still running to choose idle interval
-        _update_app_process_state(widget)
-        if is_perf_metrics_enabled():
-            logger.debug(
-                "[PERF] Media widget entering idle mode (process_running=%s, interval=%s)",
-                widget._app_process_running,
-                widget._idle_poll_interval if widget._app_process_running else widget._deep_idle_poll_interval,
-            )
-        else:
-            logger.info(
-                "[MEDIA_WIDGET] Entering idle mode after %d consecutive empty polls (app running: %s)",
-                widget._consecutive_none_count,
-                widget._app_process_running,
-            )
-        # Update timer interval from active (2.5s) to idle (5s or 30s)
-        widget._ensure_timer(force=True)
-    elif widget._is_idle and widget._consecutive_none_count % 6 == 0:
-        # Periodically re-check process state during idle to detect app launch/exit
-        prev_running = widget._app_process_running
-        _update_app_process_state(widget)
-        if prev_running != widget._app_process_running:
-            logger.info(
-                "[MEDIA_WIDGET] App process state changed: %s → %s",
-                prev_running, widget._app_process_running,
-            )
-            widget._ensure_timer(force=True)
-
-    retained_info = None
-    try:
-        retained_info = widget.get_retained_display_info()
-    except Exception as e:
-        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-
-    if retained_info is not None:
-        if widget._telemetry_last_visibility is not True:
-            logger.info("[MEDIA_WIDGET] Live session missing; retaining cached media card display")
-        widget._telemetry_last_visibility = True
-        try:
-            widget._emit_media_update(retained_info)
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        return retained_info
-
-    # No retained snapshot available – hide widget with graceful fade
-    last_vis = widget._telemetry_last_visibility
-    if last_vis or last_vis is None:
-        logger.info("[MEDIA_WIDGET] No active media session; hiding media card")
     clear_artwork = getattr(widget, "_clear_artwork_for_missing_media", None)
     if callable(clear_artwork):
         clear_artwork()
@@ -730,11 +471,13 @@ def _handle_no_media(widget: "MediaWidget") -> Optional[MediaTrackInfo]:
         widget._artwork_pixmap = None
         widget._scaled_artwork_cache = None
         widget._scaled_artwork_cache_key = None
-        if hasattr(widget, "_applied_artwork_key"):
-            widget._applied_artwork_key = (0, "")
+        widget._applied_artwork_key = (0, "")
 
-    # Graceful fade out instead of instant hide
-    if widget.isVisible():
+    try:
+        visible = bool(widget.isVisible())
+    except Exception:
+        visible = False
+    if visible:
         try:
             from widgets.shadow_utils import ShadowFadeProfile
 
@@ -743,14 +486,12 @@ def _handle_no_media(widget: "MediaWidget") -> Optional[MediaTrackInfo]:
                 duration_ms=800,
                 on_complete=lambda: widget._complete_hide_sequence(),
             )
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Fade out failed, hiding instantly: %s", e)
+        except Exception as exc:
+            logger.debug("[MEDIA_WIDGET] Fade out failed, hiding instantly: %s", exc)
             widget._complete_hide_sequence()
     else:
         widget._complete_hide_sequence()
-
     widget._telemetry_last_visibility = False
-    return None
 
 
 def _ensure_painter_owned_label_contract(widget: "MediaWidget") -> int:

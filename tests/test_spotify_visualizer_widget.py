@@ -9924,21 +9924,18 @@ def test_spotify_visualizer_watchdog_does_not_override_authoritative_media_wait(
 
 
 @pytest.mark.qt
-def test_shared_nonplaying_seed_allows_idle_startup_reveal_for_bubble(qt_app, qtbot, monkeypatch):
+def test_runtime_nonplaying_seed_allows_idle_startup_reveal_for_bubble(qt_app, qtbot, monkeypatch):
     parent = QWidget()
     qtbot.addWidget(parent)
     parent.show()
 
     class _Anchor(QWidget):
-        _shared_payload = {"state": "paused"}
-
         def __init__(self, parent=None):
             super().__init__(parent)
             self.refresh_calls = 0
 
-        @classmethod
-        def _get_shared_valid_info(cls):
-            return dict(cls._shared_payload)
+        def current_media_info(self):
+            return {"state": "paused"}
 
         def refresh_playback_state(self):
             self.refresh_calls += 1
@@ -10191,7 +10188,7 @@ def test_spotify_visualizer_start_seeds_playback_from_anchor_cache(qt_app, qtbot
 
 
 @pytest.mark.qt
-def test_spotify_visualizer_start_prefers_live_shared_playing_seed_over_local_paused_cache(qt_app, qtbot, monkeypatch):
+def test_spotify_visualizer_start_prefers_runtime_playing_seed_over_local_paused_mirror(qt_app, qtbot, monkeypatch):
     parent = QWidget()
     qtbot.addWidget(parent)
     parent.show()
@@ -10205,8 +10202,6 @@ def test_spotify_visualizer_start_prefers_live_shared_playing_seed_over_local_pa
     )
 
     class _Anchor(QWidget):
-        _shared_last_valid_info = playing_info
-
         def __init__(self, parent=None):
             super().__init__(parent)
             self.refresh_requests = 0
@@ -10218,9 +10213,8 @@ def test_spotify_visualizer_start_prefers_live_shared_playing_seed_over_local_pa
                 artwork_url="art://retained",
             )
 
-        @classmethod
-        def _get_shared_valid_info(cls):
-            return cls._shared_last_valid_info
+        def current_media_info(self):
+            return playing_info
 
         def refresh_playback_state(self) -> None:
             self.refresh_requests += 1

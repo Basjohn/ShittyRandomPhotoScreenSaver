@@ -29,7 +29,7 @@ logger = get_logger(__name__)
 # two concerns are now split - the logical/presentation playback target follows
 # the trusted MediaWidget state promptly, and capture lifetime stays engine
 # policy. No replacement timer was introduced.
-_SHARED_SEED_SOURCES = {"shared_valid_info", "shared_last_valid_info"}
+_SHARED_SEED_SOURCES = {"runtime_current_info"}
 
 
 def _payload_state_rank(payload: Optional[dict]) -> int:
@@ -82,7 +82,7 @@ def seed_playback_state_from_anchor(
     reason: str,
     request_refresh_if_missing: bool,
 ) -> bool:
-    """Seed playback state from the anchor media widget or its shared cache."""
+    """Seed playback state from the anchor's neutral owner or local mirror."""
     anchor = widget._anchor_media
     best_payload: Optional[dict] = None
     best_source = "<none>"
@@ -100,23 +100,20 @@ def seed_playback_state_from_anchor(
             best_score = candidate_score
 
     if anchor is not None:
+        try:
+            current_getter = getattr(anchor, "current_media_info", None)
+            if callable(current_getter):
+                _consider(
+                    current_getter(),
+                    source="runtime_current_info",
+                    source_rank=3,
+                )
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to read Media runtime snapshot", exc_info=True)
+
+        # Transitional E1 edge: keep the presenter's accepted mirror available
+        # to standalone/test anchors that do not expose the neutral service yet.
         _consider(getattr(anchor, "_last_info", None), source="anchor._last_info", source_rank=2)
-
-        try:
-            shared_getter = getattr(type(anchor), "_get_shared_valid_info", None)
-            if callable(shared_getter):
-                _consider(shared_getter(), source="shared_valid_info", source_rank=3)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to read shared media cache", exc_info=True)
-
-        try:
-            _consider(
-                getattr(type(anchor), "_shared_last_valid_info", None),
-                source="shared_last_valid_info",
-                source_rank=1,
-            )
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to read legacy shared media cache", exc_info=True)
 
     payload = best_payload
     if payload is not None:

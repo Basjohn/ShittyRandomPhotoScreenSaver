@@ -466,7 +466,12 @@ class MediaWidgetFactory(WidgetFactory):
             widget_pos = coerce_widget_position(model.position, WidgetPosition.BOTTOM_LEFT)
             position = position_map.get(widget_pos, MediaPosition.BOTTOM_LEFT)
             
-            widget = MediaWidget(parent=parent, position=position, provider=model.provider)
+            widget = MediaWidget(
+                parent=parent,
+                position=position,
+                provider=model.provider,
+                build_default_runtime=False,
+            )
             
             # Thread manager
             if self._thread_manager and hasattr(widget, "set_thread_manager"):

@@ -96,11 +96,20 @@ class _BaseStubWidget:
 class _StubMediaWidget(_BaseStubWidget):
     """Minimal stand-in for MediaWidget to record configuration calls."""
 
-    def __init__(self, parent, position, provider="spotify"):
+    def __init__(
+        self,
+        parent,
+        position,
+        provider="spotify",
+        build_default_runtime=True,
+    ):
         super().__init__()
         self.parent = parent
         self.position = position
         self.provider = provider
+        self.build_default_runtime = build_default_runtime
+        self.runtime_service = object() if build_default_runtime else None
+        self._runtime_generation = 17
         self.thread_manager = None
         self.font_family = None
         self.font_size = None
@@ -119,6 +128,19 @@ class _StubMediaWidget(_BaseStubWidget):
 
     def set_thread_manager(self, thread_manager):
         self.thread_manager = thread_manager
+        if self.runtime_service is not None and hasattr(
+            self.runtime_service, "set_thread_manager"
+        ):
+            self.runtime_service.set_thread_manager(thread_manager)
+
+    def set_runtime_service(self, service):
+        self.runtime_service = service
+        if self.thread_manager is not None:
+            service.set_thread_manager(self.thread_manager)
+        service.attach_consumer(self)
+
+    def is_media_consumer_alive(self):
+        return True
 
     def set_font_family(self, value):
         self.font_family = value
@@ -393,6 +415,10 @@ def _patch_widget_classes(monkeypatch):
         "create_spotify_visualizer_widget",
         lambda self, *args, **kwargs: None,
     )
+    yield
+    from widgets.media_runtime import reset_shared_media_runtime_for_tests
+
+    reset_shared_media_runtime_for_tests()
 
 
 def _create_manager():
@@ -443,7 +469,7 @@ def test_media_widget_creation_handles_prefixed_positions():
         },
     }
 
-    _manager, created = _setup_widgets(widgets_config)
+    manager, created = _setup_widgets(widgets_config)
     widget = created['media_widget']
 
     assert isinstance(widget, _StubMediaWidget)
@@ -463,6 +489,28 @@ def test_media_widget_creation_handles_prefixed_positions():
     assert widget.shadow_config == widgets_config["shadows"]
     assert widget.raised is True
     assert widget.started is True
+    assert widget.build_default_runtime is False
+    service = manager._runtime_manager.get_widget_service("media")
+    assert service is widget.runtime_service
+    assert service.is_running() is False
+
+
+def test_deactivated_media_family_owns_no_widget_or_runtime_service():
+    config = {
+        "media": {
+            "enabled": True,
+            "monitor": "ALL",
+            "position": "WidgetPosition.TOP_CENTER",
+            "provider": "spotify",
+        },
+        "family_activation": {"media": False},
+    }
+
+    manager, created = _setup_widgets(config)
+
+    assert "media_widget" not in created
+    assert manager.get_widget("media") is None
+    assert manager._runtime_manager.get_widget_service("media") is None
 
 
 def test_existing_media_widget_rebinds_thread_manager():

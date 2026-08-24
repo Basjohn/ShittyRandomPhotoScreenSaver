@@ -1,7 +1,9 @@
 """Media/Now Playing widget for screensaver overlay.
 
-This widget displays the current media playback state (track title,
-artist, album) using the centralized media controller abstraction.
+This QWidget presents the accepted state from a neutral Media runtime lease.
+Controller/provider lifetime, polling, shared playback state and source artwork
+decode live outside the presenter; this class owns only per-display projection,
+QPixmap/DPR work, fades, geometry and controls feedback.
 
 Transport controls (play/pause, previous/next) are exposed but are
 strictly gated behind explicit user intent (Ctrl-held or Interaction Mode
@@ -10,21 +12,19 @@ mode remains non-interactive.
 """
 from __future__ import annotations
 
-import hashlib
 import time
 import weakref
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from enum import Enum
-from typing import Optional, TYPE_CHECKING, ClassVar, Any
+from typing import Optional, TYPE_CHECKING, ClassVar
 
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import QBuffer, QByteArray, QTimer, Qt, Signal, QPoint
+from PySide6.QtCore import QTimer, Qt, Signal, QPoint
 from PySide6.QtGui import (
     QColor,
     QFont,
     QFontMetrics,
     QImage,
-    QImageReader,
     QPixmap,
 )
 from shiboken6 import Shiboken
@@ -33,44 +33,28 @@ from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_
 from core.performance import widget_paint_sample
 from core.media.media_controller import (
     BaseMediaController,
-    MediaPlaybackState,
     MediaTrackInfo,
-    create_media_controller,
 )
 from core.media.provider_registry import (
     get_media_provider_header_name,
-    get_provider_failover_candidates,
     normalize_provider_id,
     preserve_provider_setting,
 )
 from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
-from widgets.media.runtime_state import (
-    MediaWidgetRuntimeState,
-    build_retained_display_info,
-    cache_retained_display_info,
-    clear_missing_session,
-    mark_provider_probe_attempt,
-    note_missing_session,
-    should_probe_provider_failover,
+from widgets.media_runtime import (
+    MediaRuntimeService,
+    MediaRuntimeSnapshot,
+    PreparedMediaArtwork as PreparedArtwork,
+    compute_media_artwork_key,
 )
 from widgets.shadow_utils import ShadowFadeProfile
-from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from utils.text_utils import smart_title_case
 
 if TYPE_CHECKING:
     from rendering.widget_manager import WidgetManager
 
 logger = get_logger(__name__)
-
-
-@dataclass(frozen=True)
-class PreparedArtwork:
-    """Worker-owned artwork decode result awaiting a UI-thread pixmap handoff."""
-
-    key: tuple[int, str]
-    image: QImage | None
-    decode_ms: float
 
 
 class MediaPosition(Enum):
@@ -93,23 +77,16 @@ class MediaWidget(BaseOverlayWidget):
     Extends BaseOverlayWidget for common styling/positioning functionality.
 
     Features:
-    - Polls a centralized media controller for current track info
+    - Projects shared runtime snapshots into per-display QWidget state
     - Shows playback state (playing/paused), title, artist, album
-    - Configurable position, font, colors, and background frame
-    - Non-interactive (transparent to mouse) for screensaver safety
+    - Owns presentation-only artwork scaling, fades, layout and controls
+    - Remains non-interactive unless the existing interaction gate admits input
     """
 
     media_updated = Signal(dict)  # Emits dict(MediaTrackInfo) when refreshed
     
     # Override defaults for media widget
     DEFAULT_FONT_SIZE = 20
-    # A confirmation refresh is requested after 300 ms.  Keep the optimistic
-    # command expectation alive long enough for that query to traverse the
-    # controller's 2.5 s hard-timeout path, but release it promptly and
-    # deterministically if the backend never confirms the command.
-    _PLAYBACK_CONFIRMATION_REFRESH_DELAY_MS = 300
-    _PLAYBACK_CONFIRMATION_TIMEOUT_SEC = 3.0
-    
     # Class-level shared state for feedback synchronization
     _instances: ClassVar[weakref.WeakSet] = weakref.WeakSet()
     _shared_feedback_events: ClassVar[dict] = {}
@@ -118,11 +95,6 @@ class MediaWidget(BaseOverlayWidget):
     # deadline/fallback sweeper, so it must not add a second 60 Hz GUI stream.
     _shared_feedback_timer_interval_ms: ClassVar[int] = 100
     
-    # Shared media info cache - prevents multi-display desync
-    _shared_last_valid_info: ClassVar[Optional[MediaTrackInfo]] = None
-    _shared_last_valid_info_ts: ClassVar[float] = 0.0
-    _shared_info_max_age_sec: ClassVar[float] = 5.0
-
     def __init__(
         self,
         parent: Optional[QWidget] = None,
@@ -130,6 +102,7 @@ class MediaWidget(BaseOverlayWidget):
         controller: Optional[BaseMediaController] = None,
         thread_manager: Optional[ThreadManager] = None,
         provider: str = "spotify",
+        build_default_runtime: bool = True,
     ) -> None:
         # Convert MediaPosition to OverlayPosition for base class
         overlay_pos = OverlayPosition(position.value)
@@ -142,48 +115,22 @@ class MediaWidget(BaseOverlayWidget):
         
         # Registered provider id drives GSMTC session ownership and branding.
         self._provider: str = self._validate_provider(provider)
-        self._provider_generation: int = 0
         self._perf_media_emit_count: int = 0
         self._perf_media_emit_total: int = 0
         self._perf_media_update_request_total: int = 0
         self._perf_media_display_total: int = 0
         self._perf_media_last_log_ts: float = time.monotonic()
 
-        self._pending_controller_tm: Optional[ThreadManager] = None
+        self._runtime_service: Optional[MediaRuntimeService] = None
+        self._standalone_runtime_service: Optional[MediaRuntimeService] = None
+        self._last_runtime_revision: int = 0
+        self._pending_runtime_thread_manager: Optional[ThreadManager] = None
         if thread_manager is not None:
             self.set_thread_manager(thread_manager)
-        controller_tm = thread_manager or self._thread_manager or self._pending_controller_tm
-        self._controller: BaseMediaController = controller or create_media_controller(
-            thread_manager=controller_tm, app_filter=self._provider
-        )
-        if controller_tm is not None:
-            try:
-                self._controller.set_thread_manager(controller_tm)
-            except Exception as exc:
-                logger.debug("[MEDIA_WIDGET] Exception suppressing controller TM injection: %s", exc)
-        else:
-            self._pending_controller_tm = None
-        try:
-            logger.info("[MEDIA_WIDGET] Using controller: %s (provider=%s)", type(self._controller).__name__, self._provider)
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+        if controller is not None and not build_default_runtime:
+            raise ValueError("controller injection requires standalone Media runtime ownership")
 
         self._widget_manager: Optional["WidgetManager"] = None
-        self._update_timer: Optional[QTimer] = None
-        self._update_timer_handle: Optional[OverlayTimerHandle] = None
-        self._update_timer_interval_ms: Optional[int] = None
-        self._refresh_in_flight = False
-        self._refresh_in_flight_generation: int = 0
-        # Playback-state freshness epoch. Each accepted optimistic transport edge
-        # advances it; an async GSMTC refresh captures the epoch it started under,
-        # so a refresh that began BEFORE the command cannot reverse the optimistic
-        # post-command state. A same-epoch contradiction is also held until the
-        # backend confirms the expected state or this bounded deadline expires.
-        self._playback_epoch: int = 0
-        self._expected_playback_state: Optional[MediaPlaybackState] = None
-        self._expected_playback_epoch: Optional[int] = None
-        self._playback_confirmation_deadline_monotonic: float = 0.0
-        self._playback_confirmation_refresh_timer: Optional[QTimer] = None
         self._pending_keyboard_alias_command: Optional[tuple[str, float]] = None
         self._pending_keyboard_alias_timer: Optional[QTimer] = None
         self._last_external_transport_feedback: Optional[tuple[str, float]] = None
@@ -260,26 +207,11 @@ class MediaWidget(BaseOverlayWidget):
 
         # Central ResourceManager wiring
         self._last_info: Optional[MediaTrackInfo] = None
-        self._runtime_state = MediaWidgetRuntimeState()
         
         # Smart polling: diff gating to skip unnecessary updates
         self._last_track_identity: Optional[tuple] = None  # (title, artist, album, state)
         self._last_metadata_identity: Optional[tuple] = None
         
-        # Smart polling: idle detection to stop polling when Spotify is closed
-        self._consecutive_none_count: int = 0
-        self._idle_threshold: int = 12  # ~30s at 2500ms interval before entering idle
-        self._is_idle: bool = False
-        self._idle_poll_interval: int = 5000  # Poll every 5s when idle (app running, no media)
-        self._deep_idle_poll_interval: int = 30000  # Poll every 30s when app process not found
-        self._app_process_running: bool = False  # Last known process existence state
-        
-        # Adaptive poll interval: 1000ms → 2000ms → 2500ms
-        # Faster initial detection, then slow down for efficiency
-        self._poll_intervals: list[int] = [1000, 2000, 2500]
-        self._current_poll_stage: int = 0  # Index into _poll_intervals
-        self._polls_at_current_stage: int = 0  # Polls completed at current interval
-
         # Fixed widget height once we have seen the first track so that
         # changes in wrapped text do not move the card on screen.
         self._fixed_card_height: Optional[int] = None
@@ -296,13 +228,6 @@ class MediaWidget(BaseOverlayWidget):
         self._telemetry_logged_missing_tm = False
         self._telemetry_last_visibility: Optional[bool] = None
         self._telemetry_logged_fade_request = False
-        
-        # Desync: Cache GSMTC results for 500ms to reduce IO contention
-        self._gsmtc_cache_ms = 500
-        self._gsmtc_cached_result: Optional[Any] = None
-        self._gsmtc_cached_prepared_artwork: PreparedArtwork | None = None
-        self._gsmtc_cached_artwork_generation: int = 0
-        self._gsmtc_cache_ts: float = 0.0
         
         # Artwork vertical bias for dynamic positioning
         self._artwork_vertical_bias: float = 0.4
@@ -328,14 +253,20 @@ class MediaWidget(BaseOverlayWidget):
         self._max_identity_skip: int = 4
         self._unchanged_refresh_diag_pending: bool = False
         
-        # Widget state tracking for lifecycle management
-        self._activation_time: float = 0.0
-        self._post_activation_grace_sec: float = 5.0  # Grace period after activation
-
         # Register this instance for shared feedback
         type(self)._instances.add(self)
 
         self._setup_ui()
+
+        if build_default_runtime:
+            standalone_service = MediaRuntimeService(
+                provider=self._provider,
+                shared=False,
+                controller=controller,
+                runtime_generation=getattr(self, "_runtime_generation", None),
+            )
+            self._standalone_runtime_service = standalone_service
+            self.set_runtime_service(standalone_service)
 
         logger.debug("MediaWidget created (position=%s)", position.value)
 
@@ -365,95 +296,166 @@ class MediaWidget(BaseOverlayWidget):
 
         return get_media_provider_header_name(self._provider) or "MEDIA"
 
-    def cache_retained_display_info(self, info: MediaTrackInfo) -> None:
-        """Remember the latest valid metadata/artwork snapshot for retained display."""
-
-        cache_retained_display_info(self._runtime_state, info)
-
     def get_retained_display_info(self) -> Optional[MediaTrackInfo]:
-        """Return a retained snapshot downgraded to a non-reactive playback state."""
+        """Transitional presenter read of the shared owner's accepted snapshot."""
 
-        return build_retained_display_info(self._runtime_state)
+        service = self._runtime_service
+        if service is not None:
+            return service.current_info()
+        return self._last_info
 
-    def note_missing_session(self) -> None:
-        """Record that live session acquisition temporarily disappeared."""
+    def current_media_info(self) -> Optional[MediaTrackInfo]:
+        """Return the accepted neutral snapshot for presenter/Visualizer seeding."""
 
-        note_missing_session(self._runtime_state)
+        return self.get_retained_display_info()
 
-    def clear_missing_session(self) -> None:
-        """Clear the current missing-session marker."""
+    def set_runtime_service(self, service: MediaRuntimeService) -> None:
+        """Attach this presenter to its per-display neutral Media lease."""
 
-        clear_missing_session(self._runtime_state)
+        if service is None:
+            raise ValueError("Media runtime service is required")
+        current = self._runtime_service
+        if current is service:
+            thread_manager = self._thread_manager or self._pending_runtime_thread_manager
+            if thread_manager is not None:
+                service.set_thread_manager(thread_manager)
+            return
 
-    def should_probe_provider_failover(self) -> bool:
-        """Return True when runtime auto-fallback is allowed to probe again."""
+        was_running = bool(self._enabled)
+        if current is not None:
+            current.stop()
+            current.detach_consumer(self)
+            if current is self._standalone_runtime_service:
+                current.retire()
+                self._standalone_runtime_service = None
 
-        return should_probe_provider_failover(self._runtime_state)
+        self._runtime_service = service
+        self._last_runtime_revision = 0
+        thread_manager = self._thread_manager or self._pending_runtime_thread_manager
+        if thread_manager is not None:
+            service.set_thread_manager(thread_manager)
+        try:
+            service.attach_consumer(self)
+        except Exception:
+            self._runtime_service = None
+            raise
+        self._provider = self._validate_provider(service.provider)
+        self._brand_pixmap = self._load_brand_pixmap()
+        self._header_logo_scaled_cache = None
+        self._header_logo_scaled_cache_key = None
+        if was_running and not service.start():
+            raise RuntimeError("Media runtime service could not resume active presenter")
 
-    def mark_provider_probe_attempt(self) -> None:
-        """Record a runtime provider auto-fallback probe attempt."""
+    def is_media_consumer_alive(self) -> bool:
+        """Return whether service delivery may still target this presenter."""
 
-        mark_provider_probe_attempt(self._runtime_state)
+        try:
+            if not Shiboken.isValid(self):
+                return False
+        except Exception:
+            return False
+        return getattr(getattr(self, "_lifecycle_state", None), "name", "") != "DESTROYED"
 
-    def set_provider_runtime(self, provider: object) -> bool:
-        """Retarget controller/branding to a new provider without recreating the widget."""
+    def on_media_runtime_snapshot(self, snapshot: MediaRuntimeSnapshot) -> None:
+        """Project one shared neutral snapshot into this display's QWidget state."""
+
+        if not isinstance(snapshot, MediaRuntimeSnapshot) or not self.is_media_consumer_alive():
+            return
+        revision = int(snapshot.revision)
+        if revision < self._last_runtime_revision:
+            return
+        if snapshot.provider != self._provider:
+            self.on_media_runtime_provider_changed(
+                self._provider,
+                snapshot.provider,
+                source="runtime_replay",
+                persist=False,
+            )
+        self._last_runtime_revision = revision
+        self._artwork_update_generation = revision
+        self._update_display(
+            snapshot.info,
+            snapshot.artwork,
+            revision,
+        )
+
+    def on_media_runtime_provider_changed(
+        self,
+        old_provider: str,
+        provider: str,
+        *,
+        source: str,
+        persist: bool,
+    ) -> None:
+        """Reset only presenter caches after the neutral owner changes provider."""
 
         normalized = self._validate_provider(provider)
-        if normalized == self._provider and getattr(self, "_controller", None) is not None:
-            return False
-
-        controller_tm = self._thread_manager or self._pending_controller_tm
-        controller = create_media_controller(thread_manager=controller_tm, app_filter=normalized)
-        if controller_tm is not None:
-            try:
-                controller.set_thread_manager(controller_tm)
-            except Exception as exc:
-                logger.debug("[MEDIA_WIDGET] Exception suppressing controller TM injection: %s", exc)
-
-        old_provider = self._provider
-        self._reset_playback_confirmation(delete_timer=True)
-        self._retire_refresh_generation()
-        self._provider_generation += 1
         self._provider = normalized
-        self._controller = controller
-        self._runtime_state = MediaWidgetRuntimeState()
+        self._last_runtime_revision = 0
         self._last_info = None
         self._last_track_identity = None
         self._last_metadata_identity = None
-        self._gsmtc_cached_result = None
-        self._gsmtc_cached_prepared_artwork = None
-        self._gsmtc_cache_ts = 0.0
         self._artwork_pixmap = None
         self._scaled_artwork_cache = None
         self._scaled_artwork_cache_key = None
         self._applied_artwork_key = None
-        self._pending_artwork = None
-        self._pending_artwork_deferred = False
-        type(self)._shared_last_valid_info = None
-        type(self)._shared_last_valid_info_ts = 0.0
+        self._discard_pending_artwork()
         self._brand_pixmap = self._load_brand_pixmap()
         self._header_logo_scaled_cache = None
         self._header_logo_scaled_cache_key = None
         self._safe_update()
-        logger.info("[MEDIA_WIDGET] Runtime provider switch: %s -> %s", old_provider, normalized)
-        return True
+        if persist:
+            manager = self._widget_manager
+            if manager is not None and hasattr(manager, "handle_media_provider_failover"):
+                try:
+                    manager.handle_media_provider_failover(normalized, source=source)
+                except Exception:
+                    logger.debug(
+                        "[MEDIA_WIDGET] Failed to persist provider failover",
+                        exc_info=True,
+                    )
+        logger.info(
+            "[MEDIA_WIDGET] Presenter provider projection: %s -> %s (source=%s)",
+            old_provider,
+            normalized,
+            source,
+        )
 
-    def _apply_provider_failover(self, provider: str) -> None:
-        """UI-side provider switch and canonical settings persistence."""
+    def on_media_runtime_volume_target(self, provider: str, source_id: str) -> None:
+        """Forward the accepted target to this display's existing volume presenter."""
 
-        self.set_provider_runtime(provider)
         manager = self._widget_manager
-        if manager is not None and hasattr(manager, "handle_media_provider_failover"):
-            try:
-                manager.handle_media_provider_failover(
-                    provider,
-                    source="media_runtime_autofallback",
-                )
-            except Exception:
-                logger.debug(
-                    "[MEDIA_WIDGET] Failed to persist provider failover",
-                    exc_info=True,
-                )
+        if manager is None or not hasattr(manager, "sync_media_volume_runtime_target"):
+            return
+        try:
+            manager.sync_media_volume_runtime_target(provider, source_id)
+        except Exception:
+            logger.debug(
+                "[MEDIA_WIDGET] Failed to sync accepted volume target",
+                exc_info=True,
+            )
+
+    def set_provider_runtime(self, provider: object) -> bool:
+        """Transitional UI entry point; provider ownership remains in the service."""
+
+        normalized = self._validate_provider(provider)
+        service = self._runtime_service
+        if service is None:
+            changed = normalized != self._provider
+            self._provider = normalized
+            return changed
+        changed = service.set_provider_runtime(normalized, source="settings")
+        runtime_provider = getattr(service, "provider", normalized)
+        running_getter = getattr(service, "is_running", None)
+        service_running = bool(running_getter()) if callable(running_getter) else False
+        if runtime_provider != self._provider and not service_running:
+            self.on_media_runtime_provider_changed(
+                self._provider,
+                runtime_provider,
+                source="settings",
+                persist=False,
+            )
+        return changed
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -498,38 +500,38 @@ class MediaWidget(BaseOverlayWidget):
         logger.debug("[LIFECYCLE] MediaWidget initialized")
     
     def _activate_impl(self) -> None:
-        """Activate media widget - start polling (lifecycle hook)."""
-        self._reset_playback_confirmation(delete_timer=True)
+        """Activate this presenter lease; the shared owner starts on first use."""
         invalidate = getattr(self, "_invalidate_controls_layout", None)
         if callable(invalidate):
             invalidate()
         if not self._ensure_thread_manager("MediaWidget._activate_impl"):
-            # Fall back to a best-effort synchronous refresh so metadata at least appears once.
-            logger.error("[MEDIA_WIDGET] ThreadManager missing during activation; performing synchronous refresh")
-            self._refresh()
-            return
-        
-        # Record activation time for grace period
-        self._activation_time = time.monotonic()
-        
-        self._refresh()
-        self._ensure_timer()
-        if self._thread_manager is not None:
-            self._refresh_async()
-        
+            raise RuntimeError("Media presenter activation requires ThreadManager")
+        service = self._runtime_service
+        if service is not None and service.provider != self._provider:
+            self.on_media_runtime_provider_changed(
+                self._provider,
+                service.provider,
+                source="runtime_reactivate",
+                persist=False,
+            )
+        if service is None or not service.start():
+            raise RuntimeError("Media presenter has no startable runtime service")
         logger.debug("[LIFECYCLE] MediaWidget activated")
     
     def _deactivate_impl(self) -> None:
-        """Deactivate media widget - stop polling (lifecycle hook)."""
-        self._stop_update_timers(delete_qtimer=True)
-        self._reset_playback_confirmation(delete_timer=True)
-        self._retire_refresh_generation()
-        
+        """Release this active lease without disturbing other displays."""
+        service = self._runtime_service
+        if service is not None:
+            service.stop()
+        self._clear_pending_keyboard_alias_timer()
+        self._pending_keyboard_alias_command = None
         logger.debug("[LIFECYCLE] MediaWidget deactivated")
     
     def _cleanup_impl(self) -> None:
         """Clean up media resources (lifecycle hook)."""
         self._deactivate_impl()
+        self._expire_all_feedback()
+        type(self)._instances.discard(self)
         self._discard_pending_artwork()
         self._artwork_pixmap = None
         self._applied_artwork_key = None
@@ -538,6 +540,13 @@ class MediaWidget(BaseOverlayWidget):
         self._header_logo_scaled_cache = None
         self._header_logo_scaled_cache_key = None
         self._last_info = None
+        service = self._runtime_service
+        self._runtime_service = None
+        if service is not None:
+            service.detach_consumer(self)
+            if service is self._standalone_runtime_service:
+                service.retire()
+        self._standalone_runtime_service = None
         logger.debug("[LIFECYCLE] MediaWidget cleaned up")
     
     # -------------------------------------------------------------------------
@@ -545,120 +554,71 @@ class MediaWidget(BaseOverlayWidget):
     # -------------------------------------------------------------------------
 
     def start(self) -> None:
-        """Begin polling media controller and showing widget."""
+        """Activate this display's lease on the shared Media owner."""
 
         if self._enabled:
             logger.warning("Media widget already running")
             return
         if not self._ensure_thread_manager("MediaWidget.start"):
             return
-
-        self._reset_playback_confirmation(delete_timer=True)
-        self._enabled = True
+        service = self._runtime_service
+        if service is None:
+            logger.error("[MEDIA_WIDGET] Cannot start without runtime service")
+            return
+        if service.provider != self._provider:
+            self.on_media_runtime_provider_changed(
+                self._provider,
+                service.provider,
+                source="runtime_reactivate",
+                persist=False,
+            )
         try:
             self.hide()
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        
-        # Force initial refresh to load artwork on boot
-        # This ensures the widget shows current track immediately
-        self._ensure_timer()
-        if self._thread_manager is not None:
-            self._refresh_async()
-        else:
-            self._refresh()
+        if not service.start():
+            logger.error("[MEDIA_WIDGET] Runtime service refused start")
+            return
+        self._enabled = True
         logger.info("Media widget started")
 
     def stop(self) -> None:
-        """Stop polling and hide widget."""
+        """Release this display's active lease and hide the presenter."""
 
         if not self._enabled:
             return
 
+        service = self._runtime_service
+        if service is not None:
+            service.stop()
         self._enabled = False
-        self._stop_update_timers(delete_qtimer=True)
-        self._reset_playback_confirmation(delete_timer=True)
-        self._retire_refresh_generation()
-
+        self._clear_pending_keyboard_alias_timer()
+        self._pending_keyboard_alias_command = None
         self.hide()
         logger.debug("Media widget stopped")
 
     def is_running(self) -> bool:
-        return self._enabled
+        service = self._runtime_service
+        return bool(self._enabled and service is not None and service.is_running())
 
     def cleanup(self) -> None:
         """Clean up resources (called from DisplayWidget)."""
 
         logger.debug("Cleaning up media widget")
-        self._cancel_painted_frame_shadow_preparation()
-        self._discard_pending_artwork()
-        self.stop()
-
-    def _reset_update_timer_state(self, *, delete_qtimer: bool) -> None:
-        """Stop smart-poll timer state and optionally destroy the backing QTimer."""
-        if self._update_timer_handle is not None:
-            try:
-                self._update_timer_handle.stop()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            self._update_timer_handle = None
-
-        if self._update_timer is not None:
-            try:
-                self._update_timer.stop()
-                if delete_qtimer:
-                    self._update_timer.deleteLater()
-            except RuntimeError:
-                pass
-            self._update_timer = None
-        self._update_timer_interval_ms = None
-
-    def _stop_update_timers(self, *, delete_qtimer: bool) -> None:
-        self._reset_update_timer_state(delete_qtimer=delete_qtimer)
-
-    def _retire_refresh_generation(self) -> None:
-        """Fence results from a retired provider/runtime refresh generation."""
-        self._artwork_update_generation = (
-            int(getattr(self, "_artwork_update_generation", 0)) + 1
-        )
-        self._refresh_in_flight = False
-        self._refresh_in_flight_generation = self._artwork_update_generation
-        self._gsmtc_cached_result = None
-        self._gsmtc_cached_prepared_artwork = None
-        self._gsmtc_cached_artwork_generation = 0
-        self._gsmtc_cache_ts = 0.0
-
-    def _reset_playback_confirmation(self, *, delete_timer: bool) -> None:
-        """Clear bounded playback confirmation ownership and its refresh timer."""
-        timer = self._playback_confirmation_refresh_timer
-        if timer is not None:
-            try:
-                timer.stop()
-                if delete_timer:
-                    timer.deleteLater()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        self._playback_confirmation_refresh_timer = None
-        self._expected_playback_state = None
-        self._expected_playback_epoch = None
-        self._playback_confirmation_deadline_monotonic = 0.0
+        super().cleanup()
 
     def set_thread_manager(self, thread_manager) -> None:
         super().set_thread_manager(thread_manager)
-        controller_tm = thread_manager or self._thread_manager
-        if hasattr(self, "_controller") and self._controller is not None and controller_tm is not None:
-            try:
-                self._controller.set_thread_manager(controller_tm)
-            except Exception as exc:
-                logger.debug("[MEDIA_WIDGET] Unable to inject ThreadManager into media controller: %s", exc)
-        else:
-            self._pending_controller_tm = controller_tm
+        runtime_tm = thread_manager or self._thread_manager
+        self._pending_runtime_thread_manager = runtime_tm
+        service = self._runtime_service
+        if service is not None and runtime_tm is not None:
+            service.set_thread_manager(runtime_tm)
         invalidate = getattr(self, "_invalidate_controls_layout", None)
         if callable(invalidate):
             invalidate()
-        if self._enabled and thread_manager is not None:
-            self._ensure_timer(force=True)
-            self._refresh_async()
+        if self._enabled and service is not None and runtime_tm is not None:
+            service.refresh(bust_cache=True)
         if is_verbose_logging():
             logger.debug("[MEDIA_WIDGET] ThreadManager injected: %s", type(thread_manager).__name__ if thread_manager else None)
 
@@ -686,19 +646,11 @@ class MediaWidget(BaseOverlayWidget):
     # ------------------------------------------------------------------
     
     def wake_from_idle(self) -> None:
-        """Wake the media widget from idle mode to resume polling.
-        
-        Called when user interaction or external event suggests Spotify
-        may have been reopened.
-        """
-        if self._is_idle:
-            self._is_idle = False
-            self._consecutive_none_count = 0
-            if is_perf_metrics_enabled():
-                logger.debug("[PERF] Media widget woken from idle")
-            # Trigger immediate refresh
-            if self._enabled and self._thread_manager is not None:
-                self._refresh_async()
+        """Transitional wake entry point forwarded to the neutral owner."""
+
+        service = self._runtime_service
+        if self._enabled and service is not None:
+            service.wake_from_idle()
 
     def _update_position(self) -> None:
         """Delegates to widgets.media_layout."""
@@ -1002,7 +954,7 @@ class MediaWidget(BaseOverlayWidget):
         self._controls_shadow_cache_key = None
 
     # ------------------------------------------------------------------
-    # Transport controls (delegated to controller)
+    # Transport controls (delegated to the neutral shared owner)
     # ------------------------------------------------------------------
     def play_pause(self, source: str = "manual", execute: bool = True) -> None:
         """Toggle play/pause when supported.
@@ -1014,174 +966,40 @@ class MediaWidget(BaseOverlayWidget):
         if execute and self._should_defer_keyboard_alias_command(source, "play"):
             return
 
-        control_executed = not execute
-        refresh_requested = False
-        if execute:
-            try:
-                self._controller.play_pause()
-                control_executed = True
-            except Exception:
-                logger.debug("[MEDIA] play_pause delegation failed", exc_info=True)
-        else:
-            # Media keys already executed the command; still mirror optimistic UI
-            control_executed = True
-
-        if control_executed:
-            # Optimistically flip the last known playback state so the controls
-            # row and any listeners (e.g. the Spotify visualizer) respond
-            # immediately while the GSMTC query catches up.
-            optimistic = None
-            new_state = None
-            try:
-                info = self._last_info
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                info = None
-            if isinstance(info, MediaTrackInfo):
-                try:
-                    current_state = info.state
-                except Exception as e:
-                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                    current_state = MediaPlaybackState.UNKNOWN
-                if current_state in (MediaPlaybackState.PLAYING, MediaPlaybackState.PAUSED):
-                    new_state = (
-                        MediaPlaybackState.PAUSED
-                        if current_state == MediaPlaybackState.PLAYING
-                        else MediaPlaybackState.PLAYING
-                    )
-                    try:
-                        optimistic = MediaTrackInfo(
-                            title=info.title,
-                            artist=info.artist,
-                            album=info.album,
-                            album_artist=info.album_artist,
-                            state=new_state,
-                            can_play_pause=info.can_play_pause,
-                            can_next=info.can_next,
-                            can_previous=info.can_previous,
-                            artwork=info.artwork,
-                            source_app_user_model_id=info.source_app_user_model_id,
-                            position_ms=info.position_ms,
-                            duration_ms=info.duration_ms,
-                        )
-                    except Exception as e:
-                        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                        optimistic = None
-            if optimistic is not None:
-                try:
-                    # CRITICAL: Force update even if diff gating would skip
-                    # Update _last_info first so _draw_control_icon sees new state
-                    self._last_info = optimistic
-                    # Update track identity to prevent diff gating from skipping next poll
-                    self._last_track_identity = self._compute_track_identity(optimistic)
-                    # Emit media update for visualizer and other listeners
-                    self._emit_media_update(optimistic)
-                    # Only refresh controls if they're visible and state changed.
-                    # Use update() so the optimistic feedback coalesces with the
-                    # normal event loop rather than forcing an immediate paint.
-                    if self._show_controls and self.isVisible():
-                        self._invalidate_controls_layout()
-                        self.update()
-                    logger.info("[MEDIA_WIDGET] Optimistic play/pause applied: state=%s", optimistic.state)
-                except Exception:
-                    logger.debug("[MEDIA] play_pause optimistic update failed", exc_info=True)
-                try:
-                    if new_state is not None:
-                        self._begin_playback_confirmation(new_state)
-                        refresh_requested = True
-                except Exception:
-                    logger.debug("[MEDIA] play_pause optimistic override failed", exc_info=True)
-            else:
-                refresh_requested = self._request_refresh_after_control()
-
-        self._handle_control_feedback("play", source, force_refresh=not refresh_requested)
-
-    def _begin_playback_confirmation(self, state: MediaPlaybackState) -> None:
-        """Own one optimistic transport expectation until confirmation or expiry."""
-        self._reset_playback_confirmation(delete_timer=True)
-        # An accepted optimistic transport edge: advance the freshness epoch so a
-        # refresh already in flight cannot later reverse this state.
-        self._playback_epoch = int(getattr(self, "_playback_epoch", 0)) + 1
-        self._expected_playback_state = state
-        self._expected_playback_epoch = self._playback_epoch
-        self._playback_confirmation_deadline_monotonic = (
-            time.monotonic() + self._PLAYBACK_CONFIRMATION_TIMEOUT_SEC
+        service = self._runtime_service
+        control_executed = bool(
+            service is not None and service.play_pause(execute=execute)
         )
-        # Drop any pre-command cached GSMTC result so the next refresh cannot
-        # serve stale pre-command state from the 500 ms cache path.
-        self._gsmtc_cached_result = None
-
-        try:
-            self._safe_update()
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-
-        if not self._enabled:
-            return
-
-        timer = QTimer(self)
-        timer.setSingleShot(True)
-        timer.setInterval(self._PLAYBACK_CONFIRMATION_REFRESH_DELAY_MS)
-
-        def _on_timeout() -> None:
-            if self._playback_confirmation_refresh_timer is not timer:
-                return
-            self._playback_confirmation_refresh_timer = None
-            try:
-                if self._enabled:
-                    if self._thread_manager is not None:
-                        self._refresh_async()
-                    else:
-                        self._refresh()
-            except Exception:
-                logger.debug("[MEDIA] pending state refresh failed", exc_info=True)
-            self._safe_update()
-
-        timer.timeout.connect(_on_timeout)
-        self._playback_confirmation_refresh_timer = timer
-        self._register_resource(timer, "playback confirmation refresh timer")
-        timer.start()
+        self._handle_control_feedback(
+            "play",
+            source,
+            force_refresh=not control_executed,
+        )
 
     def next_track(self, source: str = "manual", execute: bool = True) -> None:
         """Skip to next track when supported (best-effort)."""
 
-        control_executed = not execute
-        if execute:
-            try:
-                self._controller.next()
-                control_executed = True
-            except Exception:
-                logger.debug("[MEDIA] next delegation failed", exc_info=True)
-
-        refresh_requested = False
-        if control_executed:
-            refresh_requested = self._request_refresh_after_control()
-
+        service = self._runtime_service
+        control_executed = bool(
+            service is not None and service.next_track(execute=execute)
+        )
         self._handle_control_feedback(
             "next",
             source,
-            force_refresh=not refresh_requested,
+            force_refresh=not control_executed,
         )
 
     def previous_track(self, source: str = "manual", execute: bool = True) -> None:
         """Go to previous track when supported (best-effort)."""
 
-        control_executed = not execute
-        if execute:
-            try:
-                self._controller.previous()
-                control_executed = True
-            except Exception:
-                logger.debug("[MEDIA] previous delegation failed", exc_info=True)
-
-        refresh_requested = False
-        if control_executed:
-            refresh_requested = self._request_refresh_after_control()
-
+        service = self._runtime_service
+        control_executed = bool(
+            service is not None and service.previous_track(execute=execute)
+        )
         self._handle_control_feedback(
             "prev",
             source,
-            force_refresh=not refresh_requested,
+            force_refresh=not control_executed,
         )
 
     def handle_transport_command(
@@ -1335,21 +1153,11 @@ class MediaWidget(BaseOverlayWidget):
         if not self._enabled:
             return False
         try:
-            # Bust GSMTC cache so we actually re-query the controller
-            self._gsmtc_cached_result = None
-            self._gsmtc_cached_prepared_artwork = None
-            self._gsmtc_cached_artwork_generation = 0
-            self._gsmtc_cache_ts = 0.0
-            # Reset diff gating so update_display doesn't skip the refresh
             self._last_track_identity = None
             self._skipped_identity_updates = 0
-            # Keep an existing worker authoritative. Bypassing this guard can
-            # invalidate its generation after decode but before UI ownership,
-            # causing the same artwork bytes to be decoded again.
-            if self._thread_manager is not None:
-                self._refresh_async()
-            else:
-                self._refresh()
+            service = self._runtime_service
+            if service is None or not service.refresh(bust_cache=True):
+                return False
             logger.info("[MEDIA_WIDGET] Double-click triggered artwork refresh")
             return True
         except Exception:
@@ -1360,11 +1168,8 @@ class MediaWidget(BaseOverlayWidget):
         if not self._enabled:
             return False
         try:
-            if self._thread_manager is not None:
-                self._refresh_async()
-            else:
-                self._refresh()
-            return True
+            service = self._runtime_service
+            return bool(service is not None and service.refresh(bust_cache=True))
         except Exception:
             logger.debug("[MEDIA] post-control refresh failed", exc_info=True)
             return False
@@ -1380,382 +1185,24 @@ class MediaWidget(BaseOverlayWidget):
         """
         if not self._enabled:
             return
-        self._is_idle = False
-        self._reset_poll_stage()
-        # A wake/display-change refresh must not overlap an existing query.
-        # The in-flight result already reconciles playback state and artwork.
-        if self._thread_manager is not None:
-            self._refresh_async()
+        service = self._runtime_service
+        if service is not None:
+            service.wake_from_idle()
 
     def _refresh(self) -> None:
         if not self._enabled:
             return
-        
-        # Smart polling: when idle, still poll but at slower rate to detect Spotify opening
-        # This allows the widget to spawn when Spotify opens
-        if self._is_idle:
-            if is_perf_metrics_enabled():
-                logger.debug("[PERF] Media widget idle poll (detecting Spotify open)")
-        
-        if self._thread_manager is not None:
-            if is_perf_metrics_enabled():
-                interval = self._poll_intervals[self._current_poll_stage]
-                logger.debug("[PERF] Media widget poll triggered (%dms interval)", interval)
-            elif is_verbose_logging():
-                logger.debug("[MEDIA_WIDGET] Scheduling async refresh via ThreadManager")
-            self._refresh_async()
-            return
+        service = self._runtime_service
+        if service is not None:
+            service.refresh()
 
-        # PERFORMANCE FIX: When ThreadManager is unavailable, skip the blocking
-        # get_current_track() call entirely. The WinRT/GSMTC API uses
-        # asyncio.run_until_complete() which can block the UI thread for up to
-        # 2 seconds. Better to show stale/no data than to freeze the UI.
-        if not self._telemetry_logged_missing_tm:
-            logger.warning("[MEDIA_WIDGET] ThreadManager unavailable; skipping blocking refresh (widget hidden)")
-            self._telemetry_logged_missing_tm = True
-        elif is_verbose_logging():
-            logger.debug("[MEDIA_WIDGET] No ThreadManager available, skipping blocking refresh")
-        # Don't call get_current_track() synchronously - it blocks!
-
-    def _reconcile_refresh_playback_epoch(
-        self,
-        info: Optional[MediaTrackInfo],
-        refresh_epoch: int,
-    ) -> Optional[MediaTrackInfo]:
-        """Reconcile one backend snapshot with bounded command-state ownership.
-
-        A refresh that STARTED before a transport command reflects pre-command
-        reality. If a command advanced the playback epoch while the query was in
-        flight, that result's playback state is stale and must not reverse the
-        optimistic post-command state. A refresh started after the command may
-        confirm immediately, but a contradictory same-epoch state is pinned until
-        the confirmation deadline expires. Non-state fields still apply while a
-        playback state is pinned.
-        """
-        if info is None:
-            return info
-        try:
-            result_epoch = int(refresh_epoch)
-            current_epoch = int(getattr(self, "_playback_epoch", 0))
-        except Exception:
-            return info
-
-        expected_state = getattr(self, "_expected_playback_state", None)
-        expected_epoch = getattr(self, "_expected_playback_epoch", None)
-
-        if result_epoch == current_epoch:
-            if expected_state is None or expected_epoch != current_epoch:
-                return info
-            try:
-                if info.state == expected_state:
-                    self._reset_playback_confirmation(delete_timer=True)
-                    logger.debug(
-                        "[MEDIA_WIDGET] Playback state confirmed: state=%s epoch=%s",
-                        getattr(info.state, "value", info.state),
-                        current_epoch,
-                    )
-                    return info
-            except Exception:
-                return info
-
-            deadline = float(
-                getattr(self, "_playback_confirmation_deadline_monotonic", 0.0) or 0.0
-            )
-            if time.monotonic() >= deadline:
-                self._reset_playback_confirmation(delete_timer=True)
-                logger.debug(
-                    "[MEDIA_WIDGET] Playback confirmation expired; accepting state=%s epoch=%s",
-                    getattr(info.state, "value", info.state),
-                    current_epoch,
-                )
-                return info
-            pin_reason = "unconfirmed same-epoch"
-            state_to_preserve = expected_state
-        else:
-            # An older query can never confirm or reverse a later command. Prefer
-            # the live expectation; after it is released, preserve the current
-            # accepted playback state while still taking metadata from the result.
-            current = (
-                getattr(self._last_info, "state", None)
-                if self._last_info is not None
-                else None
-            )
-            state_to_preserve = expected_state if expected_state is not None else current
-            if state_to_preserve is None:
-                return info
-            pin_reason = "stale pre-command"
-
-        try:
-            if info.state == state_to_preserve:
-                return info
-            from dataclasses import replace
-            pinned = replace(info, state=state_to_preserve)
-        except Exception:
-            logger.debug("[MEDIA_WIDGET] Failed to pin stale playback state", exc_info=True)
-            return info
-        logger.debug(
-            "[MEDIA_WIDGET] Rejected %s playback state %s; pinned to %s "
-            "(refresh_epoch=%s current_epoch=%s)",
-            pin_reason,
-            getattr(info.state, "value", info.state),
-            getattr(state_to_preserve, "value", state_to_preserve),
-            refresh_epoch,
-            current_epoch,
-        )
-        return pinned
 
     def _refresh_async(self) -> None:
-        # Desync: Check GSMTC cache first to reduce IO contention
-        now = time.time()
-        refresh_started_monotonic = time.monotonic()
-        # Capture the freshness epoch this refresh begins under, so a transport
-        # command that lands while the query is in flight can reject this result's
-        # stale pre-command playback state.
-        refresh_playback_epoch = int(getattr(self, "_playback_epoch", 0))
-        if self._gsmtc_cached_result is not None:
-            elapsed_ms = (now - self._gsmtc_cache_ts) * 1000
-            if elapsed_ms < self._gsmtc_cache_ms:
-                if is_perf_metrics_enabled():
-                    logger.debug("[PERF] MediaWidget: using cached GSMTC result (age=%.0fms)", elapsed_ms)
-                self._update_display(
-                    self._gsmtc_cached_result,
-                    self._gsmtc_cached_prepared_artwork,
-                    self._gsmtc_cached_artwork_generation,
-                )
-                return
-        
-        if self._refresh_in_flight:
-            return
-        tm = self._thread_manager
-        if tm is None:
-            try:
-                self._inherit_thread_manager_from_parent(self.parent())
-            except Exception as exc:
-                logger.debug("[MEDIA_WIDGET] Failed to inherit ThreadManager: %s", exc)
-            tm = self._thread_manager
-            if tm is None:
-                return
+        """Transitional private refresh alias forwarded to the shared owner."""
 
-        fallback_info = None
-        try:
-            fallback_info = type(self)._get_shared_valid_info()
-        except Exception:
-            fallback_info = None
-        if fallback_info is None:
-            try:
-                fallback_info = self.get_retained_display_info()
-            except Exception:
-                fallback_info = None
-        if fallback_info is None:
-            fallback_info = self._last_info
-        fallback_artwork = (
-            getattr(fallback_info, "artwork", None)
-            if fallback_info is not None
-            else None
-        )
-
-        self._artwork_update_generation += 1
-        artwork_generation = self._artwork_update_generation
-        pending_artwork = self._pending_artwork
-        known_artwork_keys = frozenset(
-            key
-            for key in (
-                self._applied_artwork_key,
-                pending_artwork.key if pending_artwork is not None else None,
-            )
-            if key is not None
-        )
-        self._refresh_in_flight = True
-        self._refresh_in_flight_generation = artwork_generation
-        artwork_owner_id = f"{id(self):x}"
-        artwork_provider = self._provider
-        provider_generation = self._provider_generation
-        query_controller = self._controller
-        if is_verbose_logging():
-            logger.debug("[MEDIA_WIDGET] Async refresh started")
-
-        def _do_query():
-            worker_started_monotonic = time.monotonic()
-            failover_candidates = get_provider_failover_candidates(artwork_provider)
-            allow_failover = bool(failover_candidates) and (
-                self.should_probe_provider_failover()
-                and not type(self)._has_fresh_shared_info_cache()
-            )
-            selected_provider = None
-            try:
-                worker_query = getattr(
-                    query_controller,
-                    "get_current_track_from_io_worker",
-                    None,
-                )
-                if callable(worker_query):
-                    selected_provider, info = worker_query(
-                        failover_candidates if allow_failover else (),
-                    )
-                else:
-                    info = query_controller.get_current_track()
-                    if info is not None:
-                        selected_provider = artwork_provider
-            except Exception:
-                logger.debug("[MEDIA] get_current_track failed", exc_info=True)
-                if is_verbose_logging():
-                    logger.debug("[MEDIA] get_current_track failed", exc_info=True)
-                info = None
-
-            selected_provider = normalize_provider_id(selected_provider)
-            if allow_failover and selected_provider != artwork_provider:
-                self.mark_provider_probe_attempt()
-            failover_provider = (
-                selected_provider
-                if selected_provider is not None and selected_provider != artwork_provider
-                else None
-            )
-
-            artwork_payload = (
-                getattr(info, "artwork", None)
-                if info is not None
-                else fallback_artwork
-            )
-            artwork_key = type(self)._compute_artwork_payload_key(artwork_payload)
-            prepared = type(self)._prepare_artwork_payload(
-                artwork_payload,
-                artwork_key,
-                known_artwork_keys=(
-                    frozenset()
-                    if failover_provider is not None
-                    else known_artwork_keys
-                ),
-            )
-            if (
-                is_perf_metrics_enabled()
-                and artwork_key != (0, "")
-                and artwork_key not in known_artwork_keys
-            ):
-                logger.info(
-                    "[PERF][MEDIA_ARTWORK] event=decoded owner_id=%s provider=%s "
-                    "key_id=%s generation=%d payload_bytes=%d decode_ms=%.2f "
-                    "decode_ok=%s",
-                    artwork_owner_id,
-                    artwork_provider,
-                    type(self)._artwork_key_log_id(artwork_key),
-                    artwork_generation,
-                    int(artwork_key[0]),
-                    float(prepared.decode_ms),
-                    prepared.image is not None and not prepared.image.isNull(),
-                )
-            return (
-                info,
-                prepared,
-                artwork_generation,
-                worker_started_monotonic,
-                time.monotonic(),
-                failover_provider,
-                provider_generation,
-            )
-
-        def _handle_result(task_result):
-            callback_received_monotonic = time.monotonic()
-
-            def _consume_result() -> None:
-                try:
-                    if not Shiboken.isValid(self):
-                        return
-                    if not self._enabled:
-                        return
-                    result_payload = task_result.result if getattr(task_result, "success", False) else None
-                    if isinstance(result_payload, tuple) and len(result_payload) == 7:
-                        (
-                            info,
-                            prepared_artwork,
-                            result_generation,
-                            worker_started,
-                            worker_finished,
-                            failover_provider,
-                            result_provider_generation,
-                        ) = result_payload
-                    else:
-                        info = result_payload
-                        prepared_artwork = PreparedArtwork((0, ""), None, 0.0)
-                        result_generation = artwork_generation
-                        worker_started = refresh_started_monotonic
-                        worker_finished = callback_received_monotonic
-                        failover_provider = None
-                        result_provider_generation = self._provider_generation
-                    if int(result_generation) != self._artwork_update_generation:
-                        return
-                    if int(result_provider_generation) != self._provider_generation:
-                        return
-                    # Reject a stale pre-command playback state before it can
-                    # reverse an optimistic transport edge that landed while this
-                    # query was in flight.
-                    info = self._reconcile_refresh_playback_epoch(
-                        info, refresh_playback_epoch
-                    )
-                    if failover_provider is not None:
-                        self._apply_provider_failover(failover_provider)
-                    runtime_provider = failover_provider or artwork_provider
-                    manager = self._widget_manager
-                    if manager is not None and hasattr(
-                        manager,
-                        "sync_media_volume_runtime_target",
-                    ):
-                        try:
-                            manager.sync_media_volume_runtime_target(
-                                runtime_provider,
-                                getattr(info, "source_app_user_model_id", "")
-                                if info is not None
-                                else "",
-                            )
-                        except Exception:
-                            logger.debug(
-                                "[MEDIA_WIDGET] Failed to sync accepted volume target",
-                                exc_info=True,
-                            )
-                    # Desync: Cache the result for 500ms
-                    self._gsmtc_cached_result = info
-                    self._gsmtc_cached_prepared_artwork = prepared_artwork
-                    self._gsmtc_cached_artwork_generation = int(result_generation)
-                    self._gsmtc_cache_ts = time.time()
-                    self._update_display(info, prepared_artwork, int(result_generation))
-                    if is_perf_metrics_enabled():
-                        consumed_monotonic = time.monotonic()
-                        worker_ms = max(0.0, (worker_finished - worker_started) * 1000.0)
-                        callback_ms = max(0.0, (callback_received_monotonic - worker_finished) * 1000.0)
-                        ui_delay_ms = max(0.0, (consumed_monotonic - callback_received_monotonic) * 1000.0)
-                        total_ms = max(0.0, (consumed_monotonic - refresh_started_monotonic) * 1000.0)
-                        if total_ms >= 1000.0 or worker_ms >= 1000.0 or ui_delay_ms >= 250.0:
-                            state = getattr(info, "state", None)
-                            state_value = getattr(state, "value", str(state))
-                            logger.warning(
-                                "[PERF][MEDIA_WIDGET][REFRESH] slow async refresh "
-                                "total_ms=%.1f worker_ms=%.1f callback_ms=%.1f "
-                                "ui_delay_ms=%.1f in_flight=%s state=%s",
-                                total_ms,
-                                worker_ms,
-                                callback_ms,
-                                ui_delay_ms,
-                                self._refresh_in_flight,
-                                state_value,
-                            )
-                except Exception as exc:
-                    logger.debug("[MEDIA_WIDGET] Exception during async refresh consume: %s", exc)
-                finally:
-                    if self._refresh_in_flight_generation == artwork_generation:
-                        self._refresh_in_flight = False
-
-            try:
-                ThreadManager.run_on_ui_thread(_consume_result)
-            except Exception as exc:
-                logger.debug("[MEDIA_WIDGET] Failed to marshal async refresh to UI thread: %s", exc)
-                if self._refresh_in_flight_generation == artwork_generation:
-                    self._refresh_in_flight = False
-
-        try:
-            tm.submit_io_task(_do_query, callback=_handle_result)
-        except Exception as exc:
-            logger.debug("[MEDIA_WIDGET] Failed to submit async refresh: %s", exc)
-            if self._refresh_in_flight_generation == artwork_generation:
-                self._refresh_in_flight = False
+        service = self._runtime_service
+        if self._enabled and service is not None:
+            service.refresh()
 
     def _emit_media_update(self, info: MediaTrackInfo) -> None:
         """Emit the current media metadata/state to interested observers."""
@@ -1812,90 +1259,6 @@ class MediaWidget(BaseOverlayWidget):
             artwork_generation=artwork_generation,
         )
 
-    @staticmethod
-    def _decode_artwork_image(artwork: Optional[bytes]) -> QImage | None:
-        """Decode artwork into a worker-safe QImage without touching GUI state."""
-        if not artwork:
-            return None
-        try:
-            data = bytes(artwork)
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Invalid artwork payload: %s", e)
-            return None
-
-        # Log payload diagnostics for debugging artwork decode issues
-        header_hex = data[:16].hex() if len(data) >= 16 else data.hex()
-        logger.debug(
-            "[MEDIA_WIDGET] Artwork decode: %d bytes, header=%s",
-            len(data), header_hex,
-        )
-
-        try:
-            byte_array = QByteArray(data)
-            buffer = QBuffer(byte_array)
-            if not buffer.open(QBuffer.OpenModeFlag.ReadOnly):
-                logger.debug("[MEDIA_WIDGET] Failed to open artwork buffer (%d bytes)", len(data))
-                return None
-
-            reader = QImageReader(buffer)
-            reader.setAutoTransform(True)
-            image = reader.read()
-            buffer.close()
-            if image is None or image.isNull():
-                logger.debug("[MEDIA_WIDGET] QImageReader returned null image (%d bytes)", len(data))
-                return None
-        except MemoryError:
-            logger.error("[MEDIA_WIDGET] Out of memory decoding artwork", exc_info=True)
-            return None
-        except Exception:
-            logger.debug("[MEDIA_WIDGET] Failed to decode artwork pixmap", exc_info=True)
-            return None
-
-        if image.width() <= 0 or image.height() <= 0:
-            logger.debug(
-                "[MEDIA_WIDGET] Decoded image has zero dimensions: %dx%d",
-                image.width(),
-                image.height(),
-            )
-            return None
-        return image
-
-    @staticmethod
-    def _prepare_artwork_payload(
-        artwork: Optional[bytes],
-        key: tuple[int, str],
-        *,
-        known_artwork_keys: frozenset[tuple[int, str]],
-    ) -> PreparedArtwork:
-        """Decode a changed artwork key once inside the media query worker."""
-
-        if key in known_artwork_keys or key == (0, ""):
-            return PreparedArtwork(key=key, image=None, decode_ms=0.0)
-
-        decode_started = time.monotonic()
-        image = MediaWidget._decode_artwork_image(artwork)
-        decode_ms = max(0.0, (time.monotonic() - decode_started) * 1000.0)
-        return PreparedArtwork(key=key, image=image, decode_ms=decode_ms)
-
-    def _decode_artwork_pixmap(self, artwork: Optional[bytes]) -> Optional[QPixmap]:
-        """Emergency/test fallback; normal refreshes decode QImage in the worker."""
-
-        image = MediaWidget._decode_artwork_image(artwork)
-        if image is None or image.isNull():
-            return None
-        pm = QPixmap.fromImage(image)
-        if pm.isNull():
-            logger.debug("[MEDIA_WIDGET] Decoded pixmap is null")
-            return None
-        if pm.width() <= 0 or pm.height() <= 0:
-            logger.debug("[MEDIA_WIDGET] Decoded pixmap has zero dimensions: %dx%d", pm.width(), pm.height())
-            return None
-        try:
-            pm.setDevicePixelRatio(1.0)
-        except Exception:
-            logger.debug("[MEDIA_WIDGET] Failed to normalize artwork DPR", exc_info=True)
-        logger.debug("[MEDIA_WIDGET] Artwork decoded OK: %dx%d", pm.width(), pm.height())
-        return pm
 
     @staticmethod
     def _create_artwork_pixmap(image: QImage) -> QPixmap | None:
@@ -2203,23 +1566,6 @@ class MediaWidget(BaseOverlayWidget):
                 widget._start_artwork_fade_if_ready(reason="all_displays_idle")
                 continue
             if generation != widget._artwork_update_generation:
-                current_generation_in_flight = bool(
-                    widget._refresh_in_flight
-                    and widget._refresh_in_flight_generation
-                    == widget._artwork_update_generation
-                )
-                if current_generation_in_flight:
-                    # The current query deliberately skipped decoding this
-                    # pending key. Keep its sole decoded QImage until that
-                    # query identifies whether the key is still authoritative;
-                    # its UI consumer will then promote or replace it.
-                    widget._log_artwork_lifecycle_event(
-                        "retained",
-                        reason="awaiting_current_generation",
-                        prepared=prepared,
-                        generation=generation,
-                    )
-                    continue
                 widget._log_artwork_lifecycle_event(
                     "discarded",
                     reason="stale_idle_flush_generation",
@@ -2251,7 +1597,7 @@ class MediaWidget(BaseOverlayWidget):
         type(self)._flush_pending_artwork_when_all_displays_idle()
 
     def _discard_pending_artwork(self) -> None:
-        """Invalidate worker generations and release any unconsumed QImage."""
+        """Invalidate presenter revisions and release any unconsumed QImage."""
 
         if self._pending_artwork is not None:
             self._log_artwork_lifecycle_event(
@@ -2264,9 +1610,6 @@ class MediaWidget(BaseOverlayWidget):
         self._pending_artwork_generation = 0
         self._pending_artwork_deferred = False
         self._artwork_coalesced_count = 0
-        self._gsmtc_cached_prepared_artwork = None
-        self._gsmtc_cached_artwork_generation = 0
-        self._refresh_in_flight = False
 
     def _clear_artwork_for_missing_media(self) -> None:
         """Clear artwork exactly once when the retained media card is abandoned."""
@@ -2375,138 +1718,11 @@ class MediaWidget(BaseOverlayWidget):
 
     @staticmethod
     def _compute_artwork_payload_key(payload: Optional[bytes]) -> tuple[int, str]:
-        if not payload:
-            return (0, "")
-        try:
-            data = bytes(payload)
-            length = len(data)
-            sample = data[:4096]
-            digest = hashlib.sha1(sample).hexdigest()
-            return (length, digest)
-        except Exception as exc:
-            logger.debug("[MEDIA_WIDGET] Failed to compute artwork key: %s", exc)
-            return (0, "")
+        return compute_media_artwork_key(payload)
 
     def _compute_artwork_key(self, info: MediaTrackInfo) -> tuple[int, str]:
         return self._compute_artwork_payload_key(getattr(info, "artwork", None))
     
-    def _reset_poll_stage(self) -> None:
-        """Reset polling to fastest interval."""
-        if self._current_poll_stage == 0:
-            return
-        self._current_poll_stage = 0
-        self._polls_at_current_stage = 0
-        self._ensure_timer(force=True)
-        if is_perf_metrics_enabled():
-            logger.debug("[PERF] Media widget reset to fast poll (%dms)", self._poll_intervals[0])
-    
-    def _advance_poll_stage(self) -> None:
-        """Advance to next slower polling interval."""
-        if self._current_poll_stage >= len(self._poll_intervals) - 1:
-            return
-        self._current_poll_stage += 1
-        self._polls_at_current_stage = 0
-        self._ensure_timer(force=True)
-        if is_perf_metrics_enabled():
-            interval = self._poll_intervals[self._current_poll_stage]
-            logger.debug("[PERF] Media widget advanced to %dms poll interval", interval)
-    
-    def _stop_timer(self) -> None:
-        """Stop the update timer."""
-        self._reset_update_timer_state(delete_qtimer=False)
-
-    def _ensure_timer(self, *, force: bool = False) -> None:
-        """Ensure update timer is running at correct interval."""
-        if self._is_idle:
-            interval = self._deep_idle_poll_interval if not self._app_process_running else self._idle_poll_interval
-        else:
-            interval = self._poll_intervals[self._current_poll_stage]
-
-        timer = self._update_timer
-        if self._update_timer_handle is not None and timer is not None:
-            try:
-                if timer.isActive():
-                    if not force and self._update_timer_interval_ms == interval:
-                        return
-                    timer.setInterval(max(1, int(interval)))
-                    timer.start()
-                    self._update_timer_interval_ms = interval
-                    if is_perf_metrics_enabled():
-                        logger.debug(
-                            "[PERF] Media widget timer retuned in place to %dms (stage %d)",
-                            interval,
-                            self._current_poll_stage,
-                        )
-                    return
-            except RuntimeError:
-                timer = None
-            except Exception as exc:
-                logger.debug("[MEDIA_WIDGET][TIMER] In-place retune failed; recreating timer: %s", exc)
-
-        if force:
-            self._stop_timer()
-
-        if not self._ensure_thread_manager("MediaWidget._ensure_timer"):
-            if not self._telemetry_logged_missing_tm:
-                logger.warning("[MEDIA_WIDGET][TIMER] ThreadManager unavailable; media polling paused")
-                self._telemetry_logged_missing_tm = True
-            return
-
-        self._telemetry_logged_missing_tm = False
-        try:
-            handle = create_overlay_timer(self, interval, self._refresh, description="MediaWidget smart poll")
-        except RuntimeError as exc:
-            logger.warning("[MEDIA_WIDGET][TIMER] Failed to schedule poll timer: %s", exc)
-            return
-        self._update_timer_handle = handle
-        try:
-            self._update_timer = getattr(handle, "_timer", None)
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            self._update_timer = None
-        self._update_timer_interval_ms = interval
-        if is_perf_metrics_enabled():
-            logger.debug("[PERF] Media widget timer started/restarted at %dms (stage %d)", interval, self._current_poll_stage)
-    
-    @classmethod
-    def _get_shared_valid_info(cls) -> Optional[MediaTrackInfo]:
-        """Get shared media info if another widget has valid data.
-        
-        Prevents multi-display desync where one widget gets None from GSMTC
-        while another still has valid media info.
-        """
-        now = time.monotonic()
-        
-        # Check shared cache first
-        if cls._shared_last_valid_info is not None:
-            age = now - cls._shared_last_valid_info_ts
-            if age < cls._shared_info_max_age_sec:
-                return cls._shared_last_valid_info
-        
-        # Fallback: check other widget instances
-        for instance in list(cls._instances):
-            try:
-                if not Shiboken.isValid(instance):
-                    continue
-                if instance._last_info is not None and instance.isVisible():
-                    cls._shared_last_valid_info = instance._last_info
-                    cls._shared_last_valid_info_ts = now
-                    return instance._last_info
-            except Exception:
-                continue
-        
-        return None
-
-    @classmethod
-    def _has_fresh_shared_info_cache(cls) -> bool:
-        """Worker-safe check that avoids a redundant cross-provider probe."""
-
-        info = cls._shared_last_valid_info
-        if info is None:
-            return False
-        return (time.monotonic() - cls._shared_last_valid_info_ts) < cls._shared_info_max_age_sec
-    
-    # ------------------------------------------------------------------
     # Shared Feedback System — delegates to widgets.media.feedback
     # ------------------------------------------------------------------
 

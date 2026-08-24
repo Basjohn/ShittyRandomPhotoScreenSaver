@@ -4,8 +4,8 @@ Provides a thin abstraction over Windows 10/11 Global System Media
 Transport Controls (GSMTC) when available, with a safe no-op fallback
 when APIs or dependencies are missing.
 
-The controller is intentionally polling-based and side-effect free
-for reads. Callers may poll from the UI thread.
+The controller exposes polling reads, while the Media runtime owner determines
+cadence and submits potentially blocking reads through ThreadManager.
 
 On Windows, GSMTC/WinRT calls are treated as potentially blocking IO
 and are executed via ThreadManager with a hard timeout so they cannot
@@ -74,10 +74,22 @@ class BaseMediaController:
 
     def __init__(self, thread_manager=None) -> None:
         self._thread_manager = thread_manager
+        self._runtime_generation = None
+        self._retired = False
+        self._task_owner_id = f"{id(self):x}"
 
     def set_thread_manager(self, thread_manager) -> None:
         """Inject the engine-owned ThreadManager."""
         self._thread_manager = thread_manager
+
+    def set_runtime_generation(self, runtime_generation) -> None:
+        """Tag controller work for the owning screensaver runtime generation."""
+        self._runtime_generation = runtime_generation
+
+    def retire(self) -> None:
+        """Close new command/query admission; in-flight WinRT work may finish fenced."""
+        self._retired = True
+        self._thread_manager = None
 
     def get_current_track(self) -> Optional[MediaTrackInfo]:  # pragma: no cover - interface
         """Return a snapshot of the current track or None if unavailable."""
@@ -242,6 +254,8 @@ class WindowsGlobalMediaController(BaseMediaController):
         but a background status query can no longer drop a user's command.
         """
 
+        if getattr(self, "_retired", False):
+            return
         tm = self._thread_manager
         if tm is None:
             logger.warning(
@@ -265,11 +279,18 @@ class WindowsGlobalMediaController(BaseMediaController):
                 # Cleared on the IO worker once the WinRT command really finished.
                 self._command_inflight = False
 
+        _run_and_clear._srpss_runtime_generation = getattr(
+            self, "_runtime_generation", None
+        )
+
         try:
             from core.threading.manager import TaskPriority
             tm.submit_io_task(
                 _run_and_clear,
-                task_id=f"media_cmd_{action_name}",
+                task_id=(
+                    f"media_cmd_{getattr(self, '_task_owner_id', f'{id(self):x}')}_"
+                    f"{action_name}"
+                ),
                 priority=TaskPriority.HIGH,
             )
         except Exception:
@@ -292,6 +313,8 @@ class WindowsGlobalMediaController(BaseMediaController):
         Inflight checking prevents query pileup in either path.
         """
 
+        if getattr(self, "_retired", False):
+            return None
         tm = self._thread_manager
         if tm is None:
             logger.warning("[MEDIA] ThreadManager not injected for GSMTC controller; skipping coroutine")
@@ -302,6 +325,10 @@ class WindowsGlobalMediaController(BaseMediaController):
 
         def _run_in_loop() -> object:
             return self._run_coro_in_isolated_loop(coro_factory)
+
+        _run_in_loop._srpss_runtime_generation = getattr(
+            self, "_runtime_generation", None
+        )
 
         if already_on_io_worker:
             if self._gsmc_inflight:
@@ -331,7 +358,10 @@ class WindowsGlobalMediaController(BaseMediaController):
                 from core.threading.manager import TaskPriority
                 tm.submit_io_task(
                     _run_in_loop,
-                    task_id="media_gsmtc_query",
+                    task_id=(
+                        "media_gsmtc_query_"
+                        f"{getattr(self, '_task_owner_id', f'{id(self):x}')}"
+                    ),
                     priority=TaskPriority.HIGH,
                     callback=_on_done,
                 )
@@ -593,7 +623,11 @@ class WindowsGlobalMediaController(BaseMediaController):
         *,
         already_on_io_worker: bool,
     ) -> tuple[Optional[str], Optional[MediaTrackInfo]]:  # pragma: no cover - requires winrt
-        if not self._available or self._MediaManager is None:
+        if (
+            getattr(self, "_retired", False)
+            or not self._available
+            or self._MediaManager is None
+        ):
             return None, None
 
         providers = tuple(
@@ -808,7 +842,11 @@ class WindowsGlobalMediaController(BaseMediaController):
         )
 
     def _invoke_simple_action(self, action_name: str, coro_factory) -> None:
-        if not self._available or self._MediaManager is None:
+        if (
+            getattr(self, "_retired", False)
+            or not self._available
+            or self._MediaManager is None
+        ):
             return
 
         async def _act():

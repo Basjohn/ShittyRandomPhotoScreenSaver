@@ -26,6 +26,11 @@ Steam cards remain separate; no generic/shared Steam service is implied.
 E1 slice 5 adds the distinct per-card/display Achievement Pulse runtime/model/
 artwork service. Progress and Friend Pulse remain unregistered and source-inert.
 
+E1 slice 6 adds one Media lease per display. Leases in the same runtime
+generation join one family-shared owner for controller/provider, polling,
+accepted state and source-resolution artwork decode; QWidget presenters retain
+only their per-display projection and QPixmap/DPR work.
+
 Heavy provider implementation is imported lazily inside the build callable so a
 process that never activates/creates the family does not resolve it merely
 because this registry is imported.
@@ -276,10 +281,58 @@ _ACHIEVEMENT_SERVICE_SPEC = RuntimeServiceSpec(
 )
 
 
+def _build_media_service(widget_id: str, widgets_config: Mapping[str, Any]) -> Any:
+    from core.settings.models import MediaWidgetSettings
+    from widgets.media_runtime import MediaRuntimeService
+
+    config = (
+        widgets_config.get(widget_id, {})
+        if isinstance(widgets_config, Mapping)
+        else {}
+    )
+    model = MediaWidgetSettings.from_mapping(
+        config if isinstance(config, Mapping) else {}
+    )
+    return MediaRuntimeService(provider=model.provider, shared=True)
+
+
+def _inject_media_service(widget: Any, service: Any) -> None:
+    setter = getattr(widget, "set_runtime_service", None)
+    if not callable(setter):
+        raise AttributeError(
+            "runtime widget cannot accept Media service (missing set_runtime_service)"
+        )
+    setter(service)
+
+
+def _retire_media_service(service: Any) -> None:
+    retire = getattr(service, "retire", None)
+    if not callable(retire):
+        raise AttributeError("Media runtime service has no retire method")
+    retire()
+
+
+def _media_service_reuse_is_valid(widget: Any, service: Any) -> bool:
+    if getattr(widget, "_runtime_service", None) is not service:
+        return False
+    if _service_is_retired(service):
+        return False
+    return not _widget_is_active(widget) or _service_is_running(service)
+
+
+_MEDIA_SERVICE_SPEC = RuntimeServiceSpec(
+    build=_build_media_service,
+    inject=_inject_media_service,
+    retire=_retire_media_service,
+    reuse_is_valid=_media_service_reuse_is_valid,
+)
+
+
 _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
     "reddit": _REDDIT_SERVICE_SPEC,
     "reddit2": _REDDIT_SERVICE_SPEC,
     "weather": _WEATHER_SERVICE_SPEC,
+    "media": _MEDIA_SERVICE_SPEC,
     "abandonment_issues": _ABANDONMENT_SERVICE_SPEC,
     "achievement_pulse": _ACHIEVEMENT_SERVICE_SPEC,
 }

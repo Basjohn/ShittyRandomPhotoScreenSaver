@@ -337,7 +337,7 @@ def test_unchanged_poll_promotes_pending_artwork_before_diff_gate(
         widget.close()
 
 
-def test_idle_flush_retains_decoded_startup_art_until_current_query_resolves(
+def test_runtime_replay_keeps_startup_art_authoritative_through_transition_idle(
     qt_app,
     monkeypatch,
     caplog,
@@ -373,25 +373,20 @@ def test_idle_flush_retains_decoded_startup_art_until_current_query_resolves(
             decoded_image = widget._pending_artwork.image
             assert decoded_image is not None
 
-            # A same-key poll starts just before transition idle. It correctly
-            # skips a duplicate decode, but its result has not reached the UI yet.
+            # The shared owner replays its one decoded source image with the
+            # newer accepted revision; the presenter only promotes ownership.
             widget._artwork_update_generation = 2
-            widget._refresh_in_flight = True
-            widget._refresh_in_flight_generation = 2
-            busy[0] = False
-
-            MediaWidget._flush_pending_artwork_when_all_displays_idle()
-
-            assert widget._pending_artwork is not None
-            assert widget._pending_artwork.image is decoded_image
-            assert widget._artwork_pixmap is None
-
             display_update.update_display(
                 widget,
                 info,
-                prepared_artwork=PreparedArtwork(key, None, 0.0),
+                prepared_artwork=PreparedArtwork(key, decoded_image, 0.0),
                 artwork_generation=2,
             )
+            assert widget._pending_artwork is not None
+            assert widget._pending_artwork.image is decoded_image
+
+            busy[0] = False
+            MediaWidget._flush_pending_artwork_when_all_displays_idle()
 
             assert widget._pending_artwork is None
             assert widget._artwork_pixmap is not None
@@ -407,10 +402,6 @@ def test_idle_flush_retains_decoded_startup_art_until_current_query_resolves(
             for record in caplog.records
             if "[PERF][MEDIA_ARTWORK]" in record.getMessage()
         ]
-        assert any(
-            "event=retained reason=awaiting_current_generation" in message
-            for message in messages
-        )
         assert not any(
             "reason=stale_idle_flush_generation" in message
             for message in messages
@@ -428,7 +419,7 @@ def test_idle_flush_retains_decoded_startup_art_until_current_query_resolves(
         widget.close()
 
 
-def test_retained_stale_key_is_released_when_current_query_resolves_new_key(
+def test_stale_pending_key_is_released_before_new_runtime_revision_applies(
     qt_app,
     monkeypatch,
 ):
@@ -448,13 +439,10 @@ def test_retained_stale_key_is_released_when_current_query_resolves_new_key(
         )
 
         widget._artwork_update_generation = 2
-        widget._refresh_in_flight = True
-        widget._refresh_in_flight_generation = 2
         busy[0] = False
         MediaWidget._flush_pending_artwork_when_all_displays_idle()
 
-        assert widget._pending_artwork is not None
-        assert widget._pending_artwork.key == old_key
+        assert widget._pending_artwork is None
 
         widget._accept_prepared_artwork(
             _prepared(current_key),

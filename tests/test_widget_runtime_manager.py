@@ -223,6 +223,22 @@ class _WeatherConsumer:
         self.injected = service
 
 
+class _MediaConsumer:
+    """Plain per-display consumer that attaches one shared Media lease."""
+
+    def __init__(self):
+        self.injected = None
+        self._runtime_generation = 73
+        self._thread_manager = None
+
+    def set_runtime_service(self, service):
+        self.injected = service
+        service.attach_consumer(self)
+
+    def is_media_consumer_alive(self):
+        return True
+
+
 def test_ensure_widget_service_builds_owns_and_injects_reddit_provider():
     # The provider owner exists independently of any QWidget pixel ownership:
     # a plain consumer stub (not a QWidget) receives the built provider, and the
@@ -284,6 +300,31 @@ def test_ensure_widget_service_builds_abandonment_without_generic_steam_owner():
     assert owner.has_runtime_service("friend_pulse") is False
     assert owner.retire_widget_service("abandonment_issues") is True
     assert service.is_retired() is True
+
+
+def test_ensure_widget_service_builds_inert_shared_media_lease() -> None:
+    from widgets.media_runtime import shared_media_owner_count
+
+    owner = WidgetRuntimeManager(_Host())
+    consumer = _MediaConsumer()
+
+    service = owner.ensure_widget_service(
+        "media",
+        consumer,
+        {"media": {"provider": "musicbee"}},
+    )
+
+    assert service is not None
+    assert consumer.injected is service
+    assert service.provider == "musicbee"
+    assert service.is_running() is False
+    assert service.shared_owner is not None
+    assert service.shared_owner.controller is None
+    assert shared_media_owner_count() == 1
+    assert owner.has_runtime_service("media") is True
+    assert owner.retire_widget_service("media") is True
+    assert service.is_retired() is True
+    assert shared_media_owner_count() == 0
 
 
 def test_ensure_widget_service_none_for_unregistered_widget():

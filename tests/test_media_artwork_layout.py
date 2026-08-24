@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-import logging
-import threading
-from types import SimpleNamespace
-
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QSize
 from PySide6.QtGui import QColor, QImage, QPixmap
 
-from core.media.media_controller import MediaPlaybackState, MediaTrackInfo
-from core.threading.manager import ThreadManager
 from widgets.media.artwork_layout import compute_artwork_frame_size
-from widgets.media_widget import MediaWidget, PreparedArtwork
+from widgets.media_runtime import (
+    PreparedMediaArtwork,
+    compute_media_artwork_key,
+    decode_media_artwork,
+    prepare_media_artwork,
+)
+from widgets.media_widget import MediaWidget
 
 
 def _image_bytes(width: int, height: int) -> bytes:
@@ -40,11 +40,17 @@ def test_compute_artwork_frame_size_keeps_square_art_square(qt_app) -> None:
     assert frame == QSize(200, 200)
 
 
-def test_decode_artwork_pixmap_uses_reader_and_normalizes_dpr(qt_app) -> None:
+def test_runtime_decodes_source_resolution_image_and_presenter_creates_pixmap(
+    qt_app,
+) -> None:
     payload = _image_bytes(640, 360)
 
-    pixmap = MediaWidget._decode_artwork_pixmap(SimpleNamespace(), payload)
+    image = decode_media_artwork(payload)
+    assert image is not None
+    assert image.width() == 640
+    assert image.height() == 360
 
+    pixmap = MediaWidget._create_artwork_pixmap(image)
     assert pixmap is not None
     assert pixmap.width() == 640
     assert pixmap.height() == 360
@@ -53,221 +59,42 @@ def test_decode_artwork_pixmap_uses_reader_and_normalizes_dpr(qt_app) -> None:
 
 def test_unique_artwork_key_decodes_once(monkeypatch) -> None:
     payload = b"unique-artwork"
-    key = MediaWidget._compute_artwork_payload_key(payload)
+    key = compute_media_artwork_key(payload)
     decode_calls = []
     image = QImage(8, 8, QImage.Format.Format_ARGB32)
 
     monkeypatch.setattr(
-        MediaWidget,
-        "_decode_artwork_image",
-        staticmethod(lambda _payload: decode_calls.append(_payload) or image),
+        "widgets.media_runtime.decode_media_artwork",
+        lambda candidate: decode_calls.append(candidate) or image,
     )
 
-    first = MediaWidget._prepare_artwork_payload(
-        payload,
-        key,
-        known_artwork_keys=frozenset(),
-    )
-    second = MediaWidget._prepare_artwork_payload(
-        payload,
-        key,
-        known_artwork_keys=frozenset({key}),
-    )
+    first = prepare_media_artwork(payload, key, known_key=None)
+    second = prepare_media_artwork(payload, key, known_key=key)
 
-    assert isinstance(first, PreparedArtwork)
+    assert isinstance(first, PreparedMediaArtwork)
     assert first.image is image
     assert second.image is None
     assert decode_calls == [payload]
 
 
-def test_applied_and_pending_artwork_keys_are_both_treated_as_decoded(
-    monkeypatch,
-) -> None:
-    payload = b"already-applied"
-    applied_key = MediaWidget._compute_artwork_payload_key(payload)
-    pending_key = (99, "pending")
+def test_unchanged_artwork_identity_skips_duplicate_decode(monkeypatch) -> None:
+    payload = b"already-owned"
+    key = compute_media_artwork_key(payload)
     decode_calls = []
-
     monkeypatch.setattr(
-        MediaWidget,
-        "_decode_artwork_image",
-        staticmethod(lambda data: decode_calls.append(data)),
+        "widgets.media_runtime.decode_media_artwork",
+        lambda candidate: decode_calls.append(candidate),
     )
 
-    prepared = MediaWidget._prepare_artwork_payload(
-        payload,
-        applied_key,
-        known_artwork_keys=frozenset({applied_key, pending_key}),
-    )
+    prepared = prepare_media_artwork(payload, key, known_key=key)
 
-    assert prepared.image is None
+    assert prepared == PreparedMediaArtwork(key=key, image=None, decode_ms=0.0)
     assert decode_calls == []
 
 
-def test_refresh_async_decodes_qimage_in_existing_worker_job(
-    qt_app,
-    monkeypatch,
-    caplog,
-) -> None:
-    payload = _image_bytes(48, 48)
-    info = MediaTrackInfo(
-        title="Track",
-        artist="Artist",
-        album="Album",
-        state=MediaPlaybackState.PLAYING,
-        artwork=payload,
+def test_widget_and_runtime_use_one_stable_artwork_identity() -> None:
+    payload = b"stable-artwork-identity"
+
+    assert MediaWidget._compute_artwork_payload_key(payload) == (
+        compute_media_artwork_key(payload)
     )
-    worker_thread_ids: list[int] = []
-    ui_callbacks = []
-    display_thread_ids: list[int] = []
-    original_decode = MediaWidget._decode_artwork_image
-
-    monkeypatch.setattr(
-        MediaWidget,
-        "_decode_artwork_image",
-        staticmethod(
-            lambda data: (
-                worker_thread_ids.append(threading.get_ident()),
-                original_decode(data),
-            )[1]
-        ),
-    )
-    monkeypatch.setattr(
-        ThreadManager,
-        "run_on_ui_thread",
-        staticmethod(lambda callback: ui_callbacks.append(callback)),
-    )
-    monkeypatch.setattr("widgets.media_widget.is_perf_metrics_enabled", lambda: True)
-
-    class _Controller:
-        def get_current_track(self):
-            return info
-
-    class _TaskResult:
-        success = True
-
-        def __init__(self, result):
-            self.result = result
-
-    class _ThreadManager:
-        def submit_io_task(self, worker, callback):
-            def _run():
-                callback(_TaskResult(worker()))
-
-            thread = threading.Thread(target=_run)
-            thread.start()
-            thread.join()
-
-    widget = MediaWidget(
-        controller=_Controller(),
-        thread_manager=_ThreadManager(),
-    )
-    try:
-        widget._update_display = lambda *_args, **_kwargs: display_thread_ids.append(
-            threading.get_ident()
-        )
-        with caplog.at_level(logging.INFO):
-            widget._refresh_async()
-
-            assert len(ui_callbacks) == 1
-            ui_callbacks.pop()()
-            widget._refresh_async()
-
-        assert worker_thread_ids
-        assert worker_thread_ids[0] != threading.get_ident()
-        assert display_thread_ids == [threading.get_ident(), threading.get_ident()]
-        decoded_events = [
-            record.getMessage()
-            for record in caplog.records
-            if "[PERF][MEDIA_ARTWORK] event=decoded" in record.getMessage()
-        ]
-        assert len(decoded_events) == 1
-        assert "decode_ok=True" in decoded_events[0]
-    finally:
-        widget.cleanup()
-        widget.close()
-
-
-def test_forced_refresh_routes_do_not_bypass_in_flight_artwork_owner(
-    qt_app,
-    monkeypatch,
-) -> None:
-    payload = _image_bytes(40, 40)
-    info = MediaTrackInfo(
-        title="Track",
-        artist="Artist",
-        album="Album",
-        state=MediaPlaybackState.PLAYING,
-        artwork=payload,
-    )
-    jobs = []
-    display_results = []
-    decode_calls = []
-    original_decode = MediaWidget._decode_artwork_image
-
-    class _Controller:
-        def get_current_track(self):
-            return info
-
-    class _HoldingThreadManager:
-        def submit_io_task(self, worker, callback):
-            jobs.append((worker, callback))
-
-    class _TaskResult:
-        success = True
-
-        def __init__(self, result):
-            self.result = result
-
-    monkeypatch.setattr(
-        MediaWidget,
-        "_decode_artwork_image",
-        staticmethod(
-            lambda data: (
-                decode_calls.append(data),
-                original_decode(data),
-            )[1]
-        ),
-    )
-    monkeypatch.setattr(
-        ThreadManager,
-        "run_on_ui_thread",
-        staticmethod(lambda callback: callback()),
-    )
-
-    widget = MediaWidget(
-        controller=_Controller(),
-        thread_manager=_HoldingThreadManager(),
-    )
-    widget._enabled = True
-    widget._update_display = (
-        lambda result_info, prepared, generation: display_results.append(
-            (result_info, prepared, generation)
-        )
-    )
-    try:
-        widget._refresh_async()
-        assert widget._refresh_in_flight is True
-        assert widget._artwork_update_generation == 1
-        assert len(jobs) == 1
-
-        widget.refresh_playback_state()
-        assert len(jobs) == 1
-        assert widget._artwork_update_generation == 1
-
-        assert widget.handle_double_click(None) is True
-        assert len(jobs) == 1
-        assert widget._artwork_update_generation == 1
-
-        worker, callback = jobs.pop()
-        callback(_TaskResult(worker()))
-
-        assert len(decode_calls) == 1
-        assert len(display_results) == 1
-        assert display_results[0][0] is info
-        assert display_results[0][1].image is not None
-        assert display_results[0][2] == 1
-        assert widget._refresh_in_flight is False
-    finally:
-        widget.cleanup()
-        widget.close()

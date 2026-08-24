@@ -7,43 +7,8 @@ from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPixmap
 
 from core.media.media_controller import MediaPlaybackState, MediaTrackInfo
+from widgets.media_runtime import MediaRuntimeSnapshot, PreparedMediaArtwork
 from widgets.media_widget import MediaWidget
-
-
-class _PollStageStub:
-    def __init__(self) -> None:
-        self._current_poll_stage = 0
-        self._polls_at_current_stage = 0
-        self._poll_intervals = [1000, 2000, 2500]
-        self.ensure_timer_calls = []
-
-    def _ensure_timer(self, *, force: bool = False) -> None:
-        self.ensure_timer_calls.append(bool(force))
-
-
-def test_media_widget_advance_poll_stage_restarts_timer() -> None:
-    stub = _PollStageStub()
-
-    MediaWidget._advance_poll_stage(stub)
-
-    assert stub._current_poll_stage == 1
-    assert stub._polls_at_current_stage == 0
-    assert stub.ensure_timer_calls == [True]
-
-
-def test_media_widget_reset_poll_stage_restarts_timer_only_when_needed() -> None:
-    stub = _PollStageStub()
-    stub._current_poll_stage = 2
-
-    MediaWidget._reset_poll_stage(stub)
-
-    assert stub._current_poll_stage == 0
-    assert stub._polls_at_current_stage == 0
-    assert stub.ensure_timer_calls == [True]
-
-    MediaWidget._reset_poll_stage(stub)
-
-    assert stub.ensure_timer_calls == [True]
 
 
 def test_media_widget_track_identity_includes_artwork_key() -> None:
@@ -98,82 +63,118 @@ def test_media_widget_header_metrics_exist_before_first_metadata_update(qt_app) 
         widget.deleteLater()
 
 
-def test_media_provider_failover_probe_runs_in_refresh_worker_before_ui_apply(
-    qt_app,
-    monkeypatch,
-) -> None:
-    class _Controller:
-        def get_current_track_from_io_worker(self, fallback_providers):
-            assert phase["value"] == "worker"
-            calls.append(("query", tuple(fallback_providers)))
-            return "spotify_browser", track
-
-        def get_current_track(self):
-            raise AssertionError("refresh worker must not enter the nested controller path")
-
-    class _TaskManager:
-        def submit_io_task(self, func, callback=None, **_kwargs):
-            phase["value"] = "worker"
-            result = func()
-            phase["value"] = "callback"
-            if callback is not None:
-                callback(SimpleNamespace(success=True, result=result))
-
-    phase = {"value": "idle"}
+def test_media_widget_projects_accepted_runtime_snapshot(qt_app):
+    widget = MediaWidget(build_default_runtime=False)
+    projected = []
     track = MediaTrackInfo(
-        title="Browser Track",
+        title="Accepted Track",
         artist="Artist",
         state=MediaPlaybackState.PLAYING,
-        source_app_user_model_id="firefox.exe",
     )
-    widget = MediaWidget(controller=_Controller(), provider="spotify")
+    widget._update_display = lambda info, artwork, revision: projected.append(
+        (info, artwork, revision)
+    )
+    snapshot = MediaRuntimeSnapshot(
+        revision=7,
+        provider="spotify",
+        info=track,
+        artwork=PreparedMediaArtwork((0, ""), None, 0.0),
+    )
+
     try:
-        widget._enabled = True
-        widget._thread_manager = _TaskManager()
-        widget._pending_controller_tm = widget._thread_manager
-        type(widget)._shared_last_valid_info = None
-        type(widget)._shared_last_valid_info_ts = 0.0
-        monkeypatch.setattr(
-            type(widget),
-            "_get_shared_valid_info",
-            classmethod(lambda cls: None),
-        )
-        monkeypatch.setattr(
-            type(widget),
-            "_has_fresh_shared_info_cache",
-            classmethod(lambda cls: False),
-        )
-        calls: list[tuple[str, object]] = []
-        widget._widget_manager = SimpleNamespace(
-            sync_media_volume_runtime_target=lambda provider, source_id: calls.append(
-                ("volume_target", (provider, source_id))
-            )
-        )
+        widget.on_media_runtime_snapshot(snapshot)
 
-        def _apply(provider):
-            assert phase["value"] == "callback"
-            calls.append(("apply", provider))
+        assert projected == [(track, snapshot.artwork, 7)]
+        assert widget._last_runtime_revision == 7
+        assert widget._artwork_update_generation == 7
+    finally:
+        widget.deleteLater()
 
-        monkeypatch.setattr(widget, "_apply_provider_failover", _apply)
-        monkeypatch.setattr(
-            widget,
-            "_update_display",
-            lambda info, *_args, **_kwargs: calls.append(("display", info)),
-        )
-        monkeypatch.setattr(
-            "widgets.media_widget.ThreadManager.run_on_ui_thread",
-            staticmethod(lambda func, *args, **kwargs: func(*args, **kwargs)),
-        )
 
-        widget._refresh_async()
+def test_media_widget_runtime_replay_resets_stale_provider_projection(qt_app):
+    widget = MediaWidget(build_default_runtime=False, provider="spotify")
+    projected = []
+    widget._applied_artwork_key = (12, "old")
+    widget._last_track_identity = ("old",)
+    widget._update_display = lambda info, artwork, revision: projected.append(
+        (info, artwork, revision)
+    )
+    track = MediaTrackInfo(
+        title="MusicBee Track",
+        artist="Artist",
+        state=MediaPlaybackState.PLAYING,
+    )
+    snapshot = MediaRuntimeSnapshot(
+        revision=11,
+        provider="musicbee",
+        info=track,
+        artwork=PreparedMediaArtwork((0, ""), None, 0.0),
+    )
+
+    try:
+        widget.on_media_runtime_snapshot(snapshot)
+
+        assert widget.provider == "musicbee"
+        assert widget._applied_artwork_key is None
+        assert widget._last_track_identity is None
+        assert projected == [(track, snapshot.artwork, 11)]
+    finally:
+        widget.deleteLater()
+
+
+def test_media_widget_delegates_provider_controls_and_refresh_to_runtime_service(qt_app):
+    calls = []
+
+    class _Runtime:
+        def set_provider_runtime(self, provider, *, source):
+            calls.append(("provider", provider, source))
+            return True
+
+        def play_pause(self, *, execute):
+            calls.append(("play_pause", execute))
+            return True
+
+        def next_track(self, *, execute):
+            calls.append(("next", execute))
+            return True
+
+        def previous_track(self, *, execute):
+            calls.append(("previous", execute))
+            return True
+
+        def refresh(self, *, bust_cache=False):
+            calls.append(("refresh", bust_cache))
+            return True
+
+    widget = MediaWidget(build_default_runtime=False)
+    widget._runtime_service = _Runtime()
+    widget._enabled = True
+    widget._handle_control_feedback = lambda *args, **kwargs: None
+    try:
+        assert widget.set_provider_runtime("spotify") is True
+        widget.play_pause(execute=False)
+        widget.next_track(execute=False)
+        widget.previous_track(execute=False)
+        assert widget._request_refresh_after_control() is True
 
         assert calls == [
-            ("query", ("spotify_browser", "musicbee")),
-            ("apply", "spotify_browser"),
-            ("volume_target", ("spotify_browser", "firefox.exe")),
-            ("display", track),
+            ("provider", "spotify", "settings"),
+            ("play_pause", False),
+            ("next", False),
+            ("previous", False),
+            ("refresh", True),
         ]
-        assert widget._refresh_in_flight is False
+    finally:
+        widget.deleteLater()
+
+
+def test_media_lifecycle_activation_without_thread_manager_fails_closed(qt_app):
+    widget = MediaWidget(build_default_runtime=False)
+    try:
+        assert widget.initialize() is True
+        assert widget.activate() is False
+        assert widget._enabled is False
+        assert widget._lifecycle_state.name == "INITIALIZED"
     finally:
         widget.deleteLater()
 
@@ -315,7 +316,7 @@ def test_media_controls_layout_compacts_for_small_committed_card(qt_app) -> None
         widget.deleteLater()
 
 
-def test_media_artwork_size_rebuilds_stale_retained_metadata_layout(qt_app) -> None:
+def test_media_artwork_size_rebuilds_from_neutral_retained_snapshot(qt_app) -> None:
     widget = MediaWidget()
     try:
         widget.resize(390, 187)
@@ -326,9 +327,11 @@ def test_media_artwork_size_rebuilds_stale_retained_metadata_layout(qt_app) -> N
             state=MediaPlaybackState.PLAYING,
             artwork=b"art",
         )
+        service = widget._runtime_service
+        assert service is not None and service.shared_owner is not None
+        service.shared_owner._current_info = info
         widget._last_info = None
         widget._has_seen_first_track = True
-        widget.cache_retained_display_info(info)
         artwork = QPixmap(200, 200)
         artwork.fill(QColor(200, 80, 40))
         widget._artwork_pixmap = artwork
@@ -354,233 +357,6 @@ def test_media_artwork_size_rebuilds_stale_retained_metadata_layout(qt_app) -> N
         assert int(widget._metadata_paint["title_font"]) < 36
         assert int(widget._metadata_paint["artist_font"]) < 28
         assert int(widget._metadata_paint["line_spacing"]) <= 3
-    finally:
-        widget.deleteLater()
-
-
-def test_media_confirmation_refresh_timer_registers_and_is_cleared_on_stop(qt_app, monkeypatch) -> None:
-    widget = MediaWidget()
-    registrations = []
-    try:
-        widget._enabled = True
-        widget._thread_manager = None
-        widget._safe_update = lambda: None
-        widget._refresh = lambda: None
-        widget._register_resource = lambda resource, description: registrations.append((resource, description))
-
-        widget._begin_playback_confirmation(MediaPlaybackState.PLAYING)
-
-        assert widget._playback_confirmation_refresh_timer is not None
-        assert len(registrations) == 1
-        assert registrations[0][0] is widget._playback_confirmation_refresh_timer
-        assert registrations[0][1] == "playback confirmation refresh timer"
-        assert widget._expected_playback_state == MediaPlaybackState.PLAYING
-
-        widget.stop()
-
-        assert widget._playback_confirmation_refresh_timer is None
-        assert widget._expected_playback_state is None
-        assert widget._expected_playback_epoch is None
-        assert widget._playback_confirmation_deadline_monotonic == 0.0
-    finally:
-        widget.deleteLater()
-
-
-def test_media_reset_update_timer_state_stops_and_optionally_deletes_timer() -> None:
-    class _FakeHandle:
-        def __init__(self) -> None:
-            self.stop_calls = 0
-
-        def stop(self) -> None:
-            self.stop_calls += 1
-
-    class _FakeTimer:
-        def __init__(self) -> None:
-            self.stop_calls = 0
-            self.delete_calls = 0
-
-        def stop(self) -> None:
-            self.stop_calls += 1
-
-        def deleteLater(self) -> None:
-            self.delete_calls += 1
-
-    stub = SimpleNamespace(
-        _update_timer_handle=_FakeHandle(),
-        _update_timer=_FakeTimer(),
-    )
-
-    MediaWidget._reset_update_timer_state(stub, delete_qtimer=False)
-
-    assert stub._update_timer_handle is None
-    assert stub._update_timer is None
-
-    handle = _FakeHandle()
-    timer = _FakeTimer()
-    stub = SimpleNamespace(
-        _update_timer_handle=handle,
-        _update_timer=timer,
-    )
-
-    MediaWidget._reset_update_timer_state(stub, delete_qtimer=True)
-
-    assert handle.stop_calls == 1
-    assert timer.stop_calls == 1
-    assert timer.delete_calls == 1
-    assert stub._update_timer_handle is None
-    assert stub._update_timer is None
-
-
-def test_media_stop_timer_uses_canonical_update_timer_reset(monkeypatch) -> None:
-    stub = SimpleNamespace()
-    calls = []
-
-    def _fake_reset(*, delete_qtimer: bool) -> None:
-        calls.append(delete_qtimer)
-
-    stub._reset_update_timer_state = _fake_reset
-
-    MediaWidget._stop_timer(stub)
-
-    assert calls == [False]
-
-
-def test_media_ensure_timer_reuses_active_timer_for_same_interval(monkeypatch) -> None:
-    class _FakeTimer:
-        def __init__(self) -> None:
-            self.set_intervals = []
-            self.start_calls = 0
-
-        def isActive(self) -> bool:
-            return True
-
-        def setInterval(self, interval: int) -> None:
-            self.set_intervals.append(interval)
-
-        def start(self) -> None:
-            self.start_calls += 1
-
-    create_calls = []
-    monkeypatch.setattr("widgets.media_widget.create_overlay_timer", lambda *args, **kwargs: create_calls.append((args, kwargs)))
-
-    timer = _FakeTimer()
-    handle = SimpleNamespace(_timer=timer)
-    stub = SimpleNamespace(
-        _is_idle=False,
-        _app_process_running=False,
-        _deep_idle_poll_interval=30000,
-        _idle_poll_interval=5000,
-        _poll_intervals=[1000, 2000, 2500],
-        _current_poll_stage=1,
-        _update_timer_handle=handle,
-        _update_timer=timer,
-        _update_timer_interval_ms=2000,
-    )
-
-    MediaWidget._ensure_timer(stub, force=False)
-
-    assert create_calls == []
-    assert timer.set_intervals == []
-    assert timer.start_calls == 0
-    assert stub._update_timer_interval_ms == 2000
-
-
-def test_media_ensure_timer_retunes_active_timer_in_place(monkeypatch) -> None:
-    class _FakeTimer:
-        def __init__(self) -> None:
-            self.set_intervals = []
-            self.start_calls = 0
-
-        def isActive(self) -> bool:
-            return True
-
-        def setInterval(self, interval: int) -> None:
-            self.set_intervals.append(interval)
-
-        def start(self) -> None:
-            self.start_calls += 1
-
-    create_calls = []
-    monkeypatch.setattr("widgets.media_widget.create_overlay_timer", lambda *args, **kwargs: create_calls.append((args, kwargs)))
-
-    timer = _FakeTimer()
-    handle = SimpleNamespace(_timer=timer)
-    stub = SimpleNamespace(
-        _is_idle=False,
-        _app_process_running=False,
-        _deep_idle_poll_interval=30000,
-        _idle_poll_interval=5000,
-        _poll_intervals=[1000, 2000, 2500],
-        _current_poll_stage=2,
-        _update_timer_handle=handle,
-        _update_timer=timer,
-        _update_timer_interval_ms=2000,
-    )
-
-    MediaWidget._ensure_timer(stub, force=True)
-
-    assert create_calls == []
-    assert timer.set_intervals == [2500]
-    assert timer.start_calls == 1
-    assert stub._update_timer_interval_ms == 2500
-
-
-def test_media_reset_playback_confirmation_clears_timer_and_expectation() -> None:
-    class _FakeTimer:
-        def __init__(self) -> None:
-            self.stop_calls = 0
-            self.delete_calls = 0
-
-        def stop(self) -> None:
-            self.stop_calls += 1
-
-        def deleteLater(self) -> None:
-            self.delete_calls += 1
-
-    timer = _FakeTimer()
-    stub = SimpleNamespace(
-        _playback_confirmation_refresh_timer=timer,
-        _expected_playback_state=MediaPlaybackState.PAUSED,
-        _expected_playback_epoch=4,
-        _playback_confirmation_deadline_monotonic=123.0,
-    )
-
-    MediaWidget._reset_playback_confirmation(stub, delete_timer=True)
-
-    assert timer.stop_calls == 1
-    assert timer.delete_calls == 1
-    assert stub._playback_confirmation_refresh_timer is None
-    assert stub._expected_playback_state is None
-    assert stub._expected_playback_epoch is None
-    assert stub._playback_confirmation_deadline_monotonic == 0.0
-
-
-def test_media_play_pause_optimistic_feedback_uses_update_not_repaint(qt_app) -> None:
-    widget = MediaWidget()
-    try:
-        widget._enabled = True
-        widget._show_controls = True
-        widget._controller = SimpleNamespace(play_pause=lambda: None)
-        widget._last_info = MediaTrackInfo(
-            title="Song",
-            artist="Artist",
-            state=MediaPlaybackState.PLAYING,
-        )
-        widget._emit_media_update = lambda info: None  # type: ignore[method-assign]
-        widget._invalidate_controls_layout = lambda: None  # type: ignore[method-assign]
-        widget._begin_playback_confirmation = lambda state: None  # type: ignore[method-assign]
-        widget._handle_control_feedback = lambda *args, **kwargs: None  # type: ignore[method-assign]
-        widget.isVisible = lambda: True  # type: ignore[method-assign]
-
-        updates = []
-        repaints = []
-        widget.update = lambda: updates.append("update")  # type: ignore[method-assign]
-        widget.repaint = lambda: repaints.append("repaint")  # type: ignore[method-assign]
-
-        widget.play_pause()
-
-        assert updates == ["update"]
-        assert repaints == []
     finally:
         widget.deleteLater()
 
@@ -623,27 +399,21 @@ def test_media_external_transport_feedback_consumes_pending_keyboard_home_alias(
 
 
 def test_media_duplicate_external_transport_feedback_is_suppressed(qt_app) -> None:
-    widget = MediaWidget()
+    widget = MediaWidget(build_default_runtime=False)
+    calls = []
+    widget._runtime_service = SimpleNamespace(
+        play_pause=lambda *, execute: calls.append(execute) or True,
+    )
+    widget._handle_control_feedback = lambda *args, **kwargs: None
     try:
-        widget._enabled = True
-        widget._show_controls = True
-        widget._last_info = MediaTrackInfo(
-            title="Song",
-            artist="Artist",
-            state=MediaPlaybackState.PLAYING,
+        assert widget.handle_transport_command(
+            "play", source="appcommand:play", execute=False
         )
-        widget._emit_media_update = lambda info: None  # type: ignore[method-assign]
-        widget._invalidate_controls_layout = lambda: None  # type: ignore[method-assign]
-        widget._handle_control_feedback = lambda *args, **kwargs: None  # type: ignore[method-assign]
-        widget.isVisible = lambda: True  # type: ignore[method-assign]
-        widget.update = lambda: None  # type: ignore[method-assign]
+        assert widget.handle_transport_command(
+            "play", source="media_key", execute=False
+        )
 
-        widget.handle_transport_command("play", source="appcommand:play", execute=False)
-        first_state = widget._last_info.state
-        widget.handle_transport_command("play", source="media_key", execute=False)
-
-        assert first_state == MediaPlaybackState.PAUSED
-        assert widget._last_info.state == MediaPlaybackState.PAUSED
+        assert calls == [False]
     finally:
         widget.deleteLater()
 
