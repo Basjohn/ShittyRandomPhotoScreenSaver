@@ -1,6 +1,6 @@
 # Widget Creation and Runtime Presentation Guide
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
 Canonical guide for adding or deeply refactoring a non-visualizer widget during the Qt Quick runtime
 presentation migration.
@@ -44,9 +44,10 @@ Visualizers is a widget-family activation capability (family `visualizers`, memb
 `spotify_visualizer`) that requires the `media` family; its runtime/render ownership remains the
 special visualizer subsystem rather than an ordinary Phase-F widget family.
 
-At the currently landed foundation, factory-backed widget creation is filtered by family activation
-before per-instance enabled handling. **E1 is active** to move model/provider/service ownership under
-the presentation-neutral final runtime owner.
+At the landed foundation, factory-backed widget creation is filtered by family activation before
+per-instance enabled handling. **E1 is closed at `4466c306`**: model/provider/service lifetime now sits
+behind presentation-neutral owners according to real family cardinality. E3/F must not move it back
+into Quick/QWidget presentation.
 
 A deactivated family must ultimately own no family-exclusive model/provider/process/poll/timer/
 presentation resource. Shared infrastructure remains while another activated capability still needs
@@ -171,7 +172,8 @@ Keep canonical Python owners for:
 
 Publish compact presentation state instead of letting render/QML code reach into provider internals.
 
-E1 should remove hidden QWidget construction as a prerequisite for retaining provider/model ownership.
+E1 removed hidden QWidget construction as a prerequisite for the migrated provider/model owners. New
+E3/F work must preserve that split.
 
 ## 9. Runtime update contract
 
@@ -266,7 +268,7 @@ contracts while containing old runtime-pixel mappings.
 
 In particular, `Docs/SRPSS_Steam_Widget_Family_Implementation_Plan.md` retains valuable Steam
 provider/privacy/selection decisions, but its `BaseOverlayWidget`/painter/factory presentation mapping
-is **CURRENT-LEGACY — WILL BE REHOMED in E1/F/I**. This guide + the Phase-E/F decomposition override
+is **CURRENT-LEGACY — WILL BE REHOMED in F/I**. This guide + the Phase-E/F decomposition override
 that old pixel-owner mapping.
 
 ## 17. Testing

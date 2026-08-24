@@ -5,18 +5,19 @@ Last updated: 2026-08-24
 Reviewed source basis:
 
 ```text
-origin/main = 9ab4f47e6e7c081710a046ae38e6f310467249ca
-tests/ tree = 035bf5072ae42a38ba67f371728aa43aabb940e6
+origin/main = 4466c306e35f1d6a61da73f08ed9c73ce2fa81d2
+Phase E1 integrated ownership + runtime-owner hoist closure
 ```
-
-Focused E1 Abandonment artwork-boundary and Weather compatibility tests were refreshed against
-`9ab4f47e`; unchanged classifications were not semantically recounted.
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
 
+The 2026-08-24 E1 closure reconciliation adds all nine E1-era test modules to the ledger and retires
+the temporary `E1` / `E1/F` classifications. Neutral E1 ownership assertions survive; only
+presenter-host edges are rehomed in later F/H/I work.
+
 At the reviewed checkpoint the repository contains:
 
-- **355 test-module files**: 354 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **361 test-module files**: 360 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -27,7 +28,7 @@ Inventory status is **not an execution result**. `KEEP` does not mean a test was
 
 This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
 
-This is deliberately **not** a claim that every assertion in all 355 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
+This is deliberately **not** a claim that every assertion in all 361 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
 
 ### Status vocabulary
 
@@ -47,14 +48,12 @@ This is deliberately **not** a claim that every assertion in all 355 modules was
 | Status | Files |
 | --- | ---: |
 | `KEEP` | 116 |
-| `KEEP — MIGRATION PERMANENT` | 83 |
-| `MIGRATION-CRITICAL — H/I` | 47 |
+| `KEEP — MIGRATION PERMANENT` | 85 |
+| `MIGRATION-CRITICAL — H/I` | 48 |
 | `WILL BE OBSOLETE — H/I` | 23 |
-| `MIGRATION-CRITICAL — F` | 18 |
+| `MIGRATION-CRITICAL — F` | 38 |
 | `MIGRATION-CRITICAL — G/H` | 16 |
 | `MIGRATION-CRITICAL — G` | 12 |
-| `MIGRATION-CRITICAL — E1/F` | 16 |
-| `MIGRATION-CRITICAL — E1` | 1 |
 | `KEEP — PERMANENT` | 5 |
 | `WILL BE OBSOLETE — J` | 4 |
 | `UPDATE REQUIRED NOW` | 3 |
@@ -63,7 +62,7 @@ This is deliberately **not** a claim that every assertion in all 355 modules was
 | `MIGRATION-CRITICAL — E4` | 2 |
 | `OBSOLETE NOW` | 2 |
 | `MIGRATION-CRITICAL — E3/F` | 1 |
-| **Total** | **355** |
+| **Total** | **361** |
 
 ## 2. Standard commands and evidence levels
 
@@ -190,13 +189,15 @@ Preserve:
   - new outage after reclaim → fresh full 30 s grace/global generation;
   - capability OFF retires pending failover state and only discards live-fallback state after confirmed retirement.
 
-E2/E2.7 implementation is closed; E1 is the next ownership slice. Do not write “after E2 lands” tests as future work.
+E2/E2.7 and E1 implementation are closed. E3 retained primitives are active. Do not write “after E1 lands” tests as future work.
 
 ## 5. Active migration gates by next phase
 
-### E1 — presentation-neutral runtime/model/provider ownership
+### E1 — presentation-neutral runtime/model/provider ownership — CLOSED
 
-Test the **real owner** for family provider/model lifetime, timers/polls, exclusive workers/processes, shared-service references, generation registration, deactivation teardown, reactivation, and fresh-process deactivated import/construction dormancy.
+Permanent E1 regressions continue to test real owner/provider lifetime, cardinality, timers/polls,
+shared-service references, generation fencing, import dormancy and display-runtime owner injection.
+Do not weaken them merely because presentation moves to Quick.
 
 ### E3/E4 — retained primitives and shadow authority
 
@@ -424,26 +425,27 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_overlay_startup_policy.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_overlay_uniforms.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_pixel_shift.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
-| `tests/test_service_widget_runtime.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
+| `tests/test_service_widget_runtime.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_shadow_tuning_paths.py` | **MIGRATION-CRITICAL — E4** | Mostly persistence/schema/profile path; likely survives E4 with direction/default updates. |
 | `tests/test_shadow_utils.py` | **MIGRATION-CRITICAL — E4** | Mixed: useful tuning/fade semantics plus QPainter/QGraphicsOpacityEffect implementation. |
 | `tests/test_startup_black_flash.py` | **MIGRATION-CRITICAL — G/H** | Rehome display/input/topology behavior to Quick runtime. |
-| `tests/test_weather_widget.py` | **MIGRATION-CRITICAL — E1/F** | Weather runtime-service ownership/cache/cadence/stale-result coverage is separated from the temporary QWidget presentation assertions; preserve and rehome the latter as the family ports. |
+| `tests/test_weather_widget.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_widget_capability_persist_repair.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_widget_descriptors.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
+| `tests/test_widget_descriptors.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_effects.py` | **WILL BE OBSOLETE — E4/F** | Keep only until owning QWidget effect/shadow path is replaced. |
 | `tests/test_widget_effects_contract.py` | **WILL BE OBSOLETE — E4/F** | Keep only until owning QWidget effect/shadow path is replaced. |
-| `tests/test_widget_factories.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
-| `tests/test_widget_family_catalog.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
-| `tests/test_widget_import_dormancy.py` | **MIGRATION-CRITICAL — E1** | Fresh-process host/package and production deactivated-Media implementation-loading oracle; retain through the display-runtime hoist. |
-| `tests/test_widget_lifecycle.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
-| `tests/test_widget_manager.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
-| `tests/test_widget_manager_refresh.py` | **MIGRATION-CRITICAL — E1/F** | Current capability admission plus production factory/service-injection seam coverage, including Reddit, Weather and Abandonment ownership/reuse validation; continue updating with later E1/F slices. |
-| `tests/test_widget_performance.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
-| `tests/test_widget_runtime_manager.py` | **MIGRATION-CRITICAL — E1** | E1 owner regression bar (`WidgetRuntimeManager` admission, service build/inject/fail-closed/retire, deactivation dispatch, reuse validation and lifecycle routing). Extend as each E1 slice migrates real ownership. |
+| `tests/test_widget_factories.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
+| `tests/test_widget_family_catalog.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
+| `tests/test_widget_lifecycle.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
+| `tests/test_widget_manager.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
+| `tests/test_widget_manager_refresh.py` | **MIGRATION-CRITICAL — F** | Current E2/E2.7 lifecycle/admission regression owner; six stale tests were corrected at 5b3cbaef. Update with E1/F ownership. |
+| `tests/test_widget_import_dormancy.py` | **KEEP — MIGRATION PERMANENT** | Fresh-process host/package and deactivated-family implementation-loading oracle; preserve after cutover. |
+| `tests/test_widget_runtime_manager.py` | **KEEP — MIGRATION PERMANENT** | Neutral owner admission/service/fail-closed/reuse/lifecycle contract; permanent destination ownership bar. |
+| `tests/test_widget_runtime_owner_hoist.py` | **MIGRATION-CRITICAL — H/I** | Current `DisplayWidget -> WidgetRuntimeManager <- WidgetManager` identity/order proof; rehome host identity to `QuickDisplayRuntime` at cutover while preserving one-owner/cleanup-order semantics. |
+| `tests/test_widget_performance.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_positioner.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
 | `tests/test_widget_positioning_comprehensive.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
-| `tests/test_widget_setup.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
+| `tests/test_widget_setup.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_stack_predictor.py` | **MIGRATION-CRITICAL — G** | Rehome CUSTOM/input/topology geometry contract to Quick ownership. |
 | `tests/test_widget_visual_padding.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_widgets_tab.py` | **KEEP** | Retain; no migration-specific retirement identified. |
@@ -485,6 +487,9 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_media_provider_registry.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_media_provider_runtime.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_media_runtime_state.py` | **KEEP** | Retain; no migration-specific retirement identified. |
+| `tests/test_media_runtime.py` | **MIGRATION-CRITICAL — F** | Shared Media owner/lease/controller/poll/state/artwork/generation contract; preserve neutral owner and rehome only presenter integration. |
+| `tests/test_media_volume_runtime.py` | **MIGRATION-CRITICAL — F** | Shared app-volume owner/lease/read-write generation/coalescing contract; preserve through Quick port. |
+| `tests/test_system_mute_runtime.py` | **MIGRATION-CRITICAL — F** | Shared system-mute endpoint/poll/action/lease contract; preserve through Quick port. |
 | `tests/test_media_widget_runtime_methods.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_mute_button_widget.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_spotify_volume.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
@@ -496,9 +501,9 @@ The inventory below accounts for every executable test file present at the revie
 | --- | --- | --- |
 | `tests/test_gmail_assets.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_backend_bootstrap.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_gmail_runtime.py` | **MIGRATION-CRITICAL — E1/F** | Shared owner/lease cardinality, cache/fetch/action generations, production wiring/reuse/retirement, standalone isolation and future presenter replay. |
 | `tests/test_gmail_backend_smoke.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_client.py` | **KEEP** | Retain; no migration-specific retirement identified. |
+| `tests/test_gmail_runtime.py` | **MIGRATION-CRITICAL — F** | Shared Gmail owner/lease/bootstrap/cache/fetch/action/generation/production-wiring contract; rehome only the presenter edge in F. |
 | `tests/test_gmail_components.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_gmail_deeplinks.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_imap_actions.py` | **KEEP** | Retain; no migration-specific retirement identified. |
@@ -530,10 +535,10 @@ The inventory below accounts for every executable test file present at the revie
 
 | File | Status | Note |
 | --- | --- | --- |
-| `tests/test_steam_abandonment_issues.py` | **MIGRATION-CRITICAL — E1/F** | Source/cadence/preparation ownership is separated from the temporary QWidget pixels; preserve behavior and rehome presenter assertions in F. |
-| `tests/test_steam_abandonment_runtime.py` | **MIGRATION-CRITICAL — E1/F** | Destination-owner/generation/cardinality/repeated-setup/real-ThreadManager-timer/lifecycle bar; preserve the neutral contract and rehome only its QWidget integration edge in F. |
-| `tests/test_steam_achievement_pulse.py` | **MIGRATION-CRITICAL — E1/F** | Source/cache/resolver behavior remains authority; Achievement ownership is separated and temporary presenter assertions rehome in F. |
-| `tests/test_steam_achievement_runtime.py` | **MIGRATION-CRITICAL — E1/F** | Destination-owner/generation/cardinality/reuse/dormancy/lifecycle bar, including real queued UI delivery fencing; preserve the neutral contract and rehome only its QWidget integration edge in F. |
+| `tests/test_steam_abandonment_issues.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
+| `tests/test_steam_abandonment_runtime.py` | **MIGRATION-CRITICAL — F** | Neutral Abandonment owner/generation/cardinality/timer/lifecycle contract; preserve source/model owner and rehome presenter edge. |
+| `tests/test_steam_achievement_pulse.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
+| `tests/test_steam_achievement_runtime.py` | **MIGRATION-CRITICAL — F** | Neutral Achievement owner/generation/cardinality/reuse/dormancy/artwork lifecycle contract; preserve source/model owner and rehome presenter edge. |
 | `tests/test_steam_backend.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_steam_cache.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_steam_credentials.py` | **KEEP** | Retain; no migration-specific retirement identified. |
@@ -681,8 +686,8 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_qt_timer_threading.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_queued_logging.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_recovery_evidence_parser.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_runtime_callback_ownership.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
-| `tests/test_runtime_destruction.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
+| `tests/test_runtime_callback_ownership.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
+| `tests/test_runtime_destruction.py` | **MIGRATION-CRITICAL — F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_save_debounce.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_secure_url_launcher.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_storage_paths.py` | **KEEP** | Retain; no migration-specific retirement identified. |

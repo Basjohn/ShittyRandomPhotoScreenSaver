@@ -17,9 +17,8 @@ Within Phase E:
 - activation/catalog foundation: landed;
 - **E2 `SETUP`/live lazy navigation: implementation CLOSED**;
 - **E2.7 Visualizer CUSTOM failover/reclaim: implementation CLOSED / audit GREEN**;
-- **E1 presentation-neutral runtime/model/provider ownership: ACTIVE**; Achievement slice 5 and the
-  bounded Abandonment/Weather correction are GREEN; Media source/cardinality audit is active;
-- E3 retained Quick primitives: waiting for E1;
+- **E1 presentation-neutral runtime/model/provider ownership: CLOSED / independently GREEN @ `4466c306`**;
+- **E3 retained Quick primitives: ACTIVE**;
 - E4 global eight-direction shadow authority: waiting for E3;
 - Phase F waits for Phase-E closure.
 
@@ -42,12 +41,9 @@ focused tests / current evidence
 `Current_Plan.md` decides what is admitted **now**. A decomposition may retain landed rationale from an
 earlier phase without reopening that phase.
 
-For active E1 ordinary-widget ownership, read `04_Widget_Runtime_Presentation.md` and
-`08_Widget_Runtime_Ownership_Threading.md` together. `08` defines owner scope/cardinality/threading; it
-does not authorize a family not admitted by `Current_Plan.md`.
-
-For Phase E3/F ordinary-widget Quick presentation, `09_Widget_Quick_Presentation_Bridge.md` defines the
-state/list/image/action/update boundary subordinate to `04`.
+For active E3 ordinary-widget retained presentation, read `04_Widget_Runtime_Presentation.md` and
+`09_Widget_Quick_Presentation_Bridge.md` together. `08_Widget_Runtime_Ownership_Threading.md` is now a
+landed E1 ownership reference that E3/F must preserve; it does not reopen provider extraction work.
 
 For visualizer work, `Docs/Guardrails/Visualizer_Presentation.md` is binding; for Bubble also read
 `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
@@ -77,7 +73,7 @@ replacement files in a handoff pack for local diff/commit/push.
 | B — runtime-host decomposition | structurally complete | landed owner/lifecycle reference |
 | C — base image + transitions | implementation complete | current transition authoring + regression/acceptance reference |
 | D — visualizer | complete | landed visualizer architecture + later G/H integration reference |
-| **E — widget presentation + capability setup** | **in progress: E1 ACTIVE** | **current normal implementation work** |
+| **E — widget presentation + capability setup** | **in progress: E3 ACTIVE; E1/E2/E2.7 closed** | **current normal implementation work** |
 | F — widget families | waiting for E | reference only |
 | G — CUSTOM/input/auxiliary pixels | waiting for F | reference only |
 | H — settings epoch + production cutover | waiting for A–G implementation | reference only |
@@ -101,11 +97,11 @@ when their owner is explicitly rehomed.
 | `01_Runtime_Host_Lifecycle.md` | landed runtime-host decomposition + H cutover requirements; old `DisplayWidget` seam is current-legacy |
 | `02_Scene_Renderer_Transitions.md` | landed Phase-C renderer architecture, current transition-authoring authority, permanent regression/acceptance rules |
 | `03_Visualizer.md` | landed Phase-D visualizer architecture/reference; old presentation-host names are migration source only |
-| `04_Widget_Runtime_Presentation.md` | **active E1**, then E3/E4 and Phase-F widget model/presentation split |
+| `04_Widget_Runtime_Presentation.md` | **active E3**, then E4 and Phase-F widget model/presentation split; E1 owner map retained as landed contract |
 | `05_Custom_Layout_Input_Interaction.md` | Phase-G CUSTOM Save/Cancel, edit overlays, cross-monitor transfer, interaction/context |
 | `06_Build_Tooling_Validation.md` | packaging, tools, tests, compiled/runtime/perf gates |
-| `07_Settings_Capability_Activation.md` | **landed E2/E2.7 capability/Settings contract** + E1 dormancy boundary |
-| `08_Widget_Runtime_Ownership_Threading.md` | **E1 cross-cutting owner scope/cardinality/threading/async-retirement contract**; service is not thread, not every family needs a service |
+| `07_Settings_Capability_Activation.md` | **landed E2/E2.7 capability/Settings contract** + landed E1 dormancy boundary |
+| `08_Widget_Runtime_Ownership_Threading.md` | **landed E1 owner scope/cardinality/threading/async-retirement contract**; preserve through E3/F/H |
 | `09_Widget_Quick_Presentation_Bridge.md` | **E3/F ordinary-widget state/list/image/action/update bridge and family-port decomposition** |
 
 ## Off-rails rule

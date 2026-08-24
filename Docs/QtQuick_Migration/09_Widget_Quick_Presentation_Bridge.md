@@ -1,6 +1,6 @@
 # 09 — Ordinary Widget Qt Quick Presentation State Bridge
 
-Status: **cross-cutting E3/F technical decomposition; sequence owned by `Current_Plan.md`**
+Status: **ACTIVE E3/F technical decomposition; E1 ownership closed; sequence owned by `Current_Plan.md`**  
 Last updated: 2026-08-24
 
 Cross-links:
@@ -520,10 +520,6 @@ Transport and volume actions route back to the Python controller owner.
 Dynamic artwork is the likely family to establish the shared dynamic Quick image-delivery seam if a
 simpler family has not already done so.
 
-The landed E1 Media owner already supplies one source-resolution `QImage` plus stable identity and one
-coherent revision to every display lease. Phase F must consume that state without recreating a
-controller, poll loop or decode path; the Quick presenter owns its logical/DPR texture projection.
-
 ### Reddit / Reddit2
 
 Use stable row IDs and normalized row data.
@@ -540,21 +536,12 @@ Notification sound/business detection stays Python-owned.
 
 QML does not own Gmail backend/session/auth.
 
-The landed E1 owner at `4f7dc869` publishes one shared raw-email/unread/error/action runtime stream over
-the existing `GmailBackend` singleton. Quick retains row grouping/formatting/layout and dispatches
-stable message IDs back to that owner; it never captures a retired presenter in an action worker.
-
 ### Steam
 
-Preserve the existing provider/cache/model strengths. The landed Achievement owner publishes a prepared
-card model plus source-resolution decoded `QImage` artwork/icon state with stable identities. Its current
-QWidget presenter owns DPR-specific scaling/cropping caches; the future Quick presenter must own its own
-equivalent projection. The bounded Abandonment correction at `9ab4f47e` established the same boundary
-without duplicating its decode/fetch path.
+Preserve the existing provider-inert/cache/model strengths.
 
 Quick consumes normalized card/view-model state; do not move ranking/cache/security/product logic into
-QML merely because the visual is being replaced. Rebinding or recreating a Quick item must replay the
-service's current prepared state without starting another provider, cache load, timer or image fetch.
+QML merely because the visual is being replaced.
 
 ---
 

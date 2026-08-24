@@ -1,6 +1,6 @@
 # 08 — Widget Runtime Ownership, Cardinality, Threading and Async Lifetimes
 
-Status: **cross-cutting E1/F technical decomposition; sequence owned by `Current_Plan.md`**
+Status: **landed E1 ownership contract / cross-cutting F reference; sequence owned by `Current_Plan.md`**  
 Last updated: 2026-08-24
 
 Cross-links:
@@ -12,9 +12,24 @@ Cross-links:
 - runtime efficiency: `Docs/Guardrails/Runtime_Efficiency.md`
 - tests/retirement ledger: `Docs/TestSuite.md`
 
-This document is **not another phase or plan**. It defines how to choose and retire ordinary-widget
-runtime owners without multiplying services, threads, timers, providers or race surfaces while E1
-separates non-pixel behavior from legacy QWidget presentation.
+This document is **not another phase or plan**. E1 is independently closed at `4466c306`; this is the
+landed ownership/cardinality/threading contract that E3/F/H must preserve while presentation moves away
+from legacy QWidget pixels.
+
+---
+
+
+## E1 closure checkpoint
+
+Independent closure basis: `4466c306e35f1d6a61da73f08ed9c73ce2fa81d2`.
+
+The final architecture has one display-runtime `WidgetRuntimeManager`, with temporary presenter-registry
+binding separated from terminal service ownership. Family cardinality is intentionally heterogeneous:
+per-instance/per-display Reddit, Weather and Steam-card owners coexist with runtime-generation shared
+Media/Gmail/volume/mute owners and already-neutral process/shared infrastructure.
+
+Do not reopen E1 to force naming or class-shape symmetry. If a later family port demonstrates a real
+ownership defect, reopen only the smallest affected owner contract.
 
 ---
 
@@ -38,11 +53,6 @@ maximum abstraction layers
 ```
 
 Extract a runtime owner only when there is real presentation-neutral state/lifetime to own.
-
-Implementation loading follows the same admission rule. The host/package dormancy checkpoint at
-`ad71421d` keeps annotation-only family types and deactivated Media/controller/accessory implementations
-unresolved until explicit factory/service creation; importing a shared `widgets.*` helper is not family
-activation.
 
 A smaller/cohesive module is desirable when it follows a real responsibility boundary. File-count or
 line-count reduction is not a substitute for architectural improvement.
@@ -424,20 +434,6 @@ neutral service failure
 
 That is fail-open ownership regression.
 
-Repeated setup/reconciliation is part of the same boundary:
-
-```text
-active presenter + valid attached service
-    -> preserve the exact live edge
-
-stale / detached / mismatched edge
-    -> retire the registry entry
-    -> active presenter fails closed
-    -> inactive presenter may rebuild through normal activation
-```
-
-Never manufacture a fresh stopped service and install it beneath a presenter that is already active.
-
 ---
 
 ## 11. Shared services and consumer accounting
@@ -574,38 +570,25 @@ standalone widget default is compatibility-only; production suppresses it before
 
 ### Weather
 
-Weather's provider/network/cache/refresh/retry/request-generation ownership is landed in the neutral
-`WeatherRuntimeService` at `25f6ca4e`. Production suppresses the standalone convenience service before
-registry injection, and detached work reuses `ThreadManager` rather than gaining a Weather thread.
+Weather has genuine runtime-data ownership to extract: provider/network/cache/refresh/retry/request
+generation. A neutral owner is justified. It should reuse existing shared execution infrastructure
+rather than gain a dedicated Weather thread.
 
 ### Gmail
 
-`GmailBackend.instance()` remains the correct neutral process backend. E1 slice 7 is landed at
-`4f7dc869`: one runtime-generation shared Gmail owner with per-display leases now coordinates the
-cache-first startup, poll/fetch, accepted email/error state, cache-write submission, new-mail decision
-and serialized action/post-action refresh. It does not wrap, replace or shut down the backend
-singleton; current presenters retain only grouping/layout/fade/input/pixels.
+`GmailBackend.instance()` is already a neutral backend. E1 should inspect and rehome only residual
+QWidget-owned orchestration/model state that still matters; do not create another backend layer merely
+for symmetry.
 
 ### Steam
 
-Progress and Friend Pulse remain provider/task/timer-inert. Steam Abandonment's cache/source/rotation
-owner is landed as one per-card/display `AbandonmentRuntimeService` at `86872ab9`. Achievement Pulse's
-cache/source/manual-refresh/model/unscaled-artwork owner is separately landed per card/display at
-`51948dc3` and adds no recurring timer. Both continue to use the existing process-scoped `core.steam`
-caches, backend locks, credentials and asset helpers. Preserve those distinct cardinalities rather than
-forcing the family through a Reddit-shaped or generic shared-Steam service. The bounded Abandonment
-correction at `9ab4f47e` moved only logical/DPR projection back to its presenter and did not create a
-second decode/fetch path.
+Current card constructors are deliberately provider-inert/cache-bridge oriented. Preserve good neutral
+seams rather than forcing the family through a Reddit-shaped service abstraction.
 
 ### Media
 
-Media's primary controller/runtime seam is landed at `4680130b`: per-display leases join one
-runtime-generation owner for controller/provider target, polling/query/cache/retention, playback
-generations/optimistic confirmation and source-resolution artwork decode. `MediaWidget` retains
-per-display QPixmap/DPR/layout/fade/input projection. Separate app-volume (`55bc73b0`) and system-mute
-(`216c7da5`) leases now join their own runtime-generation owners for accepted target/read-write/debounce
-and UI-thread endpoint/state/poll/action authority respectively. Preserve those cardinalities; do not
-fold either accessory into a generic Media god service.
+Media has a genuine controller/runtime ownership seam, but its shared/cross-display/provider/transport
+semantics require deliberate cardinality review before extraction.
 
 ### Imgur
 
@@ -629,7 +612,5 @@ At minimum answer with source/tests:
 10. Does standalone compatibility, if retained, stay outside production?
 11. Did thread/timer/provider/subscription count unexpectedly increase?
 12. If shared, what proves remaining consumers keep the owner alive?
-13. Does repeated setup preserve/revalidate the exact live presenter/service edge and reject stale
-    active reuse?
 
 Do not declare ownership migrated merely because a neutral class exists.

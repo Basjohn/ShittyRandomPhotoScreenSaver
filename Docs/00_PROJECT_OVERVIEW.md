@@ -1,6 +1,6 @@
 # Project Overview
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
 ## What SRPSS is
 
@@ -51,8 +51,8 @@ Phase E is in progress.
 - E2 application-level capability/Settings work is implementation-closed.
 - E2.7 Visualizer CUSTOM failover/reclaim implementation is independently audited GREEN; physical
   dual-display wake/late-return remains deferred acceptance only.
-- **E1 presentation-neutral runtime/model/provider ownership is active next.**
-- E3 retained Quick primitives and E4 global shadow direction follow before Phase F family ports.
+- **E1 presentation-neutral runtime/model/provider ownership is independently GREEN / closed at `4466c306`.**
+- **E3 retained Quick primitives are active now.** E4 global shadow direction follows before Phase F family ports.
 
 `Current_Plan.md` owns exact sequencing.
 

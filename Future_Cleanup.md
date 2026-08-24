@@ -191,14 +191,45 @@ General retirement rules:
 
 Do not preserve an empty tombstone test module as historical documentation.
 
-## 10. Long-run resources
+## 10. Post-migration Media artwork framing
+
+This is **nonblocking post-migration presentation cleanup**, not a reason to alter the active migration
+sequence or add a second Media acquisition path.
+
+A 2026-08-24 standalone GSMTC probe against a playing Spotify video observed one static `300x300`
+thumbnail across 897 successful reads at 59.78 Hz, with no `MediaPropertiesChanged` events. The useful
+finding is geometric: the decoded square thumbnail contained approximately 50 px / 16.67% black
+letterboxing at both top and bottom, leaving `300x200` visible content (aspect ratio `1.5`, or `3:2`).
+Treating the transport canvas as intrinsic square artwork therefore preserves visible black bars in the
+Media artwork slot.
+
+After the Qt Quick Media presentation is landed and migration-critical parity is stable:
+
+- [ ] add conservative Media-artwork letterbox/pillarbox normalization before final destination
+      scaling: detect strong symmetric near-uniform black transport bars, crop those bars, then preserve
+      the remaining content aspect ratio through the normal Quick artwork fit/fill path;
+- [ ] never stretch non-square content merely to fill the artwork slot;
+- [ ] keep the source-resolution/decoded artwork identity runtime-side and keep destination size/DPR
+      projection presentation-side;
+- [ ] avoid false-positive cropping of legitimate dark/square album art; require a bounded confidence
+      rule rather than "black edge means crop";
+- [ ] add fixture coverage for the observed `300x300 -> 300x200` letterboxed Spotify case, ordinary
+      square album art, genuinely dark edge artwork, and pillarboxed content;
+- [ ] do not add high-rate GSMTC thumbnail polling for video: this probe observed one unique decoded
+      frame over the full 15-second sample, so current evidence does not support a usable video stream.
+
+This cleanup may be generalized beyond Spotify only if other GSMTC providers demonstrate the same
+transport-letterboxing behavior. Do not make Spotify-specific presentation architecture unless source
+evidence requires it.
+
+## 11. Long-run resources
 
 Repeat long-soak resource work on final Quick architecture.
 
 Keep memory/handle retention separate from the physical-presentation decision unless evidence connects
 them.
 
-## 11. Repository / compatibility debris
+## 12. Repository / compatibility debris
 
 - [ ] remove generated preview debris after clean-checkout proof;
 - [ ] collapse deprecated class-global input authority after Quick input owner lands;
@@ -206,7 +237,7 @@ them.
 - [ ] remove migration-only compatibility aliases after caller proof rather than carrying them as a
       permanent translation layer.
 
-## 12. Documentation hygiene — through J
+## 13. Documentation hygiene — through J
 
 At each owner/cutover change:
 
@@ -220,7 +251,7 @@ At each owner/cutover change:
 - [ ] remove temporary migration decomposition docs only once their durable contracts are absorbed;
 - [ ] never create a second live roadmap hierarchy.
 
-## 13. New feature / implementation backlog
+## 14. New feature / implementation backlog
 
 New features and deliberately deferred new implementations belong in `Future_Work.md`, not this
 cleanup ledger.

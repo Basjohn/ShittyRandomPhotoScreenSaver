@@ -47,11 +47,8 @@ Current normal implementation work is **Phase E — widget presentation + capabi
 - Phase-E activation foundation and E2 `SETUP`/live lazy navigation are landed.
 - E2.7 Visualizer CUSTOM failover/reclaim implementation is independently audited GREEN; physical
   dual-display wake/late-return remains deferred acceptance only.
-- **E1 presentation-neutral runtime/model/provider ownership is ACTIVE.** Shared Media ownership is
-  GREEN at `4680130b` and shared Gmail orchestration/model/action ownership is GREEN at `4f7dc869`.
-  Separate shared app-volume/system-mute accessories are GREEN at `55bc73b0` / `216c7da5`; import
-  dormancy is GREEN at `ad71421d`, and the display-runtime owner hoist is active.
-- E3 retained Quick primitives and E4 global shadow direction remain after E1 and before Phase F.
+- **E1 presentation-neutral runtime/model/provider ownership is independently GREEN / CLOSED at `4466c306`.**
+- **E3 retained Quick primitives are ACTIVE now.** E4 global shadow direction follows before Phase F.
 
 ## Start here
 
@@ -138,7 +135,7 @@ No production runtime switch/fallback between old and Quick is to be introduced.
 
 - `Docs/SRPSS_Steam_Widget_Family_Implementation_Plan.md` contains valuable provider/security/product
   decisions, but its QWidget/painter/runtime-pixel implementation mapping predates the Quick cutover.
-  Those presentation sections are **CURRENT-LEGACY — WILL BE OBSOLETE / REHOMED in E1/F/I**; do not
+  Those presentation sections are **CURRENT-LEGACY — WILL BE OBSOLETE / REHOMED in F/I**; do not
   use them to override `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`.
 - `Docs/P2_Visualizer_Recovery_Contract.md` has a legacy phase name but its logical/runtime ownership
   contract remains **LANDED / PRESERVE**.
@@ -160,7 +157,7 @@ No production runtime switch/fallback between old and Quick is to be introduced.
 | Capability activation | canonical settings + presentation-neutral family/transition catalog/query authority |
 | Providers / service logic | existing/refactored Python owners |
 | Persistence | existing settings/store owners |
-| Widget models/providers | migrated services/leases through presentation-neutral `WidgetRuntimeManager`; Weather/Reddit, Steam Abandonment/Achievement, shared Media/Gmail, app-volume and system-mute owners are landed; host import dormancy is closed and the display-runtime owner hoist remains E1 work |
+| Widget models/providers | current owners migrating toward presentation-neutral `WidgetRuntimeManager` |
 | Runtime widget pixels | destination: display Quick scene |
 | Thread/task ownership | `ThreadManager` for general async work |
 | Resource accounting | `ResourceManager`; accounting only, never deletion owner |
