@@ -22,14 +22,14 @@ from core.steam.credentials import (
 )
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
 from core.threading.manager import TaskResult
-from widgets.steam_components import (
+from widgets.steam_card_models import (
     STEAM_SETTINGS_TARGET,
     STEAM_STALE_CONNECTION_INFO_SECONDS,
     build_achievement_pulse_view_model,
     build_steam_connect_required_view_model,
-    layout_steam_card,
     with_stale_connection_info,
 )
+from widgets.steam_components import layout_steam_card
 from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
 from rendering.input_handler import InputHandler
 
