@@ -4,8 +4,9 @@ Provides a small, best-effort helper for reading and toggling the system
 master mute state. Safe to import when pycaw is unavailable: all methods
 become cheap no-ops that never raise.
 
-All methods are synchronous and intended to be called from short-lived
-worker tasks scheduled via :mod:`core.threading.manager`.
+All methods are synchronous. The endpoint is acquired at module import, so the
+runtime owner calls it from that same UI-thread COM apartment; callers must not
+invent a second worker merely for polling or toggle dispatch.
 """
 from __future__ import annotations
 

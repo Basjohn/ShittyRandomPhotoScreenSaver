@@ -56,7 +56,6 @@ from rendering.multi_monitor_coordinator import get_coordinator, MultiMonitorCoo
 from rendering.custom_layout_manager import CustomLayoutManager
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.logging.overlay_telemetry import record_overlay_ready
-from core.media import system_mute
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
 from transitions.overlay_manager import (
@@ -77,6 +76,14 @@ win_diag_logger = logging.getLogger("win_diag")
 
 TRANSITION_WATCHDOG_DEFAULT_SEC = 18.0
 _FULLSCREEN_COMPAT_WORKAROUND = True
+
+
+def _load_system_audio_backend():
+    """Resolve Core Audio only for an explicit global-audio fallback action."""
+
+    from core.media import system_mute
+
+    return system_mute
 
 
 def _describe_pixmap(pm: Optional[QPixmap]) -> str:
@@ -1633,6 +1640,59 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Cross-display volume widget lookup failed", exc_info=True)
         return None
 
+    def _resolve_mute_button_for_system_audio(self):
+        """Return a live mute projection across all participating displays."""
+
+        candidates = []
+        seen: set[int] = set()
+
+        def _remember(candidate) -> None:
+            if candidate is None or id(candidate) in seen:
+                return
+            seen.add(id(candidate))
+            candidates.append(candidate)
+
+        _remember(getattr(self, "mute_button_widget", None))
+        widget_manager = getattr(self, "_widget_manager", None)
+        if widget_manager is not None:
+            try:
+                _remember(widget_manager.get_widget("mute_button"))
+            except Exception:
+                logger.debug(
+                    "[DISPLAY_WIDGET] Mute-button lookup via WidgetManager failed",
+                    exc_info=True,
+                )
+        try:
+            for widget in self.get_all_instances():
+                _remember(getattr(widget, "mute_button_widget", None))
+                remote_manager = getattr(widget, "_widget_manager", None)
+                if remote_manager is not None:
+                    try:
+                        _remember(remote_manager.get_widget("mute_button"))
+                    except Exception:
+                        logger.debug(
+                            "[DISPLAY_WIDGET] Remote mute-button manager lookup failed",
+                            exc_info=True,
+                        )
+        except Exception:
+            logger.debug(
+                "[DISPLAY_WIDGET] Cross-display mute-button lookup failed",
+                exc_info=True,
+            )
+        for candidate in candidates:
+            is_live = getattr(candidate, "has_live_system_mute_runtime", None)
+            if not callable(is_live):
+                continue
+            try:
+                if is_live():
+                    return candidate
+            except Exception:
+                logger.debug(
+                    "[DISPLAY_WIDGET] Mute-button liveness check failed",
+                    exc_info=True,
+                )
+        return None
+
     def _on_play_pause_requested(self) -> None:
         """Route the focused play/pause hotkey through the media widget contract."""
         self._dispatch_play_pause_hotkey(source="keyboard_space")
@@ -1739,8 +1799,36 @@ class DisplayWidget(QWidget):
         self._handle_global_volume_step(-0.05, source="keyboard_pagedown")
 
     def _handle_global_volume_step(self, delta: float, *, source: str) -> None:
+        mute_button = DisplayWidget._resolve_mute_button_for_system_audio(self)
+        if mute_button is not None and hasattr(
+            mute_button, "handle_system_volume_step"
+        ):
+            try:
+                result = mute_button.handle_system_volume_step(delta)
+            except Exception:
+                logger.debug(
+                    "[DISPLAY_WIDGET] Global volume owner dispatch failed",
+                    exc_info=True,
+                )
+                return
+            if result is None:
+                # Once a shared owner is present it is authoritative. Retrying
+                # through the module fallback could duplicate a backend write
+                # whose result was merely unavailable.
+                logger.debug(
+                    "[DISPLAY_WIDGET] Global volume hotkey ignored by shared owner (%s)",
+                    source,
+                )
+                return
+            logger.info(
+                "[DISPLAY_WIDGET] Global volume hotkey handled successfully "
+                "through shared owner (%s -> %.3f)",
+                source,
+                result,
+            )
+            return
         try:
-            result = system_mute.step_volume(delta)
+            result = _load_system_audio_backend().step_volume(delta)
         except Exception:
             logger.debug("[DISPLAY_WIDGET] Global volume hotkey dispatch failed", exc_info=True)
             result = None
@@ -1752,18 +1840,20 @@ class DisplayWidget(QWidget):
 
     def _on_global_mute_toggle_requested(self) -> None:
         """Toggle system mute through the mute-button/system-audio contract."""
-        mute_button = getattr(self, "mute_button_widget", None)
+        mute_button = DisplayWidget._resolve_mute_button_for_system_audio(self)
         if mute_button is not None:
             try:
                 handled = bool(mute_button.handle_click())
             except Exception:
                 logger.debug("[DISPLAY_WIDGET] Global mute hotkey dispatch failed via mute button", exc_info=True)
-                handled = False
+                # A presenter exception may occur after a synchronous toggle;
+                # never risk immediately applying the opposite toggle again.
+                return
             if handled:
                 logger.info("[DISPLAY_WIDGET] Global mute hotkey handled via mute button")
                 return
         try:
-            result = system_mute.toggle_mute()
+            result = _load_system_audio_backend().toggle_mute()
         except Exception:
             logger.debug("[DISPLAY_WIDGET] Global mute hotkey dispatch failed", exc_info=True)
             result = None
@@ -1775,7 +1865,7 @@ class DisplayWidget(QWidget):
 
     def _refresh_mute_button_after_system_audio_change(self) -> None:
         """Refresh mute-button UI after keyboard-driven system audio changes."""
-        mute_button = getattr(self, "mute_button_widget", None)
+        mute_button = DisplayWidget._resolve_mute_button_for_system_audio(self)
         if mute_button is None:
             return
         try:
