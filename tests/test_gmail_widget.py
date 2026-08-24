@@ -1231,9 +1231,15 @@ def test_gmail_widget_refresh_spiral_can_be_hidden(qt_app):
         widget.cleanup()
 
 
-def test_gmail_uses_shared_painted_shadow_without_drop_effect(qt_app):
-    """Gmail should use the shared painted-card shadow path at runtime."""
-    from widgets.base_overlay_widget import PAINTED_FRAME_BLUR_STEPS
+def test_gmail_card_uses_no_graphics_effect_after_painted_shadow_retirement(qt_app):
+    """Gmail renders its card without any QGraphicsEffect.
+
+    The generic painted-frame card *shadow* was retired in the F0.5 audit
+    correction: framed families now draw their card background/border via QSS
+    with no painted drop shadow (destination is OverlayCard/RectangularShadow).
+    The R-24 regression bar survives — gmail must still never attach a QWidget
+    graphics effect.
+    """
     from widgets.gmail_widget import GmailWidget
 
     widget = GmailWidget()
@@ -1242,11 +1248,11 @@ def test_gmail_uses_shared_painted_shadow_without_drop_effect(qt_app):
         widget.set_shadow_config({"enabled": True, "frame_opacity": 0.7, "blur_radius": 18})
         widget.resize(320, 160)
 
-        shared_pixmap = widget._ensure_painted_frame_shadow_pixmap()
-        assert shared_pixmap is not None
-        assert not shared_pixmap.isNull()
-        assert PAINTED_FRAME_BLUR_STEPS > 0
-        assert widget.uses_painted_frame_shadow() is True
+        # Painted card shadow is retired: no shadow pixmap, path is inert.
+        assert widget.uses_painted_frame_shadow() is False
+        assert widget.painted_frame_shadow_card_shrink() == (0, 0)
+        assert widget._ensure_painted_frame_shadow_pixmap() is None
+        # No QGraphicsDropShadowEffect ever attaches (R-24).
         assert widget.graphicsEffect() is None
     finally:
         widget.cleanup()

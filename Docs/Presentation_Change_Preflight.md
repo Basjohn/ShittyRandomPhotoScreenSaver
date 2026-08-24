@@ -1,121 +1,67 @@
 # Presentation / Cadence Change Preflight
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
-Read before changing physical presentation, visualizer delivery, cadence, or render-state ownership.
+Read before changing physical presentation, visualizer delivery, cadence or render-state ownership.
 
-## 1. Accepted architecture epoch
-
-Destination:
+## Accepted architecture
 
 ```text
 one display
-    -> one standalone QQuickWindow
-    -> threaded Qt Quick scene graph
+-> one standalone threaded QQuickWindow
+-> one retained scene
 
-visualizer logical cadence
-    -> one VisualizerLogicalRuntime
-
-visualizer/runtime pixels
-    -> layers/items inside the one Quick scene
+VisualizerLogicalRuntime
+-> sole authored visualizer cadence
+-> latest bounded state
+-> Quick presentation
 ```
 
-During migration the QRhiWidget/GLCompositor presenter may still have live callers. It is
-**CURRENT-LEGACY — WILL BE OBSOLETE at H/I**, not a rollback/fallback destination.
+The old `DisplayWidget`/QRhiWidget/`GLCompositorWidget` physical presenter may remain until H. It is
+current-legacy and is deleted at H cutover, not a runtime rollback architecture.
 
-## 2. Rejected mechanisms
+Old transition/visualizer pixel-only implementations may disappear earlier on caller proof.
 
-| Mechanism | Status |
-|---|---|
-| producer display-rate divisor | rejected |
-| pending-until-paint admission | rejected |
-| paint/swap acknowledgement | rejected |
-| catch-up replay | rejected |
-| source/event decimation | rejected |
-| separate visualizer presentation surface | rejected |
-| GUI recurring timer as visualizer simulation owner | rejected |
-| AnimationManager as visualizer simulation owner | rejected |
-| per-mode logical clock | rejected |
-| `QQuickWidget` runtime presenter | rejected |
-| old compositor/software presenter fallback | rejected destination architecture |
-| broad C++ physical-presenter phase two | not planned |
+## Rejected
 
-## 3. Logical / physical boundary
+- producer display-rate divisor;
+- pending-until-paint admission;
+- paint/swap acknowledgement;
+- catch-up replay;
+- source/event decimation;
+- separate visualizer presentation surface;
+- GUI recurring timer as visualizer simulation owner;
+- per-mode visualizer logical clocks;
+- `QQuickWidget` runtime presenter;
+- old compositor/software presenter fallback;
+- broad second native/C++ physical-presenter migration.
 
-```text
-audio/events
-    -> source owner
-    -> VisualizerLogicalRuntime
-    -> latest logical/render state
-    -> bounded Quick synchronization
-    -> Quick render owner
-    -> physical presentation
-```
+## Before changing a renderer
 
-Physical presentation may sample latest current state.
+Ask:
 
-It may not redefine logical time or event cadence.
+1. Is the defect renderer cost, scheduling, logical cadence or resource ownership?
+2. Is the current Quick primitive measured as the limiting factor?
+3. Can the change remain inside the one `QQuickWindow`?
+4. Does it preserve authored fidelity?
+5. Does it preserve one logical clock and latest-state semantics?
+6. Are you accidentally preserving an old pixel owner that is already caller-dead?
 
-## 4. Quick synchronization
+Do not resurrect old presentation as an escape hatch.
 
-A synchronization bridge may coalesce state and prepare render-thread-safe snapshots.
+## Acceptance
 
-It may not:
+Use the relevant subset:
 
-- require one GUI callback per logical tick;
-- hold producer admission until paint;
-- build an unbounded queue;
-- allow stale generation state to cross into a replacement scene.
-
-## 5. Readiness
-
-Ask separately:
-
-```text
-is intentional presentation drawable?
-is reactive source authoritative?
-```
-
-Do not require real source identity for a presentation-owned idle scene.
-
-Do not fabricate source identity.
-
-## 6. Renderer changes
-
-Before changing renderer primitive ask:
-
-1. Is the defect presentation scheduling, renderer cost, or resource ownership?
-2. Is the current Quick primitive actually measured as the limiting factor?
-3. Can the change stay inside the existing `QQuickWindow`?
-4. Does it preserve one-surface-per-display?
-5. Does it preserve fidelity and lifecycle semantics?
-
-Do not jump from a local renderer issue to a native-window rewrite or resurrect the old presenter as a
-compatibility escape hatch.
-
-## 7. Instrumentation proportionality
-
-Add a new probe only when it distinguishes materially different remaining designs.
-
-Do not keep expanding the completed P0 benchmark.
-
-## 8. Required acceptance
-
-For presentation changes use the relevant subset of:
-
+- deterministic/source contract tests;
 - visual fidelity/goldens;
-- logical scheduler health;
-- one logical clock;
-- source freshness;
-- state-to-render age;
+- authored scheduler health;
+- source freshness/state age;
 - physical p95/p99/max gaps;
-- severe-gap counts;
-- 60 Hz behaviour;
-- high-refresh behaviour;
-- no callback/backlog growth;
-- no additional accelerated surface;
-- BTF when Bubble is affected;
-- startup/reveal visual review;
-- Settings/recreate/topology lifecycle.
+- 60 Hz + high-refresh behavior;
+- multi-display/DPR;
+- startup/reveal;
+- Settings/recreate/topology;
+- BTF when Bubble is affected.
 
-Average FPS alone never closes the gate.
+Average FPS alone never closes a presentation gate.

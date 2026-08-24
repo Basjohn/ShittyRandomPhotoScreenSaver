@@ -1,870 +1,313 @@
-# 10 — Qt Quick Ordinary Widget Family Port Decomposition
+# 10 — Ordinary Widget Family Port Decomposition
 
-Status: **Phase-F ACTIVE decomposition; F0 deletion audited GREEN and packaging residue closed here; F0.5 active next**  
-Last updated: 2026-08-24  
-Source/decomposition basis: `f049baedb80d6b7e7a74fb03395b06e94b870a1c` + this migration-simplification reconciliation
+Status: **Phase F ACTIVE — F0.5 narrow correction, then F1**  
+Last updated: 2026-08-24
 
-This is subordinate to `Current_Plan.md`. Phase E is closed; F0 is closed. `Current_Plan.md` currently admits F0.5 only: retire the hidden shadow-tuning authority, normalize canonical settings, complete Widgets → General shadow controls, then audit before F1 Clock. Completed family pixel presenters retire after family GREEN rather than accumulating to I.
+This file begins at current/future Phase-F work. Completed F0/F0.5 implementation history does not live
+here.
 
-Cross-links:
+## Phase-F mission
 
-- `Current_Plan.md`
-- `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`
-- `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
-- `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`
-- `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md`
-- `Docs/10_WIDGET_GUIDELINES.md`
-- `Docs/TestSuite.md`
-- `Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md` — required Clock shadow reference
-
----
-
-# 1. Phase-F mission
-
-Port ordinary runtime **pixels** from QWidget presentation into the one retained Quick scene while
-preserving E1's presentation-neutral runtime/provider ownership.
-
-For each family:
+Move ordinary runtime pixels into the one retained Quick scene while preserving presentation-neutral
+runtime/provider ownership.
 
 ```text
-existing neutral runtime owner/state
-        ↓
-stable presentation model
-        ↓
-retained family QML content
-        ↓
-E3 OverlayWidget / OverlayCard / ShadowedText / Separator
-        ↓
-one display QQuickWindow
+neutral runtime/model
+-> presentation model
+-> retained family QML
+-> OverlayWidget / shared primitives
+-> one display QQuickWindow
 ```
 
-Do not port the Settings GUI to QML merely because runtime pixels move.
-
-Do not delete useful neutral Python behavior merely because it lived next to QWidget code.
-
----
-
-# 2. Phase-F sequence
-
-Recommended bounded order:
+## Sequence
 
 ```text
-F0    Imgur removal — CLOSED after reconciliation
-F0.5  Widgets → General shadow controls — ACTIVE NEXT
-F1    Clock / Clock2 / Clock3
-F2  Weather
-F3  Media core
-F4  Media volume / mute / progress / controls
-F5  Reddit / Reddit2
-F6  Gmail
-F7  Steam Progress
-F8  Achievement Pulse
-F9  Abandonment Issues
-F10 Friend Pulse
+F0.5 correction   remove relocated generic shadow-sidecar tuning
+F1                Clock / Clock2 / Clock3
+F2                Weather
+F3                Media core
+F4                Media controls / volume / mute / progress
+F5                Reddit / Reddit2
+F6                Gmail
+F7                Steam Progress
+F8                Achievement Pulse
+F9                Abandonment Issues
+F10               Friend Pulse
 ```
 
-Why:
+Do not reorder merely to dodge an architecture issue. Exact source may justify smaller sub-slices.
 
-- Clock proves the first real family component/model seam with no provider/image/list complexity.
-- Weather adds richer structured state and icon identity.
-- Media then earns the shared dynamic-artwork mechanism rather than having it guessed in advance.
-- Media controls build on the core model/action path.
-- Reddit/Gmail exercise bounded lists and stable semantic IDs.
-- Steam families come after the bridge is proven across scalar, image, action and list shapes.
+## Family retirement
 
-If exact current source shows a smaller safer order inside a family, split the slice. Do not rearrange
-families merely to dodge an architecture issue discovered by the first family.
-
----
-
-# 3. F0 — remove deprecated Imgur — CLOSED after reconciliation
-
-Imgur is not a Quick target.
-
-Remove, as applicable to exact current source:
-
-- family/gate/default entries;
-- settings controls;
-- descriptors/factories;
-- runtime/provider implementation;
-- CUSTOM entries;
-- tests;
-- packaging references;
-- current-authority docs;
-- Foundry metadata.
-
-Do not break historical evidence documents merely to erase the name.
-
-Source audit confirms the current tracked tree has no Imgur path and the family/catalog/default/Settings/
-factory/runtime/CUSTOM/input/cache/assets/test surfaces were deleted. The audit also found
-`beautifulsoup4`/`soupsieve` left in `requirements.txt` with no current `BeautifulSoup`/`bs4` consumer; this
-closure reconciliation removes those stale Imgur-era pins. Test execution evidence remains the implementing
-agent's report unless rerun independently. Exit documentation is reconciled in the same pack.
-
----
-
-# 3.1 Phase-F presentation hard rule — no QWidget effect-carrier/dummy ports
-
-Do not preserve a workaround merely because it is present in legacy pixels.
-
-In particular, the QWidget shadow/fade architecture may contain `ShadowFadeProfile`,
-`QGraphicsOpacityEffect`, dummy/effect-carrier widgets and staged widget-vs-shadow attachment/fade
-because one QWidget can own only one graphics effect. Qt Quick does not require that structure for the
-retained family shell.
-
-Required retained shape:
+For F1–F10:
 
 ```text
-OverlayWidget root opacity
-    -> OverlayCard + cached RectangularShadow
-    -> ShadowedText duplicate glyphs
-    -> family content
-```
-
-One root opacity fades the composition together. Do not add another shadow-fade timeline or a wrapper
-whose only job is carrying an effect.
-
-Intermediate Quick Items must have a real responsibility (layout, transform, clipping, z grouping,
-input or lifecycle composition). This rule applies to every family, beginning with Clock.
-
-Frosted/backdrop-glass cards are explicitly deferred to `Future_Work.md`. Do not add shared backdrop
-capture, blur layers or glass customization while migrating ordinary family pixels; first prove the
-plain retained card/fade/shadow architecture across real families.
-
-## 3.2 Reference-first, retire-on-GREEN family policy
-
-The old family presenter has one legitimate migration role: **reference evidence while its replacement is
-still unproven**. It is not a supported fallback architecture.
-
-For every F1–F10 family:
-
-```text
-inspect current QWidget family
--> identify surviving neutral logic + authored pixel behavior
--> build retained Quick replacement
--> rehome surviving tests
--> required focused/eyes-on proof
--> push / independent GREEN where required
+inspect old family reference
+-> extract/reuse neutral logic
+-> build retained Quick family
+-> focused tests + eyes-on as required
+-> independent GREEN
 -> caller proof
--> delete that family's old runtime pixel presenter + obsolete presentation-only tests/helpers
--> then proceed to later families
+-> delete old family pixel presenter/presentation-only tests
+-> next family
 ```
 
-Do not carry a completed family's old pixels all the way to Phase I merely because deletion was once
-scheduled there. Shared old helpers remain only while another **unported** family still genuinely uses
-them. Git history is the historical reference after deletion.
+Do not carry completed old family pixels to I.
 
-A post-GREEN family cleanup is normally a bounded retirement step. Require another independent audit if
-it crosses a shared factory, lifecycle, Settings/persistence owner or another architecture boundary.
+## No old effect architecture
 
-This policy does not delete real product resilience. Provider/network/cache recovery, transition recovery
-and the closed Visualizer failover/reclaim contract survive. Temporary migration state adapters may
-survive only when they rehome proven authored state without preserving old pixels or selectable fallback
-presentation and have an explicit retirement owner.
+Do not port:
+
+- `ShadowFadeProfile`;
+- QGraphicsOpacityEffect choreography;
+- dummy/effect carriers;
+- separate shadow fade.
+
+Whole-widget fade = retained root opacity.
+
+## Family-authored visual reference
+
+Preserve family-specific content/layout/animation/interaction/geometry while its Quick replacement is
+unproven.
+
+A value is family-authored only if the family itself owned the visual relationship independently.
+
+The retired global `shadowtuning.json` card/text/header/icon/control/volume-slider numbers are not
+family-authored reference.
+
+Clock analogue hard-shadow geometry is.
 
 ---
 
-# 4. F0.5 — canonical shadow cleanup + Widgets → General controls — ACTIVE NEXT
+# F1 — Clock
 
-F0.5 is a bounded shadow-authority/Settings slice. It does not create a runtime family component. The
-existing Widgets → General → Appearance page already owns the three shadow enable toggles; extend that
-existing owner rather than adding another page/model.
+Mandatory:
 
-Detailed UI/style contract: `Docs/Custom_Style_Implementation.md`.
+- `11_Clock_Analogue_Shadow_Contract.md`
+- `09_Widget_Quick_Presentation_Bridge.md`
+- current Clock source as visual/behavior reference
 
-## F0.5.0 Retire `shadowtuning.json` and the stale offset pair first
+## Runtime/model
 
-Before building the picker, remove the hidden QWidget painter-tuning authority:
+Keep `GlobalClockTicker` as shared one-second cadence authority.
 
-- delete `core/settings/shadow_tuning.py` and `tests/test_shadow_tuning_paths.py`;
-- remove `shadowtuning.json` from current storage layout/path authority;
-- remove all direct/transitive runtime imports/aliases of the exported tuning dictionaries;
-- do not create a replacement legacy/fallback tuning module/table/file or preserve old values as
-  compatibility constants;
-- sidecar-dependent QWidget shadow visuals may disappear during migration; delete/simplify branches
-  whose only purpose is reproducing the sidecar rather than designing temporary parity plumbing;
-- preserve family-authored visual/reference algorithms that are still needed by an unported family;
-  specifically, leave Clock analogue ring/marker, two-pass numeral and hand-shadow reference behavior
-  intact for F1 as required by `11_Clock_Analogue_Shadow_Contract.md`;
-- keep non-shadow business/runtime logic and required migration seams importable;
-- leave stale on-disk sidecar files ignored; do not add migration/copy/delete machinery for them.
+Python owns timezone/formatting/angles/settings.
 
-Also remove/retire unused `widgets.shadows.offset` from model/defaults/presets/generated artifacts. Current
-source has no runtime consumer. Do not migrate it into Extra Offset.
+Use one stable presentation model per logical Clock instance.
 
-Normalize `ShadowSettings` at this boundary: its missing-key fallbacks/types must agree with canonical
-shadow defaults rather than the stale `10 / 0.6 / 0.4` literals currently present. F0.5 adds the two
-Extra Offset defaults (`0`) and preserves canonical direction `SE`.
+No new Clock service merely for symmetry.
 
-No replacement hidden baseline authority is created in F0.5. F1 Clock establishes the first deliberate
-Quick card/text baseline magnitudes in the destination presentation style seam.
+## First generic family seam
 
-## F0.5.1 Mandatory global direction picker
+Establish the smallest static family component/model binding mechanism using the existing Quick engine
+and ordinary-widget host.
 
-```text
-┌─────────────┐
-│ ↖   ↑   ↗  │
-│ ←       →  │
-│ ↙   ↓   ↘  │
-└─────────────┘
-```
+No provider/settings/QWidget in QML.
 
-- canonical tokens `NW/N/NE/W/E/SW/S/SE`; default/fallback `SE`;
-- center inert; no ninth semantic;
-- existing `widgets.shadows.direction` only;
-- no UI-local resolver and no QML Settings reader.
+No family-specific branching in display scene/controller.
 
-## F0.5.2 Two user tuning buckets
+## Digital Clock product changes
 
-Widget/Card:
+Required:
+
+- separator = 2 logical px;
+- target width ≈ 0.77 inner width, eyes-on range ~0.75–0.80;
+- no old 240 px cap defeating widening;
+- one symmetric separator gap above/below;
+- separator also appears in analogue mode when enabled and calendar content exists;
+- day/date shadow matches ordinary timezone secondary-text semantics;
+- no text blur.
+
+Legacy `show_digital_separator` may feed semantic `showSeparator` until H settings epoch.
+
+## Shadow wiring
+
+F1 is first real end-to-end proof:
 
 ```text
-enabled             existing
-frame_opacity       Darkness
-blur_radius         Blur
-frame_extra_offset  Extra Offset (new, >=0 logical px, default 0)
-header_enabled      existing header toggle
+canonical widgets.shadows
+-> Python style projection
+-> deliberate Quick class base magnitude
+-> user Extra Offset
+-> canonical ShadowDirection resolver
+-> signed retained properties
 ```
 
-Text:
+Direction/style change does not recreate Clock item/model/ticker/engine/window.
+
+Do not use sidecar-derived baseline numbers.
+
+Analogue special shadows follow `11_Clock_Analogue_Shadow_Contract.md`.
+
+## Geometry variants
 
 ```text
-text_enabled        existing
-text_opacity        Darkness
-text_extra_offset   Extra Offset (new, >=0 logical px, default 0)
+Clock + display
+  digital -> rect A
+  analog  -> rect B
 ```
 
-No Text Blur. No per-family editor. No third Header tuning panel or hidden header-alpha profile. Header,
-ordinary text and large text all consume the shared Text enable/darkness/extra-offset bucket. A later
-deterministic font-size distance scale may be earned for very large glyphs, but it remains one Text style
-policy rather than a separate tuning source.
+First target with no saved geometry:
 
-`Extra Offset` is additive to the destination class/base magnitude before the canonical direction
-resolver. The legacy `widgets.shadows.offset` pair is removed in F0.5 and is not migrated. Do not add
-signed X/Y user controls.
+1. current visual center;
+2. target natural size;
+3. center;
+4. clamp once;
+5. establish target baseline.
 
-## F0.5.3 Retired Intense semantics stay retired
-
-Do not reintroduce `intense_shadow`, `analog_shadow_intense`, `digital_shadow_intense`, an Intense
-checkbox, or an Intense preset/profile. The destination is one shadow system. The old painter sidecar and
-its tuning numbers are deleted from current authority rather than carried as reference/fallback runtime
-values.
-
-## F0.5.4 Mandatory persistence repair
-
-Exact current source has a dangerous partial-section pattern: `save_defaults_settings()` emits only the
-three enable booleans under `shadows`, while `apply_widget_section_save_results()` assigns the returned
-section mapping wholesale. This can erase E4's `direction` and other shadow values on an unrelated
-General save.
-
-Fix the owner, not the symptom: merge edited values into the existing canonical `widgets.shadows`
-mapping or otherwise preserve every unedited/unknown key. Do not create a second shadow persistence
-store. Add a regression that saves an unrelated General field and proves arbitrary sentinel shadow keys
-survive.
-
-## F0.5.5 Focused gate
-
-Prove:
-
-- deletion of sidecar loader/path test/current source dependencies with no replacement compatibility tuning source;
-- retirement of `widgets.shadows.offset` with no migration into Extra Offset;
-- `ShadowSettings` fallback/type parity with canonical shadow defaults;
-- all eight directions, inert center, SE reset/default/fallback;
-- existing three enable toggles still round-trip;
-- Card Darkness/Blur/Extra Offset and Text Darkness/Extra Offset round-trip and clamp;
-- Extra Offset cannot become negative;
-- unedited/unknown shadow keys survive every General save path;
-- `ShadowSettings`, canonical defaults and generated defaults/SST artifacts stay in parity;
-- no Intense key/UI and no text-blur property/effect;
-- Settings lazy-page/save behavior remains intact;
-- no runtime family/provider is constructed merely by opening/saving General.
-
-Push and stop for independent audit. **Do not begin Clock in this checkpoint.**
-
----
-
-# 5. F1 — Clock family
-
-Clock is the first real family port and the first proof of the generic family-content seam.
-
-**Mandatory Clock visual reference:** read `11_Clock_Analogue_Shadow_Contract.md` before modifying the
-analogue presentation. The pre-F1 Clock remains reference evidence until the retained family is GREEN.
-
-## F1.0 Current owner inventory
-
-Preserve:
-
-- `GlobalClockTicker` as the shared one-second runtime cadence authority;
-- timezone parsing/normalization in Python;
-- formatted clock/calendar/timezone state in presentation-neutral Python;
-- exact one-second analogue hand-angle semantics;
-- settings persistence in existing settings owners;
-- activation/instance-enabled semantics.
-
-Retire/rehome as presentation:
-
-- `ClockWidget` QLabel/QPainter pixels;
-- `PaintedShadowLabel` use for Clock pixels;
-- QPixmap analogue face/frame buffers as final presentation;
-- painter card/separator/text shadows;
-- QWidget geometry mutation as final Quick geometry authority.
-
-Do not create a `ClockService` merely for structural symmetry.
-
----
-
-## F1.1 First generic family component seam
-
-Introduce the smallest static family-presentation registry/component cache needed to create Clock
-content inside the E3 retained shell.
-
-Required properties:
-
-- process-level family QML component compilation using the existing engine;
-- per-display instance creation using the existing context;
-- stable model binding;
-- no provider/settings/QWidget passed into QML;
-- no per-family branch in `DisplayScene.qml` or `QuickSceneController`;
-- host retirement also retires family child content;
-- family item recreation rebinds current Clock model without rebuilding the shared ticker.
-
-A plausible destination:
+After both exist:
 
 ```text
-WidgetPresentationDescriptor(
-    widget_id/family,
-    qml_component,
-    presentation_model_type
-)
-
-QuickSceneFactory
-    -> cache ClockContent.qml component
-
-OrdinaryWidgetPresentationHost
-    -> create shell
-    -> create ClockContent child in shell content area
-    -> bind ClockPresentationModel
+A -> B -> A exactly
 ```
 
-Exact names may differ. Keep machinery proportional to the problem.
+No cumulative derivation/drift.
 
-Audit checkpoint recommended after the first real family-binding seam if it changes factory/host
-lifecycle architecture.
+F1 establishes semantic interface; G owns final CUSTOM Save/Cancel persistence.
 
----
-
-## F1.2 Clock presentation model
-
-Use one stable presentation-oriented model per logical Clock instance.
-
-Candidate state:
-
-```text
-timeText
-calendarLines / calendarText
-timezoneText
-displayMode            # digital | analog
-hourAngle
-minuteAngle
-secondAngle
-showSeconds
-showNumerals
-showSeparator
-calendarLayout
-font/style state
-separator style
-geometryVariant
-```
-
-Do not expose:
-
-- Clock QWidget;
-- SettingsManager;
-- ticker QObject merely so QML can subscribe itself;
-- parent display widget;
-- raw CUSTOM persistence map.
-
-Ticker update occurs once per authored second and publishes the current scalar state/angles.
-
----
-
-## F1.3 Digital visual
-
-Preserve/implement:
-
-- main time;
-- 12/24-hour formatting;
-- seconds option;
-- tabular/stable numeral layout where current Qt Quick font behavior supports the intended result;
-- calendar/day/date;
-- shared/two-line calendar formatting;
-- timezone;
-- card/background/border;
-- one retained-root whole-widget fade (no dummy/effect carrier or separate shadow fade);
-- ordinary offset text shadows;
-- separator when enabled;
-- font fitting inside assigned rect without rewriting outer committed geometry.
-
-A content reflow caused by changing time text must not move the outer widget.
-
----
-
-## F1.4 Separator product improvement — REQUIRED
-
-The current legacy digital separator is 1 px, ~55% width and asymmetrically spaced.
-
-New Clock separator contract:
-
-### Thickness
-
-```text
-2 logical px
-```
-
-### Width
-
-Target:
-
-```text
-~0.77 × available inner Clock width
-```
-
-This is approximately 40% wider than the legacy `0.55` ratio.
-
-Do not keep an old absolute pixel maximum if it prevents the separator from becoming visibly wider on a
-large Clock. Final eyes-on tuning may move the ratio modestly, approximately `0.75–0.80`.
-
-### Spacing
-
-Use one symmetric gap:
-
-```text
-primary content
-      ↓ separatorGap
-separator
-      ↓ separatorGap
-calendar/day/date
-```
-
-Do not copy the legacy independent `DIGITAL_FOOTER_GAP=8` and
-`DIGITAL_SEPARATOR_CALENDAR_GAP=6` asymmetry as two authorities.
-
-### Analogue
-
-When `showSeparator` is enabled and calendar/day/date exists:
-
-```text
-analogue face/numerals
-      ↓ separatorGap
-separator
-      ↓ separatorGap
-calendar/day/date
-      ↓ ordinary row gap
-timezone (if enabled)
-```
-
-The setting is a Clock separator behavior, not a digital-only visual accident.
-
-During migration the old persisted `show_digital_separator` key may feed `showSeparator`. A final
-persistence rename belongs to the H0 settings epoch unless separately authorized.
-
----
-
-## F1.5 Clock text shadows — REQUIRED
-
-Exact legacy text-shadow architecture is offset-only.
-
-For Clock secondary text:
-
-```text
-calendar/day/date
-timezone
-```
-
-use the **same resolved ordinary-text shadow style**:
-
-- same magnitude class;
-- same global direction;
-- same alpha/color semantics;
-- no separate calendar offset;
-- no MultiEffect/text blur.
-
-The current timezone appearance is the visual reference for the day/date shadow. Do not preserve an
-over-separated day/date shadow if the old modes diverge accidentally.
-
-Digital and analogue must agree on this semantic.
-
-F1 must also prove the real E4 wiring path:
-
-```text
-canonical widgets.shadows direction + Card/Text user buckets
-    -> destination Clock shadow style policy
-    -> deliberate card/text base distance + Extra Offset
-    -> canonical Python ShadowDirection resolver
-    -> signed card/text offsets + opacity/blur properties
-    -> existing retained Clock shell/content properties
-```
-
-Changing direction/darkness/blur/extra-offset must not recreate the Clock item, its presentation model,
-`GlobalClockTicker`, engine or top-level window.
-
-Main time/numerals use the same canonical Text user bucket. If F1 visual validation earns a deterministic
-font-size-based base-distance scale for very large glyphs, encode it in the destination style policy; do
-not recreate the deleted `text_large` sidecar profile or authorize a separate arbitrary mode offset.
-
-Required eyes-on comparison:
-
-- digital day/date vs timezone;
-- analogue day/date vs timezone;
-- direction changes in at least SE/NW/N/E;
-- light and busy photographic backgrounds.
-
----
-
-## F1.6 Analogue retained visual
-
-Prefer retained Quick primitives/items over a QWidget-style frame-buffer loop.
-
-Static retained elements:
-
-- face/ring;
-- hour markers;
-- numerals;
-- separator;
-- calendar/date;
-- timezone.
-
-Dynamic once per second:
-
-- hour/minute/second hand rotations;
-- time-derived strings when required.
-
-Do not redraw/recreate the static face tree every physical frame.
-
-Analogue ring/marker, Roman-numeral and hand shadows are **family-specific authored presentation**, not
-sidecar debris and not ordinary one-pass text/card shadows. Preserve their decomposed hard-shadow
-personality from `11_Clock_Analogue_Shadow_Contract.md`, including the numeral contact + main-drop passes
-and thicker duplicate hand geometry. The mandatory global E4 direction applies to their directional
-translation. Do not automatically force the optional General Text/Card tuning buckets onto these special
-analogue classes if doing so damages the authored look; no third user tuning bucket is required.
-
-If a custom scene-graph item is actually needed for fidelity/performance, prove that need first. A
-normal retained QML implementation is preferred for an ordinary one-second clock.
-
----
-
-## F1.7 Geometry variants — REQUIRED BEFORE CLOCK CLOSURE
-
-Clock's modes are different geometry variants:
-
-```text
-digital
-analog
-```
-
-F1 must expose a presentation/geometry contract capable of asking for the target variant's rect.
-
-For ordinary non-CUSTOM default positioning, keep stable anchor/margin intent and resolve each mode's
-natural footprint without cumulative mutation.
-
-For CUSTOM:
-
-```text
-digital -> A
-analog  -> B
-```
-
-Round trip must restore exact A/B.
-
-First-ever target mode may initialize once from current visual center + target natural size + clamp.
-Thereafter switches restore saved target geometry.
-
-Do not carry the legacy recursive center-derived switch behavior forward as the destination.
-
-F1 tests the semantic adapter even if final persistent edit-session storage is completed in G.
-
-### Required F1 geometry tests
-
-- 50+ live digital↔analogue switches produce exactly two stable rects;
-- custom digital manual resize changes only digital variant;
-- custom analogue manual resize changes only analogue variant;
-- font/calendar/timezone updates do not silently alter inactive variant;
-- mode switch does not alter shared ticker/provider identity;
-- two Clock instances maintain independent variant state;
-- Clock2/Clock3 inherit the same variant semantics.
-
-Phase G adds Save/Cancel/restart/cross-monitor persistence tests.
-
----
-
-## F1.8 Clock completion gate
+## Completion
 
 Deterministic:
 
-- model/state mapping;
-- one-second ticker cadence/angles;
-- family component uses existing engine/window;
+- model mapping;
+- one-second angles/ticker ownership;
+- existing engine/window;
 - item recreate without ticker recreate;
-- one root fade with no staged/dummy shadow fade;
-- card alpha/border/shadow;
-- text shadow no MultiEffect;
-- canonical direction setting resolves through Python into real Clock card/text signed offsets;
-- direction changes update the existing Clock item/model/ticker topology in place;
-- separator thickness/ratio/symmetric geometry;
-- separator visible in digital and analogue when enabled;
-- day/date shadow == timezone shadow semantic;
-- geometry round-trip no drift;
-- no QWidget required by Quick Clock content;
-- static analogue decoration not rebuilt per physical frame.
+- root fade only;
+- no text blur/MultiEffect;
+- real canonical shadow settings/direction wiring;
+- separator contract;
+- day/date/timezone shadow semantic;
+- geometry round-trip;
+- static analogue decoration retained.
 
 Eyes-on:
 
-- digital default;
-- analogue default;
+- digital/analogue;
 - card on/off;
-- calendar one/two line;
-- timezone combinations;
+- calendar/timezone combinations;
 - separator on/off;
-- multi-DPR;
-- several shadow directions;
-- repeated live mode switching;
-- 3 simultaneous clocks with different configs.
+- several directions;
+- multiple DPR/sizes;
+- repeated mode switching;
+- multiple differently configured clocks.
 
-After F1 is independently GREEN, perform caller proof and retire Clock's old QWidget runtime-pixel
-presentation before starting F2. Preserve/rehome any neutral ticker/timezone/settings/geometry logic still
-owned there. Delete obsolete Clock presentation-only tests only after their surviving contracts are
-covered by destination tests. If the retirement touches shared family factories/lifecycle, stop for an
-additional audit; otherwise keep it a bounded family-local cleanup.
+After independent GREEN, delete old Clock pixels after caller proof.
 
 ---
 
-# 6. F2 — Weather
+# F2 — Weather
 
-## Preserve owner
+Use neutral Weather runtime/provider/cache/refresh/request-generation ownership.
 
-Use the E1-neutral Weather runtime service/model for:
+Presentation model covers location, condition, temperature, forecast, icon identity, loading/error/missing
+location and style.
 
-- provider;
-- cache;
-- startup state;
-- refresh/retry cadence;
-- async request generation;
-- current normalized state.
+Prefer packaged/static icon identities where current behavior permits.
 
-## Presentation model
+Do not create full provider-artwork infrastructure merely for icons.
 
-Likely:
+Use offline synthetic pixel/model states.
 
-```text
-location
-condition text
-temperature
-forecast rows
-condition/icon identity
-loading/error/missing-location state
-style
-```
-
-## Image seam
-
-Prefer packaged/static icon identity when the current visual can map to packaged assets. Do not create
-the full dynamic provider-artwork transport merely because Weather has icons.
-
-If Weather genuinely consumes dynamic provider images in current product behavior, establish the
-smallest shared image identity seam and document why Media does not need to be first.
-
-## Gate
-
-Prove offline synthetic states including successful current conditions, stale/cache state, missing
-location and provider error. No network is needed for pixel tests.
+After GREEN, delete old Weather pixels.
 
 ---
 
-# 7. F3 — Media core
+# F3 — Media core
 
-Media is a higher-risk family due to shared controller/provider ownership, artwork, progress, playback
-state and Visualizer relationship.
+Higher risk due shared controller, artwork, playback/progress and Visualizer relationship.
 
-## Runtime owner
+Reuse shared Media runtime owner.
 
-Reuse E1's shared Media owner. Presentation does not acquire controller lifetime.
+Publish one coherent revision of provider/track/artwork/playback/progress/control availability/style.
 
-## Coherent presentation state
+Media is preferred first serious dynamic-artwork consumer. Earn one shared image-delivery seam with
+stable identity, legal threading, bounded cache/lifetime and no unchanged upload.
 
-One revision should coherently represent, as applicable:
-
-```text
-provider identity
-track/title/artist/album
-artwork identity
-playback state
-progress/duration
-control availability
-style
-```
-
-Avoid mixed old/new track state.
-
-## Dynamic artwork seam
-
-Media is the preferred first serious dynamic-artwork consumer.
-
-Establish one shared Quick-compatible application seam with:
-
-- stable image identity/cache key;
-- legal thread ownership;
-- no QPixmap worker transport;
-- no base64/tempfile churn;
-- no upload when identity is unchanged;
-- bounded cache/lifetime;
-- replacement-scene fencing.
-
-Audit this seam separately if it changes process/display resource ownership.
+Audit separately if asset delivery changes process/display resource ownership.
 
 ---
 
-# 8. F4 — Media controls / volume / mute / progress
+# F4 — Media controls
 
-Build on Media core state/action routing.
+Build on F3.
 
-Preserve the narrow E1 volume and system-mute owners.
+Preserve narrow volume/system-mute owners.
 
-Quick controls emit semantic actions only.
+QML emits semantic actions.
 
-Prove:
+Quick progress interpolation may be visual only; it does not become playback truth.
 
-- click/drag actions route to correct owner;
-- disabled/unavailable controls visually and semantically fail closed;
-- progress interpolation, if Quick-native, does not become playback truth;
-- hidden controls do not run needless animation;
-- volume/mute polling cardinality does not increase per display/item.
+No cardinality increase per display/item.
 
 ---
 
-# 9. F5 — Reddit / Reddit2
+# F5 — Reddit / Reddit2
 
-Use E1-neutral post-provider ownership.
+Use neutral post-provider ownership.
 
-Presentation:
+Use bounded stable post IDs and semantic actions.
 
-- bounded row/card model;
-- stable post IDs;
-- current title/subreddit/metadata/images as supported;
-- semantic open/refresh actions.
+Differences belong in configuration/model resolution, not duplicate providers/deep QML inheritance.
 
-Reddit2 differences belong in config/model resolution, not a duplicated provider or deep QML
-inheritance tree.
-
-Any dynamic imagery should reuse the shared image seam already established if compatible.
+Reuse shared image seam if compatible.
 
 ---
 
-# 10. F6 — Gmail
+# F6 — Gmail
 
-Reuse the shared Gmail backend/runtime owner.
+Reuse shared Gmail backend/runtime owner.
 
-Presentation:
+Stable message IDs; bounded rows; sender/subject/snippet/time/status; semantic actions.
 
-- stable message IDs;
-- sender;
-- subject/snippet;
-- timestamp/status;
-- bounded unread rows;
-- semantic open/archive/etc. actions where current product supports them.
-
-Notification detection/sound stays Python/business-owned and cannot depend on QML visibility.
+Notification detection/sound remains Python/business-owned.
 
 ---
 
-# 11. F7–F10 — Steam family
+# F7–F10 — Steam family
 
-Order:
+Use current neutral Steam models/runtime and current wrapper:
+`Docs/SRPSS_Steam_Widget_Family_Implementation_Plan.md`.
 
-```text
-F7 Steam Progress
-F8 Achievement Pulse
-F9 Abandonment Issues
-F10 Friend Pulse
-```
+Do not parse the historical 123 KB pre-Quick plan as current presentation architecture.
 
-Preserve current provider/cache/privacy/security/product behavior. Rehome only pixels and presentation
-state.
+All four cards share appropriate Steam data/runtime ownership but remain separate presentation
+identities.
 
-Use stable card identity and the existing neutral runtime owners. Do not duplicate Steam data sources
-because four Quick components exist.
+### F7 Steam Progress
 
-Old Steam QWidget/painter implementation plans are migration reference for authored behavior only, not
-destination ownership authority.
+Before changing product/data semantics, verify current supported source/feasibility state. Presentation
+migration must not invent a data source merely to complete the card.
 
----
+### F8 Achievement Pulse
 
-# 12. Shared primitive admission rule during F
+Current source already has especially strong neutral foundations:
 
-Do not pre-build a library of hypothetical widgets.
+- immutable `SteamCardViewModel`;
+- dedicated Achievement resolution;
+- dedicated runtime/preparation path.
 
-A new shared QML primitive is justified when:
+Therefore F8 should be predominantly a presentation mapping/visual fidelity task once shared family
+seams exist.
 
-- the active family needs it now; and
-- its API is naturally presentation-only; and
-- another family or repeated use makes sharing real rather than speculative.
+### F9 Abandonment Issues / F10 Friend Pulse
 
-Likely earned later:
+Preserve current privacy/provenance/selection semantics. Unknown/private data remains explicit.
 
-```text
-Artwork
-ProgressBar
-IconButton / transport control
-bounded row shell
-```
-
-Do not add a generic `HeaderRow`/`UniversalWidgetContent` merely to make file names look symmetric.
+No duplicate Steam data source per component.
 
 ---
 
-# 13. Family checkpoint policy
+# Shared primitive admission
 
-A low-risk family may be sliced:
+Add a reusable QML primitive only when the active family needs it now and its API is naturally
+presentation-only.
 
-```text
-model/state seam
--> retained pixels
--> action/geometry integration
--> focused gate
--> diff/status
--> commit/push
-```
+Likely later candidates:
 
-Stop for independent audit when a slice introduces:
+- Artwork;
+- ProgressBar;
+- transport/icon control;
+- bounded row/card shell.
 
-- a new generic lifecycle/engine/component owner;
-- dynamic image/texture ownership;
-- high-impact interactive routing;
-- cross-display ownership;
-- major geometry persistence;
-- shared/cross-family deletion rather than the normal caller-proven family-local retirement;
-- another architecture boundary identified by current evidence.
-
-Clock's first family binding seam should receive an audit because it defines the pattern every later
-family may copy. After each family is GREEN, do not defer its caller-proven old pixel cleanup to I.
-
----
-
-# 14. Phase-F closure criteria
-
-Before F closes:
-
-- every supported ordinary family has retained Quick pixels or an explicit removal decision;
-- no family Quick component owns providers/settings/persistence;
-- no ordinary family requires QWidget runtime pixels;
-- old QWidget pixel presenters for independently GREEN families have already been retired rather than
-  accumulated for Phase I;
-- one static family/component registry exists, not central if/elif dispatch;
-- one shared dynamic-image seam exists if required;
-- semantic actions return to the correct Python owner;
-- Clock geometry variants are preserved for G;
-- all surviving visual customization maps to a Quick owner;
-- direct QWidget presentation tests have replacement destination coverage before retirement;
-- Imgur is gone;
-- no extra accelerated top-level surface exists.
-
-Phase G then owns final CUSTOM edit/input/auxiliary presentation.
+Do not prebuild a universal widget framework.

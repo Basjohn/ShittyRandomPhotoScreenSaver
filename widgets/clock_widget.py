@@ -21,15 +21,7 @@ from PySide6.QtGui import QFont, QFontMetrics, QColor, QPainter, QPen, QPaintEve
 from PySide6.QtCore import QRectF
 from shiboken6 import Shiboken
 
-from widgets.base_overlay_widget import (
-    BaseOverlayWidget,
-    OverlayPosition,
-    PAINTED_FRAME_OFFSET_X,
-    PAINTED_FRAME_OFFSET_Y,
-    PAINTED_FRAME_BLUR_STEPS,
-    PAINTED_FRAME_SPREAD,
-    PAINTED_FRAME_MAX_ALPHA,
-)
+from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import PaintedShadowLabel, ShadowFadeProfile
 from widgets.clock_ticker import GlobalClockTicker, get_global_clock_ticker
 from core.logging.logger import get_logger
@@ -1949,26 +1941,10 @@ class ClockWidget(BaseOverlayWidget):
             float(card_radius * 2),
         )
 
-        if self.uses_painted_frame_shadow():
-            offset_x = float(PAINTED_FRAME_OFFSET_X)
-            offset_y = float(PAINTED_FRAME_OFFSET_Y)
-            steps = max(1, PAINTED_FRAME_BLUR_STEPS)
-            spread = max(0.0, float(PAINTED_FRAME_SPREAD))
-            max_alpha = max(0, min(255, PAINTED_FRAME_MAX_ALPHA))
-
-            painter.save()
-            painter.setPen(Qt.PenStyle.NoPen)
-            for layer in range(steps, 0, -1):
-                frac = layer / float(steps)
-                grow = spread * frac
-                alpha = int(max_alpha * (1.0 - (frac * 0.86)))
-                if alpha <= 0:
-                    continue
-                shadow_rect = card_rect.translated(offset_x, offset_y).adjusted(-grow, -grow, grow, grow)
-                painter.setBrush(QColor(0, 0, 0, alpha))
-                painter.drawEllipse(shadow_rect)
-            painter.restore()
-
+        # The generic analogue round-card drop shadow was retired with the
+        # painted-frame sidecar profile (F0.5 audit correction). The card
+        # background/border still render below; the bespoke analogue
+        # face/ring/marker/numeral/hand shadows are separate and unaffected.
         painter.save()
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(self._bg_color)

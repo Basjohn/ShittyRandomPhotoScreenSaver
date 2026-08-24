@@ -20,8 +20,8 @@ from contextlib import contextmanager
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, QThread, Signal, Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Signal, Qt
+from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import QLabel, QWidget
 try:
     from shiboken6 import Shiboken  # type: ignore
@@ -29,7 +29,6 @@ except ImportError:  # pragma: no cover - optional dependency for validity check
     Shiboken = None  # type: ignore
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
-from core.performance import widget_timer_sample
 from core.resources.manager import ResourceManager
 from core.resources.types import ResourceType
 from core.threading.manager import ThreadManager
@@ -46,21 +45,15 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-# Authored QWidget painted-frame card-shadow reference magnitudes. These were
-# formerly sourced from the shared shadowtuning.json ``card`` sidecar. That
-# hidden tuning authority was retired in F0.5, so the values are inlined as this
-# base widget's own constants — the painted-frame QWidget card shadow is the
-# reference for not-yet-ported families only; the canonical destination card
-# shadow is OverlayCard/RectangularShadow. There is no replacement sidecar/
-# loader/file.
-PAINTED_FRAME_CARD_SHRINK_RIGHT = 11
-PAINTED_FRAME_CARD_SHRINK_BOTTOM = 11
-PAINTED_FRAME_OFFSET_X = 4
-PAINTED_FRAME_OFFSET_Y = 6
-PAINTED_FRAME_BLUR_STEPS = 55
-PAINTED_FRAME_SPREAD = 8
-PAINTED_FRAME_MAX_ALPHA = 8
-PAINTED_FRAME_RADIUS_EXTRA = 0
+# The generic painted-frame QWidget card *shadow* is retired. It was legacy
+# shared debris parameterised by the old shadowtuning.json ``card`` sidecar
+# (blur steps / spread / max-alpha / shrink margins); the F0.5 audit correction
+# removed both the sidecar and the relocated constant profile rather than keep
+# the half-migrated QWidget runtime looking identical. Framed widgets now paint
+# their card background/border directly (QSS), with no painted drop shadow; the
+# canonical destination card shadow is OverlayCard/RectangularShadow. Bespoke
+# family-authored shadows (e.g. the Clock analogue face/ring/numeral/hand
+# geometry) are separate and unaffected.
 
 
 class WidgetLifecycleState(Enum):
@@ -817,8 +810,15 @@ class BaseOverlayWidget(QLabel):
         self.update()
 
     def uses_painted_frame_shadow(self) -> bool:
-        """True when this framed widget should paint/cache its own outer shadow."""
-        return bool(self._painted_frame_shadow_enabled and self._show_background)
+        """Retired: the generic painted-frame card *shadow* no longer renders.
+
+        The F0.5 audit correction removed the sidecar-derived painted-card shadow
+        profile. Framed widgets now draw their card background/border via QSS (see
+        ``_update_stylesheet``); the destination card shadow is
+        OverlayCard/RectangularShadow. Kept as ``False`` so every dependent cache/
+        shrink/prepare path stays inert without touching its callers.
+        """
+        return False
 
     def uses_shared_painted_frame_shadow_cache(self) -> bool:
         """True when this widget consumes BaseOverlayWidget's frame pixmap."""
@@ -900,23 +900,8 @@ class BaseOverlayWidget(QLabel):
         self._painted_frame_shadow_cache_key = None
 
     def painted_frame_shadow_card_shrink(self) -> tuple[int, int]:
-        """Return (shrink_right, shrink_bottom) when painted shadows are active.
-
-        Returns ``(0, 0)`` when painted shadows are not in use, so callers
-        can unconditionally subtract these from ``widget.width()`` /
-        ``widget.height()`` to get the content-safe area.
-        """
-        if not self.uses_painted_frame_shadow():
-            return (0, 0)
-        return (PAINTED_FRAME_CARD_SHRINK_RIGHT, PAINTED_FRAME_CARD_SHRINK_BOTTOM)
-
-    def _painted_frame_shadow_card_rect(self) -> QRectF:
-        return QRectF(
-            0.0,
-            0.0,
-            max(1.0, float(self.width() - PAINTED_FRAME_CARD_SHRINK_RIGHT)),
-            max(1.0, float(self.height() - PAINTED_FRAME_CARD_SHRINK_BOTTOM)),
-        )
+        """Retired painted-card shadow reserves no margin; content uses the full rect."""
+        return (0, 0)
 
     def _prepared_painted_frame_shadow_pixmap_for_paint(self) -> Optional[QPixmap]:
         """Return only an exact-current prepared frame; never build from paint."""
@@ -933,69 +918,13 @@ class BaseOverlayWidget(QLabel):
         return pixmap
 
     def _prepare_painted_frame_shadow_pixmap(self) -> Optional[QPixmap]:
-        """Build the stable painted frame on its GUI owner outside paint delivery."""
+        """Retired: the generic painted-card shadow no longer builds a pixmap.
 
-        if self._painted_frame_shadow_cache_cancelled:
-            return None
-        try:
-            if QThread.currentThread() != self.thread():
-                logger.error("[OVERLAY] Refusing frame-shadow preparation off GUI thread")
-                return None
-        except RuntimeError:
-            return None
-        key = self._current_painted_frame_shadow_cache_key()
-        if key is None:
-            return None
-        if (
-            self._painted_frame_shadow_pixmap is not None
-            and not self._painted_frame_shadow_pixmap.isNull()
-            and self._painted_frame_shadow_cache_key == key
-        ):
-            return self._painted_frame_shadow_pixmap
-
-        dpr = float(key[2])
-        with widget_timer_sample(self, "overlay.frame_shadow.regen"):
-            pixmap = QPixmap(max(1, int(self.width() * dpr)), max(1, int(self.height() * dpr)))
-            pixmap.setDevicePixelRatio(dpr)
-            pixmap.fill(Qt.GlobalColor.transparent)
-            painter = QPainter(pixmap)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            try:
-                card_rect = self._painted_frame_shadow_card_rect().adjusted(1.0, 1.0, -1.0, -1.0)
-                radius = max(0.0, float(self._bg_corner_radius + PAINTED_FRAME_RADIUS_EXTRA))
-                offset_x = float(PAINTED_FRAME_OFFSET_X)
-                offset_y = float(PAINTED_FRAME_OFFSET_Y)
-                steps = max(1, PAINTED_FRAME_BLUR_STEPS)
-                spread = max(0.0, float(PAINTED_FRAME_SPREAD))
-                max_alpha = max(0, min(255, PAINTED_FRAME_MAX_ALPHA))
-
-                for layer in range(steps, 0, -1):
-                    frac = layer / float(steps)
-                    grow = spread * frac
-                    alpha = int(max_alpha * (1.0 - (frac * 0.86)))
-                    if alpha <= 0:
-                        continue
-                    shadow_rect = card_rect.translated(offset_x, offset_y).adjusted(-grow, -grow, grow, grow)
-                    shadow_path = QPainterPath()
-                    shadow_path.addRoundedRect(shadow_rect, radius + grow, radius + grow)
-                    painter.fillPath(shadow_path, QColor(0, 0, 0, alpha))
-
-                frame_path = QPainterPath()
-                frame_path.addRoundedRect(card_rect, radius, radius)
-                painter.fillPath(frame_path, self._bg_color)
-                if self._bg_border_width > 0 and self._bg_border_color.alpha() > 0:
-                    pen = QPen(self._bg_border_color, max(1, int(self._bg_border_width)))
-                    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-                    painter.setPen(pen)
-                    painter.setBrush(Qt.BrushStyle.NoBrush)
-                    painter.drawPath(frame_path)
-            finally:
-                painter.end()
-
-        self._painted_frame_shadow_pixmap = pixmap
-        self._painted_frame_shadow_cache_key = key
+        Kept as an inert no-op so existing GUI-side prepare/commit callers keep a
+        stable contract; the card background/border render via QSS instead.
+        """
         self._painted_frame_shadow_batch_dirty = False
-        return pixmap
+        return None
 
     def _ensure_painted_frame_shadow_pixmap(self) -> Optional[QPixmap]:
         """Compatibility alias for explicit GUI-side frame preparation."""
