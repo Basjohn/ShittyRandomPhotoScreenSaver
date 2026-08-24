@@ -17,8 +17,8 @@ Within Phase E:
 - activation/catalog foundation: landed;
 - **E2 `SETUP`/live lazy navigation: implementation CLOSED**;
 - **E2.7 Visualizer CUSTOM failover/reclaim: implementation CLOSED / audit GREEN**;
-- **E1 presentation-neutral runtime/model/provider ownership: ACTIVE**; Weather slice 3 is
-  self-audited GREEN at `25f6ca4e`;
+- **E1 presentation-neutral runtime/model/provider ownership: ACTIVE**; Achievement slice 5 and the
+  bounded Abandonment/Weather correction are GREEN; Media source/cardinality audit is active;
 - E3 retained Quick primitives: waiting for E1;
 - E4 global eight-direction shadow authority: waiting for E3;
 - Phase F waits for Phase-E closure.

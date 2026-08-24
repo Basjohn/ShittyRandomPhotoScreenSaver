@@ -5,12 +5,12 @@ Last updated: 2026-08-24
 Reviewed source basis:
 
 ```text
-origin/main = 51948dc3956bc10549eb3e8440b2c3e25857f952
-tests/ tree = 4af6ae5388ebf29cf0e1b50d34b846f266e55f7c
+origin/main = 9ab4f47e6e7c081710a046ae38e6f310467249ca
+tests/ tree = 035bf5072ae42a38ba67f371728aa43aabb940e6
 ```
 
-Focused E1 Achievement ownership and its new runtime test module were refreshed against `51948dc3`;
-unchanged classifications were not semantically recounted.
+Focused E1 Abandonment artwork-boundary and Weather compatibility tests were refreshed against
+`9ab4f47e`; unchanged classifications were not semantically recounted.
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
 
