@@ -34,8 +34,6 @@ from core.media.provider_registry import normalize_provider_id, preserve_provide
 from rendering.multi_monitor_coordinator import get_coordinator
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
 from rendering.fade_coordinator import FadeCoordinator
-from widgets.media_widget import MediaWidget
-from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings, RedditWidgetSettings
 from core.settings.visualizer_presets import (
     apply_preset_to_config,
@@ -50,7 +48,6 @@ from core.settings.visualizer_presets import (
 from core.settings.visualizer_mode_registry import get_preset_key
 from core.settings.visualizer_settings_contract import strip_legacy_global_technical_keys
 from core.threading.manager import ThreadManager
-from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
 from rendering.widget_stacking import (
     StackObstacle,
@@ -65,7 +62,9 @@ from widgets.base_overlay_widget import BaseOverlayWidget
 
 if TYPE_CHECKING:
     from rendering.display_widget import DisplayWidget
-    from core.threading.manager import ThreadManager
+    from widgets.media_widget import MediaWidget
+    from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+    from widgets.spotify_volume_widget import SpotifyVolumeWidget
 
 logger = get_logger(__name__)
 
