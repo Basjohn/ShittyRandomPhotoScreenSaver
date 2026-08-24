@@ -59,11 +59,6 @@ from widgets.spotify_visualizer.overlay_frame_shell import (
     resolve_frame_fade,
 )
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
-from widgets.base_overlay_widget import (
-    PAINTED_FRAME_CARD_SHRINK_RIGHT,
-    PAINTED_FRAME_CARD_SHRINK_BOTTOM,
-    PAINTED_FRAME_RADIUS_EXTRA,
-)
 
 logger = get_logger(__name__)
 
@@ -1859,13 +1854,16 @@ class SpotifyBarsGLOverlay(QWidget):
 
     def _draw_painted_card_stencil_mask(self, rect: QRect) -> None:
         dpr = self._get_dpr()
+        # The retired painted-card drop shadow reserved a right/bottom shrink
+        # margin (F0.5 audit correction removed it); the card mask now uses the
+        # full rect with no extra corner radius.
         uniforms = compute_painted_card_mask_uniforms(
             rect,
             dpr=dpr,
             border_width_px=self._border_width_px,
-            shrink_right=PAINTED_FRAME_CARD_SHRINK_RIGHT,
-            shrink_bottom=PAINTED_FRAME_CARD_SHRINK_BOTTOM,
-            radius_extra=PAINTED_FRAME_RADIUS_EXTRA,
+            shrink_right=0,
+            shrink_bottom=0,
+            radius_extra=0,
         )
 
         # The mask shader reads gl_FragCoord, which is WINDOW space. When this

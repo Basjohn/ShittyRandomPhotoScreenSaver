@@ -60,24 +60,21 @@ def painted_frame_shadow_card_rect(
     *,
     logical_size: Optional[QSize] = None,
 ) -> QRectF:
-    """Return the card rectangle used for painted-frame-shadow rendering.
+    """Return the card rectangle used for the compositor card visual.
 
     ``logical_size`` overrides the live widget geometry. The compositor passes
     the authoritative published presentation size so a momentarily stale live
-    QWidget rect cannot give the card a different size from the bars.
+    QWidget rect cannot give the card a different size from the bars. The retired
+    painted-card drop shadow reserved a right/bottom shrink margin; with that
+    shadow removed (F0.5 audit correction) the card uses the full rect.
     """
-    from widgets.base_overlay_widget import (
-        PAINTED_FRAME_CARD_SHRINK_RIGHT,
-        PAINTED_FRAME_CARD_SHRINK_BOTTOM,
-    )
-
     width = widget.width() if logical_size is None else logical_size.width()
     height = widget.height() if logical_size is None else logical_size.height()
     return QRectF(
         0.0,
         0.0,
-        max(1.0, float(width - PAINTED_FRAME_CARD_SHRINK_RIGHT)),
-        max(1.0, float(height - PAINTED_FRAME_CARD_SHRINK_BOTTOM)),
+        max(1.0, float(width)),
+        max(1.0, float(height)),
     )
 
 
@@ -123,23 +120,18 @@ def ensure_painted_frame_shadow_pixmap(
     logical_size: Optional[QSize] = None,
     dpr: Optional[float] = None,
 ) -> Optional[QPixmap]:
-    """Build (or return cached) painted-frame-shadow pixmap.
+    """Build (or return cached) the compositor card-visual pixmap.
 
     ``logical_size`` and ``dpr`` let the compositor render the authored card
     visual **for the target dimensions** rather than scaling a stale pixmap
-    afterwards, which would change border, radius and shadow thickness. Both
-    participate in the cache key, so a geometry or DPR change rebuilds rather
-    than reusing a mismatched card.
-    """
-    from widgets.base_overlay_widget import (
-        PAINTED_FRAME_OFFSET_X,
-        PAINTED_FRAME_OFFSET_Y,
-        PAINTED_FRAME_BLUR_STEPS,
-        PAINTED_FRAME_SPREAD,
-        PAINTED_FRAME_MAX_ALPHA,
-        PAINTED_FRAME_RADIUS_EXTRA,
-    )
+    afterwards, which would change border and radius. Both participate in the
+    cache key, so a geometry or DPR change rebuilds rather than reusing a
+    mismatched card.
 
+    The generic painted-card *drop shadow* (the old shadowtuning.json blur
+    profile) was removed in the F0.5 audit correction; this now paints only the
+    card background and border, which the compositor uploads as the card texture.
+    """
     if not widget.uses_painted_frame_shadow():
         return None
     width = widget.width() if logical_size is None else int(logical_size.width())
@@ -173,23 +165,7 @@ def ensure_painted_frame_shadow_pixmap(
         card_rect = painted_frame_shadow_card_rect(
             widget, logical_size=QSize(width, height)
         ).adjusted(1.0, 1.0, -1.0, -1.0)
-        radius = max(0.0, float(8 + PAINTED_FRAME_RADIUS_EXTRA))
-        offset_x = float(PAINTED_FRAME_OFFSET_X)
-        offset_y = float(PAINTED_FRAME_OFFSET_Y)
-        steps = max(1, PAINTED_FRAME_BLUR_STEPS)
-        spread = max(0.0, float(PAINTED_FRAME_SPREAD))
-        max_alpha = max(0, min(255, PAINTED_FRAME_MAX_ALPHA))
-
-        for layer in range(steps, 0, -1):
-            frac = layer / float(steps)
-            grow = spread * frac
-            alpha = int(max_alpha * (1.0 - (frac * 0.86)))
-            if alpha <= 0:
-                continue
-            shadow_rect = card_rect.translated(offset_x, offset_y).adjusted(-grow, -grow, grow, grow)
-            shadow_path = QPainterPath()
-            shadow_path.addRoundedRect(shadow_rect, radius + grow, radius + grow)
-            painter.fillPath(shadow_path, QColor(0, 0, 0, alpha))
+        radius = 8.0
 
         frame_path = QPainterPath()
         frame_path.addRoundedRect(card_rect, radius, radius)
