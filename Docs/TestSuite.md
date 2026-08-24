@@ -495,6 +495,7 @@ The inventory below accounts for every executable test file present at the revie
 | --- | --- | --- |
 | `tests/test_gmail_assets.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_backend_bootstrap.py` | **KEEP** | Retain; no migration-specific retirement identified. |
+| `tests/test_gmail_runtime.py` | **MIGRATION-CRITICAL — E1/F** | Shared owner/lease cardinality, cache/fetch/action generations, production wiring/reuse/retirement, standalone isolation and future presenter replay. |
 | `tests/test_gmail_backend_smoke.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_client.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_components.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |

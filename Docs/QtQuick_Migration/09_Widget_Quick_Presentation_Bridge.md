@@ -540,9 +540,9 @@ Notification sound/business detection stays Python-owned.
 
 QML does not own Gmail backend/session/auth.
 
-The active E1 destination is one shared raw-email/unread/error/action runtime stream over the existing
-`GmailBackend` singleton. Quick retains row grouping/formatting/layout and dispatches stable message IDs
-back to that owner; it never captures a retired presenter in an action worker.
+The landed E1 owner at `4f7dc869` publishes one shared raw-email/unread/error/action runtime stream over
+the existing `GmailBackend` singleton. Quick retains row grouping/formatting/layout and dispatches
+stable message IDs back to that owner; it never captures a retired presenter in an action worker.
 
 ### Steam
 

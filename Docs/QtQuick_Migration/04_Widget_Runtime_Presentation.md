@@ -1,6 +1,6 @@
 # 04 — Runtime Widgets, Retained Quick Presentation, Shadows and Full Customization
 
-Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — shared Media owner GREEN at `4680130b`; Gmail shared orchestration/model/action slice active**
+Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — shared Media GREEN at `4680130b`; shared Gmail GREEN at `4f7dc869`; volume/mute accessories active**
 Last updated: 2026-08-24
 
 Cross-links:
@@ -195,6 +195,11 @@ one `MediaRuntimeService` lease per display joins one runtime-generation shared 
 provider target, adaptive poll/query/cache/retained state, optimistic playback confirmation and one
 source-resolution artwork decode per stable identity. Presenters retain QPixmap/DPR/layout/fade/input.
 
+E1 slice 7 is self-audited **GREEN** at `4f7dc869`: one `GmailRuntimeService` lease per display joins
+one runtime-generation owner for backend-bootstrap coordination, cache-first startup, poll/fetch,
+accepted raw-email state, cache persistence, notification decisions and serialized actions over the
+unchanged process `GmailBackend` singleton. Presenters retain row projection and all pixels/input.
+
 Treat the current host edge as transitional:
 
 ```text
@@ -316,10 +321,9 @@ or future presenter replays accepted model/images without another source/cache/i
 Friend Pulse remain provider/task/timer-inert and unregistered.
 
 The bounded Abandonment artwork projection and Weather compatibility-proxy corrections are GREEN at
-`9ab4f47e`; shared Media ownership is GREEN at `4680130b`. Exact-source closure review proves Gmail's
-remaining per-display poll/fetch/cache/model/notification/action duplication is the next real owner
-slice over its existing neutral singleton backend. Residual Media accessories and production import
-dormancy then require bounded closure checkpoints before a safe display-runtime owner hoist.
+`9ab4f47e`; shared Media ownership is GREEN at `4680130b`; shared Gmail ownership is GREEN at
+`4f7dc869`. Residual Media volume/mute accessories and production import dormancy require bounded
+closure checkpoints before a safe display-runtime owner hoist.
 
 ### 6.2 Per-display Quick widget presentation host
 
