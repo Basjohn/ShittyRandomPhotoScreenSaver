@@ -1,6 +1,6 @@
 # 07 — Settings Capability Activation and Lazy Navigation
 
-Status: **E2 + E2.7 implementation CLOSED / independently audited GREEN; E1 ownership ACTIVE next**  
+Status: **E2 + E2.7 implementation CLOSED / independently audited GREEN; E1 ownership CLOSED; E3 active**  
 Last updated: 2026-08-23
 
 Cross-links:
@@ -13,8 +13,8 @@ Cross-links:
 - harness routing: `Docs/Harness_Index.md`
 
 This document is now a **landed capability/Settings contract**, not an unfinished E2 implementation
-plan. E1 may extend runtime/model/provider ownership, but must not reopen the E2 UI/state model without
-contradictory evidence.
+plan. E1 has now closed its runtime/model/provider ownership work. E3/F must preserve this capability
+contract and must not reopen the E2 UI/state model without contradictory evidence.
 
 ## 1. Durable capability model
 

@@ -2,29 +2,25 @@
 
 Last updated: 2026-08-24
 
-## Current checkpoint
-
-Latest pushed/self-audited implementation basis:
-
-```text
-ad71421d395806e78898593c71a3bc25a53bcdf1
-Phase E1 slice 9 — fresh-process/deactivated-family import dormancy — self-audited GREEN; reused-agent reviews GREEN
-```
+## Current reviewed checkpoint
 
 Independent review basis:
 
 ```text
-c320887cc27e1b2bace10ba562a36e24ae9307ca
-Phase E1 slice 2 — Reddit post-provider runtime ownership — independently audited GREEN after correction
+4466c306e35f1d6a61da73f08ed9c73ce2fa81d2
+Phase E1 presentation-neutral widget runtime ownership — independently audited GREEN; implementation closed
 ```
 
-E1 remains active. E2/E2.7 remain implementation-closed; physical R-26 dual-display acceptance remains
-deferred hardware evidence.
+The final audit first verified the slice-10 display-runtime `WidgetRuntimeManager` hoist, then reviewed
+the integrated E1 owner architecture across Reddit, Weather, Steam cards, Media, Gmail, Media volume,
+system mute and fresh-process capability dormancy. No E1 architecture blocker remains.
 
-The earlier `9adb74916010304f622a843e1b6d48e054792e6d` prescription for a generic live family
-OFF/ON retirement mechanism remains superseded: current production family activation is applied through
-Settings-owned full runtime teardown/recreation. E1 migrates real provider/model/runtime ownership; it
-does not invent a second hot-reload lifecycle without a demonstrated live writer.
+Earlier independently closed checkpoints remain:
+
+```text
+b787c57a...  — E2 capability/SETUP foundation
+5b3cbaef...  — E2.7 Visualizer CUSTOM failover/reclaim
+```
 
 Always inspect exact current `main` before acting. Repository state outranks this file if a later
 checkpoint has landed.
@@ -387,6 +383,8 @@ Read for active Phase E work:
 
 - `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`
 - `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
+- `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md`
+- `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
 - current source and tests at exact `main`
 
 ## E2 — application-level capability/Settings slice — IMPLEMENTATION CLOSED
@@ -457,198 +455,162 @@ SOLVED from deterministic tests alone.
 Detailed E2.7 implementation/correction chronology is historical evidence, not active execution guidance.
 Do not reopen E2.7 without contradictory runtime/source evidence.
 
-## E1 — presentation-neutral runtime/model/provider ownership — ACTIVE
+## E1 — presentation-neutral runtime/model/provider ownership — IMPLEMENTATION CLOSED / INDEPENDENTLY GREEN
 
-E2 and E2.7 are implementation-closed. Complete the broader `WidgetRuntimeManager` ownership split
-across bounded, individually-audited slices. Do not batch every family into one commit.
-
-Required destination:
-
-- canonical widget identity/settings metadata independent of QWidget factories;
-- presentation-neutral provider/model/runtime-data lifecycle ownership;
-- activated/enabled/visible state and monitor participation without QWidget presentation authority;
-- when a capability is deactivated, its exclusive provider/model/process/poll/timer/resource ownership
-  must not survive the legal runtime lifecycle that applies that configuration;
-- shared infrastructure survives while another real consumer still needs it;
-- deactivated capability before first use does not unnecessarily import/resolve heavy implementation;
-- ordinary instance-disabled state remains distinct from family deactivation;
-- no giant Python `QuickBaseOverlayWidget` replacement god object.
-
-### Current capability-lifetime fact
-
-Current production family activation is not an in-place runtime hot-toggle architecture.
-
-The normal user flow is:
+Independent closure checkpoint:
 
 ```text
-running screensaver
--> Settings request
--> engine.stop(exit_app=False, reason="settings")
--> complete display/runtime teardown
--> destruction barrier
--> Settings dialog opens
--> family activation is changed/saved
--> new runtime generation is created
--> creation admission applies the new capability state
+4466c306e35f1d6a61da73f08ed9c73ce2fa81d2
 ```
 
-Therefore the durable requirement “deactivated capability owns no exclusive runtime resources” does
-**not** imply that E1 must invent a second generic live family-retirement/recreation system.
+E1 is no longer an active extraction phase. Its durable result is the ownership boundary Phase F must
+consume rather than recreate.
 
-If future/current source gains a real family-activation writer while the screensaver runtime remains
-alive, that path must satisfy the same ownership contract. Do not build such a path speculatively.
-
-The existing E2.7 live Visualizer capability/failover reaction is a special closed lifecycle seam and is
-not precedent for making every widget family hot-retire in place.
-
-### E1 slice 1 — establish `WidgetRuntimeManager` by extraction — AUDITED GREEN
-
-Pushed/audited checkpoint:
+### Landed owner map
 
 ```text
-8fcbc57a41c0b402fd4253d9668a0c6548b3100f
+current display runtime
+    -> one WidgetRuntimeManager per DisplayWidget/runtime generation
+           -> temporary WidgetManager presenter-registry host
+           -> per-widget/per-display neutral services where semantics require them
+           -> leases onto broader shared owners where semantics require sharing
 ```
 
-Landed:
+The current `DisplayWidget` is still the production display runtime until Phase H, but it now owns the
+neutral manager independently of the temporary QWidget `WidgetManager`. `WidgetManager` receives that
+owner by injection and does not terminally own it. Direct standalone/test `WidgetManager(...)`
+construction retains one isolated convenience owner.
 
-- presentation-neutral admission/lifecycle owner shell;
-- capability admission routed through it;
-- E2.7 capability-change bridge preserved;
-- `WidgetManager` reduced by 110 lines rather than enlarged;
-- no provider/model family migration yet.
-
-Reported local gate: `325 passed, 4 skipped`. The independent reviewer audited pushed source/diff/test
-intent but did not independently rerun that Windows execution.
-
-### E1 slice 2 — Reddit post-provider ownership — AUDITED GREEN
-
-Final audited implementation checkpoint:
+Terminal order is:
 
 ```text
-c320887cc27e1b2bace10ba562a36e24ae9307ca
+close new presentation work
+-> clean/detach QWidget presenters
+-> detach presenter registry host
+-> terminally retire display-owned WidgetRuntimeManager services
+-> continue display/render teardown
 ```
 
-The original slice landed at `61483372...`; independent audit found one real blocker: the production
-`RedditWidgetFactory` still allowed `RedditWidget.__init__` to build its old default provider before the
-neutral owner injected a second provider. That duplicated construction and made neutral service failure
-fail open to the QWidget-owned default.
+The hoist is deliberately **not** duplicated into dormant `QuickDisplayRuntime`; the later production
+cutover transfers the already-neutral ownership contract rather than running two production owners.
 
-The correction at `c320887c...` is independently GREEN:
+Family results are intentionally asymmetric:
 
-- `rendering/widget_runtime_services.py` is the static family-specific runtime-service registry;
-- `WidgetRuntimeManager` generically owns/builds/injects/retires runtime services without a central
-  family `if/elif` switchboard;
-- production `RedditWidgetFactory` creates runtime-managed Reddit widgets with default-provider
-  construction explicitly suppressed;
-- standalone `RedditWidget()` retains its convenience default where direct construction is genuinely
-  used;
-- runtime service build **or injection** failure leaves no neutral service and causes the production
-  creation path to fail closed rather than run on a QWidget-owned fallback;
-- deactivated Reddit capability creates neither widget nor provider;
-- ordinary instance `enabled=False` remains distinct from family deactivation;
-- Reddit/Reddit2 provider inheritance remains preserved;
-- no shared-consumer machinery was invented because the Reddit post-provider seam is per-instance;
-- the E2.7 Visualizer bridge was not generalized into ordinary family hot-retirement.
+- **Clock:** existing presentation-neutral ticker remains the useful shared authority; no artificial
+  Clock service was manufactured.
+- **Reddit / Reddit2:** per-instance post-provider ownership is neutral and production suppresses the
+  old QWidget default/fail-open provider path.
+- **Weather:** provider/network/cache/startup/refresh/retry/request-generation ownership is neutral;
+  source state is no longer exposed through fake QWidget-private state proxies.
+- **Steam Abandonment:** one per-card/display neutral owner retains cache/source/rotation/model and
+  source-resolution decoded artwork; DPR scaling/cropping remains presentation-side.
+- **Steam Achievement Pulse:** one per-card/display neutral owner retains source/cache/model and
+  source-resolution app/icon artwork identity; no recurring timer was invented.
+- **Media:** per-display leases in one runtime generation join one shared Media owner for controller,
+  provider resolution, polling/query state, accepted state, transport generations and source-resolution
+  artwork. The QWidget retains temporary display projection only.
+- **Gmail:** per-display leases join one runtime-generation shared orchestration owner over the existing
+  process-scoped `GmailBackend.instance()` for bootstrap/cache/poll/fetch/notification/action state.
+- **Media app volume:** separate narrow shared owner with per-display leases and one coalesced write/read
+  authority.
+- **System mute:** separate narrow shared owner with per-display leases and one endpoint/poll/action
+  authority; process-global audio infrastructure is not shut down merely because one display leaves.
 
-Reported corrected local gate: `440 passed, 4 skipped`, plus `py_compile` and `git diff --check` clean.
-The independent reviewer audited the pushed source and regressions but did not independently rerun that
-Windows execution.
+Fresh-process admission also keeps deactivated family implementations dormant: shared `widgets.*`
+imports and annotation-only host references do not themselves resolve Media/Visualizer/accessory/provider
+implementations.
 
-Non-blocking cleanup for the next time the owner tests are touched: add a dedicated generic
-service-injection-exception regression (build failure is already covered through the real production
-setup seam). Do not create a separate checkpoint solely for that test.
+### E1 closure invariants
 
-### Reviewer family triage after slice 2
+Preserve through E3/F/H:
 
-The reviewer inspected the remaining current families rather than delegating selection to the coding
-agent.
-
-**Slice-3 selection at that checkpoint: Weather.**
-
-Reasoning:
-
-- **Clock / Clock2 / Clock3:** the shared `GlobalClockTicker` is already presentation-neutral; do not
-  manufacture an E1 provider migration merely because the current pixels are QWidget.
-- **Reddit / Reddit2:** provider ownership is now landed and audited GREEN in slice 2.
-- **Weather:** before slice 3, `WeatherWidget` owned the refresh/retry lifecycle, async request
-  generations, cache-first startup orchestration and the worker closure that constructed
-  `OpenMeteoProvider`. That was the clearest next ordinary-family runtime-data ownership seam.
-- **Gmail:** `GmailBackend.instance()` is already a neutral process singleton backend. Gmail still has
-  a real per-display poll/cache/fetch/model/action-controller seam to migrate later, but it is broader
-  than the next bounded owner extraction; preserve the singleton rather than wrapping it.
-- **Steam card families:** Progress and Friend Pulse are provider/task/timer-inert. Source inspection
-  after Weather proved that Achievement Pulse and Abandonment Issues then owned detached cache/refresh
-  request generations in QWidget code, with Abandonment additionally owning recurring cache-backed
-  rotation. Slices 4–5 have since migrated those separate owners; do not force them into a generic Steam
-  provider/service shape.
-- **Media:** `MediaWidget` really does construct/hold a `BaseMediaController`, so Media is a substantial
-  later E1 owner migration. It is deliberately **not next** because it is high-blast-radius: Spotify
-  controls, Visualizer/media dependency behavior, transport state and cross-display/shared state all
-  meet there.
-- **Imgur:** do not migrate; Phase F0 removes it.
-
-This ordering is an E1 migration decision, not a permanent family ranking.
-
-### E1 slice 3 — Weather runtime-data/provider ownership — CLOSED / SELF-AUDITED GREEN
-
-Pushed checkpoint: `25f6ca4e7cdcaf82409a184c1d2999c01a7283e4`.
-
-The completed checklist is pruned. The durable result is one registry-owned, presentation-neutral
-`WeatherRuntimeService` for production Weather provider/network/cache/refresh/retry/request-generation
-ownership; `WeatherWidget` is the temporary legacy pixel consumer. Production suppresses its standalone
-convenience owner and fails closed on service build/injection failure.
-
-The self-audit proved factory/setup ownership, activation dormancy, instance-disabled distinction,
-single cadence, stale location/request fencing, cache/error/retry/`--noupdates`/manual-refresh behavior,
-standalone separation and idempotent retirement. Focused Weather/owner/factory/setup/lifecycle gate:
-`270 passed`, plus `py_compile`, fresh-process registry import dormancy and `git diff --check` clean.
-
-Retirement deliberately fences unavoidable late shared-pool work rather than assuming running tasks can
-be killed. All Weather tasks are runtime-generation tagged and the full runtime destruction barrier owns
-generation-wide callback/task drainage. Accepted cache persistence may finish after presentation stop;
-service-local teardown must not cancel unrelated delayed callbacks that share the display generation.
-
-### E1 slice 4 — Steam Abandonment runtime/model ownership — CLOSED / SELF-AUDITED GREEN
-
-Pushed checkpoint: `86872ab92a6b0960f2a3746d43dc6056cb013d47`.
-
-The completed checklist is pruned. The durable result is one per-card/display, registry-owned
-`AbandonmentRuntimeService` for cache-first load, source/manual refresh, cache-only rotation, recurring
-cadence, request generations and accepted prepared model/QImage state. It reuses the existing
-process-scoped `core.steam` cache/backend/credential/asset authorities. `AbandonmentIssuesWidget` is now
-only the temporary geometry/QPainter/fade/transition/input consumer; no generic shared-Steam service was
-introduced.
-
-Production suppresses the standalone convenience owner, injects the required service and validates the
-exact live widget/service edge on repeated setup. Invalid registry entries retire; stale active reuse
-fails closed; inactive reuse may rebuild through normal activation. All detached tasks/callbacks are
-runtime-generation tagged and retirement fences unavoidable late shared-pool work.
-
-Focused Abandonment/Steam/factory/setup/runtime-owner/lifecycle gate: `426 passed`, plus `py_compile`,
-fresh-process registry and deactivated-family import dormancy, structural old-owner search and
-`git diff --check` clean. Exact-diff self-audit and reused-agent repeated-setup audit were GREEN.
-
-### E1 remaining after import-dormancy slice 9
-
-- keep Steam Progress and Friend Pulse as E1 no-ops unless current source later gains a real runtime
+- one legal state/lifetime authority for each provider/controller/timer/poll/action stream;
+- runtime service does not imply a new thread;
+- shared work remains shared only where product semantics are actually shared;
+- per-instance/per-display state remains separate where configuration differs;
+- no hidden QWidget fallback when a production-required neutral service fails;
+- no duplicate provider/controller/timer introduced during presenter replacement;
+- stale asynchronous completion is generation/request/config fenced;
+- presentation cleanup precedes terminal neutral-service retirement;
+- valid repeated setup may replace a presenter/service edge without reconstructing the neutral display
   owner;
-- hoist the per-display runtime owner out of legacy `WidgetManager` into an injected display-runtime
-  boundary only after exact construction/lifecycle dependencies prove one owner serves the current
-  presenter and can transfer to `QuickDisplayRuntime` without creating a duplicate proof-only owner.
+- application-level family deactivation remains distinct from ordinary instance `enabled=False`.
 
-A live in-place family retirement mechanism is **not** an E1 deliverable unless exact current source
-introduces a real live activation writer or another demonstrated product flow requires it.
+Do not reopen E1 merely to make families look structurally identical. Reopen only the smallest
+demonstrated ownership defect if later E3/F evidence exposes one.
 
-Each substantial ownership/lifecycle slice remains an audit checkpoint.
+### Closure evidence limits
 
+The independent reviewer inspected exact pushed `main`, the slice-10 diff/source/test intent, production
+owner identity/cleanup paths, registry structure, import dormancy and the integrated shared-owner
+cardinality/lifetime designs. The coding agents' Windows pytest counts remain reported execution
+evidence rather than a second independent execution by the reviewer.
 
-## E3 — shared retained Quick primitives
+The known synthetic Bubble test
+`test_on_tick_does_not_double_throttle_when_timer_already_paces` remains pre-existing test debt recorded
+in `Future_Cleanup.md`; it does not reopen E1.
 
-Build small reusable retained primitives for cards/backgrounds, border/radius, foreground opacity,
-shadows, text/header shadow, image/artwork, separators, text, fades/visibility, click targets and
-controls.
+## E3 — shared retained Quick primitives — ACTIVE
 
-Do not create another monolithic presentation base class.
+E3 now owns normal implementation work.
+
+Exact source at E1 closure already has the process-level `QuickSceneFactory`, one display-scoped
+`QuickSceneController`, `DisplayScene.qml`, background/transition render ownership and the retained
+Visualizer presentation. It does **not** yet have the ordinary-widget retained primitive library.
+
+### E3 slice 1 — ordinary-widget retained host + shell primitives — ACTIVE NEXT
+
+Establish the smallest reusable ordinary-widget presentation substrate before any Phase-F family port.
+
+Required scope:
+
+- add one ordinary-widget presentation host inside the existing per-display `DisplayScene` /
+  `QuickSceneController` ownership; do not create another window, engine or family dispatcher;
+- establish a small QML primitive package for the shared shell concerns actually proven across current
+  widgets, beginning with the equivalent of:
+  - root/assigned-rect + whole-widget fade opacity;
+  - card/background/border/radius/padding;
+  - text with authored text-shadow semantics;
+  - simple separator/layout support;
+- keep component APIs explicit and presentation-only; no `SettingsManager`, provider/backend, QWidget or
+  arbitrary business object is exposed to QML;
+- make shadow offsets signed-safe and bounds-safe so E4 can later map the global eight-direction token
+  into them, but **do not** create the global direction setting in E3;
+- preserve the distinction between content/background alpha, border alpha, shadow alpha and root fade
+  opacity;
+- use retained Quick composition rather than QWidget screenshots, frame-by-frame Python painting,
+  `QQuickWidget`, a generic Python `QuickBaseOverlayWidget`, or a second presentation surface;
+- do not establish a dynamic-artwork transport merely for this slice unless the primitive proof
+  genuinely requires it; the first real artwork consumer may establish the shared image-delivery seam
+  under `09_Widget_Quick_Presentation_Bridge.md`;
+- do not port Clock/Weather/Media/Reddit/Gmail/Steam family pixels yet.
+
+Validation must cross the actual Quick seam:
+
+- all new QML components load in the pinned PySide runtime through the existing Quick import/component
+  path;
+- one production-shaped synthetic retained item can be created under the display widget host, have
+  explicit geometry/style/fade properties updated, and be retired without retaining the display
+  generation;
+- static unchanged state causes no Python/QML per-frame callback or provider/timer work;
+- card/text shadow bounds and negative offsets do not clip;
+- component creation/retirement does not create another `QQmlEngine` or top-level runtime window;
+- focused Quick runtime/scene/primitive tests, `py_compile` for changed Python, QML/static checks,
+  `git diff --check`, exact diff/status review.
+
+This is an architecture-boundary slice:
+
+```text
+inspect exact main
+-> implement E3 slice 1 only
+-> focused gate
+-> diff/status
+-> commit
+-> push
+-> STOP for independent audit
+```
+
+Do not self-promote into E4 or Phase F.
 
 ## E4 — eight-direction shadow authority
 
@@ -673,9 +635,8 @@ Do not reintroduce QWidget `QGraphicsDropShadowEffect`.
 Unless stronger current evidence forces a smaller corrective detour:
 
 ```text
-E1 runtime/model/provider ownership  <- ACTIVE
--> independent audit
--> E3 retained primitives
+E1 runtime/model/provider ownership  — CLOSED / independently GREEN
+-> E3 retained primitives            <- ACTIVE
 -> E4 shadow authority
 -> Phase-E closure review
 -> Phase F
@@ -693,9 +654,6 @@ E2 correction unless current investigation proves otherwise:
 - `test_sine_line4_builder_integration.py::test_actual_save_media_settings_includes_line4`;
 - `test_visualizer_doc_references.py::test_contracts_route_visualizer_shell_clip_and_geometry_owners`
   (stale assertion around legitimate `QSGClipNode` historical/contract wording).
-- `test_spotify_visualizer_widget.py::test_on_tick_does_not_double_throttle_when_timer_already_paces`
-  (synthetic Bubble harness omits the required `runtime_controller`; reproduced before Media slice 6 and
-  recorded in `Future_Cleanup.md`).
 
 Do not silently ignore new failures; isolate before attributing them.
 
@@ -1042,207 +1000,37 @@ architecture.
 
 # 15. Current next work
 
-**E2 implementation is CLOSED by independent audit at `b787c57a`.**
-
-**E2.7 implementation is CLOSED by independent audit at
-`5b3cbaef4d443c79941e5ac780252f82a4e77bc4`.**
-
-Physical dual-display sleep/wake/late-return acceptance for R-26 remains deferred hardware evidence;
-it does not reopen E2.7 implementation or block the next Phase-E slice.
-
-**E1 slice 1 is CLOSED / AUDITED GREEN at
-`8fcbc57a41c0b402fd4253d9668a0c6548b3100f`.**
-
-**E1 slice 2 is CLOSED / AUDITED GREEN at
-`c320887cc27e1b2bace10ba562a36e24ae9307ca`.**
-
-**E1 slice 3 is CLOSED / SELF-AUDITED GREEN at
-`25f6ca4e7cdcaf82409a184c1d2999c01a7283e4`.**
-
-**E1 slice 4 is CLOSED / SELF-AUDITED GREEN at
-`86872ab92a6b0960f2a3746d43dc6056cb013d47`.**
-
-**E1 slice 5 is CLOSED / SELF-AUDITED GREEN at
-`51948dc3956bc10549eb3e8440b2c3e25857f952`.**
-
-**E1 slice 6 is CLOSED / SELF-AUDITED GREEN at
-`4680130b8371adf74452eb76f64318e8fc6571a9`.**
-
-The earlier generic live family-retirement prescription remains superseded. Current production family
-activation is applied through Settings-owned full runtime teardown/recreation.
-
-### E1 slice 5 — Steam Achievement Pulse runtime/model/artwork ownership — CLOSED
-
-The completed checklist is pruned. The durable result is one per-card/display, registry-owned
-`AchievementPulseRuntimeService` over the existing process-shared Steam cache/backend/credential/asset
-authorities. It owns cache-first load, source/manual refresh, semantic model creation, request fencing,
-unscaled decoded app/icon artwork with stable identity, replay and retirement. `SteamCardWidget` retains
-only geometry, QPainter/fade/input/style concerns and DPR-specific image scaling/cropping caches.
-
-Production suppresses the standalone convenience owner, injects exactly one required service and
-validates the live presenter/service edge on repeated setup. Progress and Friend Pulse remain
-unregistered and source-inert. All detached tasks/callbacks are runtime-generation tagged and weak-owner
-fenced; the service adds no recurring timer or alternate Steam cache/backend path.
-
-Focused Achievement/Steam/factory/setup/runtime-owner/lifecycle gate: `471 passed`, plus `py_compile`,
-fresh-process registry/deactivated-family dormancy, structural old-owner search and `git diff --check`
-clean. Exact-diff self-audit and reused-agent ownership review were GREEN; the review's suggested real
-queued-UI stop fence was added and passed before checkpoint.
-
-### E1 bounded post-slice-5 correction checkpoint — CLOSED / SELF-AUDITED GREEN
-
-Pushed checkpoint: `9ab4f47e6e7c081710a046ae38e6f310467249ca`.
-
-The completed checklist is pruned. Abandonment now keeps source-resolution decoded artwork plus stable
-identity in its neutral runtime while its temporary QWidget presenter owns logical-size/DPR cover
-scaling, centered cropping and projection caching. Fetch, fallback, desaturation and decode remain one
-unchanged path. Weather no longer exposes private cache/request/generation/timer properties as a model
-API; only the real standalone/test forwarding methods remain and are explicitly transitional.
-
-Focused Abandonment and Weather files plus their owner/factory/setup/lifecycle dependencies: `547
-passed`, plus `py_compile`, structural owner searches, exact old/new QPainter pixel comparison (`0`
-differing pixels), `git diff --check` and exact-diff self-audit clean. Both reused-agent boundary reviews
-were GREEN.
-
-### E1 slice 6 — Media shared runtime ownership — CLOSED / SELF-AUDITED GREEN
-
-Pushed checkpoint: `4680130b8371adf74452eb76f64318e8fc6571a9`.
-
-The completed checklist is pruned. One `MediaRuntimeService` lease per participating display now joins
-one runtime-generation shared owner for controller/provider lifetime, adaptive polling, query/cache/
-retained state, provider/request/runtime/playback generations, optimistic transport confirmation and
-one source-resolution artwork decode per stable identity. First/last active and attached lease
-accounting prevents one display from stopping another and retires the family owner exactly once.
-
-`MediaWidget` is now the temporary QWidget projection: it retains metadata/progress/control pixels,
-QPixmap/DPR scaling/crop caches, transition deferral/fades and local keyboard/feedback presentation
-timing. Production suppresses standalone construction and fails closed on service injection/reuse;
-direct construction retains an isolated compatibility owner. No new thread or scheduler was added.
-Visualizer seeding now reads the neutral accepted snapshot while the existing `media_updated` and
-`refresh_playback_state` contracts remain intact.
-
-Focused Media gate: `191 passed`; owner/factory/setup/runtime-destruction gate: `99 passed`; relevant
-Visualizer bridge gate: `228 passed, 7 skipped, 1 deselected`. `py_compile`, focused Ruff, fresh-process
-registry/deactivated-family dormancy, structural owner searches and `git diff --check` were clean. The
-exact-diff self-audit and both reused-agent lifecycle/wiring reviews were GREEN after adding explicit
-activation rollback, stop/restart freshness, real production reuse, worker/UI-boundary and
-runtime-generation regressions.
-
-The deselected Visualizer synthetic Bubble harness failure reproduces before this slice and is recorded
-in `Future_Cleanup.md`; it is not being repaired inside the landed Media owner checkpoint.
-
-### E1 slice 7 — Gmail shared runtime/model/action ownership — CLOSED / SELF-AUDITED GREEN
-
-Pushed checkpoint: `4f7dc8695c0f5096512f8fd421abc0c51faa2b6d`.
-
-The completed checklist is pruned. One `GmailRuntimeService` lease per participating display now joins
-one runtime-generation shared owner over the unchanged process-scoped `GmailBackend.instance()`.
-That owner coordinates one backend bootstrap, cache-first startup decision, poll/fetch cadence,
-accepted raw-email/unread/error/refresh stream, detached atomic cache persistence, new-mail sound
-decision and serialized semantic action/post-action refresh path. It adds no backend, thread, scheduler
-or cache format.
-
-`GmailWidget` is now the temporary QWidget projection: it retains row grouping/formatting/capacity,
-transition deferral, spinner/fade, geometry, QPixmap/QPainter caches, hit regions, menus and input.
-Production suppresses the isolated convenience owner and fails closed on missing/stale service wiring;
-direct construction retains standalone compatibility. First/last lease accounting preserves a
-remaining display and retires the family owner exactly once. Runtime/startup/fetch/action generations
-fence late work, custom filters survive presenter setting sync, and UI-dispatch decline cannot wedge
-the serialized action slot.
-
-All Gmail-focused files: `202 passed, 1 skipped`; owner/lifecycle/manager gate: `190 passed`; cross-family
-registry gate: `50 passed`. Focused Ruff, `py_compile`, fresh-process registry dormancy, structural
-owner searches and `git diff --check` were clean. The non-green repository-wide run reached `5362
-passed, 159 skipped, 121 failed, 1 error`; those unrelated legacy/Quick/environment failures contained
-no Gmail failure and were not repaired inside this landed slice. Exact-diff self-audit and both
-reused-agent reviews were GREEN.
-
-### E1 slice 8 — Media volume and mute accessory ownership — CLOSED / SELF-AUDITED GREEN
-
-Pushed checkpoints:
+Closed implementation checkpoints:
 
 ```text
-55bc73b0 — shared Media app-volume runtime owner
-216c7da5 — shared system-mute runtime owner
+E2    capability / SETUP foundation                 CLOSED
+E2.7  Visualizer CUSTOM failover/reclaim            CLOSED / independently GREEN
+E1    presentation-neutral widget runtime ownership CLOSED / independently GREEN @ 4466c306
 ```
 
-The completed checklist is pruned. Per-display app-volume leases now join one runtime-generation owner
-for controller/accepted-target lifetime, read/write generations, optimistic state and 80 ms write
-coalescing. Separate per-display system-mute leases join one runtime-generation UI-thread owner for
-endpoint availability, accepted mute state, one 30-second poll chain and semantic mute/system-volume
-actions. These owners remain separate from each other and from the primary `MediaRuntimeService`.
+Physical dual-display sleep/wake/late-return acceptance for R-26 remains deferred hardware evidence;
+it does not reopen E2.7 or E1 implementation.
 
-`SpotifyVolumeWidget` and `MuteButtonWidget` retain only anchor/visibility/fade/CUSTOM geometry,
-drag/input feedback and QPainter/QPixmap/style presentation. Production suppresses isolated defaults,
-injects before activation, validates active reuse and fails closed on missing/stale services; standalone
-construction retains isolated compatibility. First/final display accounting, target/owner/runtime
-generations and authoritative cross-display hotkey routing prevent duplicate work and stale callbacks.
-No controller, endpoint, poll chain, thread or scheduler is duplicated per display.
-
-Focused volume checkpoint gate: `178 passed`. Final combined Media accessory/provider/setup/runtime
-manager gate: `207 passed`, plus focused Ruff, `py_compile`, fresh-process registry probes, structural
-owner searches and `git diff --check`. Exact-diff self-audit and reused-agent reviews were GREEN after
-correcting queued-write fencing and stale-local/live-remote system-audio routing.
-
-### E1 slice 9 — fresh-process/deactivated-family import dormancy — CLOSED / SELF-AUDITED GREEN
-
-Pushed checkpoint: `ad71421d395806e78898593c71a3bc25a53bcdf1`.
-
-The completed checklist is pruned. Annotation-only Clock/Weather/Media/Reddit/Visualizer/accessory types
-in the two legacy host modules now resolve only under `TYPE_CHECKING`; genuine factories remain explicit
-lazy creation seams. The `widgets` package itself is inert instead of activating Clock, Weather and
-Media whenever any shared `widgets.*` helper is imported. Repository search found no caller of the
-removed package-level class aliases, so no lazy compatibility facade was introduced.
-
-Fresh-process host-import and real deactivated-Media setup probes prove no Media widget/runtime,
-Visualizer, volume, mute, controller or Core Audio implementation resolves before admission. Focused
-manager/setup/Media gate: `277 passed`; Clock/Weather/Reddit/Media-family gate: `179 passed`; relevant
-Visualizer gate: `282 passed, 7 skipped, 1 deselected` (the deselected synthetic Bubble harness is the
-known pre-existing failure recorded in `Future_Cleanup.md`). Strict new-file/fatal-host Ruff,
-`py_compile`, structural import searches and `git diff --check` were clean. Both reused-agent reviews
-were GREEN.
-
-### E1 slice 10 — hoist `WidgetRuntimeManager` to the display-runtime boundary — IMPLEMENTATION ACTIVE
-
-Exact current production still constructs and terminally owns `WidgetRuntimeManager` inside the legacy
-`WidgetManager`. The current production display runtime is `DisplayWidget`; `QuickDisplayRuntime` is not
-yet a production host and must not gain a second proof-only owner. Hoist the one real owner to the
-current display-runtime boundary and inject it into the current presenter manager so Phase F can replace
-the presenter without inheriting a QWidget-owned lifetime.
-
-Live checklist:
-
-- [ ] let `WidgetRuntimeManager` bind an explicit runtime-widget registry host contract instead of
-  reading `WidgetManager._widgets` directly; preserve all lifecycle/E2.7/service APIs and fail closed on
-  invalid/double host binding;
-- [ ] construct exactly one `WidgetRuntimeManager` per production `DisplayWidget` runtime generation and
-  inject it into `WidgetManager`; retain direct `WidgetManager(...)` convenience ownership only for
-  standalone/tests and expose the injected edge as non-owning;
-- [ ] move terminal service-owner cleanup to `rendering/display_cleanup.py` after presenter/widget
-  cleanup and before display teardown completes; preserve idempotence, widget-before-service order,
-  confirmed E2.7 cleanup semantics and runtime-generation destruction barriers;
-- [ ] update setup/internal callers to consume a read-only runtime-manager accessor while retaining only
-  the minimum transitional private alias needed by existing standalone tests;
-- [ ] prove production identity/cardinality (`DisplayWidget -> one owner <- WidgetManager`), no duplicate
-  service/controller/timer construction, injected-vs-standalone cleanup ownership, host detach/rebind
-  rules, repeated setup and exact first/final shared-family retirement behavior;
-- [ ] run focused runtime-manager/setup/factory/family-owner/display-cleanup/destruction/Visualizer gates,
-  Ruff, `py_compile`, structural owner-construction searches and `git diff --check`; self-audit and
-  commit/push the coherent hoist checkpoint.
-
-Non-goals: constructing a `WidgetRuntimeManager` in dormant `QuickDisplayRuntime`, Quick pixels,
-provider/cache redesign, E3/E4 or Phase F.
-
-After E1 completes across bounded owner slices:
+The active next checkpoint is:
 
 ```text
-E3 retained Quick primitives
--> E4 global eight-direction shadow authority
+E3 slice 1 — ordinary-widget retained host + shell primitives
+-> focused Quick component/scene/lifecycle regressions
+-> diff/status
+-> commit + push
+-> STOP for independent audit
+```
+
+After E3 closes:
+
+```text
+E4 global eight-direction shadow authority
 -> Phase-E closure review
 -> Phase F
 ```
 
-Do not send implementation work back into E2/E2.7 without a demonstrated regression.
+Do not send an implementation agent back into E1/E2/E2.7 without new source/runtime evidence
+demonstrating a specific regression.
 
 ---
 
@@ -1258,8 +1046,6 @@ Technical decompositions:
 - `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`
 - `Docs/QtQuick_Migration/06_Build_Tooling_Validation.md`
 - `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
-- `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md`
-- `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
 
 Durable routing/guardrails:
 

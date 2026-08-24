@@ -48,7 +48,7 @@ retirement/rehome ledger.
 | Custom GL scene pixels | inline `QQuickItem -> QSGRenderNode -> OpenGL` | `Docs/Compositor_Architecture.md` |
 | Settings/config UI | existing QWidget/settings owners | `Spec.md` |
 | Capability activation | canonical settings + cheap presentation-neutral catalogs; landed E2 authority | `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md` |
-| Widget data/provider lifecycle | per-instance services or family-shared leases through `WidgetRuntimeManager` according to real cardinality; shared Media/Gmail and separate app-volume/system-mute owners landed; import dormancy closed, display-runtime owner hoist active; **E1 active** | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`, `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md` |
+| Widget data/provider lifecycle | **E1 landed**: neutral `WidgetRuntimeManager` + family-scoped/shared runtime owners by semantic cardinality | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`, `08_Widget_Runtime_Ownership_Threading.md` |
 | Runtime widget pixels | destination: display retained Quick scene | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
 | General async work | `ThreadManager` | `Docs/Guardrails/Runtime_Efficiency.md` |
 | Resource accounting | `ResourceManager`; accounting only, never deletion owner | `Docs/Guardrails.md` |
@@ -92,9 +92,10 @@ but is not the membership source). Visualizers is a capability family (member `s
 subsystem. `capability_activation.normalize_widget_capability_state` is the one authority enforcing the
 dependency (`media=False` forces `visualizers=False`).
 
-A deactivated widget family is filtered before runtime widget/model/provider creation at the currently
-landed factory creation seam. The broader E1 manager/provider ownership split is the **active Phase-E
-slice** until exact source says it has landed.
+A deactivated widget family is filtered before runtime widget/model/provider creation. E1 is
+independently closed at `4466c306`: production currently hoists one neutral `WidgetRuntimeManager` to
+the display-runtime boundary, while family services use the narrowest correct per-instance/per-display/
+shared lifetime. E3/F must consume that boundary rather than recreate provider ownership in Quick.
 
 Transition runtime selection/cycle/random admission filters by activation. **E2 operator-facing
 `SETUP` UI, live lazy navigation, normalization and context-menu admission are implementation-closed.**
