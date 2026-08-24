@@ -22,79 +22,53 @@ Future_Cleanup.md
 Future_Work.md
 ```
 
-`Current_Plan.md` owns current sequence/work admission and may retain clearly marked completed-phase
-closure/rationale for migration continuity. Completed sections do not reopen themselves as work.
+`Current_Plan.md` owns current sequence/work admission. Historical plans/reports are evidence/rationale,
+not current status authority.
 
-`Future_Work.md` is a long-horizon new-feature/new-implementation backlog, not active sequencing. An
-agent may implement from it only when the operator explicitly selects an item or when
-`Current_Plan.md` and `Future_Cleanup.md` contain no remaining important active work.
-
-During the Qt Quick migration, exact source tells you what is **currently implemented** while
-`Spec.md` and `Docs/Compositor_Architecture.md` define the accepted destination architecture.
-
-`Docs/TestSuite.md` is the canonical live test inventory, migration-retirement ledger and testing
-strategy. Use it before treating a broad-suite failure, old phase-numbered test or presenter-specific
-assertion as current architectural authority. `Docs/Harness_Index.md` routes recurring commands and
-runtime harnesses; it is not a replacement test inventory.
+`Docs/TestSuite.md` is the canonical live test inventory/retirement ledger. `Docs/Harness_Index.md`
+routes recurring runtime/physical harnesses.
 
 ## Current migration status
 
-Current normal implementation work is **Phase E — widget presentation + capability setup foundation**.
+Current normal implementation work is **Phase E4 — global eight-direction shadow authority + retained
+shadow normalization**.
 
-- Phase C transition implementation/deterministic hardening: landed; remaining acceptance is explicit.
-- Phase D visualizer implementation/documentation closure: complete; remaining physical/eyes-on items
-  are explicit acceptance debt.
-- Phase-E activation foundation and E2 `SETUP`/live lazy navigation are landed.
-- E2.7 Visualizer CUSTOM failover/reclaim implementation is independently audited GREEN; physical
-  dual-display wake/late-return remains deferred acceptance only.
-- **E1 presentation-neutral runtime/model/provider ownership is independently GREEN / CLOSED at `4466c306`.**
-- **E3 retained Quick primitives are ACTIVE now.** E4 global shadow direction follows before Phase F.
+- Phase C transition implementation: closed; remaining physical acceptance explicit.
+- Phase D visualizer implementation: closed; remaining physical acceptance explicit.
+- E2 capability/SETUP: closed.
+- E2.7 Visualizer CUSTOM failover/reclaim: independently GREEN.
+- E1 presentation-neutral runtime/model/provider ownership: independently GREEN / closed @ `4466c306`.
+- E3 retained ordinary-widget host + shell primitives: independently GREEN / closed @ `1f25a791`.
+- **E4 is active next.**
+- Phase F waits for E4 + Phase-E closure review.
 
 ## Start here
 
 | Task | Read |
-|---|---|
+| --- | --- |
 | Active migration work | `Current_Plan.md` |
-| Qt Quick migration technical detail | `Docs/QtQuick_Migration/README.md` + only the active/focused decomposition |
+| Qt Quick technical index | `Docs/QtQuick_Migration/README.md` |
 | Accepted runtime presentation architecture | `Docs/Compositor_Architecture.md` |
-| Current/migration ownership map | `Docs/Contracts.md` |
+| Ownership map | `Docs/Contracts.md` |
 | Cross-cutting safety | `Docs/Guardrails.md` |
 | Stable architecture | `Spec.md` |
-| Capability activation / E2 SETUP | `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md` |
-| Widget runtime ownership/threading | `Docs/10_WIDGET_GUIDELINES.md`, `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`, `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md` |
-| Quick widget state/models/actions | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`, `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md` |
-| Transition authoring/runtime | `Docs/Transition_Change_Checklist.md`, `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md` |
+| Capability activation / SETUP | `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md` |
+| Widget runtime ownership/threading | `Docs/10_WIDGET_GUIDELINES.md`, `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md` |
+| Widget retained shell + shadows | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
+| Widget state/models/actions/assets | `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md` |
+| Detailed family ports / Clock | `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md` |
+| CUSTOM/input/geometry variants | `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md` |
+| Transitions | `Docs/Transition_Change_Checklist.md`, `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md` |
 | Visualizer presentation/cadence | `Docs/Guardrails/Visualizer_Presentation.md` |
-| Bubble feel / timing | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
-| Visualizer subsystem | `Docs/Visualizer_Reference.md`, `Docs/Visualizer_Change_Checklist.md`, `Docs/QtQuick_Migration/03_Visualizer.md` |
-| CUSTOM/input/interaction | `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md` |
+| Bubble temporal fidelity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
+| Visualizer subsystem | `Docs/Visualizer_Reference.md`, `Docs/QtQuick_Migration/03_Visualizer.md` |
 | Defaults/settings schema | `Docs/Defaults_Guide.md` |
-| Qt Quick architecture evidence | `Docs/Performance_Evidence/QtQuick-P0-Comparison-2026-08-20.md` |
-| Tests / test retirement / stale-test triage | `Docs/TestSuite.md` |
+| Tests / retirement | `Docs/TestSuite.md` |
 | Recurring harnesses | `Docs/Harness_Index.md` |
-| Documentation roles/hygiene | `Docs/Documentation_Maintenance.md` |
-| Prior regressions | `Docs/Historical_Bugs/README.md` |
-| Cutover deletion / deferred cleanup | `Future_Cleanup.md` |
-| Explicitly deferred new features / experiments | `Future_Work.md` (only when activation rule is satisfied) |
+| Deferred cleanup | `Future_Cleanup.md` |
+| Deferred feature/experiments | `Future_Work.md` when explicitly admitted |
 
 Do not read every document by default.
-
-## Qt Quick migration support docs
-
-These are subordinate technical decompositions/references, not parallel plans:
-
-- `Docs/QtQuick_Migration/01_Runtime_Host_Lifecycle.md`
-- `Docs/QtQuick_Migration/02_Scene_Renderer_Transitions.md`
-- `Docs/QtQuick_Migration/03_Visualizer.md`
-- `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`
-- `Docs/QtQuick_Migration/05_Custom_Layout_Input_Interaction.md`
-- `Docs/QtQuick_Migration/06_Build_Tooling_Validation.md`
-- `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`
-- `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md`
-- `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
-
-Some decompositions describe landed earlier-phase architecture because they remain the best focused
-reference. `Current_Plan.md` alone decides whether work is admitted now.
 
 ## Accepted presentation destination
 
@@ -105,137 +79,93 @@ one standalone top-level QQuickWindow
         ↓
 threaded Qt Quick scene graph
         ↓
-base image + transitions + visualizer + runtime overlays
+base image + transitions + visualizer + retained runtime widgets
         ↓
 OS presentation
 ```
 
-`QQuickWidget` is not acceptable.
+No `QQuickWidget`, no second accelerated widget surface, no permanent fallback presenter.
 
-There is no planned second migration to a native/C++ presenter. Native code is allowed only as a
-localized measured renderer optimization inside this architecture.
+## Current ordinary-widget direction
 
-## Current implementation during migration
+```text
+presentation-neutral runtime/model owner
+        ↓
+stable presentation model
+        ↓
+per-display retained ordinaryWidgetHost
+        ↓
+OverlayWidget + OverlayCard + family content
+```
 
-Until production cutover, `main` may still contain/run:
+E3 proved this substrate. E4 now supplies one canonical shadow direction and normalizes the retained
+shadow primitives. Phase F then ports families.
+
+## Shadow direction
+
+One canonical token:
+
+```text
+NW N NE W E SW S SE
+```
+
+Default `SE`.
+
+Direction changes signs/axis only; card/text/header magnitudes remain their own authored values.
+
+Card `RectangularShadow` is cached by default for static ordinary cards.
+
+Current legacy ordinary text shadows are offset duplicate-text passes, not blurred effects. Do not
+canonize MultiEffect text blur without an actual authored requirement.
+
+## Clock migration direction
+
+Clock is the first Phase-F family after F0.
+
+Its Quick port intentionally includes:
+
+- 2 logical px separator;
+- roughly 40% wider separator (~0.77 inner-width ratio);
+- symmetric gap above/below separator;
+- separator in analogue mode as well when selected;
+- day/date text shadow matching timezone ordinary-text shadow semantics;
+- digital/analogue as separate geometry variants so repeated live switches restore exact saved sizes/
+  positions rather than recursively deriving and drifting.
+
+Final CUSTOM variant persistence belongs to Phase G.
+
+## Current-legacy warning
+
+Before H/I cutover/deletion, source may still contain:
 
 - `DisplayWidget`;
-- `GLCompositorWidget`;
-- QRhiWidget/OpenGL presenter code;
-- GUI-side presentation handoffs;
-- QWidget runtime widget presentation.
+- QRhiWidget / `GLCompositorWidget`;
+- QWidget runtime widget presentation;
+- painter/QPixmap shadow implementations.
 
-Those files are **CURRENT-LEGACY — WILL BE OBSOLETE at production cutover / Phase I**. They remain
-current/reference migration source only while callers still exist; they are not permission to expand
-old architecture or to preserve a compatibility presenter.
+These are migration source/reference only. Do not use them as permission to add new old-presentation
+machinery.
 
-No production runtime switch/fallback between old and Quick is to be introduced.
+## Migration execution
 
-### Known migration-epoch document traps
-
-- `Docs/SRPSS_Steam_Widget_Family_Implementation_Plan.md` contains valuable provider/security/product
-  decisions, but its QWidget/painter/runtime-pixel implementation mapping predates the Quick cutover.
-  Those presentation sections are **CURRENT-LEGACY — WILL BE OBSOLETE / REHOMED in F/I**; do not
-  use them to override `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`.
-- `Docs/P2_Visualizer_Recovery_Contract.md` has a legacy phase name but its logical/runtime ownership
-  contract remains **LANDED / PRESERVE**.
-- `Docs/phase_reports/`, `Docs/Performance_Evidence/`, `Docs/Historical_Bugs/`,
-  `Docs/Historical_Plans/` and `Docs/audits/` are evidence/reference scopes. Status language inside an
-  old record may be obsolete as current sequencing even when its measurements/mechanism remain valid.
-
-## Durable runtime owners/direction
-
-| Domain | Owner/direction |
-|---|---|
-| Runtime sequencing | `ScreensaverEngine` |
-| Display topology | `DisplayManager` |
-| Runtime physical window | destination: one `QQuickWindow` per display |
-| Runtime scene pixels | destination: retained Quick + Quick render-thread custom nodes |
-| Visualizer logical cadence | `VisualizerLogicalRuntime` |
-| Visualizer source/audio | BeatEngine/audio worker/backend |
-| Settings/config UI | existing QWidget/settings owners |
-| Capability activation | canonical settings + presentation-neutral family/transition catalog/query authority |
-| Providers / service logic | existing/refactored Python owners |
-| Persistence | existing settings/store owners |
-| Widget models/providers | current owners migrating toward presentation-neutral `WidgetRuntimeManager` |
-| Runtime widget pixels | destination: display Quick scene |
-| Thread/task ownership | `ThreadManager` for general async work |
-| Resource accounting | `ResourceManager`; accounting only, never deletion owner |
-
-## Capability activation direction
-
-```text
-cheap catalog metadata
-        ↓
-application-level activated?
-        ↓ yes
-implementation/runtime owner may resolve
-        ↓
-ordinary enabled / manual / pool state
-```
-
-Use `activated/deactivated` for the application-level gate and `enabled/disabled` for ordinary widget
-instance state. Transition pool membership/manual selection are separate again.
-
-`visualizers` is a canonical application capability family with member widget
-`spotify_visualizer` and a hard dependency on `media`. That activation-family relationship does not
-move the Visualizer out of its special logical/runtime presentation ownership or make it an ordinary
-widget presentation path.
-
-## Visualizer direction
-
-```text
-audio / analysis
-        ↓
-VisualizerLogicalRuntime
-        ↓
-mode-owned logical frame runtime
-        ↓
-immutable latest state
-        ↓
-Quick visualizer synchronization
-        ↓
-render-thread custom node
-        ↓
-physical presentation
-```
-
-## Migration execution rule
-
-Local mutation:
+Normal:
 
 ```text
 focused gate
--> inspect diff/status
+-> diff/status
 -> commit
 -> push
 ```
 
-High-risk/audit-required slice adds:
+Audit-required adds:
 
 ```text
--> independent audit of actual pushed source before continuation
+-> independent review of actual pushed source
 ```
 
-Repository connectors are read/audit only for normal SRPSS workflow. Hosted CI is not added unless the
-operator explicitly requests it.
-
-Do not use destructive Git operations to force checkpoint state.
-
-When a checkpoint adds, removes, renames, rehomes or intentionally retires tests, update the canonical
-inventory/status in `Docs/TestSuite.md` in the same documentation sweep.
+Repository connectors are read/audit only for normal SRPSS work.
 
 ## Historical navigation
 
-Older reports intentionally contain old owner maps.
-
-Do not recover current direction from historical references to:
-
-- QOpenGLWidget;
-- QRhiWidget as final presenter;
-- separate visualizer overlay;
-- GUI visualizer timers;
-- paint-coupled admission;
-- old widget factories as final pixel authority.
-
-Use historical material only for the mechanism/regression/evidence it records.
+Historical records may contain old owner maps and old phase status. Use them for mechanism/evidence
+only, never to override current source + `Current_Plan.md`.
