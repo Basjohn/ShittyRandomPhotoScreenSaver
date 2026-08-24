@@ -23,6 +23,7 @@ from .render import BackgroundRenderItem, RenderNodeTelemetry
 from .state import QuickSceneReadiness
 from .transitions.state import TransitionRun
 from .visualizer import VisualizerRenderItem, VisualizerRenderNodeTelemetry
+from .widgets import OrdinaryWidgetPresentationHost
 from .window import QuickDisplayWindow
 
 
@@ -40,6 +41,22 @@ class QuickSceneFactory(QObject):
         self._component = QQmlComponent(self._engine, self._qml_url)
         if self._component.status() != QQmlComponent.Status.Ready:
             raise RuntimeError(self._component_error("DisplayScene.qml failed to load"))
+        # Shared retained ordinary-widget presentation primitive. Compiled once
+        # as process-level QML compile state; instances are created per display
+        # context and are never retained on the factory.
+        self._overlay_widget_url = QUrl.fromLocalFile(
+            str(self._qml_root / "OverlayWidget.qml")
+        )
+        self._overlay_widget_component = QQmlComponent(
+            self._engine, self._overlay_widget_url
+        )
+        if self._overlay_widget_component.status() != QQmlComponent.Status.Ready:
+            raise RuntimeError(
+                self._component_error(
+                    "OverlayWidget.qml failed to load",
+                    self._overlay_widget_component,
+                )
+            )
 
     @property
     def qml_root(self) -> Path:
@@ -83,8 +100,38 @@ class QuickSceneFactory(QObject):
         )
         return context, root
 
-    def _component_error(self, prefix: str) -> str:
-        details = "; ".join(error.toString() for error in self._component.errors())
+    def create_overlay_widget(
+        self,
+        initial_properties: dict[str, object],
+        context: QQmlContext,
+    ) -> QQuickItem:
+        """Create one retained overlay-widget root without retaining it here."""
+
+        component = self._overlay_widget_component
+        if component.status() != QQmlComponent.Status.Ready:
+            raise RuntimeError(
+                self._component_error("OverlayWidget.qml is not ready", component)
+            )
+        item = component.createWithInitialProperties(
+            dict(initial_properties), context
+        )
+        if not isinstance(item, QQuickItem):
+            raise RuntimeError(
+                self._component_error(
+                    "OverlayWidget.qml did not create a QQuickItem", component
+                )
+            )
+        QQmlEngine.setObjectOwnership(
+            item,
+            QQmlEngine.ObjectOwnership.CppOwnership,
+        )
+        return item
+
+    def _component_error(
+        self, prefix: str, component: QQmlComponent | None = None
+    ) -> str:
+        target = component if component is not None else self._component
+        details = "; ".join(error.toString() for error in target.errors())
         return f"{prefix}: {details or 'unknown QML component error'}"
 
 
@@ -107,6 +154,7 @@ class QuickSceneController(QObject):
         self._context: QQmlContext | None = None
         self._scene_root: QQuickItem | None = None
         self._background_item: BackgroundRenderItem | None = None
+        self._ordinary_widget_host: OrdinaryWidgetPresentationHost | None = None
         self._visualizer_loader: QQuickItem | None = None
         self._visualizer_root: QQuickItem | None = None
         self._visualizer_content_host: QQuickItem | None = None
@@ -134,6 +182,17 @@ class QuickSceneController(QObject):
         )
         if self._visualizer_loader is None:
             raise RuntimeError("DisplayScene.qml has no visualizer presentation loader")
+        ordinary_widget_host_item = root.findChild(
+            QQuickItem,
+            "ordinaryWidgetHost",
+        )
+        if ordinary_widget_host_item is None:
+            raise RuntimeError("DisplayScene.qml has no ordinary widget host")
+        self._ordinary_widget_host = OrdinaryWidgetPresentationHost(
+            host_item=ordinary_widget_host_item,
+            context=context,
+            create_overlay_item=factory.create_overlay_widget,
+        )
         self._background_item = BackgroundRenderItem(
             root,
             telemetry=self._telemetry,
@@ -173,6 +232,13 @@ class QuickSceneController(QObject):
         if item is None:
             raise RuntimeError("display background item has retired")
         return item
+
+    @property
+    def ordinary_widget_host(self) -> OrdinaryWidgetPresentationHost:
+        host = self._ordinary_widget_host
+        if host is None:
+            raise RuntimeError("ordinary widget host has retired")
+        return host
 
     @property
     def telemetry(self) -> RenderNodeTelemetry:
@@ -493,6 +559,11 @@ class QuickSceneController(QObject):
     def _retire_qml_objects(self) -> None:
         if self._readiness.qml_objects_retired:
             return
+        # Retire retained overlay widgets first: each is detached from the host
+        # and queued for deletion, so no C++-owned item outlives the display
+        # generation or depends on the scene root still being attached.
+        if self._ordinary_widget_host is not None:
+            self._ordinary_widget_host.retire_all()
         root = self._scene_root
         context = self._context
         # Detach and queue the C++-owned root while every Python child wrapper
@@ -506,6 +577,7 @@ class QuickSceneController(QObject):
             context.deleteLater()
         self._scene_root = None
         self._background_item = None
+        self._ordinary_widget_host = None
         self._visualizer_item = None
         self._visualizer_content_host = None
         self._visualizer_root = None
