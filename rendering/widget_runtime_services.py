@@ -37,6 +37,10 @@ coordination, cache-first startup, polling/fetch, accepted raw-email state,
 notification decisions and serialized actions. ``GmailBackend.instance()``
 remains the unchanged process singleton.
 
+E1 slice 8 adds a separate Media app-volume lease per participating display.
+Those leases share one controller/target/read-write/debounce owner per runtime
+generation; the primary Media owner remains intentionally separate.
+
 Heavy provider implementation is imported lazily inside the build callable so a
 process that never activates/creates the family does not resolve it merely
 because this registry is imported.
@@ -382,11 +386,64 @@ _GMAIL_SERVICE_SPEC = RuntimeServiceSpec(
 )
 
 
+def _build_media_volume_service(
+    widget_id: str, widgets_config: Mapping[str, Any]
+) -> Any:
+    from core.settings.models import MediaWidgetSettings
+    from widgets.media_volume_runtime import MediaVolumeRuntimeService
+
+    config = (
+        widgets_config.get("media", {})
+        if isinstance(widgets_config, Mapping)
+        else {}
+    )
+    model = MediaWidgetSettings.from_mapping(
+        config if isinstance(config, Mapping) else {}
+    )
+    return MediaVolumeRuntimeService(provider=model.provider, shared=True)
+
+
+def _inject_media_volume_service(widget: Any, service: Any) -> None:
+    setter = getattr(widget, "set_runtime_service", None)
+    if not callable(setter):
+        raise AttributeError(
+            "runtime widget cannot accept Media volume service "
+            "(missing set_runtime_service)"
+        )
+    setter(service)
+
+
+def _retire_media_volume_service(service: Any) -> None:
+    retire = getattr(service, "retire", None)
+    if not callable(retire):
+        raise AttributeError("Media volume runtime service has no retire method")
+    retire()
+
+
+def _media_volume_service_reuse_is_valid(widget: Any, service: Any) -> bool:
+    if getattr(widget, "_runtime_service", None) is not service:
+        return False
+    if _service_is_retired(service):
+        return False
+    if getattr(service, "shared_owner", None) is None:
+        return False
+    return not _widget_is_active(widget) or _service_is_running(service)
+
+
+_MEDIA_VOLUME_SERVICE_SPEC = RuntimeServiceSpec(
+    build=_build_media_volume_service,
+    inject=_inject_media_volume_service,
+    retire=_retire_media_volume_service,
+    reuse_is_valid=_media_volume_service_reuse_is_valid,
+)
+
+
 _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
     "reddit": _REDDIT_SERVICE_SPEC,
     "reddit2": _REDDIT_SERVICE_SPEC,
     "weather": _WEATHER_SERVICE_SPEC,
     "media": _MEDIA_SERVICE_SPEC,
+    "spotify_volume": _MEDIA_VOLUME_SERVICE_SPEC,
     "gmail": _GMAIL_SERVICE_SPEC,
     "abandonment_issues": _ABANDONMENT_SERVICE_SPEC,
     "achievement_pulse": _ACHIEVEMENT_SERVICE_SPEC,

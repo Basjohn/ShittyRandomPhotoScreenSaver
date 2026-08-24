@@ -2,116 +2,131 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import QRect, QTimer
+from PySide6.QtCore import QRect
 from PySide6.QtWidgets import QWidget
 
+from widgets.media_volume_runtime import MediaVolumeRuntimeService
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 
 
-def test_spotify_volume_reset_flush_state_stops_and_optionally_deletes_timer(qt_app):
+class _FakeVolumeController:
+    def __init__(self) -> None:
+        self.configure_calls: list[tuple[object, object]] = []
+        self.reads = 0
+        self.writes: list[float] = []
+
+    def is_available(self) -> bool:
+        return True
+
+    def configure_volume_target(self, provider, source_app_user_model_id="") -> bool:
+        self.configure_calls.append((provider, source_app_user_model_id))
+        return provider != "spotify_browser" or bool(source_app_user_model_id)
+
+    def get_volume(self) -> float:
+        self.reads += 1
+        return 0.6
+
+    def set_volume(self, level: float) -> bool:
+        self.writes.append(float(level))
+        return True
+
+
+def _make_widget(provider: str = "spotify") -> tuple[SpotifyVolumeWidget, _FakeVolumeController]:
+    controller = _FakeVolumeController()
+    widget = SpotifyVolumeWidget(provider=provider, build_default_runtime=False)
+    widget.set_runtime_service(
+        MediaVolumeRuntimeService(
+            provider=provider,
+            shared=False,
+            controller=controller,
+        )
+    )
+    return widget, controller
+
+
+def test_spotify_volume_direct_widget_owns_isolated_runtime_until_cleanup(qt_app):
     widget = SpotifyVolumeWidget()
+    service = widget._runtime_service  # type: ignore[attr-defined]
     try:
-        timer = QTimer(widget)
-        timer.setSingleShot(True)
-        timer.start(1000)
-        widget._flush_timer = timer  # type: ignore[attr-defined]
-        widget._pending_volume = 0.5  # type: ignore[attr-defined]
+        assert service is not None
+        assert widget._owns_runtime_service is True  # type: ignore[attr-defined]
+        assert service.shared_owner is not None
 
-        widget._reset_flush_state(delete_timer=False)  # type: ignore[attr-defined]
+        widget.cleanup()
 
-        assert widget._flush_timer is timer  # type: ignore[attr-defined]
-        assert timer.isActive() is False
-        assert widget._pending_volume is None  # type: ignore[attr-defined]
-
-        widget._pending_volume = 0.3  # type: ignore[attr-defined]
-        widget._reset_flush_state(delete_timer=True)  # type: ignore[attr-defined]
-
-        assert widget._flush_timer is None  # type: ignore[attr-defined]
-        assert widget._pending_volume is None  # type: ignore[attr-defined]
+        assert service.is_retired() is True
+        assert widget._runtime_service is None  # type: ignore[attr-defined]
     finally:
         widget.deleteLater()
 
 
-def test_spotify_volume_stop_uses_canonical_flush_reset(qt_app, monkeypatch):
-    widget = SpotifyVolumeWidget()
-    calls = []
+def test_spotify_volume_stop_deactivates_runtime_without_retiring_attached_owner(qt_app):
+    widget, _controller = _make_widget()
+    service = widget._runtime_service  # type: ignore[attr-defined]
     try:
-        widget._enabled = True  # type: ignore[attr-defined]
-        monkeypatch.setattr(widget, "_reset_flush_state", lambda **kwargs: calls.append(kwargs))  # type: ignore[method-assign]
-        monkeypatch.setattr(widget, "hide", lambda *args, **kwargs: calls.append({"hide": True}))  # type: ignore[method-assign]
+        assert service is not None
+        assert widget.start() is True
+        assert service.is_running() is True
 
         widget.stop()
 
-        assert calls[0] == {"delete_timer": False}
-        assert {"hide": True} in calls
+        assert widget.is_lifecycle_active() is False
+        assert service.is_running() is False
+        assert service.is_retired() is False
     finally:
+        widget.cleanup()
         widget.deleteLater()
 
 
-def test_spotify_volume_cleanup_impl_deletes_flush_timer(qt_app, monkeypatch):
+def test_spotify_volume_cleanup_impl_releases_neutral_runtime(qt_app):
     widget = SpotifyVolumeWidget()
-    calls = []
+    service = widget._runtime_service  # type: ignore[attr-defined]
     try:
-        monkeypatch.setattr(widget, "_reset_flush_state", lambda **kwargs: calls.append(kwargs))  # type: ignore[method-assign]
-
         widget._cleanup_impl()  # type: ignore[attr-defined]
 
-        assert calls == [{"delete_timer": False}, {"delete_timer": True}]
+        assert service is not None and service.is_retired() is True
+        assert widget._runtime_service is None  # type: ignore[attr-defined]
     finally:
         widget.deleteLater()
 
 
-def test_spotify_volume_provider_switch_requests_volume_sync(qt_app, monkeypatch):
-    widget = SpotifyVolumeWidget()
-    calls = []
+def test_spotify_volume_provider_switch_delegates_and_syncs_snapshot(qt_app):
+    widget, controller = _make_widget()
     try:
-        monkeypatch.setattr(widget, "_request_volume_sync", lambda **kwargs: calls.append(kwargs))  # type: ignore[method-assign]
+        controller.configure_calls.clear()
 
         changed = widget.set_provider_runtime("musicbee")
 
         assert changed is True
-        assert calls == [{"force": True}]
+        assert widget._provider == "musicbee"  # type: ignore[attr-defined]
+        assert controller.configure_calls == [("musicbee", "")]
     finally:
+        widget.cleanup()
         widget.deleteLater()
 
 
-def test_spotify_browser_provider_waits_hidden_for_exact_runtime_source(qt_app, monkeypatch):
-    widget = SpotifyVolumeWidget()
-    calls = []
+def test_spotify_browser_provider_waits_hidden_for_exact_runtime_source(qt_app):
+    widget, controller = _make_widget()
     try:
         widget._enabled = True  # type: ignore[attr-defined]
         widget.show()
-        monkeypatch.setattr(
-            widget._controller,
-            "configure_volume_target",
-            lambda provider, source_app_user_model_id="": calls.append(
-                (provider, source_app_user_model_id)
-            )
-            or False,
-        )
+        controller.configure_calls.clear()
 
         changed = widget.set_provider_runtime("spotify_browser")
 
         assert changed is True
         assert widget._provider_volume_supported is False  # type: ignore[attr-defined]
         assert widget.isVisible() is False
-        assert calls == [("spotify_browser", "")]
+        assert controller.configure_calls == [("spotify_browser", "")]
     finally:
+        widget.cleanup()
         widget.deleteLater()
 
 
-def test_spotify_browser_runtime_source_enables_and_retargets_exact_host(qt_app, monkeypatch):
-    widget = SpotifyVolumeWidget(provider="spotify_browser")
-    calls = []
+def test_spotify_browser_runtime_source_enables_and_retargets_exact_host(qt_app):
+    widget, controller = _make_widget(provider="spotify_browser")
     try:
-        monkeypatch.setattr(
-            widget._controller,
-            "configure_volume_target",
-            lambda provider, source_app_user_model_id="": calls.append(
-                (provider, source_app_user_model_id)
-            )
-            or True,
-        )
+        controller.configure_calls.clear()
 
         assert widget.set_runtime_volume_source("spotify_browser", "firefox.exe") is True
         assert widget._provider_volume_supported is True  # type: ignore[attr-defined]
@@ -120,22 +135,18 @@ def test_spotify_browser_runtime_source_enables_and_retargets_exact_host(qt_app,
 
         assert widget.set_runtime_volume_source("spotify_browser", "chrome") is True
         assert widget._browser_volume_process == "chrome.exe"  # type: ignore[attr-defined]
-        assert calls == [
+        assert controller.configure_calls == [
             ("spotify_browser", "firefox.exe"),
             ("spotify_browser", "chrome"),
         ]
     finally:
+        widget.cleanup()
         widget.deleteLater()
 
 
-def test_spotify_browser_unknown_source_clears_prior_runtime_target(qt_app, monkeypatch):
-    widget = SpotifyVolumeWidget(provider="spotify_browser")
+def test_spotify_browser_unknown_source_clears_prior_runtime_target(qt_app):
+    widget, _controller = _make_widget(provider="spotify_browser")
     try:
-        monkeypatch.setattr(
-            widget._controller,
-            "configure_volume_target",
-            lambda _provider, source_app_user_model_id="": bool(source_app_user_model_id),
-        )
         assert widget.set_runtime_volume_source("spotify_browser", "firefox.exe") is True
 
         assert widget.set_runtime_volume_source("spotify_browser", "myfirefox.exe") is True
@@ -144,6 +155,7 @@ def test_spotify_browser_unknown_source_clears_prior_runtime_target(qt_app, monk
         assert widget._browser_volume_process is None  # type: ignore[attr-defined]
         assert widget.isVisible() is False
     finally:
+        widget.cleanup()
         widget.deleteLater()
 
 

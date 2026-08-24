@@ -778,7 +778,9 @@ class SpotifyVolumeFactory(WidgetFactory):
         
         try:
             # Create widget
-            widget = SpotifyVolumeWidget(parent=parent)
+            # Generic production factory callers must not create a second
+            # QWidget-owned controller; WidgetRuntimeManager injects the owner.
+            widget = SpotifyVolumeWidget(parent=parent, build_default_runtime=False)
             
             # Configure colors
             fill_color = config.get("fill_color", "#1DB954")
