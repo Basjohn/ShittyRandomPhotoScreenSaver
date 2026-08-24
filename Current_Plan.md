@@ -7,8 +7,8 @@ Last updated: 2026-08-24
 Latest pushed/self-audited implementation basis:
 
 ```text
-4f7dc8695c0f5096512f8fd421abc0c51faa2b6d
-Phase E1 slice 7 — shared Gmail runtime/model/action ownership — self-audited GREEN; reused-agent reviews GREEN
+216c7da597df0fa1b8aeb132b806441b424168e2
+Phase E1 slice 8 — shared Media volume and system-mute accessory ownership — self-audited GREEN; reused-agent reviews GREEN
 ```
 
 Independent review basis:
@@ -628,11 +628,8 @@ Focused Abandonment/Steam/factory/setup/runtime-owner/lifecycle gate: `426 passe
 fresh-process registry and deactivated-family import dormancy, structural old-owner search and
 `git diff --check` clean. Exact-diff self-audit and reused-agent repeated-setup audit were GREEN.
 
-### E1 remaining after Gmail slice 7
+### E1 remaining after Media accessory slice 8
 
-- classify and extract the still-real Media accessory ownership: app-volume controller/read/write/
-  debounce state and system-mute polling/toggle state must not remain QWidget-owned at E1 closure, but
-  must stay separate from the landed primary Media owner rather than turning it into a god service;
 - keep Steam Progress and Friend Pulse as E1 no-ops unless current source later gains a real runtime
   owner;
 - close fresh-process import dormancy: catalogued-but-deactivated capability resolves no unnecessary
@@ -1163,56 +1160,53 @@ passed, 159 skipped, 121 failed, 1 error`; those unrelated legacy/Quick/environm
 no Gmail failure and were not repaired inside this landed slice. Exact-diff self-audit and both
 reused-agent reviews were GREEN.
 
-### E1 slice 8 — Media volume and mute accessory ownership — IMPLEMENTATION ACTIVE
+### E1 slice 8 — Media volume and mute accessory ownership — CLOSED / SELF-AUDITED GREEN
 
-Exact current source proves two smaller Media-adjacent owners remain outside the landed primary Media
-runtime. Each visible `SpotifyVolumeWidget` constructs another app-volume controller and owns target,
-read/write/debounce and cross-display mirroring state. Each visible `MuteButtonWidget` owns another
-30-second system-mute poll/toggle state machine. Monitor `ALL` therefore duplicates genuinely shared
-Core Audio work.
-
-Accepted destination:
+Pushed checkpoints:
 
 ```text
-per-display WidgetRuntimeManager
-    -> one app-volume lease
-           -> one runtime-generation shared app-volume owner
-                  -> controller + accepted provider/process target
-                  -> one read/write/debounce/generation authority
-                  -> coherent accepted/optimistic volume state
-    -> one system-mute lease
-           -> one runtime-generation shared mute owner
-                  -> one availability/state/poll/toggle authority
-    -> temporary QWidget presenters
-           -> anchor/visibility/secondary fade and CUSTOM geometry
-           -> drag capture, local click feedback, QPainter/QPixmap/style pixels
+55bc73b0 — shared Media app-volume runtime owner
+216c7da5 — shared system-mute runtime owner
 ```
+
+The completed checklist is pruned. Per-display app-volume leases now join one runtime-generation owner
+for controller/accepted-target lifetime, read/write generations, optimistic state and 80 ms write
+coalescing. Separate per-display system-mute leases join one runtime-generation UI-thread owner for
+endpoint availability, accepted mute state, one 30-second poll chain and semantic mute/system-volume
+actions. These owners remain separate from each other and from the primary `MediaRuntimeService`.
+
+`SpotifyVolumeWidget` and `MuteButtonWidget` retain only anchor/visibility/fade/CUSTOM geometry,
+drag/input feedback and QPainter/QPixmap/style presentation. Production suppresses isolated defaults,
+injects before activation, validates active reuse and fails closed on missing/stale services; standalone
+construction retains isolated compatibility. First/final display accounting, target/owner/runtime
+generations and authoritative cross-display hotkey routing prevent duplicate work and stale callbacks.
+No controller, endpoint, poll chain, thread or scheduler is duplicated per display.
+
+Focused volume checkpoint gate: `178 passed`. Final combined Media accessory/provider/setup/runtime
+manager gate: `207 passed`, plus focused Ruff, `py_compile`, fresh-process registry probes, structural
+owner searches and `git diff --check`. Exact-diff self-audit and reused-agent reviews were GREEN after
+correcting queued-write fencing and stale-local/live-remote system-audio routing.
+
+### E1 slice 9 — fresh-process/deactivated-family import dormancy — IMPLEMENTATION ACTIVE
+
+Exact current source still has type-annotation-only eager widget-family imports in the legacy host path.
+Those imports can resolve Media and other heavy implementation modules before family admission even
+though registry service builders themselves are lazy. Close only that loading boundary before the
+display-runtime owner hoist.
 
 Live checklist:
 
-- [ ] extract two narrow presentation-neutral accessory owners/lease types; keep them separate from the
-  primary `MediaRuntimeService` and from each other where controller/device cardinality differs;
-- [ ] suppress controller/poll ownership in production presenters before required injection, preserve
-  direct-widget/test compatibility with isolated owners, and fail closed on stale/missing service
-  wiring without breaking the Media/Visualizer setup order;
-- [ ] move app-volume controller lifetime, accepted browser/process target, read/write generations,
-  optimistic shared level, write coalescing/debounce and cross-display state broadcast out of QWidget;
-- [ ] move system-mute availability/state, one 30-second poll and semantic toggle result out of QWidget;
-  preserve the legal Core Audio/UI-thread constraint rather than inventing another worker/scheduler;
-- [ ] keep anchor visibility, coordinated secondary fade, CUSTOM sizing/position, drag ownership,
-  feedback animation and all QPainter/QPixmap/style concerns in current presenters;
-- [ ] preserve provider switching, exact accepted browser-host targeting, pending-write invalidation,
-  wheel/keyboard/drag behavior, `--noupdates` semantics where applicable, first/last display lifetime
-  and active presenter/service reuse; do not disturb Visualizer/E2.7 contracts;
-- [ ] prove `N -> 1` controller/read/write/debounce and mute-poll cardinality, remaining-display
-  survival, stale callback/target/retirement fencing, standalone isolation, deactivated Media dormancy,
-  fail-closed production setup and no synchronous production fallback;
-- [ ] run focused volume/mute/Media/provider/setup/runtime-manager/lifecycle/destruction gates, Ruff,
-  `py_compile`, fresh-process probes, structural old-owner searches and `git diff --check`; self-audit
-  the exact diff and commit/push coherent checkpoints.
+- [ ] inspect every eager family import in `rendering/display_widget.py` and `rendering/widget_manager.py`;
+  move only verified annotation-only names behind `TYPE_CHECKING` or the existing lazy creation seam;
+- [ ] preserve genuine runtime class checks/factories and standalone compatibility; do not replace real
+  dependencies with broad exception fallbacks or a second registry;
+- [ ] add a fresh-process production-shaped deactivated-Media setup oracle forbidding Media widget,
+  controller, volume and system-mute implementation modules, plus focused host-import probes for any
+  other family names moved;
+- [ ] run focused setup/factory/runtime-manager/Media/Visualizer gates, Ruff, `py_compile`, structural
+  import searches and `git diff --check`; self-audit and commit/push this bounded checkpoint.
 
-Non-goals: primary Media owner redesign, generic Media god service, Core Audio provider rewrite,
-Visualizer work, Quick pixels, manager hoist, E3/E4 or unrelated cleanup.
+Non-goals: provider/cache rewrite, widget behavior changes, manager hoist, Quick pixels or E3/E4.
 
 After E1 completes across bounded owner slices:
 

@@ -1,6 +1,6 @@
 # 04 — Runtime Widgets, Retained Quick Presentation, Shadows and Full Customization
 
-Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — shared Media GREEN at `4680130b`; shared Gmail GREEN at `4f7dc869`; volume/mute accessories active**
+Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — shared Media/Gmail and separate app-volume/system-mute owners GREEN; import dormancy active**
 Last updated: 2026-08-24
 
 Cross-links:
@@ -322,8 +322,8 @@ Friend Pulse remain provider/task/timer-inert and unregistered.
 
 The bounded Abandonment artwork projection and Weather compatibility-proxy corrections are GREEN at
 `9ab4f47e`; shared Media ownership is GREEN at `4680130b`; shared Gmail ownership is GREEN at
-`4f7dc869`. Residual Media volume/mute accessories and production import dormancy require bounded
-closure checkpoints before a safe display-runtime owner hoist.
+`4f7dc869`; separate shared app-volume/system-mute owners are GREEN at `55bc73b0` / `216c7da5`.
+Production import dormancy remains the bounded checkpoint before a safe display-runtime owner hoist.
 
 ### 6.2 Per-display Quick widget presentation host
 
@@ -467,7 +467,8 @@ Keep GSMTC/provider/control command logic in Python.
 
 The current shared owner publishes one coherent runtime revision to per-display leases. Source artwork
 is decoded once into `QImage` plus stable identity; current and future presenters own their own
-logical/DPR texture projection. Volume/mute remain a separate residual E1 accessory seam.
+logical/DPR texture projection. App-volume and system-mute remain separate narrow shared owners rather
+than presentation state being folded into a generic Media god service.
 
 ### Reddit / Gmail / Steam
 

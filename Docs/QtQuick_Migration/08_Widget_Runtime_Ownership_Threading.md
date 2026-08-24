@@ -597,8 +597,10 @@ second decode/fetch path.
 Media's primary controller/runtime seam is landed at `4680130b`: per-display leases join one
 runtime-generation owner for controller/provider target, polling/query/cache/retention, playback
 generations/optimistic confirmation and source-resolution artwork decode. `MediaWidget` retains
-per-display QPixmap/DPR/layout/fade/input projection. App-volume and system-mute accessories remain a
-separate closure seam; do not fold them into a generic Media god service.
+per-display QPixmap/DPR/layout/fade/input projection. Separate app-volume (`55bc73b0`) and system-mute
+(`216c7da5`) leases now join their own runtime-generation owners for accepted target/read-write/debounce
+and UI-thread endpoint/state/poll/action authority respectively. Preserve those cardinalities; do not
+fold either accessory into a generic Media god service.
 
 ### Imgur
 
