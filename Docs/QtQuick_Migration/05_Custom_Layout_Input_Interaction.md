@@ -3,6 +3,8 @@
 Status: **Phase-G technical decomposition; Clock multi-geometry contract predeclared by Phase F**  
 Last updated: 2026-08-24
 
+Phase E is independently GREEN/CLOSED through `3a562632`; this remains the waiting Phase-G authority.
+
 Cross-links:
 
 - `Current_Plan.md`

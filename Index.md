@@ -30,8 +30,7 @@ routes recurring runtime/physical harnesses.
 
 ## Current migration status
 
-Current normal implementation work is **Phase E4 — global eight-direction shadow authority + retained
-shadow normalization**.
+Current normal implementation work is **Phase F0 — remove deprecated Imgur before retained family ports**.
 
 - Phase C transition implementation: closed; remaining physical acceptance explicit.
 - Phase D visualizer implementation: closed; remaining physical acceptance explicit.
@@ -39,8 +38,8 @@ shadow normalization**.
 - E2.7 Visualizer CUSTOM failover/reclaim: independently GREEN.
 - E1 presentation-neutral runtime/model/provider ownership: independently GREEN / closed @ `4466c306`.
 - E3 retained ordinary-widget host + shell primitives: independently GREEN / closed @ `1f25a791`.
-- **E4 is active next.**
-- Phase F waits for E4 + Phase-E closure review.
+- **E4 is independently GREEN / CLOSED at `3a562632`; Phase E is CLOSED.**
+- **Phase F is active: F0 Imgur removal is next; F1 Clock follows.**
 
 ## Start here
 
@@ -98,7 +97,7 @@ per-display retained ordinaryWidgetHost
 OverlayWidget + OverlayCard + family content
 ```
 
-E3 proved this substrate. E4 now supplies one canonical shadow direction and normalizes the retained
+E3 proved this substrate. E4 supplied one canonical shadow direction and normalized the retained
 shadow primitives. Phase F then ports families.
 
 ## Shadow direction
@@ -117,6 +116,10 @@ Card `RectangularShadow` is cached by default for static ordinary cards.
 
 Current legacy ordinary text shadows are offset duplicate-text passes, not blurred effects. Do not
 canonize MultiEffect text blur without an actual authored requirement.
+
+Quick family ports must also discard QWidget-era effect-carrier/dummy and staged shadow-fade
+workarounds. Whole-widget fade is the outer retained root opacity; card/text shadow alpha remains style,
+not another fade timeline. Intermediate Items need a real composition responsibility.
 
 ## Clock migration direction
 

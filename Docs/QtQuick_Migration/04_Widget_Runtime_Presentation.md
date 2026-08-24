@@ -1,8 +1,8 @@
 # 04 — Runtime Widgets, Retained Quick Presentation, Shadows and Full Customization
 
-Status: **Phase-E/F technical decomposition; E1/E2/E2.7/E3 CLOSED; E4 ACTIVE NEXT**  
+Status: **Phase-E CLOSED through independently GREEN E4; Phase-F technical authority / F0 active next**  
 Last updated: 2026-08-24  
-Reviewed source basis: `1f25a791a2af822aff707f1e64ff836d0fc6f070`
+Reviewed source basis: `3a5626325891ec10343d53b0e88d5fd3c4b6469d` — E4 independently GREEN
 
 Cross-links:
 
@@ -265,7 +265,7 @@ ShadowedText
 
 No MultiEffect/layer capture/blur is required for current ordinary text parity.
 
-E4 should remove from `ShadowedText.qml`:
+E4 removed from `ShadowedText.qml`:
 
 ```text
 import QtQuick.Effects
@@ -274,14 +274,15 @@ layer.enabled
 layer.effect: MultiEffect
 ```
 
-unless exact current source changes before implementation and demonstrates a surviving authored need.
+The landed primitive is the retained duplicate-glyph offset pass. A later feature may reintroduce an
+effect only when exact current product requirements deliberately earn it.
 
 Do not interpret this as a ban on all future MultiEffect use. It is a requirement not to pay for or
 canonize a feature SRPSS does not currently author.
 
 ---
 
-## 9. E4 — one global eight-direction shadow authority
+## 9. E4 — one global eight-direction shadow authority — LANDED / CLOSED
 
 Canonical token:
 
@@ -398,22 +399,42 @@ A one-second Clock ticker update is authored product state, not a license for pe
 
 ---
 
-## 12. Fade
+## 12. Fade and effect-carrier retirement
 
 One authored whole-widget fade maps to the retained outer root opacity.
+
+The current QWidget path needs `ShadowFadeProfile`/`QGraphicsOpacityEffect` staging and related shadow
+attachment workarounds because QWidget graphics effects compete for one effect slot. That is
+**CURRENT-LEGACY**, not a parity requirement.
+
+Do not port a dummy/effect-carrier hierarchy or a separate shadow fade into Quick.
+
+Destination:
+
+```text
+OverlayWidget.fadeOpacity
+    -> root Item.opacity
+    -> complete retained subtree composites together
+       (card + cached card shadow + text-shadow glyphs + text/artwork/controls)
+```
 
 Do not animate:
 
 - card blur;
 - card spread;
 - shadow direction;
-- text-shadow offsets;
+- card-shadow alpha merely to imitate root fade;
+- text-shadow offsets/alpha merely to imitate root fade;
 - provider/model state
 
-to implement fade.
+to implement whole-widget fade.
 
-The fade must include the complete widget composition coherently: card, border, shadows, text, artwork,
-controls.
+Independent card/text/background/border alpha settings remain authored style controls. They are not
+additional fade stages.
+
+An intermediate Quick `Item` is allowed only when it owns a genuine layout/transform/clip/z/input/
+lifecycle role. Do not create one solely to carry another effect or to reproduce the old
+one-graphics-effect-per-QWidget limitation.
 
 ---
 
@@ -432,6 +453,8 @@ Prove as applicable:
 - semantic actions target the correct current runtime owner;
 - geometry/stacking/monitor routing are authoritative outside family QML;
 - shared card/text-shadow semantics are preserved;
+- no QWidget-era dummy/effect carrier or staged shadow fade was reproduced;
+- one whole-widget fade is the retained root opacity;
 - display recreation rebinds current state;
 - static presentation does not create recurring work;
 - visual parity/improvements are covered by deterministic or eyes-on evidence;
