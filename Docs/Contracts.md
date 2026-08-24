@@ -48,7 +48,7 @@ retirement/rehome ledger.
 | Custom GL scene pixels | inline `QQuickItem -> QSGRenderNode -> OpenGL` | `Docs/Compositor_Architecture.md` |
 | Settings/config UI | existing QWidget/settings owners | `Spec.md` |
 | Capability activation | canonical settings + cheap presentation-neutral catalogs; landed E2 authority | `Docs/QtQuick_Migration/07_Settings_Capability_Activation.md` |
-| Widget data/provider lifecycle | per-instance services or family-shared leases through `WidgetRuntimeManager` according to real cardinality; shared Media landed, Gmail orchestration active; **E1 active** | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`, `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md` |
+| Widget data/provider lifecycle | per-instance services or family-shared leases through `WidgetRuntimeManager` according to real cardinality; shared Media and Gmail landed, volume/mute accessories active; **E1 active** | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`, `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md` |
 | Runtime widget pixels | destination: display retained Quick scene | `Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md` |
 | General async work | `ThreadManager` | `Docs/Guardrails/Runtime_Efficiency.md` |
 | Resource accounting | `ResourceManager`; accounting only, never deletion owner | `Docs/Guardrails.md` |

@@ -7,8 +7,8 @@ Last updated: 2026-08-24
 Latest pushed/self-audited implementation basis:
 
 ```text
-4680130b8371adf74452eb76f64318e8fc6571a9
-Phase E1 slice 6 — shared Media runtime ownership — self-audited GREEN; reused-agent reviews GREEN
+4f7dc8695c0f5096512f8fd421abc0c51faa2b6d
+Phase E1 slice 7 — shared Gmail runtime/model/action ownership — self-audited GREEN; reused-agent reviews GREEN
 ```
 
 Independent review basis:
@@ -628,10 +628,8 @@ Focused Abandonment/Steam/factory/setup/runtime-owner/lifecycle gate: `426 passe
 fresh-process registry and deactivated-family import dormancy, structural old-owner search and
 `git diff --check` clean. Exact-diff self-audit and reused-agent repeated-setup audit were GREEN.
 
-### E1 remaining after Media slice 6
+### E1 remaining after Gmail slice 7
 
-- complete Gmail's now-proven shared orchestration/model/action seam without wrapping or replacing the
-  existing neutral `GmailBackend` singleton;
 - classify and extract the still-real Media accessory ownership: app-volume controller/read/write/
   debounce state and system-mute polling/toggle state must not remain QWidget-owned at E1 closure, but
   must stay separate from the landed primary Media owner rather than turning it into a god service;
@@ -1139,58 +1137,82 @@ runtime-generation regressions.
 The deselected Visualizer synthetic Bubble harness failure reproduces before this slice and is recorded
 in `Future_Cleanup.md`; it is not being repaired inside the landed Media owner checkpoint.
 
-### E1 slice 7 — Gmail shared runtime/model/action ownership — IMPLEMENTATION ACTIVE
+### E1 slice 7 — Gmail shared runtime/model/action ownership — CLOSED / SELF-AUDITED GREEN
 
-Exact-source review proves Gmail is a real remaining E1 seam. `GmailBackend.instance()` is already the
-correct process-scoped backend/client/bootstrap authority and must remain unchanged. The problem is that
-each visible `GmailWidget` independently owns another poll/fetch/cache-startup/cache-write/model/
-notification/action lifecycle over that singleton. With monitor `ALL`, `N` presenters therefore create
-`N` equivalent data cadences and can make duplicate new-mail sound decisions.
+Pushed checkpoint: `4f7dc8695c0f5096512f8fd421abc0c51faa2b6d`.
+
+The completed checklist is pruned. One `GmailRuntimeService` lease per participating display now joins
+one runtime-generation shared owner over the unchanged process-scoped `GmailBackend.instance()`.
+That owner coordinates one backend bootstrap, cache-first startup decision, poll/fetch cadence,
+accepted raw-email/unread/error/refresh stream, detached atomic cache persistence, new-mail sound
+decision and serialized semantic action/post-action refresh path. It adds no backend, thread, scheduler
+or cache format.
+
+`GmailWidget` is now the temporary QWidget projection: it retains row grouping/formatting/capacity,
+transition deferral, spinner/fade, geometry, QPixmap/QPainter caches, hit regions, menus and input.
+Production suppresses the isolated convenience owner and fails closed on missing/stale service wiring;
+direct construction retains standalone compatibility. First/last lease accounting preserves a
+remaining display and retires the family owner exactly once. Runtime/startup/fetch/action generations
+fence late work, custom filters survive presenter setting sync, and UI-dispatch decline cannot wedge
+the serialized action slot.
+
+All Gmail-focused files: `202 passed, 1 skipped`; owner/lifecycle/manager gate: `190 passed`; cross-family
+registry gate: `50 passed`. Focused Ruff, `py_compile`, fresh-process registry dormancy, structural
+owner searches and `git diff --check` were clean. The non-green repository-wide run reached `5362
+passed, 159 skipped, 121 failed, 1 error`; those unrelated legacy/Quick/environment failures contained
+no Gmail failure and were not repaired inside this landed slice. Exact-diff self-audit and both
+reused-agent reviews were GREEN.
+
+### E1 slice 8 — Media volume and mute accessory ownership — IMPLEMENTATION ACTIVE
+
+Exact current source proves two smaller Media-adjacent owners remain outside the landed primary Media
+runtime. Each visible `SpotifyVolumeWidget` constructs another app-volume controller and owns target,
+read/write/debounce and cross-display mirroring state. Each visible `MuteButtonWidget` owns another
+30-second system-mute poll/toggle state machine. Monitor `ALL` therefore duplicates genuinely shared
+Core Audio work.
 
 Accepted destination:
 
 ```text
 per-display WidgetRuntimeManager
-    -> one presentation-neutral Gmail consumer lease/projection
-           -> one runtime-generation-scoped shared Gmail family owner
-                  -> existing GmailBackend singleton (unchanged)
-                  -> one cache-first startup + poll/fetch cadence
-                  -> one accepted raw-email/unread/error/refresh snapshot
-                  -> fetch/startup/action/runtime generations
-                  -> one new-mail seen/notification decision
-                  -> serialized backend actions + post-action refresh
-    -> GmailWidget (temporary QWidget presenter)
-           -> DisplayRow grouping/text formatting and visible capacity
-           -> transition-safe snapshot deferral + spinner/fade
-           -> QPixmap/QPainter/layout/hit regions/menu/input
+    -> one app-volume lease
+           -> one runtime-generation shared app-volume owner
+                  -> controller + accepted provider/process target
+                  -> one read/write/debounce/generation authority
+                  -> coherent accepted/optimistic volume state
+    -> one system-mute lease
+           -> one runtime-generation shared mute owner
+                  -> one availability/state/poll/toggle authority
+    -> temporary QWidget presenters
+           -> anchor/visibility/secondary fade and CUSTOM geometry
+           -> drag capture, local click feedback, QPainter/QPixmap/style pixels
 ```
 
 Live checklist:
 
-- [ ] add a Gmail-specific shared owner plus one per-display neutral lease through the existing static
-  runtime-service registry; do not wrap, replace, shut down or duplicate `GmailBackend`;
-- [ ] make production `GmailWidgetFactory` suppress standalone runtime ownership and fail closed on
-  build/injection/reuse mismatch while preserving direct `GmailWidget(...)` compatibility through an
-  isolated owner;
-- [ ] move backend-bootstrap coordination, cache-first startup decision, one recurring refresh timer,
-  fetch guard/client acquisition, accepted raw-email/unread/error/refresh state, cache persistence
-  submission, generations, new-mail detection/sound and backend action dispatch/post-action refresh out
-  of the QWidget; use only the existing `ThreadManager` and existing atomic Gmail cache helpers;
-- [ ] keep presentation grouping/formatting/capacity, transition deferral, spinner/fade, geometry,
-  QPixmap/QPainter caches, hit testing, menu construction and browser deep links in the presenter;
-- [ ] preserve `--noupdates`, manual refresh/auth flow, empty/error visible fallback, startup cache age
-  policy, detached accepted cache writes, IMAP-vs-OAuth action visibility/IDs and current Settings
-  behavior; tag/fence every detached fetch/startup/action callback without retaining a QWidget;
-- [ ] prove `N -> 1` poll/fetch/startup/cache-write/new-mail cardinality, first/last-consumer lifetime,
-  remaining-display survival, active reuse, isolated standalone behavior, stale result rejection,
-  deactivated-family import/construction dormancy and no duplicate notification/action effects;
-- [ ] run focused Gmail/backend/cache/retiring-runtime plus owner/factory/setup/lifecycle/destruction
-  gates, `py_compile`, fresh-process probes, structural old-owner searches and `git diff --check`;
-  self-audit the exact diff for feature loss/duplicate work, correct every finding, then commit/push the
-  coherent Gmail checkpoint.
+- [ ] extract two narrow presentation-neutral accessory owners/lease types; keep them separate from the
+  primary `MediaRuntimeService` and from each other where controller/device cardinality differs;
+- [ ] suppress controller/poll ownership in production presenters before required injection, preserve
+  direct-widget/test compatibility with isolated owners, and fail closed on stale/missing service
+  wiring without breaking the Media/Visualizer setup order;
+- [ ] move app-volume controller lifetime, accepted browser/process target, read/write generations,
+  optimistic shared level, write coalescing/debounce and cross-display state broadcast out of QWidget;
+- [ ] move system-mute availability/state, one 30-second poll and semantic toggle result out of QWidget;
+  preserve the legal Core Audio/UI-thread constraint rather than inventing another worker/scheduler;
+- [ ] keep anchor visibility, coordinated secondary fade, CUSTOM sizing/position, drag ownership,
+  feedback animation and all QPainter/QPixmap/style concerns in current presenters;
+- [ ] preserve provider switching, exact accepted browser-host targeting, pending-write invalidation,
+  wheel/keyboard/drag behavior, `--noupdates` semantics where applicable, first/last display lifetime
+  and active presenter/service reuse; do not disturb Visualizer/E2.7 contracts;
+- [ ] prove `N -> 1` controller/read/write/debounce and mute-poll cardinality, remaining-display
+  survival, stale callback/target/retirement fencing, standalone isolation, deactivated Media dormancy,
+  fail-closed production setup and no synchronous production fallback;
+- [ ] run focused volume/mute/Media/provider/setup/runtime-manager/lifecycle/destruction gates, Ruff,
+  `py_compile`, fresh-process probes, structural old-owner searches and `git diff --check`; self-audit
+  the exact diff and commit/push coherent checkpoints.
 
-Non-goals: Gmail backend/auth/cache format rewrite, generic mail service, Quick pixels, Gmail UI/style
-redesign, Media accessory migration, manager hoist, E3/E4 or unrelated cleanup.
+Non-goals: primary Media owner redesign, generic Media god service, Core Audio provider rewrite,
+Visualizer work, Quick pixels, manager hoist, E3/E4 or unrelated cleanup.
 
 After E1 completes across bounded owner slices:
 

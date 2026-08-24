@@ -575,11 +575,11 @@ registry injection, and detached work reuses `ThreadManager` rather than gaining
 
 ### Gmail
 
-`GmailBackend.instance()` is already the correct neutral process backend. Exact-source closure review
-proved a separate real seam: every current presenter owns another cache-first startup, poll/fetch,
-accepted email/error state, cache-write submission, new-mail decision and action/post-action refresh.
-The active E1 slice therefore adds one runtime-generation shared Gmail owner with per-display leases;
-it must not wrap, replace or shut down the existing backend singleton.
+`GmailBackend.instance()` remains the correct neutral process backend. E1 slice 7 is landed at
+`4f7dc869`: one runtime-generation shared Gmail owner with per-display leases now coordinates the
+cache-first startup, poll/fetch, accepted email/error state, cache-write submission, new-mail decision
+and serialized action/post-action refresh. It does not wrap, replace or shut down the backend
+singleton; current presenters retain only grouping/layout/fade/input/pixels.
 
 ### Steam
 

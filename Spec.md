@@ -109,6 +109,8 @@ If native code is ever earned, preserve the one-`QQuickWindow`-per-display prese
   cardinality still follows the actual family semantics rather than presentation count;
 - runtime-generation shared family state uses explicit consumer leases: the landed Media owner keeps
   one controller/poll/query/accepted-artwork authority while each display retains only its presenter;
+- the landed Gmail owner likewise coordinates one backend-bootstrap/cache/poll/model/notification/
+  action stream over the unchanged process singleton while each display retains row/pixel projection;
 - Settings/Edit/topology recreation use ordered generations/lifetimes;
 - visualizer audio analysis, logical simulation, render-state publication, shell policy, geometry,
   content clipping, and physical presentation remain separate concerns.
@@ -377,7 +379,7 @@ activation boundary.
 
 An already-neutral process backend is not wrapped merely for naming symmetry. A family runtime owner
 may instead coordinate one shared cadence/model/action stream over it and expose per-display leases;
-Gmail's existing backend singleton and residual QWidget orchestration are the current example.
+the landed Gmail owner follows this contract over its unchanged backend singleton.
 
 For dynamic artwork, a presentation-neutral runtime/preparation owner may fetch/decode and retain the
 source-resolution image plus stable identity. Logical-size/DPR-specific scaling, cropping and prepared-
