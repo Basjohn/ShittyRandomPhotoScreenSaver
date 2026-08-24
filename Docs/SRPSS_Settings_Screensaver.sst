@@ -905,6 +905,7 @@
           0,
           255
         ],
+        "direction": "SE",
         "enabled": true,
         "frame_opacity": 0.77,
         "header_enabled": true,

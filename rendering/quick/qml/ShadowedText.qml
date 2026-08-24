@@ -1,11 +1,13 @@
 import QtQuick
-import QtQuick.Effects
 
-// Presentation-only text with authored text-shadow semantics. The shadow is a
-// retained duplicate glyph layer at a signed offset; blur is applied through a
-// single bounded effect that stays dormant (layer disabled) until a positive
-// blur is authored, so static text performs no per-frame effect work. This is a
-// shared E3 primitive and exposes only explicit presentation properties.
+// Presentation-only text with the surviving SRPSS text-shadow semantic: a
+// retained duplicate glyph drawn behind the main text at a signed offset, with
+// its own color/alpha. Current text-shadow source authority exposes no authored
+// ordinary-text blur, so there is deliberately no MultiEffect, no layer capture
+// and no shadowBlur property here — a static label performs no per-frame work.
+// The signed offset is resolved from the global shadow direction in Python
+// before it reaches this component. This is a shared E4 primitive and exposes
+// only explicit presentation properties.
 Item {
     id: shadowedText
     objectName: "shadowedText"
@@ -22,7 +24,6 @@ Item {
     // Signed offsets: negative values move the shadow up/left and must not clip.
     property real shadowOffsetX: 0.0
     property real shadowOffsetY: 2.0
-    property real shadowBlur: 0.0
 
     clip: false
     implicitWidth: mainText.implicitWidth
@@ -43,12 +44,6 @@ Item {
         verticalAlignment: shadowedText.verticalAlignment
         wrapMode: shadowedText.wrap ? Text.WordWrap : Text.NoWrap
         z: 0
-        layer.enabled: shadowedText.shadowEnabled && shadowedText.shadowBlur > 0
-        layer.effect: MultiEffect {
-            blurEnabled: true
-            blur: 1.0
-            blurMax: Math.max(1, Math.ceil(shadowedText.shadowBlur))
-        }
     }
 
     Text {

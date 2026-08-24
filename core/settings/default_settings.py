@@ -839,6 +839,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 4
                          'subreddit': 'Games'},
              'shadows': {'blur_radius': 18,
                          'color': [0, 0, 0, 255],
+                         'direction': 'SE',
                          'enabled': True,
                          'frame_opacity': 0.77,
                          'header_enabled': True,

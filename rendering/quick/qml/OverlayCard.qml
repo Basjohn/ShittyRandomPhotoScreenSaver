@@ -44,7 +44,10 @@ Item {
         radius: card.cornerRadius
         spread: card.shadowSpread
         offset: Qt.vector2d(card.shadowOffsetX, card.shadowOffsetY)
-        cached: false
+        // SRPSS card shadows are overwhelmingly static: cache by default so a
+        // whole-widget fade (root opacity) never rebuilds blur/spread, while a
+        // style/geometry/direction change still invalidates the cache naturally.
+        cached: true
         z: -1
     }
 

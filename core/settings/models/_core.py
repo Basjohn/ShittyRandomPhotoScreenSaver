@@ -193,7 +193,10 @@ class ShadowSettings:
     blur_radius: int = 10
     text_opacity: float = 0.6
     frame_opacity: float = 0.4
-    
+    # Canonical eight-direction shadow orientation (Phase E4). Orientation only;
+    # per-class magnitudes stay in their own tuning. Default SE.
+    direction: str = "SE"
+
     @classmethod
     def from_settings(cls, settings: "SettingsManager") -> "ShadowSettings":
         """Load shadow settings from SettingsManager."""
@@ -206,8 +209,9 @@ class ShadowSettings:
             blur_radius=settings.get("widgets.shadows.blur_radius", 10),
             text_opacity=settings.get("widgets.shadows.text_opacity", 0.6),
             frame_opacity=settings.get("widgets.shadows.frame_opacity", 0.4),
+            direction=settings.get("widgets.shadows.direction", "SE"),
         )
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for saving."""
         return {
@@ -219,6 +223,7 @@ class ShadowSettings:
             "widgets.shadows.blur_radius": self.blur_radius,
             "widgets.shadows.text_opacity": self.text_opacity,
             "widgets.shadows.frame_opacity": self.frame_opacity,
+            "widgets.shadows.direction": self.direction,
         }
 
 
