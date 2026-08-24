@@ -47,9 +47,9 @@ Current normal implementation work is **Phase E — widget presentation + capabi
 - Phase-E activation foundation and E2 `SETUP`/live lazy navigation are landed.
 - E2.7 Visualizer CUSTOM failover/reclaim implementation is independently audited GREEN; physical
   dual-display wake/late-return remains deferred acceptance only.
-- **E1 presentation-neutral runtime/model/provider ownership is ACTIVE.** Steam Abandonment slice 4
-  is self-audited GREEN, with its repeated-setup/reuse seam separately reviewed GREEN, at `86872ab9`;
-  Achievement Pulse is the next bounded residual Steam owner.
+- **E1 presentation-neutral runtime/model/provider ownership is ACTIVE.** Achievement Pulse slice 5 is
+  self-audited GREEN at `51948dc3`; the active bounded checkpoint corrects the Abandonment artwork
+  projection boundary and narrows Weather compatibility proxies before the dedicated Media owner slice.
 - E3 retained Quick primitives and E4 global shadow direction remain after E1 and before Phase F.
 
 ## Start here
@@ -159,7 +159,7 @@ No production runtime switch/fallback between old and Quick is to be introduced.
 | Capability activation | canonical settings + presentation-neutral family/transition catalog/query authority |
 | Providers / service logic | existing/refactored Python owners |
 | Persistence | existing settings/store owners |
-| Widget models/providers | migrated services through presentation-neutral `WidgetRuntimeManager`; Weather/Reddit and per-card/display Steam Abandonment ownership are landed while already-correct shared/family owners remain preserved |
+| Widget models/providers | migrated services through presentation-neutral `WidgetRuntimeManager`; Weather/Reddit and per-card/display Steam Abandonment/Achievement ownership are landed while already-correct shared/family owners remain preserved |
 | Runtime widget pixels | destination: display Quick scene |
 | Thread/task ownership | `ThreadManager` for general async work |
 | Resource accounting | `ResourceManager`; accounting only, never deletion owner |

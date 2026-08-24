@@ -1,6 +1,6 @@
 # 04 — Runtime Widgets, Retained Quick Presentation, Shadows and Full Customization
 
-Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — slices 1–3 GREEN; Steam Abandonment slice 4 self-audited GREEN with reuse check GREEN at `86872ab9`**
+Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — Achievement Pulse slice 5 self-audited GREEN at `51948dc3`; bounded Abandonment/Weather corrections active**
 Last updated: 2026-08-24
 
 Cross-links:
@@ -185,6 +185,11 @@ E1 slice 4 is self-audited **GREEN**, with its repeated-setup/reuse seam separat
 ownership now lives in one neutral `AbandonmentRuntimeService` per card/display while the existing
 process-scoped Steam cache/backend/credential/asset authorities remain unchanged.
 
+E1 slice 5 is self-audited **GREEN** at `51948dc3956bc10549eb3e8440b2c3e25857f952`:
+Achievement Pulse cache/source/manual-refresh/model/artwork ownership now lives in one neutral
+`AchievementPulseRuntimeService` per card/display. It adds no recurring timer and continues to use the
+same process-scoped Steam authorities.
+
 Treat the current host edge as transitional:
 
 ```text
@@ -287,8 +292,28 @@ injects the required registry service before activation and fails closed on buil
 failure. Every detached task/callback is runtime-generation tagged; retirement fences late work and
 stops the sole recurring rotation timer.
 
-Continue bounded real ownership migrations, then prove fresh-process import dormancy and hoist the
-per-display owner out of the legacy `WidgetManager` as the Quick display-runtime boundary lands.
+#### Landed ordinary-family owner seam: Steam Achievement Pulse
+
+Slice 5 keeps Achievement separate from Abandonment and from the process-scoped Steam authorities:
+
+```text
+WidgetRuntimeManager
+    -> AchievementPulseRuntimeService (one per Achievement card/display)
+           -> existing core.steam caches/backend/credential/asset helpers
+           -> cache-first/source/manual-refresh and request-generation ownership
+           -> semantic card model + source-resolution decoded artwork/icon identities
+    -> SteamCardWidget (temporary legacy pixel/transition consumer)
+           -> DPR-specific scaling/cropping caches, QPainter/layout/fade/input/style
+```
+
+The service uses the shared `ThreadManager` and introduces no recurring cadence. Rebinding the current
+or future presenter replays accepted model/images without another source/cache/image fetch. Progress and
+Friend Pulse remain provider/task/timer-inert and unregistered.
+
+Before the dedicated Media owner slice, complete only the bounded Abandonment artwork projection and
+Weather compatibility-proxy corrections admitted by `Current_Plan.md`. Then continue real ownership
+migrations, prove closure dormancy and hoist the per-display owner only when its final display-runtime
+boundary is safe.
 
 ### 6.2 Per-display Quick widget presentation host
 
