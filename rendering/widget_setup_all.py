@@ -213,6 +213,23 @@ def _ensure_thread_manager(mgr: "WidgetManager", widget: QWidget, widget_name: s
         logger.warning("[WIDGET_MANAGER] Failed to inject ThreadManager into %s: %s", widget_name, exc)
 
 
+def _reused_widget_is_active(widget: QWidget) -> bool:
+    """Resolve reused presentation state conservatively for fail-closed setup."""
+
+    getter = getattr(widget, "is_lifecycle_active", None)
+    if not callable(getter):
+        return False
+    try:
+        return bool(getter())
+    except Exception:
+        logger.warning(
+            "[WIDGET_MANAGER] Could not resolve reused widget lifecycle state; "
+            "treating it as active",
+            exc_info=True,
+        )
+        return True
+
+
 def _reuse_existing_secondary(
     mgr: "WidgetManager",
     created: Dict[str, QWidget],
@@ -537,6 +554,7 @@ def _create_factory_widgets(
             mgr.add_expected_overlay(descriptor.settings_key)
 
         widget = _reuse_existing_widget(mgr, created, descriptor.attr_name, descriptor.settings_key)
+        widget_was_reused = widget is not None
         if widget is None:
             factory = mgr._factory_registry.get_factory(descriptor.factory_name)
             if factory:
@@ -562,9 +580,37 @@ def _create_factory_widgets(
             # injection fails, FAIL CLOSED: retire the widget rather than leave it
             # running on a QWidget-owned default provider.
             if runtime_owner.has_runtime_service(descriptor.settings_key):
-                service = runtime_owner.ensure_widget_service(
-                    descriptor.settings_key, widget, widgets_config
+                # Reconciliation may encounter an already-active presentation.
+                # Preserve its existing neutral owner: replacing it here would
+                # inject a stopped service and _start_widgets() would correctly
+                # skip the already-active QWidget, silently ending its cadence.
+                service = (
+                    runtime_owner.get_reusable_widget_service(
+                        descriptor.settings_key,
+                        widget,
+                    )
+                    if widget_was_reused
+                    else None
                 )
+                if (
+                    service is None
+                    and widget_was_reused
+                    and _reused_widget_is_active(widget)
+                ):
+                    logger.error(
+                        "[WIDGET_MANAGER] Active reused widget %s has no required "
+                        "runtime service; failing closed instead of injecting a "
+                        "replacement that cannot cross the activation boundary",
+                        descriptor.settings_key,
+                    )
+                    _fail_closed_runtime_service_widget(
+                        mgr, created, descriptor, widget
+                    )
+                    continue
+                if service is None:
+                    service = runtime_owner.ensure_widget_service(
+                        descriptor.settings_key, widget, widgets_config
+                    )
                 if service is None:
                     logger.error(
                         "[WIDGET_MANAGER] Required runtime service for %s could not be "

@@ -50,12 +50,13 @@ from core.steam.credentials import (
 )
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
 from core.threading.manager import TaskResult
-from widgets.abandonment_issues_widget import (
-    AbandonmentIssuesWidget,
-    _achievement_evidence_requested,
-    _prepare_cover_image,
-)
+from widgets.abandonment_issues_widget import AbandonmentIssuesWidget
 from widgets.base_overlay_widget import OverlayPosition
+from widgets.steam_abandonment_runtime import (
+    achievement_evidence_requested as _achievement_evidence_requested,
+    prepare_abandonment_presentation,
+    prepare_cover_image as _prepare_cover_image,
+)
 from widgets.steam_abandonment_components import (
     ABANDONMENT_ALTERNATE_REDISCOVERY_MESSAGES,
     ABANDONMENT_FIELD_DEFAULTS,
@@ -1136,7 +1137,8 @@ def test_abandonment_preparation_hydrates_one_missing_selected_artwork(
         guilt_desaturater=False,
     )
     try:
-        presentation = widget._prepare_presentation(
+        presentation = prepare_abandonment_presentation(
+            widget._build_runtime_config(),
             _Snapshot(),
             profile_key="profile_fixture",
             allow_asset_network=True,
@@ -1203,7 +1205,8 @@ def test_abandonment_preparation_falls_back_to_wide_artwork_after_portrait_404(
         guilt_desaturater=False,
     )
     try:
-        presentation = widget._prepare_presentation(
+        presentation = prepare_abandonment_presentation(
+            widget._build_runtime_config(),
             _Snapshot(),
             profile_key="profile_fixture",
             allow_asset_network=True,
@@ -1255,7 +1258,8 @@ def test_abandonment_preparation_does_not_retry_transient_artwork_failure(
         guilt_desaturater=False,
     )
     try:
-        presentation = widget._prepare_presentation(
+        presentation = prepare_abandonment_presentation(
+            widget._build_runtime_config(),
             _Snapshot(),
             profile_key="profile_fixture",
             allow_asset_network=True,
@@ -1614,8 +1618,8 @@ def test_abandonment_rotation_defers_transition_collision_through_shared_single_
 
         busy["value"] = False
         monkeypatch.setattr(
-            widget,
-            "_request_cache_only_rotation",
+            widget._runtime_service,
+            "request_cache_rotation",
             lambda: resumed.append(True) or True,
         )
         scheduled[0][1]()
@@ -1647,14 +1651,13 @@ def test_abandonment_automatic_rotation_hydrates_only_when_updates_are_allowed(
     expected_asset_network: bool,
     expected_evidence_calls: int,
 ) -> None:
-    from core import runtime_flags
     from core.steam import abandonment_cache, credentials
 
     class _Metadata:
         profile_cache_key = "profile_fixture"
 
     class _InlineThreadManager:
-        def submit_io_task(self, func, *, task_id, callback):
+        def submit_io_task(self, func, *, task_id, callback, **_kwargs):
             callback(TaskResult(success=True, result=func(), task_id=task_id))
             return task_id
 
@@ -1663,8 +1666,7 @@ def test_abandonment_automatic_rotation_hydrates_only_when_updates_are_allowed(
     preparation_calls: list[dict[str, object]] = []
     evidence_calls: list[dict[str, object]] = []
     monkeypatch.setattr(
-        runtime_flags,
-        "automatic_service_updates_enabled",
+        "widgets.steam_abandonment_runtime.automatic_service_updates_enabled",
         lambda: updates_enabled,
     )
     monkeypatch.setattr(credentials, "read_credential_metadata", lambda: _Metadata())
@@ -1694,12 +1696,17 @@ def test_abandonment_automatic_rotation_hydrates_only_when_updates_are_allowed(
     )
     try:
         widget.set_thread_manager(_InlineThreadManager())
+        service = widget._runtime_service
+        service._running = True
 
         def _prepare(_snapshot, **kwargs):
             preparation_calls.append(kwargs)
             return prepared
 
-        monkeypatch.setattr(widget, "_prepare_presentation", _prepare)
+        monkeypatch.setattr(
+            "widgets.steam_abandonment_runtime.prepare_abandonment_presentation",
+            lambda _config, snapshot, **kwargs: _prepare(snapshot, **kwargs),
+        )
         monkeypatch.setattr(widget, "_apply_prepared_presentation", lambda *_args, **_kwargs: None)
 
         assert widget._request_cache_only_rotation() is True
@@ -1733,7 +1740,7 @@ def test_abandonment_rebuild_arms_persisted_remaining_rotation_delay(
         return handle
 
     monkeypatch.setattr(
-        "widgets.abandonment_issues_widget.create_overlay_timer",
+        "widgets.steam_abandonment_runtime.create_overlay_timer",
         _create,
     )
     widget = AbandonmentIssuesWidget(
@@ -1745,14 +1752,16 @@ def test_abandonment_rebuild_arms_persisted_remaining_rotation_delay(
     )
     rotations: list[bool] = []
     try:
-        widget._abandonment_activation_rotation_due_seconds = 75.0
+        service = widget._runtime_service
+        service._running = True
+        service._activation_rotation_due_seconds = 75.0
         monkeypatch.setattr(
             widget,
             "_request_cache_only_rotation",
             lambda: rotations.append(True) or True,
         )
 
-        widget._start_rotation_timer()
+        service.start_rotation_timer()
         assert created[0][0] == 75_000
         created[0][1]()
 
@@ -1776,9 +1785,16 @@ def test_abandonment_double_click_forces_source_refresh_and_new_draw(
     calls: list[dict[str, object]] = []
     try:
         monkeypatch.setattr(
-            widget,
-            "_refresh_abandonment_cache",
-            lambda **kwargs: calls.append(kwargs) or True,
+            widget._runtime_service,
+            "request_manual_refresh",
+            lambda: calls.append(
+                {
+                    "cache_age_seconds": None,
+                    "force": True,
+                    "force_rotation": True,
+                }
+            )
+            or True,
         )
 
         assert widget.handle_double_click(None) is True
@@ -1825,7 +1841,7 @@ def test_abandonment_widget_applies_cache_before_first_coordinated_fade(
         )
 
     class _InlineThreadManager:
-        def submit_io_task(self, func, *, task_id, callback):
+        def submit_io_task(self, func, *, task_id, callback, **_kwargs):
             callback(TaskResult(success=True, result=func(), task_id=task_id))
             return task_id
 

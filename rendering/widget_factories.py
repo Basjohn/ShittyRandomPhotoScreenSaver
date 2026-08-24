@@ -1220,6 +1220,11 @@ class SteamCardFactory(WidgetFactory):
                         shared_steam_settings.get("show_connection_info_icon", True),
                         True,
                     ),
+                    # The production setup path injects the registry-owned
+                    # service before activation.  Direct factory construction
+                    # intentionally remains inert; standalone callers opt into
+                    # the widget's convenience owner explicitly.
+                    build_default_runtime=False,
                 )
             else:
                 widget = SteamCardWidget(

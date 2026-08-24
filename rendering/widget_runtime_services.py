@@ -18,6 +18,11 @@ E1 slice 3 adds the per-instance Weather runtime-data service. It owns provider
 fetch/cache/refresh/retry/request-generation lifetime while the legacy
 ``WeatherWidget`` remains only a prepared-state presentation consumer.
 
+E1 slice 4 adds a separate per-card/display Abandonment runtime/model service.
+It owns that Steam card's cache/source/rotation cadence and prepared state while
+preserving the existing neutral ``core.steam`` cache/backend authorities. Other
+Steam cards remain unregistered; no generic/shared Steam service is implied.
+
 Heavy provider implementation is imported lazily inside the build callable so a
 process that never activates/creates the family does not resolve it merely
 because this registry is imported.
@@ -42,12 +47,48 @@ class RuntimeServiceSpec:
       widget for consumption (the widget renders/uses it but no longer owns its
       lifetime);
     - ``retire(service) -> None`` releases the service; ``None`` when the service
-      holds no releasable resources (e.g. a stateless source object).
+      holds no releasable resources (e.g. a stateless source object);
+    - ``reuse_is_valid(widget, service) -> bool`` validates that an existing
+      presentation still consumes a live compatible owner before setup reuses
+      it across reconciliation.
     """
 
     build: Callable[[str, Mapping[str, Any]], Any]
     inject: Callable[[Any, Any], None]
     retire: Optional[Callable[[Any], None]] = None
+    reuse_is_valid: Optional[Callable[[Any, Any], bool]] = None
+
+
+def _widget_is_active(widget: Any) -> bool:
+    getter = getattr(widget, "is_lifecycle_active", None)
+    if not callable(getter):
+        return False
+    try:
+        return bool(getter())
+    except Exception:
+        # Reuse validation is a fail-closed boundary.  An unresolvable
+        # lifecycle state must not make a stopped owner look safely inactive.
+        return True
+
+
+def _service_is_retired(service: Any) -> bool:
+    getter = getattr(service, "is_retired", None)
+    if not callable(getter):
+        return False
+    try:
+        return bool(getter())
+    except Exception:
+        return True
+
+
+def _service_is_running(service: Any) -> bool:
+    getter = getattr(service, "is_running", None)
+    if not callable(getter):
+        return False
+    try:
+        return bool(getter())
+    except Exception:
+        return False
 
 
 def _resolve_reddit_provider_id(
@@ -87,10 +128,15 @@ def _inject_reddit_service(widget: Any, service: Any) -> None:
     setter(service)
 
 
+def _reddit_service_reuse_is_valid(widget: Any, service: Any) -> bool:
+    return getattr(widget, "_post_provider", None) is service
+
+
 _REDDIT_SERVICE_SPEC = RuntimeServiceSpec(
     build=_build_reddit_service,
     inject=_inject_reddit_service,
     retire=None,  # RedditPostProvider holds no releasable resources.
+    reuse_is_valid=_reddit_service_reuse_is_valid,
 )
 
 
@@ -119,10 +165,67 @@ def _retire_weather_service(service: Any) -> None:
     retire()
 
 
+def _weather_service_reuse_is_valid(widget: Any, service: Any) -> bool:
+    if getattr(widget, "_runtime_service", None) is not service:
+        return False
+    if _service_is_retired(service):
+        return False
+    # Missing-location Weather is intentionally active with a stopped service.
+    has_location = bool(str(getattr(widget, "_location", "") or "").strip())
+    return not (_widget_is_active(widget) and has_location) or _service_is_running(
+        service
+    )
+
+
 _WEATHER_SERVICE_SPEC = RuntimeServiceSpec(
     build=_build_weather_service,
     inject=_inject_weather_service,
     retire=_retire_weather_service,
+    reuse_is_valid=_weather_service_reuse_is_valid,
+)
+
+
+def _build_abandonment_service(
+    widget_id: str, widgets_config: Mapping[str, Any]
+) -> Any:
+    # Construction is provider/network/filesystem inert. Configuration is
+    # synchronized by the presentation consumer during injection so the factory's
+    # canonical normalization remains the single settings interpretation.
+    from widgets.steam_abandonment_runtime import AbandonmentRuntimeService
+
+    return AbandonmentRuntimeService()
+
+
+def _inject_abandonment_service(widget: Any, service: Any) -> None:
+    setter = getattr(widget, "set_runtime_service", None)
+    if not callable(setter):
+        raise AttributeError(
+            "runtime widget cannot accept Abandonment service "
+            "(missing set_runtime_service)"
+        )
+    setter(service)
+
+
+def _retire_abandonment_service(service: Any) -> None:
+    retire = getattr(service, "retire", None)
+    if not callable(retire):
+        raise AttributeError("Abandonment runtime service has no retire method")
+    retire()
+
+
+def _abandonment_service_reuse_is_valid(widget: Any, service: Any) -> bool:
+    if getattr(widget, "_runtime_service", None) is not service:
+        return False
+    if _service_is_retired(service):
+        return False
+    return not _widget_is_active(widget) or _service_is_running(service)
+
+
+_ABANDONMENT_SERVICE_SPEC = RuntimeServiceSpec(
+    build=_build_abandonment_service,
+    inject=_inject_abandonment_service,
+    retire=_retire_abandonment_service,
+    reuse_is_valid=_abandonment_service_reuse_is_valid,
 )
 
 
@@ -130,6 +233,7 @@ _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
     "reddit": _REDDIT_SERVICE_SPEC,
     "reddit2": _REDDIT_SERVICE_SPEC,
     "weather": _WEATHER_SERVICE_SPEC,
+    "abandonment_issues": _ABANDONMENT_SERVICE_SPEC,
 }
 
 
