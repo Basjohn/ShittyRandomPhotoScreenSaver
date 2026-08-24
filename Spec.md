@@ -107,6 +107,8 @@ If native code is ever earned, preserve the one-`QQuickWindow`-per-display prese
 - presentation-neutral widget services/models may be extracted from legacy pixel owners during
   migration; `WidgetRuntimeManager` is the current per-display owner seam, while provider/backend
   cardinality still follows the actual family semantics rather than presentation count;
+- deactivated family implementations remain import-dormant through inert package/host modules and lazy
+  factory/service creation; type annotations do not grant implementation-loading permission;
 - runtime-generation shared family state uses explicit consumer leases: the landed Media owner keeps
   one controller/poll/query/accepted-artwork authority while each display retains only its presenter;
 - Media app-volume and system-mute use two narrower runtime-generation shared owners: respectively one
