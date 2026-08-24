@@ -16,6 +16,7 @@ from PySide6.QtCore import QObject
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
+from core.settings.shadow_direction import ShadowDirection, resolve_signed_offset
 from rendering.quick.bootstrap import quick_qml_root
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
@@ -43,6 +44,16 @@ def _load_primitive(engine: QQmlEngine, filename: str) -> QQmlComponent:
 
     component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_ROOT / filename)))
     return component
+
+
+def _qml_code_without_comments(path: Path) -> str:
+    """Return QML source with ``//`` line comments removed (code-only scan)."""
+
+    lines = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        marker = line.find("//")
+        lines.append(line if marker < 0 else line[:marker])
+    return "\n".join(lines)
 
 
 @pytest.mark.qt
@@ -197,7 +208,6 @@ def test_shadowed_text_shadow_uses_signed_offset_and_stays_unclipped(qt_app) -> 
             "shadowEnabled": True,
             "shadowOffsetX": -4.0,
             "shadowOffsetY": -6.0,
-            "shadowBlur": 0.0,
         }
     )
     try:
@@ -238,9 +248,15 @@ def test_shell_primitives_carry_no_per_frame_or_business_logic() -> None:
                     "import QtQuick.Effects",
                 }, f"{filename} unexpected import: {stripped!r}"
 
-    # The text-shadow blur effect must be authored dormant, gated on positive blur.
-    shadowed_text = (QML_ROOT / "ShadowedText.qml").read_text(encoding="utf-8")
-    assert "shadowBlur > 0" in shadowed_text
+    # E4: ordinary text shadow is the surviving offset-pass semantic only — no
+    # MultiEffect, no layer capture, no blur property, no Effects import. Scan
+    # code only so explanatory comments naming what is avoided do not trip it.
+    shadowed_text_code = _qml_code_without_comments(QML_ROOT / "ShadowedText.qml")
+    for banned in ("MultiEffect", "layer.effect", "layer.enabled", "shadowBlur", "QtQuick.Effects"):
+        assert banned not in shadowed_text_code, banned
+    # It keeps the retained duplicate shadow glyph at a signed offset.
+    assert "shadowedTextShadow" in shadowed_text_code
+    assert "shadowOffsetX" in shadowed_text_code and "shadowOffsetY" in shadowed_text_code
 
 
 def test_host_module_is_presentation_only() -> None:
@@ -294,3 +310,137 @@ def test_scene_controller_owns_and_retires_ordinary_widget_host(qt_app) -> None:
         window.deleteLater()
         factory.deleteLater()
         qt_app.processEvents()
+
+
+# --------------------------------------------------------------------------- #
+# E4 — global shadow direction + retained shadow normalization                #
+# --------------------------------------------------------------------------- #
+
+
+def _card_offsets(direction: ShadowDirection) -> tuple[float, float]:
+    # Authored card magnitude (offset_x=4, offset_y=6) resolved to a signed
+    # offset by the presentation-neutral resolver, before it reaches QML.
+    return resolve_signed_offset(direction, 4.0, 6.0)
+
+
+@pytest.mark.qt
+def test_overlay_card_shadow_is_cached_by_default(qt_app) -> None:
+    # E4.3: the shared card shadow caches by default so static cards and fades
+    # never rebuild the blur.
+    source = (QML_ROOT / "OverlayCard.qml").read_text(encoding="utf-8")
+    assert "cached: true" in source
+    assert "cached: false" not in source
+
+    owner = QObject()
+    factory = QuickSceneFactory()
+    context, root = factory.create_display_root(
+        owner=owner, screen_index=0, runtime_generation=0
+    )
+    host_item = root.findChild(QQuickItem, "ordinaryWidgetHost")
+    host = OrdinaryWidgetPresentationHost(
+        host_item=host_item,
+        context=context,
+        create_overlay_item=factory.create_overlay_widget,
+    )
+    widget = host.create_widget(
+        geometry=OverlayWidgetGeometry(0.0, 0.0, 200.0, 120.0),
+        card_style=OverlayCardStyle(),
+    )
+    shadow = widget.item.findChild(QQuickItem, "overlayCardShadow")
+    assert shadow is not None
+    assert shadow.property("cached") is True
+
+    host.retire_all()
+    factory.deleteLater()
+    owner.deleteLater()
+    qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_direction_change_updates_retained_shadow_without_recreating_item(qt_app) -> None:
+    # E4.6: a direction change resolves to new signed offsets and updates the
+    # retained shadow properties in place — the same QQuickItem, no new engine
+    # or window.
+    owner = QObject()
+    factory = QuickSceneFactory()
+    context, root = factory.create_display_root(
+        owner=owner, screen_index=0, runtime_generation=0
+    )
+    windows_before = len(qt_app.topLevelWindows())
+    host_item = root.findChild(QQuickItem, "ordinaryWidgetHost")
+    host = OrdinaryWidgetPresentationHost(
+        host_item=host_item,
+        context=context,
+        create_overlay_item=factory.create_overlay_widget,
+    )
+
+    se_x, se_y = _card_offsets(ShadowDirection.SE)
+    widget = host.create_widget(
+        geometry=OverlayWidgetGeometry(0.0, 0.0, 200.0, 120.0),
+        card_style=OverlayCardStyle(shadow_offset_x=se_x, shadow_offset_y=se_y),
+    )
+    item = widget.item
+    card = item.findChild(QQuickItem, "overlayWidgetCard")
+    assert (card.property("shadowOffsetX"), card.property("shadowOffsetY")) == (4.0, 6.0)
+    engine_before = QQmlEngine.contextForObject(item).engine()
+
+    nw_x, nw_y = _card_offsets(ShadowDirection.NW)
+    widget.set_card_style(OverlayCardStyle(shadow_offset_x=nw_x, shadow_offset_y=nw_y))
+
+    # Same retained item, updated retained properties, no new engine/window.
+    assert widget.item is item
+    assert (card.property("shadowOffsetX"), card.property("shadowOffsetY")) == (-4.0, -6.0)
+    assert QQmlEngine.contextForObject(item).engine() is engine_before
+    assert len(qt_app.topLevelWindows()) == windows_before
+    assert host.live_count == 1
+
+    host.retire_all()
+    factory.deleteLater()
+    owner.deleteLater()
+    qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_root_fade_does_not_rewrite_card_shadow_properties(qt_app) -> None:
+    # E4.3/E4.5: whole-widget fade is root opacity only and must not touch the
+    # card shadow's magnitude/blur/offset/color authorities.
+    owner = QObject()
+    factory = QuickSceneFactory()
+    context, root = factory.create_display_root(
+        owner=owner, screen_index=0, runtime_generation=0
+    )
+    host_item = root.findChild(QQuickItem, "ordinaryWidgetHost")
+    host = OrdinaryWidgetPresentationHost(
+        host_item=host_item,
+        context=context,
+        create_overlay_item=factory.create_overlay_widget,
+    )
+    widget = host.create_widget(
+        geometry=OverlayWidgetGeometry(0.0, 0.0, 200.0, 120.0),
+        fade_opacity=1.0,
+        card_style=OverlayCardStyle(shadow_blur=18.0, shadow_offset_x=4.0, shadow_offset_y=6.0),
+    )
+    shadow = widget.item.findChild(QQuickItem, "overlayCardShadow")
+    before = (
+        shadow.property("blur"),
+        shadow.property("offset").x(),
+        shadow.property("offset").y(),
+        shadow.property("color").name(QColor.NameFormat.HexArgb),
+    )
+
+    widget.set_fade_opacity(0.3)
+
+    after = (
+        shadow.property("blur"),
+        shadow.property("offset").x(),
+        shadow.property("offset").y(),
+        shadow.property("color").name(QColor.NameFormat.HexArgb),
+    )
+    assert widget.item.property("fadeOpacity") == pytest.approx(0.3)
+    assert widget.item.opacity() == pytest.approx(0.3)
+    assert after == before
+
+    host.retire_all()
+    factory.deleteLater()
+    owner.deleteLater()
+    qt_app.processEvents()

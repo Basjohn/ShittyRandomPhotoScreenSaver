@@ -5,8 +5,8 @@ Last updated: 2026-08-24
 Reviewed source basis:
 
 ```text
-origin/main = 4466c306e35f1d6a61da73f08ed9c73ce2fa81d2
-Phase E1 integrated ownership + runtime-owner hoist closure
+test-inventory basis = 1f25a791a2af822aff707f1e64ff836d0fc6f070
+Phase E3 slice 1 retained ordinary-widget host + shell primitives (independently GREEN)
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -15,9 +15,13 @@ The 2026-08-24 E1 closure reconciliation adds all nine E1-era test modules to th
 the temporary `E1` / `E1/F` classifications. Neutral E1 ownership assertions survive; only
 presenter-host edges are rehomed in later F/H/I work.
 
+The subsequent E3 reconciliation (through `1f25a791`) adds
+`tests/test_qtquick_ordinary_widget_host.py` for the retained ordinary-widget host and shared shell
+primitives, marks E3 **CLOSED / independently GREEN**, and makes E4 the active shadow-authority phase.
+
 At the reviewed checkpoint the repository contains:
 
-- **361 test-module files**: 360 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **362 test-module files**: 361 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -28,7 +32,7 @@ Inventory status is **not an execution result**. `KEEP` does not mean a test was
 
 This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
 
-This is deliberately **not** a claim that every assertion in all 361 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
+This is deliberately **not** a claim that every assertion in all 362 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
 
 ### Status vocabulary
 
@@ -48,7 +52,7 @@ This is deliberately **not** a claim that every assertion in all 361 modules was
 | Status | Files |
 | --- | ---: |
 | `KEEP` | 116 |
-| `KEEP — MIGRATION PERMANENT` | 85 |
+| `KEEP — MIGRATION PERMANENT` | 86 |
 | `MIGRATION-CRITICAL — H/I` | 48 |
 | `WILL BE OBSOLETE — H/I` | 23 |
 | `MIGRATION-CRITICAL — F` | 38 |
@@ -62,7 +66,7 @@ This is deliberately **not** a claim that every assertion in all 361 modules was
 | `MIGRATION-CRITICAL — E4` | 2 |
 | `OBSOLETE NOW` | 2 |
 | `MIGRATION-CRITICAL — E3/F` | 1 |
-| **Total** | **361** |
+| **Total** | **362** |
 
 ## 2. Standard commands and evidence levels
 
@@ -189,7 +193,7 @@ Preserve:
   - new outage after reclaim → fresh full 30 s grace/global generation;
   - capability OFF retires pending failover state and only discards live-fallback state after confirmed retirement.
 
-E2/E2.7 and E1 implementation are closed. E3 retained primitives are active. Do not write “after E1 lands” tests as future work.
+E2/E2.7, E1 and E3 implementation are closed. E4 (global eight-direction shadow authority + retained shadow normalization) is the active phase. Do not write “after E1 lands” or “after E3 lands” tests as future work.
 
 ## 5. Active migration gates by next phase
 
@@ -199,7 +203,15 @@ Permanent E1 regressions continue to test real owner/provider lifetime, cardinal
 shared-service references, generation fencing, import dormancy and display-runtime owner injection.
 Do not weaken them merely because presentation moves to Quick.
 
-### E3/E4 — retained primitives and shadow authority
+### E3 — retained ordinary-widget host + shell primitives — CLOSED
+
+`tests/test_qtquick_ordinary_widget_host.py` is the permanent destination-architecture regression for the
+per-display retained ordinary-widget host and the shared shell primitives (root fade, card
+background/border/radius/padding, signed-offset card shadow, offset-pass text shadow, separator). It
+proves package-path component loading, create/update/retire without retaining the display generation,
+unclipped signed offsets, and no second engine/window. Preserve it across cutover.
+
+### E4 — retained primitives and shadow authority — ACTIVE
 
 Retain semantic/style/configuration coverage while replacing QWidget-painted frame caches, `QGraphicsOpacityEffect`, `QGraphicsDropShadowEffect`, and QPainter-only shadow helpers with retained Quick equivalents. E4 must cover one global 8-direction shadow direction authority without reintroducing QWidget graphics effects.
 
@@ -287,6 +299,7 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_qtquick_image_boundary.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_image_textures.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_input_controller.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
+| `tests/test_qtquick_ordinary_widget_host.py` | **KEEP — MIGRATION PERMANENT** | E3 retained ordinary-widget host + shared shell primitives; destination architecture, retain through cutover. |
 | `tests/test_qtquick_p0_presentation_benchmark.py` | **WILL BE OBSOLETE — J** | Architecture-selection benchmark, not a forever product regression. |
 | `tests/test_qtquick_particle_transition.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
 | `tests/test_qtquick_phase_c_effect_smoke.py` | **KEEP — MIGRATION PERMANENT** | Destination/current contract; retain through cutover. |
