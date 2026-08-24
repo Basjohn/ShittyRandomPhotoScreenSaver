@@ -301,6 +301,11 @@ class WidgetRuntimeManager:
         try:
             if hasattr(widget, "cleanup") and callable(widget.cleanup):
                 widget.cleanup()
+                # A confirmed terminal widget cleanup also retires any neutral
+                # service owned for that widget id. Failed cleanup retains the
+                # service and therefore fails closed rather than orphaning a live
+                # provider/timer owner.
+                self.retire_widget_service(name)
                 logger.debug("[LIFECYCLE] Widget %s cleaned up via WidgetRuntimeManager", name)
                 return True
         except Exception:

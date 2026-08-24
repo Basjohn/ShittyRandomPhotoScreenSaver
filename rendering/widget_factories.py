@@ -315,7 +315,16 @@ class WeatherWidgetFactory(WidgetFactory):
             position = position_map.get(widget_pos, WeatherPosition.TOP_LEFT)
             location = config.get('location', canonical.get('location', 'New York'))
             
-            widget = WeatherWidget(parent=parent, location=location, position=position)
+            # Production Weather data lifetime is required from the neutral
+            # WidgetRuntimeManager service registry. Suppress the standalone
+            # convenience service so setup cannot transiently construct a second
+            # QWidget-owned cadence/provider path before neutral injection.
+            widget = WeatherWidget(
+                parent=parent,
+                location=location,
+                position=position,
+                build_default_runtime=False,
+            )
             
             # Thread manager
             if self._thread_manager and hasattr(widget, "set_thread_manager"):

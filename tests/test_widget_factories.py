@@ -229,6 +229,8 @@ class TestWeatherWidgetFactory:
         widget = factory.create(parent_widget, config)
         
         assert widget is not None
+        assert widget._runtime_service is None
+        assert widget._owns_runtime_service is False
         # Clean up
         widget.deleteLater()
 

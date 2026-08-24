@@ -44,7 +44,7 @@ def isolated_weather_cache(tmp_path, monkeypatch):
     """Ensure each test uses a fresh on-disk cache."""
     widget_cache = tmp_path / "weather_widget_cache.json"
     provider_cache = tmp_path / "open_meteo_cache.json"
-    monkeypatch.setattr("widgets.weather_widget._CACHE_FILE", widget_cache, raising=False)
+    monkeypatch.setattr("widgets.weather_runtime._CACHE_FILE", widget_cache, raising=False)
     monkeypatch.setattr(
         "weather.open_meteo_provider._WEATHER_CACHE_FILE", provider_cache, raising=False
     )
@@ -110,6 +110,90 @@ def test_weather_creation(qapp, parent_widget):
     assert weather.is_running() is False
 
 
+def test_weather_standalone_service_inherits_valid_zero_runtime_generation(
+    qapp,
+    parent_widget,
+):
+    parent_widget._runtime_generation = 0
+
+    weather = WeatherWidget(parent=parent_widget, location="London")
+
+    assert weather._runtime_service is not None
+    assert weather._runtime_service.runtime_generation == 0
+
+
+def test_weather_real_setup_owns_one_neutral_service_before_start(
+    qapp,
+    monkeypatch,
+):
+    from core.resources.manager import ResourceManager
+    from rendering.widget_manager import WidgetManager
+
+    class _Signal:
+        def connect(self, *_args, **_kwargs):
+            return None
+
+        def disconnect(self, *_args, **_kwargs):
+            return None
+
+    class _Settings:
+        settings_changed = _Signal()
+
+        def __init__(self):
+            self.widgets = {
+                "weather": {
+                    "enabled": True,
+                    "monitor": "ALL",
+                    "position": "Top Left",
+                    "location": "Cape Town",
+                },
+                "family_activation": {"weather": True},
+            }
+
+        def get(self, key, default=None):
+            return self.widgets if key == "widgets" else default
+
+        def get_widgets_map(self):
+            return dict(self.widgets)
+
+    class _RuntimeParent(QWidget):
+        def __init__(self, thread_manager):
+            super().__init__()
+            self._thread_manager = thread_manager
+            self._runtime_generation = 0
+
+    manager_io = _QueuedIoManager()
+    parent = _RuntimeParent(manager_io)
+    monkeypatch.setattr(
+        "widgets.weather_runtime.OpenMeteoProvider",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("provider constructed during setup/startup-cache admission")
+        ),
+    )
+    manager = WidgetManager(parent, ResourceManager())
+
+    created = manager.setup_all_widgets(
+        _Settings(),
+        screen_index=0,
+        thread_manager=manager_io,
+    )
+
+    widget = created["weather_widget"]
+    service = manager._runtime_manager.get_widget_service("weather")
+    assert service is not None
+    assert widget._runtime_service is service
+    assert widget._owns_runtime_service is False
+    assert service.location == "Cape Town"
+    assert service.runtime_generation == 0
+    assert service.is_running() is True
+    assert [task.category for task in manager_io.tasks] == ["weather_startup_cache"]
+
+    manager.cleanup()
+    assert service.is_retired() is True
+    assert widget._runtime_service is None
+    parent.deleteLater()
+
+
 def test_weather_missing_location_is_spaced_provider_inert_settings_state(
     qapp,
     parent_widget,
@@ -118,7 +202,6 @@ def test_weather_missing_location_is_spaced_provider_inert_settings_state(
     weather = WeatherWidget(parent=parent_widget, location="   ")
     calls: list[str] = []
     monkeypatch.setattr(weather, "_ensure_thread_manager", lambda _owner: calls.append("thread") or True)
-    monkeypatch.setattr(weather, "_schedule_refresh_cycle", lambda: calls.append("schedule"))
     monkeypatch.setattr(weather, "_fade_in", lambda: calls.append("fade"))
 
     weather._initialize_impl()
@@ -154,7 +237,6 @@ def test_weather_missing_location_legacy_start_does_not_require_thread_manager(
     weather = WeatherWidget(parent=parent_widget, location="")
     calls: list[str] = []
     monkeypatch.setattr(weather, "_ensure_thread_manager", lambda _owner: calls.append("thread") or False)
-    monkeypatch.setattr(weather, "_schedule_refresh_cycle", lambda: calls.append("schedule"))
     monkeypatch.setattr(weather, "_fade_in", lambda: calls.append("fade"))
 
     weather.start()
@@ -239,6 +321,26 @@ def test_weather_stop(qapp, parent_widget):
         assert weather.is_running() is False
 
 
+def test_weather_double_click_manual_refresh_survives_noupdates(
+    qapp,
+    parent_widget,
+    monkeypatch,
+):
+    weather = WeatherWidget(parent=parent_widget)
+    service = weather._runtime_service
+    assert service is not None
+    weather._enabled = True
+    calls = []
+    monkeypatch.setattr(
+        "widgets.weather_runtime.automatic_service_updates_enabled",
+        lambda: False,
+    )
+    monkeypatch.setattr(service, "fetch_weather", lambda: calls.append("fetch"))
+
+    assert weather.handle_double_click(QPoint(0, 0)) is True
+    assert calls == ["fetch"]
+
+
 def test_weather_signals(qapp, parent_widget, mock_weather_data):
     """Test weather signals."""
     weather = WeatherWidget(parent=parent_widget)
@@ -286,11 +388,11 @@ def test_weather_cache(qapp, parent_widget, mock_weather_data):
 def test_weather_constructor_and_initialize_are_filesystem_inert(qapp, parent_widget, monkeypatch):
     calls = []
     monkeypatch.setattr(
-        "widgets.weather_widget.load_weather_startup_snapshot",
+        "widgets.weather_runtime.load_weather_startup_snapshot",
         lambda *args, **kwargs: calls.append("cache") or (_ for _ in ()).throw(AssertionError("cache read")),
     )
     monkeypatch.setattr(
-        "widgets.weather_widget.OpenMeteoProvider",
+        "widgets.weather_runtime.OpenMeteoProvider",
         lambda *args, **kwargs: calls.append("provider") or (_ for _ in ()).throw(AssertionError("provider")),
     )
 
@@ -321,7 +423,7 @@ def test_weather_startup_cache_load_runs_on_io_then_commits_on_gui(
         "weather_code": 0,
     }
     widget_cache.write_text(json.dumps(payload), encoding="utf-8")
-    monkeypatch.setattr("widgets.weather_widget._CACHE_FILE", widget_cache, raising=False)
+    monkeypatch.setattr("widgets.weather_runtime._CACHE_FILE", widget_cache, raising=False)
     manager = _QueuedIoManager()
     weather = WeatherWidget(parent=parent_widget, location="  london  ")
     weather.set_thread_manager(manager)
@@ -336,12 +438,16 @@ def test_weather_startup_cache_load_runs_on_io_then_commits_on_gui(
         loader_threads.append(threading.get_ident())
         return real_loader(*args, **kwargs)
 
-    monkeypatch.setattr("widgets.weather_widget.load_weather_startup_snapshot", _load)
+    monkeypatch.setattr("widgets.weather_runtime.load_weather_startup_snapshot", _load)
     monkeypatch.setattr(
-        "widgets.weather_widget.ThreadManager.run_on_ui_thread",
+        "widgets.weather_runtime.ThreadManager.run_on_ui_thread",
         lambda callback, *args, **kwargs: queued_ui.append((callback, args, kwargs)),
     )
-    monkeypatch.setattr(weather, "_schedule_refresh_cycle", lambda: schedule_calls.append(threading.get_ident()))
+    monkeypatch.setattr(
+        weather._runtime_service,
+        "schedule_refresh_cycle",
+        lambda: schedule_calls.append(threading.get_ident()),
+    )
     monkeypatch.setattr(weather, "_request_fade_in", lambda: fade_calls.append(threading.get_ident()))
     original_update = weather._update_display
     monkeypatch.setattr(
@@ -384,7 +490,7 @@ def test_weather_legacy_start_preserves_immediate_refresh_after_cache_miss(
     monkeypatch,
 ):
     monkeypatch.setattr(
-        "widgets.weather_widget._LEGACY_CACHE_FILE",
+        "widgets.weather_runtime._LEGACY_CACHE_FILE",
         tmp_path / "missing_legacy.json",
         raising=False,
     )
@@ -393,11 +499,15 @@ def test_weather_legacy_start_preserves_immediate_refresh_after_cache_miss(
     weather.set_thread_manager(manager)
     calls = []
     monkeypatch.setattr(
-        "widgets.weather_widget.ThreadManager.run_on_ui_thread",
+        "widgets.weather_runtime.ThreadManager.run_on_ui_thread",
         lambda callback, *args, **kwargs: callback(*args, **kwargs),
     )
-    monkeypatch.setattr(weather, "_fetch_weather", lambda: calls.append("fetch"))
-    monkeypatch.setattr(weather, "_schedule_refresh_cycle", lambda: calls.append("schedule"))
+    monkeypatch.setattr(weather._runtime_service, "fetch_weather", lambda: calls.append("fetch"))
+    monkeypatch.setattr(
+        weather._runtime_service,
+        "schedule_refresh_cycle",
+        lambda: calls.append("schedule"),
+    )
 
     weather.start()
     _run_queued_io_task(manager.tasks.pop(0))
@@ -468,17 +578,21 @@ def test_weather_location_change_rejects_late_startup_snapshot(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr("widgets.weather_widget._CACHE_FILE", widget_cache, raising=False)
+    monkeypatch.setattr("widgets.weather_runtime._CACHE_FILE", widget_cache, raising=False)
     manager = _QueuedIoManager()
     weather = WeatherWidget(parent=parent_widget, location="London")
     weather.set_thread_manager(manager)
     queued_ui = []
     scheduled = []
     monkeypatch.setattr(
-        "widgets.weather_widget.ThreadManager.run_on_ui_thread",
+        "widgets.weather_runtime.ThreadManager.run_on_ui_thread",
         lambda callback, *args, **kwargs: queued_ui.append((callback, args, kwargs)),
     )
-    monkeypatch.setattr(weather, "_schedule_refresh_cycle", lambda: scheduled.append(True))
+    monkeypatch.setattr(
+        weather._runtime_service,
+        "schedule_refresh_cycle",
+        lambda: scheduled.append(True),
+    )
 
     weather.start()
     task = manager.tasks.pop(0)
@@ -498,10 +612,10 @@ def test_weather_fetch_accepts_only_latest_request_and_persists_off_gui(
     monkeypatch,
 ):
     from core.weather_preparation import PreparedWeatherFetch, prepare_weather_sample
-    from widgets.weather_widget import _normalize_weather_location_key
+    from widgets.weather_runtime import _normalize_weather_location_key
 
     cache_path = tmp_path / "weather_widget_cache.json"
-    monkeypatch.setattr("widgets.weather_widget._CACHE_FILE", cache_path, raising=False)
+    monkeypatch.setattr("widgets.weather_runtime._CACHE_FILE", cache_path, raising=False)
     manager = _QueuedIoManager()
     weather = WeatherWidget(parent=parent_widget, location="London")
     weather.set_thread_manager(manager)
@@ -513,6 +627,9 @@ def test_weather_fetch_accepts_only_latest_request_and_persists_off_gui(
     weather._fetch_weather()
     weather._fetch_weather()
     assert [task.category for task in manager.tasks] == ["weather_fetch", "weather_fetch"]
+    service = weather._runtime_service
+    assert service is not None
+    latest_request_id = service._fetch_request_id
 
     location_key = _normalize_weather_location_key("London")
     older = prepare_weather_sample(
@@ -526,16 +643,16 @@ def test_weather_fetch_accepts_only_latest_request_and_persists_off_gui(
         observed_at=datetime.now(),
     )
 
-    weather._commit_weather_fetch(
-        1,
+    service.commit_weather_fetch(
+        latest_request_id - 1,
         location_key,
         PreparedWeatherFetch(older, persist_provider=True),
     )
     assert weather._cached_data is None
     assert cache_path.exists() is False
 
-    weather._commit_weather_fetch(
-        2,
+    service.commit_weather_fetch(
+        latest_request_id,
         location_key,
         PreparedWeatherFetch(newer, persist_provider=True),
     )
@@ -557,6 +674,53 @@ def test_weather_fetch_accepts_only_latest_request_and_persists_off_gui(
         (tmp_path / "open_meteo_cache.json").read_text(encoding="utf-8")
     )
     assert provider_payload["London"]["temperature"] == 20.0
+
+
+def test_weather_location_b_rejects_late_location_a_provider_result(
+    qapp,
+    parent_widget,
+    monkeypatch,
+):
+    from core.weather_preparation import PreparedWeatherFetch, prepare_weather_sample
+    from widgets.weather_runtime import _normalize_weather_location_key
+
+    manager = _QueuedIoManager()
+    weather = WeatherWidget(parent=parent_widget, location="London")
+    weather.set_thread_manager(manager)
+    service = weather._runtime_service
+    assert service is not None
+    service.set_running(True)
+    weather._enabled = True
+    monkeypatch.setattr(weather, "_update_display", lambda data: None)
+
+    service.fetch_weather()
+    request_a = service._fetch_request_id
+    weather.set_location("Paris")
+    request_b = service._fetch_request_id
+
+    sample_a = prepare_weather_sample(
+        {"location": "London", "temperature": 11, "condition": "Rain"},
+        fallback_location="London",
+    )
+    sample_b = prepare_weather_sample(
+        {"location": "Paris", "temperature": 24, "condition": "Clear"},
+        fallback_location="Paris",
+    )
+    service.commit_weather_fetch(
+        request_a,
+        _normalize_weather_location_key("London"),
+        PreparedWeatherFetch(sample_a, persist_provider=False),
+    )
+    assert service.get_cached_data() is None
+
+    service.commit_weather_fetch(
+        request_b,
+        _normalize_weather_location_key("Paris"),
+        PreparedWeatherFetch(sample_b, persist_provider=False),
+    )
+
+    assert service.get_cached_data()["location"] == "Paris"
+    assert service.get_cached_data()["temperature"] == 24.0
 
 
 def test_weather_fetch_defers_provider_cache_until_gui_accepts_request(
@@ -582,10 +746,10 @@ def test_weather_fetch_defers_provider_cache_until_gui_accepts_request(
         def get_current_weather(self, location):
             return {"location": location, "temperature": 21, "condition": "Clear"}
 
-    monkeypatch.setattr("widgets.weather_widget.OpenMeteoProvider", _Provider)
+    monkeypatch.setattr("widgets.weather_runtime.OpenMeteoProvider", _Provider)
     monkeypatch.setattr(weather, "_update_display", lambda data: None)
     monkeypatch.setattr(
-        "widgets.weather_widget.ThreadManager.run_on_ui_thread",
+        "widgets.weather_runtime.ThreadManager.run_on_ui_thread",
         lambda callback, *args, **kwargs: queued_ui.append((callback, args, kwargs)),
     )
 
@@ -727,12 +891,14 @@ def test_weather_legacy_migration_is_serialized_with_current_persistence(tmp_pat
 
 def test_weather_deactivation_rejects_late_fetch_commit(qapp, parent_widget, monkeypatch):
     from core.weather_preparation import PreparedWeatherFetch, prepare_weather_sample
-    from widgets.weather_widget import _normalize_weather_location_key
+    from widgets.weather_runtime import _normalize_weather_location_key
 
     weather = WeatherWidget(parent=parent_widget, location="London")
     manager = _QueuedIoManager()
     weather.set_thread_manager(manager)
-    weather._fetch_request_id = 3
+    service = weather._runtime_service
+    assert service is not None
+    service._fetch_request_id = 3
     weather._enabled = True
     monkeypatch.setattr(weather, "_update_display", lambda data: None)
     sample = prepare_weather_sample(
@@ -741,7 +907,7 @@ def test_weather_deactivation_rejects_late_fetch_commit(qapp, parent_widget, mon
     )
 
     weather._deactivate_impl()
-    weather._commit_weather_fetch(
+    service.commit_weather_fetch(
         3,
         _normalize_weather_location_key("London"),
         PreparedWeatherFetch(sample, persist_provider=True),
@@ -759,7 +925,7 @@ def test_weather_fetch_without_thread_manager_never_constructs_provider(
     weather = WeatherWidget(parent=parent_widget, location="London")
     calls = []
     monkeypatch.setattr(
-        "widgets.weather_widget.OpenMeteoProvider",
+        "widgets.weather_runtime.OpenMeteoProvider",
         lambda *args, **kwargs: calls.append(True),
     )
 
@@ -818,15 +984,18 @@ def test_weather_set_api_key(qapp, parent_widget):
 def test_weather_set_location(qapp, parent_widget):
     """Test setting location."""
     weather = WeatherWidget(parent=parent_widget, location="London")
-    
-    with patch.object(weather, '_fetch_weather') as mock_fetch:
-        weather._enabled = True  # Simulate running
+    service = weather._runtime_service
+    assert service is not None
+    service.set_running(True)
+
+    with patch.object(service, 'fetch_weather') as mock_fetch:
+        weather._enabled = True
         weather.set_location("Paris")
-        
+
         assert weather._location == "Paris"
-        # Should trigger fetch
+        assert service.location == "Paris"
         mock_fetch.assert_called_once()
-    
+
     # Cache should be cleared
     assert weather._cached_data is None
 
@@ -853,103 +1022,184 @@ def test_weather_set_text_color(qapp, parent_widget):
     assert weather._text_color == color
 
 
-def test_weather_cleanup(qapp, parent_widget):
-    """Test weather cleanup."""
+def test_weather_cleanup_retires_standalone_runtime_once(qapp, parent_widget):
+    """Standalone cleanup terminally retires its convenience data owner."""
     weather = WeatherWidget(parent=parent_widget)
-    
-    # Mock ThreadManager to allow start
-    mock_thread_manager = Mock()
-    weather.set_thread_manager(mock_thread_manager)
-    
-    with patch.object(weather, '_fetch_weather'):
-        weather.start()
-        assert weather.is_running() is True
-        
-        weather.cleanup()
-        assert weather.is_running() is False
-        assert weather._update_timer is None
-        assert weather._retry_timer is None
-
-
-def test_weather_retry_timer_is_cleared_on_cleanup(qapp, parent_widget):
-    """Retry timer should not survive cleanup/destruction paths."""
-    weather = WeatherWidget(parent=parent_widget)
-
+    service = weather._runtime_service
+    assert service is not None
+    weather.set_thread_manager(Mock())
+    service.set_running(True)
     weather._enabled = True
-    weather._schedule_retry(delay_ms=60_000)
-
-    assert weather._retry_timer is not None
-    assert weather._retry_timer.isActive() is True
 
     weather.cleanup()
 
-    assert weather._retry_timer is None
+    assert weather.is_running() is False
+    assert weather._runtime_service is None
+    assert service.is_retired() is True
+    assert service._update_timer_handle is None
+    assert service._retry_pending is False
+
+    # Terminal cleanup and service retirement are idempotent.
+    weather.cleanup()
+    service.retire()
+    assert service.is_retired() is True
 
 
-def test_weather_retry_timer_is_reused_while_active(qapp, parent_widget):
-    """Retry scheduling should reuse the active single-shot timer instead of recreating it."""
+def test_weather_retry_callback_is_fenced_by_cleanup(
+    qapp,
+    parent_widget,
+    monkeypatch,
+):
     weather = WeatherWidget(parent=parent_widget)
+    service = weather._runtime_service
+    assert service is not None
+    service.set_running(True)
+    scheduled = []
+    fetched = []
+    monkeypatch.setattr(
+        "widgets.weather_runtime.ThreadManager.single_shot",
+        lambda delay, callback: scheduled.append((delay, callback)),
+    )
+    monkeypatch.setattr(service, "fetch_weather", lambda: fetched.append(True))
 
-    weather._schedule_retry(delay_ms=60_000)
-    first_timer = weather._retry_timer
+    service.schedule_retry(delay_ms=60_000)
+    assert service._retry_pending is True
+    assert len(scheduled) == 1
 
-    weather._schedule_retry(delay_ms=60_000)
+    weather.cleanup()
+    scheduled[0][1]()
 
-    assert first_timer is not None
-    assert weather._retry_timer is first_timer
+    assert service.is_retired() is True
+    assert service._retry_pending is False
+    assert fetched == []
+
+
+def test_weather_retry_schedule_keeps_one_pending_callback(
+    qapp,
+    parent_widget,
+    monkeypatch,
+):
+    weather = WeatherWidget(parent=parent_widget)
+    service = weather._runtime_service
+    assert service is not None
+    service.set_running(True)
+    scheduled = []
+    fetched = []
+    monkeypatch.setattr(
+        "widgets.weather_runtime.ThreadManager.single_shot",
+        lambda delay, callback: scheduled.append((delay, callback)),
+    )
+    monkeypatch.setattr(service, "fetch_weather", lambda: fetched.append(True))
+
+    service.schedule_retry(delay_ms=60_000)
+    service.schedule_retry(delay_ms=60_000)
+
+    assert len(scheduled) == 1
+    scheduled[0][1]()
+    assert fetched == [True]
+    assert service._retry_pending is False
     weather.cleanup()
 
 
-def test_weather_retry_timeout_fetches_only_when_enabled(qapp, parent_widget):
-    """Retry timeout should no-op once the widget is no longer enabled."""
+def test_weather_retry_timeout_noops_after_stop(
+    qapp,
+    parent_widget,
+    monkeypatch,
+):
     weather = WeatherWidget(parent=parent_widget)
-    calls = []
+    service = weather._runtime_service
+    assert service is not None
+    service.set_running(True)
+    scheduled = []
+    fetched = []
+    monkeypatch.setattr(
+        "widgets.weather_runtime.ThreadManager.single_shot",
+        lambda delay, callback: scheduled.append((delay, callback)),
+    )
+    monkeypatch.setattr(service, "fetch_weather", lambda: fetched.append(True))
 
-    weather._fetch_weather = lambda: calls.append("fetch")  # type: ignore[method-assign]
+    service.schedule_retry(delay_ms=60_000)
+    service.stop()
+    scheduled.pop()[1]()
 
-    weather._enabled = False
-    weather._retry_timer = object()  # placeholder so we prove it gets cleared
-    weather._on_retry_timeout()
-
-    assert weather._retry_timer is None
-    assert calls == []
-
-    weather._retry_timer = object()
-    weather._enabled = True
-    weather._on_retry_timeout()
-
-    assert calls == ["fetch"]
+    assert fetched == []
+    assert service._retry_pending is False
+    weather.cleanup()
 
 
-def test_weather_schedule_refresh_cycle_uses_shared_startup_and_jitter_policy(qapp, parent_widget, monkeypatch):
-    """Weather refresh scheduling should go through one canonical startup + jittered steady-state path."""
+def test_weather_schedule_refresh_cycle_uses_shared_startup_and_jitter_policy(
+    qapp,
+    parent_widget,
+    monkeypatch,
+):
+    """The neutral owner schedules one startup callback and one periodic cadence."""
     weather = WeatherWidget(parent=parent_widget)
+    service = weather._runtime_service
+    assert service is not None
+    service.set_running(True)
     single_shots = []
     timer_calls = []
 
     class _Handle:
         def __init__(self):
             self._timer = object()
+            self.stopped = False
 
-    monkeypatch.setattr("widgets.weather_widget.ThreadManager.single_shot", lambda delay, cb: single_shots.append((delay, cb)))
-    monkeypatch.setattr("widgets.weather_widget.random.randint", lambda a, b: 60_000)
+        def stop(self):
+            self.stopped = True
+            self._timer = None
+
     monkeypatch.setattr(
-        "widgets.weather_widget.create_overlay_timer",
-        lambda owner, interval, callback, description="": timer_calls.append((owner, interval, callback, description)) or _Handle(),
+        "widgets.weather_runtime.ThreadManager.single_shot",
+        lambda delay, callback: single_shots.append((delay, callback)),
+    )
+    monkeypatch.setattr("widgets.weather_runtime.random.randint", lambda a, b: 60_000)
+    monkeypatch.setattr(
+        "widgets.weather_runtime.create_overlay_timer",
+        lambda owner, interval, callback, description="": (
+            timer_calls.append((owner, interval, callback, description)) or _Handle()
+        ),
     )
 
-    weather._schedule_refresh_cycle()  # type: ignore[attr-defined]
+    service.schedule_refresh_cycle()
 
-    assert single_shots == [(30 * 1000, weather._fetch_weather)]
+    assert len(single_shots) == 1
+    assert single_shots[0][0] == 30 * 1000
     assert timer_calls == [
-        (weather, 30 * 60 * 1000 + 60_000, weather._fetch_weather, "WeatherWidget refresh")
+        (
+            service,
+            30 * 60 * 1000 + 60_000,
+            service._on_periodic_refresh_timeout,
+            "Weather runtime refresh",
+        )
     ]
-    assert weather._update_timer_handle is not None
-    assert weather._update_timer is not None
+    assert service._update_timer_handle is not None
+    assert service._update_timer is not None
+    first_handle = service._update_timer_handle
+    first_startup_callback = single_shots[0][1]
+    fetched = []
+    monkeypatch.setattr(service, "fetch_weather", lambda: fetched.append(True))
+
+    service.schedule_refresh_cycle()
+    first_startup_callback()
+
+    assert first_handle.stopped is True
+    assert len(timer_calls) == 2
+    assert service._update_timer_handle is not first_handle
+    assert fetched == []
+    weather.cleanup()
 
 
-def test_weather_schedule_refresh_cycle_skips_startup_fetch_when_cache_is_fresh(qapp, parent_widget, monkeypatch):
+def test_weather_schedule_refresh_cycle_skips_startup_fetch_when_cache_is_fresh(
+    qapp,
+    parent_widget,
+    monkeypatch,
+):
     weather = WeatherWidget(parent=parent_widget)
+    service = weather._runtime_service
+    assert service is not None
+    service.set_running(True)
+    service._cache_time = datetime.now()
     single_shots = []
     timer_calls = []
 
@@ -957,38 +1207,67 @@ def test_weather_schedule_refresh_cycle_skips_startup_fetch_when_cache_is_fresh(
         def __init__(self):
             self._timer = object()
 
-    weather._cache_time = datetime.now()
-    monkeypatch.setattr("widgets.weather_widget.ThreadManager.single_shot", lambda delay, cb: single_shots.append((delay, cb)))
-    monkeypatch.setattr("widgets.weather_widget.random.randint", lambda a, b: 0)
+        def stop(self):
+            self._timer = None
+
     monkeypatch.setattr(
-        "widgets.weather_widget.create_overlay_timer",
-        lambda owner, interval, callback, description="": timer_calls.append((owner, interval, callback, description)) or _Handle(),
+        "widgets.weather_runtime.ThreadManager.single_shot",
+        lambda delay, callback: single_shots.append((delay, callback)),
+    )
+    monkeypatch.setattr("widgets.weather_runtime.random.randint", lambda a, b: 0)
+    monkeypatch.setattr(
+        "widgets.weather_runtime.create_overlay_timer",
+        lambda owner, interval, callback, description="": (
+            timer_calls.append((owner, interval, callback, description)) or _Handle()
+        ),
     )
 
-    weather._schedule_refresh_cycle()  # type: ignore[attr-defined]
+    service.schedule_refresh_cycle()
 
     assert single_shots == []
     assert timer_calls == [
-        (weather, 30 * 60 * 1000, weather._fetch_weather, "WeatherWidget refresh")
+        (
+            service,
+            30 * 60 * 1000,
+            service._on_periodic_refresh_timeout,
+            "Weather runtime refresh",
+        )
     ]
+    weather.cleanup()
 
 
-def test_weather_schedule_refresh_cycle_disables_automatic_updates_under_noupdates(qapp, parent_widget, monkeypatch):
+def test_weather_schedule_refresh_cycle_disables_automatic_updates_under_noupdates(
+    qapp,
+    parent_widget,
+    monkeypatch,
+):
     weather = WeatherWidget(parent=parent_widget)
+    service = weather._runtime_service
+    assert service is not None
+    service.set_running(True)
     single_shots = []
     timer_calls = []
 
-    monkeypatch.setattr("widgets.weather_widget.automatic_service_updates_enabled", lambda: False)
-    monkeypatch.setattr("widgets.weather_widget.ThreadManager.single_shot", lambda delay, cb: single_shots.append((delay, cb)))
     monkeypatch.setattr(
-        "widgets.weather_widget.create_overlay_timer",
-        lambda owner, interval, callback, description="": timer_calls.append((owner, interval, callback, description)),
+        "widgets.weather_runtime.automatic_service_updates_enabled",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        "widgets.weather_runtime.ThreadManager.single_shot",
+        lambda delay, callback: single_shots.append((delay, callback)),
+    )
+    monkeypatch.setattr(
+        "widgets.weather_runtime.create_overlay_timer",
+        lambda owner, interval, callback, description="": timer_calls.append(
+            (owner, interval, callback, description)
+        ),
     )
 
-    weather._schedule_refresh_cycle()  # type: ignore[attr-defined]
+    service.schedule_refresh_cycle()
 
     assert single_shots == []
     assert timer_calls == []
+    weather.cleanup()
 
 
 def test_weather_start_uses_same_refresh_schedule_for_cached_startup(qapp, parent_widget, monkeypatch):
@@ -1000,7 +1279,11 @@ def test_weather_start_uses_same_refresh_schedule_for_cached_startup(qapp, paren
     weather._cache_time = object()
 
     calls = []
-    monkeypatch.setattr(weather, "_schedule_refresh_cycle", lambda: calls.append("scheduled"))  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        weather._runtime_service,
+        "schedule_refresh_cycle",
+        lambda: calls.append("scheduled"),
+    )
     monkeypatch.setattr(weather, "_fade_in", lambda *args, **kwargs: calls.append("fade"))  # type: ignore[method-assign]
 
     weather.start()
@@ -1025,7 +1308,7 @@ def test_weather_cached_startup_stays_hidden_until_fade_starter_runs(qapp, monke
     weather._cached_data = {"temperature": 20, "condition": "Clear", "location": "London"}
     weather._cache_time = object()
 
-    monkeypatch.setattr(weather, "_schedule_refresh_cycle", lambda: None)  # type: ignore[method-assign]
+    monkeypatch.setattr(weather._runtime_service, "schedule_refresh_cycle", lambda: None)
     monkeypatch.setattr(weather, "show", lambda: show_calls.append("show"))  # type: ignore[method-assign]
 
     assert weather.isVisible() is False
@@ -1043,26 +1326,37 @@ def test_weather_cached_startup_stays_hidden_until_fade_starter_runs(qapp, monke
     parent.deleteLater()
 
 
-def test_weather_error_handling(qapp, parent_widget):
+def test_weather_error_handling(qapp, parent_widget, monkeypatch):
     """Test weather error handling."""
     weather = WeatherWidget(parent=parent_widget)
     
     error_messages = []
+    retries = []
     weather.error_occurred.connect(lambda e: error_messages.append(e))
+    service = weather._runtime_service
+    assert service is not None
+    service.set_running(True)
+    monkeypatch.setattr(service, "schedule_retry", lambda: retries.append(True))
     
     # Simulate fetch error
     weather._on_fetch_error("Network error")
     
     assert len(error_messages) == 1
     assert "Network error" in error_messages[0]
+    assert retries == [True]
 
 
-def test_weather_error_with_cache(qapp, parent_widget, mock_weather_data):
+def test_weather_error_with_cache(qapp, parent_widget, mock_weather_data, monkeypatch):
     """Test error handling with valid cache."""
     weather = WeatherWidget(parent=parent_widget)
     
     # Set cache first
     weather._on_weather_fetched(mock_weather_data)
+    service = weather._runtime_service
+    assert service is not None
+    service.set_running(True)
+    retries = []
+    monkeypatch.setattr(service, "schedule_retry", lambda: retries.append(True))
     
     # Simulate error
     weather._on_fetch_error("Network error")
@@ -1070,6 +1364,7 @@ def test_weather_error_with_cache(qapp, parent_widget, mock_weather_data):
     # Should fall back to cache (case-insensitive check)
     text = weather._city_label.text()
     assert "London" in text or "LONDON" in text.upper()
+    assert retries == []
 
 
 def test_weather_runtime_content_refresh_respects_active_custom_rect(qapp, parent_widget, mock_weather_data):
