@@ -429,6 +429,7 @@ High-level sequence:
 
 ```text
 F0  remove deprecated Imgur
+F0.5  Widgets → General shadow-direction picker
 F1  Clock / Clock2 / Clock3
 F2  Weather
 F3  Media core
@@ -487,6 +488,29 @@ capture, blur layers or glass-specific effect machinery while proving the ordina
 
 Remove the live gate/defaults/settings controls/descriptor/runtime/provider/CUSTOM/tests/package/current
 authority references that exist solely for deprecated Imgur. Do not create an Imgur Quick component.
+
+## F0.5 — Widgets → General shadow-direction picker
+
+E4 deliberately landed runtime/settings authority before Settings UI. After F0 is independently GREEN,
+add the missing user-facing control before the first real family port.
+
+Location:
+
+```text
+Settings
+  -> Widgets
+      -> General
+          -> Shadow Direction
+```
+
+Use the compact custom-styled 3×3 arrow-picker contract defined in
+`Docs/Custom_Style_Implementation.md`. The center cell is inert because there is no center/none direction.
+The picker edits the existing canonical `widgets.shadows.direction` setting; it must not introduce a
+second token/mapping authority or expose SettingsManager to runtime QML.
+
+This is a Settings QWidget slice, not a runtime family port. Gate canonical load/save/reset/default `SE`,
+all eight selections, selected/hover/pressed state, inert center behavior, and normal Settings persistence.
+Do not begin Clock in the same checkpoint.
 
 ## F1 — Clock family: first retained family seam
 
@@ -629,7 +653,7 @@ Scope:
 - update canonical family/catalog/default/settings/test inventory after deletion
 - prove fresh-process/catalog/settings/package integrity
 
-Do not begin Clock/F1 in the same checkpoint.
+Do not begin F0.5 or Clock/F1 in the same checkpoint.
 Do not alter surviving provider families.
 Do not run full/Nuitka/installed builds as routine validation.
 
@@ -637,5 +661,6 @@ commit + push
 STOP for independent audit because this is a broad deletion boundary
 ```
 
-After F0 GREEN, F1 Clock is the first retained family port and must obey the no-effect-carrier/root-fade
+After F0 GREEN, implement and audit F0.5 (the Widgets → General compact shadow-direction picker).
+After F0.5 GREEN, F1 Clock is the first retained family port and must obey the no-effect-carrier/root-fade
 rule above.
