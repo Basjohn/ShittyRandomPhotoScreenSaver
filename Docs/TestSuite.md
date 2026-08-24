@@ -435,6 +435,7 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_widget_effects_contract.py` | **WILL BE OBSOLETE — E4/F** | Keep only until owning QWidget effect/shadow path is replaced. |
 | `tests/test_widget_factories.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_family_catalog.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
+| `tests/test_widget_import_dormancy.py` | **MIGRATION-CRITICAL — E1** | Fresh-process host/package and production deactivated-Media implementation-loading oracle; retain through the display-runtime hoist. |
 | `tests/test_widget_lifecycle.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_manager.py` | **MIGRATION-CRITICAL — E1/F** | Update with provider/model/runtime ownership split; preserve contract. |
 | `tests/test_widget_manager_refresh.py` | **MIGRATION-CRITICAL — E1/F** | Current capability admission plus production factory/service-injection seam coverage, including Reddit, Weather and Abandonment ownership/reuse validation; continue updating with later E1/F slices. |

@@ -7,8 +7,8 @@ Last updated: 2026-08-24
 Latest pushed/self-audited implementation basis:
 
 ```text
-216c7da597df0fa1b8aeb132b806441b424168e2
-Phase E1 slice 8 — shared Media volume and system-mute accessory ownership — self-audited GREEN; reused-agent reviews GREEN
+ad71421d395806e78898593c71a3bc25a53bcdf1
+Phase E1 slice 9 — fresh-process/deactivated-family import dormancy — self-audited GREEN; reused-agent reviews GREEN
 ```
 
 Independent review basis:
@@ -628,13 +628,10 @@ Focused Abandonment/Steam/factory/setup/runtime-owner/lifecycle gate: `426 passe
 fresh-process registry and deactivated-family import dormancy, structural old-owner search and
 `git diff --check` clean. Exact-diff self-audit and reused-agent repeated-setup audit were GREEN.
 
-### E1 remaining after Media accessory slice 8
+### E1 remaining after import-dormancy slice 9
 
 - keep Steam Progress and Friend Pulse as E1 no-ops unless current source later gains a real runtime
   owner;
-- close fresh-process import dormancy: catalogued-but-deactivated capability resolves no unnecessary
-  heavy family implementation before first use, including removal of type-annotation-only eager family
-  imports from the current host path;
 - hoist the per-display runtime owner out of legacy `WidgetManager` into an injected display-runtime
   boundary only after exact construction/lifecycle dependencies prove one owner serves the current
   presenter and can transfer to `QuickDisplayRuntime` without creating a duplicate proof-only owner.
@@ -1187,26 +1184,54 @@ manager gate: `207 passed`, plus focused Ruff, `py_compile`, fresh-process regis
 owner searches and `git diff --check`. Exact-diff self-audit and reused-agent reviews were GREEN after
 correcting queued-write fencing and stale-local/live-remote system-audio routing.
 
-### E1 slice 9 — fresh-process/deactivated-family import dormancy — IMPLEMENTATION ACTIVE
+### E1 slice 9 — fresh-process/deactivated-family import dormancy — CLOSED / SELF-AUDITED GREEN
 
-Exact current source still has type-annotation-only eager widget-family imports in the legacy host path.
-Those imports can resolve Media and other heavy implementation modules before family admission even
-though registry service builders themselves are lazy. Close only that loading boundary before the
-display-runtime owner hoist.
+Pushed checkpoint: `ad71421d395806e78898593c71a3bc25a53bcdf1`.
+
+The completed checklist is pruned. Annotation-only Clock/Weather/Media/Reddit/Visualizer/accessory types
+in the two legacy host modules now resolve only under `TYPE_CHECKING`; genuine factories remain explicit
+lazy creation seams. The `widgets` package itself is inert instead of activating Clock, Weather and
+Media whenever any shared `widgets.*` helper is imported. Repository search found no caller of the
+removed package-level class aliases, so no lazy compatibility facade was introduced.
+
+Fresh-process host-import and real deactivated-Media setup probes prove no Media widget/runtime,
+Visualizer, volume, mute, controller or Core Audio implementation resolves before admission. Focused
+manager/setup/Media gate: `277 passed`; Clock/Weather/Reddit/Media-family gate: `179 passed`; relevant
+Visualizer gate: `282 passed, 7 skipped, 1 deselected` (the deselected synthetic Bubble harness is the
+known pre-existing failure recorded in `Future_Cleanup.md`). Strict new-file/fatal-host Ruff,
+`py_compile`, structural import searches and `git diff --check` were clean. Both reused-agent reviews
+were GREEN.
+
+### E1 slice 10 — hoist `WidgetRuntimeManager` to the display-runtime boundary — IMPLEMENTATION ACTIVE
+
+Exact current production still constructs and terminally owns `WidgetRuntimeManager` inside the legacy
+`WidgetManager`. The current production display runtime is `DisplayWidget`; `QuickDisplayRuntime` is not
+yet a production host and must not gain a second proof-only owner. Hoist the one real owner to the
+current display-runtime boundary and inject it into the current presenter manager so Phase F can replace
+the presenter without inheriting a QWidget-owned lifetime.
 
 Live checklist:
 
-- [ ] inspect every eager family import in `rendering/display_widget.py` and `rendering/widget_manager.py`;
-  move only verified annotation-only names behind `TYPE_CHECKING` or the existing lazy creation seam;
-- [ ] preserve genuine runtime class checks/factories and standalone compatibility; do not replace real
-  dependencies with broad exception fallbacks or a second registry;
-- [ ] add a fresh-process production-shaped deactivated-Media setup oracle forbidding Media widget,
-  controller, volume and system-mute implementation modules, plus focused host-import probes for any
-  other family names moved;
-- [ ] run focused setup/factory/runtime-manager/Media/Visualizer gates, Ruff, `py_compile`, structural
-  import searches and `git diff --check`; self-audit and commit/push this bounded checkpoint.
+- [ ] let `WidgetRuntimeManager` bind an explicit runtime-widget registry host contract instead of
+  reading `WidgetManager._widgets` directly; preserve all lifecycle/E2.7/service APIs and fail closed on
+  invalid/double host binding;
+- [ ] construct exactly one `WidgetRuntimeManager` per production `DisplayWidget` runtime generation and
+  inject it into `WidgetManager`; retain direct `WidgetManager(...)` convenience ownership only for
+  standalone/tests and expose the injected edge as non-owning;
+- [ ] move terminal service-owner cleanup to `rendering/display_cleanup.py` after presenter/widget
+  cleanup and before display teardown completes; preserve idempotence, widget-before-service order,
+  confirmed E2.7 cleanup semantics and runtime-generation destruction barriers;
+- [ ] update setup/internal callers to consume a read-only runtime-manager accessor while retaining only
+  the minimum transitional private alias needed by existing standalone tests;
+- [ ] prove production identity/cardinality (`DisplayWidget -> one owner <- WidgetManager`), no duplicate
+  service/controller/timer construction, injected-vs-standalone cleanup ownership, host detach/rebind
+  rules, repeated setup and exact first/final shared-family retirement behavior;
+- [ ] run focused runtime-manager/setup/factory/family-owner/display-cleanup/destruction/Visualizer gates,
+  Ruff, `py_compile`, structural owner-construction searches and `git diff --check`; self-audit and
+  commit/push the coherent hoist checkpoint.
 
-Non-goals: provider/cache rewrite, widget behavior changes, manager hoist, Quick pixels or E3/E4.
+Non-goals: constructing a `WidgetRuntimeManager` in dormant `QuickDisplayRuntime`, Quick pixels,
+provider/cache redesign, E3/E4 or Phase F.
 
 After E1 completes across bounded owner slices:
 

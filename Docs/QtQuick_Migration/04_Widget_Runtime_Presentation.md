@@ -1,6 +1,6 @@
 # 04 — Runtime Widgets, Retained Quick Presentation, Shadows and Full Customization
 
-Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — shared Media/Gmail and separate app-volume/system-mute owners GREEN; import dormancy active**
+Status: **Phase-E/F technical decomposition; E2/E2.7 closed; E1 ACTIVE — family owner seams and import dormancy GREEN; display-runtime owner hoist active**
 Last updated: 2026-08-24
 
 Cross-links:
@@ -323,7 +323,7 @@ Friend Pulse remain provider/task/timer-inert and unregistered.
 The bounded Abandonment artwork projection and Weather compatibility-proxy corrections are GREEN at
 `9ab4f47e`; shared Media ownership is GREEN at `4680130b`; shared Gmail ownership is GREEN at
 `4f7dc869`; separate shared app-volume/system-mute owners are GREEN at `55bc73b0` / `216c7da5`.
-Production import dormancy remains the bounded checkpoint before a safe display-runtime owner hoist.
+Production import dormancy is GREEN at `ad71421d`; the safe display-runtime owner hoist is active.
 
 ### 6.2 Per-display Quick widget presentation host
 

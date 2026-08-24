@@ -39,6 +39,11 @@ maximum abstraction layers
 
 Extract a runtime owner only when there is real presentation-neutral state/lifetime to own.
 
+Implementation loading follows the same admission rule. The host/package dormancy checkpoint at
+`ad71421d` keeps annotation-only family types and deactivated Media/controller/accessory implementations
+unresolved until explicit factory/service creation; importing a shared `widgets.*` helper is not family
+activation.
+
 A smaller/cohesive module is desirable when it follows a real responsibility boundary. File-count or
 line-count reduction is not a substitute for architectural improvement.
 

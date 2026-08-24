@@ -50,7 +50,7 @@ Current normal implementation work is **Phase E — widget presentation + capabi
 - **E1 presentation-neutral runtime/model/provider ownership is ACTIVE.** Shared Media ownership is
   GREEN at `4680130b` and shared Gmail orchestration/model/action ownership is GREEN at `4f7dc869`.
   Separate shared app-volume/system-mute accessories are GREEN at `55bc73b0` / `216c7da5`; import
-  dormancy is active, followed by the safe display-runtime owner hoist.
+  dormancy is GREEN at `ad71421d`, and the display-runtime owner hoist is active.
 - E3 retained Quick primitives and E4 global shadow direction remain after E1 and before Phase F.
 
 ## Start here
@@ -160,7 +160,7 @@ No production runtime switch/fallback between old and Quick is to be introduced.
 | Capability activation | canonical settings + presentation-neutral family/transition catalog/query authority |
 | Providers / service logic | existing/refactored Python owners |
 | Persistence | existing settings/store owners |
-| Widget models/providers | migrated services/leases through presentation-neutral `WidgetRuntimeManager`; Weather/Reddit, Steam Abandonment/Achievement, shared Media/Gmail, app-volume and system-mute owners are landed; import dormancy and the display-runtime hoist remain E1 work |
+| Widget models/providers | migrated services/leases through presentation-neutral `WidgetRuntimeManager`; Weather/Reddit, Steam Abandonment/Achievement, shared Media/Gmail, app-volume and system-mute owners are landed; host import dormancy is closed and the display-runtime owner hoist remains E1 work |
 | Runtime widget pixels | destination: display Quick scene |
 | Thread/task ownership | `ThreadManager` for general async work |
 | Resource accounting | `ResourceManager`; accounting only, never deletion owner |
