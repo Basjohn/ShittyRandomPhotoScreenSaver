@@ -17,11 +17,14 @@ from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen, QPainterPath, QPi
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
-from core.media import system_mute
 from core.settings.shadow_tuning import CONTROL_SHADOW_TUNING
 from core.threading.manager import ThreadManager
 from widgets.media.dependent_visibility import sync_anchor_dependent_visibility
 from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes
+from widgets.system_mute_runtime import (
+    SystemMuteRuntimeService,
+    SystemMuteRuntimeSnapshot,
+)
 
 logger = get_logger(__name__)
 
@@ -29,16 +32,22 @@ logger = get_logger(__name__)
 class MuteButtonWidget(QWidget):
     """Small rounded mute toggle button anchored to the media widget."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        *,
+        build_default_runtime: bool = True,
+    ) -> None:
         super().__init__(parent)
 
         self._muted: bool = False
-        self._available: bool = system_mute.is_available()
+        self._available: bool = False
         self._enabled: bool = False
         self._anchor_media: Optional[QWidget] = None
         self._thread_manager: Optional[ThreadManager] = None
+        self._runtime_service: SystemMuteRuntimeService | None = None
+        self._owns_runtime_service = False
         self._has_faded_in: bool = False
-        self._mute_poll_active: bool = False
         self._spotify_secondary_stage_started: bool = False
 
         # Visual feedback on click
@@ -65,6 +74,10 @@ class MuteButtonWidget(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setFixedSize(self._btn_width + self._shadow_margin * 2, self._btn_height + self._shadow_margin * 2)
         self.hide()
+
+        if build_default_runtime:
+            service = SystemMuteRuntimeService(shared=False)
+            self._install_runtime_service(service, owns_service=True)
 
     def _resize_to_button_footprint(self, btn_width: int, btn_height: int) -> None:
         """Apply a new button footprint and invalidate cached shadow geometry."""
@@ -104,16 +117,100 @@ class MuteButtonWidget(QWidget):
         """Enable or disable the mute button."""
         self._enabled = bool(enabled) and self._available
         if not self._enabled:
-            self._reset_runtime_state(stop_poll=True, reset_secondary_stage=True)
+            service = self._runtime_service
+            if service is not None:
+                service.stop()
+            self._reset_presentation_state(reset_secondary_stage=True)
             self.hide()
             return
-        if self._thread_manager is not None:
-            self._start_mute_poll()
+        service = self._runtime_service
+        if service is None or not service.start():
+            self._enabled = False
+            logger.error("[MUTE_BTN] Runtime service start failed closed")
+            self.hide()
 
-    def set_thread_manager(self, tm: ThreadManager) -> None:
-        """Inject the ThreadManager for async mute operations."""
+    def set_thread_manager(self, tm: Optional[ThreadManager]) -> None:
+        """Inject the runtime scheduler identity used by the neutral lease."""
         self._thread_manager = tm
-        self._start_mute_poll()
+        service = self._runtime_service
+        if service is not None:
+            service.set_thread_manager(tm)
+
+    def set_runtime_service(self, service: SystemMuteRuntimeService) -> None:
+        """Attach the registry-owned neutral service before enabling pixels."""
+
+        self._install_runtime_service(service, owns_service=False)
+
+    def _install_runtime_service(
+        self,
+        service: SystemMuteRuntimeService,
+        *,
+        owns_service: bool,
+    ) -> None:
+        if service is self._runtime_service:
+            return
+        prior = self._runtime_service
+        prior_owned = self._owns_runtime_service
+        if prior is not None:
+            prior.stop()
+            prior.detach_consumer(self)
+            if prior_owned:
+                prior.retire()
+        self._runtime_service = service
+        self._owns_runtime_service = bool(owns_service)
+        if self._thread_manager is not None:
+            service.set_thread_manager(self._thread_manager)
+        service.attach_consumer(self)
+        self._sync_runtime_snapshot()
+
+    def _sync_runtime_snapshot(self) -> None:
+        service = self._runtime_service
+        snapshot = service.current_snapshot() if service is not None else None
+        if snapshot is not None:
+            self._apply_runtime_snapshot(snapshot)
+
+    def is_system_mute_consumer_alive(self) -> bool:
+        try:
+            from shiboken6 import Shiboken
+
+            return bool(Shiboken.isValid(self))
+        except Exception:
+            return False
+
+    def on_system_mute_runtime_snapshot(
+        self, snapshot: SystemMuteRuntimeSnapshot
+    ) -> None:
+        self._apply_runtime_snapshot(snapshot)
+
+    def _apply_runtime_snapshot(self, snapshot: SystemMuteRuntimeSnapshot) -> None:
+        self._available = bool(snapshot.available)
+        self._apply_mute_state(bool(snapshot.muted))
+        if not self._available:
+            self.hide()
+
+    def is_lifecycle_active(self) -> bool:
+        return bool(self._enabled)
+
+    def has_live_system_mute_runtime(self) -> bool:
+        """Return whether this presenter still fronts its current running lease."""
+
+        if not self._enabled or not self.is_system_mute_consumer_alive():
+            return False
+        service = self._runtime_service
+        if service is None or not service.is_running():
+            return False
+        service_generation = service.runtime_generation
+        try:
+            parent_generation = getattr(self.parent(), "_runtime_generation", None)
+        except Exception:
+            return False
+        if not service.is_shared:
+            return True
+        return (
+            service_generation is not None
+            and parent_generation is not None
+            and service_generation == parent_generation
+        )
 
     def set_anchor(self, media_widget: Optional[QWidget]) -> None:
         """Set the media widget this button anchors to."""
@@ -292,57 +389,26 @@ class MuteButtonWidget(QWidget):
         y = anchor_geo.bottom() + 6
         return x, y
 
-    # ------------------------------------------------------------------
-    # Periodic system mute polling (30s interval)
-    # ------------------------------------------------------------------
-
-    _MUTE_POLL_INTERVAL_S: float = 30.0
-
-    def _start_mute_poll(self) -> None:
-        """Start periodic mute state polling via ThreadManager."""
-        if self._mute_poll_active or not self._available or not self._enabled:
-            return
-        tm = self._thread_manager
-        if tm is None:
-            return
-        self._mute_poll_active = True
-        self._schedule_next_poll()
-
-    def _stop_mute_poll(self) -> None:
-        """Cancel periodic mute polling."""
-        self._mute_poll_active = False
-
-    def _reset_runtime_state(self, *, stop_poll: bool, reset_secondary_stage: bool) -> None:
-        """Clear local runtime state so disable/cleanup can behave like a fresh lifecycle."""
-        if stop_poll:
-            self._stop_mute_poll()
+    def _reset_presentation_state(self, *, reset_secondary_stage: bool) -> None:
+        """Clear local reveal state so disable/cleanup behaves like a fresh presenter."""
         if reset_secondary_stage:
             self._spotify_secondary_stage_started = False
             self._has_faded_in = False
 
-    def _schedule_next_poll(self) -> None:
-        """Schedule the next poll using ThreadManager.single_shot (non-blocking)."""
-        if not self._mute_poll_active:
-            return
-        try:
-            delay_ms = int(self._MUTE_POLL_INTERVAL_S * 1000)
-            ThreadManager.single_shot(delay_ms, self._poll_mute_tick)
-        except Exception:
-            logger.debug("[MUTE_BTN] Failed to schedule mute poll", exc_info=True)
-            self._mute_poll_active = False
-
-    def _poll_mute_tick(self) -> None:
-        """Called on UI thread via single_shot: read mute state and reschedule."""
-        if not self._mute_poll_active:
-            return
-        state = system_mute.get_mute()
-        if state is not None:
-            self._apply_mute_state(state)
-        self._schedule_next_poll()
-
     def cleanup(self) -> None:
-        """Stop polling and clean up resources."""
-        self._reset_runtime_state(stop_poll=True, reset_secondary_stage=True)
+        """Release presentation state and the attached neutral lease."""
+        self._enabled = False
+        self._reset_presentation_state(reset_secondary_stage=True)
+        service = self._runtime_service
+        owns_service = self._owns_runtime_service
+        if service is not None:
+            service.stop()
+            service.detach_consumer(self)
+            if owns_service:
+                service.retire()
+        self._runtime_service = None
+        self._owns_runtime_service = False
+        self.hide()
 
     # ------------------------------------------------------------------
     # Interaction (called by DisplayWidget)
@@ -351,26 +417,33 @@ class MuteButtonWidget(QWidget):
     def handle_click(self) -> bool:
         """Toggle system mute. Returns True if handled.
 
-        Runs synchronously on the UI thread because pycaw COM objects
-        are apartment-threaded — they must be called from the same
-        thread that acquired them (the main/UI thread).
+        The neutral owner executes synchronously on this UI thread because the
+        pycaw endpoint was acquired in the same COM apartment.
         """
         if not self._enabled or not self._available:
             logger.debug("[MUTE_BTN] handle_click blocked: enabled=%s available=%s",
                          self._enabled, self._available)
             return False
 
-        logger.debug("[MUTE_BTN] handle_click: toggling mute (current=%s)", self._muted)
-        result = system_mute.toggle_mute()
-        if result is not None:
-            self._muted = result
-            logger.debug("[MUTE_BTN] mute toggled to %s", result)
-        else:
-            logger.debug("[MUTE_BTN] toggle_mute returned None")
+        service = self._runtime_service
+        if service is None:
+            logger.error("[MUTE_BTN] Missing required runtime service; click failed closed")
+            return False
+        before = self._muted
+        handled = bool(service.toggle_mute())
+        if handled and self._muted == before:
+            # Preserve click feedback when the optional backend returns no state.
+            self._trigger_feedback()
+            self.update()
+        return handled
 
-        self._trigger_feedback()
-        self.update()
-        return True
+    def handle_system_volume_step(self, delta: float) -> float | None:
+        """Route one global system-volume step through the shared audio owner."""
+
+        service = self._runtime_service
+        if service is None or not self._enabled or not self._available:
+            return None
+        return service.step_system_volume(delta)
 
     def _trigger_feedback(self) -> None:
         """Start a visual click-flash feedback animation using QVariantAnimation."""
@@ -418,14 +491,12 @@ class MuteButtonWidget(QWidget):
         self.update()
 
     def poll_mute_state(self) -> None:
-        """Poll the current system mute state (call periodically)."""
+        """Request one owner-coalesced mute refresh on the UI thread."""
         if not self._enabled or not self._available:
             return
-        state = system_mute.get_mute()
-        if state is not None and state != self._muted:
-            self._muted = state
-            self._trigger_feedback()
-            self.update()
+        service = self._runtime_service
+        if service is not None:
+            service.request_refresh(source="presenter")
 
     def hit_test(self, global_pos) -> bool:
         """Return True if the global position is within this button."""

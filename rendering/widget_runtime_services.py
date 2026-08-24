@@ -39,7 +39,8 @@ remains the unchanged process singleton.
 
 E1 slice 8 adds a separate Media app-volume lease per participating display.
 Those leases share one controller/target/read-write/debounce owner per runtime
-generation; the primary Media owner remains intentionally separate.
+generation. A second, distinct system-mute lease shares one UI-thread endpoint
+state/poll/action owner. The primary Media owner remains intentionally separate.
 
 Heavy provider implementation is imported lazily inside the build callable so a
 process that never activates/creates the family does not resolve it merely
@@ -438,12 +439,56 @@ _MEDIA_VOLUME_SERVICE_SPEC = RuntimeServiceSpec(
 )
 
 
+def _build_system_mute_service(
+    widget_id: str, widgets_config: Mapping[str, Any]
+) -> Any:
+    from widgets.system_mute_runtime import SystemMuteRuntimeService
+
+    return SystemMuteRuntimeService(shared=True)
+
+
+def _inject_system_mute_service(widget: Any, service: Any) -> None:
+    setter = getattr(widget, "set_runtime_service", None)
+    if not callable(setter):
+        raise AttributeError(
+            "runtime widget cannot accept system-mute service "
+            "(missing set_runtime_service)"
+        )
+    setter(service)
+
+
+def _retire_system_mute_service(service: Any) -> None:
+    retire = getattr(service, "retire", None)
+    if not callable(retire):
+        raise AttributeError("system-mute runtime service has no retire method")
+    retire()
+
+
+def _system_mute_service_reuse_is_valid(widget: Any, service: Any) -> bool:
+    if getattr(widget, "_runtime_service", None) is not service:
+        return False
+    if _service_is_retired(service):
+        return False
+    if getattr(service, "shared_owner", None) is None:
+        return False
+    return not _widget_is_active(widget) or _service_is_running(service)
+
+
+_SYSTEM_MUTE_SERVICE_SPEC = RuntimeServiceSpec(
+    build=_build_system_mute_service,
+    inject=_inject_system_mute_service,
+    retire=_retire_system_mute_service,
+    reuse_is_valid=_system_mute_service_reuse_is_valid,
+)
+
+
 _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
     "reddit": _REDDIT_SERVICE_SPEC,
     "reddit2": _REDDIT_SERVICE_SPEC,
     "weather": _WEATHER_SERVICE_SPEC,
     "media": _MEDIA_SERVICE_SPEC,
     "spotify_volume": _MEDIA_VOLUME_SERVICE_SPEC,
+    "mute_button": _SYSTEM_MUTE_SERVICE_SPEC,
     "gmail": _GMAIL_SERVICE_SPEC,
     "abandonment_issues": _ABANDONMENT_SERVICE_SPEC,
     "achievement_pulse": _ACHIEVEMENT_SERVICE_SPEC,

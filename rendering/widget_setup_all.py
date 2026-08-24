@@ -703,11 +703,20 @@ def _setup_media_owned_spotify_dependents(
         mgr._register_spotify_secondary_fade(vol_widget)
 
     mute_btn = _reuse_existing_secondary(mgr, created, "mute_button_widget", "mute_button")
+    mute_reused = mute_btn is not None
     if mute_btn is None:
         mute_btn = mgr.create_mute_button_widget(
             widgets_config, screen_index, thread_manager, media_widget,
         )
-    if mute_btn:
+    if mute_btn and _ensure_secondary_runtime_service(
+        mgr,
+        created,
+        "mute_button",
+        mute_btn,
+        widgets_config,
+        reused=mute_reused,
+    ):
+        mute_btn.set_enabled(True)
         created['mute_button_widget'] = mute_btn
         mgr._register_spotify_secondary_fade(mute_btn)
 

@@ -1216,8 +1216,9 @@ def create_mute_button_widget(
         return None
 
     try:
-        btn = MuteButtonWidget(mgr._parent)
-        btn.set_enabled(True)
+        # Production ownership is injected by WidgetRuntimeManager before the
+        # button is enabled and allowed to schedule the shared poll cadence.
+        btn = MuteButtonWidget(mgr._parent, build_default_runtime=False)
 
         if thread_manager is not None:
             btn.set_thread_manager(thread_manager)

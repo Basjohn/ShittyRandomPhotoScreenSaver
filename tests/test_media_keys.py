@@ -372,21 +372,121 @@ def test_display_widget_resolves_cross_display_volume_widget_for_hotkeys():
 def test_display_widget_global_volume_up_hotkey_uses_system_audio(monkeypatch):
     refreshes = []
     stub = SimpleNamespace(_refresh_mute_button_after_system_audio_change=lambda: refreshes.append(True))
-    monkeypatch.setattr("rendering.display_widget.system_mute.step_volume", lambda delta: 0.55)
+    backend = SimpleNamespace(step_volume=lambda delta: 0.55)
+    monkeypatch.setattr(
+        "rendering.display_widget._load_system_audio_backend", lambda: backend
+    )
 
     DisplayWidget._handle_global_volume_step(stub, 0.05, source="keyboard_pageup")
 
     assert refreshes == [True]
 
 
+def test_display_widget_global_volume_uses_cross_display_shared_mute_owner():
+    mute_button = MagicMock()
+    mute_button.has_live_system_mute_runtime.return_value = True
+    mute_button.handle_system_volume_step.return_value = 0.65
+    remote_display = SimpleNamespace(mute_button_widget=mute_button)
+    stub = SimpleNamespace(
+        mute_button_widget=None,
+        _widget_manager=None,
+        get_all_instances=lambda: [remote_display],
+    )
+
+    DisplayWidget._handle_global_volume_step(stub, 0.05, source="keyboard_pageup")
+
+    mute_button.handle_system_volume_step.assert_called_once_with(0.05)
+
+
+def test_display_widget_global_volume_does_not_retry_after_owner_attempt(monkeypatch):
+    mute_button = MagicMock()
+    mute_button.has_live_system_mute_runtime.return_value = True
+    mute_button.handle_system_volume_step.return_value = None
+    backend_loader = MagicMock()
+    monkeypatch.setattr(
+        "rendering.display_widget._load_system_audio_backend", backend_loader
+    )
+    stub = SimpleNamespace(mute_button_widget=mute_button)
+
+    DisplayWidget._handle_global_volume_step(stub, 0.05, source="keyboard_pageup")
+
+    mute_button.handle_system_volume_step.assert_called_once_with(0.05)
+    backend_loader.assert_not_called()
+
+
+def test_display_widget_global_volume_skips_stale_local_for_live_remote(monkeypatch):
+    stale_local = MagicMock()
+    stale_local.has_live_system_mute_runtime.return_value = False
+    live_remote = MagicMock()
+    live_remote.has_live_system_mute_runtime.return_value = True
+    live_remote.handle_system_volume_step.return_value = 0.7
+    backend_loader = MagicMock()
+    monkeypatch.setattr(
+        "rendering.display_widget._load_system_audio_backend", backend_loader
+    )
+    remote_display = SimpleNamespace(mute_button_widget=live_remote)
+    stub = SimpleNamespace(
+        mute_button_widget=stale_local,
+        _widget_manager=None,
+        get_all_instances=lambda: [remote_display],
+    )
+
+    DisplayWidget._handle_global_volume_step(stub, 0.05, source="keyboard_pageup")
+
+    stale_local.handle_system_volume_step.assert_not_called()
+    live_remote.handle_system_volume_step.assert_called_once_with(0.05)
+    backend_loader.assert_not_called()
+
+
 def test_display_widget_global_mute_hotkey_uses_mute_button_when_available():
     mute_button = MagicMock()
+    mute_button.has_live_system_mute_runtime.return_value = True
     mute_button.handle_click.return_value = True
     stub = SimpleNamespace(mute_button_widget=mute_button)
 
     DisplayWidget._on_global_mute_toggle_requested(stub)
 
     mute_button.handle_click.assert_called_once_with()
+
+
+def test_display_widget_global_mute_does_not_retry_after_owner_exception(monkeypatch):
+    mute_button = MagicMock()
+    mute_button.has_live_system_mute_runtime.return_value = True
+    mute_button.handle_click.side_effect = RuntimeError("post-toggle presenter failure")
+    backend_loader = MagicMock()
+    monkeypatch.setattr(
+        "rendering.display_widget._load_system_audio_backend", backend_loader
+    )
+    stub = SimpleNamespace(mute_button_widget=mute_button)
+
+    DisplayWidget._on_global_mute_toggle_requested(stub)
+
+    mute_button.handle_click.assert_called_once_with()
+    backend_loader.assert_not_called()
+
+
+def test_display_widget_global_mute_skips_stale_local_for_live_remote(monkeypatch):
+    stale_local = MagicMock()
+    stale_local.has_live_system_mute_runtime.return_value = False
+    live_remote = MagicMock()
+    live_remote.has_live_system_mute_runtime.return_value = True
+    live_remote.handle_click.return_value = True
+    backend_loader = MagicMock()
+    monkeypatch.setattr(
+        "rendering.display_widget._load_system_audio_backend", backend_loader
+    )
+    remote_display = SimpleNamespace(mute_button_widget=live_remote)
+    stub = SimpleNamespace(
+        mute_button_widget=stale_local,
+        _widget_manager=None,
+        get_all_instances=lambda: [remote_display],
+    )
+
+    DisplayWidget._on_global_mute_toggle_requested(stub)
+
+    stale_local.handle_click.assert_not_called()
+    live_remote.handle_click.assert_called_once_with()
+    backend_loader.assert_not_called()
 
 def test_native_virtual_key_recognition(input_handler):
     """Verify recognition via native virtual key codes (Windows)."""
