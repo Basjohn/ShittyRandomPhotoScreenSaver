@@ -6,7 +6,8 @@ Reviewed source basis:
 
 ```text
 test-inventory basis = 19460a7a8ffe9e5134363267da3d61fe46cc23d4
-Phase F0 deprecated Imgur deletion — source-audited GREEN; stale scraping dependency pins removed by closure reconciliation; 360 test modules; F0.5 next
+documentation basis = f049baedb80d6b7e7a74fb03395b06e94b870a1c
+Phase F0 CLOSED; 360 test modules; F0.5 shadow-authority cleanup + General controls next
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -227,6 +228,11 @@ The E4 host test necessarily injects already-resolved signed offsets because no 
 
 F0 deleted deprecated Imgur instead of porting it. F0.5 is the bounded QWidget Settings slice that completes the canonical global shadow controls before F1 Clock. For each later family, preserve provider/model/behavior/settings tests and rehome direct QWidget presentation assertions to retained Quick items.
 
+Old family presentation tests do **not** need to survive until I. Once a family is independently GREEN,
+its surviving contracts must already be covered by destination tests; then retire caller-proven
+QWidget/painter-only tests with that family's old pixel presenter before the next family. Git/history,
+not executable dead tests, becomes the old-pixel reference.
+
 Do not port QWidget-era effect carriers, dummy shadow widgets, `QGraphicsOpacityEffect`/`ShadowFadeProfile` staged shadow attachment, or equivalent wrapper choreography into Quick. Whole-widget family fade is the retained presentation-root opacity and composites the card, cached card shadow, text-shadow glyphs and content together. Intermediate Quick `Item`s require a real layout/transform/clipping/z/input/lifecycle purpose, not an old one-effect-per-QWidget workaround. F1 Clock must explicitly prove this rule and the real E4 settings→Python resolver→retained-family wiring.
 
 F0.5 permanent Settings regressions must protect: complete removal of the `shadowtuning.json` loader/path/profile-copy authority and old `widgets.shadows.offset`; `ShadowSettings` fallback/default parity; all eight direction selections and inert center; default/reset/fallback `SE`; existing shadow enable toggles; Card Darkness/Blur/Extra Offset and Text Darkness/Extra Offset canonical persistence; no negative Extra Offset; no Intense keys/UI; no text blur; and, critically, General-section save **merging/preservation** so a partial edit cannot erase unedited canonical or unknown-future `widgets.shadows` keys. Do not add tests that require legacy QWidget shadow visual parity. After deleting `test_shadow_tuning_paths.py` and `test_base_overlay_shadow_cache.py`, reconcile the exact module count (358 before any newly added F0.5 module). If F0.5 adds a new test module, add it to this inventory in the same checkpoint and update the count.
@@ -235,9 +241,13 @@ F0.5 permanent Settings regressions must protect: complete removal of the `shado
 
 Preserve geometry/routing/session semantics, but move shell/top-level QWidget assumptions to Quick-scene input/edit ownership. Edge resize reflows the viewport; it does not anisotropically stretch finished visualizer pixels.
 
-### H/I — production cutover and legacy deletion
+### H/I — physical cutover then residual cleanup
 
-Before deleting an old presenter test, prove its **surviving contract** is covered by Quick tests. Then delete QRhiWidget/GLCompositor/software-fallback/old-overlay tests together with the source they own. Do not keep them as a compatibility layer.
+Ordinary family QWidget tests should already have retired family-by-family during F. H owns the old
+**physical presenter** test retirement: before deleting an old presenter test, prove its surviving
+contract is covered by Quick tests, then delete QRhiWidget/GLCompositor/software-backend/fallback-overlay
+coverage together with the H source it owns. I is a residue sweep for caller-proven migration debris,
+not the planned bulk retirement point for completed family tests.
 
 ### J — final validation/docs closure
 

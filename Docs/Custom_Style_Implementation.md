@@ -41,8 +41,8 @@ Keep provider/model/settings authority in Python.
 
 ### 3.1 Current-legacy runtime style owners
 
-The following may still have real callers before family/cutover deletion, but are
-**CURRENT-LEGACY — WILL BE OBSOLETE / REHOMED through E3/E4/F/I**:
+The following may still have real callers while their replacement owner is unproven, but are
+**CURRENT-LEGACY — WILL BE OBSOLETE / REHOMED during F/G/H as their owner lands**:
 
 - `BaseOverlayWidget` runtime card/pixel ownership;
 - QWidget/QPainter runtime card drawing;
@@ -50,8 +50,10 @@ The following may still have real callers before family/cutover deletion, but ar
 - QWidget runtime `QGraphicsEffect` opacity/shadow machinery;
 - old compositor/overlay fade/style application that exists only for the pre-Quick presenter.
 
-Do not expand those paths because they still run today. Preserve the **visual/style contract**, then
-move that contract to retained Quick owners and delete caller-proven legacy machinery.
+Do not expand those paths because they still run today. Preserve the **visual/style contract** while it
+is still needed as migration evidence, move that contract to retained Quick owners, then delete the
+caller-proven old pixel machinery promptly after the replacement family/owner is independently GREEN.
+Do not carry completed family presenters to I merely as a fallback.
 
 Transient QWidget control styling for Settings/context controls is not automatically obsolete merely
 because a similarly named runtime helper is.
@@ -186,8 +188,12 @@ Do not restore an `Intense Shadow` toggle/profile. `intense_shadow`, `analog_sha
 The old painter sidecar `shadowtuning.json` is deleted from current authority in F0.5 together with
 `core/settings/shadow_tuning.py` and its path/profile tests. Do not copy its `blur_steps`, spread/pass
 counts, card-shrink values, alpha tables or font-scaling values into another module or into Quick UI
-units. There is no compatibility/fallback tuning source. Legacy QWidget shadow visuals are allowed to
-disappear during migration rather than earning temporary parity work.
+units. There is no compatibility/fallback tuning source. **Sidecar-driven** QWidget shadow parity is
+allowed to disappear rather than earning temporary parity work.
+
+Do not interpret that as permission to erase family-authored shadow reference behavior before its port.
+Clock's bespoke analogue ring/marker, two-pass numeral and hand shadows remain reference authority until
+F1 is GREEN; see `Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md`.
 
 The destination has one normal shadow system with canonical settings plus these direct controls. F1 Clock
 establishes the first deliberate Quick card/text baseline magnitudes; later families reuse the destination
