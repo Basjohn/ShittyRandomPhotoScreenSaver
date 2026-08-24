@@ -251,9 +251,11 @@ There is **no text blur** and no revived Intense mode. Do not reintroduce retire
 `widgets.shadows.offset` pair; do not migrate it into Extra Offset.
 
 F0.5 also deletes the old `shadowtuning.json` / `core.settings.shadow_tuning` authority and its path test.
-Do not create a replacement legacy/fallback tuning table or preserve the old painter numbers. Legacy
-QWidget shadows may disappear while migration is incomplete; destination Quick families use the
-canonical settings and the deliberate Quick style baseline first established with Clock.
+Do not create a replacement legacy/fallback tuning table or preserve the old painter numbers.
+Sidecar-dependent QWidget shadow rendering may disappear while migration is incomplete, but family-
+authored visual reference behavior must remain available until its family port is GREEN. Clock analogue
+shadows are explicitly protected by `Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md`.
+Destination Quick families use canonical settings and deliberate Quick style policy.
 
 Extra Offset is a non-negative logical-pixel scalar added to authored class magnitude before the E4
 direction resolver. Direction remains the only orientation authority.
@@ -269,6 +271,7 @@ must never erase direction/tuning/unknown future keys. Detailed UI and regressio
 
 Clock is the first retained Phase-F family after F0 and the independently audited F0.5 Widgets → General shadow-controls slice.
 
+Read `Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md` before touching analogue presentation.
 Preserve the shared Python ticker/timezone logic.
 
 Intentional Quick-port visual improvements:
@@ -367,7 +370,31 @@ symmetry.
 
 ---
 
-## 16. Testing
+## 16. Reference retention and prompt retirement
+
+Do not confuse useful source reference with a supported fallback presenter.
+
+For each ordinary family:
+
+1. keep the old QWidget implementation intact while inspecting/implementing the Quick replacement;
+2. extract/reuse presentation-neutral logic rather than rewriting it into QML;
+3. prove the retained replacement with focused tests and required eyes-on comparison;
+4. after independent GREEN, prove old pixel callers absent and delete the family-local QWidget presenter,
+   painter/effect-only helpers and obsolete presentation tests before moving on;
+5. keep shared legacy code only while another unported family still genuinely requires it.
+
+Git history is sufficient historical reference after the family is closed. A family-local retirement
+need not become another architecture project; stop for audit only when deletion crosses shared lifecycle,
+factory, persistence or other high-risk boundaries.
+
+Temporary migration adapters are acceptable only when they carry **authored state** into the destination
+contract and avoid rebuilding already-proven logic. They must not preserve old pixels, selectable dual
+presentation or hidden fallback authority, and they need an explicit retirement point.
+
+Real resilience (provider/network/cache recovery, deterministic transition recovery, etc.) is not
+migration debris.
+
+## 17. Testing
 
 Test at the owner appropriate to the claim:
 

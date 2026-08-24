@@ -342,6 +342,22 @@ legacy tuning dictionary, fallback constants table or profile-copy dependency. F
 first deliberate destination card/text baseline magnitudes and later ordinary families reuse that Quick
 presentation policy.
 
+### Temporary migration-adapter rule
+
+A temporary adapter is admissible when it prevents needless reimplementation of already-proven authored
+logic by copying/normalizing that logic's result into a detached destination model/state contract.
+
+It is **not** admissible when it:
+
+- keeps old QWidget pixels selectable as a fallback;
+- screenshot-captures old presentation into Quick;
+- makes a provider/model depend on the old presenter;
+- creates a second settings/style authority;
+- exists only to keep the half-migrated application visually usable.
+
+Every temporary adapter needs a named replacement/retirement owner. Once its destination owner no longer
+requires the old source object, remove it rather than allowing “temporary” to become architecture.
+
 ### Whole-widget fade / no effect-carrier bridge
 
 The retained family shell has one whole-widget fade authority: outer `OverlayWidget` opacity.

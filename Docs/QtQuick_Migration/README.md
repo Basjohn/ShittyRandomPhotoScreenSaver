@@ -2,7 +2,7 @@
 
 Status: subordinate technical notes for `Current_Plan.md`  
 Last updated: 2026-08-24  
-Reviewed source basis: `19460a7a8ffe9e5134363267da3d61fe46cc23d4` + F0 closure reconciliation
+Reviewed documentation/source basis: `f049baedb80d6b7e7a74fb03395b06e94b870a1c` (F0 closed; F0.5 docs active)
 
 These documents are not independent plans. Sequence and work admission come only from
 `Current_Plan.md`; deferred cleanup/deletion comes from `Future_Cleanup.md`.
@@ -66,17 +66,20 @@ operator's real local worktree. Do not add hosted CI unless explicitly requested
 | `07_Settings_Capability_Activation.md` | landed E2/E2.7 activation/SETUP contract |
 | `08_Widget_Runtime_Ownership_Threading.md` | landed E1 owner/cardinality/threading contract |
 | `09_Widget_Quick_Presentation_Bridge.md` | model/list/image/action/family component bridge built on landed E3 host |
-| `10_Widget_Family_Port_Decomposition.md` | **detailed Phase-F family order and per-family implementation contracts** |
+| `10_Widget_Family_Port_Decomposition.md` | **detailed Phase-F family order, reference/retirement policy and per-family implementation contracts** |
+| `11_Clock_Analogue_Shadow_Contract.md` | **required F1 Clock analogue ring/marker/numeral/hand shadow reference; also protects that reference during F0.5 sidecar deletion** |
 
-For active Phase-F work, F0.5 is the admitted slice: delete the legacy `shadowtuning.json` authority/unused offset pair, normalize canonical shadow settings, then add the General controls. Read `Docs/Custom_Style_Implementation.md` plus `10_Widget_Family_Port_Decomposition.md`; use `04_Widget_Runtime_Presentation.md` and `09_Widget_Quick_Presentation_Bridge.md` for the destination semantics the Settings values must later feed. For F1 Clock after F0.5 is GREEN, read `09_Widget_Quick_Presentation_Bridge.md` and `10_Widget_Family_Port_Decomposition.md` together.
+For active Phase-F work, F0.5 is the admitted slice: delete the legacy `shadowtuning.json` authority/unused offset pair, normalize canonical shadow settings, then add the General controls. Read `Docs/Custom_Style_Implementation.md` plus `10_Widget_Family_Port_Decomposition.md`; use `04_Widget_Runtime_Presentation.md` and `09_Widget_Quick_Presentation_Bridge.md` for destination semantics. **Before deleting shadow consumers, also read `11_Clock_Analogue_Shadow_Contract.md` so sidecar cleanup does not erase the family-authored Clock analogue reference.** For F1 Clock after F0.5 is GREEN, read `09_Widget_Quick_Presentation_Bridge.md`, `10_Widget_Family_Port_Decomposition.md` and `11_Clock_Analogue_Shadow_Contract.md` together.
 
 ## Current-legacy warning
 
-`DisplayWidget`, QRhiWidget, `GLCompositorWidget`, QWidget runtime widget pixels and painter shadow
-implementations may remain before cutover. They are migration source/reference, not destination
-authority.
+The old physical `DisplayWidget` / QRhiWidget / `GLCompositorWidget` stack remains until H production
+cutover. Ordinary family presenters have a shorter lifetime: keep an unported family's QWidget pixels
+only while they are still needed as behavioral/visual reference, then delete them after that family's
+independent GREEN + caller proof instead of carrying them to I.
 
-Do not deepen old presentation architecture.
+Do not deepen old presentation architecture or create a selectable fallback presenter. Git is sufficient
+historical reference after a family closes. Real resilience contracts are not removed by this rule.
 
 ## Off-rails rule
 

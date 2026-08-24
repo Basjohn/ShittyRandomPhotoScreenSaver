@@ -2,9 +2,9 @@
 
 Status: **Phase-F ACTIVE decomposition; F0 deletion audited GREEN and packaging residue closed here; F0.5 active next**  
 Last updated: 2026-08-24  
-Source/decomposition basis: `19460a7a8ffe9e5134363267da3d61fe46cc23d4` + this closure reconciliation
+Source/decomposition basis: `f049baedb80d6b7e7a74fb03395b06e94b870a1c` + this migration-simplification reconciliation
 
-This is subordinate to `Current_Plan.md`. Phase E is closed; F0 deletion is source-audited GREEN at `19460a7` and this reconciliation removes its final stale scraping dependency pins. `Current_Plan.md` currently admits F0.5 only: complete Widgets → General canonical shadow controls, then audit before F1 Clock.
+This is subordinate to `Current_Plan.md`. Phase E is closed; F0 is closed. `Current_Plan.md` currently admits F0.5 only: retire the hidden shadow-tuning authority, normalize canonical settings, complete Widgets → General shadow controls, then audit before F1 Clock. Completed family pixel presenters retire after family GREEN rather than accumulating to I.
 
 Cross-links:
 
@@ -15,6 +15,7 @@ Cross-links:
 - `Docs/QtQuick_Migration/08_Widget_Runtime_Ownership_Threading.md`
 - `Docs/10_WIDGET_GUIDELINES.md`
 - `Docs/TestSuite.md`
+- `Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md` — required Clock shadow reference
 
 ---
 
@@ -130,6 +131,37 @@ Frosted/backdrop-glass cards are explicitly deferred to `Future_Work.md`. Do not
 capture, blur layers or glass customization while migrating ordinary family pixels; first prove the
 plain retained card/fade/shadow architecture across real families.
 
+## 3.2 Reference-first, retire-on-GREEN family policy
+
+The old family presenter has one legitimate migration role: **reference evidence while its replacement is
+still unproven**. It is not a supported fallback architecture.
+
+For every F1–F10 family:
+
+```text
+inspect current QWidget family
+-> identify surviving neutral logic + authored pixel behavior
+-> build retained Quick replacement
+-> rehome surviving tests
+-> required focused/eyes-on proof
+-> push / independent GREEN where required
+-> caller proof
+-> delete that family's old runtime pixel presenter + obsolete presentation-only tests/helpers
+-> then proceed to later families
+```
+
+Do not carry a completed family's old pixels all the way to Phase I merely because deletion was once
+scheduled there. Shared old helpers remain only while another **unported** family still genuinely uses
+them. Git history is the historical reference after deletion.
+
+A post-GREEN family cleanup is normally a bounded retirement step. Require another independent audit if
+it crosses a shared factory, lifecycle, Settings/persistence owner or another architecture boundary.
+
+This policy does not delete real product resilience. Provider/network/cache recovery, transition recovery
+and the closed Visualizer failover/reclaim contract survive. Temporary migration state adapters may
+survive only when they rehome proven authored state without preserving old pixels or selectable fallback
+presentation and have an explicit retirement owner.
+
 ---
 
 # 4. F0.5 — canonical shadow cleanup + Widgets → General controls — ACTIVE NEXT
@@ -149,8 +181,11 @@ Before building the picker, remove the hidden QWidget painter-tuning authority:
 - remove all direct/transitive runtime imports/aliases of the exported tuning dictionaries;
 - do not create a replacement legacy/fallback tuning module/table/file or preserve old values as
   compatibility constants;
-- legacy QWidget shadow visuals may disappear during migration; delete/simplify shadow-only painter
-  branches instead of designing temporary parity plumbing;
+- sidecar-dependent QWidget shadow visuals may disappear during migration; delete/simplify branches
+  whose only purpose is reproducing the sidecar rather than designing temporary parity plumbing;
+- preserve family-authored visual/reference algorithms that are still needed by an unported family;
+  specifically, leave Clock analogue ring/marker, two-pass numeral and hand-shadow reference behavior
+  intact for F1 as required by `11_Clock_Analogue_Shadow_Contract.md`;
 - keep non-shadow business/runtime logic and required migration seams importable;
 - leave stale on-disk sidecar files ignored; do not add migration/copy/delete machinery for them.
 
@@ -251,6 +286,9 @@ Push and stop for independent audit. **Do not begin Clock in this checkpoint.**
 # 5. F1 — Clock family
 
 Clock is the first real family port and the first proof of the generic family-content seam.
+
+**Mandatory Clock visual reference:** read `11_Clock_Analogue_Shadow_Contract.md` before modifying the
+analogue presentation. The pre-F1 Clock remains reference evidence until the retained family is GREEN.
 
 ## F1.0 Current owner inventory
 
@@ -503,9 +541,12 @@ Dynamic once per second:
 
 Do not redraw/recreate the static face tree every physical frame.
 
-Analogue face/hand shadow personality may remain family-specific where current authored visuals differ
-from ordinary text/card shadow classes. It still consumes the global E4 direction authority where that
-shadow class participates in the global direction product feature.
+Analogue ring/marker, Roman-numeral and hand shadows are **family-specific authored presentation**, not
+sidecar debris and not ordinary one-pass text/card shadows. Preserve their decomposed hard-shadow
+personality from `11_Clock_Analogue_Shadow_Contract.md`, including the numeral contact + main-drop passes
+and thicker duplicate hand geometry. The mandatory global E4 direction applies to their directional
+translation. Do not automatically force the optional General Text/Card tuning buckets onto these special
+analogue classes if doing so damages the authored look; no third user tuning bucket is required.
 
 If a custom scene-graph item is actually needed for fidelity/performance, prove that need first. A
 normal retained QML implementation is preferred for an ordinary one-second clock.
@@ -588,6 +629,12 @@ Eyes-on:
 - several shadow directions;
 - repeated live mode switching;
 - 3 simultaneous clocks with different configs.
+
+After F1 is independently GREEN, perform caller proof and retire Clock's old QWidget runtime-pixel
+presentation before starting F2. Preserve/rehome any neutral ticker/timezone/settings/geometry logic still
+owned there. Delete obsolete Clock presentation-only tests only after their surviving contracts are
+covered by destination tests. If the retirement touches shared family factories/lifecycle, stop for an
+additional audit; otherwise keep it a bounded family-local cleanup.
 
 ---
 
@@ -794,11 +841,11 @@ Stop for independent audit when a slice introduces:
 - high-impact interactive routing;
 - cross-display ownership;
 - major geometry persistence;
-- a broad family cutover/deletion;
+- shared/cross-family deletion rather than the normal caller-proven family-local retirement;
 - another architecture boundary identified by current evidence.
 
 Clock's first family binding seam should receive an audit because it defines the pattern every later
-family may copy.
+family may copy. After each family is GREEN, do not defer its caller-proven old pixel cleanup to I.
 
 ---
 
@@ -809,6 +856,8 @@ Before F closes:
 - every supported ordinary family has retained Quick pixels or an explicit removal decision;
 - no family Quick component owns providers/settings/persistence;
 - no ordinary family requires QWidget runtime pixels;
+- old QWidget pixel presenters for independently GREEN families have already been retired rather than
+  accumulated for Phase I;
 - one static family/component registry exists, not central if/elif dispatch;
 - one shared dynamic-image seam exists if required;
 - semantic actions return to the correct Python owner;

@@ -7,9 +7,15 @@ Last updated: 2026-08-24
 Independent review basis:
 
 ```text
-1646ff17e00a81e9dcb445534e0bc5092ee45d63
+f049baedb80d6b7e7a74fb03395b06e94b870a1c
 Phase F0 CLOSED; F0.5 canonical shadow controls + immediate legacy shadow-tuning retirement ACTIVE NEXT
 ```
+
+Migration simplification policy added at this documentation checkpoint: a legacy ordinary-family
+presenter is retained only while it is still the active visual/behavioral reference for an unproven
+Quick family. After that family is independently GREEN, its caller-proven QWidget pixel presenter is
+retired before moving to later families. The half-migrated application is not required to remain a
+usable dual-presenter product.
 
 The F0 audit inspected the actual pushed deletion rather than relying on the implementation summary.
 Imgur is absent from the current widget-family catalog, its Settings/factory/descriptor/runtime/CUSTOM/
@@ -94,8 +100,8 @@ and use the smallest environment capable of proving the claim.
 | E — widget presentation + capability setup foundation | **CLOSED / independently GREEN through E4** | Reopen only on contradictory evidence |
 | **F — widget families** | **IN PROGRESS: F0.5 ACTIVE NEXT** | **Normal implementation work belongs in F0.5 now** |
 | G — CUSTOM/input/auxiliary pixels | Waiting for F | Decomposition/reference only |
-| H — settings epoch + production cutover | Waiting for A–G implementation | Reference only |
-| I — legacy presenter deletion | Waiting for H cutover | Reference only |
+| H — settings epoch + production cutover + old physical-presenter retirement | Waiting for A–G implementation | Reference only |
+| I — residual legacy/debris sweep | Waiting for H cutover | Reference only |
 | J — tooling/final validation/docs closure | Waiting for migration implementation | Reference only |
 
 Physical/compiled/eyes-on acceptance debt from structurally closed phases remains operator-scheduled
@@ -484,6 +490,42 @@ old one-graphics-effect-per-QWidget limitation.
 Every Phase-F family audit must explicitly check that no legacy effect-carrier/dummy/staged-shadow-fade
 structure was copied into the retained presentation.
 
+## Phase-F reference/retirement rule — keep evidence, not dual runtime architecture
+
+For an unported family, its current QWidget implementation remains valuable source evidence for:
+
+- exact content and formatting;
+- visual proportions and layering;
+- animation/fade feel;
+- family-specific shadows and special drawing;
+- interaction semantics;
+- geometry behavior that has not yet been rehomed.
+
+Do not delete that family reference before the Quick port has been implemented and independently
+validated. Do not, however, preserve it as a runtime fallback or maintain both presenters indefinitely.
+
+Normal family closure is:
+
+```text
+inspect old family reference
+-> extract/reuse surviving presentation-neutral logic
+-> implement retained Quick family
+-> focused tests + required eyes-on comparison
+-> push / independent audit
+-> when GREEN, prove old pixel callers absent
+-> retire that family's old QWidget pixel presenter/tests in a bounded cleanup before the next family
+```
+
+The post-GREEN cleanup may remain low-risk when it is caller-proven and family-local. Stop for another
+independent audit if deletion reaches shared factories, lifecycle or other architecture boundaries.
+Git history becomes the historical pixel reference after deletion.
+
+Do not apply this rule to real product resilience merely because it uses the word `fallback`. Provider/
+network/cache recovery, deterministic transition recovery and the closed Visualizer display-failover
+contract remain product behavior. Temporary migration adapters are allowed only when they extract proven
+authored state into the destination contract without preserving old pixels or a selectable fallback
+presenter, and they must have an explicit retirement owner.
+
 Frosted/backdrop-glass card customization is deliberately **not** Phase-F migration work. Its future
 shared-per-display/lazy backdrop architecture is recorded in `Future_Work.md`; do not introduce backdrop
 capture, blur layers or glass-specific effect machinery while proving the ordinary retained families.
@@ -502,7 +544,7 @@ F0 removed the deprecated Imgur family instead of migrating it. Verified current
 
 Historical documents may still mention Imgur as history; that is not live product authority.
 
-## F0.5 — Widgets → General shadow controls — ACTIVE NEXT
+## F0.5 — canonical shadow cleanup + Widgets → General controls — ACTIVE NEXT
 
 E4 deliberately landed canonical shadow runtime/settings authority before its complete Settings editor.
 F0.5 completes the **existing QWidget Widgets → General → Appearance** surface before the first retained
@@ -571,12 +613,16 @@ product authority in F0.5**, before the UI work:
 - do **not** migrate the old `blur_steps`, spread/pass counts, card-shrink values, per-painter alpha values
   or small-font scaling into canonical settings.
 
-The application is not required to preserve QWidget-era shadow visuals while the Quick migration is in
-progress. If a legacy painter branch exists only to render a sidecar-tuned shadow, remove/simplify that
-shadow-only branch rather than designing a temporary translation layer. Preserve non-shadow business,
-runtime, geometry contracts that are still needed by later migration work, and keep modules importable.
-Legacy widgets may temporarily render without their old shadows. That is acceptable and is **not** a
-product regression during this migration.
+The application is not required to preserve **sidecar-driven QWidget shadow parity** while the Quick
+migration is in progress. If a painter branch exists only to reproduce `shadowtuning.json` tuning,
+remove/simplify that branch rather than designing a temporary translation layer.
+
+This permission is deliberately narrow. Do **not** erase family-authored visual/reference algorithms
+that are still needed to port an unproven family. In particular, F0.5 must preserve the Clock analogue
+ring/marker, two-pass numeral and hand-shadow behavior documented in
+`Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md`. Those bespoke Clock shadows are not the
+sidecar authority being retired. Preserve other family-specific authored reference behavior on the same
+principle until its Quick replacement is GREEN.
 
 Existing stale `shadowtuning.json` files in app-data need no migration or deletion code: after F0.5 no
 current source reads, writes, creates, copies or regenerates them. Historical documents may mention the
@@ -645,6 +691,11 @@ Push and stop for independent audit. Do not begin F1 in the same checkpoint.
 
 Clock is deliberately first because its ticker/timezone computation is already presentation-neutral and
 it does not require provider I/O, dynamic artwork or repeating list models.
+
+Mandatory F1 reading includes `Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md`. The current
+Clock implementation remains the source reference through F1 validation, especially for its bespoke
+analogue ring/marker, two-pass Roman-numeral and hand shadows. Do not flatten those into the generic
+ordinary-text/card shadow primitives.
 
 F1 establishes the smallest real family component/model binding mechanism on top of E3.
 
@@ -738,15 +789,36 @@ For Clock:
 
 # 9. H–J routing
 
-## H — settings epoch + production cutover
+## H — settings epoch + production cutover + old physical-presenter retirement
 
 Create the new Quick presentation settings epoch, remove obsolete presentation-key compatibility where
-planned, cut production to the single Quick presenter, and audit the lifecycle/cutover checkpoint.
+planned, and cut production to the single Quick presenter.
 
-## I — legacy presenter deletion
+Because the half-migrated application is not a supported dual-presenter product, H also owns retirement
+of the **old physical presentation stack** once Quick production ownership is proven. Caller-proven H
+cleanup includes, as applicable to exact source:
 
-After H cutover, delete old runtime presenter/widget pixel owners and old compatibility paths. Preserve
-only presentation-neutral product logic that still has a destination owner.
+- `DisplayWidget` as the physical runtime presenter;
+- QRhiWidget / `GLCompositorWidget` presentation ownership;
+- old compositor scheduling/presentation glue;
+- `rendering/backends/software` and `display.render_backend_mode` selection/demotion machinery that exists
+  only to provide the unsupported software presenter fallback;
+- obsolete `hw_accel`/fallback-overlay presentation policy where no surviving non-presentation owner
+  requires it;
+- old transition/compositor helpers whose Quick replacement is already authoritative.
+
+Do not create a production switch back to the old presenter. H is an audit-required lifecycle/cutover
+boundary.
+
+## I — residual legacy/debris sweep
+
+I is **not** the planned bulk deletion point for ordinary widget families. Their old QWidget pixel
+presenters should already have been retired family-by-family after each independently GREEN Phase-F port.
+
+After H, run a caller-driven residue sweep for compatibility aliases, abandoned migration adapters,
+old presenter tests/tools/comments and other source that could not be removed safely with its owning
+family or physical-presenter cutover. Preserve presentation-neutral product logic and real resilience
+contracts. I should be small if F/G/H retire their owners promptly.
 
 ## J — final validation/docs closure
 
@@ -777,7 +849,9 @@ archive obsolete migration-only evidence.
 F0.5 — canonical shadow cleanup + Widgets → General controls
 
 Scope:
-- FIRST delete `shadowtuning.json` authority: loader/path-test/storage reference and all current tuning-dict
+- FIRST read `Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md`; sidecar retirement must not
+  delete the family-authored analogue Clock shadow reference needed by F1
+- delete `shadowtuning.json` authority: loader/path-test/storage reference and all current tuning-dict
   imports/aliases; do not introduce a replacement compatibility tuning source
 - retire unused `widgets.shadows.offset` immediately; do not migrate it into Extra Offset
 - normalize `ShadowSettings` fallbacks/types to the canonical shadow defaults

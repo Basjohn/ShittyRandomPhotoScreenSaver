@@ -37,12 +37,18 @@ but they are already classified by the TestSuite audit:
 
 If these test files change, update `Docs/TestSuite.md` in the same checkpoint.
 
-## 1. Phase H/I — old production presenter deletion
+## 1. Phase H — old physical production presenter deletion
 
-The following are **CURRENT-LEGACY — WILL BE OBSOLETE at production cutover / Phase I**.
+The following are **CURRENT-LEGACY — WILL BE OBSOLETE at production cutover / Phase H**.
+
+These are different from ordinary family pixel presenters. Ordinary families retire their old QWidget
+pixels family-by-family in Phase F after the retained replacement is independently GREEN. This section
+owns the old **physical display/presentation substrate** that cannot disappear until production itself
+moves to `QuickDisplayRuntime`.
 
 After production owner switches to `QuickDisplayRuntime`, replacement gates are green and callers are
-proved absent:
+proved absent, Phase H removes the old physical stack in the same cutover boundary rather than carrying
+it as a selectable fallback into I:
 
 - [ ] remove `DisplayWidget` as runtime physical presenter;
 - [ ] remove retired QRhiWidget physical presentation ownership;
@@ -56,11 +62,18 @@ proved absent:
       (`FULL_SHADERS -> COMPOSITOR_ONLY -> SOFTWARE_ONLY`) once no live pre-cutover caller requires it;
 - [ ] remove `rendering/backends/software` and backend-selection/demotion plumbing existing solely for
       software/compositor fallback support;
+- [ ] remove obsolete `display.render_backend_mode` / unsupported software-presenter selection UI and
+      generated-setting leaves when caller/schema proof says they have no surviving product meaning;
+- [ ] remove obsolete `hw_accel`/fallback-overlay presentation policy where its only purpose was choosing
+      or explaining the retired old presenter;
 - [ ] retain P0 comparison/raw evidence;
 - [ ] retain cheap architecture-neutral timing diagnostics.
 
 Software-only rendering is not a supported SRPSS destination capability. Intentional provider/cache/
 network resilience remains feature-owned and is unrelated to presenter fallback deletion.
+
+This H deletion is part of the audit-required physical cutover, not a separate permanent compatibility
+phase.
 
 Each deletion batch:
 
@@ -73,12 +86,17 @@ caller proof
 -> push
 ```
 
-## 2. Visualizer legacy deletion — H0/I
+## 2. Visualizer legacy deletion — H / caller-proof boundary
 
 The logical/runtime contract is **LANDED / PRESERVE**. Old pixel/presenter machinery is
 **CURRENT-LEGACY — WILL BE OBSOLETE**.
 
-After visualizer pixels are fully Quick-owned and relevant old callers are gone:
+The Visualizer is deliberately treated differently from an ordinary F-family because Phase D already
+landed its Quick renderer while some temporary state extraction/presenter-adjacent ownership still
+references the pre-cutover runtime. Do not reopen the proven logical architecture simply to remove a file
+whose name contains `legacy`.
+
+After visualizer pixels/state no longer require the old presenter objects and relevant callers are gone:
 
 - [ ] remove `CompositorVisualizerLayer`;
 - [ ] remove old compositor card texture owner;
@@ -86,35 +104,60 @@ After visualizer pixels are fully Quick-owned and relevant old callers are gone:
 - [ ] remove QWidget visualizer card/presentation code not needed by remaining Settings/model logic;
 - [ ] remove QWidget/QRhi reveal/fade ownership replaced by Quick;
 - [ ] remove pre-Quick per-mode card-height/growth Settings controls/bindings/preset leaves/
-      compatibility helpers (`card_height.py` / old growth-map paths) at the H0/I schema/caller gate;
+      compatibility helpers (`card_height.py` / old growth-map paths) at the H settings/caller gate;
 - [ ] delete/retarget tests whose only purpose is preserving that retired presentation geometry;
 - [ ] preserve `VisualizerLogicalRuntime`, BeatEngine/source, presets, BTF, mode algorithms/shaders,
-      snapshot bridge and destination Quick render contracts.
+      snapshot bridge and destination Quick render contracts until the snapshot bridge's own source-object
+      dependency has a proven replacement/retirement owner.
+
+A temporary adapter that detaches authored state into the immutable Quick contract is allowed while it
+prevents reimplementation of already-proven logic. It is not permission to preserve old visual pixels or
+a selectable presenter fallback.
 
 Do not confuse a historical class name with the behavior it protected. Rehome surviving lifecycle/
 scheduling/fidelity assertions before deleting old presentation tests.
 
-## 3. E3/E4/F/I — runtime widget presentation deletion
+## 3. Phase F — ordinary runtime widget presentation deletion
 
-Runtime QWidget pixel owners are **CURRENT-LEGACY — WILL BE OBSOLETE / REHOMED** as each family moves.
+Runtime QWidget pixel owners are **CURRENT-LEGACY — WILL BE OBSOLETE / REHOMED per family**.
 
-After the corresponding Quick primitive/family/cutover caller proof:
+Their legitimate migration purpose is to remain inspectable as the exact visual/behavioral reference
+while that family is still being ported. They do **not** need to remain executable until H/I simply to
+keep the half-migrated application usable.
 
-- [ ] delete old QWidget runtime-pixel class code no longer used by Settings/model tests;
-- [ ] delete old QWidget-only widget factory presentation paths;
-- [ ] delete `BaseOverlayWidget` after no remaining runtime/settings owner requires it;
-- [ ] delete painted runtime-shadow/static-frame cache code after Quick shadow parity and caller proof;
-- [ ] delete QWidget runtime `QGraphicsEffect` invalidation/fade/shadow code where no transient Settings
-      control UI still owns it;
-- [ ] delete old `EditShellWidget` / `EditGridOverlayWidget` when Quick CUSTOM replaces them;
-- [ ] retain Python providers/models/settings/business logic that remains canonical.
+For each family after its retained Quick replacement is independently GREEN:
+
+```text
+replacement contract proven
+-> old pixel caller proof
+-> rehome surviving neutral logic/tests
+-> delete family-local QWidget pixels/painter/effect-only helpers
+-> focused gate
+-> proceed to next family
+```
+
+Accordingly:
+
+- [ ] delete old QWidget runtime-pixel class code for each GREEN family before moving to later families;
+- [ ] delete old QWidget-only widget factory presentation paths as their last family caller disappears;
+- [ ] delete `BaseOverlayWidget` when the final unported family no longer requires it;
+- [ ] delete painted runtime-shadow/static-frame cache code when its last unported family caller is gone;
+- [ ] delete QWidget runtime `QGraphicsEffect` invalidation/fade/shadow code when its last runtime caller is
+      gone; QWidget Settings/control styling is a separate owner;
+- [ ] retain Python providers/models/settings/business logic that remains canonical;
+- [ ] preserve family-authored reference behavior until that family's Quick proof is complete, then rely
+      on Git/history rather than maintaining dead executable pixel code.
+
+F0.5's `shadowtuning.json` deletion is narrower: it removes hidden sidecar authority immediately but must
+not erase bespoke authored family reference algorithms still needed by an unported family, such as the
+Clock analogue shadow system.
 
 Do not retain screenshot-to-texture adapters or dual presentation registries "for safety."
 
-## 4. Transition legacy deletion — Phase I
+## 4. Transition legacy deletion — Phase H
 
 All canonical transitions already have Quick renderers. The old presentation implementation may still
-have live pre-cutover callers and is therefore **CURRENT-LEGACY — WILL BE OBSOLETE at I**.
+have live pre-cutover callers and is therefore **CURRENT-LEGACY — WILL BE OBSOLETE at H**.
 
 After production cutover/caller proof:
 
@@ -123,17 +166,21 @@ After production cutover/caller proof:
 - [ ] remove old compositor-specific transition watchdog/animation glue;
 - [ ] preserve canonical transition registry/settings identity and Quick renderer regressions.
 
-## 5. Phase G/I — CUSTOM/input/auxiliary pixel deletion
+## 5. Phase G — CUSTOM/input/auxiliary pixel deletion
 
-After retained Quick edit/input ownership lands and callers are proven absent:
+After retained Quick edit/input ownership lands and callers are proven absent, retire the old pixel/input
+owners in the same Phase-G closure rather than carrying them to I:
 
 - [ ] remove QWidget edit-shell/grid pixel ownership;
-- [ ] remove `DisplayWidget`-specific input assumptions superseded by `RuntimeInputController`;
+- [ ] remove `DisplayWidget`-specific input assumptions superseded by `RuntimeInputController` where they
+      are not inseparable from the still-live physical presenter;
 - [ ] remove old auxiliary top-level/transient runtime pixel owners replaced by the Quick scene;
 - [ ] preserve product-owned CUSTOM persistence/math/session semantics;
 - [ ] preserve QWidget Settings/control UI where it remains the selected non-runtime owner.
 
-Cross-monitor/CUSTOM retirement must not delete the saved geometry authority it was meant to preserve.
+Any `DisplayWidget` input remnants that cannot be removed before physical cutover transfer to H's caller
+proof. Cross-monitor/CUSTOM retirement must not delete the saved geometry authority it was meant to
+preserve.
 
 ## 6. Native code
 
@@ -164,7 +211,10 @@ P2/Phase-D names.
 
 General retirement rules:
 
-- [ ] retire tests protecting only removed QRhiWidget/GLCompositor/software-presentation architecture;
+- [ ] retire ordinary family QWidget/painter-only tests with that family's Phase-F retirement after
+      surviving semantics are rehomed;
+- [ ] retire tests protecting only removed QRhiWidget/GLCompositor/software-presentation architecture in
+      Phase H with the physical presenter;
 - [ ] remove/retarget `tests/test_gl_fallback_policy.py`, software-backend tests and related legacy
       capability-demotion assertions when their old runtime callers are deleted;
 - [ ] rehome surviving semantics before deleting old owner-specific tests;
@@ -219,8 +269,9 @@ them.
 - [ ] remove generated preview debris after clean-checkout proof;
 - [ ] collapse deprecated class-global input authority after Quick input owner lands;
 - [ ] add lightweight repository-hygiene checks if they provide continuing value;
-- [ ] remove migration-only compatibility aliases after caller proof rather than carrying them as a
-      permanent translation layer.
+- [ ] remove migration-only compatibility aliases/adapters at their owning F/G/H retirement checkpoint
+      after caller proof rather than carrying them to I by default;
+- [ ] leave I for genuinely residual caller-proven debris that could not be retired with its owner.
 
 ## 12. Documentation hygiene — through J
 

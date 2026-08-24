@@ -358,6 +358,11 @@ destination card/text baseline magnitudes in the Quick presentation style seam; 
 reuse that destination policy. E4's resolver remains capable of distinct magnitudes, but historical
 painter dictionaries are not their authority.
 
+Sidecar retirement is **not** a license to delete authored family-specific visual algorithms before that
+family is ported. Keep such code as source reference until the retained replacement is independently
+GREEN, then retire its caller-proven old pixel implementation promptly. Clock's analogue shadow exception
+is decomposed in `11_Clock_Analogue_Shadow_Contract.md`.
+
 When real retained families arrive, changing direction/darkness/blur/extra-offset mutates existing retained
 style properties. It must not recreate provider/model/item/engine/window merely because a shadow style
 value changed. Card blur/style mutation invalidates the Qt cache naturally; root fade remains independent.
