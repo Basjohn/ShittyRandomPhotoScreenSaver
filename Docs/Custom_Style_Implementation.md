@@ -155,9 +155,10 @@ Canonical settings:
 - `text_extra_offset` — new non-negative logical-pixel scalar, default `0`.
 
 **There is no Text Blur control or text-blur destination property.** Ordinary, large and header text
-shadows stay duplicate retained glyphs. Header text may retain class-specific baseline alpha/magnitude
-inside the style resolver, but there is no third user-facing Header tuning system; global direction and
-the Text user modifier path apply consistently.
+shadows stay duplicate retained glyphs and share the same Text enable/darkness/extra-offset user bucket.
+Do not preserve the old sidecar's separate header alpha as a hidden third tuning system. If very large
+text later needs deterministic distance scaling for legibility, that belongs to the destination style
+policy and remains subordinate to the same Text controls.
 
 #### Extra Offset semantics
 
@@ -174,21 +175,31 @@ signed X/Y retained properties
 E/W activate X, N/S activate Y, diagonals add the scalar to both authored axes before signs are applied.
 Extra Offset is non-negative; direction owns orientation. Do not create signed offset sliders.
 
-Do **not** reinterpret legacy `widgets.shadows.offset` as either new Extra Offset field. That old pair is
-not the E4 magnitude authority and can remain compatibility debris until the later settings epoch.
+The old `widgets.shadows.offset` pair is retired and removed in F0.5. It is not the E4 magnitude
+authority and must not be migrated into either Extra Offset field.
 
 #### No Intense mode
 
 Do not restore an `Intense Shadow` toggle/profile. `intense_shadow`, `analog_shadow_intense` and
-`digital_shadow_intense` are already retired settings keys. The old painter `shadowtuning.json` values
-(`blur_steps`, per-pass alpha, etc.) are implementation-specific visual-reference evidence, not Quick UI
-units. The destination has one normal shadow system with canonical defaults plus these direct controls.
+`digital_shadow_intense` are already retired settings keys.
+
+The old painter sidecar `shadowtuning.json` is deleted from current authority in F0.5 together with
+`core/settings/shadow_tuning.py` and its path/profile tests. Do not copy its `blur_steps`, spread/pass
+counts, card-shrink values, alpha tables or font-scaling values into another module or into Quick UI
+units. There is no compatibility/fallback tuning source. Legacy QWidget shadow visuals are allowed to
+disappear during migration rather than earning temporary parity work.
+
+The destination has one normal shadow system with canonical settings plus these direct controls. F1 Clock
+establishes the first deliberate Quick card/text baseline magnitudes; later families reuse the destination
+style policy rather than reading historical painter numbers.
 
 #### Settings authority / save safety
 
 - read/write the existing canonical `widgets.shadows` mapping;
 - reuse E4 direction vocabulary/resolver; no UI-local direction semantics;
-- extend `ShadowSettings` rather than creating a second shadow settings/model owner;
+- extend and normalize `ShadowSettings` rather than creating a second shadow settings/model owner;
+- remove the unused legacy `offset` pair and make model missing-key fallbacks agree with canonical
+  defaults (`blur_radius=18`, `frame_opacity=0.77`, `text_opacity=0.33`, direction `SE`, extras `0`);
 - do not expose `SettingsManager` to runtime QML or poke retained QML items directly from the picker;
 - no per-family shadow editor in F0.5;
 - preserve normal Settings apply/save/recreate/update ownership.
@@ -196,10 +207,16 @@ units. The destination has one normal shadow system with canonical defaults plus
 **Mandatory bug fix:** the current General save helper builds a partial `shadows` dictionary with only
 the enable booleans, and the section-save layer assigns that dictionary wholesale. F0.5 must merge into
 the existing `widgets.shadows` mapping (or equivalent) so any General save preserves unedited direction,
-color, legacy offset, opacity, blur, extra-offset and unknown future keys.
+color, opacity, blur, extra-offset and unknown future keys. Explicitly retired `offset` is removed by
+canonical settings cleanup rather than preserved by the merge.
 
 Focused F0.5 tests cover:
 
+- complete deletion of `core/settings/shadow_tuning.py` / `tests/test_shadow_tuning_paths.py` and zero
+  current-source sidecar/tuning-dictionary dependencies;
+- no replacement compatibility tuning module/table/file;
+- retirement of `widgets.shadows.offset` with no migration into Extra Offset;
+- `ShadowSettings` fallback/default parity with canonical settings;
 - all eight direction choices and inert center;
 - selected/hover/pressed/focus/accessibility behavior where deterministic;
 - canonical persistence/reload, default/reset `SE`, malformed-token fallback;

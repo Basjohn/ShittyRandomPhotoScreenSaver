@@ -7,8 +7,8 @@ Last updated: 2026-08-24
 Independent review basis:
 
 ```text
-19460a7a8ffe9e5134363267da3d61fe46cc23d4
-Phase F0 deprecated Imgur removal — deletion/source audit GREEN; stale Imgur-only dependency pins corrected by this closure reconciliation
+1646ff17e00a81e9dcb445534e0bc5092ee45d63
+Phase F0 CLOSED; F0.5 canonical shadow controls + immediate legacy shadow-tuning retirement ACTIVE NEXT
 ```
 
 The F0 audit inspected the actual pushed deletion rather than relying on the implementation summary.
@@ -223,8 +223,9 @@ Read together:
 - `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
 - current `rendering/quick/qml/OverlayCard.qml`
 - current `rendering/quick/qml/ShadowedText.qml`
-- legacy `core/settings/shadow_tuning.py`
-- legacy `widgets/shadow_utils.py`
+- legacy `core/settings/shadow_tuning.py` — **F0.5 deletion target only; not destination authority**
+- legacy `widgets/shadow_utils.py` — historical/painter evidence only; tuning-backed shadow branches may be retired in F0.5
+- canonical `core/settings/shadow_direction.py` + `widgets.shadows` settings
 - current settings/defaults tests
 
 This is an architecture/style-authority slice and therefore **audit-required**.
@@ -537,13 +538,59 @@ Text Shadows
   Extra Offset    -> widgets.shadows.text_extra_offset    (new scalar, default 0)
 ```
 
-There is **no text blur**. Ordinary/large/header text shadows remain duplicate retained glyphs. Header
-shadows may preserve authored class-specific baseline alpha/magnitude internally, but there is no third
-user-facing Header tuning system; they consume the global direction and Text user modifier path.
+There is **no text blur**. Ordinary/large/header text shadows remain duplicate retained glyphs and use the
+same Text user bucket for enable/darkness/extra-offset. Do not preserve the old sidecar's separate header
+alpha as a hidden third tuning system. A deterministic font-size-based base distance for very large text
+may be earned in the destination style policy, but it is not a separate user setting or sidecar-derived
+profile.
 
 `Intense Shadow` must not return. `intense_shadow`, `analog_shadow_intense` and
-`digital_shadow_intense` are retired compatibility debris. The old `shadowtuning.json` painter numbers
-are visual/reference baselines, not Quick slider units. Do not recreate an Intense preset or mode.
+`digital_shadow_intense` are retired compatibility debris. There is no Intense preset/profile in the
+destination.
+
+### F0.5.0 — delete the hidden legacy tuning authority first
+
+The actual legacy sidecar is `shadowtuning.json` (no underscore). It and its loader are **removed from
+product authority in F0.5**, before the UI work:
+
+- delete `core/settings/shadow_tuning.py`;
+- delete `tests/test_shadow_tuning_paths.py`;
+- remove `shadowtuning.json` from the current storage-layout documentation in
+  `core/settings/storage_paths.py`;
+- remove all imports/exports of `CARD_SHADOW_TUNING`, `TEXT_SHADOW_TUNING`,
+  `TEXT_LARGE_SHADOW_TUNING`, `HEADER_SHADOW_TUNING`, `ICON_SHADOW_TUNING`,
+  `CONTROL_SHADOW_TUNING`, `VOLUME_SLIDER_SHADOW_TUNING` and the
+  `PAINTED_FRAME_SHADOW_TUNING` alias from current runtime source;
+- current direct consumers include `widgets/base_overlay_widget.py`, `widgets/clock_widget.py`,
+  `widgets/shadow_utils.py`, `widgets/weather_components.py`, `widgets/media/painting.py`,
+  `widgets/mute_button_widget.py`, `widgets/spotify_volume_widget.py`, and
+  `widgets/spotify_visualizer/renderers/spectrum.py`; also inspect transitive users of the base-overlay
+  alias such as `widgets/spotify_visualizer/card_paint.py` and `widgets/spotify_bars_gl_overlay.py`;
+- do **not** replace the sidecar with `legacy_shadow_tuning.py`, copied dictionaries, fallback constants,
+  profile migration/copy logic, or a compatibility reader;
+- do **not** migrate the old `blur_steps`, spread/pass counts, card-shrink values, per-painter alpha values
+  or small-font scaling into canonical settings.
+
+The application is not required to preserve QWidget-era shadow visuals while the Quick migration is in
+progress. If a legacy painter branch exists only to render a sidecar-tuned shadow, remove/simplify that
+shadow-only branch rather than designing a temporary translation layer. Preserve non-shadow business,
+runtime, geometry contracts that are still needed by later migration work, and keep modules importable.
+Legacy widgets may temporarily render without their old shadows. That is acceptable and is **not** a
+product regression during this migration.
+
+Existing stale `shadowtuning.json` files in app-data need no migration or deletion code: after F0.5 no
+current source reads, writes, creates, copies or regenerates them. Historical documents may mention the
+file as history only.
+
+The old canonical `widgets.shadows.offset = [x, y]` pair also leaves current authority in F0.5. Current
+source search finds no runtime consumer; it is only stale defaults/model/preset authority. Remove it from
+`ShadowSettings`, canonical defaults/presets/custom-backup/generated artifacts and retire/drop it through
+the existing settings-canonicalization mechanism. Do not translate old values into either new Extra
+Offset field.
+
+F0.5 deliberately does **not** create a replacement hidden magnitude/tuning file. The first destination
+Quick baseline magnitudes are established deliberately by the F1 Clock presentation-style seam and then
+shared by later ordinary families; they are not mechanically copied from the deleted painter sidecar.
 
 ### F0.5 offset semantics
 
@@ -554,9 +601,8 @@ direction resolver applies signs/axis zeroing. It is one non-negative logical-pi
 - N/S add it to the active Y magnitude;
 - diagonals add it to both authored axis magnitudes before sign resolution.
 
-Do **not** reinterpret legacy `widgets.shadows.offset = [4, 4]` as this new user control. E4 deliberately
-did not make that legacy key a second magnitude authority; leave its retirement/migration to the later
-settings epoch unless exact source proves it safe to remove separately.
+The retired `widgets.shadows.offset` pair is **not** this control and is removed in F0.5. Do not migrate,
+copy or reinterpret its old value. `frame_extra_offset` and `text_extra_offset` start at canonical `0`.
 
 ### F0.5 persistence correction — mandatory
 
@@ -565,20 +611,32 @@ only the three enable flags, while the section-save path assigns that mapping wh
 Widgets → General save can therefore erase `direction`, opacity/blur and future shadow keys.
 
 F0.5 must fix this owner boundary: **merge General shadow edits into the existing canonical
-`widgets.shadows` mapping or otherwise preserve every unedited key**. A save that changes only Border
-Width or a shadow checkbox must not delete direction, color, legacy offset, opacity, blur, extra-offset
-or unknown future keys. Do not create a second persistence owner to work around this.
+`widgets.shadows` mapping or otherwise preserve every unedited canonical/unknown-future key**. A save that
+changes only Border Width or a shadow checkbox must not delete direction, color, opacity, blur,
+extra-offset or unknown future keys. Explicitly retired keys such as the old `offset` pair may be removed
+by the canonical settings-retirement path; do not preserve them merely because the General page merges.
+Do not create a second persistence owner to work around this.
 
 Focused F0.5 gates:
 
+- `core/settings/shadow_tuning.py` and `tests/test_shadow_tuning_paths.py` are gone;
+- current non-historical source has no `shadowtuning.json`, `core.settings.shadow_tuning`, exported tuning
+  dictionary, or `PAINTED_FRAME_SHADOW_TUNING` dependency;
+- no replacement legacy/fallback tuning module/table/file is introduced;
+- old `widgets.shadows.offset` is removed/retired with no migration into Extra Offset;
+- `ShadowSettings` missing-key fallbacks/types agree with canonical defaults (including current
+  `blur_radius=18`, `frame_opacity=0.77`, `text_opacity=0.33`, direction `SE`, extras `0`) rather than its
+  stale pre-F0.5 literals;
 - all eight direction choices, center inert, default/reset `SE`, malformed-token canonical fallback;
 - load/save/reload through the real Widgets → General section;
-- save-preservation regression proving unrelated General edits cannot erase shadow keys;
+- save-preservation regression proving unrelated General edits cannot erase canonical/unknown-future
+  shadow keys;
 - existing enable toggles preserved;
 - card Darkness/Blur/Extra Offset and Text Darkness/Extra Offset canonical round-trip/defaults;
 - bounded/clamped numeric input; no negative Extra Offset;
 - no retired Intense keys or UI; no text-blur setting/property/effect;
-- generated defaults/SST parity if canonical defaults gain the two extra-offset keys;
+- generated defaults/snapshot/SST/preset parity after offset retirement and the two extra-offset additions;
+- tuning-only legacy painter tests are deleted/trimmed rather than forcing old visual parity;
 - normal lazy-page/save behavior and no provider/runtime construction.
 
 Push and stop for independent audit. Do not begin F1 in the same checkpoint.
@@ -716,16 +774,20 @@ archive obsolete migration-only evidence.
 # 11. Immediate next checkpoint
 
 ```text
-F0.5 — Widgets → General canonical shadow controls
+F0.5 — canonical shadow cleanup + Widgets → General controls
 
 Scope:
-- fix partial-shadow-save replacement so General edits preserve the complete widgets.shadows mapping
+- FIRST delete `shadowtuning.json` authority: loader/path-test/storage reference and all current tuning-dict
+  imports/aliases; do not introduce a replacement compatibility tuning source
+- retire unused `widgets.shadows.offset` immediately; do not migrate it into Extra Offset
+- normalize `ShadowSettings` fallbacks/types to the canonical shadow defaults
+- fix partial-shadow-save replacement so General edits preserve the complete surviving widgets.shadows mapping
 - add the compact styled 3×3 global direction picker; center inert; canonical default/fallback SE
 - retain the three existing shadow enable toggles
 - add Widget/Card Darkness, Blur and Extra Offset
 - add Text Darkness and Extra Offset; NO text blur
 - add only frame_extra_offset/text_extra_offset as new scalar settings, default 0
-- keep retired Intense keys retired; do not repurpose legacy widgets.shadows.offset
+- keep retired Intense keys retired; old widgets.shadows.offset is removed, not repurposed
 - update ShadowSettings/defaults/generated artifacts and focused Settings tests as needed
 
 No QML Settings rewrite.

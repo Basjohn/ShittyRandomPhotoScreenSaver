@@ -7,7 +7,7 @@ Reviewed source basis: `19460a7a8ffe9e5134363267da3d61fe46cc23d4` + F0 closure r
 These documents are not independent plans. Sequence and work admission come only from
 `Current_Plan.md`; deferred cleanup/deletion comes from `Future_Cleanup.md`.
 
-Current normal implementation work: **Phase F0.5 — complete Widgets → General canonical shadow controls before the first retained family port**.
+Current normal implementation work: **Phase F0.5 — delete legacy shadow-tuning authority, normalize canonical shadow settings, and complete Widgets → General shadow controls before the first retained family port**.
 
 Within Phase E:
 
@@ -17,7 +17,7 @@ Within Phase E:
 - E3 retained ordinary-widget substrate: **CLOSED / audit GREEN @ `1f25a791`**
 - **E4 global eight-direction shadow authority: CLOSED / independently GREEN @ `3a562632`**;
 - **Phase E: CLOSED**;
-- **Phase F: ACTIVE; F0 deletion is source-audited GREEN and this reconciliation removes its stale scraping dependency pins; F0.5 canonical shadow controls are next; then F1 Clock**.
+- **Phase F: ACTIVE; F0 is closed; F0.5 legacy shadow-tuning retirement + canonical shadow controls are next; then F1 Clock**.
 
 ## Required routing
 
@@ -47,7 +47,7 @@ operator's real local worktree. Do not add hosted CI unless explicitly requested
 | C | implementation closed |
 | D | implementation closed |
 | E | **closed / independently GREEN through E4** |
-| **F** | **active: F0 closed after reconciliation; F0.5 shadow controls next; then F1 Clock** |
+| **F** | **active: F0 closed; F0.5 shadow-tuning retirement + controls next; then F1 Clock** |
 | G | waiting for F |
 | H | waiting for A–G implementation |
 | I | waiting for H |
@@ -68,7 +68,7 @@ operator's real local worktree. Do not add hosted CI unless explicitly requested
 | `09_Widget_Quick_Presentation_Bridge.md` | model/list/image/action/family component bridge built on landed E3 host |
 | `10_Widget_Family_Port_Decomposition.md` | **detailed Phase-F family order and per-family implementation contracts** |
 
-For active Phase-F work, F0.5 is the admitted slice. Read `Docs/Custom_Style_Implementation.md` plus `10_Widget_Family_Port_Decomposition.md`; use `04_Widget_Runtime_Presentation.md` and `09_Widget_Quick_Presentation_Bridge.md` for the destination semantics the Settings values must later feed. For F1 Clock after F0.5 is GREEN, read `09_Widget_Quick_Presentation_Bridge.md` and `10_Widget_Family_Port_Decomposition.md` together.
+For active Phase-F work, F0.5 is the admitted slice: delete the legacy `shadowtuning.json` authority/unused offset pair, normalize canonical shadow settings, then add the General controls. Read `Docs/Custom_Style_Implementation.md` plus `10_Widget_Family_Port_Decomposition.md`; use `04_Widget_Runtime_Presentation.md` and `09_Widget_Quick_Presentation_Bridge.md` for the destination semantics the Settings values must later feed. For F1 Clock after F0.5 is GREEN, read `09_Widget_Quick_Presentation_Bridge.md` and `10_Widget_Family_Port_Decomposition.md` together.
 
 ## Current-legacy warning
 
