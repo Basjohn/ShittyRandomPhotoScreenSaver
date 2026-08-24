@@ -109,6 +109,9 @@ If native code is ever earned, preserve the one-`QQuickWindow`-per-display prese
   cardinality still follows the actual family semantics rather than presentation count;
 - runtime-generation shared family state uses explicit consumer leases: the landed Media owner keeps
   one controller/poll/query/accepted-artwork authority while each display retains only its presenter;
+- Media app-volume and system-mute use two narrower runtime-generation shared owners: respectively one
+  controller/accepted-target/read-write-debounce authority and one UI-thread endpoint/state/poll/action
+  authority; neither is folded into the primary Media owner or duplicated per display;
 - the landed Gmail owner likewise coordinates one backend-bootstrap/cache/poll/model/notification/
   action stream over the unchanged process singleton while each display retains row/pixel projection;
 - Settings/Edit/topology recreation use ordered generations/lifetimes;
