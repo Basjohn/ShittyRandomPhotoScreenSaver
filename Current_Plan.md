@@ -1104,34 +1104,85 @@ passed`, plus `py_compile`, structural owner searches, exact old/new QPainter pi
 differing pixels), `git diff --check` and exact-diff self-audit clean. Both reused-agent boundary reviews
 were GREEN.
 
-### E1 slice 6 — Media runtime ownership — SOURCE/CARDINALITY AUDIT ACTIVE
+### E1 slice 6 — Media shared runtime ownership — IMPLEMENTATION ACTIVE
 
 Media is the next admitted ownership family. The source/cardinality audit is part of this slice, not a
 separate phase. Resolve the exact owner graph before editing so a per-display `WidgetRuntimeManager`
 does not accidentally multiply or retire genuinely shared Media state.
 
+The exact-source audit is complete. The current per-display QWidget creates one GSMTC controller, poll
+loop, timeout/retained cache, request/optimistic-playback state and artwork decode path per visible
+Media card, then uses a class cache to repair cross-display desynchronization. The provider setting,
+selected GSMTC session, transport target and accepted track/artwork state are application/family-shared;
+preserving one owner is both the product semantic and a reduction of accidental duplicate work.
+
+Accepted destination:
+
+```text
+per-display WidgetRuntimeManager
+    -> one presentation-neutral Media consumer lease/projection
+           -> one runtime-generation-scoped shared Media family owner
+                  -> one controller/provider target
+                  -> one poll/query cadence + accepted/retained snapshot
+                  -> request/provider/playback generations + optimistic confirmation
+                  -> one source-resolution artwork decode/identity
+    -> MediaWidget (temporary QWidget presenter)
+           -> metadata/progress/control projection
+           -> QPixmap + logical/DPR scaling/crop/transition/fade
+           -> local keyboard-alias and control-feedback presentation timing
+```
+
+Before/after expensive cardinality for `N` participating displays:
+
+```text
+controller/provider instances: N -> 1
+poll loops/recurring data timers: N -> 1
+in-flight query/cache writers: N -> 1
+source artwork decodes per accepted key: up to N -> 1
+per-display presenters/QPixmap/DPR caches: N -> N
+shared feedback timer: 1 -> 1
+new threads/schedulers: 0
+```
+
+The shared owner needs explicit active-consumer accounting because each per-display manager retires its
+own lease. The first active lease starts the owner; removing one display must not stop remaining
+consumers; the last active/attached lease stops/retires the owner. This is Media-specific ownership, not
+generic refcount machinery. No Gmail or other family seam must precede it.
+
 Live checklist:
 
-- [ ] inventory the exact current owners and call paths for controller/provider construction, polling
-  cadence, refresh/provider/playback/artwork generations, retained/shared media snapshots, provider
-  failover, optimistic transport confirmation, commands, progress/control state, artwork decoding and
-  presenter projection, related timers and terminal cleanup;
-- [ ] classify each owner as process/application, family-shared, per-display projection, per-widget
-  instance or presentation-only, recording before/after controller, poll, timer, worker and subscriber
-  cardinality; preserve the real multi-display shared-state behavior rather than copying Weather/Steam;
-- [ ] trace Media/Visualizer/E2.7 capability, playback-state, visibility, input, volume/mute and runtime-
-  destruction contracts; identify any dependency that must land before extraction and document any
-  deliberate transitional presenter edge;
-- [ ] turn the proven map into the smallest safe implementation checklist and focused regression gate,
-  including production suppression of any standalone default, exact active presenter/service reuse,
-  fresh-process/deactivated-family dormancy, stale result/command/timer fencing and last-consumer
-  retirement where shared ownership is real;
-- [ ] implement only the admitted Media owner seam, preserve QWidget presentation and authored behavior,
-  self-audit the exact diff, correct findings, then commit/push the coherent checkpoint.
+- [ ] add the family-specific shared owner plus one presentation-neutral lease per display; acquire it
+  through the existing runtime-service registry, preserve exact live-edge reuse and fail closed on
+  build/injection mismatch without changing the generic manager into a shared-service switchboard;
+- [ ] make production `MediaWidgetFactory` suppress standalone controller/service construction; retain
+  direct `MediaWidget(...)` convenience for real tools/tests, with explicit-controller injection using
+  an isolated owner rather than joining the production shared registry;
+- [ ] move controller/provider, one adaptive poll timer, in-flight/cache/retained state, failover,
+  request/provider/runtime fencing, optimistic playback confirmation and raw progress/control snapshot
+  ownership into the shared owner using the existing `ThreadManager` only;
+- [ ] decode each accepted artwork key once into source-resolution `QImage` plus stable identity in the
+  shared owner; keep QPixmap creation, logical/DPR scaling/crop caches, transition deferral and fades in
+  each QWidget presenter, with replay to a new/rebound presenter and no duplicate decode/fetch path;
+- [ ] preserve per-anchor `media_updated`, `_last_info` transitional seed compatibility,
+  `refresh_playback_state`, provider failover persistence, per-display volume-target sync, input command
+  routing, visibility/setup order and all Visualizer/E2.7 behavior without moving their owners;
+- [ ] prove `N -> 1` controller/poll/decode cardinality, first/last-consumer lifetime, remaining-display
+  survival, standalone separation, deactivated-family dormancy, active reuse, stale result rejection
+  across stop/retire/provider/runtime generations and shared optimistic state; run focused Media plus
+  owner/factory/setup/lifecycle/runtime-destruction and Visualizer bridge gates;
+- [ ] run `py_compile`, fresh-process import/construction probes, structural old-owner searches and
+  `git diff --check`; self-audit the exact diff for feature loss and duplicate work, correct every
+  finding, then commit/push the coherent Media checkpoint.
 
-Non-goals: Visualizer or E2.7 redesign, generic Media god-service, new thread/scheduler, provider or
-volume/cache rewrite, Quick pixels, Gmail, premature `WidgetRuntimeManager` hoist, E3/E4 and unrelated
-cleanup.
+Non-goals: Visualizer or E2.7 redesign, generic Media/Spotify god-service, volume/mute controller or
+widget migration, new thread/scheduler, provider/cache rewrite, Quick pixels, Gmail, premature
+`WidgetRuntimeManager` hoist, E3/E4 and unrelated cleanup.
+
+Volume/mute remain unchanged during this primary shared-owner extraction so their independent
+controller/flush/presentation behavior cannot destabilize the slice. They are not silently waived:
+the E1 structural-closure audit must classify their residual non-pixel ownership and migrate only what
+is genuinely required before E1 closes. The same closure audit owns broader import dormancy after the
+Media production path itself proves deactivated-family construction dormancy.
 
 After E1 completes across bounded owner slices:
 
