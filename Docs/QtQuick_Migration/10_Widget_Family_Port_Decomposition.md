@@ -313,9 +313,11 @@ The second F5 checkpoint replaces the old provider-only lease with one per-membe
 window, periodic/manual due horizons, blocked-gate persistence, request generations and retirement.
 `WidgetRuntimeManager` injects the service into either the temporary QWidget consumer or retained model;
 construction remains filesystem/network inert and activation is the first work boundary. The old
-QWidget runtime methods remain production-dormant standalone/reference code until the next
-runtime-shaped retained state/action/geometry and caller-proof slice permits deleting them together
-with old pixels.
+QWidget runtime methods remain production-dormant standalone/reference code. Runtime-shaped caller
+proof now crosses the real manager-owned service, retained model and current `QuickSceneController`
+host; it verifies cached-first state, semantic refresh/open routing, accepted live state, in-place
+geometry/style mutation, stable item/engine/service identity and retirement. The old QWidget pixels,
+paint caches, hit regions and standalone runtime implementation may now retire.
 
 ---
 
