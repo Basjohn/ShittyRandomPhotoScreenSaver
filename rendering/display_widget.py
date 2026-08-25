@@ -69,7 +69,6 @@ if TYPE_CHECKING:
     from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
     from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
     from widgets.spotify_volume_widget import SpotifyVolumeWidget
-    from widgets.weather_widget import WeatherWidget
 
 
 logger = get_logger(__name__)
@@ -277,7 +276,7 @@ class DisplayWidget(QWidget):
         self.clock_widget: Optional[Any] = None
         self.clock2_widget: Optional[Any] = None
         self.clock3_widget: Optional[Any] = None
-        self.weather_widget: Optional["WeatherWidget"] = None
+        self.weather_widget: Optional[Any] = None
         self.media_widget: Optional["MediaWidget"] = None
         self.spotify_visualizer_widget: Optional["SpotifyVisualizerWidget"] = None
         self.spotify_volume_widget: Optional["SpotifyVolumeWidget"] = None

@@ -14,7 +14,6 @@ from PySide6.QtWidgets import QApplication, QWidget
 
 from rendering.widget_factories import (
     WidgetFactory,
-    WeatherWidgetFactory,
     MediaWidgetFactory,
     RedditWidgetFactory,
     SpotifyVisualizerFactory,
@@ -71,7 +70,7 @@ class TestWidgetFactoryBase:
     
     def test_shadow_config_extraction(self, mock_settings):
         """Test shadow config extraction helper."""
-        factory = WeatherWidgetFactory(mock_settings)
+        factory = MediaWidgetFactory(mock_settings)
         
         # With shadow enabled
         config = {
@@ -94,46 +93,6 @@ class TestWidgetFactoryBase:
         config_disabled = {"shadow": {"enabled": False}}
         shadow_disabled = factory._get_shadow_config(config_disabled)
         assert shadow_disabled is None
-
-
-# ---------------------------------------------------------------------------
-# Weather Widget Factory Tests
-# ---------------------------------------------------------------------------
-
-class TestWeatherWidgetFactory:
-    """Test WeatherWidgetFactory."""
-    
-    def test_get_widget_name(self, mock_settings):
-        """Test factory returns correct widget name."""
-        factory = WeatherWidgetFactory(mock_settings)
-        assert factory.get_widget_name() == "weather"
-    
-    def test_create_disabled_returns_none(self, mock_settings, parent_widget):
-        """Test disabled widget returns None."""
-        factory = WeatherWidgetFactory(mock_settings)
-        config = {"enabled": False}
-        
-        widget = factory.create(parent_widget, config)
-        
-        assert widget is None
-    
-    def test_create_enabled_returns_widget(self, mock_settings, parent_widget):
-        """Test enabled widget is created."""
-        factory = WeatherWidgetFactory(mock_settings)
-        config = {
-            "enabled": True,
-            "position": "top_left",
-            "api_key": "test_key",
-            "location": "London",
-        }
-        
-        widget = factory.create(parent_widget, config)
-        
-        assert widget is not None
-        assert widget._runtime_service is None
-        assert widget._owns_runtime_service is False
-        # Clean up
-        widget.deleteLater()
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +217,7 @@ class TestWidgetFactoryRegistry:
         registry = WidgetFactoryRegistry(mock_settings)
         
         assert registry.get_factory("clock") is None
-        assert registry.get_factory("weather") is not None
+        assert registry.get_factory("weather") is None
         assert registry.get_factory("media") is not None
         assert registry.get_factory("reddit") is not None
         assert registry.get_factory("spotify_visualizer") is not None
@@ -271,7 +230,7 @@ class TestWidgetFactoryRegistry:
         names = registry.get_all_factory_names()
         
         assert "clock" not in names
-        assert "weather" in names
+        assert "weather" not in names
         assert "media" in names
         assert "reddit" in names
         assert "spotify_visualizer" in names

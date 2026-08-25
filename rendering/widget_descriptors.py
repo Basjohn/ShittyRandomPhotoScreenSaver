@@ -16,12 +16,12 @@ from core.dev_gates import gate_signature, is_named_gate_enabled
 from PySide6.QtWidgets import QButtonGroup, QPushButton
 from core.settings.defaults import get_default_settings
 from core.settings.widget_family_catalog import (
-    WIDGET_FAMILY_DESCRIPTORS,
-    WidgetFamilyDescriptor,
-    get_family_id_for_widget,
-    get_widget_family_catalog,
+    WIDGET_FAMILY_DESCRIPTORS,  # noqa: F401 - compatibility re-export
+    WidgetFamilyDescriptor,  # noqa: F401 - compatibility re-export
+    get_family_id_for_widget,  # noqa: F401 - compatibility re-export
+    get_widget_family_catalog,  # noqa: F401 - compatibility re-export
     get_widget_family_descriptor,
-    get_widget_family_descriptors,
+    get_widget_family_descriptors,  # noqa: F401 - compatibility re-export
 )
 from rendering.custom_layout_contract import (
     get_custom_layout_restore_entry,
@@ -147,12 +147,6 @@ class FactoryWidgetDescriptor:
 
 
 FACTORY_WIDGET_DESCRIPTORS: tuple[FactoryWidgetDescriptor, ...] = (
-    FactoryWidgetDescriptor(
-        settings_key="weather",
-        attr_name="weather_widget",
-        factory_name="weather",
-        factory_shadows_kwarg=True,
-    ),
     FactoryWidgetDescriptor(
         settings_key="media",
         attr_name="media_widget",

@@ -80,7 +80,7 @@ class OpenMeteoProvider:
         Args:
             timeout: Request timeout in seconds
             persist_results: Persist successful network samples immediately.
-                WeatherWidget disables this and persists only after its GUI
+                WeatherRuntimeService disables this and persists only after its
                 request/location token accepts the result.
         """
         self._timeout = timeout

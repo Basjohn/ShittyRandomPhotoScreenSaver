@@ -349,7 +349,7 @@ class WeatherPresentationModel(QObject):
         self,
         config: WeatherPresentationConfig,
         style: WeatherPresentationStyle,
-        runtime_service: Any,
+        runtime_service: Any | None = None,
         *,
         parent: QObject | None = None,
     ) -> None:
@@ -358,6 +358,15 @@ class WeatherPresentationModel(QObject):
         self._snapshot = _initial_snapshot(config, style)
         self._active = False
         self._retired = False
+
+    def set_runtime_service(self, runtime_service: Any) -> None:
+        """Accept the neutral owner injected by ``WidgetRuntimeManager``."""
+
+        if self._retired:
+            raise RuntimeError("cannot inject a retired Weather presentation model")
+        if self._active and runtime_service is not self._runtime_service:
+            raise RuntimeError("cannot replace the active Weather runtime service")
+        self._runtime_service = runtime_service
 
     @property
     def config(self) -> WeatherPresentationConfig:
@@ -377,6 +386,8 @@ class WeatherPresentationModel(QObject):
         if self._active:
             return
         service = self._runtime_service
+        if service is None:
+            raise RuntimeError("Weather runtime service is not configured")
         service.attach_consumer(self)
         service.set_thread_manager(thread_manager)
         current_location = str(getattr(service, "location", "") or "").strip()
@@ -398,6 +409,8 @@ class WeatherPresentationModel(QObject):
         self._retired = True
         self._active = False
         service = self._runtime_service
+        if service is None:
+            return
         service.stop()
         service.detach_consumer(self)
 
@@ -416,6 +429,9 @@ class WeatherPresentationModel(QObject):
 
     def _apply_location_change(self, location: str) -> None:
         service = self._runtime_service
+        if service is None:
+            self._replace_snapshot(_initial_snapshot(self.config, self.style))
+            return
         was_running = service.is_running()
         service.set_location(location)
         self._replace_snapshot(_initial_snapshot(self.config, self.style))
@@ -438,6 +454,21 @@ class WeatherPresentationModel(QObject):
 
     def weather_pending_first_show(self) -> bool:
         return self.is_active and self._snapshot.view_state == "loading"
+
+    def request_refresh(self) -> bool:
+        """Request the existing runtime owner to perform a manual refresh."""
+
+        if (
+            not self.is_active
+            or not self.config.location
+            or self._runtime_service is None
+        ):
+            return False
+        try:
+            self._runtime_service.fetch_weather()
+        except Exception:
+            return False
+        return True
 
     def on_weather_state(self, data: Mapping[str, Any], *, from_cache: bool) -> None:
         if not self.is_weather_consumer_alive():
@@ -667,6 +698,9 @@ class RetainedWeatherPresentation:
         signal = getattr(self._retained.item, "settingsRequested", None)
         if signal is not None and hasattr(signal, "connect"):
             signal.connect(self._handle_settings_requested)
+        refresh_signal = getattr(self._retained.item, "refreshRequested", None)
+        if refresh_signal is not None and hasattr(refresh_signal, "connect"):
+            refresh_signal.connect(self._model.request_refresh)
 
     @property
     def item(self):

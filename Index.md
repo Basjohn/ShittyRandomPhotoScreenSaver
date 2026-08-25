@@ -13,8 +13,8 @@ exact current source
 -> tests/evidence for the claim
 ```
 
-Current migration state: **Phase F active; F1 Clock is independently GREEN, caller-proven and CLOSED.
-F2 Weather is ACTIVE.**
+Current migration state: **Phase F active; F1 Clock and F2 Weather are caller-proven and CLOSED.
+F3 Media core is ACTIVE.**
 
 Do not read the whole history tree by default.
 

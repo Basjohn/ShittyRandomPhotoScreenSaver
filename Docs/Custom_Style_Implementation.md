@@ -50,7 +50,7 @@ or simplified at pushed checkpoint `8c9fd468`:
 
 ```text
 widgets/shadow_utils.py          -> text / text_large / header / icon
-widgets/weather_components.py    -> icon
+rendering/quick/widgets/weather.py -> packaged icon identity
 widgets/media/painting.py        -> control
 widgets/mute_button_widget.py    -> control
 widgets/spotify_volume_widget.py -> volume_slider

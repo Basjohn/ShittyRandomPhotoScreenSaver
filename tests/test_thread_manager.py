@@ -880,11 +880,11 @@ class TestOverlayTimerIntegration:
 
         widget._thread_manager = _StubManager()  # type: ignore[attr-defined]
 
-        handle = create_overlay_timer(widget, 2500, lambda: None, description="WeatherWidget refresh")
+        handle = create_overlay_timer(widget, 2500, lambda: None, description="Weather runtime refresh")
 
         assert isinstance(handle, OverlayTimerHandle)
         assert captured["interval_ms"] == 2500
-        assert captured["description"] == "WeatherWidget refresh"
+        assert captured["description"] == "Weather runtime refresh"
         callback = captured["callback"]
         assert getattr(callback, "_srpss_timer_owner", None) is widget
 

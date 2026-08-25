@@ -40,7 +40,7 @@ def test_no_current_source_reads_the_retired_sidecar() -> None:
         "rendering/quick/widgets/clock.py",
         "widgets/spotify_volume_widget.py",
         "widgets/mute_button_widget.py",
-        "widgets/weather_components.py",
+        "rendering/quick/widgets/weather.py",
         "widgets/media/painting.py",
         "widgets/spotify_visualizer/card_surface.py",
         "widgets/spotify_visualizer/renderers/spectrum.py",
@@ -80,7 +80,7 @@ def test_no_production_copy_of_retired_profile_behavior_remains() -> None:
             "draw_pixmap_drop_shadow",
             "draw_rounded_rect_with_shadow",
         ),
-        "widgets/weather_components.py": (
+        "rendering/quick/widgets/weather.py": (
             "shadowtuning.json",
             "_scaled_shadow_offsets",
             "_shadow_pixmap",

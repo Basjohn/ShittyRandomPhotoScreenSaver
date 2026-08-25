@@ -10,7 +10,6 @@ from core.resources.manager import ResourceManager
 from rendering import display_setup
 from rendering.widget_manager import WidgetManager
 from widgets.media_widget import MediaPosition
-from widgets.weather_widget import WeatherPosition
 from widgets.reddit_widget import RedditPosition
 from rendering.widget_descriptors import get_factory_widget_descriptors
 
@@ -185,68 +184,6 @@ class _StubMediaWidget(_BaseStubWidget):
         self.provider = value
 
 
-class _StubWeatherWidget(_BaseStubWidget):
-    def __init__(self, parent, location, position, build_default_runtime=True):
-        super().__init__()
-        self.parent = parent
-        self.location = location
-        self.position = position
-        self.build_default_runtime = build_default_runtime
-        self.runtime_service = object() if build_default_runtime else None
-        self.thread_manager = None
-        self.font_family = None
-        self.font_size = None
-        self.text_color = None
-        self.show_background = None
-        self.background_color = None
-        self.background_opacity = None
-        self.border = None
-        self.show_forecast = None
-        self.margin = None
-
-    def set_thread_manager(self, manager):
-        self.thread_manager = manager
-        if self.runtime_service is not None and hasattr(self.runtime_service, "set_thread_manager"):
-            self.runtime_service.set_thread_manager(manager)
-
-    def set_runtime_service(self, service):
-        self.runtime_service = service
-        service.attach_consumer(self)
-        service.set_location(self.location)
-        if self.thread_manager is not None:
-            service.set_thread_manager(self.thread_manager)
-
-    def is_weather_consumer_alive(self):
-        return True
-
-    def set_font_family(self, value):
-        self.font_family = value
-
-    def set_font_size(self, value):
-        self.font_size = value
-
-    def set_text_color(self, value):
-        self.text_color = value
-
-    def set_show_background(self, value):
-        self.show_background = value
-
-    def set_background_color(self, value):
-        self.background_color = value
-
-    def set_background_opacity(self, value):
-        self.background_opacity = value
-
-    def set_background_border(self, width, color):
-        self.border = (width, color)
-
-    def set_show_forecast(self, value):
-        self.show_forecast = value
-
-    def set_margin(self, value):
-        self.margin = value
-
-
 class _StubRedditWidget(_BaseStubWidget):
     def __init__(self, parent, position, build_default_provider=True):
         super().__init__()
@@ -329,7 +266,6 @@ def _patch_widget_classes(monkeypatch):
     monkeypatch.setattr("rendering.widget_manager.parse_color_to_qcolor", _fake_qcolor)
     monkeypatch.setattr("rendering.widget_factories.parse_color_to_qcolor", _fake_qcolor)
     monkeypatch.setattr("widgets.media_widget.MediaWidget", _StubMediaWidget)
-    monkeypatch.setattr("widgets.weather_widget.WeatherWidget", _StubWeatherWidget)
     monkeypatch.setattr("widgets.reddit_widget.RedditWidget", _StubRedditWidget)
     monkeypatch.setattr(
         WidgetManager,
@@ -470,86 +406,7 @@ def test_existing_media_widget_rebinds_thread_manager():
     assert existing.thread_manager is new_tm
 
 
-def test_weather_widget_creation_handles_prefixed_positions():
-    widgets_config = {
-        "weather": {
-            "enabled": True,
-            "monitor": "ALL",
-            "position": "WidgetPosition.MIDDLE_RIGHT",
-            "location": "Berlin",
-            "font_family": "Inter",
-            "font_size": 30,
-            "color": [5, 5, 5, 255],
-            "show_background": True,
-            "bg_color": [1, 1, 1, 255],
-            "bg_opacity": 0.75,
-            "border_color": [2, 2, 2, 255],
-            "border_opacity": 0.9,
-            "margin": 10,
-            "show_forecast": True,
-        },
-        "shadows": {"enabled": True},
-    }
-
-    manager, created = _setup_widgets(widgets_config)
-    widget = created['weather_widget']
-
-    assert isinstance(widget, _StubWeatherWidget)
-    assert widget.position == WeatherPosition.MIDDLE_RIGHT
-    assert widget.location == "Berlin"
-    assert widget.font_size == 30
-    assert widget.margin == 10
-    assert widget.background_opacity == 0.75
-    assert widget.raised is True
-    assert widget.started is True
-    assert widget.build_default_runtime is False
-    service = manager._runtime_manager.get_widget_service("weather")
-    assert service is widget.runtime_service
-    assert service.location == "Berlin"
-
-
-def test_deactivated_weather_family_owns_no_runtime_service():
-    config = {
-        "weather": {
-            "enabled": True,
-            "monitor": "ALL",
-            "position": "WidgetPosition.TOP_LEFT",
-            "location": "London",
-        },
-        "family_activation": {"weather": False},
-    }
-
-    manager, created = _setup_widgets(config)
-
-    assert "weather_widget" not in created
-    assert manager._runtime_manager.get_widget_service("weather") is None
-
-
-def test_disabled_weather_instance_is_distinct_from_family_deactivation():
-    config = {
-        "weather": {
-            "enabled": False,
-            "monitor": "ALL",
-            "position": "WidgetPosition.TOP_LEFT",
-            "location": "London",
-        },
-        "family_activation": {"weather": True},
-    }
-
-    manager, created = _setup_widgets(config)
-
-    assert manager._runtime_manager.admits_widget_family("weather", config) is True
-    assert "weather_widget" not in created
-    assert manager._runtime_manager.get_widget_service("weather") is None
-
-
-def test_weather_fails_closed_when_runtime_service_build_fails(monkeypatch):
-    import widgets.weather_runtime as weather_runtime
-
-    def _boom(*_args, **_kwargs):
-        raise RuntimeError("Weather service build failed")
-
-    monkeypatch.setattr(weather_runtime, "WeatherRuntimeService", _boom)
+def test_retired_weather_qwidget_factory_is_not_created():
     config = {
         "weather": {
             "enabled": True,
@@ -566,24 +423,23 @@ def test_weather_fails_closed_when_runtime_service_build_fails(monkeypatch):
     assert manager._runtime_manager.get_widget_service("weather") is None
 
 
-def test_deactivating_one_family_does_not_affect_another():
+def test_deactivating_clock_family_does_not_affect_media():
     widgets_config = {
         "clock": {
             "enabled": True, "monitor": "ALL",
             "position": "WidgetPosition.BOTTOM_CENTER", "timezone": "UTC",
             "display_mode": "analog",
         },
-        "weather": {
+        "media": {
             "enabled": True, "monitor": "ALL",
-            "position": "WidgetPosition.MIDDLE_RIGHT", "location": "Berlin",
-            "show_forecast": True,
+            "position": "WidgetPosition.MIDDLE_RIGHT", "provider": "spotify",
         },
         "shadows": {"enabled": True},
         "family_activation": {"clocks": False},
     }
     _manager, created = _setup_widgets(widgets_config)
     assert "clock_widget" not in created
-    assert "weather_widget" in created
+    assert "media_widget" in created
 
 
 def _reddit_config(*, enabled=True, provider="public_json", **family_activation):
@@ -747,7 +603,6 @@ def test_factory_widget_descriptors_cover_factory_backed_widget_families():
     descriptor_names = [descriptor.settings_key for descriptor in descriptors]
 
     expected = [
-        "weather",
         "media",
         "reddit",
         "reddit2",

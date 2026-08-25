@@ -18,7 +18,6 @@ from PySide6.QtCore import QSize, QRect, QPoint
 
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
 from widgets.reddit_widget import RedditPosition
-from widgets.weather_widget import WeatherPosition
 from widgets.media_widget import MediaPosition
 
 
@@ -72,11 +71,9 @@ def test_all_widget_enums_in_sync():
     """All widget-specific Position enums must match PositionAnchor values."""
     canonical = {anchor.value for anchor in PositionAnchor}
     
-    weather_values = {pos.value for pos in WeatherPosition}
     media_values = {pos.value for pos in MediaPosition}
     reddit_values = {pos.value for pos in RedditPosition}
     
-    assert weather_values == canonical, f"WeatherPosition mismatch: {weather_values ^ canonical}"
     assert media_values == canonical, f"MediaPosition mismatch: {media_values ^ canonical}"
     assert reddit_values == canonical, f"RedditPosition mismatch: {reddit_values ^ canonical}"
 
@@ -84,7 +81,6 @@ def test_all_widget_enums_in_sync():
 def test_enum_count_consistency():
     """All position enums must have exactly 9 values."""
     assert len(PositionAnchor) == 9
-    assert len(WeatherPosition) == 9
     assert len(MediaPosition) == 9
     assert len(RedditPosition) == 9
 

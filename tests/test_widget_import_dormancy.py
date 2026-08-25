@@ -33,7 +33,6 @@ import rendering.widget_manager  # noqa: F401
 import rendering.display_widget  # noqa: F401
 
 forbidden = {
-    "widgets.weather_widget",
     "widgets.media_widget",
     "widgets.reddit_widget",
     "widgets.spotify_visualizer_widget",

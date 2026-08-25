@@ -1,6 +1,6 @@
 # 10 — Ordinary Widget Family Port Decomposition
 
-Status: **Phase F ACTIVE — F1 CLOSED; F2 Weather ACTIVE**
+Status: **Phase F ACTIVE — F1/F2 CLOSED; F3 Media core ACTIVE**
 Last updated: 2026-08-25
 
 This file begins at current/future Phase-F work. Completed F0/F0.5 implementation history does not live
@@ -24,8 +24,8 @@ neutral runtime/model
 ```text
 F0.5              closed
 F1                Clock / Clock2 / Clock3 — CLOSED
-F2                Weather — ACTIVE
-F3                Media core
+F2                Weather — CLOSED
+F3                Media core — ACTIVE
 F4                Media controls / volume / mute / progress
 F5                Reddit / Reddit2
 F6                Gmail
@@ -200,11 +200,11 @@ geometry metadata and `GlobalClockTicker` remain with their destination owners.
 
 Use neutral Weather runtime/provider/cache/refresh/request-generation ownership.
 
-Current retained implementation uses `WeatherPresentationModel` as the existing
+The retained implementation uses `WeatherPresentationModel` as the existing
 `WeatherRuntimeService` consumer, publishes packaged/static icon identities and creates
 `WeatherPresentation.qml` through the ordinary-widget host. Provider/timer/cache/generation ownership
-has not moved. Caller proof and old Weather pixel retirement remain after the implementation
-checkpoint is pushed and self-audited GREEN.
+has not moved. Caller proof crosses the real `WidgetRuntimeManager` service injection and ordinary-widget
+host; the old Weather factory, QWidget pixel presenter/components and presentation-only tests are gone.
 
 Presentation model covers location, condition, temperature, forecast, icon identity, loading/error/missing
 location and style.
@@ -215,7 +215,8 @@ Do not create full provider-artwork infrastructure merely for icons.
 
 Use offline synthetic pixel/model states.
 
-After GREEN, delete old Weather pixels.
+F2 is CLOSED. Runtime/cache/provider regressions remain under `tests/test_weather_runtime.py` and retained
+presentation coverage remains under `tests/test_qtquick_weather_presentation.py`.
 
 ---
 
