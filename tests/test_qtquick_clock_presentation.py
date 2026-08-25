@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -373,6 +374,162 @@ def test_clock_geometry_variants_round_trip_exactly_and_first_target_centers_onc
         assert presentation.geometry == digital
     finally:
         presentation.retire()
+        root.setParentItem(None)
+        root.setParent(None)
+        root.deleteLater()
+        context.deleteLater()
+        factory.deleteLater()
+        owner.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_analogue_feature_toggles_and_direction_mutate_retained_items_in_place(qt_app) -> None:
+    owner = QObject()
+    factory = QuickSceneFactory()
+    context, root, host = _create_host(factory, owner)
+    ticker = _FakeTicker()
+    now_box = [datetime(2026, 8, 25, 13, 24, 30)]
+    config = _clock_config(display_mode="analog")
+    model = _model(now_box, ticker, config=config)
+    presentation = RetainedClockPresentation(
+        host=host,
+        model=model,
+        geometry=OverlayWidgetGeometry(90.0, 70.0, 420.0, 520.0),
+        display_bounds=OverlayWidgetGeometry(0.0, 0.0, 1920.0, 1080.0),
+        display_identity="screen:a",
+    )
+    try:
+        presentation.activate(object())
+        item = presentation.item
+        geometry = presentation.geometry
+        ring_shadow = item.findChild(QQuickItem, "clockAnalogueRingShadow")
+        numeral = _find_visual_item(item, "clockAnalogueNumeral0")
+        numeral_shadow = _find_visual_item(item, "clockAnalogueNumeralMainShadow0")
+        hour_hand = item.findChild(QQuickItem, "clockAnalogueHourHand")
+        hand_shadow = hour_hand.findChild(QQuickItem, "clockHandShadow")
+        assert ring_shadow is not None
+        assert numeral is not None and numeral_shadow is not None
+        assert hour_hand is not None and hand_shadow is not None
+        assert ring_shadow.isVisible() is True
+        assert numeral_shadow.isVisible() is True
+        assert hand_shadow.isVisible() is True
+
+        presentation.apply_config(
+            replace(config, analog_face_shadow=False, show_numerals=False),
+            _shadow_values(direction="E"),
+        )
+        qt_app.processEvents()
+
+        assert presentation.item is item
+        assert presentation.geometry == geometry
+        assert model.displayMode == "analog"
+        assert len(ticker.subscribers) == 1
+        assert ring_shadow.isVisible() is False
+        assert numeral.isVisible() is False
+        assert numeral_shadow.isVisible() is False
+        assert hand_shadow.isVisible() is False
+
+        presentation.apply_config(
+            replace(config, analog_face_shadow=True, show_numerals=True),
+            _shadow_values(direction="N"),
+        )
+        qt_app.processEvents()
+        assert presentation.item is item
+        assert ring_shadow.isVisible() is True
+        assert numeral.isVisible() is True
+        assert hand_shadow.isVisible() is True
+        assert model.analogRingOffsetX == pytest.approx(0.0)
+        assert model.analogRingOffsetY == pytest.approx(-3.0)
+        assert model.analogNumeralContactOffsetX == pytest.approx(0.0)
+        assert model.analogNumeralContactOffsetY == pytest.approx(-1.0)
+        assert model.analogHandOffsetX == pytest.approx(0.0)
+        assert model.analogHandOffsetY == pytest.approx(-4.0)
+    finally:
+        presentation.retire()
+        root.setParentItem(None)
+        root.setParent(None)
+        root.deleteLater()
+        context.deleteLater()
+        factory.deleteLater()
+        owner.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_three_differently_configured_clocks_share_engine_and_ticker(qt_app) -> None:
+    owner = QObject()
+    factory = QuickSceneFactory()
+    context, root, host = _create_host(factory, owner)
+    ticker = _FakeTicker()
+    now_box = [datetime(2026, 8, 25, 13, 24, 30)]
+    configs = (
+        _clock_config(display_mode="digital", font_size=48),
+        ClockPresentationConfig.from_mapping(
+            "clock2",
+            {
+                "format": "12h",
+                "show_seconds": False,
+                "timezone": "UTC-5",
+                "show_timezone": True,
+                "font_size": 34,
+                "color": [255, 220, 120, 230],
+                "display_mode": "digital",
+            },
+        ),
+        ClockPresentationConfig.from_mapping(
+            "clock3",
+            {
+                "format": "24h",
+                "show_seconds": True,
+                "timezone": "UTC",
+                "show_timezone": False,
+                "show_day_of_week": True,
+                "show_date": True,
+                "font_size": 68,
+                "show_background": True,
+                "display_mode": "analog",
+                "analog_face_shadow": False,
+            },
+        ),
+    )
+    presentations = []
+    try:
+        for index, config in enumerate(configs):
+            model = _model(now_box, ticker, config=config)
+            presentation = RetainedClockPresentation(
+                host=host,
+                model=model,
+                geometry=OverlayWidgetGeometry(
+                    40.0 + index * 360.0,
+                    50.0,
+                    330.0,
+                    180.0 if config.display_mode == "digital" else 450.0,
+                ),
+                display_bounds=OverlayWidgetGeometry(0.0, 0.0, 1920.0, 1080.0),
+                display_identity="screen:a",
+            )
+            presentation.activate(object())
+            presentations.append(presentation)
+
+        engine = QQmlEngine.contextForObject(root).engine()
+        assert [presentation.model.config.widget_id for presentation in presentations] == [
+            "clock",
+            "clock2",
+            "clock3",
+        ]
+        assert all(
+            QQmlEngine.contextForObject(presentation.item).engine() is engine
+            for presentation in presentations
+        )
+        assert len(ticker.subscribers) == 3
+        assert presentations[0].model.timeText == "13:24:30"
+        assert presentations[1].model.timeText == "1:24 PM"
+        assert presentations[2].model.displayMode == "analog"
+        assert presentations[2].model.analogFaceShadow is False
+    finally:
+        host.retire_all()
+        assert ticker.subscribers == []
         root.setParentItem(None)
         root.setParent(None)
         root.deleteLater()
