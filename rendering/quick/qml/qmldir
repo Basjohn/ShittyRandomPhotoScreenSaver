@@ -4,3 +4,4 @@ ClockPresentation 1.0 ClockPresentation.qml
 ClockDigitalFace 1.0 ClockDigitalFace.qml
 ClockAnalogueFace 1.0 ClockAnalogueFace.qml
 ClockHand 1.0 ClockHand.qml
+WeatherPresentation 1.0 WeatherPresentation.qml

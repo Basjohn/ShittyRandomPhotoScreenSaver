@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 from .host import (
+    ORDINARY_CARD_SHADOW_BASE,
+    ORDINARY_TEXT_SHADOW_BASE,
     OrdinaryWidgetPresentationHost,
     OverlayCardStyle,
     OverlayWidgetGeometry,
     RetainedOverlayWidget,
+)
+from .weather import (
+    RetainedWeatherPresentation,
+    WeatherPresentationConfig,
+    WeatherPresentationModel,
+    WeatherPresentationSnapshot,
+    WeatherPresentationStyle,
 )
 from .clock import (
     ClockGeometryVariantStore,
@@ -25,6 +34,8 @@ from .registry import (
 
 __all__ = [
     "OrdinaryWidgetPresentationHost",
+    "ORDINARY_CARD_SHADOW_BASE",
+    "ORDINARY_TEXT_SHADOW_BASE",
     "OverlayCardStyle",
     "OverlayWidgetGeometry",
     "RetainedOverlayWidget",
@@ -35,6 +46,11 @@ __all__ = [
     "ClockPresentationStyle",
     "RetainedClockPresentation",
     "normalize_clock_display_mode",
+    "RetainedWeatherPresentation",
+    "WeatherPresentationConfig",
+    "WeatherPresentationModel",
+    "WeatherPresentationSnapshot",
+    "WeatherPresentationStyle",
     "ORDINARY_WIDGET_FAMILY_COMPONENTS",
     "OrdinaryWidgetFamilyComponent",
     "ordinary_widget_family_component",

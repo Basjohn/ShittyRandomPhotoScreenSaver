@@ -25,6 +25,11 @@ Independent source/architecture audit: GREEN
 
 The retained Clock implementation, caller proof and old pixel retirement are complete. F1 is CLOSED.
 
+F2 retained implementation is now present for audit: a stable Weather presentation model consumes the
+existing neutral runtime protocol, resolves packaged icon identities and canonical retained style in
+Python, and creates `WeatherPresentation.qml` through the current ordinary-widget host. Old Weather
+pixels remain until this checkpoint is pushed/self-audited GREEN and caller proof is complete.
+
 Source outranks this plan if a later checkpoint has landed.
 
 ---
@@ -366,5 +371,5 @@ The unrelated Bubble cadence harness debt from the visualizer card-surface clean
 Settings-GUI shadow polish is separate from runtime widget shadow authority and is not a migration
 sequencing blocker.
 
-`Docs/TestSuite.md` remains the canonical 358-module inventory. Its phase-status prose does not override
+`Docs/TestSuite.md` remains the canonical 359-module inventory. Its phase-status prose does not override
 this plan's sequencing.

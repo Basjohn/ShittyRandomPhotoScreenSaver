@@ -200,6 +200,12 @@ geometry metadata and `GlobalClockTicker` remain with their destination owners.
 
 Use neutral Weather runtime/provider/cache/refresh/request-generation ownership.
 
+Current retained implementation uses `WeatherPresentationModel` as the existing
+`WeatherRuntimeService` consumer, publishes packaged/static icon identities and creates
+`WeatherPresentation.qml` through the ordinary-widget host. Provider/timer/cache/generation ownership
+has not moved. Caller proof and old Weather pixel retirement remain after the implementation
+checkpoint is pushed and self-audited GREEN.
+
 Presentation model covers location, condition, temperature, forecast, icon identity, loading/error/missing
 location and style.
 

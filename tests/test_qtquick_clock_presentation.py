@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QObject
-from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
@@ -693,10 +692,13 @@ def test_clock_qml_contract_has_retained_two_pass_analogue_shadows_and_no_effect
 def test_static_registry_maps_clock_family_without_member_duplication() -> None:
     from rendering.quick.widgets.registry import ORDINARY_WIDGET_FAMILY_COMPONENTS
 
-    assert [descriptor.family_id for descriptor in ORDINARY_WIDGET_FAMILY_COMPONENTS] == [
-        "clocks"
+    clock_descriptors = [
+        descriptor
+        for descriptor in ORDINARY_WIDGET_FAMILY_COMPONENTS
+        if descriptor.family_id == "clocks"
     ]
-    descriptor = ORDINARY_WIDGET_FAMILY_COMPONENTS[0]
+    assert len(clock_descriptors) == 1
+    descriptor = clock_descriptors[0]
     assert descriptor.qml_filename == "ClockPresentation.qml"
     assert descriptor.presentation_model_kind == "ClockPresentationModel"
     registry_source = (
