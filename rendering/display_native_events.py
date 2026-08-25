@@ -686,21 +686,6 @@ def handle_eventFilter(widget, watched, event):
                             else:
                                 owner._show_ctrl_cursor_hint(local_pos, mode="none")
 
-                        # Forward halo hover position to the Reddit
-                        # widget (if present) so it can manage its own
-                        # delayed tooltips over post titles.
-                        try:
-                            rw = getattr(owner, "reddit_widget", None)
-                            if rw is not None and rw.isVisible() and hasattr(rw, "handle_hover"):
-                                try:
-                                    local_rw_pos = rw.mapFromGlobal(global_pos)
-                                except Exception as e:
-                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                                    local_rw_pos = None
-                                if local_rw_pos is not None:
-                                    rw.handle_hover(local_rw_pos, global_pos)
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     except Exception as e:
                         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
     except MemoryError:

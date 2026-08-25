@@ -1,6 +1,6 @@
 # 10 — Ordinary Widget Family Port Decomposition
 
-Status: **Phase F ACTIVE — F1/F2/F3/F4 CLOSED; F5 Reddit ACTIVE**
+Status: **Phase F ACTIVE — F1–F5 CLOSED; F6 Gmail ACTIVE**
 Last updated: 2026-08-25
 
 This file begins at current/future Phase-F work. Completed F0/F0.5 implementation history does not live
@@ -27,8 +27,8 @@ F1                Clock / Clock2 / Clock3 — CLOSED
 F2                Weather — CLOSED
 F3                Media core — CLOSED
 F4                Media controls / volume / mute / progress — CLOSED
-F5                Reddit / Reddit2 — ACTIVE
-F6                Gmail
+F5                Reddit / Reddit2 — CLOSED
+F6                Gmail — ACTIVE
 F7                Achievement Pulse
 F8                Abandonment Issues
 ```
@@ -311,13 +311,13 @@ effect, persistence, rate limiter or Timer. Real threaded-OpenGL evidence covers
 The second F5 checkpoint replaces the old provider-only lease with one per-member
 `RedditRuntimeService`. It owns provider selection/use, startup cache snapshots, the accepted candidate
 window, periodic/manual due horizons, blocked-gate persistence, request generations and retirement.
-`WidgetRuntimeManager` injects the service into either the temporary QWidget consumer or retained model;
-construction remains filesystem/network inert and activation is the first work boundary. The old
-QWidget runtime methods remain production-dormant standalone/reference code. Runtime-shaped caller
-proof now crosses the real manager-owned service, retained model and current `QuickSceneController`
-host; it verifies cached-first state, semantic refresh/open routing, accepted live state, in-place
-geometry/style mutation, stable item/engine/service identity and retirement. The old QWidget pixels,
-paint caches, hit regions and standalone runtime implementation may now retire.
+`WidgetRuntimeManager` injects the service into the retained model; construction remains
+filesystem/network inert and activation is the first work boundary. Runtime-shaped caller proof crosses
+the real manager-owned service, retained model and current `QuickSceneController` host; it verifies
+cached-first state, semantic refresh/open routing, accepted live state, in-place geometry/style mutation,
+stable item/engine/service identity and retirement. F5 closure deletes the old Reddit factory, QWidget
+pixels, pixmap caches, hit regions, hover/config adapters and presentation-only suites. Neutral provider,
+preparation, cache, cadence, rate-limit, helper and deferred-URL contracts remain. F5 is CLOSED.
 
 ---
 

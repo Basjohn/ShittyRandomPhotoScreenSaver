@@ -1109,11 +1109,7 @@ def test_gmail_action_menu_click_defers_mc_focus_restore(qt_app):
 
     handled, reddit_handled, reddit_url = handler.route_widget_click(
         event,
-        None,
-        None,
-        gmail,
-        None,
-        None,
+        gmail_widget=gmail,
     )
 
     assert handled is True

@@ -34,7 +34,6 @@ import rendering.display_widget  # noqa: F401
 
 forbidden = {
     "widgets.media_widget",
-    "widgets.reddit_widget",
     "widgets.spotify_visualizer_widget",
     "core.media.media_controller",
     "core.media.spotify_volume",

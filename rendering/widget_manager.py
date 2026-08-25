@@ -10,7 +10,7 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING, Mapping
 import weakref
 
-from PySide6.QtCore import QPoint, QRect, QSize, QTimer
+from PySide6.QtCore import QPoint, QRect, QTimer
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import (
@@ -33,7 +33,7 @@ from core.media.provider_registry import normalize_provider_id, preserve_provide
 from rendering.multi_monitor_coordinator import get_coordinator
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
 from rendering.fade_coordinator import FadeCoordinator
-from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings, RedditWidgetSettings
+from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings
 from core.settings.visualizer_presets import (
     apply_preset_to_config,
     build_normalized_custom_snapshot,
@@ -355,7 +355,7 @@ class WidgetManager:
                     starter()
                 else:
                     ThreadManager.single_shot(delay_ms, starter)
-            except Exception as e:
+            except Exception:
                 logger.warning("[SPOTIFY_SECONDARY][FALLBACK] Failed to schedule queued starter", exc_info=True)
                 try:
                     starter()
@@ -1344,84 +1344,6 @@ class WidgetManager:
         settings.set('widgets', updated_widgets_cfg)
         settings.save()
 
-    def _refresh_reddit_configs(self, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
-        """Apply latest reddit settings to live reddit widgets (reddit, reddit2)."""
-        targets = [('reddit', self._widgets.get('reddit_widget')), ('reddit2', self._widgets.get('reddit2_widget'))]
-        if all(w is None for _, w in targets):
-            return
-
-        cfg = widgets_config
-        if cfg is None:
-            if self._settings_manager is None:
-                return
-            cfg = self._settings_manager.get('widgets', {}) or {}
-        if not isinstance(cfg, Mapping):
-            return
-
-        base_reddit_cfg = cfg.get('reddit', {}) if isinstance(cfg.get('reddit', {}), Mapping) else cfg.get('reddit', {})
-
-        for key, widget in targets:
-            if widget is None:
-                continue
-            reddit_cfg = cfg.get(key, {})
-            if not isinstance(reddit_cfg, Mapping):
-                continue
-            model = RedditWidgetSettings.from_mapping(reddit_cfg, prefix=f"widgets.{key}")
-
-            style_fallback = base_reddit_cfg if (key == 'reddit2' and isinstance(base_reddit_cfg, Mapping)) else None
-
-            def inherit_style(field: str, default: Any) -> Any:
-                if field in reddit_cfg:
-                    return reddit_cfg.get(field)
-                if isinstance(style_fallback, Mapping) and field in style_fallback:
-                    return style_fallback.get(field)
-                return default
-
-            try:
-                font_family = inherit_style('font_family', model.font_family)
-                font_size = inherit_style('font_size', model.font_size)
-                margin = inherit_style('margin', model.margin)
-                header_logo_px_adjust = inherit_style('header_logo_px_adjust', model.header_logo_px_adjust)
-                text_color = inherit_style('color', [255, 255, 255, 230])
-                show_background = SettingsManager.to_bool(inherit_style('show_background', model.show_background), True)
-                show_separators = SettingsManager.to_bool(inherit_style('show_separators', model.show_separators), True)
-                show_refresh_spiral = SettingsManager.to_bool(
-                    inherit_style('show_refresh_spiral', model.show_refresh_spiral),
-                    True,
-                )
-                bg_color_value = inherit_style('bg_color', inherit_style('background_color', [35, 35, 35, 255]))
-                bg_opacity_value = inherit_style('bg_opacity', model.background_opacity)
-                border_color_value = inherit_style('border_color', [255, 255, 255, 255])
-                border_opacity_value = inherit_style('border_opacity', model.border_opacity)
-
-                if hasattr(widget, 'set_font_family'):
-                    widget.set_font_family(font_family)
-                if hasattr(widget, 'set_font_size'):
-                    widget.set_font_size(int(font_size))
-                if hasattr(widget, 'set_text_color'):
-                    widget.set_text_color(parse_color_to_qcolor(text_color))
-                if hasattr(widget, 'set_show_background'):
-                    widget.set_show_background(show_background)
-                if hasattr(widget, 'set_show_separators'):
-                    widget.set_show_separators(show_separators)
-                if hasattr(widget, 'set_show_refresh_spiral'):
-                    widget.set_show_refresh_spiral(show_refresh_spiral)
-                if hasattr(widget, 'set_background_color'):
-                    widget.set_background_color(parse_color_to_qcolor(bg_color_value))
-                if hasattr(widget, 'set_background_opacity'):
-                    widget.set_background_opacity(float(bg_opacity_value))
-                if hasattr(widget, 'set_background_border'):
-                    border_qcolor = parse_color_to_qcolor(border_color_value, opacity_override=border_opacity_value)
-                    if border_qcolor:
-                        current_width = getattr(widget, '_bg_border_width', None)
-                        widget.set_background_border(current_width if current_width is not None else widget.get_global_border_width(), border_qcolor)
-                if hasattr(widget, 'set_margin'):
-                    widget.set_margin(int(margin))
-                if hasattr(widget, 'set_header_logo_px_adjust'):
-                    widget.set_header_logo_px_adjust(int(header_logo_px_adjust))
-            except Exception:
-                logger.debug("[WIDGET_MANAGER] Failed to reapply reddit config for %s", key, exc_info=True)
-    
     def show_widget(self, name: str) -> bool:
         """
         Show a specific widget.
@@ -2465,7 +2387,7 @@ class WidgetManager:
             )
             try:
                 ThreadManager.single_shot(direct_delay_ms, starter)
-            except Exception as e:
+            except Exception:
                 logger.warning("[SPOTIFY_SECONDARY][FALLBACK] Failed to schedule direct starter", exc_info=True)
                 try:
                     starter()
@@ -2492,7 +2414,7 @@ class WidgetManager:
         )
         try:
             ThreadManager.single_shot(direct_delay_ms, starter)
-        except Exception as e:
+        except Exception:
             logger.warning("[SPOTIFY_SECONDARY][FALLBACK] Failed to schedule compositor-ready starter", exc_info=True)
             try:
                 starter()
@@ -2744,8 +2666,7 @@ class WidgetManager:
     # =========================================================================
     # Widget Factory Methods (Phase 2 - Jan 2026)
     # Legacy create_*_widget methods removed - now using WidgetFactoryRegistry
-    # See rendering/widget_factories.py for the surviving MediaWidgetFactory
-    # and RedditWidgetFactory implementations.
+    # See rendering/widget_factories.py for the surviving MediaWidgetFactory.
     # =========================================================================
 
     # NOTE: old create_* methods have been removed. setup_all_widgets() uses

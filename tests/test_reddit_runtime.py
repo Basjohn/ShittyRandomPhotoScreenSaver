@@ -8,6 +8,7 @@ import pytest
 
 from core.reddit_post_provider import RedditProviderResult
 from core.reddit_preparation import RedditPost, write_reddit_post_cache
+from core.settings.widget_capacity_policy import LIST_WIDGET_MAX_CAPACITY
 from widgets.reddit_runtime import RedditRuntimeConfig, RedditRuntimeService
 
 
@@ -207,6 +208,44 @@ def test_reddit_runtime_rejects_stale_fetch_after_subreddit_change(
     assert startup_task[2] is not None
 
 
+def test_reddit_runtime_rejects_stale_startup_snapshot_after_live_acceptance(
+    monkeypatch, tmp_path
+) -> None:
+    import widgets.reddit_runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module, "_REDDIT_CACHE_DIR", tmp_path)
+    monkeypatch.setattr(runtime_module, "automatic_service_updates_enabled", lambda: False)
+    cached = RedditPost("Old cache", "https://example.com/old", 1, 100.0)
+    assert write_reddit_post_cache(tmp_path / "reddit_posts.json", (cached,))
+    held = []
+
+    class _HeldThreadManager:
+        def submit_io_task(self, callback_fn, *args, callback=None, **_kwargs):
+            held.append((callback_fn, args, callback))
+            return "held"
+
+    provider = _Provider(
+        [RedditProviderResult.with_posts(_rows("Fresh live"), source_id="test")]
+    )
+    service = _service(provider)
+    service._schedule_timer = lambda: None
+    consumer = _Consumer()
+    service.attach_consumer(consumer)
+    service.set_thread_manager(_HeldThreadManager())
+
+    assert service.start()
+    startup_task = held.pop(0)
+    old_snapshot = startup_task[0](*startup_task[1])
+    assert service.fetch()
+    fetch_task = held.pop(0)
+    prepared = fetch_task[0](*fetch_task[1])
+    fetch_task[2](SimpleNamespace(success=True, result=prepared, error=None))
+    startup_task[2](SimpleNamespace(success=True, result=old_snapshot, error=None))
+
+    assert service.candidates[0].title == "Fresh live"
+    assert [posts[0].title for posts, _metadata in consumer.posts] == ["Fresh live"]
+
+
 def test_reddit_runtime_manual_action_routes_once_and_reports_refreshing(
     monkeypatch, tmp_path
 ) -> None:
@@ -229,6 +268,7 @@ def test_reddit_runtime_manual_action_routes_once_and_reports_refreshing(
     assert len(provider.requests) == 1
     assert provider.requests[0].cache_key == "reddit"
     assert provider.requests[0].subreddit == "python"
+    assert provider.requests[0].limit == LIST_WIDGET_MAX_CAPACITY
     assert consumer.refreshing == [True, False]
     assert service.accepted_revision == 1
 
@@ -315,34 +355,3 @@ def test_reddit_runtime_retirement_fences_work_and_clears_consumer() -> None:
     assert service.request_refresh() is False
     with pytest.raises(RuntimeError, match="retired"):
         service.attach_consumer(consumer)
-
-
-@pytest.mark.qt
-def test_runtime_managed_qwidget_consumes_cache_without_local_provider_path(
-    qt_app, qtbot, monkeypatch, tmp_path
-) -> None:
-    import widgets.reddit_runtime as runtime_module
-    from widgets.reddit_widget import RedditWidget
-
-    monkeypatch.setattr(runtime_module, "_REDDIT_CACHE_DIR", tmp_path)
-    monkeypatch.setattr(runtime_module, "automatic_service_updates_enabled", lambda: False)
-    cached = RedditPost("Runtime cached", "https://example.com/runtime", 1, 100.0)
-    assert write_reddit_post_cache(tmp_path / "reddit_posts.json", (cached,))
-    service = _service(_Provider([]))
-    widget = RedditWidget(build_default_provider=False)
-    qtbot.addWidget(widget)
-    widget._cache_key = "reddit"
-    widget.set_subreddit("python")
-    widget.set_thread_manager(_ImmediateThreadManager())
-    widget.set_runtime_service(service)
-
-    assert widget.initialize() is True
-    assert widget.activate() is True
-    qt_app.processEvents()
-
-    assert widget._post_provider is None
-    assert widget._runtime_service is service
-    assert widget._posts == [cached]
-    assert service.candidates == (cached,)
-    assert widget.deactivate() is True
-    assert service.is_running() is False

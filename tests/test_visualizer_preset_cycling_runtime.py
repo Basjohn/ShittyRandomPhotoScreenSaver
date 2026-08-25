@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, PropertyMock
 import pytest
 from PySide6.QtCore import QObject, QPoint, QRect, Qt
 
+from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_presets import (
     VISUALIZER_CUSTOM_STORAGE_KEY,
     get_custom_preset_index,
@@ -65,14 +66,12 @@ def test_widget_manager_cycle_visualizer_preset_does_not_refresh_media(settings_
 
     wm._attach_settings_manager(settings_manager)
     wm._refresh_media_config = MagicMock()
-    wm._refresh_reddit_configs = MagicMock()
     wm._refresh_spotify_visualizer_config = MagicMock()
 
     assert wm.cycle_visualizer_preset("spectrum", 1) is True
 
     wm._refresh_spotify_visualizer_config.assert_called()
     wm._refresh_media_config.assert_not_called()
-    wm._refresh_reddit_configs.assert_not_called()
 
 
 def test_widget_manager_cycle_visualizer_preset_wraps_backward(settings_manager):
@@ -177,8 +176,6 @@ def test_widget_manager_cycle_visualizer_preset_defers_disk_save(settings_manage
 
 
 def test_widget_manager_refresh_applies_curated_contract_for_hotswap(settings_manager):
-    from core.settings.models import SpotifyVisualizerSettings
-
     wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
     wm._attach_settings_manager(settings_manager)
 
@@ -216,8 +213,6 @@ def test_widget_manager_refresh_applies_curated_contract_for_hotswap(settings_ma
 
 
 def test_widget_manager_refresh_ignores_legacy_global_technical_keys_for_custom_hotswap(settings_manager):
-    from core.settings.models import SpotifyVisualizerSettings
-
     wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
     wm._attach_settings_manager(settings_manager)
 
@@ -350,8 +345,6 @@ def test_input_handler_routes_visualizer_middle_click_only_on_hit():
 
     handled, reddit_handled, reddit_url = handler.route_widget_click(
         event,
-        None,
-        None,
         spotify_visualizer_widget=vis,
     )
 
@@ -365,8 +358,6 @@ def test_input_handler_routes_visualizer_middle_click_only_on_hit():
 
     handled, _, _ = handler.route_widget_click(
         event,
-        None,
-        None,
         spotify_visualizer_widget=vis,
     )
 
@@ -388,8 +379,6 @@ def test_input_handler_routes_visualizer_back_button():
 
     handled, _, _ = handler.route_widget_click(
         event,
-        None,
-        None,
         spotify_visualizer_widget=vis,
     )
 

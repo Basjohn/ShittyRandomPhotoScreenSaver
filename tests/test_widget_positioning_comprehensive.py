@@ -7,7 +7,7 @@ all widget positioning enums, and stacking/collision handling.
 Phase 0.2 coverage:
 - All 9 anchor positions
 - MIDDLE_* anchor stacking
-- All widget Position enum synchronization
+- Surviving widget Position enum synchronization
 - Reddit 2 middle/center positioning
 - Cross-anchor collision detection
 """
@@ -17,7 +17,6 @@ import pytest
 from PySide6.QtCore import QSize, QRect, QPoint
 
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
-from widgets.reddit_widget import RedditPosition
 from widgets.media_widget import MediaPosition
 
 
@@ -61,10 +60,7 @@ def test_positioning_systems_in_sync():
     }
 
     anchor_values = {anchor.value for anchor in PositionAnchor}
-    reddit_values = {anchor.value for anchor in RedditPosition}
-
     assert anchor_values == canonical
-    assert reddit_values == canonical
 
 
 def test_all_widget_enums_in_sync():
@@ -72,17 +68,14 @@ def test_all_widget_enums_in_sync():
     canonical = {anchor.value for anchor in PositionAnchor}
     
     media_values = {pos.value for pos in MediaPosition}
-    reddit_values = {pos.value for pos in RedditPosition}
     
     assert media_values == canonical, f"MediaPosition mismatch: {media_values ^ canonical}"
-    assert reddit_values == canonical, f"RedditPosition mismatch: {reddit_values ^ canonical}"
 
 
 def test_enum_count_consistency():
     """All position enums must have exactly 9 values."""
     assert len(PositionAnchor) == 9
     assert len(MediaPosition) == 9
-    assert len(RedditPosition) == 9
 
 
 # ---------------------------------------------------------------------------

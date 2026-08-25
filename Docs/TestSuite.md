@@ -5,8 +5,8 @@ Last updated: 2026-08-25
 Reviewed source basis:
 
 ```text
-test-inventory basis = F5 retained Reddit runtime-shaped caller-proof checkpoint
-Phase F0/F0.5/F1/F2/F3/F4 CLOSED; 355 test modules; F5 Reddit active
+test-inventory basis = F5 Reddit caller-proof and legacy-presentation retirement
+Phase F0/F0.5/F1/F2/F3/F4/F5 CLOSED; 352 test modules; F6 Gmail active
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -102,12 +102,14 @@ The first F5 checkpoint adds `tests/test_qtquick_reddit_presentation.py` and
 and Reddit2, Python-resolved style inheritance, independent feed/list-model identity, bounded stable
 rows, coherent synthetic feed states, in-place row/style mutation, semantic open/refresh admission and
 no item/model/list-model/engine recreation. The real Quick matrix covers card/no-card, ready,
-cached-error and empty states at effective DPR 1.0, 1.5 and 2.25. Provider/cache/cadence extraction is
-still pending, so old QWidget runtime/pixel suites remain migration-critical.
+cached-error and empty states at effective DPR 1.0, 1.5 and 2.25. F5 closure adds
+`tests/test_reddit_runtime.py` for startup cache, accepted-state, bounded requests, cadence, stale-result
+fencing and retirement. It deletes the old QWidget paint/cache/progressive/presentation suites after the
+real manager-service-retained-host caller proof is green.
 
 At the reviewed checkpoint the repository contains:
 
-- **355 test-module files**: 354 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **352 test-module files**: 351 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -303,7 +305,7 @@ Permanent E4 coverage protects: one canonical eight-direction authority; all eig
 
 The E4 host test necessarily injected already-resolved signed offsets before a real family was Quick-presented. F1 Clock subsequently supplied the end-to-end proof that an actual family projection reads the canonical direction plus the two canonical user buckets, applies the deliberate destination card/text base-distance policy in Python, and updates retained properties without presentation or runtime-owner recreation. Do not resurrect sidecar-era `text_large`/header tuning profiles.
 
-### F — widget family ports — ACTIVE; F1 Clock/F2 Weather/F3 Media core/F4 Media controls CLOSED, F5 Reddit ACTIVE
+### F — widget family ports — ACTIVE; F1–F5 CLOSED, F6 Gmail ACTIVE
 
 F0 deleted deprecated Imgur instead of porting it. F0.5 is the bounded QWidget Settings slice that completes the canonical global shadow controls before F1 Clock. For each later family, preserve provider/model/behavior/settings tests and rehome direct QWidget presentation assertions to retained Quick items.
 
@@ -643,13 +645,11 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_reddit_helper_runtime.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_reddit_helper_task_harness.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_reddit_helper_watcher.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_reddit_paint_caching.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_reddit_post_provider.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_reddit_preparation.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_reddit_progressive_loading.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
 | `tests/test_reddit_provider_settings.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_reddit_rate_limiter.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_reddit_widget.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |
+| `tests/test_reddit_runtime.py` | **KEEP — MIGRATION PERMANENT** | Neutral startup/cache/cadence/manual-refresh/accepted-state/generation/retirement coverage. |
 
 ### 10.9 Steam
 
