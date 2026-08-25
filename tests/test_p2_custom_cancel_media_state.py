@@ -1,4 +1,4 @@
-"""CUSTOM Cancel must not rebuild a preview-only widget from persisted payload.
+"""CUSTOM Cancel must not replay persisted payloads into preview-only widgets.
 
 Current_Plan section 3. CUSTOM is preview-first for ordinary widgets:
 `_start_session_local()` hides the live widget and an `EditShellWidget` carries
@@ -6,131 +6,13 @@ the preview geometry, so ordinary drag/resize never mutates the hidden live
 widget. Cancel nonetheless replayed every persisted CUSTOM entry back into every
 display instance.
 
-The installed run shows Media created with
-
-    payload={artwork_size=220, font_size=19}
-
-and Cancel replaying that identical payload through replay_start ->
-replay_after_payload -> replay_after_update_position -> replay_final, after
-which the operator sees live artwork and metadata gone.
-
-The absence of `overlay.frame_shadow.regen` did not make that replay a semantic
-no-op: `MediaWidget.set_artwork_size()`/`set_font_size()` invalidate the
-metadata and controls layout and then rebuild the card through
-`_refresh_current_display_layout()`, which falls back to an empty card whenever
-`_last_info` and the retained info are unavailable.
-
-These bars hold both halves: Cancel restores only owners whose live runtime it
-actually suspended, and an unchanged Media size is a no-op.
+These bars preserve the surviving ownership contract: Cancel restores only
+owners whose live runtime it actually suspended. Media core pixels are retained
+Quick-owned, so the retired QWidget artwork/metadata reconstruction assertions
+do not belong in this gate.
 """
 
 from __future__ import annotations
-
-from types import SimpleNamespace
-
-import pytest
-from PySide6.QtGui import QColor, QImage, QPixmap
-
-from core.media.media_controller import MediaPlaybackState, MediaTrackInfo
-from widgets.media_widget import MediaWidget
-
-
-# ---------------------------------------------------------------------------
-# A real, populated MediaWidget
-# ---------------------------------------------------------------------------
-
-
-class _Controller:
-    def get_current_track(self):
-        return None
-
-    def is_available(self):
-        return False
-
-
-class _ThreadManager:
-    def submit_task(self, *args, **kwargs):
-        return None
-
-    def run_on_ui_thread(self, func, *args, **kwargs):
-        func(*args, **kwargs)
-
-
-def _artwork() -> QPixmap:
-    image = QImage(220, 220, QImage.Format.Format_ARGB32)
-    image.fill(QColor("#cc5500"))
-    return QPixmap.fromImage(image)
-
-
-@pytest.fixture
-def media(qt_app, qtbot):
-    widget = MediaWidget(controller=_Controller(), thread_manager=_ThreadManager())
-    qtbot.addWidget(widget)
-    widget.resize(420, 300)
-    widget.set_artwork_size(220)
-    widget.set_font_size(19)
-    widget._last_info = MediaTrackInfo(
-        title="Ghost Town",
-        artist="The Specials",
-        album="Ghost Town",
-        state=MediaPlaybackState.PLAYING,
-    )
-    widget._artwork_pixmap = _artwork()
-    widget._metadata_paint = {"title": "Ghost Town", "artist": "The Specials"}
-    return widget
-
-
-class TestUnchangedSizeIsANoOp:
-    def test_reapplying_the_same_artwork_size_keeps_artwork(self, media):
-        before = media._artwork_pixmap
-
-        media.set_artwork_size(220)
-
-        assert media._artwork_pixmap is before, (
-            "re-applying the current artwork size rebuilt the live card"
-        )
-
-    def test_reapplying_the_same_artwork_size_keeps_metadata(self, media):
-        before = dict(media._metadata_paint)
-
-        media.set_artwork_size(220)
-
-        assert media._metadata_paint == before
-
-    def test_reapplying_the_same_font_size_keeps_metadata(self, media):
-        before = dict(media._metadata_paint)
-
-        media.set_font_size(19)
-
-        assert media._metadata_paint == before
-
-    def test_a_real_artwork_size_change_still_applies(self):
-        """The guard is a no-op filter, never a freeze."""
-        widget = MediaWidget(controller=_Controller(), thread_manager=_ThreadManager())
-        widget.set_artwork_size(220)
-        widget.set_artwork_size(160)
-        assert widget._artwork_size == 160
-
-    def test_a_real_font_size_change_still_applies(self):
-        widget = MediaWidget(controller=_Controller(), thread_manager=_ThreadManager())
-        widget.set_font_size(19)
-        widget.set_font_size(24)
-        assert widget._font_size == 24
-
-
-# ---------------------------------------------------------------------------
-# Cancel restores only genuinely suspended owners
-# ---------------------------------------------------------------------------
-
-
-class _Descriptor:
-    def __init__(self, widget_id: str, attr_name: str):
-        self.widget_id = widget_id
-        self.attr_name = attr_name
-        self.custom_layout_resize_mode = "media_scale"
-        self.supports_layout_resize_edit = True
-        self.custom_layout_runtime_vertical_content_resize = False
-
 
 def test_cancel_restore_set_excludes_preview_only_widgets():
     """The audit result, pinned: only the visualizer is restored."""

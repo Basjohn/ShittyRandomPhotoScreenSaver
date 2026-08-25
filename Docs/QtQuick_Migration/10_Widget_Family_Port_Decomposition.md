@@ -1,6 +1,6 @@
 # 10 — Ordinary Widget Family Port Decomposition
 
-Status: **Phase F ACTIVE — F1/F2 CLOSED; F3 Media core ACTIVE**
+Status: **Phase F ACTIVE — F1/F2/F3 CLOSED; F4 Media controls ACTIVE**
 Last updated: 2026-08-25
 
 This file begins at current/future Phase-F work. Completed F0/F0.5 implementation history does not live
@@ -25,8 +25,8 @@ neutral runtime/model
 F0.5              closed
 F1                Clock / Clock2 / Clock3 — CLOSED
 F2                Weather — CLOSED
-F3                Media core — ACTIVE
-F4                Media controls / volume / mute / progress
+F3                Media core — CLOSED
+F4                Media controls / volume / mute / progress — ACTIVE
 F5                Reddit / Reddit2
 F6                Gmail
 F7                Achievement Pulse
@@ -233,14 +233,16 @@ stable identity, legal threading, bounded cache/lifetime and no unchanged upload
 
 Audit separately if asset delivery changes process/display resource ownership.
 
-The retained implementation now uses `MediaPresentationModel` plus static `MediaPresentation.qml` and
+The retained implementation uses `MediaPresentationModel` plus static `MediaPresentation.qml` and
 one process-engine `MediaArtworkImageProvider`. The existing shared Media runtime still owns provider,
 controller, poll cadence, accepted revision and decoded `QImage`; the Quick provider only detaches and
 serves immutable images by the runtime artwork key. Focused gates cover real runtime-manager injection,
 ordinary-widget-host activation/retirement, unchanged-artwork identity, stale-revision rejection and
-in-place settings/style mutation. The mixed old Media QWidget remains only while its F4-owned controls,
-volume, mute and progress paths are still live; F3 closure must retire only separable Media-core pixels
-and presentation tests.
+in-place settings/style mutation. Caller proof removed the old QWidget header, metadata, artwork,
+artwork-cache/fade lifecycle and their presentation-only tests. The narrowed QWidget anchor remains only
+for F4 controls, progress, input feedback and geometry until those pixels are retired in F4.
+
+F3 is CLOSED.
 
 ---
 

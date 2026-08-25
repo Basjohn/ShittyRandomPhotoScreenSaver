@@ -7,8 +7,8 @@ Last updated: 2026-08-25
 Exact main inspected through:
 
 ```text
-a716cac0903833168c7088fbaf1a2d67e83298ba
-Phase F2 Weather caller proof and legacy pixel retirement
+51272b4f076024d8ed24a02041232eca0f3abf2d
+Phase F3 retained Media core presentation
 ```
 
 F1 implementation basis:
@@ -23,8 +23,8 @@ F1 visual acceptance matrix + retained multi-instance/toggle gates
 Independent source/architecture audit: GREEN
 ```
 
-The retained Clock and Weather implementations, caller proofs and old pixel retirements are complete.
-F1 and F2 are CLOSED.
+The retained Clock, Weather and Media-core implementations, caller proofs and bounded old pixel
+retirements are complete. F1, F2 and F3 are CLOSED.
 
 Source outranks this plan if a later checkpoint has landed.
 
@@ -32,69 +32,50 @@ Source outranks this plan if a later checkpoint has landed.
 
 ## Immediate work
 
-### F3 Media core — ACTIVE
+### F4 Media controls / volume / mute / progress — ACTIVE
 
 Read only the focused current owners needed for the slice:
 
 - `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md`
 - `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
-- current shared `MediaRuntimeOwner`/per-display lease, controller/provider/artwork ownership and tests
-- current Media presentation/painting source as temporary visual and behavior reference
+- retained `MediaPresentationModel` / `MediaPresentation.qml` and current F4-preservation tests
+- current shared Media, app-volume and system-mute runtime owners/leases
+- temporary QWidget transport/progress painter and existing interaction/input routing as behavioral reference
 
 Required implementation:
 
-- keep shared controller/provider/polling/accepted-state ownership Python-owned;
-- build one stable detached Media presentation model covering provider, track metadata, artwork,
-  playback, progress, control availability and style state as one coherent revision;
-- instantiate the family through the existing process engine and per-display ordinary-widget host;
-- feed final Card/Text shadow values and Python-resolved direction to QML without exposing
-  `SettingsManager`, controllers, providers, QWidget or persistence objects;
-- use Media as the first serious dynamic-artwork consumer and introduce only the narrow shared
-  image-delivery seam needed for stable identity, legal threading, bounded lifetime/cache and no
-  unchanged upload;
-- preserve current Media core settings/runtime behavior and the Visualizer relationship;
-- do not pull F4 volume/mute/control-action implementation into this slice;
-- publish coherent state and mutate retained items/models in place without controller/runtime, engine
-  or window recreation;
-- after GREEN and caller proof, retire only caller-proven old Media-core pixels/tests; keep F4-owned
-  controls/progress/volume/mute paths until their phase.
+- extend the existing stable retained Media model/QML; do not create a second Media presenter/model;
+- keep shared controller, app-volume and system-mute polling/state/action ownership Python-owned;
+- project playback progress and control availability from coherent accepted state;
+- emit semantic transport/volume/mute actions from QML and route them to the existing owners;
+- preserve current interaction gating, keyboard/media-key ingress, Visualizer/dependent visibility and
+  optimistic playback-state behavior;
+- keep visual-only progress interpolation subordinate to accepted playback truth;
+- mutate retained items/model state in place without runtime, engine, window or provider recreation;
+- after GREEN and caller proof, retire the remaining temporary Media QWidget controls/progress pixels,
+  input-hit plumbing and presentation-only tests; retain neutral runtime/action contracts.
 
 Validation:
 
-- focused Media runtime/controller/provider/artwork + retained-Quick tests;
-- caller/runtime integration, shared-owner and stale-generation/recovery gates;
-- repeated state/settings/direction mutation without item/model/runtime/engine/window recreation;
-- practical DPR Media smoke with eyes-on populated/empty/paused/artwork/no-artwork, card on/off, several
-  directions/sizes and busy background;
+- focused retained Media semantic-action/progress/control tests;
+- shared Media/app-volume/system-mute owner and stale-generation/recovery gates;
+- interaction gating, keyboard/media-key ingress, dependent visibility and Visualizer relationship;
+- repeated state/settings/action mutation without item/model/runtime/engine/window recreation;
+- practical DPR eyes-on controls/progress/volume/mute states and interaction feedback;
 - compile/import/static checks as relevant;
 - caller scans, full diff/status and `git diff --check`.
 
-For the F3 shared artwork seam, the latest operator direction replaces the independent-review stop with
-a fresh post-push ownership/lifecycle self-audit. Escalate only if that audit finds a real unresolved
-resource issue or deterministic and eyes-on evidence disagree.
-
-After F3 implementation is GREEN, complete caller proof and bounded old Media-core retirement before F4.
-
-```text
-F3 -> CLOSED
-F4 Media controls / volume / mute / progress -> ACTIVE
-```
-
-Do not stop solely because the work is dynamic or artwork-bearing; stop only at the explicit audit
-boundary above or for a real unresolved lifecycle/resource issue.
-
-F3 retained implementation checkpoint evidence:
+F3 closure evidence:
 
 ```text
 stable MediaPresentationModel + static MediaPresentation.qml: GREEN
 one process-engine MediaArtworkImageProvider with stable identity/bounded cache: GREEN
 real WidgetRuntimeManager lease -> ordinary-widget host activation/retirement: GREEN
 focused Media/runtime/host gate + two-DPR threaded-OpenGL eyes-on matrix: GREEN
+old QWidget header/metadata/artwork painters, caches, lifecycle and presentation-only tests: deleted
+temporary QWidget anchor narrowed to F4 controls/progress/input/geometry only: GREEN
+post-implementation ownership/lifecycle self-audit: GREEN
 ```
-
-The old mixed Media QWidget presenter still owns F4 controls/volume/mute/progress paths. Do not delete
-that class wholesale during the F3 implementation checkpoint. The next F3 action remains caller-proofed,
-presentation-only Media-core retirement that does not pre-empt F4.
 
 F2 closure evidence:
 
@@ -113,8 +94,8 @@ F0    Imgur removal                              CLOSED
 F0.5  shadow authority + General controls        CLOSED
 F1    Clock / Clock2 / Clock3                    CLOSED
 F2    Weather                                    CLOSED
-F3    Media core                                 ACTIVE
-F4    Media controls / volume / mute / progress
+F3    Media core                                 CLOSED
+F4    Media controls / volume / mute / progress  ACTIVE
 F5    Reddit / Reddit2
 F6    Gmail
 F7    Achievement Pulse
@@ -404,5 +385,5 @@ The unrelated Bubble cadence harness debt from the visualizer card-surface clean
 Settings-GUI shadow polish is separate from runtime widget shadow authority and is not a migration
 sequencing blocker.
 
-`Docs/TestSuite.md` remains the canonical 359-module inventory. Its phase-status prose does not override
+`Docs/TestSuite.md` remains the canonical 360-module inventory. Its phase-status prose does not override
 this plan's sequencing.

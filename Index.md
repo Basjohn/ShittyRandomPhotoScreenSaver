@@ -13,8 +13,8 @@ exact current source
 -> tests/evidence for the claim
 ```
 
-Current migration state: **Phase F active; F1 Clock and F2 Weather are caller-proven and CLOSED.
-F3 Media core is ACTIVE.**
+Current migration state: **Phase F active; F1 Clock, F2 Weather and F3 Media core are caller-proven and
+CLOSED. F4 Media controls / volume / mute / progress is ACTIVE.**
 
 Do not read the whole history tree by default.
 
