@@ -33,6 +33,14 @@ from .reddit import (
     RedditRowListModel,
     RetainedRedditPresentation,
 )
+from .gmail import (
+    GmailPresentationConfig,
+    GmailPresentationModel,
+    GmailPresentationRow,
+    GmailPresentationSnapshot,
+    GmailPresentationStyle,
+    GmailRowListModel,
+)
 from .clock import (
     ClockGeometryVariantStore,
     ClockPresentationConfig,
@@ -79,6 +87,12 @@ __all__ = [
     "RedditPresentationStyle",
     "RedditRowListModel",
     "RetainedRedditPresentation",
+    "GmailPresentationConfig",
+    "GmailPresentationModel",
+    "GmailPresentationRow",
+    "GmailPresentationSnapshot",
+    "GmailPresentationStyle",
+    "GmailRowListModel",
     "ORDINARY_WIDGET_FAMILY_COMPONENTS",
     "OrdinaryWidgetFamilyComponent",
     "ordinary_widget_family_component",

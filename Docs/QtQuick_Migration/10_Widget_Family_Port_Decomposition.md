@@ -329,6 +329,13 @@ Stable message IDs; bounded rows; sender/subject/snippet/time/status; semantic a
 
 Notification detection/sound remains Python/business-owned.
 
+The first retained F6 checkpoint keeps the existing `GmailRuntimeService` and shared runtime owner as
+the sole backend/cache/cadence/generation/action/notification authority. It adds one stable
+`GmailPresentationModel` and `GmailRowListModel` with bounded config/style projection, thread/message
+identity, grouping, sender/subject/time formatting, coherent accepted-state projection and
+interaction-gated semantic refresh/auth/open/message actions. Accepted snapshots and settings mutate
+the retained row model in place. Static QML, real owner injection and caller proof remain open.
+
 ---
 
 # F7–F8 — substantive Steam family
