@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import QRect
 
-from widgets.spotify_visualizer.overlay_mask import compute_painted_card_mask_uniforms
+from widgets.spotify_visualizer.overlay_mask import compute_compositor_card_mask_uniforms
 
 
 def _rounded_rect_sdf(px: float, py: float, cx: float, cy: float, hw: float, hh: float, radius: float) -> float:
@@ -33,7 +33,7 @@ class CardConfig:
     shrink_b: int
     radius: float
     dpr: float = 1.0
-    inset: float = 1.0  # logical px; matches _ensure_painted_frame_shadow_pixmap
+    inset: float = 1.0  # logical px; matches ensure_compositor_card_surface_pixmap
     border_width: float = 3.0  # logical px; matches BaseOverlayWidget.DEFAULT_BORDER_WIDTH
 
     @property
@@ -107,7 +107,7 @@ def compute_expected_boundary(config: CardConfig) -> set[tuple[int, int]]:
     """Brute-force compute every integer pixel inside the visible card fill.
 
     The painted frame shadow draws the card fill with
-    _painted_frame_shadow_card_rect().adjusted(1.0, 1.0, -1.0, -1.0).
+    compositor_card_surface_rect().adjusted(1.0, 1.0, -1.0, -1.0).
     A pen border of ``border_width`` px is then drawn *centred* on that
     path, so the visualizer must stay inside the inner edge of the border:
     an extra ``border_width/2`` inset beyond the 1-px painted-frame inset.
@@ -146,11 +146,11 @@ def compute_mask_boundary(config: CardConfig) -> set[tuple[int, int]]:
     )
 
 
-def test_overlay_mask_helper_matches_painted_card_contract():
+def test_overlay_mask_helper_matches_compositor_card_contract():
     cfg = CardConfig(300, 150, shrink_r=20, shrink_b=16, radius=8.0, dpr=1.5, border_width=3.0)
     rect = QRect(0, 0, cfg.widget_w, cfg.widget_h)
 
-    uniforms = compute_painted_card_mask_uniforms(
+    uniforms = compute_compositor_card_mask_uniforms(
         rect,
         dpr=cfg.dpr,
         border_width_px=cfg.border_width,

@@ -44,17 +44,6 @@ def configure_overlay_widget_attributes(widget: QWidget) -> None:
         logger.debug("[SHADOW] Exception suppressed: %s", e)
 
 
-def uses_painted_frame_shadow(widget: QWidget) -> bool:
-    """Return True when a widget owns its framed-card shadow in paintEvent."""
-    try:
-        fn = getattr(widget, "uses_painted_frame_shadow", None)
-        if callable(fn):
-            return bool(fn())
-    except Exception:
-        return False
-    return False
-
-
 def _to_bool(value: Any, default: bool = False) -> bool:
     """Lightweight bool normalisation for local config fields.
 

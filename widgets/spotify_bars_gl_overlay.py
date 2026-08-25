@@ -27,7 +27,7 @@ from widgets.spotify_visualizer.overlay_state import (
     reset_mode_state as reset_overlay_mode_state,
 )
 from widgets.spotify_visualizer.overlay_mask import (
-    compute_painted_card_mask_uniforms,
+    compute_compositor_card_mask_uniforms,
 )
 from widgets.spotify_visualizer.overlay_diagnostics import (
     maybe_log_glow_diagnostics,
@@ -171,7 +171,7 @@ class SpotifyBarsGLOverlay(QWidget):
         # Never presented: no surface format, no update behaviour, no paint.
         # Kept as a QWidget purely so CUSTOM layout/geometry ownership and the
         # existing show/hide visibility semantics continue to work unchanged.
-        self._painted_frame_shadow_enabled: bool = True
+        self._compositor_card_surface_enabled: bool = True
         # Set by the compositor visualizer layer while drawing into the
         # whole-display framebuffer; None when the target is card-sized.
         self._compositor_mask_origin_px = None
@@ -456,7 +456,7 @@ class SpotifyBarsGLOverlay(QWidget):
         self._gl_program_rids: _Dict[str, _Any] = {}
         self._gl_vao_rid = None
         self._gl_vbo: Optional[int] = None
-        # Rounded-rect stencil mask program for painted-card corner clipping
+        # Rounded-rect stencil mask program for compositor card-surface clipping
         self._gl_mask_program: Optional[int] = None
         # Legacy single-program aliases for backward compat with ResourceManager
         self._gl_program = None
@@ -699,8 +699,8 @@ class SpotifyBarsGLOverlay(QWidget):
     # Public API
     # ------------------------------------------------------------------
 
-    def set_painted_frame_shadow_enabled(self, enabled: bool) -> None:
-        self._painted_frame_shadow_enabled = bool(enabled)
+    def set_compositor_card_surface_enabled(self, enabled: bool) -> None:
+        self._compositor_card_surface_enabled = bool(enabled)
 
     def set_state(
         self,
@@ -1830,8 +1830,8 @@ class SpotifyBarsGLOverlay(QWidget):
                     )
                 self._maybe_log_perf_counters(reason="layer_paint")
 
-    def _begin_painted_card_stencil_clip(self, rect: QRect) -> bool:
-        if not self._painted_frame_shadow_enabled:
+    def _begin_compositor_card_stencil_clip(self, rect: QRect) -> bool:
+        if not self._compositor_card_surface_enabled:
             return False
         try:
             gl.glEnable(gl.GL_STENCIL_TEST)
@@ -1842,7 +1842,7 @@ class SpotifyBarsGLOverlay(QWidget):
             gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_REPLACE)
 
             if self._gl_mask_program and self._gl_vao:
-                self._draw_painted_card_stencil_mask(rect)
+                self._draw_compositor_card_stencil_mask(rect)
 
             gl.glColorMask(True, True, True, True)
             gl.glStencilFunc(gl.GL_EQUAL, 1, 0xFF)
@@ -1852,12 +1852,10 @@ class SpotifyBarsGLOverlay(QWidget):
             logger.debug("[SPOTIFY_VIS] Stencil mask setup failed: %s", e)
             return False
 
-    def _draw_painted_card_stencil_mask(self, rect: QRect) -> None:
+    def _draw_compositor_card_stencil_mask(self, rect: QRect) -> None:
         dpr = self._get_dpr()
-        # The retired painted-card drop shadow reserved a right/bottom shrink
-        # margin (F0.5 audit correction removed it); the card mask now uses the
-        # full rect with no extra corner radius.
-        uniforms = compute_painted_card_mask_uniforms(
+        # Match the authored card surface: full rect, with no reserved margin.
+        uniforms = compute_compositor_card_mask_uniforms(
             rect,
             dpr=dpr,
             border_width_px=self._border_width_px,
@@ -1889,7 +1887,7 @@ class SpotifyBarsGLOverlay(QWidget):
         gl.glBindVertexArray(0)
         gl.glUseProgram(0)
 
-    def _end_painted_card_stencil_clip(self, stencil_active: bool) -> None:
+    def _end_compositor_card_stencil_clip(self, stencil_active: bool) -> None:
         if not stencil_active:
             return
         gl.glDisable(gl.GL_STENCIL_TEST)

@@ -99,10 +99,10 @@ class SpotifyVisualizerWidget(LegacyVisualizerRuntimeAdapterMixin, QWidget):
         init_cadence_state(self)
         self._shadow_config = None
         self._show_background: bool = True
-        self._painted_frame_shadow_enabled: bool = True
+        self._compositor_card_surface_enabled: bool = True
         self._custom_layout_constraint_restore: Optional[tuple[int, int, int, int]] = None
-        self._painted_frame_shadow_pixmap: Optional[QPixmap] = None
-        self._painted_frame_shadow_cache_key: Optional[tuple] = None
+        self._compositor_card_surface_pixmap: Optional[QPixmap] = None
+        self._compositor_card_surface_cache_key: Optional[tuple] = None
         self._animation_manager = None
         self._anim_listener_id: Optional[int] = None
 
@@ -1278,14 +1278,14 @@ class SpotifyVisualizerWidget(LegacyVisualizerRuntimeAdapterMixin, QWidget):
 
     def set_shadow_config(self, config) -> None:
         self._shadow_config = config
-        self._painted_frame_shadow_enabled = shadow_config_enabled(config, "enabled", True)
-        self._invalidate_painted_frame_shadow_cache()
+        self._compositor_card_surface_enabled = shadow_config_enabled(config, "enabled", True)
+        self._invalidate_compositor_card_surface_cache()
         self._update_card_style()
         self.update()
 
     def _update_card_style(self) -> None:
-        from widgets.spotify_visualizer.card_paint import update_card_style
-        update_card_style(self)
+        from widgets.spotify_visualizer.card_surface import update_card_surface_style
+        update_card_surface_style(self)
 
     def set_bar_style(self, *, bg_color: QColor, bg_opacity: float, border_color: QColor, border_width: Optional[int] = None,
                       show_background: bool = True) -> None:
@@ -1295,31 +1295,31 @@ class SpotifyVisualizerWidget(LegacyVisualizerRuntimeAdapterMixin, QWidget):
         resolved_width = BaseOverlayWidget.get_global_border_width() if border_width is None else int(border_width)
         self._border_width = max(0, resolved_width)
         self._show_background = bool(show_background)
-        self._invalidate_painted_frame_shadow_cache()
+        self._invalidate_compositor_card_surface_cache()
         self._update_card_style()
         self.update()
 
-    def uses_painted_frame_shadow(self) -> bool:
-        return bool(self._painted_frame_shadow_enabled and self._show_background)
+    def uses_compositor_card_surface(self) -> bool:
+        return bool(self._compositor_card_surface_enabled and self._show_background)
 
-    def _invalidate_painted_frame_shadow_cache(self) -> None:
-        self._painted_frame_shadow_pixmap = None
-        self._painted_frame_shadow_cache_key = None
+    def _invalidate_compositor_card_surface_cache(self) -> None:
+        self._compositor_card_surface_pixmap = None
+        self._compositor_card_surface_cache_key = None
 
-    def _painted_frame_shadow_card_rect(self) -> QRectF:
-        from widgets.spotify_visualizer.card_paint import painted_frame_shadow_card_rect
-        return painted_frame_shadow_card_rect(self)
+    def _compositor_card_surface_rect(self) -> QRectF:
+        from widgets.spotify_visualizer.card_surface import compositor_card_surface_rect
+        return compositor_card_surface_rect(self)
 
-    def _ensure_painted_frame_shadow_pixmap(self) -> Optional[QPixmap]:
-        from widgets.spotify_visualizer.card_paint import ensure_painted_frame_shadow_pixmap
-        return ensure_painted_frame_shadow_pixmap(self)
+    def _ensure_compositor_card_surface_pixmap(self) -> Optional[QPixmap]:
+        from widgets.spotify_visualizer.card_surface import ensure_compositor_card_surface_pixmap
+        return ensure_compositor_card_surface_pixmap(self)
 
-    def _paint_painted_frame_shadow(self) -> None:
-        from widgets.spotify_visualizer.card_paint import paint_painted_frame_shadow
-        paint_painted_frame_shadow(self)
+    def _paint_compositor_card_surface(self) -> None:
+        from widgets.spotify_visualizer.card_surface import paint_compositor_card_surface
+        paint_compositor_card_surface(self)
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
-        self._invalidate_painted_frame_shadow_cache()
+        self._invalidate_compositor_card_surface_cache()
         super().resizeEvent(event)
 
     def set_bar_colors(self, fill_color: QColor, border_color: QColor) -> None:
@@ -1879,8 +1879,8 @@ class SpotifyVisualizerWidget(LegacyVisualizerRuntimeAdapterMixin, QWidget):
             # interaction all stay here; only the pixels move to the compositor.
             return
 
-        if self.uses_painted_frame_shadow():
-            self._paint_painted_frame_shadow()
+        if self.uses_compositor_card_surface():
+            self._paint_compositor_card_surface()
         else:
             super().paintEvent(event)
 

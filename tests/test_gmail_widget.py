@@ -1249,9 +1249,9 @@ def test_gmail_card_uses_no_graphics_effect_after_painted_shadow_retirement(qt_a
         widget.resize(320, 160)
 
         # Painted card shadow is retired: no shadow pixmap, path is inert.
-        assert widget.uses_painted_frame_shadow() is False
-        assert widget.painted_frame_shadow_card_shrink() == (0, 0)
-        assert widget._ensure_painted_frame_shadow_pixmap() is None
+        assert not hasattr(widget, "uses_painted_frame_shadow")
+        assert not hasattr(widget, "painted_frame_shadow_card_shrink")
+        assert not hasattr(widget, "_ensure_painted_frame_shadow_pixmap")
         # No QGraphicsDropShadowEffect ever attaches (R-24).
         assert widget.graphicsEffect() is None
     finally:

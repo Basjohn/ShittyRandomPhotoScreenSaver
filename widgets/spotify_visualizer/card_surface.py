@@ -1,9 +1,7 @@
-"""Card paint / painted-frame-shadow logic for SpotifyVisualizerWidget.
+"""Spotify Visualizer compositor card-surface painting and caching.
 
-Extracted to reduce the main widget below the 2000-line threshold.
-All functions take the widget instance as the first argument.
-
-Phase 3 of the Visualizer Architecture Split.
+The retained QWidget owns card geometry and style.  The compositor requests
+these exact authored background/border pixels for its GL texture.
 """
 from __future__ import annotations
 
@@ -12,15 +10,11 @@ from typing import Any, Optional
 from PySide6.QtCore import QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
 
-from core.logging.logger import get_logger
 
-logger = get_logger(__name__)
-
-
-def update_card_style(widget: Any) -> None:
-    """Rebuild the QSS stylesheet for the card surface."""
+def update_card_surface_style(widget: Any) -> None:
+    """Keep QWidget styling transparent while compositor card pixels are active."""
     selector = f"#{widget.objectName()}" if widget.objectName() else "QWidget"
-    if widget.uses_painted_frame_shadow():
+    if widget.uses_compositor_card_surface():
         widget.setStyleSheet(
             f"""
             {selector} {{
@@ -55,44 +49,24 @@ def update_card_style(widget: Any) -> None:
         )
 
 
-def painted_frame_shadow_card_rect(
+def compositor_card_surface_rect(
     widget: Any,
     *,
     logical_size: Optional[QSize] = None,
 ) -> QRectF:
-    """Return the card rectangle used for the compositor card visual.
-
-    ``logical_size`` overrides the live widget geometry. The compositor passes
-    the authoritative published presentation size so a momentarily stale live
-    QWidget rect cannot give the card a different size from the bars. The retired
-    painted-card drop shadow reserved a right/bottom shrink margin; with that
-    shadow removed (F0.5 audit correction) the card uses the full rect.
-    """
+    """Return the full logical rect used for the compositor card texture."""
     width = widget.width() if logical_size is None else logical_size.width()
     height = widget.height() if logical_size is None else logical_size.height()
-    return QRectF(
-        0.0,
-        0.0,
-        max(1.0, float(width)),
-        max(1.0, float(height)),
-    )
+    return QRectF(0.0, 0.0, max(1.0, float(width)), max(1.0, float(height)))
 
 
-def painted_frame_shadow_cache_key(
+def compositor_card_surface_cache_key(
     widget: Any,
     *,
     logical_size: Optional[QSize] = None,
     dpr: Optional[float] = None,
 ) -> tuple:
-    """Canonical identity of the authored card pixels.
-
-    This is the ONE definition of "these card pixels changed". Both the QPixmap
-    rebuild and the compositor GL texture re-upload derive from it, so the two
-    can never disagree - a second hand-maintained revision would eventually let
-    the pixmap invalidate correctly while the GL texture stayed stale.
-
-    Cheap enough to call per frame; only a changed key does real work.
-    """
+    """Return the canonical identity of the authored card pixels."""
     width = widget.width() if logical_size is None else int(logical_size.width())
     height = widget.height() if logical_size is None else int(logical_size.height())
     if dpr is None:
@@ -114,25 +88,14 @@ def painted_frame_shadow_cache_key(
     )
 
 
-def ensure_painted_frame_shadow_pixmap(
+def ensure_compositor_card_surface_pixmap(
     widget: Any,
     *,
     logical_size: Optional[QSize] = None,
     dpr: Optional[float] = None,
 ) -> Optional[QPixmap]:
-    """Build (or return cached) the compositor card-visual pixmap.
-
-    ``logical_size`` and ``dpr`` let the compositor render the authored card
-    visual **for the target dimensions** rather than scaling a stale pixmap
-    afterwards, which would change border and radius. Both participate in the
-    cache key, so a geometry or DPR change rebuilds rather than reusing a
-    mismatched card.
-
-    The generic painted-card *drop shadow* (the old shadowtuning.json blur
-    profile) was removed in the F0.5 audit correction; this now paints only the
-    card background and border, which the compositor uploads as the card texture.
-    """
-    if not widget.uses_painted_frame_shadow():
+    """Build or return the cached card background/border texture source."""
+    if not widget.uses_compositor_card_surface():
         return None
     width = widget.width() if logical_size is None else int(logical_size.width())
     height = widget.height() if logical_size is None else int(logical_size.height())
@@ -146,15 +109,15 @@ def ensure_painted_frame_shadow_pixmap(
     dpr = max(1.0, float(dpr))
     bg = QColor(widget._bg_color)
     bg.setAlpha(int(255 * max(0.0, min(1.0, widget._bg_opacity))))
-    key = painted_frame_shadow_cache_key(
+    key = compositor_card_surface_cache_key(
         widget, logical_size=QSize(width, height), dpr=dpr
     )
     if (
-        widget._painted_frame_shadow_pixmap is not None
-        and not widget._painted_frame_shadow_pixmap.isNull()
-        and widget._painted_frame_shadow_cache_key == key
+        widget._compositor_card_surface_pixmap is not None
+        and not widget._compositor_card_surface_pixmap.isNull()
+        and widget._compositor_card_surface_cache_key == key
     ):
-        return widget._painted_frame_shadow_pixmap
+        return widget._compositor_card_surface_pixmap
 
     pixmap = QPixmap(max(1, int(width * dpr)), max(1, int(height * dpr)))
     pixmap.setDevicePixelRatio(dpr)
@@ -162,13 +125,11 @@ def ensure_painted_frame_shadow_pixmap(
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     try:
-        card_rect = painted_frame_shadow_card_rect(
+        card_rect = compositor_card_surface_rect(
             widget, logical_size=QSize(width, height)
         ).adjusted(1.0, 1.0, -1.0, -1.0)
-        radius = 8.0
-
         frame_path = QPainterPath()
-        frame_path.addRoundedRect(card_rect, radius, radius)
+        frame_path.addRoundedRect(card_rect, 8.0, 8.0)
         painter.fillPath(frame_path, bg)
         if widget._border_width > 0 and widget._card_border_color.alpha() > 0:
             pen = QPen(widget._card_border_color, max(1, int(widget._border_width)))
@@ -179,14 +140,14 @@ def ensure_painted_frame_shadow_pixmap(
     finally:
         painter.end()
 
-    widget._painted_frame_shadow_pixmap = pixmap
-    widget._painted_frame_shadow_cache_key = key
+    widget._compositor_card_surface_pixmap = pixmap
+    widget._compositor_card_surface_cache_key = key
     return pixmap
 
 
-def paint_painted_frame_shadow(widget: Any) -> None:
-    """Paint the cached shadow pixmap onto the widget surface."""
-    if not widget.uses_painted_frame_shadow():
+def paint_compositor_card_surface(widget: Any) -> None:
+    """Paint the cached card surface when the QWidget temporarily owns pixels."""
+    if not widget.uses_compositor_card_surface():
         return
     painter = QPainter(widget)
     try:
@@ -194,7 +155,7 @@ def paint_painted_frame_shadow(widget: Any) -> None:
         painter.fillRect(widget.rect(), Qt.GlobalColor.transparent)
     finally:
         painter.end()
-    pixmap = ensure_painted_frame_shadow_pixmap(widget)
+    pixmap = ensure_compositor_card_surface_pixmap(widget)
     if pixmap is not None and not pixmap.isNull():
         painter = QPainter(widget)
         try:

@@ -94,7 +94,7 @@ def test_push_spotify_visualizer_frame_allows_hidden_startup_priming(monkeypatch
         def set_state(self, **kwargs) -> None:
             calls.append(kwargs)
 
-        def set_painted_frame_shadow_enabled(self, enabled: bool) -> None:
+        def set_compositor_card_surface_enabled(self, enabled: bool) -> None:
             return None
 
     monkeypatch.setattr(
@@ -226,7 +226,7 @@ def test_push_spotify_visualizer_frame_prefers_committed_custom_rect_over_stale_
         def set_state(self, **kwargs) -> None:
             calls.append(kwargs)
 
-        def set_painted_frame_shadow_enabled(self, enabled: bool) -> None:
+        def set_compositor_card_surface_enabled(self, enabled: bool) -> None:
             return None
 
     monkeypatch.setattr(

@@ -78,8 +78,8 @@ def test_render_overlay_frame_wraps_render_in_stencil_lifecycle():
         calls.append(("render", rect.width(), rect.height(), fade))
 
     overlay = SimpleNamespace(
-        _begin_painted_card_stencil_clip=_begin,
-        _end_painted_card_stencil_clip=_end,
+        _begin_compositor_card_stencil_clip=_begin,
+        _end_compositor_card_stencil_clip=_end,
     )
     rect = QRect(0, 0, 320, 180)
 
@@ -107,8 +107,8 @@ def test_render_overlay_frame_always_ends_stencil_after_render_error():
         raise RuntimeError("boom")
 
     overlay = SimpleNamespace(
-        _begin_painted_card_stencil_clip=_begin,
-        _end_painted_card_stencil_clip=_end,
+        _begin_compositor_card_stencil_clip=_begin,
+        _end_compositor_card_stencil_clip=_end,
     )
     rect = QRect(0, 0, 320, 180)
 

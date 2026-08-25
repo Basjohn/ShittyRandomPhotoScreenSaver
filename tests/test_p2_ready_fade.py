@@ -328,11 +328,11 @@ class TestFadeOwnershipIsNotTheQWidgetEffect:
 class _CardStub:
     def __init__(self):
         self._show_background = True
-        self._painted_frame_shadow_enabled = True
+        self._compositor_card_surface_enabled = True
         self.owned = False
 
-    def uses_painted_frame_shadow(self):
-        return bool(self._painted_frame_shadow_enabled and self._show_background)
+    def uses_compositor_card_surface(self):
+        return bool(self._compositor_card_surface_enabled and self._show_background)
 
     def set_compositor_owns_card_visual(self, owned):
         self.owned = bool(owned)
@@ -768,7 +768,7 @@ class TestReadinessCanDelayButNeverDeadlock:
         layer.publish(VisualizerRenderState(owner, QRect(0, 0, 400, 200)))
 
         monkeypatch.setattr(
-            "widgets.spotify_visualizer.card_paint.ensure_painted_frame_shadow_pixmap",
+            "widgets.spotify_visualizer.card_surface.ensure_compositor_card_surface_pixmap",
             lambda *a, **k: None,
         )
         layer.prepare(600, 1.0)

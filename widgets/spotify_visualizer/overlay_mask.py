@@ -7,7 +7,7 @@ from PySide6.QtCore import QRect
 
 
 @dataclass(frozen=True)
-class PaintedCardMaskUniforms:
+class CompositorCardMaskUniforms:
     rect_x_px: float
     rect_y_px: float
     rect_w_px: float
@@ -15,7 +15,7 @@ class PaintedCardMaskUniforms:
     radius_px: float
 
 
-def compute_painted_card_mask_uniforms(
+def compute_compositor_card_mask_uniforms(
     widget_rect: QRect,
     *,
     dpr: float,
@@ -23,7 +23,7 @@ def compute_painted_card_mask_uniforms(
     shrink_right: int,
     shrink_bottom: int,
     radius_extra: int,
-) -> PaintedCardMaskUniforms:
+) -> CompositorCardMaskUniforms:
     """Return the rounded-rect stencil-mask geometry in framebuffer pixels."""
     card_w = max(1, int(widget_rect.width()) - int(shrink_right))
     card_h = max(1, int(widget_rect.height()) - int(shrink_bottom))
@@ -37,7 +37,7 @@ def compute_painted_card_mask_uniforms(
     rect_h_px = max(1.0, (card_h - 2.0) * float(dpr) - 2.0 * extra)
     radius_px = float(max(0.0, (radius - 1.0 - float(border_width_px) * 0.5) * float(dpr)))
 
-    return PaintedCardMaskUniforms(
+    return CompositorCardMaskUniforms(
         rect_x_px=rect_x_px,
         rect_y_px=rect_y_px,
         rect_w_px=float(rect_w_px),

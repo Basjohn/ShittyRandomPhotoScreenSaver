@@ -42,7 +42,7 @@ def test_no_current_source_reads_the_retired_sidecar() -> None:
         "widgets/mute_button_widget.py",
         "widgets/weather_components.py",
         "widgets/media/painting.py",
-        "widgets/spotify_visualizer/card_paint.py",
+        "widgets/spotify_visualizer/card_surface.py",
         "widgets/spotify_visualizer/renderers/spectrum.py",
         "core/settings/storage_paths.py",
     ):
@@ -60,6 +60,14 @@ def test_no_current_source_reads_the_retired_sidecar() -> None:
 def test_no_production_copy_of_retired_profile_behavior_remains() -> None:
     root = Path(__file__).resolve().parents[1]
     retired_markers = {
+        "widgets/base_overlay_widget.py": (
+            "painted_frame_shadow",
+            "uses_shared_painted_frame_shadow_cache",
+        ),
+        "rendering/widget_manager.py": (
+            "painted_frame_shadow",
+            "_prepare_overlay_frame_shadow_before_reveal",
+        ),
         "widgets/shadow_utils.py": (
             "shadowtuning.json",
             "TEXT_SHADOW_",
@@ -95,6 +103,14 @@ def test_no_production_copy_of_retired_profile_behavior_remains() -> None:
             "_ensure_track_shadow_pixmap",
             "_track_shadow",
             "_painted_frame_shadow",
+        ),
+        "widgets/spotify_visualizer_widget.py": (
+            "painted_frame_shadow",
+            "card_paint",
+        ),
+        "widgets/spotify_visualizer/card_surface.py": (
+            "painted_frame_shadow",
+            "shadowtuning.json",
         ),
     }
 

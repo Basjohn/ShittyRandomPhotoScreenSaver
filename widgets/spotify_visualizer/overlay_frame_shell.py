@@ -40,8 +40,8 @@ def resolve_bars_fade(overlay, scene_fade: float) -> float:
 
 
 def render_overlay_frame(overlay, rect, fade: float, render_fn) -> None:
-    stencil_active = overlay._begin_painted_card_stencil_clip(rect)
+    stencil_active = overlay._begin_compositor_card_stencil_clip(rect)
     try:
         render_fn(rect, fade)
     finally:
-        overlay._end_painted_card_stencil_clip(stencil_active)
+        overlay._end_compositor_card_stencil_clip(stencil_active)

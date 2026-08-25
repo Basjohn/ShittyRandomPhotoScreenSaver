@@ -6,7 +6,7 @@ Reviewed source basis:
 
 ```text
 test-inventory basis = F1 retained Clock family seam
-Phase F0 CLOSED; 360 test modules; F1 Clock implementation active
+Phase F0 CLOSED; 359 test modules; F1 Clock implementation active
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -41,7 +41,7 @@ round-trip, separator contract and analogue two-pass shadow structure.
 
 At the reviewed checkpoint the repository contains:
 
-- **360 test-module files**: 359 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **359 test-module files**: 358 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -52,7 +52,7 @@ Inventory status is **not an execution result**. `KEEP` does not mean a test was
 
 This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
 
-This is deliberately **not** a claim that every assertion in all 360 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
+This is deliberately **not** a claim that every assertion in all 359 modules was manually read line-by-line or executed during this review. The inventory is complete; semantic inspection was concentrated where migration status could change whether a test remains authority.
 
 ### Status vocabulary
 
@@ -73,7 +73,7 @@ This is deliberately **not** a claim that every assertion in all 360 modules was
 | --- | ---: |
 | `KEEP` | 116 |
 | `KEEP — MIGRATION PERMANENT` | 89 |
-| `MIGRATION-CRITICAL — H/I` | 48 |
+| `MIGRATION-CRITICAL — H/I` | 47 |
 | `WILL BE OBSOLETE — H/I` | 23 |
 | `MIGRATION-CRITICAL — F` | 39 |
 | `MIGRATION-CRITICAL — G/H` | 16 |
@@ -84,7 +84,7 @@ This is deliberately **not** a claim that every assertion in all 360 modules was
 | `WILL BE OBSOLETE — E4/F` | 2 |
 | `OBSOLETE NOW` | 2 |
 | `MIGRATION-CRITICAL — E3/F` | 1 |
-| **Total** | **360** |
+| **Total** | **359** |
 
 ## 2. Standard commands and evidence levels
 
@@ -685,7 +685,6 @@ no current test inventory row or product gate should restore the family.
 | `tests/test_p2_perf_unchanged_scene.py` | **WILL BE OBSOLETE — H/I** | Delete with legacy presenter after Quick cutover/parity confirmation. |
 | `tests/test_p2_playback_epoch.py` | **KEEP — PERMANENT** | Presentation-neutral permanent regression. |
 | `tests/test_p2_playback_state_ownership.py` | **KEEP — PERMANENT** | Presentation-neutral permanent regression. |
-| `tests/test_p2_pre_reveal_frame_preparation.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_p2_pre_reveal_gl_warmup.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_p2_ready_fade.py` | **MIGRATION-CRITICAL — H/I** | Require equivalent Quick-owner coverage before deleting legacy-owner assertions. |
 | `tests/test_p2_single_surface.py` | **MIGRATION-CRITICAL — H/I** | Important one-surface intent, but harness imports legacy GLCompositor/SpotifyBarsGLOverlay. Quick successor must inherit intent before deletion. |

@@ -1,6 +1,6 @@
 # Contracts — Current Owner Map
 
-Last updated: 2026-08-24
+Last updated: 2026-08-25
 
 `Current_Plan.md` owns work admission. This file owns fast current/destination owner routing.
 
@@ -33,6 +33,12 @@ deletion**, not I.
 | residue/aliases/expired adapters | I |
 
 Historical code is not automatically reference-protected.
+
+The current legacy visualizer compositor obtains its card background/border pixels from
+`widgets/spotify_visualizer/card_surface.py`. That visualizer-specific module owns the canonical
+geometry/DPR/style cache key and pixmap build used for GL texture revision and upload. Ordinary
+`BaseOverlayWidget` instances have no generic painted-frame-shadow cache or reveal-preparation
+contract.
 
 ## Widget runtime/data ownership
 

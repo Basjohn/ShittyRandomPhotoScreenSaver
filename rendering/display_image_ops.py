@@ -1126,10 +1126,12 @@ def _push_spotify_bars_overlay_state(
 
         try:
             vis = getattr(widget, "spotify_visualizer_widget", None)
-            if vis is not None and hasattr(overlay, "set_painted_frame_shadow_enabled"):
-                overlay.set_painted_frame_shadow_enabled(bool(vis.uses_painted_frame_shadow()))
+            if vis is not None and hasattr(overlay, "set_compositor_card_surface_enabled"):
+                overlay.set_compositor_card_surface_enabled(
+                    bool(vis.uses_compositor_card_surface())
+                )
         except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to sync GL stencil shadow state", exc_info=True)
+            logger.debug("[SPOTIFY_VIS] Failed to sync compositor card stencil state", exc_info=True)
 
         try:
             overlay.set_state(**overlay_kwargs)

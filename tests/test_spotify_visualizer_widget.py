@@ -9340,7 +9340,7 @@ def test_shadow_cache_invalidation_clears_transient_effect_once_per_cycle(qt_app
 
 
 @pytest.mark.qt
-def test_spotify_visualizer_setting_uses_painted_frame_shadow(qt_app, qtbot):
+def test_spotify_visualizer_setting_controls_compositor_card_surface(qt_app, qtbot):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=8)
     qtbot.addWidget(widget)
     widget.resize(320, 160)
@@ -9353,14 +9353,14 @@ def test_spotify_visualizer_setting_uses_painted_frame_shadow(qt_app, qtbot):
     )
     widget.set_shadow_config({"enabled": True})
 
-    assert widget.uses_painted_frame_shadow() is True
+    assert widget.uses_compositor_card_surface() is True
     assert widget.graphicsEffect() is None
-    pixmap = widget._ensure_painted_frame_shadow_pixmap()
+    pixmap = widget._ensure_compositor_card_surface_pixmap()
     assert pixmap is not None
     assert not pixmap.isNull()
 
     widget.set_shadow_config({"enabled": False})
-    assert widget.uses_painted_frame_shadow() is False
+    assert widget.uses_compositor_card_surface() is False
 
 
 @pytest.mark.qt

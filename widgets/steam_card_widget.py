@@ -832,12 +832,11 @@ class SteamCardWidget(BaseOverlayWidget):
             from PySide6.QtGui import QPainter
 
             painter = QPainter(self)
-            shrink_r, shrink_b = self.painted_frame_shadow_card_shrink()
             target = QRectF(
                 0.0,
                 0.0,
-                max(1.0, float(self.width() - shrink_r)),
-                max(1.0, float(self.height() - shrink_b)),
+                max(1.0, float(self.width())),
+                max(1.0, float(self.height())),
             )
             dpr = max(1.0, float(self.devicePixelRatioF()))
             show_latest_artwork = bool(

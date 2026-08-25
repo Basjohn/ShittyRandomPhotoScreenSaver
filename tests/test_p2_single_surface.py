@@ -355,7 +355,7 @@ class TestDisplayCoordinateConversion:
 
     def test_mask_uniform_adds_the_display_origin(self):
         source = inspect.getsource(
-            SpotifyBarsGLOverlay._draw_painted_card_stencil_mask
+            SpotifyBarsGLOverlay._draw_compositor_card_stencil_mask
         )
         assert "_compositor_mask_origin_px" in source
         assert "origin_x" in source and "origin_y" in source
@@ -614,7 +614,7 @@ class TestCardVisualOwnership:
     def test_card_layer_reuses_the_existing_cached_pixmap(self):
         """Authored border/radius/shadow must not be reimplemented in GL."""
         source = inspect.getsource(CompositorVisualizerLayer._ensure_card_visual)
-        assert "ensure_painted_frame_shadow_pixmap" in source
+        assert "ensure_compositor_card_surface_pixmap" in source
 
     def test_card_ownership_is_claimed_before_the_fade_leaves_zero(self):
         """Otherwise the card QWidget paints itself at full opacity first."""

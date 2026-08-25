@@ -75,14 +75,12 @@ def _header_layout(widget: "MediaWidget") -> dict[str, object]:
     width = int(logo_size + gap + text_w + pad_x * 2)
     height = int(row_h + pad_y * 2)
 
-    shrink_r, _ = widget.painted_frame_shadow_card_shrink()
-    effective_w = max(1, int(widget.width() - shrink_r))
+    effective_w = max(1, int(widget.width()))
     max_width = max(0, effective_w - left - 10)
     artwork_pm = getattr(widget, "_artwork_pixmap", None)
     artwork_size = max(0, int(getattr(widget, "_artwork_size", 0)))
     if artwork_pm is not None and not artwork_pm.isNull() and artwork_size > 0:
-        _, shrink_b = widget.painted_frame_shadow_card_shrink()
-        effective_h = max(1, int(widget.height() - shrink_b))
+        effective_h = max(1, int(widget.height()))
         max_art_h = max(24, effective_h - 60)
         art_target = max(48, min(artwork_size, max_art_h))
         frame_size = compute_artwork_frame_size(artwork_pm, art_target)
@@ -274,9 +272,8 @@ def paint_metadata_text(widget: "MediaWidget", painter: QPainter) -> None:
     header_layout = _header_layout(widget)
     header_rect = header_layout["rect"]
     margins = widget.contentsMargins()
-    shrink_r, _ = widget.painted_frame_shadow_card_shrink()
     left = int(margins.left())
-    right = int(widget.width() - margins.right() - shrink_r - 8)
+    right = int(widget.width() - margins.right() - 8)
     max_width = max(40, right - left)
 
     color = QColor(widget._text_color)
@@ -378,9 +375,8 @@ def metadata_paint_bottom(widget: "MediaWidget") -> int:
     artist = str(metadata.get("artist") or "")
     header_rect = _header_layout(widget)["rect"]
     margins = widget.contentsMargins()
-    shrink_r, _ = widget.painted_frame_shadow_card_shrink()
     left = int(margins.left())
-    right = int(widget.width() - margins.right() - shrink_r - 8)
+    right = int(widget.width() - margins.right() - 8)
     max_width = max(40, right - left)
     title_font_pt = int(metadata.get("title_font") or max(6, widget._font_size + 3))
     artist_font_pt = int(metadata.get("artist_font") or max(6, widget._font_size - 2))
@@ -579,9 +575,8 @@ def paint_artwork(widget: "MediaWidget", painter: QPainter) -> None:
     if pm is None or pm.isNull():
         return
 
-    shrink_r, shrink_b = widget.painted_frame_shadow_card_shrink()
-    effective_w = widget.width() - shrink_r
-    effective_h = widget.height() - shrink_b
+    effective_w = widget.width()
+    effective_h = widget.height()
     max_by_height = max(24, effective_h - 60)
     size = max(48, min(widget._artwork_size, max_by_height))
     if size <= 0:

@@ -1341,14 +1341,12 @@ class ClockWidget(BaseOverlayWidget):
             mode_l = "digital"
         if self._display_mode == mode_l:
             return
-        with self.painted_frame_shadow_update_batch():
-            self._commit_display_mode(mode_l)
+        self._commit_display_mode(mode_l)
 
     def _commit_display_mode(self, mode_l: str) -> None:
         """Apply one normalized mode switch as a single frame-cache transaction."""
 
         self._display_mode = mode_l
-        self._invalidate_painted_frame_shadow_cache()
         self._update_digital_alignment()
 
         self._apply_display_mode_size_constraints()
@@ -1397,7 +1395,6 @@ class ClockWidget(BaseOverlayWidget):
                 self._update_position()
             except Exception as e:
                 logger.debug("[CLOCK] Exception suppressed: %s", e)
-        self._commit_painted_frame_shadow_cache()
 
     def _apply_display_mode_size_constraints(self) -> None:
         """Keep the widget footprint contract aligned with the current display mode.
@@ -1649,40 +1646,10 @@ class ClockWidget(BaseOverlayWidget):
         self._calendar_font_size = point_size
         self._refresh_calendar_configuration()
     
-    def uses_shared_painted_frame_shadow_cache(self) -> bool:
-        """Digital mode consumes Base's rectangular frame; analogue owns its face."""
-
-        return bool(
-            getattr(self, "_display_mode", "digital") != "analog"
-            and super().uses_shared_painted_frame_shadow_cache()
-        )
-
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet based on current settings."""
         self._update_digital_alignment()
         self._style_secondary_labels()
-        if self.uses_painted_frame_shadow():
-            if self._display_mode == "analog":
-                padding_left, padding_top, padding_bottom, _ = self._compute_analog_padding()
-                padding_right = padding_left
-                padding_rule = f"{padding_top}px {padding_right}px {padding_bottom}px {padding_left}px"
-            else:
-                padding_left, padding_top, padding_right, padding_bottom = self._compute_digital_padding()
-                padding_rule = "0px"
-
-            self.setStyleSheet(f"""
-                QLabel {{
-                    color: rgba({self._text_color.red()}, {self._text_color.green()}, 
-                               {self._text_color.blue()}, {self._text_color.alpha()});
-                    background-color: transparent;
-                    border: {self._bg_border_width}px solid transparent;
-                    border-radius: 8px;
-                    padding: {padding_rule};
-                }}
-            """)
-            self.setContentsMargins(padding_left, padding_top, padding_right, padding_bottom)
-            return
-
         if self._show_background:
             if self._display_mode == "analog":
                 padding_left, padding_top, padding_bottom, _ = self._compute_analog_padding()
@@ -2368,7 +2335,6 @@ class ClockWidget(BaseOverlayWidget):
     def cleanup(self) -> None:
         """Clean up resources."""
         logger.debug("Cleaning up clock widget")
-        self._cancel_painted_frame_shadow_preparation()
         self.stop()
         if self._tz_label:
             self._tz_label.deleteLater()

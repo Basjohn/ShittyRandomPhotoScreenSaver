@@ -178,7 +178,7 @@ def _render_idle_spectrum(ctx, *, card_h, single_piece, dpr=1.0, bars=None):
         vis_mode="spectrum",
     )
     overlay._single_piece = bool(single_piece)
-    overlay._painted_frame_shadow_enabled = False
+    overlay._compositor_card_surface_enabled = False
 
     target = _GLTarget(SURFACE)
     try:
