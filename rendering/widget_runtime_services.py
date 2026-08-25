@@ -415,7 +415,9 @@ def _build_media_volume_service(
 
 
 def _inject_media_volume_service(widget: Any, service: Any) -> None:
-    setter = getattr(widget, "set_runtime_service", None)
+    setter = getattr(widget, "set_volume_runtime_service", None)
+    if not callable(setter):
+        setter = getattr(widget, "set_runtime_service", None)
     if not callable(setter):
         raise AttributeError(
             "runtime widget cannot accept Media volume service "
@@ -432,7 +434,12 @@ def _retire_media_volume_service(service: Any) -> None:
 
 
 def _media_volume_service_reuse_is_valid(widget: Any, service: Any) -> bool:
-    if getattr(widget, "_runtime_service", None) is not service:
+    attached = getattr(
+        widget,
+        "_volume_runtime_service",
+        getattr(widget, "_runtime_service", None),
+    )
+    if attached is not service:
         return False
     if _service_is_retired(service):
         return False

@@ -7,8 +7,8 @@ Last updated: 2026-08-25
 Exact main inspected through:
 
 ```text
-51272b4f076024d8ed24a02041232eca0f3abf2d
-Phase F3 retained Media core presentation
+d8a643a42c51e4121bce5f9a368fa2c30b318bd6
+Phase F4 retained Media controls and progress
 ```
 
 F1 implementation basis:
@@ -69,13 +69,17 @@ Current F4 sequence:
 
 ```text
 retained transport controls + accepted-state progress + pointer admission  -> implementation GREEN
-app-volume presenter under existing MediaVolumeRuntimeService              -> NEXT
-system-mute presenter under existing SystemMuteRuntimeService              -> pending
+app-volume presenter under existing MediaVolumeRuntimeService              -> implementation GREEN
+system-mute presenter under existing SystemMuteRuntimeService              -> NEXT
 caller proof + remaining QWidget F4 pixel/input retirement                 -> pending
 ```
 
 The first checkpoint extends the existing Media model/item only. It does not create a second Media
 presenter or change app-volume/system-mute runtime ownership.
+
+The second checkpoint projects the existing app-volume lease into that same model/item. Its retained
+slider emits semantic levels only; controller targeting, accepted revisions, optimistic state, reads,
+writes and debounce remain owned by `MediaVolumeRuntimeService`.
 
 F3 closure evidence:
 

@@ -1,4 +1,4 @@
-"""Stable retained Media presentation model, artwork and transport projection."""
+"""Stable retained Media presentation, artwork, transport and app-volume projection."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from rendering.quick.media_artwork import MediaArtworkImageProvider
 
 if TYPE_CHECKING:
     from widgets.media_runtime import MediaRuntimeSnapshot
+    from widgets.media_volume_runtime import MediaVolumeRuntimeSnapshot
 
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
@@ -118,6 +119,8 @@ class MediaPresentationConfig:
     playback_progress_shadow_enabled: bool = False
     playback_progress_glow_enabled: bool = False
     playback_progress_glow_color: tuple[int, int, int, int] = (255, 255, 255, 180)
+    app_volume_enabled: bool = True
+    app_volume_fill_color: tuple[int, int, int, int] = (66, 66, 66, 255)
 
     @classmethod
     def from_mapping(
@@ -160,6 +163,13 @@ class MediaPresentationConfig:
             playback_progress_glow_color=_rgba(
                 values.get("playback_progress_glow_color"),
                 (255, 255, 255, 180),
+            ),
+            app_volume_enabled=_as_bool(
+                values.get("spotify_volume_enabled"), True
+            ),
+            app_volume_fill_color=_rgba(
+                values.get("spotify_volume_fill_color"),
+                (66, 66, 66, 255),
             ),
         )
 
@@ -259,6 +269,10 @@ class MediaPresentationSnapshot:
     duration_ms: int = 0
     artwork_source: str = ""
     interaction_enabled: bool = False
+    app_volume_revision: int = 0
+    app_volume_supported: bool = False
+    app_volume_runtime_available: bool = False
+    app_volume_level: float = 1.0
 
 
 class MediaPresentationModel(QObject):
@@ -273,6 +287,7 @@ class MediaPresentationModel(QObject):
         style: MediaPresentationStyle,
         artwork_provider: MediaArtworkImageProvider,
         runtime_service: Any | None = None,
+        volume_runtime_service: Any | None = None,
         *,
         runtime_generation: int | None = None,
         parent: QObject | None = None,
@@ -281,6 +296,8 @@ class MediaPresentationModel(QObject):
         self._runtime_generation = runtime_generation
         self._thread_manager = None
         self._runtime_service = runtime_service
+        self._volume_runtime_service = volume_runtime_service
+        self._volume_runtime_attached = False
         self._artwork_provider = artwork_provider
         self._artwork_identity = ""
         self._snapshot = MediaPresentationSnapshot(
@@ -297,6 +314,15 @@ class MediaPresentationModel(QObject):
         if self._active and service is not self._runtime_service:
             raise RuntimeError("cannot replace the active Media runtime service")
         self._runtime_service = service
+
+    def set_volume_runtime_service(self, service: Any) -> None:
+        """Inject the existing presentation-neutral app-volume lease."""
+
+        if self._retired:
+            raise RuntimeError("cannot inject a retired Media presentation model")
+        if self._active and service is not self._volume_runtime_service:
+            raise RuntimeError("cannot replace the active Media volume runtime service")
+        self._volume_runtime_service = service
 
     @property
     def config(self) -> MediaPresentationConfig:
@@ -326,6 +352,13 @@ class MediaPresentationModel(QObject):
             self._active = False
             service.detach_consumer(self)
             raise RuntimeError("Media runtime service failed to start")
+        try:
+            self._start_volume_runtime_if_enabled()
+        except Exception:
+            self._active = False
+            service.stop()
+            service.detach_consumer(self)
+            raise
 
     def retire(self) -> None:
         if self._retired:
@@ -333,6 +366,11 @@ class MediaPresentationModel(QObject):
         self._retired = True
         self._active = False
         service = self._runtime_service
+        volume_service = self._volume_runtime_service
+        if volume_service is not None and self._volume_runtime_attached:
+            volume_service.stop()
+            volume_service.detach_consumer(self)
+            self._volume_runtime_attached = False
         if service is not None:
             service.stop()
             service.detach_consumer(self)
@@ -368,6 +406,9 @@ class MediaPresentationModel(QObject):
             self._runtime_service.set_provider_runtime(
                 config.provider, source="settings"
             )
+        if provider_changed and self._volume_runtime_service is not None:
+            self._volume_runtime_service.set_provider_runtime(config.provider)
+        self._sync_volume_runtime_activation()
         return True
 
     def apply_style(self, style: MediaPresentationStyle) -> bool:
@@ -413,7 +454,33 @@ class MediaPresentationModel(QObject):
             self.request_refresh()
         return handled
 
+    def request_app_volume(self, level: float) -> bool:
+        """Route one semantic app-volume level to the existing volume owner."""
+
+        service = self._volume_runtime_service
+        if (
+            not self.is_active
+            or service is None
+            or not self.config.app_volume_enabled
+            or not self._snapshot.app_volume_supported
+            or not self._snapshot.app_volume_runtime_available
+        ):
+            return False
+        clamped = max(0.0, min(1.0, float(level)))
+        return bool(service.set_volume_optimistic(clamped))
+
+    def request_app_volume_step(self, direction: int) -> bool:
+        """Apply one admitted keyboard/wheel step through the same owner."""
+
+        if direction == 0:
+            return False
+        delta = 0.05 if direction > 0 else -0.05
+        return self.request_app_volume(self._snapshot.app_volume_level + delta)
+
     def is_media_consumer_alive(self) -> bool:
+        return self.is_active
+
+    def is_media_volume_consumer_alive(self) -> bool:
         return self.is_active
 
     def on_media_runtime_snapshot(self, snapshot: MediaRuntimeSnapshot) -> None:
@@ -499,7 +566,67 @@ class MediaPresentationModel(QObject):
 
     def on_media_runtime_volume_target(self, provider: str, source_id: str) -> None:
         if self.is_active:
+            service = self._volume_runtime_service
+            if service is not None and self._volume_runtime_attached:
+                service.set_runtime_volume_source(provider, source_id)
             self.volumeTargetChanged.emit(str(provider), str(source_id))
+
+    def on_media_volume_runtime_snapshot(
+        self, snapshot: MediaVolumeRuntimeSnapshot
+    ) -> None:
+        """Project one accepted app-volume revision without owning its cadence."""
+
+        if not self.is_active:
+            return
+        try:
+            revision = int(snapshot.revision)
+            supported = bool(snapshot.supported)
+            available = bool(snapshot.available)
+            level = max(0.0, min(1.0, float(snapshot.level)))
+        except (AttributeError, TypeError, ValueError):
+            return
+        if revision <= self._snapshot.app_volume_revision:
+            return
+        self._replace_snapshot(
+            replace(
+                self._snapshot,
+                app_volume_revision=revision,
+                app_volume_supported=supported,
+                app_volume_runtime_available=available,
+                app_volume_level=level,
+            )
+        )
+
+    def _start_volume_runtime_if_enabled(self) -> None:
+        service = self._volume_runtime_service
+        if service is None or not self.config.app_volume_enabled:
+            return
+        try:
+            if not self._volume_runtime_attached:
+                service.set_thread_manager(self._thread_manager)
+                service.attach_consumer(self)
+                self._volume_runtime_attached = True
+            if not service.start():
+                raise RuntimeError("Media volume runtime service failed to start")
+            snapshot = service.current_snapshot()
+            if snapshot is not None:
+                self.on_media_volume_runtime_snapshot(snapshot)
+        except Exception:
+            if self._volume_runtime_attached:
+                service.stop()
+                service.detach_consumer(self)
+                self._volume_runtime_attached = False
+            raise
+
+    def _sync_volume_runtime_activation(self) -> None:
+        if not self.is_active:
+            return
+        service = self._volume_runtime_service
+        if self.config.app_volume_enabled:
+            self._start_volume_runtime_if_enabled()
+            return
+        if service is not None and self._volume_runtime_attached:
+            service.stop()
 
     def _project_artwork(self, snapshot: MediaRuntimeSnapshot) -> str:
         key = snapshot.artwork.key
@@ -618,6 +745,36 @@ class MediaPresentationModel(QObject):
         color.setAlpha(max(150, min(235, alpha)))
         return color
 
+    @Property(bool, notify=stateChanged)
+    def appVolumeAvailable(self) -> bool:
+        return bool(
+            self.config.app_volume_enabled
+            and self._snapshot.has_track
+            and self._snapshot.app_volume_supported
+            and self._snapshot.app_volume_runtime_available
+        )
+
+    @Property(float, notify=stateChanged)
+    def appVolumeLevel(self) -> float:
+        return self._snapshot.app_volume_level
+
+    @Property(QColor, notify=stateChanged)
+    def appVolumeTrackColor(self) -> QColor:
+        return QColor(*self.config.background_color)
+
+    @Property(QColor, notify=stateChanged)
+    def appVolumeBorderColor(self) -> QColor:
+        color = QColor(*self.config.border_color)
+        color.setAlpha(255)
+        return color
+
+    @Property(QColor, notify=stateChanged)
+    def appVolumeFillColor(self) -> QColor:
+        color = QColor(*self.config.app_volume_fill_color)
+        if color == QColor(255, 255, 255, 230):
+            color.setAlpha(140)
+        return color
+
     @Property(str, notify=stateChanged)
     def fontFamily(self) -> str:
         return self.config.font_family
@@ -713,6 +870,9 @@ class RetainedMediaPresentation:
                 signal.connect(
                     lambda _key=key: self._handle_transport_requested(_key)
                 )
+        volume = getattr(self._retained.item, "appVolumeLevelRequested", None)
+        if volume is not None and hasattr(volume, "connect"):
+            volume.connect(self._handle_app_volume_requested)
 
     @property
     def item(self):
@@ -769,6 +929,16 @@ class RetainedMediaPresentation:
         if not self._model.interactionEnabled:
             return False
         return self._model.request_transport(key)
+
+    def _handle_app_volume_requested(self, level: float) -> bool:
+        if not self._model.interactionEnabled:
+            return False
+        return self._model.request_app_volume(level)
+
+    def request_app_volume_step(self, direction: int) -> bool:
+        """Route an already-admitted keyboard app-volume step."""
+
+        return self._model.request_app_volume_step(direction)
 
     def retire(self) -> bool:
         return self._host.retire_widget(self._retained)

@@ -1,4 +1,4 @@
-"""Render focused retained-Media-core evidence through a real Quick window."""
+"""Render retained Media controls/progress/app-volume through a real Quick window."""
 
 from __future__ import annotations
 
@@ -36,6 +36,7 @@ from rendering.quick.widgets import (  # noqa: E402
     RetainedMediaPresentation,
 )
 from widgets.media_runtime import MediaRuntimeSnapshot, PreparedMediaArtwork  # noqa: E402
+from widgets.media_volume_runtime import MediaVolumeRuntimeSnapshot  # noqa: E402
 
 
 class _Runtime:
@@ -69,6 +70,50 @@ class _Runtime:
         return True
 
 
+class _VolumeRuntime:
+    def __init__(self) -> None:
+        self.consumer = None
+        self.running = False
+        self.snapshot = MediaVolumeRuntimeSnapshot(
+            revision=1,
+            provider="spotify",
+            browser_process=None,
+            supported=True,
+            available=True,
+            level=0.68,
+            source="smoke",
+        )
+
+    def set_thread_manager(self, _manager) -> None:
+        return
+
+    def attach_consumer(self, consumer) -> None:
+        self.consumer = consumer
+
+    def detach_consumer(self, consumer=None) -> None:
+        if consumer is None or consumer is self.consumer:
+            self.consumer = None
+
+    def start(self) -> bool:
+        self.running = True
+        return True
+
+    def stop(self) -> None:
+        self.running = False
+
+    def current_snapshot(self):
+        return self.snapshot
+
+    def set_provider_runtime(self, _provider) -> bool:
+        return True
+
+    def set_runtime_volume_source(self, _provider, _source_id) -> bool:
+        return True
+
+    def set_volume_optimistic(self, _level) -> bool:
+        return True
+
+
 def _config(**overrides) -> MediaPresentationConfig:
     values = {
         "provider": "spotify",
@@ -90,6 +135,8 @@ def _config(**overrides) -> MediaPresentationConfig:
         "playback_progress_shadow_enabled": True,
         "playback_progress_glow_enabled": True,
         "playback_progress_glow_color": [50, 205, 255, 180],
+        "spotify_volume_enabled": True,
+        "spotify_volume_fill_color": [255, 255, 255, 190],
     }
     values.update(overrides)
     return MediaPresentationConfig.from_mapping(values)
@@ -219,7 +266,12 @@ def run(output_dir: Path) -> dict[str, object]:
             runtime = _Runtime()
             style = MediaPresentationStyle.project(config, _shadows(direction))
             model = MediaPresentationModel(
-                config, style, factory.media_artwork_provider, runtime, parent=owner
+                config,
+                style,
+                factory.media_artwork_provider,
+                runtime,
+                volume_runtime_service=_VolumeRuntime(),
+                parent=owner,
             )
             presentation = RetainedMediaPresentation(
                 host=host, model=model, geometry=geometry
