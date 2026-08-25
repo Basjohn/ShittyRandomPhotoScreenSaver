@@ -11,6 +11,7 @@ OverlayWidget {
     signal previousRequested()
     signal nextRequested()
     signal appVolumeLevelRequested(real level)
+    signal systemMuteToggleRequested()
 
     function appVolumeLevelAt(y, height) {
         if (height <= 0.0)
@@ -21,7 +22,7 @@ OverlayWidget {
     readonly property int visibleSectionCount: 1
         + (mediaModel.showHeaderFrame ? 1 : 0)
         + (mediaModel.progressAvailable ? 1 : 0)
-        + (mediaModel.controlsAvailable ? 1 : 0)
+        + (mediaModel.controlsBandAvailable ? 1 : 0)
 
     TapHandler {
         acceptedButtons: Qt.LeftButton
@@ -283,7 +284,7 @@ OverlayWidget {
         Rectangle {
             id: controlsRow
             objectName: "mediaControlsRow"
-            visible: mediaRoot.mediaModel.controlsAvailable
+            visible: mediaRoot.mediaModel.controlsBandAvailable
             width: parent.width
             height: visible ? Math.max(38.0, mediaRoot.mediaModel.fontSize * 2.15) : 0.0
             radius: 12.0
@@ -292,7 +293,14 @@ OverlayWidget {
             border.color: "#55ffffff"
 
             Row {
-                anchors.fill: parent
+                visible: mediaRoot.mediaModel.controlsAvailable
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.right: parent.right
+                anchors.rightMargin: systemMuteButton.visible
+                    ? systemMuteButton.width + 1.0
+                    : 0.0
 
                 Item {
                     id: previousButton
@@ -389,6 +397,137 @@ OverlayWidget {
                             && mediaRoot.mediaModel.canNext
                         acceptedButtons: Qt.LeftButton
                         onTapped: mediaRoot.nextRequested()
+                    }
+                }
+            }
+
+            Rectangle {
+                id: systemMuteButton
+                objectName: "mediaSystemMuteButton"
+                visible: mediaRoot.mediaModel.systemMuteAvailable
+                height: parent.width < 210.0
+                    ? Math.min(30.0, parent.height * 0.92)
+                    : Math.min(36.0, parent.height * 0.92)
+                width: parent.width < 210.0
+                    ? Math.min(32.0, height * 1.08)
+                    : Math.min(40.0, height * 1.08)
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.right: parent.right
+                radius: Math.max(8.0, Math.min(12.0, height * 0.32))
+                border.width: 1.25
+                border.color: "#41ffffff"
+                scale: systemMuteTap.pressed ? 1.06 : 1.0
+                property real feedbackOpacity: 0.0
+                gradient: Gradient {
+                    GradientStop {
+                        position: 0.0
+                        color: Qt.rgba(
+                            mediaRoot.mediaModel.systemMuteBackgroundColor.r,
+                            mediaRoot.mediaModel.systemMuteBackgroundColor.g,
+                            mediaRoot.mediaModel.systemMuteBackgroundColor.b,
+                            Math.min(
+                                1.0,
+                                mediaRoot.mediaModel.systemMuteBackgroundColor.a * 0.95
+                                    + 30.0 / 255.0
+                            )
+                        )
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: Qt.rgba(
+                            mediaRoot.mediaModel.systemMuteBackgroundColor.r,
+                            mediaRoot.mediaModel.systemMuteBackgroundColor.g,
+                            mediaRoot.mediaModel.systemMuteBackgroundColor.b,
+                            mediaRoot.mediaModel.systemMuteBackgroundColor.a * 0.85
+                        )
+                    }
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 3.0
+                    radius: Math.max(1.0, parent.radius - 1.0)
+                    color: "transparent"
+                    border.width: 1.0
+                    border.color: "#3c000000"
+                }
+
+                Canvas {
+                    id: systemMuteIcon
+                    objectName: "mediaSystemMuteIcon"
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width, parent.height) * 0.64
+                    height: width
+                    property bool muted: mediaRoot.mediaModel.systemMuted
+                    property color iconColor: mediaRoot.mediaModel.systemMuteIconColor
+                    onMutedChanged: requestPaint()
+                    onIconColorChanged: requestPaint()
+                    onWidthChanged: requestPaint()
+                    onHeightChanged: requestPaint()
+                    onPaint: {
+                        var context = getContext("2d")
+                        context.reset()
+                        context.fillStyle = iconColor
+                        context.strokeStyle = iconColor
+                        context.lineCap = "round"
+                        context.lineWidth = Math.max(1.2, width * 0.045)
+                        context.beginPath()
+                        context.moveTo(width * 0.18, height * 0.42)
+                        context.lineTo(width * 0.32, height * 0.42)
+                        context.lineTo(width * 0.48, height * 0.27)
+                        context.lineTo(width * 0.48, height * 0.73)
+                        context.lineTo(width * 0.32, height * 0.58)
+                        context.lineTo(width * 0.18, height * 0.58)
+                        context.closePath()
+                        context.fill()
+                        if (muted) {
+                            context.beginPath()
+                            context.moveTo(width * 0.48, height * 0.28)
+                            context.lineTo(width * 0.78, height * 0.72)
+                            context.stroke()
+                        } else {
+                            context.beginPath()
+                            context.arc(
+                                width * 0.44, height * 0.5, width * 0.22,
+                                -0.68, 0.68
+                            )
+                            context.stroke()
+                            context.beginPath()
+                            context.arc(
+                                width * 0.44, height * 0.5, width * 0.36,
+                                -0.68, 0.68
+                            )
+                            context.stroke()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    color: "white"
+                    opacity: parent.feedbackOpacity
+                }
+
+                SequentialAnimation {
+                    id: systemMuteFeedback
+                    NumberAnimation {
+                        target: systemMuteButton
+                        property: "feedbackOpacity"
+                        from: 0.47
+                        to: 0.0
+                        duration: 350
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                TapHandler {
+                    id: systemMuteTap
+                    enabled: mediaRoot.mediaModel.interactionEnabled
+                    acceptedButtons: Qt.LeftButton
+                    onTapped: {
+                        systemMuteFeedback.restart()
+                        mediaRoot.systemMuteToggleRequested()
                     }
                 }
             }

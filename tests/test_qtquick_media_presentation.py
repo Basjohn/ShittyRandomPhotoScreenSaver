@@ -34,6 +34,7 @@ from widgets.media_runtime import (
     reset_shared_media_runtime_for_tests,
 )
 from widgets.media_volume_runtime import MediaVolumeRuntimeSnapshot
+from widgets.system_mute_runtime import SystemMuteRuntimeSnapshot
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -167,6 +168,63 @@ class _FakeMediaVolumeRuntime:
             self.consumer.on_media_volume_runtime_snapshot(snapshot)
 
 
+class _FakeSystemMuteRuntime:
+    def __init__(self) -> None:
+        self.consumer = None
+        self.thread_manager = None
+        self.running = False
+        self.snapshot = SystemMuteRuntimeSnapshot(
+            revision=1,
+            available=True,
+            muted=False,
+            source="initial",
+        )
+        self.toggle_calls = 0
+        self.step_calls: list[float] = []
+        self.start_result = True
+
+    def set_thread_manager(self, thread_manager) -> None:
+        self.thread_manager = thread_manager
+
+    def attach_consumer(self, consumer) -> None:
+        self.consumer = consumer
+
+    def detach_consumer(self, consumer=None) -> None:
+        if consumer is None or consumer is self.consumer:
+            self.consumer = None
+
+    def start(self) -> bool:
+        self.running = bool(self.start_result)
+        return self.start_result
+
+    def stop(self) -> None:
+        self.running = False
+
+    def current_snapshot(self):
+        return self.snapshot
+
+    def toggle_mute(self) -> bool:
+        self.toggle_calls += 1
+        self.publish(
+            replace(
+                self.snapshot,
+                revision=self.snapshot.revision + 1,
+                muted=not self.snapshot.muted,
+                source="toggle",
+            )
+        )
+        return True
+
+    def step_system_volume(self, delta: float) -> float:
+        self.step_calls.append(float(delta))
+        return 0.55
+
+    def publish(self, snapshot: SystemMuteRuntimeSnapshot) -> None:
+        self.snapshot = snapshot
+        if self.consumer is not None and self.running:
+            self.consumer.on_system_mute_runtime_snapshot(snapshot)
+
+
 class _RuntimeHost:
     def get_runtime_widget_registry(self):
         return {}
@@ -243,6 +301,7 @@ def _values(**overrides):
         "playback_progress_glow_color": [45, 190, 250, 180],
         "spotify_volume_enabled": True,
         "spotify_volume_fill_color": [255, 255, 255, 230],
+        "mute_button_enabled": True,
     }
     values.update(overrides)
     return values
@@ -302,7 +361,13 @@ def _snapshot(
     )
 
 
-def _model(provider=None, runtime=None, volume_runtime=None, **overrides):
+def _model(
+    provider=None,
+    runtime=None,
+    volume_runtime=None,
+    system_mute_runtime=None,
+    **overrides,
+):
     artwork_provider = provider or MediaArtworkImageProvider()
     config = MediaPresentationConfig.from_mapping(_values(**overrides))
     style = MediaPresentationStyle.project(config, _shadows())
@@ -314,6 +379,7 @@ def _model(provider=None, runtime=None, volume_runtime=None, **overrides):
             artwork_provider,
             service,
             volume_runtime_service=volume_runtime,
+            system_mute_runtime_service=system_mute_runtime,
         ),
         service,
         artwork_provider,
@@ -348,6 +414,7 @@ def test_media_config_and_style_project_canonical_settings_and_direction() -> No
     assert config.playback_progress_glow_enabled is True
     assert config.app_volume_enabled is True
     assert config.app_volume_fill_color == (79, 79, 79, 150)
+    assert config.system_mute_enabled is False
     assert style.card_style.background_color.alpha() == 128
     assert style.card_style.shadow_offset_x == pytest.approx(-6.0)
     assert style.card_style.shadow_offset_y == pytest.approx(-6.0)
@@ -414,6 +481,63 @@ def test_media_volume_start_failure_rolls_back_both_retained_leases() -> None:
     assert runtime.consumer is None
     assert volume_runtime.running is False
     assert volume_runtime.consumer is None
+
+
+def test_media_model_projects_and_routes_existing_system_mute_owner() -> None:
+    mute_runtime = _FakeSystemMuteRuntime()
+    model, runtime, _provider = _model(system_mute_runtime=mute_runtime)
+    model.activate(object())
+    runtime.publish(_snapshot(1, image=_image()))
+
+    assert model.systemMuteAvailable is True
+    assert model.systemMuted is False
+    assert model.controlsBandAvailable is True
+    assert mute_runtime.consumer is model
+    assert mute_runtime.running is True
+
+    model.on_system_mute_runtime_snapshot(
+        replace(mute_runtime.snapshot, revision=0, muted=True)
+    )
+    assert model.systemMuted is False
+    assert model.request_system_mute_toggle() is True
+    assert model.systemMuted is True
+    assert mute_runtime.toggle_calls == 1
+    assert model.request_system_volume_step(0.05) == pytest.approx(0.55)
+    assert mute_runtime.step_calls == [pytest.approx(0.05)]
+
+    disabled = replace(model.config, system_mute_enabled=False)
+    assert model.apply_config(disabled) is True
+    assert model.systemMuteAvailable is False
+    assert mute_runtime.running is False
+    assert model.request_system_mute_toggle() is False
+    assert model.request_system_volume_step(-0.05) is None
+
+    assert model.apply_config(replace(disabled, system_mute_enabled=True)) is True
+    assert mute_runtime.running is True
+    model.retire()
+    assert mute_runtime.running is False
+    assert mute_runtime.consumer is None
+
+
+def test_system_mute_start_failure_rolls_back_all_retained_media_leases() -> None:
+    volume_runtime = _FakeMediaVolumeRuntime()
+    mute_runtime = _FakeSystemMuteRuntime()
+    mute_runtime.start_result = False
+    model, runtime, _provider = _model(
+        volume_runtime=volume_runtime,
+        system_mute_runtime=mute_runtime,
+    )
+
+    with pytest.raises(RuntimeError, match="system-mute runtime service failed"):
+        model.activate(object())
+
+    assert model.is_active is False
+    assert runtime.running is False
+    assert runtime.consumer is None
+    assert volume_runtime.running is False
+    assert volume_runtime.consumer is None
+    assert mute_runtime.running is False
+    assert mute_runtime.consumer is None
 
 
 def test_media_artwork_provider_is_stable_bounded_and_returns_detached_images() -> None:
@@ -609,6 +733,25 @@ def test_media_runtime_manager_injects_separate_app_volume_lease_into_same_model
     assert service.is_retired() is True
 
 
+def test_media_runtime_manager_injects_system_mute_lease_into_same_model() -> None:
+    provider = MediaArtworkImageProvider()
+    config = MediaPresentationConfig.from_mapping(_values())
+    style = MediaPresentationStyle.project(config, _shadows())
+    model = MediaPresentationModel(config, style, provider, runtime_generation=91)
+    owner = WidgetRuntimeManager(_RuntimeHost())
+
+    service = owner.ensure_widget_service("mute_button", model, {"media": {}})
+
+    assert service is not None
+    assert model._system_mute_runtime_service is service
+    assert model._runtime_service is None
+    assert model._volume_runtime_service is None
+    assert service.shared_owner is None
+    assert service.is_running() is False
+    owner.cleanup()
+    assert service.is_retired() is True
+
+
 @pytest.mark.qt
 def test_media_real_runtime_owner_activates_through_current_scene_host(qt_app) -> None:
     reset_shared_media_runtime_for_tests()
@@ -686,10 +829,12 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
     controller = QuickSceneController(window=window, factory=factory)
     runtime = _FakeMediaRuntime()
     volume_runtime = _FakeMediaVolumeRuntime()
+    mute_runtime = _FakeSystemMuteRuntime()
     model, _, provider = _model(
         factory.media_artwork_provider,
         runtime,
         volume_runtime,
+        mute_runtime,
     )
     try:
         presentation = RetainedMediaPresentation(
@@ -710,14 +855,19 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
         assert item.findChild(QQuickItem, "mediaProgressFill") is not None
         assert item.findChild(QQuickItem, "mediaAppVolumeSlider") is not None
         assert item.findChild(QQuickItem, "mediaAppVolumeFill") is not None
+        assert item.findChild(QQuickItem, "mediaSystemMuteButton") is not None
+        assert item.findChild(QQuickItem, "mediaSystemMuteIcon") is not None
         assert model.hasArtwork is True
         assert model.appVolumeAvailable is True
+        assert model.systemMuteAvailable is True
         assert provider.image_count == 1
 
         item.playPauseRequested.emit()
         item.appVolumeLevelRequested.emit(0.7)
+        item.systemMuteToggleRequested.emit()
         assert runtime.transport_calls == []
         assert volume_runtime.level_calls == []
+        assert mute_runtime.toggle_calls == 0
         assert presentation.apply_input_state(
             QuickInputState(
                 screen_index=0,
@@ -729,8 +879,11 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
         item.previousRequested.emit()
         item.nextRequested.emit()
         item.appVolumeLevelRequested.emit(0.25)
+        item.systemMuteToggleRequested.emit()
         assert runtime.transport_calls == ["play", "previous", "next"]
         assert volume_runtime.level_calls == [pytest.approx(0.25)]
+        assert mute_runtime.toggle_calls == 1
+        assert model.systemMuted is True
 
         assert presentation.apply_input_state(
             {
@@ -741,8 +894,10 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
         ) is True
         item.nextRequested.emit()
         item.appVolumeLevelRequested.emit(0.8)
+        item.systemMuteToggleRequested.emit()
         assert runtime.transport_calls == ["play", "previous", "next"]
         assert volume_runtime.level_calls == [pytest.approx(0.25)]
+        assert mute_runtime.toggle_calls == 1
 
         next_config = replace(
             model.config,
@@ -793,9 +948,11 @@ def test_media_qml_and_registry_keep_actions_static_and_python_owned() -> None:
         "signal nextRequested()",
         "signal previousRequested()",
         "signal appVolumeLevelRequested(real level)",
+        "signal systemMuteToggleRequested()",
         "mediaModel.interactionEnabled",
         "mediaModel.progressFraction",
         "mediaModel.appVolumeLevel",
+        "mediaModel.systemMuted",
     ):
         assert marker in qml
     assert "MediaPresentation 1.0 MediaPresentation.qml" in (
