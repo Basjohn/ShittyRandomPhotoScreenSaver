@@ -414,12 +414,11 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         painter = None
         try:
             painter = QPainter(self)
-            shrink_r, shrink_b = self.painted_frame_shadow_card_shrink()
             target = QRectF(
                 0.0,
                 0.0,
-                max(1.0, float(self.width() - shrink_r)),
-                max(1.0, float(self.height() - shrink_b)),
+                max(1.0, float(self.width())),
+                max(1.0, float(self.height())),
             )
             preview_layout = layout_abandonment_card(
                 self._view_model,

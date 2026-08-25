@@ -16,12 +16,11 @@ from __future__ import annotations
 
 import threading
 from abc import abstractmethod
-from contextlib import contextmanager
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Signal, Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
+from PySide6.QtCore import QPoint, QRect, QSize, Signal, Qt
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QLabel, QWidget
 try:
     from shiboken6 import Shiboken  # type: ignore
@@ -32,26 +31,12 @@ from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
 from core.resources.types import ResourceType
 from core.threading.manager import ThreadManager
-from widgets.shadow_utils import (
-    configure_overlay_widget_attributes,
-    shadow_config_enabled,
-)
+from widgets.shadow_utils import configure_overlay_widget_attributes
 
 if TYPE_CHECKING:
     from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
-
-
-# The generic painted-frame QWidget card *shadow* is retired. It was legacy
-# shared debris parameterised by the old shadowtuning.json ``card`` sidecar
-# (blur steps / spread / max-alpha / shrink margins); the F0.5 audit correction
-# removed both the sidecar and the relocated constant profile rather than keep
-# the half-migrated QWidget runtime looking identical. Framed widgets now paint
-# their card background/border directly (QSS), with no painted drop shadow; the
-# canonical destination card shadow is OverlayCard/RectangularShadow. Bespoke
-# family-authored shadows (e.g. the Clock analogue face/ring/numeral/hand
-# geometry) are separate and unaffected.
 
 
 class WidgetLifecycleState(Enum):
@@ -217,13 +202,6 @@ class BaseOverlayWidget(QLabel):
         # Shadow
         self._shadow_config: Optional[Dict[str, Any]] = None
         self._has_faded_in = False
-        self._painted_frame_shadow_enabled = True
-        self._painted_frame_shadow_pixmap: Optional[QPixmap] = None
-        self._painted_frame_shadow_cache_key: Optional[Tuple[Any, ...]] = None
-        self._painted_frame_shadow_revision = 0
-        self._painted_frame_shadow_cache_cancelled = False
-        self._painted_frame_shadow_batch_depth = 0
-        self._painted_frame_shadow_batch_dirty = False
         
         # Thread manager
         self._thread_manager: Optional["ThreadManager"] = None
@@ -305,14 +283,9 @@ class BaseOverlayWidget(QLabel):
         """Enable or disable background frame."""
         show = bool(show)
         if show == self._show_background:
-            # Unchanged style produces an identical frame, so rebuilding it is
-            # pure synchronous GUI cost. set_background_border() already guards
-            # this way; these setters simply did not.
             return
         self._show_background = show
-        self._invalidate_painted_frame_shadow_cache()
         self._update_stylesheet()
-        self._commit_painted_frame_shadow_cache()
         self.update()
     
     def set_background_color(self, color: QColor) -> None:
@@ -321,9 +294,7 @@ class BaseOverlayWidget(QLabel):
             if color == self._bg_color:
                 return
             self._bg_color = color
-            self._invalidate_painted_frame_shadow_cache()
             self._update_stylesheet()
-            self._commit_painted_frame_shadow_cache()
     
     def set_background_opacity(self, opacity: float) -> None:
         """Set background opacity (0.0 - 1.0)."""
@@ -334,9 +305,7 @@ class BaseOverlayWidget(QLabel):
         self._bg_opacity = resolved
         # Update bg_color alpha
         self._bg_color.setAlpha(alpha)
-        self._invalidate_painted_frame_shadow_cache()
         self._update_stylesheet()
-        self._commit_painted_frame_shadow_cache()
     
     @classmethod
     def set_global_border_width(cls, width: int) -> None:
@@ -350,32 +319,27 @@ class BaseOverlayWidget(QLabel):
     def get_global_border_width(cls) -> int:
         return cls._global_border_width
 
-    def _apply_border_width(self, width: int, *, invalidate: bool = True) -> bool:
+    def _apply_border_width(self, width: int) -> bool:
         new_width = max(0, int(width))
         if new_width == self._bg_border_width:
             return False
         self._bg_border_width = new_width
-        if invalidate:
-            self._invalidate_painted_frame_shadow_cache()
         return True
 
     def set_card_border_width(self, width: int) -> None:
         """Update the widget's border width while respecting global policy."""
         if self._apply_border_width(width):
             self._update_stylesheet()
-            self._commit_painted_frame_shadow_cache()
 
     def set_background_border(self, width: int, color: QColor) -> None:
         """Set background border width and color."""
-        changed = self._apply_border_width(width, invalidate=False)
+        changed = self._apply_border_width(width)
         if isinstance(color, QColor):
             if color != self._bg_border_color:
                 self._bg_border_color = color
                 changed = True
         if changed:
-            self._invalidate_painted_frame_shadow_cache()
             self._update_stylesheet()
-            self._commit_painted_frame_shadow_cache()
     
     def set_background_corner_radius(self, radius: int) -> None:
         """Set background corner radius."""
@@ -383,23 +347,12 @@ class BaseOverlayWidget(QLabel):
         if resolved == self._bg_corner_radius:
             return
         self._bg_corner_radius = resolved
-        self._invalidate_painted_frame_shadow_cache()
         self._update_stylesheet()
-        self._commit_painted_frame_shadow_cache()
     
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet. Override for custom styling."""
         selector = f"#{self.objectName()}" if self.objectName() else self.__class__.__name__
-        if self.uses_painted_frame_shadow():
-            self.setStyleSheet(f"""
-                {selector} {{
-                    background-color: transparent;
-                    border: {self._bg_border_width}px solid transparent;
-                    border-radius: {self._bg_corner_radius}px;
-                    color: rgba({self._text_color.red()}, {self._text_color.green()}, {self._text_color.blue()}, {self._text_color.alpha()});
-                }}
-            """)
-        elif self._show_background:
+        if self._show_background:
             bg = self._bg_color
             border = self._bg_border_color
             self.setStyleSheet(f"""
@@ -779,10 +732,7 @@ class BaseOverlayWidget(QLabel):
     def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:
         """Set shadow configuration."""
         self._shadow_config = config
-        self._painted_frame_shadow_enabled = shadow_config_enabled(config, "enabled", True)
-        self._invalidate_painted_frame_shadow_cache()
         self._update_stylesheet()
-        self._commit_painted_frame_shadow_cache()
         self.update()
         if is_perf_metrics_enabled():
             overlay = getattr(self, "_overlay_name", self.__class__.__name__)
@@ -800,152 +750,13 @@ class BaseOverlayWidget(QLabel):
     def on_fade_complete(self) -> None:
         """Called when fade-in animation completes."""
         self._has_faded_in = True
-        if self.uses_shared_painted_frame_shadow_cache():
-            self._invalidate_painted_frame_shadow_cache()
-            self._commit_painted_frame_shadow_cache()
         self.update()
-
-    def uses_painted_frame_shadow(self) -> bool:
-        """Retired: the generic painted-frame card *shadow* no longer renders.
-
-        The F0.5 audit correction removed the sidecar-derived painted-card shadow
-        profile. Framed widgets now draw their card background/border via QSS (see
-        ``_update_stylesheet``); the destination card shadow is
-        OverlayCard/RectangularShadow. Kept as ``False`` so every dependent cache/
-        shrink/prepare path stays inert without touching its callers.
-        """
-        return False
-
-    def uses_shared_painted_frame_shadow_cache(self) -> bool:
-        """True when this widget consumes BaseOverlayWidget's frame pixmap."""
-
-        return self.uses_painted_frame_shadow()
-
-    def _invalidate_painted_frame_shadow_cache(self) -> None:
-        """Invalidate the shared stable frame at its state owner."""
-
-        self._painted_frame_shadow_pixmap = None
-        self._painted_frame_shadow_cache_key = None
-        self._painted_frame_shadow_revision += 1
-        self._painted_frame_shadow_batch_dirty = True
-
-    @contextmanager
-    def painted_frame_shadow_update_batch(self):
-        """Coalesce a known GUI style transaction into one final frame build."""
-
-        self._painted_frame_shadow_batch_depth += 1
-        try:
-            yield self
-        finally:
-            self._painted_frame_shadow_batch_depth = max(
-                0,
-                self._painted_frame_shadow_batch_depth - 1,
-            )
-            if (
-                self._painted_frame_shadow_batch_depth == 0
-                and self._painted_frame_shadow_batch_dirty
-            ):
-                self._commit_painted_frame_shadow_cache()
-
-    def _commit_painted_frame_shadow_cache(self) -> Optional[QPixmap]:
-        """Synchronously publish the exact visible frame before paint can run."""
-
-        if self._painted_frame_shadow_batch_depth > 0:
-            return None
-        if not self.uses_shared_painted_frame_shadow_cache():
-            self._painted_frame_shadow_batch_dirty = False
-            return None
-        if (
-            not self._painted_frame_shadow_cache_cancelled
-            and self.isVisible()
-        ):
-            return self._prepare_painted_frame_shadow_pixmap()
-        return None
-
-    def _current_painted_frame_shadow_cache_key(self) -> Optional[Tuple[Any, ...]]:
-        """Return the exact current frame identity, or ``None`` when inactive."""
-
-        if (
-            not self.uses_shared_painted_frame_shadow_cache()
-            or self.width() <= 0
-            or self.height() <= 0
-        ):
-            return None
-        try:
-            dpr = max(1.0, float(self.devicePixelRatioF()))
-        except Exception:
-            dpr = 1.0
-        return (
-            int(self.width()),
-            int(self.height()),
-            float(dpr),
-            self._bg_color.getRgb(),
-            self._bg_border_color.getRgb(),
-            int(self._bg_border_width),
-            int(self._bg_corner_radius),
-            int(self._painted_frame_shadow_revision),
-        )
-
-    def _cancel_painted_frame_shadow_preparation(self) -> None:
-        """Drop shared frame state at a terminal cleanup boundary."""
-
-        self._painted_frame_shadow_cache_cancelled = True
-        self._painted_frame_shadow_batch_depth = 0
-        self._painted_frame_shadow_batch_dirty = False
-        self._painted_frame_shadow_pixmap = None
-        self._painted_frame_shadow_cache_key = None
-
-    def painted_frame_shadow_card_shrink(self) -> tuple[int, int]:
-        """Retired painted-card shadow reserves no margin; content uses the full rect."""
-        return (0, 0)
-
-    def _prepared_painted_frame_shadow_pixmap_for_paint(self) -> Optional[QPixmap]:
-        """Return only an exact-current prepared frame; never build from paint."""
-
-        pixmap = self._painted_frame_shadow_pixmap
-        key = self._current_painted_frame_shadow_cache_key()
-        if (
-            key is None
-            or pixmap is None
-            or pixmap.isNull()
-            or self._painted_frame_shadow_cache_key != key
-        ):
-            return None
-        return pixmap
-
-    def _prepare_painted_frame_shadow_pixmap(self) -> Optional[QPixmap]:
-        """Retired: the generic painted-card shadow no longer builds a pixmap.
-
-        Kept as an inert no-op so existing GUI-side prepare/commit callers keep a
-        stable contract; the card background/border render via QSS instead.
-        """
-        self._painted_frame_shadow_batch_dirty = False
-        return None
-
-    def _ensure_painted_frame_shadow_pixmap(self) -> Optional[QPixmap]:
-        """Compatibility alias for explicit GUI-side frame preparation."""
-
-        return self._prepare_painted_frame_shadow_pixmap()
 
     def _paint_before_native_text(self) -> None:
         """Subclass hook for painter shadow passes before QLabel text."""
         return
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
-        if self.uses_shared_painted_frame_shadow_cache():
-            painter = QPainter(self)
-            try:
-                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-                painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
-            finally:
-                painter.end()
-            pixmap = self._prepared_painted_frame_shadow_pixmap_for_paint()
-            if pixmap is not None and not pixmap.isNull():
-                painter = QPainter(self)
-                try:
-                    painter.drawPixmap(0, 0, pixmap)
-                finally:
-                    painter.end()
         try:
             self._paint_before_native_text()
         except Exception:
@@ -953,12 +764,7 @@ class BaseOverlayWidget(QLabel):
         super().paintEvent(event)
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
-        # Qt delivers an initial resize when a widget is first shown even when
-        # the size is unchanged; that must not discard a prepared frame.
-        if not self._painted_frame_shadow_cache_is_current():
-            self._invalidate_painted_frame_shadow_cache()
         super().resizeEvent(event)
-        self._commit_painted_frame_shadow_cache()
         if self._active_custom_layout_rect() is not None:
             self._schedule_custom_layout_geometry_reapply()
             return
@@ -968,48 +774,6 @@ class BaseOverlayWidget(QLabel):
             logger.debug("[STACK] Failed to re-anchor overlay after resize", exc_info=True)
         self._schedule_parent_stacking_recalc()
 
-    def showEvent(self, event) -> None:  # type: ignore[override]
-        # Show/reveal is the synchronous prewarm boundary: even if hidden
-        # configuration invalidations were coalesced, first paint is consume-only.
-        self._prepare_painted_frame_shadow_pixmap()
-        super().showEvent(event)
-
-    def _painted_frame_shadow_cache_is_current(self) -> bool:
-        """True when the cached frame already matches this widget's exact state.
-
-        The frame is rasterised only from size, device pixel ratio, background
-        colour/border/radius and the shared tuning - all of which the cache key
-        carries. So a geometry or screen event that resolves to the identical
-        key cannot change a single pixel, and invalidating for it discards a
-        valid frame to rebuild the same one.
-
-        This matters at reveal. Showing a widget for the first time delivers an
-        initial resize and a ``ScreenChangeInternal`` even when neither the size
-        nor the device pixel ratio actually changes, which would otherwise throw
-        away a frame prepared while the widget was still hidden and rebuild it
-        inside the fade window.
-        """
-
-        pixmap = self._painted_frame_shadow_pixmap
-        if pixmap is None or pixmap.isNull():
-            return False
-        stored = self._painted_frame_shadow_cache_key
-        if stored is None:
-            return False
-        current = self._current_painted_frame_shadow_cache_key()
-        return current is not None and current == stored
-
-    def event(self, event) -> bool:  # type: ignore[override]
-        result = super().event(event)
-        if event.type() in (
-            QEvent.Type.DevicePixelRatioChange,
-            QEvent.Type.ScreenChangeInternal,
-        ) and hasattr(self, "_painted_frame_shadow_revision"):
-            if not self._painted_frame_shadow_cache_is_current():
-                self._invalidate_painted_frame_shadow_cache()
-                self._commit_painted_frame_shadow_cache()
-                self.update()
-        return result
 
     def _schedule_parent_stacking_recalc(self) -> None:
         if self._stack_recalc_pending:
@@ -1460,7 +1224,6 @@ class BaseOverlayWidget(QLabel):
         
         This method is idempotent - calling it multiple times is safe.
         """
-        self._cancel_painted_frame_shadow_preparation()
         with self._lifecycle_lock:
             if self._lifecycle_state == WidgetLifecycleState.DESTROYED:
                 logger.debug(f"[LIFECYCLE] {self._overlay_name} already destroyed")

@@ -205,11 +205,6 @@ def _update_progress_paint_state(
 def _compute_metadata_layout_budget(widget: "MediaWidget", *, has_artwork: bool = False) -> dict[str, int]:
     width = max(1, int(getattr(widget, "width", lambda: 0)() or 0))
     height = max(1, int(getattr(widget, "height", lambda: 0)() or 0))
-    try:
-        shrink_r, shrink_b = widget.painted_frame_shadow_card_shrink()
-    except Exception:
-        shrink_r, shrink_b = 0, 0
-
     left_margin = 29
     top_margin = 12
     if hasattr(widget, "contentsMargins"):
@@ -228,11 +223,11 @@ def _compute_metadata_layout_budget(widget: "MediaWidget", *, has_artwork: bool 
         except Exception:
             pass
     if has_artwork:
-        right_reserved = max(artwork_size + 40, 60) + int(shrink_r)
+        right_reserved = max(artwork_size + 40, 60)
     else:
         right_reserved = max(base_right_margin, 12)
     text_width = max(1, width - left_margin - right_reserved - 8)
-    content_height = max(1, height - top_margin - int(shrink_b))
+    content_height = max(1, height - top_margin)
     return {
         "text_width": text_width,
         "content_height": content_height,
@@ -732,16 +727,15 @@ def _build_and_apply_metadata(
 
     # Artwork and its reserved lane become visible atomically. Deferred
     # worker results therefore leave both the current pixmap and margins alone.
-    shrink_r, shrink_b = widget.painted_frame_shadow_card_shrink()
     if _has_applied_artwork(widget):
-        right_margin = max(widget._artwork_size + 40, 60) + shrink_r
+        right_margin = max(widget._artwork_size + 40, 60)
     else:
-        right_margin = 12 + shrink_r
+        right_margin = 12
     layout_mutations += _ensure_card_geometry_contract(
         widget,
         fixed_height=int(widget._fixed_card_height),
         right_margin=right_margin,
-        bottom_margin=widget._controls_row_margin() + shrink_b,
+        bottom_margin=widget._controls_row_margin(),
     )
     refresh_metadata_boundary = getattr(widget, "_refresh_metadata_paint_boundary", None)
     if callable(refresh_metadata_boundary):

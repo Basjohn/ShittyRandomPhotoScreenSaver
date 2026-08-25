@@ -616,7 +616,7 @@ class TestCompositorSceneReveal:
             _show_background = True
             _compositor_owns_card_visual = False
 
-            def uses_painted_frame_shadow(self):
+            def uses_compositor_card_surface(self):
                 return False
 
             def set_compositor_owns_card_visual(self, owned):

@@ -1,6 +1,6 @@
 # Future Cleanup — Migration Deletion Ledger
 
-Last updated: 2026-08-24
+Last updated: 2026-08-25
 
 This file tracks caller-proven deletion/retirement work. It does not admit work ahead of
 `Current_Plan.md`.
@@ -19,12 +19,6 @@ I                        -> residue only
 
 Real product resilience is not migration debris.
 
-## Immediate F0.5 correction
-
-Remove generic tuning constants copied from retired `shadowtuning.json`.
-
-Do not remove genuinely family-authored reference algorithms required by an unported family.
-
 ## Phase-F family retirement
 
 After each F1–F10 family is independently GREEN:
@@ -36,6 +30,13 @@ After each F1–F10 family is independently GREEN:
 - retain a shared old helper only while another unported family genuinely requires it.
 
 Git is historical pixel reference after deletion.
+
+## Test-harness follow-up
+
+- `tests/test_spotify_visualizer_widget.py::test_on_tick_does_not_double_throttle_when_timer_already_paces`
+  currently builds a Bubble-mode stub without the now-required runtime controller and fails before
+  reaching its cadence assertion. Repair that harness with the owning visualizer-runtime work; it is
+  unrelated to card-surface ownership.
 
 ## Transition legacy — caller-proof early cleanup
 

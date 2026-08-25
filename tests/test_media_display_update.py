@@ -111,9 +111,6 @@ class _StubMediaWidget:
     def _decode_artwork_pixmap(self, _artwork):
         return None
 
-    def painted_frame_shadow_card_shrink(self):
-        return (0, 0)
-
     def parent(self):
         return None
 

@@ -447,7 +447,6 @@ class RedditWidget(BaseOverlayWidget):
 
     def cleanup(self) -> None:
         logger.debug("Cleaning up Reddit widget")
-        self._cancel_painted_frame_shadow_preparation()
         self._paint_cache_cancelled = True
         self.stop()
         stop_qtimer_attr(
@@ -2205,26 +2204,6 @@ class RedditWidget(BaseOverlayWidget):
 
     def _update_stylesheet(self) -> None:
         selector = f"#{self.objectName()}" if self.objectName() else "QLabel"
-        if self.uses_painted_frame_shadow():
-            self.setStyleSheet(
-                """
-                %s {
-                    color: rgba(%d, %d, %d, %d);
-                    background-color: transparent;
-                    border: %dpx solid transparent;
-                    border-radius: 8px;
-                }
-                """
-                % (
-                    selector,
-                    self._text_color.red(),
-                    self._text_color.green(),
-                    self._text_color.blue(),
-                    self._text_color.alpha(),
-                    self._bg_border_width,
-                )
-            )
-            return
         if self._show_background:
             self.setStyleSheet(
                 """

@@ -490,18 +490,18 @@ class CompositorVisualizerLayer:
         Fade is deliberately absent - it is a GL alpha multiplier, so a fade
         animation never re-uploads.
         """
-        from widgets.spotify_visualizer.card_paint import (
-            painted_frame_shadow_cache_key,
+        from widgets.spotify_visualizer.card_surface import (
+            compositor_card_surface_cache_key,
         )
 
-        return painted_frame_shadow_cache_key(
+        return compositor_card_surface_cache_key(
             card,
             logical_size=geometry.logical_rect.size(),
             dpr=geometry.dpr,
         )
 
     def _render_card_visual(self, geometry: "PresentationGeometry", fade: float) -> None:
-        """Draw the card background/border/shadow beneath the shader layer.
+        """Draw the card background/border beneath the shader layer.
 
         The authored appearance still comes from the card's own QPainter output;
         it is uploaded to a GL texture when its revision changes and drawn as a
@@ -540,14 +540,14 @@ class CompositorVisualizerLayer:
 
             revision = self._card_revision(card, geometry)
             if self._card_texture.revision != revision:
-                from widgets.spotify_visualizer.card_paint import (
-                    ensure_painted_frame_shadow_pixmap,
+                from widgets.spotify_visualizer.card_surface import (
+                    ensure_compositor_card_surface_pixmap,
                 )
 
                 # Rendered FOR the authoritative presentation size and DPR,
                 # never taken from the live QWidget geometry and never rescaled
-                # after the fact, which would change border/radius/shadow.
-                pixmap = ensure_painted_frame_shadow_pixmap(
+                # after the fact, which would change border/radius.
+                pixmap = ensure_compositor_card_surface_pixmap(
                     card,
                     logical_size=geometry.logical_rect.size(),
                     dpr=geometry.dpr,
@@ -575,7 +575,7 @@ class CompositorVisualizerLayer:
         try:
             if not bool(getattr(card, "_show_background", False)):
                 return False
-            return bool(card.uses_painted_frame_shadow())
+            return bool(card.uses_compositor_card_surface())
         except Exception:
             return False
 

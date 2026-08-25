@@ -5,7 +5,6 @@ Manages overlay widget lifecycle, positioning, visibility, and Z-order.
 """
 from __future__ import annotations
 
-from contextlib import nullcontext
 from functools import partial
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING, Mapping
@@ -1281,18 +1280,15 @@ class WidgetManager:
             logger.debug("[WIDGET_MANAGER] Failed to reapply media text color", exc_info=True)
 
         try:
-            batch_factory = getattr(media_widget, 'painted_frame_shadow_update_batch', None)
-            batch = batch_factory() if callable(batch_factory) else nullcontext()
-            with batch:
-                if hasattr(media_widget, 'set_background_color'):
-                    media_widget.set_background_color(parse_color_to_qcolor(model.bg_color))
-                if hasattr(media_widget, 'set_background_opacity'):
-                    media_widget.set_background_opacity(float(model.background_opacity))
-                if hasattr(media_widget, 'set_background_border'):
-                    border_qcolor = parse_color_to_qcolor(model.border_color, opacity_override=model.border_opacity)
-                    if border_qcolor:
-                        current_width = getattr(media_widget, '_bg_border_width', None)
-                        media_widget.set_background_border(current_width if current_width is not None else media_widget.get_global_border_width(), border_qcolor)
+            if hasattr(media_widget, 'set_background_color'):
+                media_widget.set_background_color(parse_color_to_qcolor(model.bg_color))
+            if hasattr(media_widget, 'set_background_opacity'):
+                media_widget.set_background_opacity(float(model.background_opacity))
+            if hasattr(media_widget, 'set_background_border'):
+                border_qcolor = parse_color_to_qcolor(model.border_color, opacity_override=model.border_opacity)
+                if border_qcolor:
+                    current_width = getattr(media_widget, '_bg_border_width', None)
+                    media_widget.set_background_border(current_width if current_width is not None else media_widget.get_global_border_width(), border_qcolor)
         except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to reapply media background/border", exc_info=True)
 
@@ -1442,8 +1438,6 @@ class WidgetManager:
                 return default
 
             try:
-                batch_factory = getattr(widget, 'painted_frame_shadow_update_batch', None)
-                batch = batch_factory() if callable(batch_factory) else nullcontext()
                 font_family = inherit_style('font_family', model.font_family)
                 font_size = inherit_style('font_size', model.font_size)
                 margin = inherit_style('margin', model.margin)
@@ -1460,32 +1454,31 @@ class WidgetManager:
                 border_color_value = inherit_style('border_color', [255, 255, 255, 255])
                 border_opacity_value = inherit_style('border_opacity', model.border_opacity)
 
-                with batch:
-                    if hasattr(widget, 'set_font_family'):
-                        widget.set_font_family(font_family)
-                    if hasattr(widget, 'set_font_size'):
-                        widget.set_font_size(int(font_size))
-                    if hasattr(widget, 'set_text_color'):
-                        widget.set_text_color(parse_color_to_qcolor(text_color))
-                    if hasattr(widget, 'set_show_background'):
-                        widget.set_show_background(show_background)
-                    if hasattr(widget, 'set_show_separators'):
-                        widget.set_show_separators(show_separators)
-                    if hasattr(widget, 'set_show_refresh_spiral'):
-                        widget.set_show_refresh_spiral(show_refresh_spiral)
-                    if hasattr(widget, 'set_background_color'):
-                        widget.set_background_color(parse_color_to_qcolor(bg_color_value))
-                    if hasattr(widget, 'set_background_opacity'):
-                        widget.set_background_opacity(float(bg_opacity_value))
-                    if hasattr(widget, 'set_background_border'):
-                        border_qcolor = parse_color_to_qcolor(border_color_value, opacity_override=border_opacity_value)
-                        if border_qcolor:
-                            current_width = getattr(widget, '_bg_border_width', None)
-                            widget.set_background_border(current_width if current_width is not None else widget.get_global_border_width(), border_qcolor)
-                    if hasattr(widget, 'set_margin'):
-                        widget.set_margin(int(margin))
-                    if hasattr(widget, 'set_header_logo_px_adjust'):
-                        widget.set_header_logo_px_adjust(int(header_logo_px_adjust))
+                if hasattr(widget, 'set_font_family'):
+                    widget.set_font_family(font_family)
+                if hasattr(widget, 'set_font_size'):
+                    widget.set_font_size(int(font_size))
+                if hasattr(widget, 'set_text_color'):
+                    widget.set_text_color(parse_color_to_qcolor(text_color))
+                if hasattr(widget, 'set_show_background'):
+                    widget.set_show_background(show_background)
+                if hasattr(widget, 'set_show_separators'):
+                    widget.set_show_separators(show_separators)
+                if hasattr(widget, 'set_show_refresh_spiral'):
+                    widget.set_show_refresh_spiral(show_refresh_spiral)
+                if hasattr(widget, 'set_background_color'):
+                    widget.set_background_color(parse_color_to_qcolor(bg_color_value))
+                if hasattr(widget, 'set_background_opacity'):
+                    widget.set_background_opacity(float(bg_opacity_value))
+                if hasattr(widget, 'set_background_border'):
+                    border_qcolor = parse_color_to_qcolor(border_color_value, opacity_override=border_opacity_value)
+                    if border_qcolor:
+                        current_width = getattr(widget, '_bg_border_width', None)
+                        widget.set_background_border(current_width if current_width is not None else widget.get_global_border_width(), border_qcolor)
+                if hasattr(widget, 'set_margin'):
+                    widget.set_margin(int(margin))
+                if hasattr(widget, 'set_header_logo_px_adjust'):
+                    widget.set_header_logo_px_adjust(int(header_logo_px_adjust))
             except Exception:
                 logger.debug("[WIDGET_MANAGER] Failed to reapply reddit config for %s", key, exc_info=True)
     
@@ -2503,48 +2496,12 @@ class WidgetManager:
             len(self._fade_coordinator.describe().get("pending", [])),
         )
 
-        self._prepare_overlay_frame_shadow_before_reveal(overlay_name)
         started_immediately = self._fade_coordinator.request_fade(overlay_name, _starter_wrapper)
         logger.debug(
             "[FADE_COORD] %s fade request registered (started_immediately=%s)",
             overlay_name,
             started_immediately,
         )
-
-    def _prepare_overlay_frame_shadow_before_reveal(self, overlay_name: str) -> None:
-        """Build the overlay's painted frame while it is still hidden.
-
-        ``BaseOverlayWidget`` coalesces frame-shadow invalidation while a widget
-        is hidden - ``_commit_painted_frame_shadow_cache()`` returns early unless
-        ``isVisible()`` - and rebuilds once in ``showEvent``. The reveal starter
-        is what calls ``show()``, so that rebuild lands inside the fade window
-        alongside every other participant's.
-
-        This point is the widget declaring itself ready for display: geometry,
-        DPR and background style are already final, and the cache key does not
-        depend on visibility. Preparing here produces the identical cache-keyed
-        pixmap and leaves the later ``showEvent`` a cache hit.
-
-        Same pixels, same cache identity, same GUI owner; no timer, thread,
-        queue or second cache is introduced. A widget that does not use the
-        shared painted frame is untouched, because the prepare resolves no cache
-        key and returns.
-        """
-
-        widget = self._resolve_overlay_fade_widget(overlay_name)
-        if widget is None:
-            return
-        prepare = getattr(widget, "_prepare_painted_frame_shadow_pixmap", None)
-        if not callable(prepare):
-            return
-        try:
-            prepare()
-        except Exception:
-            logger.debug(
-                "[WIDGET_MANAGER] Pre-reveal frame preparation failed (overlay=%s)",
-                overlay_name,
-                exc_info=True,
-            )
 
     def _resolve_overlay_fade_widget(self, overlay_name: str) -> Optional[QWidget]:
         candidates = (

@@ -205,7 +205,7 @@ def _overlay_for(mode: str) -> SpotifyBarsGLOverlay:
     )
     # Painted-card stencil clipping is exercised in its own bar; these isolate
     # the fragment coordinate mapping.
-    overlay._painted_frame_shadow_enabled = False
+    overlay._compositor_card_surface_enabled = False
     return overlay
 
 
@@ -424,7 +424,7 @@ def test_layer_restores_compositor_gl_state(gl_context, qapp):
 def test_stencil_masked_card_clips_to_rounded_bounds(gl_context, qapp):
     """With the painted card mask on, corners must be clipped, centre kept."""
     overlay = _overlay_for("spectrum")
-    overlay._painted_frame_shadow_enabled = True
+    overlay._compositor_card_surface_enabled = True
     drew, pixels = _render(gl_context, overlay)
     if not drew:
         pytest.skip("spectrum shader unavailable in this environment")
@@ -520,15 +520,15 @@ class _CardStub:
         self._bg_opacity = 0.9
         self._card_border_color = QColor(255, 255, 255, 255)
         self._border_width = 2
-        self._painted_frame_shadow_enabled = True
-        self._painted_frame_shadow_pixmap = None
-        self._painted_frame_shadow_cache_key = None
+        self._compositor_card_surface_enabled = True
+        self._compositor_card_surface_pixmap = None
+        self._compositor_card_surface_cache_key = None
         self._w = width
         self._h = height
         self.owned = None
 
-    def uses_painted_frame_shadow(self):
-        return bool(self._painted_frame_shadow_enabled and self._show_background)
+    def uses_compositor_card_surface(self):
+        return bool(self._compositor_card_surface_enabled and self._show_background)
 
     def width(self):
         return self._w
@@ -709,8 +709,8 @@ class TestCardTextureUploadContract:
 class TestCardTexturePixelsMatchTheAuthoredPixmap:
     def test_drawn_card_matches_the_authored_qpixmap(self, gl_context, qapp):
         """The GL path must reproduce the authored QPainter output."""
-        from widgets.spotify_visualizer.card_paint import (
-            ensure_painted_frame_shadow_pixmap,
+        from widgets.spotify_visualizer.card_surface import (
+            ensure_compositor_card_surface_pixmap,
         )
 
         card = _CardStub()
@@ -728,7 +728,7 @@ class TestCardTexturePixelsMatchTheAuthoredPixmap:
             gl.glDisable(gl.GL_BLEND)
             pixels = target.read()
 
-            reference = ensure_painted_frame_shadow_pixmap(
+            reference = ensure_compositor_card_surface_pixmap(
                 card, logical_size=CARD.size(), dpr=1.0
             ).toImage().convertToFormat(QImage.Format.Format_RGBA8888)
 
@@ -790,7 +790,7 @@ class TestNoPerFrameQPainterBridge:
 # INTEGRATED layer bounds with the card visual ENABLED
 # ---------------------------------------------------------------------------
 #
-# The existing mode bars set `_painted_frame_shadow_enabled = False`, so they
+# The existing mode bars set `_compositor_card_surface_enabled = False`, so they
 # bypass the card-texture draw entirely. That is why they kept passing while the
 # installed build painted the card across almost the whole display: the bubbles
 # were correctly bounded, the card was not.
@@ -844,7 +844,7 @@ class TestIntegratedLayerBoundsWithCardEnabled:
 
     def _case(self, gl_context, *, card_rect, dpr, surface):
         overlay = _overlay_for("spectrum")
-        overlay._painted_frame_shadow_enabled = True  # deliberately ENABLED
+        overlay._compositor_card_surface_enabled = True  # deliberately ENABLED
         card = _CardStub(width=card_rect.width(), height=card_rect.height())
         drew, pixels, layer = _render_with_card(
             gl_context, overlay, card,
@@ -976,7 +976,7 @@ class TestCardTextureLifecycleAcrossVisibility:
         from types import SimpleNamespace
 
         overlay = _overlay_for("spectrum")
-        overlay._painted_frame_shadow_enabled = True
+        overlay._compositor_card_surface_enabled = True
         card = _CardStub()
         comp = _FakeCompositor(ctx)
         layer = CompositorVisualizerLayer(comp)
@@ -1094,24 +1094,24 @@ class TestCardRevisionHasOneAuthority:
         import inspect
 
         source = inspect.getsource(CompositorVisualizerLayer._card_revision)
-        assert "painted_frame_shadow_cache_key" in source, (
+        assert "compositor_card_surface_cache_key" in source, (
             "the GL texture revision must derive from the authored card cache key"
         )
 
     def test_pixmap_and_texture_share_the_key_resolver(self, qapp):
-        from widgets.spotify_visualizer.card_paint import (
-            ensure_painted_frame_shadow_pixmap,
-            painted_frame_shadow_cache_key,
+        from widgets.spotify_visualizer.card_surface import (
+            compositor_card_surface_cache_key,
+            ensure_compositor_card_surface_pixmap,
         )
 
         card = _CardStub()
-        key = painted_frame_shadow_cache_key(
+        key = compositor_card_surface_cache_key(
             card, logical_size=CARD.size(), dpr=1.0
         )
-        ensure_painted_frame_shadow_pixmap(
+        ensure_compositor_card_surface_pixmap(
             card, logical_size=CARD.size(), dpr=1.0
         )
-        assert card._painted_frame_shadow_cache_key == key, (
+        assert card._compositor_card_surface_cache_key == key, (
             "the pixmap cache and the shared resolver must agree exactly"
         )
 
