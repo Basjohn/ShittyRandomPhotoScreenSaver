@@ -82,6 +82,7 @@ class RetainedOverlayWidget:
 
     def __init__(self, item: QQuickItem) -> None:
         self._item: QQuickItem | None = item
+        self._retirement_callbacks: list[Callable[[], None]] = []
 
     @property
     def item(self) -> QQuickItem:
@@ -116,9 +117,22 @@ class RetainedOverlayWidget:
         for property_name, attribute in _CARD_STYLE_BINDINGS:
             item.setProperty(property_name, getattr(style, attribute))
 
+    def add_retirement_callback(self, callback: Callable[[], None]) -> None:
+        """Run ``callback`` exactly once before the retained item is detached."""
+
+        if self._item is None:
+            callback()
+            return
+        if callback not in self._retirement_callbacks:
+            self._retirement_callbacks.append(callback)
+
     def _retire(self) -> None:
         item = self._item
         self._item = None
+        callbacks = self._retirement_callbacks
+        self._retirement_callbacks = []
+        for callback in callbacks:
+            callback()
         if item is not None:
             # Detach from the scene graph before queuing deletion so retiring one
             # widget never depends on the display generation still being live.
@@ -138,10 +152,15 @@ class OrdinaryWidgetPresentationHost:
         create_overlay_item: Callable[
             [Mapping[str, object], QQmlContext], QQuickItem
         ],
+        create_family_item: Callable[
+            [str, Mapping[str, object], QQmlContext], QQuickItem
+        ]
+        | None = None,
     ) -> None:
         self._host_item: QQuickItem | None = host_item
         self._context: QQmlContext | None = context
         self._create_overlay_item = create_overlay_item
+        self._create_family_item = create_family_item
         self._live: list[RetainedOverlayWidget] = []
         self._retired = False
 
@@ -174,6 +193,59 @@ class OrdinaryWidgetPresentationHost:
         if object_name is not None:
             initial["objectName"] = str(object_name)
         item = self._create_overlay_item(initial, context)
+        return self._adopt_item(
+            item,
+            host_item=host_item,
+            geometry=geometry,
+            fade_opacity=fade_opacity,
+            card_style=card_style,
+        )
+
+    def create_family_widget(
+        self,
+        family_id: str,
+        *,
+        initial_properties: Mapping[str, object] | None = None,
+        object_name: str | None = None,
+        geometry: OverlayWidgetGeometry | None = None,
+        fade_opacity: float | None = None,
+        card_style: OverlayCardStyle | None = None,
+    ) -> RetainedOverlayWidget:
+        """Create one registered family component under this display host."""
+
+        if self._retired:
+            raise RuntimeError("ordinary-widget presentation host has retired")
+        host_item = self._host_item
+        context = self._context
+        creator = self._create_family_item
+        if host_item is None or context is None:
+            raise RuntimeError("ordinary-widget presentation host is incomplete")
+        if creator is None:
+            raise RuntimeError("ordinary-widget family factory is unavailable")
+
+        initial = dict(initial_properties or {})
+        if object_name is not None:
+            initial["objectName"] = str(object_name)
+        item = creator(str(family_id), initial, context)
+        return self._adopt_item(
+            item,
+            host_item=host_item,
+            geometry=geometry,
+            fade_opacity=fade_opacity,
+            card_style=card_style,
+        )
+
+    def _adopt_item(
+        self,
+        item: QQuickItem,
+        *,
+        host_item: QQuickItem,
+        geometry: OverlayWidgetGeometry | None,
+        fade_opacity: float | None,
+        card_style: OverlayCardStyle | None,
+    ) -> RetainedOverlayWidget:
+        """Adopt one factory-created item into this display generation."""
+
         if not isinstance(item, QQuickItem):
             raise RuntimeError("overlay widget factory did not create a QQuickItem")
         item.setParentItem(host_item)
@@ -207,5 +279,6 @@ class OrdinaryWidgetPresentationHost:
         self._retired = True
         self._host_item = None
         self._context = None
+        self._create_family_item = None
         for widget in live:
             widget._retire()

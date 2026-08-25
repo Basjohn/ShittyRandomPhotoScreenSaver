@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, replace
 from pathlib import Path
 
@@ -23,7 +24,11 @@ from .render import BackgroundRenderItem, RenderNodeTelemetry
 from .state import QuickSceneReadiness
 from .transitions.state import TransitionRun
 from .visualizer import VisualizerRenderItem, VisualizerRenderNodeTelemetry
-from .widgets import OrdinaryWidgetPresentationHost
+from .widgets import (
+    ORDINARY_WIDGET_FAMILY_COMPONENTS,
+    OrdinaryWidgetPresentationHost,
+    ordinary_widget_family_component,
+)
 from .window import QuickDisplayWindow
 
 
@@ -57,6 +62,22 @@ class QuickSceneFactory(QObject):
                     self._overlay_widget_component,
                 )
             )
+        self._ordinary_widget_family_components: dict[str, QQmlComponent] = {}
+        for descriptor in ORDINARY_WIDGET_FAMILY_COMPONENTS:
+            component = QQmlComponent(
+                self._engine,
+                QUrl.fromLocalFile(
+                    str(self._qml_root / descriptor.qml_filename)
+                ),
+            )
+            if component.status() != QQmlComponent.Status.Ready:
+                raise RuntimeError(
+                    self._component_error(
+                        f"{descriptor.qml_filename} failed to load",
+                        component,
+                    )
+                )
+            self._ordinary_widget_family_components[descriptor.family_id] = component
 
     @property
     def qml_root(self) -> Path:
@@ -119,6 +140,38 @@ class QuickSceneFactory(QObject):
             raise RuntimeError(
                 self._component_error(
                     "OverlayWidget.qml did not create a QQuickItem", component
+                )
+            )
+        QQmlEngine.setObjectOwnership(
+            item,
+            QQmlEngine.ObjectOwnership.CppOwnership,
+        )
+        return item
+
+    def create_ordinary_widget_family(
+        self,
+        family_id: str,
+        initial_properties: Mapping[str, object],
+        context: QQmlContext,
+    ) -> QQuickItem:
+        """Create one statically registered retained family component."""
+
+        descriptor = ordinary_widget_family_component(family_id)
+        component = self._ordinary_widget_family_components.get(
+            descriptor.family_id
+        )
+        if component is None or component.status() != QQmlComponent.Status.Ready:
+            raise RuntimeError(
+                f"ordinary-widget family component is unavailable: {family_id!r}"
+            )
+        item = component.createWithInitialProperties(
+            dict(initial_properties), context
+        )
+        if not isinstance(item, QQuickItem):
+            raise RuntimeError(
+                self._component_error(
+                    f"{descriptor.qml_filename} did not create a QQuickItem",
+                    component,
                 )
             )
         QQmlEngine.setObjectOwnership(
@@ -192,6 +245,7 @@ class QuickSceneController(QObject):
             host_item=ordinary_widget_host_item,
             context=context,
             create_overlay_item=factory.create_overlay_widget,
+            create_family_item=factory.create_ordinary_widget_family,
         )
         self._background_item = BackgroundRenderItem(
             root,
