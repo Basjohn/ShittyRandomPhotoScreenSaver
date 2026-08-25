@@ -276,6 +276,14 @@ revisions drive the icon; QML emits a semantic toggle and owns only pressed/flas
 acquisition, polling, toggle/global-volume actions and generation fencing remain Python-owned. Caller
 proof and retirement of the remaining QWidget F4 pixels/input are next.
 
+The retained progress correction adds `can_seek` to the accepted Media track snapshot and sends an
+invisible track click/release as one clamped semantic fraction through the existing shared runtime and
+GSMTC controller. The controller resolves the selected session's current timeline and converts the
+fraction to WinRT ticks; QML never changes the displayed fraction itself. Unsupported or non-admitted
+requests are inert. The old solid enlarged glow rectangle is replaced by one cached, bounded
+`RectangularShadow` around the retained fill, with the configured enable and colour semantics intact.
+The real-Quick matrix carries an explicit glow-off comparison at effective DPR 1.0, 1.5 and 2.25.
+
 ---
 
 # F5 — Reddit / Reddit2

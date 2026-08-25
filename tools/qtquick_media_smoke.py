@@ -70,6 +70,9 @@ class _Runtime:
         del source
         return True
 
+    def seek_fraction(self, _fraction, *, execute=True) -> bool:
+        return bool(execute)
+
 
 class _VolumeRuntime:
     def __init__(self) -> None:
@@ -295,6 +298,18 @@ def run(output_dir: Path) -> dict[str, object]:
             MediaPlaybackState.UNKNOWN,
             OverlayWidgetGeometry(680, 400, 420, 190),
         ),
+        (
+            "media_progress_glow_off_reference",
+            _config(
+                provider="musicbee",
+                artwork_size=145,
+                playback_progress_glow_enabled=False,
+            ),
+            "W",
+            None,
+            MediaPlaybackState.PLAYING,
+            OverlayWidgetGeometry(680, 35, 450, 235),
+        ),
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     presentations = []
@@ -333,6 +348,7 @@ def run(output_dir: Path) -> dict[str, object]:
                     can_play_pause=True,
                     can_next=True,
                     can_previous=True,
+                    can_seek=True,
                     position_ms=60_000,
                     duration_ms=240_000,
                 )
@@ -361,6 +377,7 @@ def run(output_dir: Path) -> dict[str, object]:
                     "name": name,
                     "direction": direction,
                     "card": config.show_background,
+                    "progress_glow": config.playback_progress_glow_enabled,
                     "image_size": [image.width(), image.height()],
                     "path": str(path.resolve()),
                     "busy_background_path": str(busy_path.resolve()),

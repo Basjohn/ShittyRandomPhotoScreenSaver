@@ -41,6 +41,7 @@ def clone_track_info(
         can_play_pause=info.can_play_pause,
         can_next=info.can_next,
         can_previous=info.can_previous,
+        can_seek=info.can_seek,
         artwork=bytes(info.artwork) if info.artwork is not None else None,
         source_app_user_model_id=info.source_app_user_model_id,
         position_ms=info.position_ms,

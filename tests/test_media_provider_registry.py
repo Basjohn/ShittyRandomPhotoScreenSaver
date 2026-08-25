@@ -1,6 +1,7 @@
 """Focused contracts for registered GSMTC media-provider identities."""
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -274,6 +275,7 @@ def test_io_worker_failover_runs_one_inline_gsmtc_query_without_nested_submit() 
                 is_play_pause_enabled=True,
                 is_next_enabled=True,
                 is_previous_enabled=True,
+                is_playback_position_enabled=True,
             )
             return SimpleNamespace(playback_status=self._status, controls=controls)
 
@@ -318,6 +320,7 @@ def test_io_worker_failover_runs_one_inline_gsmtc_query_without_nested_submit() 
     assert info.source_app_user_model_id == "Mozilla.Firefox.Profile.Default"
     assert info.position_ms == 60_000
     assert info.duration_ms == 240_000
+    assert info.can_seek is True
     assert browser.timeline_reads == 1
     assert _MediaManager.requests == 1
 
@@ -340,6 +343,41 @@ def test_gsmtc_timeline_normalization_rejects_invalid_duration_and_clamps_positi
         )
     ) == (30_000, 30_000)
     assert normalize(SimpleNamespace()) == (None, None)
+
+
+def test_gsmtc_seek_fraction_routes_absolute_timeline_ticks_without_blocking(
+    monkeypatch,
+) -> None:
+    controller = _controller("spotify")
+    controller._available = True
+    controller._MediaManager = object()
+    captured = {}
+    monkeypatch.setattr(
+        controller,
+        "_invoke_simple_action",
+        lambda name, factory: captured.update(name=name, factory=factory),
+    )
+
+    class _SeekSession:
+        def __init__(self) -> None:
+            self.targets = []
+
+        def get_timeline_properties(self):
+            return SimpleNamespace(
+                start_time=timedelta(seconds=5),
+                end_time=timedelta(seconds=245),
+            )
+
+        async def try_change_playback_position_async(self, target):
+            self.targets.append(target)
+            return True
+
+    session = _SeekSession()
+    controller.seek_fraction(0.25)
+
+    assert captured["name"] == "seek"
+    assert asyncio.run(captured["factory"](session)) is True
+    assert session.targets == [65_000 * 10_000]
 
 
 def test_session_selection_rejects_unrelated_and_false_positive_sources() -> None:

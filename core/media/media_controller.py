@@ -55,6 +55,7 @@ class MediaTrackInfo:
     can_play_pause: bool = False
     can_next: bool = False
     can_previous: bool = False
+    can_seek: bool = False
     # Optional album artwork bytes (e.g. PNG/JPEG), if available.
     artwork: Optional[bytes] = None
     # Runtime-only identity of the selected GSMTC host. Never persisted.
@@ -107,6 +108,9 @@ class BaseMediaController:
     def previous(self) -> None:  # pragma: no cover - interface
         raise NotImplementedError
 
+    def seek_fraction(self, fraction: float) -> None:  # pragma: no cover - interface
+        raise NotImplementedError
+
     def is_app_process_running(self) -> bool:
         """Lightweight check whether the target media app process exists.
 
@@ -132,6 +136,11 @@ class NoOpMediaController(BaseMediaController):
 
     def previous(self) -> None:
         logger.debug("[MEDIA] previous called on NoOpMediaController")
+
+    def seek_fraction(self, fraction: float) -> None:
+        logger.debug(
+            "[MEDIA] seek_fraction(%s) called on NoOpMediaController", fraction
+        )
 
 
 class WindowsGlobalMediaController(BaseMediaController):
@@ -713,6 +722,9 @@ class WindowsGlobalMediaController(BaseMediaController):
                     info.can_play_pause = bool(getattr(controls, "is_play_pause_enabled", False))
                     info.can_next = bool(getattr(controls, "is_next_enabled", False))
                     info.can_previous = bool(getattr(controls, "is_previous_enabled", False))
+                    info.can_seek = bool(
+                        getattr(controls, "is_playback_position_enabled", False)
+                    )
             except Exception:
                 logger.debug("[MEDIA] Failed to read control capabilities", exc_info=True)
 
@@ -880,6 +892,41 @@ class WindowsGlobalMediaController(BaseMediaController):
 
     def previous(self) -> None:  # pragma: no cover - requires winrt
         self._invoke_simple_action("previous", lambda s: s.try_skip_previous_async())
+
+    def seek_fraction(self, fraction: float) -> None:  # pragma: no cover - requires winrt
+        """Seek the selected provider session without blocking the GUI caller."""
+
+        try:
+            parsed_fraction = float(fraction)
+        except (TypeError, ValueError):
+            return
+        if not math.isfinite(parsed_fraction):
+            return
+        bounded_fraction = max(0.0, min(1.0, parsed_fraction))
+
+        async def _seek(session):
+            try:
+                timeline = session.get_timeline_properties()
+                start_ms = self._timespan_to_milliseconds(
+                    getattr(timeline, "start_time", None)
+                )
+                end_ms = self._timespan_to_milliseconds(
+                    getattr(timeline, "end_time", None)
+                )
+                if start_ms is None or end_ms is None or end_ms <= start_ms:
+                    return False
+                target_ms = start_ms + int(
+                    round((end_ms - start_ms) * bounded_fraction)
+                )
+                # WinRT playback positions use 100 ns ticks.
+                return await session.try_change_playback_position_async(
+                    target_ms * 10_000
+                )
+            except Exception:
+                logger.debug("[MEDIA] seek failed", exc_info=True)
+                return False
+
+        self._invoke_simple_action("seek", _seek)
 
     # ------------------------------------------------------------------
     # Process detection (lightweight, no GSMTC overhead)

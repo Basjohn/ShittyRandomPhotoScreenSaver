@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+import math
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -270,6 +271,7 @@ class MediaPresentationSnapshot:
     can_play_pause: bool = False
     can_previous: bool = False
     can_next: bool = False
+    can_seek: bool = False
     position_ms: int = 0
     duration_ms: int = 0
     artwork_source: str = ""
@@ -415,6 +417,7 @@ class MediaPresentationModel(QObject):
                     can_play_pause=False,
                     can_previous=False,
                     can_next=False,
+                    can_seek=False,
                     position_ms=0,
                     duration_ms=0,
                     artwork_source="",
@@ -474,6 +477,26 @@ class MediaPresentationModel(QObject):
         if not handled:
             self.request_refresh()
         return handled
+
+    def request_seek(self, fraction: float) -> bool:
+        """Route one admitted semantic seek without owning playback position."""
+
+        service = self._runtime_service
+        if (
+            not self.is_active
+            or service is None
+            or not self.canSeek
+            or not self.progressAvailable
+        ):
+            return False
+        try:
+            parsed_fraction = float(fraction)
+        except (TypeError, ValueError):
+            return False
+        if not math.isfinite(parsed_fraction):
+            return False
+        bounded_fraction = max(0.0, min(1.0, parsed_fraction))
+        return bool(service.seek_fraction(bounded_fraction, execute=True))
 
     def request_app_volume(self, level: float) -> bool:
         """Route one semantic app-volume level to the existing volume owner."""
@@ -558,6 +581,7 @@ class MediaPresentationModel(QObject):
                 can_play_pause=False,
                 can_previous=False,
                 can_next=False,
+                can_seek=False,
                 position_ms=0,
                 duration_ms=0,
                 artwork_source=artwork_source,
@@ -578,6 +602,7 @@ class MediaPresentationModel(QObject):
                 can_play_pause=bool(info.can_play_pause),
                 can_previous=bool(info.can_previous),
                 can_next=bool(info.can_next),
+                can_seek=bool(info.can_seek),
                 position_ms=min(position, duration) if duration else position,
                 duration_ms=duration,
                 artwork_source=artwork_source,
@@ -608,6 +633,7 @@ class MediaPresentationModel(QObject):
                 can_play_pause=False,
                 can_previous=False,
                 can_next=False,
+                can_seek=False,
                 position_ms=0,
                 duration_ms=0,
                 artwork_source="",
@@ -825,6 +851,10 @@ class MediaPresentationModel(QObject):
     def canNext(self) -> bool:
         return self._snapshot.can_next
 
+    @Property(bool, notify=stateChanged)
+    def canSeek(self) -> bool:
+        return self._snapshot.can_seek
+
     @Property(float, notify=stateChanged)
     def progressFraction(self) -> float:
         duration = self._snapshot.duration_ms
@@ -1018,6 +1048,9 @@ class RetainedMediaPresentation:
         mute = getattr(self._retained.item, "systemMuteToggleRequested", None)
         if mute is not None and hasattr(mute, "connect"):
             mute.connect(self._handle_system_mute_requested)
+        seek = getattr(self._retained.item, "seekFractionRequested", None)
+        if seek is not None and hasattr(seek, "connect"):
+            seek.connect(self._handle_seek_requested)
 
     @property
     def item(self):
@@ -1079,6 +1112,11 @@ class RetainedMediaPresentation:
         if not self._model.interactionEnabled:
             return False
         return self._model.request_app_volume(level)
+
+    def _handle_seek_requested(self, fraction: float) -> bool:
+        if not self._model.interactionEnabled:
+            return False
+        return self._model.request_seek(fraction)
 
     def request_app_volume_step(self, direction: int) -> bool:
         """Route an already-admitted keyboard app-volume step."""
