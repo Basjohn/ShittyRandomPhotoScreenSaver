@@ -5,7 +5,7 @@ Last updated: 2026-08-25
 Reviewed source basis:
 
 ```text
-test-inventory basis = F3 retained Media-core closure
+test-inventory basis = F4 retained Media controls/progress implementation
 Phase F0/F0.5/F1/F2/F3 CLOSED; 360 test modules; F4 Media controls active
 ```
 
@@ -66,6 +66,12 @@ The F3 caller-proof checkpoint deletes `tests/test_media_artwork_layout.py` and 
 header/metadata/artwork assertions from mixed Media tests. Neutral artwork decode/key/deduplication
 coverage now lives in `tests/test_media_runtime_artwork.py`; temporary QWidget tests are narrowed to the
 F4 controls/progress/runtime-anchor behavior they still protect.
+
+The first F4 checkpoint extends `tests/test_qtquick_media_presentation.py` with capability-gated semantic
+transport routing, failure refresh, primitive pointer-admission, configured progress styling, retained
+control/progress item identity and no-recreation coverage. `tools/qtquick_media_smoke.py` now renders
+controls and progress in its two-DPR visual matrix. App-volume and system-mute owner/presenter coverage
+remains separate until their F4 slices land.
 
 At the reviewed checkpoint the repository contains:
 
@@ -568,7 +574,7 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_media_keys.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_media_provider_registry.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_media_provider_runtime.py` | **KEEP** | Retain; no migration-specific retirement identified. |
-| `tests/test_qtquick_media_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Media-core model/QML/artwork seam, real runtime-owner/host lifecycle and no-recreation destination coverage; retain through cutover. |
+| `tests/test_qtquick_media_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Media core plus capability-gated transport/progress/input admission, real runtime-owner/host lifecycle and no-recreation destination coverage; retain through cutover. |
 | `tests/test_media_runtime_artwork.py` | **KEEP — PERMANENT** | Presentation-neutral artwork decode, stable key and unchanged-payload deduplication contract. |
 | `tests/test_media_runtime_state.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_media_runtime.py` | **MIGRATION-CRITICAL — F** | Shared Media owner/lease/controller/poll/state/artwork/generation contract; preserve neutral owner and rehome only presenter integration. |

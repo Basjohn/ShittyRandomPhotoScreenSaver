@@ -1,4 +1,4 @@
-"""F3 production-shaped gates for the retained Quick Media core."""
+"""F3/F4 production-shaped gates for the retained Quick Media family."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from PySide6.QtQuick import QQuickItem
 from core.media.media_controller import MediaPlaybackState, MediaTrackInfo
 from rendering.quick.media_artwork import MediaArtworkImageProvider
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
-from rendering.quick.state import QuickWindowPolicy
+from rendering.quick.state import QuickInputState, QuickWindowPolicy
 from rendering.quick.widgets import (
     MediaPresentationConfig,
     MediaPresentationModel,
@@ -48,6 +48,8 @@ class _FakeMediaRuntime:
         self.provider = "spotify"
         self.refresh_calls: list[bool] = []
         self.provider_calls: list[tuple[str, str]] = []
+        self.transport_calls: list[str] = []
+        self.transport_result = True
 
     def set_thread_manager(self, thread_manager) -> None:
         self.thread_manager = thread_manager
@@ -76,6 +78,21 @@ class _FakeMediaRuntime:
         self.provider = normalized
         self.provider_calls.append((normalized, source))
         return changed
+
+    def play_pause(self, *, execute: bool = True) -> bool:
+        assert execute is True
+        self.transport_calls.append("play")
+        return self.transport_result
+
+    def previous_track(self, *, execute: bool = True) -> bool:
+        assert execute is True
+        self.transport_calls.append("previous")
+        return self.transport_result
+
+    def next_track(self, *, execute: bool = True) -> bool:
+        assert execute is True
+        self.transport_calls.append("next")
+        return self.transport_result
 
     def publish(self, snapshot: MediaRuntimeSnapshot) -> None:
         if self.consumer is not None:
@@ -151,6 +168,11 @@ def _values(**overrides):
         "rounded_artwork_border": True,
         "show_controls": True,
         "playback_progress_enabled": True,
+        "playback_progress_height": 9,
+        "playback_progress_fill_color": [45, 190, 250, 230],
+        "playback_progress_shadow_enabled": True,
+        "playback_progress_glow_enabled": True,
+        "playback_progress_glow_color": [45, 190, 250, 180],
     }
     values.update(overrides)
     return values
@@ -224,7 +246,18 @@ def _model(provider=None, runtime=None, **overrides):
 
 def test_media_config_and_style_project_canonical_settings_and_direction() -> None:
     config = MediaPresentationConfig.from_widgets_mapping(
-        {"media": {"font_size": 31, "artwork_size": 210, "bg_opacity": 0.5}}
+        {
+            "media": {
+                "font_size": 31,
+                "artwork_size": 210,
+                "bg_opacity": 0.5,
+                "playback_progress_height": 9,
+                "playback_progress_fill_color": [45, 190, 250, 230],
+                "playback_progress_shadow_enabled": True,
+                "playback_progress_glow_enabled": True,
+                "playback_progress_glow_color": [45, 190, 250, 180],
+            }
+        }
     )
     style = MediaPresentationStyle.project(
         config,
@@ -233,6 +266,10 @@ def test_media_config_and_style_project_canonical_settings_and_direction() -> No
 
     assert config.font_size == 31
     assert config.artwork_size == 210
+    assert config.playback_progress_height == 9
+    assert config.playback_progress_fill_color == (45, 190, 250, 230)
+    assert config.playback_progress_shadow_enabled is True
+    assert config.playback_progress_glow_enabled is True
     assert style.card_style.background_color.alpha() == 128
     assert style.card_style.shadow_offset_x == pytest.approx(-6.0)
     assert style.card_style.shadow_offset_y == pytest.approx(-6.0)
@@ -242,6 +279,9 @@ def test_media_config_and_style_project_canonical_settings_and_direction() -> No
     model = MediaPresentationModel(config, style, MediaArtworkImageProvider())
     assert model.artworkBorderColor == style.card_style.border_color
     assert model.artworkBorderWidth == pytest.approx(6.0)
+    assert model.progressHeight == pytest.approx(9.0)
+    assert model.progressFillColor == QColor(45, 190, 250, 230)
+    assert model.progressGlowColor == QColor(45, 190, 250, 180)
 
 
 def test_media_artwork_provider_is_stable_bounded_and_returns_detached_images() -> None:
@@ -315,7 +355,7 @@ def test_media_model_publishes_coherent_revisions_without_unchanged_artwork_repu
     assert runtime.running is False
 
 
-def test_media_model_handles_empty_provider_change_and_f4_state_without_actions() -> (
+def test_media_model_handles_empty_provider_change_and_f4_state() -> (
     None
 ):
     model, runtime, _provider = _model()
@@ -354,6 +394,41 @@ def test_media_model_handles_empty_provider_change_and_f4_state_without_actions(
     assert model.progressAvailable is False
     assert model.progressFraction == 0.0
     assert model.playbackState == "unknown"
+
+
+def test_media_model_routes_capability_gated_transport_to_existing_owner() -> None:
+    model, runtime, _provider = _model()
+    model.activate(object())
+    runtime.publish(_snapshot(1, image=_image()))
+
+    assert model.request_transport("play") is True
+    assert model.request_transport("previous") is True
+    assert model.request_transport("next") is True
+    assert runtime.transport_calls == ["play", "previous", "next"]
+
+    runtime.publish(_snapshot(2, image=None, info=_info(can_next=False)))
+    assert model.request_transport("next") is False
+    assert runtime.transport_calls == ["play", "previous", "next"]
+
+    runtime.transport_result = False
+    assert model.request_transport("play") is False
+    assert runtime.refresh_calls == [True]
+    model.retire()
+    assert model.request_transport("play") is False
+
+
+def test_media_interaction_admission_mutates_model_without_runtime_work() -> None:
+    model, runtime, _provider = _model()
+    changes = []
+    model.stateChanged.connect(lambda: changes.append(model.interactionEnabled))
+
+    assert model.interactionEnabled is False
+    assert model.set_interaction_enabled(True) is True
+    assert model.set_interaction_enabled(True) is False
+    assert model.set_interaction_enabled(False) is True
+    assert changes == [True, False]
+    assert runtime.refresh_calls == []
+    assert runtime.transport_calls == []
 
 
 def test_media_runtime_manager_injects_retained_model_without_starting_controller() -> (
@@ -472,8 +547,34 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
         assert item.parentItem() is not None
         assert item.findChild(QQuickItem, "mediaMetadata") is not None
         assert item.findChild(QQuickItem, "mediaArtworkFrame") is not None
+        assert item.findChild(QQuickItem, "mediaControlsRow") is not None
+        assert item.findChild(QQuickItem, "mediaProgressFill") is not None
         assert model.hasArtwork is True
         assert provider.image_count == 1
+
+        item.playPauseRequested.emit()
+        assert runtime.transport_calls == []
+        assert presentation.apply_input_state(
+            QuickInputState(
+                screen_index=0,
+                runtime_generation=92,
+                ctrl_held=True,
+            )
+        ) is True
+        item.playPauseRequested.emit()
+        item.previousRequested.emit()
+        item.nextRequested.emit()
+        assert runtime.transport_calls == ["play", "previous", "next"]
+
+        assert presentation.apply_input_state(
+            {
+                "admission_open": False,
+                "interaction_mode_enabled": True,
+                "ctrl_held": True,
+            }
+        ) is True
+        item.nextRequested.emit()
+        assert runtime.transport_calls == ["play", "previous", "next"]
 
         next_config = replace(
             model.config,
@@ -507,7 +608,7 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
         qt_app.processEvents()
 
 
-def test_media_qml_and_registry_keep_f3_static_and_f4_actions_absent() -> None:
+def test_media_qml_and_registry_keep_actions_static_and_python_owned() -> None:
     qml = (QML_ROOT / "MediaPresentation.qml").read_text(encoding="utf-8")
     for marker in (
         "Timer {",
@@ -517,11 +618,16 @@ def test_media_qml_and_registry_keep_f3_static_and_f4_actions_absent() -> None:
         "QWidget",
         "MultiEffect",
         "layer.enabled",
-        "playPauseRequested",
-        "nextRequested",
-        "previousRequested",
     ):
         assert marker not in qml
+    for marker in (
+        "signal playPauseRequested()",
+        "signal nextRequested()",
+        "signal previousRequested()",
+        "mediaModel.interactionEnabled",
+        "mediaModel.progressFraction",
+    ):
+        assert marker in qml
     assert "MediaPresentation 1.0 MediaPresentation.qml" in (
         QML_ROOT / "qmldir"
     ).read_text(encoding="utf-8")

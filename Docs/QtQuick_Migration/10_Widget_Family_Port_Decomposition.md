@@ -258,6 +258,12 @@ Quick progress interpolation may be visual only; it does not become playback tru
 
 No cardinality increase per display/item.
 
+The first retained F4 checkpoint adds capability-gated previous/play-pause/next controls and accepted
+progress to the existing `MediaPresentation.qml`. QML emits semantic actions; Python routes them to the
+existing `MediaRuntimeService`. Primitive Ctrl/Interaction state is resolved in Python before enabling
+pointer actions. No second model/item/runtime is introduced. App-volume and system-mute presenters are
+the next F4 slices and remain under their already-separated neutral owners.
+
 ---
 
 # F5 — Reddit / Reddit2
