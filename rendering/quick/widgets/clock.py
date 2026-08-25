@@ -21,10 +21,11 @@ from core.settings.shadow_direction import resolve_signed_offset
 from widgets.clock_ticker import GlobalClockTicker, get_global_clock_ticker
 
 from .host import (
+    ORDINARY_CARD_SHADOW_BASE,
+    ORDINARY_TEXT_SHADOW_BASE,
     OrdinaryWidgetPresentationHost,
     OverlayCardStyle,
     OverlayWidgetGeometry,
-    RetainedOverlayWidget,
 )
 
 try:
@@ -42,11 +43,6 @@ _WEEKDAYS = (
     "SATURDAY",
     "SUNDAY",
 )
-
-# Deliberate destination-family baselines. These are not migrated sidecar
-# profiles: F1 establishes the first ordinary retained Clock card/text recipe.
-_CLOCK_CARD_SHADOW_BASE = (4.0, 4.0)
-_CLOCK_TEXT_SHADOW_BASE = (2.0, 2.0)
 
 # Family-authored analogue relationships protected by the F1 Clock contract.
 _ANALOG_RING_SHADOW_BASE = (3.0, 3.0)
@@ -301,13 +297,13 @@ class ClockPresentationStyle:
         )
         card_offset = resolve_signed_offset(
             direction,
-            _CLOCK_CARD_SHADOW_BASE[0] + frame_extra,
-            _CLOCK_CARD_SHADOW_BASE[1] + frame_extra,
+            ORDINARY_CARD_SHADOW_BASE[0] + frame_extra,
+            ORDINARY_CARD_SHADOW_BASE[1] + frame_extra,
         )
         text_offset = resolve_signed_offset(
             direction,
-            _CLOCK_TEXT_SHADOW_BASE[0] + text_extra,
-            _CLOCK_TEXT_SHADOW_BASE[1] + text_extra,
+            ORDINARY_TEXT_SHADOW_BASE[0] + text_extra,
+            ORDINARY_TEXT_SHADOW_BASE[1] + text_extra,
         )
         ring_offset = resolve_signed_offset(direction, *_ANALOG_RING_SHADOW_BASE)
         numeral_drop = 3.0 if config.show_background else 2.0

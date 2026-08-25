@@ -23,6 +23,12 @@ from PySide6.QtQml import QQmlContext
 from PySide6.QtQuick import QQuickItem
 
 
+# Deliberate destination policy established by F1 Clock and reused by ordinary
+# families unless a family owns a real visual distinction.
+ORDINARY_CARD_SHADOW_BASE = (4.0, 4.0)
+ORDINARY_TEXT_SHADOW_BASE = (2.0, 2.0)
+
+
 @dataclass(frozen=True)
 class OverlayWidgetGeometry:
     """One resolved display-space rectangle for a retained overlay widget."""

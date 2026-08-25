@@ -25,6 +25,11 @@ ORDINARY_WIDGET_FAMILY_COMPONENTS: tuple[OrdinaryWidgetFamilyComponent, ...] = (
         qml_filename="ClockPresentation.qml",
         presentation_model_kind="ClockPresentationModel",
     ),
+    OrdinaryWidgetFamilyComponent(
+        family_id="weather",
+        qml_filename="WeatherPresentation.qml",
+        presentation_model_kind="WeatherPresentationModel",
+    ),
 )
 
 
