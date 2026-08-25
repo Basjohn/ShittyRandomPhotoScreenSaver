@@ -7,45 +7,48 @@ Last updated: 2026-08-25
 Reviewed pushed implementation basis:
 
 ```text
-8c9fd46871738cb66707467d19782a18f6e9e748
-final F0.5 sidecar-only shadow behavior correction pushed
-Independent audit: YELLOW — correction checkpoint awaiting audit
+09c1a215fe28ffbaee51897e81d22948e15d0be6
+F1 retained Clock family seam
+
+652d54f6d0ae772a5e2f617021ec38d092573444
+F1 real-OpenGL visual acceptance matrix + retained multi-instance/toggle gates
+
+Independent audit: YELLOW — F1 implementation awaiting external GREEN
 ```
 
-F0.5's canonical Settings/model/direction-picker/save work remains intact. The bounded implementation
-correction is complete at the pushed checkpoint above. Do not begin F1 until independent audit marks
-F0.5 GREEN.
+F0.5 is closed. F1 implementation and self-audit evidence are pushed. Do not retire old Clock pixels or
+begin F2 until an independent reviewer marks F1 GREEN.
 
 Source outranks this plan if a later checkpoint has landed.
 
 ## Immediate work
 
-### F0.5 independent audit — ACTIVE
+### F1 independent audit — ACTIVE
 
-Do only this before F1.
+This audit is externally owned. Implementation agents should not duplicate it.
 
 Read:
 
-- `Docs/Custom_Style_Implementation.md` — F0.5 shadow authority;
 - `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md` — phase order;
+- `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md` — model/scene seam;
 - `Docs/QtQuick_Migration/11_Clock_Analogue_Shadow_Contract.md` — protected family-authored behavior.
 
 Audit checklist:
 
-- [ ] inspect exact pushed source at `8c9fd46871738cb66707467d19782a18f6e9e748`;
-- [ ] confirm canonical Settings/model/default/direction-picker/save behavior remains intact;
-- [ ] confirm no loader/file/local constants retain retired `card`, `text`, `text_large`, `header`,
-  `icon`, `control`, or `volume_slider` numeric/style authority;
-- [ ] confirm no replacement compatibility tuning or hidden/shared profile exists;
-- [ ] confirm generic shadow-only tests were retired without weakening content/runtime/interaction
-  coverage;
-- [ ] confirm Clock analogue ring/marker, Roman-numeral, hand and `analog_face_shadow` behavior remains
-  independently authored and unchanged;
-- [ ] record any precise blocker, or mark F0.5 GREEN.
+- [ ] inspect exact pushed source through `652d54f6d0ae772a5e2f617021ec38d092573444`;
+- [ ] confirm one stable model per Clock instance and existing `GlobalClockTicker` ownership;
+- [ ] confirm Clock/Clock2/Clock3 share the existing process engine/window while retaining independent
+  presentation state;
+- [ ] confirm in-place Card/Text direction/style mutation, root-only fade and exact geometry variants;
+- [ ] confirm digital separator and calendar/timezone shadow semantics;
+- [ ] confirm retained analogue ring/markers, two-pass Roman numerals, hand shadows and
+  `analog_face_shadow` suppression;
+- [ ] run focused deterministic tests and `tools/qtquick_clock_smoke.py` at practical DPRs;
+- [ ] inspect card on/off, both modes, calendar/timezone, several directions/sizes, busy background and
+  repeated mode/toggle behavior;
+- [ ] record any precise blocker, or mark F1 GREEN.
 
-Do not modify or begin F1 as part of this checkpoint. STOP after the independent audit decision.
-
-After GREEN: **F1 Clock becomes active immediately.**
+After GREEN: caller-proof and retire the old Clock pixel presenter/tests, then begin F2 Weather.
 
 ---
 
@@ -53,9 +56,9 @@ After GREEN: **F1 Clock becomes active immediately.**
 
 ```text
 F0    Imgur removal                              CLOSED
-F0.5  shadow authority + General controls        YELLOW — independent audit pending
-F1    Clock / Clock2 / Clock3                    NEXT
-F2    Weather
+F0.5  shadow authority + General controls        CLOSED
+F1    Clock / Clock2 / Clock3                    YELLOW — independent audit pending
+F2    Weather                                    BLOCKED on F1 GREEN + Clock pixel retirement
 F3    Media core
 F4    Media controls / volume / mute / progress
 F5    Reddit / Reddit2
@@ -204,7 +207,7 @@ architecture boundary requiring its own audit.
 
 ## Early cleanup already admitted
 
-These are cleanup opportunities, not automatic reasons to interrupt the active F0.5/F1 sequence.
+These are cleanup opportunities, not automatic reasons to interrupt the active F1 sequence.
 
 ### Old transition pixels
 
