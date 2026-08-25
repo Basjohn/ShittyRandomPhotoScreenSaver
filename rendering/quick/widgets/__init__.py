@@ -17,6 +17,13 @@ from .weather import (
     WeatherPresentationSnapshot,
     WeatherPresentationStyle,
 )
+from .media import (
+    MediaPresentationConfig,
+    MediaPresentationModel,
+    MediaPresentationSnapshot,
+    MediaPresentationStyle,
+    RetainedMediaPresentation,
+)
 from .clock import (
     ClockGeometryVariantStore,
     ClockPresentationConfig,
@@ -51,6 +58,11 @@ __all__ = [
     "WeatherPresentationModel",
     "WeatherPresentationSnapshot",
     "WeatherPresentationStyle",
+    "MediaPresentationConfig",
+    "MediaPresentationModel",
+    "MediaPresentationSnapshot",
+    "MediaPresentationStyle",
+    "RetainedMediaPresentation",
     "ORDINARY_WIDGET_FAMILY_COMPONENTS",
     "OrdinaryWidgetFamilyComponent",
     "ordinary_widget_family_component",

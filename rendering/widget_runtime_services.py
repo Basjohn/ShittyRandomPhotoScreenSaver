@@ -328,9 +328,17 @@ def _retire_media_service(service: Any) -> None:
 def _media_service_reuse_is_valid(widget: Any, service: Any) -> bool:
     if getattr(widget, "_runtime_service", None) is not service:
         return False
+    if bool(getattr(widget, "_retired", False)):
+        return False
     if _service_is_retired(service):
         return False
-    return not _widget_is_active(widget) or _service_is_running(service)
+    retained_active = getattr(widget, "is_active", None)
+    is_active = (
+        bool(retained_active)
+        if isinstance(retained_active, bool)
+        else _widget_is_active(widget)
+    )
+    return not is_active or _service_is_running(service)
 
 
 _MEDIA_SERVICE_SPEC = RuntimeServiceSpec(
