@@ -433,11 +433,13 @@ class RedditPresentationModel(QObject):
         self,
         config: RedditPresentationConfig,
         style: RedditPresentationStyle,
+        runtime_service: Any | None = None,
         *,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._row_model = RedditRowListModel(self)
+        self._runtime_service = runtime_service
         self._snapshot = RedditPresentationSnapshot(
             config=config,
             style=style,
@@ -462,15 +464,44 @@ class RedditPresentationModel(QObject):
     def is_active(self) -> bool:
         return self._active and not self._retired
 
-    def activate(self) -> None:
+    def set_runtime_service(self, runtime_service: Any) -> None:
+        """Accept the neutral owner injected by ``WidgetRuntimeManager``."""
+
+        if self._retired:
+            raise RuntimeError("cannot inject a retired Reddit presentation model")
+        if self._active and runtime_service is not self._runtime_service:
+            raise RuntimeError("cannot replace the active Reddit runtime service")
+        self._runtime_service = runtime_service
+
+    def activate(self, thread_manager: Any | None = None) -> None:
         if self._retired:
             raise RuntimeError("cannot activate a retired Reddit model")
+        if self._active:
+            return
         self._active = True
+        service = self._runtime_service
+        if service is None:
+            return
+        if thread_manager is None:
+            self._active = False
+            raise RuntimeError("Reddit runtime activation requires ThreadManager")
+        service.attach_consumer(self)
+        service.set_thread_manager(thread_manager)
+        if service.config.subreddit.casefold() != self.config.subreddit.casefold():
+            service.set_subreddit(self.config.subreddit)
+        if not service.start():
+            self._active = False
+            service.detach_consumer(self)
+            raise RuntimeError("Reddit runtime service failed to start")
 
     def retire(self) -> None:
         if self._retired:
             return
         self._active = False
+        service = self._runtime_service
+        if service is not None:
+            service.stop()
+            service.detach_consumer(self)
         self._retired = True
         self._row_model.replace_rows(())
 
@@ -487,6 +518,8 @@ class RedditPresentationModel(QObject):
                 error_text="",
                 from_cache=False,
             )
+            if self._runtime_service is not None:
+                self._runtime_service.set_subreddit(config.subreddit)
         elif len(self._row_model.rows) > config.limit:
             self._row_model.replace_rows(self._row_model.rows[: config.limit])
         self.stateChanged.emit()
@@ -543,6 +576,34 @@ class RedditPresentationModel(QObject):
                 refreshing=False,
             )
         )
+
+    def is_reddit_consumer_alive(self) -> bool:
+        return self.is_active
+
+    def on_reddit_runtime_posts(
+        self,
+        posts: Iterable[RedditPost],
+        *,
+        from_cache: bool,
+        source_id: str | None,
+        attempted_sources: Iterable[str],
+    ) -> None:
+        del source_id, attempted_sources
+        if self.is_reddit_consumer_alive():
+            self.publish_posts(posts, from_cache=from_cache)
+
+    def on_reddit_runtime_refreshing(self, refreshing: bool) -> None:
+        if self.is_reddit_consumer_alive():
+            self.set_refreshing(refreshing)
+
+    def on_reddit_runtime_error(self, error: str) -> None:
+        if self.is_reddit_consumer_alive():
+            self.publish_error(error)
+
+    def request_refresh(self) -> bool:
+        if not self.is_active or self._runtime_service is None:
+            return False
+        return bool(self._runtime_service.request_refresh())
 
     def set_refreshing(self, refreshing: bool) -> bool:
         normalized = bool(refreshing)
@@ -716,8 +777,8 @@ class RetainedRedditPresentation:
     def model(self) -> RedditPresentationModel:
         return self._model
 
-    def activate(self) -> None:
-        self._model.activate()
+    def activate(self, thread_manager: Any | None = None) -> None:
+        self._model.activate(thread_manager)
 
     def set_geometry(self, geometry: OverlayWidgetGeometry) -> None:
         self._retained.set_geometry(geometry)
@@ -734,7 +795,8 @@ class RetainedRedditPresentation:
         if isinstance(input_state, Mapping):
             value = input_state.get
         else:
-            value = lambda name, default: getattr(input_state, name, default)
+            def value(name, default):
+                return getattr(input_state, name, default)
         enabled = (
             bool(value("admission_open", True))
             and not bool(value("exiting", False))
@@ -768,10 +830,11 @@ class RetainedRedditPresentation:
         if (
             not self._model.is_active
             or not self._model.interactionEnabled
-            or self._on_refresh_requested is None
         ):
             return False
-        return bool(self._on_refresh_requested())
+        if self._on_refresh_requested is not None:
+            return bool(self._on_refresh_requested())
+        return self._model.request_refresh()
 
     def retire(self) -> bool:
         return self._host.retire_widget(self._retained)

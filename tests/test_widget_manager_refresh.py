@@ -272,6 +272,13 @@ class _StubRedditWidget(_BaseStubWidget):
     def set_post_provider(self, provider):
         self.post_provider = provider
 
+    def set_runtime_service(self, service):
+        self.runtime_service = service
+        service.attach_consumer(self)
+
+    def is_reddit_consumer_alive(self):
+        return bool(getattr(self, "active", False))
+
 
 @pytest.fixture(autouse=True)
 def _patch_widget_classes(monkeypatch):
@@ -461,16 +468,16 @@ def _reddit_config(*, enabled=True, provider="public_json", **family_activation)
     return config
 
 
-def test_reddit_provider_lifetime_owned_by_runtime_manager():
-    # E1 slice 2: the post-provider lifetime is owned by the neutral runtime
-    # owner, built from canonical settings during setup — existing independently
-    # of QWidget pixel ownership (the stub widget has no set_post_provider, yet
-    # the owner still owns the built provider).
+def test_reddit_runtime_lifetime_owned_by_runtime_manager():
+    # F5: the complete Reddit runtime is built from canonical settings during
+    # setup and exists independently of QWidget pixel ownership.
     manager, created = _setup_widgets(_reddit_config(provider="public_json"))
     assert "reddit_widget" in created
     service = manager._runtime_manager.get_widget_service("reddit")
     assert service is not None
-    assert getattr(service, "provider_id", None) == "public_json"
+    assert getattr(service.provider, "provider_id", None) == "public_json"
+    assert service.config.subreddit == "games"
+    assert service.is_running() is False
 
 
 def test_repeated_setup_preserves_hoisted_owner_and_service_edge():

@@ -245,13 +245,19 @@ def test_terminal_cleanup_prevents_rebind_and_service_recreation():
 # Presentation-neutral runtime service (provider/model) ownership             #
 # --------------------------------------------------------------------------- #
 class _ProviderConsumer:
-    """Stub runtime widget that records an injected provider (no QWidget)."""
+    """Plain consumer that records one injected Reddit runtime owner."""
 
     def __init__(self):
         self.injected = None
+        self._runtime_service = None
 
-    def set_post_provider(self, provider):
-        self.injected = provider
+    def set_runtime_service(self, service):
+        self.injected = service
+        self._runtime_service = service
+        service.attach_consumer(self)
+
+    def is_reddit_consumer_alive(self):
+        return True
 
 
 class _WeatherConsumer:
@@ -298,19 +304,22 @@ class _GmailConsumer:
         return True
 
 
-def test_ensure_widget_service_builds_owns_and_injects_reddit_provider():
-    # The provider owner exists independently of any QWidget pixel ownership:
-    # a plain consumer stub (not a QWidget) receives the built provider, and the
-    # owner holds it for independent retirement.
+def test_ensure_widget_service_builds_owns_and_injects_reddit_runtime():
+    # The complete provider/cache/cadence/fetch owner exists independently of
+    # QWidget pixel ownership and is inert until its consumer activates it.
     owner = WidgetRuntimeManager(_Host())
     consumer = _ProviderConsumer()
     service = owner.ensure_widget_service(
         "reddit", consumer, {"reddit": {"provider": "public_json"}}
     )
     assert service is not None
-    assert getattr(service, "provider_id", None) == "public_json"
+    assert getattr(service.provider, "provider_id", None) == "public_json"
     assert consumer.injected is service
     assert owner.get_widget_service("reddit") is service
+    assert service.is_running() is False
+    assert service.is_retired() is False
+    assert owner.retire_widget_service("reddit") is True
+    assert service.is_retired() is True
 
 
 def test_ensure_widget_service_builds_and_injects_inert_weather_owner(monkeypatch):

@@ -308,10 +308,14 @@ place without item/model/list-model/engine recreation. QML owns no provider, cac
 effect, persistence, rate limiter or Timer. Real threaded-OpenGL evidence covers effective DPR 1.0,
 1.5 and 2.25.
 
-The current `WidgetRuntimeManager` Reddit lease owns only provider construction/inheritance; startup
-cache, fetch cadence, progressive state and generation fencing still live in `RedditWidget`. The next
-F5 slice must extract that logical runtime into a presentation-neutral owner and inject the retained
-model before any old QWidget pixels or paint-cache tests retire.
+The second F5 checkpoint replaces the old provider-only lease with one per-member
+`RedditRuntimeService`. It owns provider selection/use, startup cache snapshots, the accepted candidate
+window, periodic/manual due horizons, blocked-gate persistence, request generations and retirement.
+`WidgetRuntimeManager` injects the service into either the temporary QWidget consumer or retained model;
+construction remains filesystem/network inert and activation is the first work boundary. The old
+QWidget runtime methods remain production-dormant standalone/reference code until the next
+runtime-shaped retained state/action/geometry and caller-proof slice permits deleting them together
+with old pixels.
 
 ---
 

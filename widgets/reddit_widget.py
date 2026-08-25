@@ -32,7 +32,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QWidget
 from shiboken6 import isValid as shiboken_isValid
 
-from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
+from core.logging.logger import get_logger, is_verbose_logging
 from core.performance import widget_paint_sample, widget_timer_sample
 from core.reddit_post_provider import (
     RedditFetchRequest,
@@ -194,6 +194,8 @@ class RedditWidget(BaseOverlayWidget):
         self._pending_refresh_after_transition: bool = False
         self._deferred_prepared_feed: Optional[PreparedRedditFeed] = None
         self._deferred_fetch_error: Optional[str] = None
+        self._deferred_runtime_posts: Optional[tuple] = None
+        self._deferred_runtime_error: Optional[str] = None
         self._startup_snapshot_request_id: int = 0
 
         # Hover state and tooltip management
@@ -206,6 +208,10 @@ class RedditWidget(BaseOverlayWidget):
         self._show_separators: bool = False
 
         self._shutdown_event = threading.Event()
+        # Phase F5: production runtime ownership is injected independently of
+        # this temporary QWidget presenter. Standalone construction may still
+        # use the local provider/runtime path until old-family retirement.
+        self._runtime_service: Any = None
         # Provider ownership: an explicitly supplied provider always wins. When a
         # runtime-managed widget defers ownership to WidgetRuntimeManager
         # (build_default_provider=False), do NOT construct a QWidget-owned default
@@ -258,7 +264,10 @@ class RedditWidget(BaseOverlayWidget):
     
     def _update_content(self) -> None:
         """Required by BaseOverlayWidget - refresh reddit display."""
-        self._fetch_feed()
+        if self._runtime_service is not None:
+            self._runtime_service.fetch()
+        else:
+            self._fetch_feed()
 
     # -------------------------------------------------------------------------
     # Lifecycle Implementation Hooks
@@ -275,7 +284,14 @@ class RedditWidget(BaseOverlayWidget):
         if not self._ensure_thread_manager("RedditWidget._activate_impl"):
             raise RuntimeError("ThreadManager not available")
         
-        self._begin_startup_snapshot_load()
+        service = self._runtime_service
+        if service is not None:
+            service.attach_consumer(self)
+            service.set_thread_manager(self._thread_manager)
+            if not service.start():
+                raise RuntimeError("Reddit runtime service failed to start")
+        else:
+            self._begin_startup_snapshot_load()
         logger.debug("[LIFECYCLE] RedditWidget activated")
     
     def _deactivate_impl(self) -> None:
@@ -295,6 +311,8 @@ class RedditWidget(BaseOverlayWidget):
             clear_attr=True,
         )
         self._reset_deferred_runtime_state(delete_qtimers=False)
+        if self._runtime_service is not None:
+            self._runtime_service.stop()
         
         self._posts.clear()
         self._clear_paint_cache()
@@ -310,6 +328,8 @@ class RedditWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._hover_timer = None
+        if self._runtime_service is not None:
+            self._runtime_service.detach_consumer(self)
         logger.debug("[LIFECYCLE] RedditWidget cleaned up")
     
     # -------------------------------------------------------------------------
@@ -331,7 +351,14 @@ class RedditWidget(BaseOverlayWidget):
         # CRITICAL: Hide widget immediately - it will be shown by fade sync
         self.hide()
         
-        self._begin_startup_snapshot_load()
+        service = self._runtime_service
+        if service is not None:
+            service.attach_consumer(self)
+            service.set_thread_manager(self._thread_manager)
+            if not service.start():
+                logger.error("[REDDIT] Runtime service failed to start")
+        else:
+            self._begin_startup_snapshot_load()
 
     def _begin_startup_snapshot_load(self) -> None:
         """Load startup posts and persisted gate metadata on the shared I/O pool."""
@@ -435,6 +462,8 @@ class RedditWidget(BaseOverlayWidget):
         )
 
         self._reset_deferred_runtime_state(delete_qtimers=False)
+        if self._runtime_service is not None:
+            self._runtime_service.stop()
 
         self._enabled = False
         self._posts.clear()
@@ -471,6 +500,8 @@ class RedditWidget(BaseOverlayWidget):
         self._refresh_spin_timer = None
         self._reset_deferred_runtime_state(delete_qtimers=True)
         self._clear_paint_cache()
+        if self._runtime_service is not None:
+            self._runtime_service.detach_consumer(self)
 
     def is_running(self) -> bool:
         return self._enabled
@@ -490,6 +521,8 @@ class RedditWidget(BaseOverlayWidget):
                 ("_pending_refresh_after_transition", False),
                 ("_deferred_prepared_feed", None),
                 ("_deferred_fetch_error", None),
+                ("_deferred_runtime_posts", None),
+                ("_deferred_runtime_error", None),
                 ("_fetch_in_progress", False),
             ),
             delete_qtimers=delete_qtimers,
@@ -501,6 +534,22 @@ class RedditWidget(BaseOverlayWidget):
 
     def set_thread_manager(self, thread_manager: ThreadManager) -> None:
         self._thread_manager = thread_manager
+        if self._runtime_service is not None:
+            self._runtime_service.set_thread_manager(thread_manager)
+
+    def set_runtime_service(self, runtime_service: Any) -> None:
+        """Accept the neutral Reddit owner injected by WidgetRuntimeManager."""
+
+        if self._runtime_service is runtime_service:
+            return
+        if self.is_lifecycle_active():
+            raise RuntimeError("cannot replace the active Reddit runtime service")
+        if self._runtime_service is not None:
+            self._runtime_service.detach_consumer(self)
+        self._runtime_service = runtime_service
+        runtime_service.attach_consumer(self)
+        if self._thread_manager is not None:
+            runtime_service.set_thread_manager(self._thread_manager)
 
     def set_post_provider(self, provider: Optional[RedditPostProvider]) -> None:
         self._post_provider = (
@@ -510,11 +559,65 @@ class RedditWidget(BaseOverlayWidget):
     def set_subreddit(self, subreddit: str) -> None:
         next_subreddit = self._normalise_subreddit(subreddit)
         self._subreddit = next_subreddit
+        if self._runtime_service is not None:
+            self._runtime_service.set_subreddit(next_subreddit)
+            return
         # _displayed_subreddit changes only with an authoritative row commit,
         # keeping the last complete header+rows snapshot together on failure.
         # Refresh immediately on change
         if self._enabled:
             self._fetch_feed()
+
+    def is_reddit_consumer_alive(self) -> bool:
+        service_running = bool(
+            self._runtime_service is not None
+            and self._runtime_service.is_running()
+        )
+        return shiboken_isValid(self) and (self._enabled or service_running)
+
+    def on_reddit_runtime_posts(
+        self,
+        posts,
+        *,
+        from_cache: bool,
+        source_id: str | None,
+        attempted_sources,
+    ) -> None:
+        """Project accepted neutral candidates through temporary QWidget pixels."""
+
+        if not self.is_reddit_consumer_alive():
+            return
+        if self._parent_transition_running():
+            self._deferred_runtime_posts = (
+                tuple(posts),
+                bool(from_cache),
+                source_id,
+                tuple(attempted_sources),
+            )
+            self._deferred_runtime_error = None
+            self._schedule_deferred_refresh()
+            return
+        self._all_fetched_posts = list(posts)
+        self._display_configured_posts(fade=False)
+
+    def on_reddit_runtime_refreshing(self, refreshing: bool) -> None:
+        if not self.is_reddit_consumer_alive():
+            return
+        if refreshing:
+            self._start_refresh_spinner()
+        else:
+            self._stop_refresh_spinner()
+
+    def on_reddit_runtime_error(self, error: str) -> None:
+        if not self.is_reddit_consumer_alive():
+            return
+        if self._parent_transition_running():
+            self._deferred_runtime_error = str(error)
+            self._schedule_deferred_refresh()
+            return
+        logger.warning("[REDDIT] Runtime fetch error: %s", error)
+        if not self._posts and not self._has_displayed_valid_data:
+            self.hide()
 
     def set_position(self, position: RedditPosition) -> None:
         """Set widget position using RedditPosition enum."""
@@ -1003,6 +1106,8 @@ class RedditWidget(BaseOverlayWidget):
         logger.info("[REDDIT] Fetch skipped without changing visible content (reason=%s)", reason)
 
     def _trigger_manual_refresh(self) -> bool:
+        if self._runtime_service is not None:
+            return bool(self._runtime_service.request_refresh())
         skip_reason = self._manual_refresh_skip_reason()
         if skip_reason is not None:
             reason, remaining_s = skip_reason
@@ -1147,6 +1252,21 @@ class RedditWidget(BaseOverlayWidget):
     def _flush_deferred_refresh(self) -> None:
         if self._parent_transition_running():
             self._schedule_deferred_refresh()
+            return
+        if self._deferred_runtime_posts is not None:
+            posts, from_cache, source_id, attempted_sources = self._deferred_runtime_posts
+            self._deferred_runtime_posts = None
+            self.on_reddit_runtime_posts(
+                posts,
+                from_cache=from_cache,
+                source_id=source_id,
+                attempted_sources=attempted_sources,
+            )
+            return
+        if self._deferred_runtime_error is not None:
+            error = self._deferred_runtime_error
+            self._deferred_runtime_error = None
+            self.on_reddit_runtime_error(error)
             return
         if self._deferred_prepared_feed is not None:
             prepared = self._deferred_prepared_feed
