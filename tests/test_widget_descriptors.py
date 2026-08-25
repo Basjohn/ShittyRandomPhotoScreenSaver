@@ -91,22 +91,6 @@ def test_widget_descriptors_accept_named_steam_dev_gate():
         force_gate(steam=prior_steam_gate)
 
 
-def test_clock_descriptor_builds_expected_factory_kwargs():
-    descriptor = next(
-        item for item in get_factory_widget_descriptors() if item.settings_key == "clock2"
-    )
-
-    kwargs = descriptor.build_factory_kwargs(
-        widgets_config={"clock": {"font_family": "Inter"}},
-        shadows_config={"enabled": True},
-    )
-
-    assert kwargs["settings_key"] == "clock2"
-    assert kwargs["overlay_name"] == "clock2"
-    assert kwargs["base_clock_settings"] == {"font_family": "Inter"}
-    assert kwargs["shadows_config"] == {"enabled": True}
-
-
 def test_gmail_descriptor_injects_shadow_config_into_widget_config():
     descriptor = next(
         item for item in get_factory_widget_descriptors() if item.settings_key == "gmail"

@@ -13,6 +13,8 @@ from PySide6.QtQml import QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
 from rendering.quick.scene_controller import QuickSceneFactory
+from rendering.quick.scene_controller import QuickSceneController
+from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.widgets import (
     ClockGeometryVariantStore,
     ClockPresentationConfig,
@@ -22,6 +24,7 @@ from rendering.quick.widgets import (
     OverlayWidgetGeometry,
     RetainedClockPresentation,
 )
+from rendering.quick.window import QuickDisplayWindow
 from widgets.clock_ticker import GlobalClockTicker
 
 
@@ -536,6 +539,122 @@ def test_three_differently_configured_clocks_share_engine_and_ticker(qt_app) -> 
         context.deleteLater()
         factory.deleteLater()
         owner.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_clock_family_caller_projects_settings_through_current_scene_host(qt_app) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=11,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    ticker = _FakeTicker()
+    now_box = [datetime(2026, 8, 25, 13, 24, 30)]
+    display_signature = "display:test"
+    widgets = {
+        "clock": {
+            "format": "24h",
+            "show_seconds": True,
+            "show_day_of_week": True,
+            "show_date": True,
+            "show_digital_separator": True,
+            "calendar_layout": "two_lines",
+            "calendar_font_size": 27,
+            "font_family": "Aptos",
+            "font_size": 52,
+            "color": [240, 245, 250, 230],
+            "show_background": True,
+            "bg_color": [20, 25, 30, 255],
+            "bg_opacity": 0.4,
+            "border_color": [255, 255, 255, 255],
+            "border_opacity": 0.8,
+            "display_mode": "digital",
+            "show_numerals": True,
+            "analog_face_shadow": True,
+        },
+        "clock2": {
+            "timezone": "UTC-5",
+            "display_mode_overrides": {display_signature: "analog"},
+        },
+        "clock3": {"timezone": "UTC", "show_seconds": False},
+    }
+    shadows = _shadow_values(
+        direction="NW",
+        frame_extra_offset=2,
+        text_extra_offset=1,
+    )
+    toggles: list[tuple[str, str]] = []
+    presentations: list[RetainedClockPresentation] = []
+    try:
+        host = controller.ordinary_widget_host
+        for index, widget_id in enumerate(("clock", "clock2", "clock3")):
+            config = ClockPresentationConfig.from_widgets_mapping(
+                widget_id,
+                widgets,
+                display_signature=display_signature,
+            )
+            style = ClockPresentationStyle.project(config, shadows)
+            model = ClockPresentationModel(
+                config,
+                style,
+                now_provider=lambda _zone: now_box[0],
+                ticker_provider=lambda: ticker,  # type: ignore[arg-type]
+            )
+            presentation = RetainedClockPresentation(
+                host=host,
+                model=model,
+                geometry=OverlayWidgetGeometry(
+                    20.0 + index * 260.0,
+                    30.0,
+                    240.0,
+                    180.0 if config.display_mode == "digital" else 320.0,
+                ),
+                display_bounds=OverlayWidgetGeometry(0.0, 0.0, 1000.0, 700.0),
+                display_identity=display_signature,
+                on_mode_toggle=lambda mode, wid=widget_id: toggles.append((wid, mode)),
+            )
+            presentation.activate(object())
+            presentations.append(presentation)
+
+        engine = QQmlEngine.contextForObject(controller.scene_root).engine()
+        assert [entry.model.config.widget_id for entry in presentations] == [
+            "clock",
+            "clock2",
+            "clock3",
+        ]
+        assert all(
+            QQmlEngine.contextForObject(entry.item).engine() is engine
+            for entry in presentations
+        )
+        assert all(entry.item.parentItem() is not None for entry in presentations)
+        assert len(ticker.subscribers) == 3
+        assert presentations[1].model.config.timezone_name == "UTC-5"
+        assert presentations[1].model.config.font_family == "Aptos"
+        assert presentations[1].model.config.calendar_layout == "two_lines"
+        assert presentations[1].model.config.display_mode == "analog"
+        assert presentations[2].model.config.timezone_name == "UTC"
+        assert presentations[2].model.config.show_seconds is True
+        assert presentations[0].model.style.card_style.shadow_offset_x == pytest.approx(-6.0)
+        assert presentations[0].model.textShadowOffsetY == pytest.approx(-3.0)
+
+        item = presentations[0].item
+        presentations[0].toggle_display_mode()
+        assert presentations[0].item is item
+        assert toggles == [("clock", "analog")]
+
+        controller.quiesce_for_retirement()
+        assert host.is_retired is True
+        assert ticker.subscribers == []
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
         qt_app.processEvents()
 
 

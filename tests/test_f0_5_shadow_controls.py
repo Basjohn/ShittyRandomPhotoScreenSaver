@@ -37,7 +37,7 @@ def test_no_current_source_reads_the_retired_sidecar() -> None:
     for rel in (
         "widgets/base_overlay_widget.py",
         "widgets/shadow_utils.py",
-        "widgets/clock_widget.py",
+        "rendering/quick/widgets/clock.py",
         "widgets/spotify_volume_widget.py",
         "widgets/mute_button_widget.py",
         "widgets/weather_components.py",

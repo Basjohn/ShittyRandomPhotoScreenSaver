@@ -52,7 +52,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     logging.getLogger("SettingsManager").info("[SETTINGS] write trace")
     logging.getLogger("widgets.spotify_visualizer_widget").info("[SPOTIFY_VIS] mode trace")
     logging.getLogger("engine.screensaver").info("[PERF] timing trace")
-    logging.getLogger("widgets.clock_widget").warning(
+    logging.getLogger("widgets.weather_widget").warning(
         "[PERF_WIDGET] warning visibility trace"
     )
     logging.getLogger("core.performance.usage_sampler").info("[USAGE] sample seq=1")
@@ -190,11 +190,11 @@ def test_lifecycle_filter_matches_lifecycle_and_supervisor_records():
     lifecycle_filter = logger_mod.LifecycleLogFilter()
 
     widget_record = logging.LogRecord(
-        "widgets.clock_widget",
+        "widgets.weather_widget",
         logging.INFO,
         __file__,
         1,
-        "[LIFECYCLE] ClockWidget activated",
+        "[LIFECYCLE] WeatherWidget activated",
         args=(),
         exc_info=None,
     )

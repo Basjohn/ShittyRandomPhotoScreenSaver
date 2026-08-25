@@ -61,7 +61,6 @@ from rendering.backends.base import RendererBackend, RenderSurface, SurfaceDescr
 from rendering.widget_runtime_manager import WidgetRuntimeManager
 
 if TYPE_CHECKING:
-    from widgets.clock_widget import ClockWidget
     from widgets.context_menu import ScreensaverContextMenu
     from widgets.cursor_halo import CursorHaloWidget
     from widgets.media_widget import MediaWidget
@@ -273,9 +272,11 @@ class DisplayWidget(QWidget):
         self.current_image_path: Optional[str] = None
         self.previous_pixmap: Optional[QPixmap] = None
         self.error_message: Optional[str] = None
-        self.clock_widget: Optional["ClockWidget"] = None
-        self.clock2_widget: Optional["ClockWidget"] = None
-        self.clock3_widget: Optional["ClockWidget"] = None
+        # Retained only as current-legacy registry slots until the physical host
+        # retires at H. Clock pixels no longer have a QWidget owner.
+        self.clock_widget: Optional[Any] = None
+        self.clock2_widget: Optional[Any] = None
+        self.clock3_widget: Optional[Any] = None
         self.weather_widget: Optional["WeatherWidget"] = None
         self.media_widget: Optional["MediaWidget"] = None
         self.spotify_visualizer_widget: Optional["SpotifyVisualizerWidget"] = None

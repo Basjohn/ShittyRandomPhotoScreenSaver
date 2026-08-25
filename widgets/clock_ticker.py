@@ -1,6 +1,6 @@
 """Centralized global clock ticker for all clock widgets.
 
-This module provides a shared 1-second timer that all ClockWidget instances
+This module provides a shared 1-second timer for retained Clock presentation models
 subscribe to, eliminating per-widget timers and ensuring synchronized updates
 across all displays.
 

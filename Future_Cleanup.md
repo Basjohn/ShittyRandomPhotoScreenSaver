@@ -19,9 +19,17 @@ I                        -> residue only
 
 Real product resilience is not migration debris.
 
+## Unrelated focused-test debt
+
+- `tests/test_logging_config.py::test_diagnostic_build_enables_every_family_beside_frozen_executable`
+  fails on exact main because the diagnostic output set includes at least one `RotatingFileHandler`
+  whose `maxBytes` is not the test's blanket 1 MiB expectation. The failure reproduces alone and is
+  unrelated to F1 Clock ownership; determine whether the handler profile or the assertion is stale in
+  a dedicated logging checkpoint.
+
 ## Phase-F family retirement
 
-After each F1–F10 family is independently GREEN:
+After each F1–F8 family is independently GREEN:
 
 - prove old family pixel callers absent;
 - delete old QWidget/QPainter family pixel presenter;

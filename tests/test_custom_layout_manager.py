@@ -10,7 +10,6 @@ from core.settings.models._enums import WidgetPosition, coerce_widget_position
 from rendering.custom_layout_manager import CustomLayoutManager
 from rendering.custom_layout_contract import get_screen_signature, resolve_snap_local_rect_for_edit
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
-from widgets.clock_widget import ClockWidget
 from widgets.edit_shell_widget import EditShellWidget
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 
@@ -401,65 +400,6 @@ def test_custom_layout_manager_clock_payload_keeps_display_mode_settings_owned(q
 
     assert clock._font_size == 54
     assert clock._display_mode == "analog"
-
-
-def test_custom_layout_manager_clock_replay_migrates_legacy_mode_to_geometry_variant(qtbot):
-    _reset_custom_layout_manager_state()
-    screen = _FakeScreen("Display-A", QRect(0, 0, 1000, 700))
-    signature = get_screen_signature(screen)
-    settings_stub = _SettingsStub()
-    settings_stub._widgets_map = {
-        "clock": {
-            "enabled": True,
-            "position": "Custom",
-            "monitor": "1",
-            "display_mode": "analog",
-        },
-        "custom_layout": {
-            "version": 1,
-            "displays": {
-                signature: {
-                    "clock": {
-                        "rect": {"x": 0.10, "y": 0.20, "width": 0.40, "height": 0.16},
-                        "size_payload": {"font_size": 55, "display_mode": "digital"},
-                        "resize_mode": "clock_font",
-                    }
-                }
-            },
-        },
-    }
-    display = _DisplayStub(settings_stub, screen=screen)
-    qtbot.addWidget(display)
-    display.show()
-
-    clock = ClockWidget(parent=display)
-    qtbot.addWidget(clock)
-    clock.set_show_timezone(True)
-    clock.set_show_background(True)
-    clock.set_font_size(30)
-    clock.set_display_mode("analog")
-    display.clock_widget = clock
-
-    manager = CustomLayoutManager(display)
-    _attach_manager(display, manager)
-    manager.apply_saved_layouts_to_display()
-
-    expected_rect = QRect(176, 35, 248, 322)
-    saved_entry = settings_stub._widgets_map["custom_layout"]["displays"][signature]["clock"]
-    saved_payload = saved_entry["size_payload"]
-
-    assert clock._display_mode == "analog"
-    assert clock._font_size == 55
-    assert clock.geometry() == expected_rect
-    assert clock._custom_layout_local_rect == expected_rect
-    assert saved_payload == {"font_size": 55, "geometry_variant": "analog"}
-    assert saved_entry["rect"] == {
-        "x": expected_rect.x() / screen.geometry().width(),
-        "y": expected_rect.y() / screen.geometry().height(),
-        "width": expected_rect.width() / screen.geometry().width(),
-        "height": expected_rect.height() / screen.geometry().height(),
-    }
-    assert settings_stub.saved is True
 
 
 def test_custom_layout_manager_save_session_persists_untouched_widgets_as_authoritative_custom_scene(qtbot):

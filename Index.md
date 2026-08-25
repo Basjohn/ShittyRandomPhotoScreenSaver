@@ -13,8 +13,8 @@ exact current source
 -> tests/evidence for the claim
 ```
 
-Current migration state: **Phase F active; F0.5 is closed and the retained F1 Clock implementation is
-pushed/YELLOW pending independent audit. F2 waits for F1 GREEN and old Clock pixel retirement.**
+Current migration state: **Phase F active; F1 Clock is independently GREEN, caller-proven and CLOSED.
+F2 Weather is ACTIVE.**
 
 Do not read the whole history tree by default.
 

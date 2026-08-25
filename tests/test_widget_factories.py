@@ -14,7 +14,6 @@ from PySide6.QtWidgets import QApplication, QWidget
 
 from rendering.widget_factories import (
     WidgetFactory,
-    ClockWidgetFactory,
     WeatherWidgetFactory,
     MediaWidgetFactory,
     RedditWidgetFactory,
@@ -72,7 +71,7 @@ class TestWidgetFactoryBase:
     
     def test_shadow_config_extraction(self, mock_settings):
         """Test shadow config extraction helper."""
-        factory = ClockWidgetFactory(mock_settings)
+        factory = WeatherWidgetFactory(mock_settings)
         
         # With shadow enabled
         config = {
@@ -95,104 +94,6 @@ class TestWidgetFactoryBase:
         config_disabled = {"shadow": {"enabled": False}}
         shadow_disabled = factory._get_shadow_config(config_disabled)
         assert shadow_disabled is None
-
-
-# ---------------------------------------------------------------------------
-# Clock Widget Factory Tests
-# ---------------------------------------------------------------------------
-
-class TestClockWidgetFactory:
-    """Test ClockWidgetFactory."""
-    
-    def test_get_widget_name(self, mock_settings):
-        """Test factory returns correct widget name."""
-        factory = ClockWidgetFactory(mock_settings)
-        assert factory.get_widget_name() == "clock"
-    
-    def test_create_disabled_returns_none(self, mock_settings, parent_widget):
-        """Test disabled widget returns None."""
-        factory = ClockWidgetFactory(mock_settings)
-        config = {"enabled": False}
-        
-        widget = factory.create(parent_widget, config)
-        
-        assert widget is None
-    
-    def test_create_enabled_returns_widget(self, mock_settings, parent_widget):
-        """Test enabled widget is created."""
-        factory = ClockWidgetFactory(mock_settings)
-        config = {
-            "enabled": True,
-            "format": "24h",
-            "position": "top_right",
-            "show_seconds": True,
-        }
-        
-        widget = factory.create(parent_widget, config)
-        
-        assert widget is not None
-        # Clean up
-        widget.deleteLater()
-    
-    def test_create_with_thread_manager(self, mock_settings, mock_thread_manager, parent_widget):
-        """Test widget receives thread manager."""
-        factory = ClockWidgetFactory(mock_settings, mock_thread_manager)
-        config = {"enabled": True}
-        
-        widget = factory.create(parent_widget, config)
-        
-        assert widget is not None
-        # Clean up
-        widget.deleteLater()
-
-    def test_create_applies_screen_specific_display_mode_override(self, mock_settings, parent_widget):
-        from PySide6.QtGui import QGuiApplication
-
-        from rendering.custom_layout_contract import get_screen_signature
-
-        parent_widget._screen = QGuiApplication.primaryScreen()
-        signature = get_screen_signature(parent_widget._screen)
-        factory = ClockWidgetFactory(mock_settings)
-        widget = factory.create(
-            parent_widget,
-            {
-                "enabled": True,
-                "display_mode": "digital",
-                "display_mode_overrides": {signature: "analog"},
-            },
-        )
-
-        assert widget is not None
-        assert widget._display_mode == "analog"
-        widget.deleteLater()
-
-    def test_secondary_clock_inherits_calendar_style_but_uses_own_timezone(
-        self,
-        mock_settings,
-        parent_widget,
-    ):
-        factory = ClockWidgetFactory(mock_settings)
-        widget = factory.create(
-            parent_widget,
-            {"enabled": True, "timezone": "UTC+02:00"},
-            settings_key="clock2",
-            base_clock_settings={
-                "show_day_of_week": True,
-                "show_date": True,
-                "show_digital_separator": True,
-                "calendar_layout": "two_lines",
-                "calendar_font_size": 27,
-            },
-        )
-
-        assert widget is not None
-        assert widget._timezone_str == "UTC+02:00"
-        assert widget._show_day_of_week is True
-        assert widget._show_date is True
-        assert widget._show_digital_separator is True
-        assert widget._calendar_layout == "two_lines"
-        assert widget._calendar_font_size == 27
-        widget.deleteLater()
 
 
 # ---------------------------------------------------------------------------
@@ -356,7 +257,7 @@ class TestWidgetFactoryRegistry:
         """Test default factories are registered on init."""
         registry = WidgetFactoryRegistry(mock_settings)
         
-        assert registry.get_factory("clock") is not None
+        assert registry.get_factory("clock") is None
         assert registry.get_factory("weather") is not None
         assert registry.get_factory("media") is not None
         assert registry.get_factory("reddit") is not None
@@ -369,7 +270,7 @@ class TestWidgetFactoryRegistry:
         
         names = registry.get_all_factory_names()
         
-        assert "clock" in names
+        assert "clock" not in names
         assert "weather" in names
         assert "media" in names
         assert "reddit" in names
@@ -384,20 +285,12 @@ class TestWidgetFactoryRegistry:
         
         assert factory is None
     
-    def test_create_widget_via_registry(self, mock_settings, parent_widget):
-        """Test creating widget via registry."""
+    def test_retired_clock_factory_is_not_available(self, mock_settings, parent_widget):
+        """The retained Clock family must not revive its QWidget factory."""
         registry = WidgetFactoryRegistry(mock_settings)
-        config = {
-            "enabled": True,
-            "format": "12h",
-            "position": "top_right",
-        }
-        
-        widget = registry.create_widget("clock", parent_widget, config)
-        
-        assert widget is not None
-        # Clean up
-        widget.deleteLater()
+        widget = registry.create_widget("clock", parent_widget, {"enabled": True})
+
+        assert widget is None
     
     def test_create_unknown_widget_returns_none(self, mock_settings, parent_widget):
         """Test creating unknown widget returns None."""
