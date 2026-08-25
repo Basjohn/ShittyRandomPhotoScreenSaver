@@ -83,18 +83,7 @@ def compute_controls_layout(widget):
     fm = QFontMetrics(font)
     row_height = max(widget._controls_row_min_height(), int((fm.height() + 10) * 0.85))
 
-    try:
-        header_font_pt = int(widget._header_font_pt) if widget._header_font_pt > 0 else widget._font_size
-    except Exception as e:
-        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        header_font_pt = widget._font_size
-
     progress_enabled = bool(getattr(widget, "_playback_progress_enabled", False))
-    protected_metadata_bottom = (
-        max(0, int(getattr(widget, "_metadata_paint_bottom", 0) or 0))
-        if progress_enabled
-        else 0
-    )
 
     cache_key = (
         width,
@@ -104,21 +93,16 @@ def compute_controls_layout(widget):
         margins.right(),
         margins.bottom(),
         controls_font_pt,
-        header_font_pt,
         round(compact_scale, 3),
         progress_enabled,
         int(getattr(widget, "_playback_progress_height", 0) or 0),
-        protected_metadata_bottom,
     )
     cached = widget._controls_layout_cache
     if cached is not None and cached.get("_cache_key") == cache_key:
         return cached
 
-    header_metrics = QFontMetrics(QFont(widget._font_family, header_font_pt, QFont.Weight.Bold))
-    header_height = header_metrics.height()
-
     base_row_top = height - margins.bottom() - row_height - 5  # Shift up 5px for 3D depth effect
-    min_row_top = margins.top() + header_height + 6
+    min_row_top = margins.top()
     row_top = max(min_row_top, base_row_top)
     if row_top + row_height > height - margins.bottom():
         row_top = max(margins.top(), height - margins.bottom() - row_height)
@@ -140,10 +124,7 @@ def compute_controls_layout(widget):
         )
         progress_gap = max(8, progress_height // 2 + 4)
         progress_top = row_rect.top() - progress_gap - progress_height
-        minimum_top = max(
-            margins.top() + header_height + 6,
-            protected_metadata_bottom + 7,
-        )
+        minimum_top = margins.top()
         horizontal_inset = max(14, int(content_width * 0.08))
         progress_width = content_width - horizontal_inset * 2
         if progress_top >= minimum_top and progress_width >= 40:

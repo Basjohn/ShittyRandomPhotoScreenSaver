@@ -1,9 +1,10 @@
-"""Media/Now Playing widget for screensaver overlay.
+"""Temporary QWidget anchor for Phase-F4 Media controls.
 
 This QWidget presents the accepted state from a neutral Media runtime lease.
 Controller/provider lifetime, polling, shared playback state and source artwork
-decode live outside the presenter; this class owns only per-display projection,
-QPixmap/DPR work, fades, geometry and controls feedback.
+decode live outside the presenter. Retained Quick owns the Media core pixels;
+this class temporarily owns controls, progress, input feedback and their anchor
+geometry until Phase F4 retires them.
 
 Transport controls (play/pause, previous/next) are exposed but are
 strictly gated behind explicit user intent (Ctrl-held or Interaction Mode
@@ -24,8 +25,6 @@ from PySide6.QtGui import (
     QColor,
     QFont,
     QFontMetrics,
-    QImage,
-    QPixmap,
 )
 from shiboken6 import Shiboken
 
@@ -36,7 +35,6 @@ from core.media.media_controller import (
     MediaTrackInfo,
 )
 from core.media.provider_registry import (
-    get_media_provider_header_name,
     normalize_provider_id,
     preserve_provider_setting,
 )
@@ -45,11 +43,8 @@ from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.media_runtime import (
     MediaRuntimeService,
     MediaRuntimeSnapshot,
-    PreparedMediaArtwork as PreparedArtwork,
-    compute_media_artwork_key,
 )
 from widgets.shadow_utils import ShadowFadeProfile
-from utils.text_utils import smart_title_case
 
 if TYPE_CHECKING:
     from rendering.widget_manager import WidgetManager
@@ -77,9 +72,8 @@ class MediaWidget(BaseOverlayWidget):
     Extends BaseOverlayWidget for common styling/positioning functionality.
 
     Features:
-    - Projects shared runtime snapshots into per-display QWidget state
-    - Shows playback state (playing/paused), title, artist, album
-    - Owns presentation-only artwork scaling, fades, layout and controls
+    - Projects accepted playback state into temporary F4 controls/progress state
+    - Delegates transport commands to the shared runtime owner
     - Remains non-interactive unless the existing interaction gate admits input
     """
 
@@ -138,27 +132,9 @@ class MediaWidget(BaseOverlayWidget):
         # Override base class font size default
         self._font_size = 20
 
-        # Album artwork state (optional)
-        self._artwork_pixmap: Optional[QPixmap] = None
-        self._applied_artwork_key: tuple[int, str] | None = None
-        self._pending_artwork: PreparedArtwork | None = None
-        self._pending_artwork_generation: int = 0
-        self._pending_artwork_deferred: bool = False
-        self._artwork_update_generation: int = 0
-        self._artwork_coalesced_count: int = 0
-        # Cached scaled artwork to avoid expensive SmoothTransformation on every paint
-        self._scaled_artwork_cache: Optional[QPixmap] = None
-        self._scaled_artwork_cache_key: Optional[tuple] = None  # (pm_id, frame_w, frame_h, dpr)
-        # Default artwork size (logical pixels); overridable via settings.
+        # Temporary anchor geometry still follows the Media artwork-size setting
+        # so F4 controls and CUSTOM editing share the retained card footprint.
         self._artwork_size: int = 200
-        self._artwork_opacity: float = 1.0
-        self._artwork_anim: Optional[object] = None
-
-        # Artwork border behaviour
-        self._rounded_artwork_border: bool = True
-
-        # Optional header frame around the Spotify logo + title row.
-        self._show_header_frame: bool = True
 
         # Layout/controls behaviour
         self._show_controls: bool = True
@@ -171,36 +147,6 @@ class MediaWidget(BaseOverlayWidget):
         self._playback_progress_visible: bool = False
         self._playback_progress_fill_width: int = 0
         self._playback_progress_paint_key: Optional[tuple] = None
-        self._metadata_paint_bottom: int = 0
-
-        # Optional Spotify-style brand logo used when album artwork is absent.
-        self._brand_pixmap: Optional[QPixmap] = self._load_brand_pixmap()
-        self._header_logo_scaled_cache: Optional[QPixmap] = None
-        self._header_logo_scaled_cache_key: Optional[tuple] = None
-
-        # Painter-owned metadata layout used by widgets.media.painting.  This
-        # keeps existing dynamic font scaling but avoids QLabel rich-text
-        # shadow duplication.
-        self._metadata_paint: dict[str, object] = {
-            "provider": "",
-            "title": "",
-            "artist": "",
-            "base_font": self._font_size,
-            "header_font": 0,
-            "title_font": self._font_size + 3,
-            "artist_font": max(6, self._font_size - 2),
-            "header_weight": 750,
-            "title_weight": 700,
-            "artist_weight": 600,
-            "line_spacing": 4,
-            "body_top_gap": 8,
-        }
-
-        # Cached header logo metrics so paintEvent can align the Spotify glyph
-        # with the painter-owned SPOTIFY header.
-        self._header_font_pt: int = max(6, int(self._font_size * 1.2))
-        self._header_logo_size: int = max(12, int(self._header_font_pt * 1.3))
-        self._header_logo_margin: int = self._header_logo_size
         self._context_menu_active: bool = False
         self._context_menu_prewarmed: bool = False
         self._pending_effect_invalidation: bool = False
@@ -209,28 +155,17 @@ class MediaWidget(BaseOverlayWidget):
         self._last_info: Optional[MediaTrackInfo] = None
         
         # Smart polling: diff gating to skip unnecessary updates
-        self._last_track_identity: Optional[tuple] = None  # (title, artist, album, state)
-        self._last_metadata_identity: Optional[tuple] = None
+        self._last_track_identity: Optional[tuple] = None
         
-        # Fixed widget height once we have seen the first track so that
-        # changes in wrapped text do not move the card on screen.
+        # Established anchor height used when F4 controls/progress reserve space.
         self._fixed_card_height: Optional[int] = None
 
-        # One-shot guard so we can perform an initial layout pass using the
-        # first track's metadata, then only fade the widget in on the
-        # *second* update once geometry has settled. This avoids the card
-        # jumping size mid-fade or a second after it appears.
+        # First accepted state is published before the temporary F4 anchor's
+        # coordinated reveal.
         self._has_seen_first_track: bool = False
         self._fade_in_completed: bool = False
 
-        # One-shot flag so we only log the first paintEvent geometry.
-        self._paint_debug_logged = False
-        self._telemetry_logged_missing_tm = False
         self._telemetry_last_visibility: Optional[bool] = None
-        self._telemetry_logged_fade_request = False
-        
-        # Artwork vertical bias for dynamic positioning
-        self._artwork_vertical_bias: float = 0.4
         
         # Control feedback state (for visual feedback on button press)
         self._controls_feedback: dict = {}
@@ -247,10 +182,7 @@ class MediaWidget(BaseOverlayWidget):
         self._controls_row_outline_alpha: int = 65
         self._controls_layout_cache: Optional[dict[str, object]] = None
         self._last_display_update_ts: float = 0.0
-        self._skipped_identity_updates: int = 0
-        self._max_identity_skip: int = 4
-        self._unchanged_refresh_diag_pending: bool = False
-        
+
         # Register this instance for shared feedback
         type(self)._instances.add(self)
 
@@ -287,12 +219,6 @@ class MediaWidget(BaseOverlayWidget):
     def provider(self) -> str:
         """Current registered media-provider id."""
         return self._provider
-
-    @property
-    def provider_display_name(self) -> str:
-        """Human-readable provider name for the header text."""
-
-        return get_media_provider_header_name(self._provider) or "MEDIA"
 
     def get_retained_display_info(self) -> Optional[MediaTrackInfo]:
         """Transitional presenter read of the shared owner's accepted snapshot."""
@@ -338,9 +264,6 @@ class MediaWidget(BaseOverlayWidget):
             self._runtime_service = None
             raise
         self._provider = self._validate_provider(service.provider)
-        self._brand_pixmap = self._load_brand_pixmap()
-        self._header_logo_scaled_cache = None
-        self._header_logo_scaled_cache_key = None
         if was_running and not service.start():
             raise RuntimeError("Media runtime service could not resume active presenter")
 
@@ -370,12 +293,7 @@ class MediaWidget(BaseOverlayWidget):
                 persist=False,
             )
         self._last_runtime_revision = revision
-        self._artwork_update_generation = revision
-        self._update_display(
-            snapshot.info,
-            snapshot.artwork,
-            revision,
-        )
+        self._update_display(snapshot.info)
 
     def on_media_runtime_provider_changed(
         self,
@@ -392,15 +310,6 @@ class MediaWidget(BaseOverlayWidget):
         self._last_runtime_revision = 0
         self._last_info = None
         self._last_track_identity = None
-        self._last_metadata_identity = None
-        self._artwork_pixmap = None
-        self._scaled_artwork_cache = None
-        self._scaled_artwork_cache_key = None
-        self._applied_artwork_key = None
-        self._discard_pending_artwork()
-        self._brand_pixmap = self._load_brand_pixmap()
-        self._header_logo_scaled_cache = None
-        self._header_logo_scaled_cache_key = None
         self._safe_update()
         if persist:
             manager = self._widget_manager
@@ -462,8 +371,7 @@ class MediaWidget(BaseOverlayWidget):
         # Use base class styling setup
         self._apply_base_styling()
         
-        # Align content to the top-left so the header/logo sit close to the
-        # top edge rather than vertically centered in the card.
+        # Keep the temporary control surface aligned with the retained card.
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         try:
             # Non-interactive by default; screensaver interaction is gated elsewhere.
@@ -475,14 +383,11 @@ class MediaWidget(BaseOverlayWidget):
         self.setFont(font)
         self.setWordWrap(True)
 
-        # Base contents margins; _update_display() will tighten these once we
-        # know the artwork size, but start with a modest frame.
+        # Base margins shared by the temporary controls/progress surface.
         self.setContentsMargins(29, 12, 12, 12)
 
-        # Ensure a reasonable default footprint before artwork/metadata arrive.
+        # Preserve the configured Media card footprint for F4/CUSTOM geometry.
         self.setMinimumWidth(BaseOverlayWidget.DEFAULT_CARD_MIN_WIDTH)
-        # Tie the default minimum height to the configured artwork size so
-        # the widget does not "jump" in height once artwork is decoded.
         self.setMinimumHeight(max(220, self._artwork_size + 60))
     
     def _update_content(self) -> None:
@@ -530,13 +435,6 @@ class MediaWidget(BaseOverlayWidget):
         self._deactivate_impl()
         self._expire_all_feedback()
         type(self)._instances.discard(self)
-        self._discard_pending_artwork()
-        self._artwork_pixmap = None
-        self._applied_artwork_key = None
-        self._scaled_artwork_cache = None
-        self._scaled_artwork_cache_key = None
-        self._header_logo_scaled_cache = None
-        self._header_logo_scaled_cache_key = None
         self._last_info = None
         service = self._runtime_service
         self._runtime_service = None
@@ -743,28 +641,6 @@ class MediaWidget(BaseOverlayWidget):
         overlay_pos = OverlayPosition(position.value)
         super().set_position(overlay_pos)
 
-    def _invalidate_metadata_layout(self) -> None:
-        """Force the next media display refresh to rebuild painter-owned text layout."""
-
-        self._metadata_paint = {}
-        self._metadata_paint_bottom = 0
-        self._last_metadata_identity = None
-
-    def _refresh_metadata_paint_boundary(self) -> None:
-        """Prepare the scalar text boundary outside paint-time layout lookup."""
-
-        if not bool(getattr(self, "_playback_progress_enabled", False)):
-            self._metadata_paint_bottom = 0
-            return
-        try:
-            from widgets.media.painting import metadata_paint_bottom
-
-            self._metadata_paint_bottom = max(0, int(metadata_paint_bottom(self)))
-        except Exception as exc:
-            logger.debug("[MEDIA_WIDGET] Failed to prepare metadata paint boundary: %s", exc)
-            self._metadata_paint_bottom = 0
-        self._invalidate_controls_layout()
-
     def _refresh_playback_progress_snapshot(self) -> bool:
         """Re-quantize progress from the accepted snapshot without publication work."""
 
@@ -783,57 +659,26 @@ class MediaWidget(BaseOverlayWidget):
             logger.debug("[MEDIA_WIDGET] Failed to refresh progress paint state: %s", exc)
             return True
 
-    def _refresh_current_display_layout(self) -> None:
-        """Rebuild the live or retained media card layout after geometry-affecting setting changes."""
-
-        info = self._last_info
-        if info is None:
-            try:
-                info = self.get_retained_display_info()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                info = None
-        if info is not None:
-            try:
-                self._update_display(info)
-                return
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        self._safe_update()
-
     def set_font_size(self, size: int) -> None:  # type: ignore[override]
-        """Set the font size and invalidate any cached media text layout."""
+        """Set the temporary transport-control font size."""
 
         if int(size) == int(getattr(self, "_font_size", -1)):
-            # Same reasoning as `set_artwork_size`: an unchanged size must not
-            # rebuild the live card.
             return
         super().set_font_size(size)
-        self._invalidate_metadata_layout()
-        invalidate = getattr(self, "_invalidate_controls_layout", None)
-        if callable(invalidate):
-            invalidate()
-        self._refresh_current_display_layout()
+        self._invalidate_controls_layout()
+        self._refresh_playback_progress_snapshot()
+        self._safe_update()
 
     def set_artwork_size(self, size: int) -> None:
-        """Set preferred artwork size in pixels and refresh layout."""
+        """Keep the F4/CUSTOM anchor geometry aligned to retained artwork size."""
 
         if size <= 0:
             return
         if int(size) == int(self._artwork_size):
-            # Re-applying the current footprint cannot change the authored card,
-            # but the rebuild below reconstructs the display from `_last_info`
-            # and would drop live artwork/metadata when that is unavailable.
             return
         self._artwork_size = int(size)
-        self._invalidate_metadata_layout()
-        invalidate = getattr(self, "_invalidate_controls_layout", None)
-        if callable(invalidate):
-            invalidate()
+        self._invalidate_controls_layout()
         target_min_height = max(220, self._artwork_size + 60)
-        # Keep the card's minimum height in sync with the configured artwork
-        # footprint so resizing via settings does not cause unexpected jumps
-        # at runtime.
         self.setMinimumHeight(self._resolve_custom_locked_height(target_min_height))
         if self._active_custom_layout_rect() is not None:
             try:
@@ -841,18 +686,7 @@ class MediaWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             self._schedule_custom_layout_geometry_reapply()
-        self._refresh_current_display_layout()
-
-    def set_rounded_artwork_border(self, rounded: bool) -> None:
-        """Enable or disable rounded borders around the album artwork."""
-
-        self._rounded_artwork_border = bool(rounded)
-        self._safe_update()
-
-    def set_show_header_frame(self, show: bool) -> None:
-        """Enable or disable the header subcontainer frame around logo+title."""
-
-        self._show_header_frame = bool(show)
+        self._refresh_playback_progress_snapshot()
         self._safe_update()
 
     def set_show_controls(self, show: bool) -> None:
@@ -867,11 +701,9 @@ class MediaWidget(BaseOverlayWidget):
             old_reserved,
             self._controls_reserved_height(),
         )
-        self._refresh_metadata_paint_boundary()
-        invalidate = getattr(self, "_invalidate_controls_layout", None)
-        if callable(invalidate):
-            invalidate()
-        self._refresh_current_display_layout()
+        self._invalidate_controls_layout()
+        self._refresh_playback_progress_snapshot()
+        self._safe_update()
 
     def set_playback_progress_config(
         self,
@@ -926,7 +758,6 @@ class MediaWidget(BaseOverlayWidget):
         self._playback_progress_glow_color = normalized_glow
         new_reserved = self._controls_reserved_height()
         self._apply_controls_reserved_height_delta(old_reserved, new_reserved)
-        self._refresh_metadata_paint_boundary()
         self._invalidate_controls_layout()
         progress_changed = self._refresh_playback_progress_snapshot()
         if progress_changed or old_reserved != new_reserved:
@@ -1138,11 +969,10 @@ class MediaWidget(BaseOverlayWidget):
             return False
         try:
             self._last_track_identity = None
-            self._skipped_identity_updates = 0
             service = self._runtime_service
             if service is None or not service.refresh(bust_cache=True):
                 return False
-            logger.info("[MEDIA_WIDGET] Double-click triggered artwork refresh")
+            logger.info("[MEDIA_WIDGET] Double-click triggered media refresh")
             return True
         except Exception:
             logger.debug("[MEDIA_WIDGET] Double-click refresh failed", exc_info=True)
@@ -1231,29 +1061,12 @@ class MediaWidget(BaseOverlayWidget):
     def _update_display(
         self,
         info: Optional[MediaTrackInfo],
-        prepared_artwork: PreparedArtwork | None = None,
-        artwork_generation: int | None = None,
     ) -> None:
-        """Delegates to widgets.media.display_update."""
+        """Project accepted state into the temporary F4 controls bridge."""
+
         from widgets.media.display_update import update_display
-        update_display(
-            self,
-            info,
-            prepared_artwork=prepared_artwork,
-            artwork_generation=artwork_generation,
-        )
 
-
-    @staticmethod
-    def _create_artwork_pixmap(image: QImage) -> QPixmap | None:
-        """Create the sole GUI-owned representation for a prepared image."""
-
-        pm = QPixmap.fromImage(image)
-        if pm.isNull() or pm.width() <= 0 or pm.height() <= 0:
-            return None
-        pm.setDevicePixelRatio(1.0)
-        return pm
-
+        update_display(self, info)
     @classmethod
     def _has_transition_work_on_any_display(cls) -> bool:
         """Return whether any live display is preparing or running a transition."""
@@ -1285,325 +1098,6 @@ class MediaWidget(BaseOverlayWidget):
                 )
         return False
 
-    @staticmethod
-    def _artwork_key_log_id(key: tuple[int, str] | None) -> str:
-        if key is None:
-            return "none"
-        digest = str(key[1] or "")
-        return digest[:12] if digest else "empty"
-
-    def _log_artwork_lifecycle_event(
-        self,
-        event: str,
-        *,
-        reason: str,
-        prepared: PreparedArtwork | None = None,
-        generation: int | None = None,
-        replaced_key: tuple[int, str] | None = None,
-    ) -> None:
-        """Emit one bounded, key-stable record for a material artwork event."""
-
-        if not is_perf_metrics_enabled():
-            return
-        current = prepared or self._pending_artwork
-        key = current.key if current is not None else None
-        logger.info(
-            "[PERF][MEDIA_ARTWORK] event=%s reason=%s key_id=%s "
-            "payload_bytes=%d generation=%d current_generation=%d "
-            "replaced_key_id=%s decode_ms=%.2f coalesced_count=%d",
-            event,
-            reason,
-            self._artwork_key_log_id(key),
-            int(key[0]) if key is not None else 0,
-            int(generation or 0),
-            int(self._artwork_update_generation),
-            self._artwork_key_log_id(replaced_key),
-            float(current.decode_ms) if current is not None else 0.0,
-            int(self._artwork_coalesced_count),
-        )
-
-    def _queue_pending_artwork(
-        self,
-        prepared: PreparedArtwork,
-        generation: int,
-    ) -> None:
-        existing = self._pending_artwork
-        if existing is not None:
-            if existing.key == prepared.key:
-                # Same-key metadata churn is not a coalesced artwork change.
-                # Preserve an already decoded image when the worker correctly
-                # skipped another decode, while promoting the track generation.
-                if prepared.image is not None:
-                    self._pending_artwork = prepared
-                self._pending_artwork_generation = generation
-                self._pending_artwork_deferred = True
-                return
-            self._artwork_coalesced_count += 1
-            self._log_artwork_lifecycle_event(
-                "replaced",
-                reason="newer_transition_key",
-                prepared=prepared,
-                generation=generation,
-                replaced_key=existing.key,
-            )
-        else:
-            self._log_artwork_lifecycle_event(
-                "queued",
-                reason="transition_active",
-                prepared=prepared,
-                generation=generation,
-            )
-
-        self._pending_artwork = prepared
-        self._pending_artwork_generation = generation
-        self._pending_artwork_deferred = True
-
-    def _accept_prepared_artwork(
-        self,
-        prepared: PreparedArtwork | None,
-        generation: int | None,
-        *,
-        refresh_layout_after_apply: bool,
-    ) -> bool:
-        """Apply a current result now or retain only its newest transition-safe form."""
-
-        if prepared is None or generation is None:
-            return False
-        generation = int(generation)
-        if generation != self._artwork_update_generation:
-            self._log_artwork_lifecycle_event(
-                "discarded",
-                reason="stale_accept_generation",
-                prepared=prepared,
-                generation=generation,
-            )
-            return False
-
-        if prepared.key == self._applied_artwork_key:
-            pending = self._pending_artwork
-            if pending is not None:
-                reverted_to_applied_key = pending.key != prepared.key
-                if reverted_to_applied_key:
-                    self._artwork_coalesced_count += 1
-                    self._log_artwork_lifecycle_event(
-                        "discarded",
-                        reason="reverted_to_applied_key",
-                        prepared=pending,
-                        generation=self._pending_artwork_generation,
-                        replaced_key=pending.key,
-                    )
-                self._pending_artwork = None
-                self._pending_artwork_generation = 0
-                self._pending_artwork_deferred = False
-                self._artwork_coalesced_count = 0
-            return False
-
-        pending = self._pending_artwork
-        was_deferred = False
-        if pending is not None and pending.key == prepared.key:
-            was_deferred = bool(self._pending_artwork_deferred)
-            if prepared.image is None:
-                prepared = pending
-
-        if type(self)._has_transition_work_on_any_display():
-            self._queue_pending_artwork(prepared, generation)
-            return False
-
-        return self._apply_prepared_artwork_now(
-            prepared,
-            generation,
-            deferred_for_transition=was_deferred,
-            refresh_layout_after_apply=refresh_layout_after_apply,
-        )
-
-    def _apply_prepared_artwork_now(
-        self,
-        prepared: PreparedArtwork,
-        generation: int,
-        *,
-        deferred_for_transition: bool,
-        refresh_layout_after_apply: bool,
-    ) -> bool:
-        """Perform the one permitted UI-thread QImage -> QPixmap handoff."""
-
-        if generation != self._artwork_update_generation:
-            self._log_artwork_lifecycle_event(
-                "discarded",
-                reason="stale_apply_generation",
-                prepared=prepared,
-                generation=generation,
-            )
-            return False
-        key_changed = prepared.key != self._applied_artwork_key
-        if not key_changed:
-            return False
-
-        ui_started = time.monotonic()
-        pixmap: QPixmap | None = None
-        if prepared.key != (0, "") and prepared.image is not None and not prepared.image.isNull():
-            try:
-                pixmap = self._create_artwork_pixmap(prepared.image)
-            except Exception:
-                logger.debug(
-                    "[MEDIA_WIDGET] Failed to create UI artwork pixmap",
-                    exc_info=True,
-                )
-                pixmap = None
-        ui_pixmap_ms = max(0.0, (time.monotonic() - ui_started) * 1000.0)
-
-        self._artwork_pixmap = pixmap
-        self._applied_artwork_key = prepared.key
-        self._scaled_artwork_cache = None
-        self._scaled_artwork_cache_key = None
-
-        if self._pending_artwork is not None:
-            if self._pending_artwork.key != prepared.key:
-                self._artwork_coalesced_count += 1
-                self._log_artwork_lifecycle_event(
-                    "discarded",
-                    reason="superseded_by_applied_key",
-                    prepared=self._pending_artwork,
-                    generation=self._pending_artwork_generation,
-                    replaced_key=self._pending_artwork.key,
-                )
-            self._pending_artwork = None
-            self._pending_artwork_generation = 0
-            self._pending_artwork_deferred = False
-
-        fade_started = False
-        if pixmap is not None:
-            # The card owns startup visibility.  Artwork prepared before the
-            # coordinated card reveal must remain hidden until that reveal
-            # completes, then receive its own authored fade.
-            self._artwork_opacity = 0.0
-            fade_started = self._start_artwork_fade_if_ready(
-                reason="artwork_apply",
-            )
-        else:
-            self._artwork_opacity = 1.0
-
-        if refresh_layout_after_apply:
-            try:
-                from widgets.media.display_update import refresh_artwork_layout
-
-                refresh_artwork_layout(self)
-            except Exception:
-                logger.debug(
-                    "[MEDIA_WIDGET] Failed to refresh deferred artwork layout",
-                    exc_info=True,
-                )
-                self._safe_update()
-
-        if is_perf_metrics_enabled():
-            logger.info(
-                "[PERF][MEDIA_ARTWORK] event=applied key_changed=%s key_id=%s "
-                "generation=%d payload_bytes=%d "
-                "decode_ms=%.2f ui_pixmap_ms=%.2f deferred_for_transition=%s "
-                "coalesced_count=%d pixmap_ready=%s fade_started=%s",
-                key_changed,
-                self._artwork_key_log_id(prepared.key),
-                generation,
-                int(prepared.key[0]),
-                float(prepared.decode_ms),
-                ui_pixmap_ms,
-                bool(deferred_for_transition),
-                int(self._artwork_coalesced_count),
-                pixmap is not None,
-                fade_started,
-            )
-        self._artwork_coalesced_count = 0
-        self._safe_update()
-        return True
-
-    @classmethod
-    def _flush_pending_artwork_when_all_displays_idle(cls) -> None:
-        """Flush newest-only artwork for every display once all transitions are idle."""
-
-        if cls._has_transition_work_on_any_display():
-            return
-
-        for widget in list(cls._instances):
-            try:
-                if not Shiboken.isValid(widget):
-                    prepared = getattr(widget, "_pending_artwork", None)
-                    if prepared is not None:
-                        widget._log_artwork_lifecycle_event(
-                            "discarded",
-                            reason="widget_destroyed",
-                            prepared=prepared,
-                            generation=widget._pending_artwork_generation,
-                        )
-                    widget._pending_artwork = None
-                    widget._pending_artwork_generation = 0
-                    widget._pending_artwork_deferred = False
-                    cls._instances.discard(widget)
-                    continue
-            except Exception:
-                continue
-
-            prepared = widget._pending_artwork
-            generation = int(widget._pending_artwork_generation)
-            if prepared is None:
-                # Artwork may already be GUI-owned but still hidden behind the
-                # coordinated card reveal.  If a transition overlapped reveal
-                # completion, transition idle is the remaining handoff.
-                widget._start_artwork_fade_if_ready(reason="all_displays_idle")
-                continue
-            if generation != widget._artwork_update_generation:
-                widget._log_artwork_lifecycle_event(
-                    "discarded",
-                    reason="stale_idle_flush_generation",
-                    prepared=prepared,
-                    generation=generation,
-                )
-                widget._pending_artwork = None
-                widget._pending_artwork_generation = 0
-                widget._pending_artwork_deferred = False
-                continue
-            if cls._has_transition_work_on_any_display():
-                return
-            widget._log_artwork_lifecycle_event(
-                "flushing",
-                reason="all_displays_idle",
-                prepared=prepared,
-                generation=generation,
-            )
-            widget._apply_prepared_artwork_now(
-                prepared,
-                generation,
-                deferred_for_transition=True,
-                refresh_layout_after_apply=True,
-            )
-
-    def on_parent_transition_work_pending(self, pending: bool) -> None:
-        if pending:
-            return
-        type(self)._flush_pending_artwork_when_all_displays_idle()
-
-    def _discard_pending_artwork(self) -> None:
-        """Invalidate presenter revisions and release any unconsumed QImage."""
-
-        if self._pending_artwork is not None:
-            self._log_artwork_lifecycle_event(
-                "discarded",
-                reason="widget_lifecycle_cleanup",
-                generation=self._pending_artwork_generation,
-            )
-        self._artwork_update_generation += 1
-        self._pending_artwork = None
-        self._pending_artwork_generation = 0
-        self._pending_artwork_deferred = False
-        self._artwork_coalesced_count = 0
-
-    def _clear_artwork_for_missing_media(self) -> None:
-        """Clear artwork exactly once when the retained media card is abandoned."""
-
-        self._accept_prepared_artwork(
-            PreparedArtwork((0, ""), None, 0.0),
-            self._artwork_update_generation,
-            refresh_layout_after_apply=False,
-        )
-    
     def _controls_row_min_height(self) -> int:
         """Return the minimum vertical footprint required for the controls row."""
         from widgets.media_layout import _controls_compact_scale
@@ -1678,34 +1172,17 @@ class MediaWidget(BaseOverlayWidget):
         draw_control_icon(self, painter, rect, key)
     
     def _compute_track_identity(self, info: MediaTrackInfo) -> tuple:
-        """Compute track identity for diff gating."""
+        """Compute the state identity still consumed by F4 controls."""
+
         return (
             (info.title or "").strip().lower(),
             (info.artist or "").strip().lower(),
             (info.album or "").strip().lower(),
             getattr(info.state, "value", info.state),
-            self._compute_artwork_key(info),
+            bool(info.can_play_pause),
+            bool(info.can_previous),
+            bool(info.can_next),
         )
-
-    def _compute_metadata_identity(self, info: MediaTrackInfo) -> tuple:
-        """Compute the visible text/layout identity for media metadata.
-
-        Album, playback state, and artwork churn must not cause a relayout when
-        the user-visible title/artist/provider presentation is unchanged.
-        """
-        return (
-            smart_title_case((info.title or "").strip()).lower(),
-            smart_title_case((info.artist or "").strip()).lower(),
-            int(self._font_size),
-            str(self.provider_display_name or "").strip().lower(),
-        )
-
-    @staticmethod
-    def _compute_artwork_payload_key(payload: Optional[bytes]) -> tuple[int, str]:
-        return compute_media_artwork_key(payload)
-
-    def _compute_artwork_key(self, info: MediaTrackInfo) -> tuple[int, str]:
-        return self._compute_artwork_payload_key(getattr(info, "artwork", None))
     
     # Shared Feedback System — delegates to widgets.media.feedback
     # ------------------------------------------------------------------
@@ -1759,17 +1236,12 @@ class MediaWidget(BaseOverlayWidget):
         except Exception:
             width_changed = True
         if width_changed and bool(getattr(self, "_playback_progress_enabled", False)):
-            self._refresh_metadata_paint_boundary()
+            self._invalidate_controls_layout()
             if self._refresh_playback_progress_snapshot():
                 self._safe_update()
 
     def paintEvent(self, event):  # type: ignore[override]
-        """Paint the media card through the painter-owned runtime path.
-
-        Artwork is drawn to the right side inside the widget's margins so
-        that the text content remains legible. All failures are ignored so
-        that paint never raises.
-        """
+        """Paint the temporary F4 controls/progress compatibility surface."""
         with widget_paint_sample(self, "media.paint"):
             self._paint_contents(event)
 
@@ -1778,19 +1250,14 @@ class MediaWidget(BaseOverlayWidget):
         from widgets.media.painting import paint_contents
         paint_contents(self, event)
 
-    def _load_brand_pixmap(self) -> Optional[QPixmap]:
-        """Delegates to widgets.media.painting."""
-        from widgets.media.painting import load_brand_pixmap
-        return load_brand_pixmap(provider=self._provider)
-
     def _start_widget_fade_in(self, duration_ms: Optional[int] = None) -> None:
-        """Fade the entire widget in; shadows are painter-owned."""
+        """Fade the temporary F4 anchor in."""
         resolved_duration_ms = (
             ShadowFadeProfile.default_duration_ms()
             if duration_ms is None
             else max(0, int(duration_ms))
         )
-        # Reset fade completion flag so re-entrancy (wake from idle) refreshes painted shadows.
+        # Reset completion so re-entrancy can restore the temporary anchor.
         self._fade_in_completed = False
         # CRITICAL: Position the widget BEFORE showing to prevent teleport flash
         # The widget starts at (0,0) and must be moved to its correct position
@@ -1839,7 +1306,7 @@ class MediaWidget(BaseOverlayWidget):
             self._handle_fade_in_complete()
 
     def _handle_fade_in_complete(self) -> None:
-        """Mark fade-in complete and refresh painter-owned shadows."""
+        """Mark the temporary anchor fade-in complete."""
         if self._fade_in_completed:
             return
         self._fade_in_completed = True
@@ -1854,78 +1321,3 @@ class MediaWidget(BaseOverlayWidget):
             self.on_fade_complete()
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        self._start_artwork_fade_if_ready(reason="widget_reveal_complete")
-
-    def _start_artwork_fade_if_ready(self, *, reason: str) -> bool:
-        """Start one pending artwork fade after card reveal and transition idle."""
-
-        pixmap = self._artwork_pixmap
-        if pixmap is None or self._artwork_opacity >= 1.0:
-            return False
-        try:
-            if pixmap.isNull():
-                return False
-        except Exception:
-            return False
-        if (
-            not self._fade_in_completed
-            or not self._has_seen_first_track
-            or self._artwork_anim is not None
-            or type(self)._has_transition_work_on_any_display()
-        ):
-            return False
-
-        self._start_artwork_fade_in()
-        if is_perf_metrics_enabled():
-            logger.info(
-                "[PERF][MEDIA_ARTWORK] event=fade_started reason=%s "
-                "key_id=%s generation=%d",
-                reason,
-                self._artwork_key_log_id(self._applied_artwork_key),
-                int(self._artwork_update_generation),
-            )
-        return True
-
-    def _start_artwork_fade_in(self) -> None:
-        if self._artwork_anim is not None:
-            try:
-                self._artwork_anim.stop()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            self._artwork_anim = None
-
-        self._artwork_opacity = 0.0
-        
-        # Use AnimationManager instead of QPropertyAnimation to avoid per-frame update() calls
-        # This reduces paint calls from ~10Hz to only when needed
-        try:
-            from core.animation.animator import AnimationManager
-            from core.animation.types import EasingCurve
-            
-            anim_mgr = AnimationManager.get_or_create_app_shared()
-            
-            def _on_tick(progress: float) -> None:
-                try:
-                    self._artwork_opacity = float(progress)
-                    self._safe_update()
-                except Exception as e:
-                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            
-            def _on_finished() -> None:
-                self._artwork_anim = None
-                self._artwork_opacity = 1.0
-                self._safe_update()
-            
-            # AnimationManager uses seconds, not milliseconds
-            anim_id = anim_mgr.animate_custom(
-                duration=0.85,  # 850ms
-                update_callback=_on_tick,
-                on_complete=_on_finished,
-                easing=EasingCurve.CUBIC_IN_OUT
-            )
-            self._artwork_anim = anim_id
-        except Exception:
-            logger.debug("[MEDIA] Failed to start artwork fade via AnimationManager", exc_info=True)
-            # Fallback: just set opacity to 1.0 immediately
-            self._artwork_opacity = 1.0
-            self._safe_update()

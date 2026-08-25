@@ -1,127 +1,108 @@
+"""F4-preservation tests for the temporary Media QWidget state bridge."""
+
 from __future__ import annotations
 
-import logging
 from types import SimpleNamespace
 
 from PySide6.QtCore import QRect
-from PySide6.QtGui import QColor, QImage
+from PySide6.QtGui import QColor
 
 import widgets.media.display_update as display_update
 from core.media.media_controller import MediaPlaybackState, MediaTrackInfo
-from widgets.media_widget import MediaWidget, PreparedArtwork
 
 
-class _StubMediaWidget:
+class _StubMediaControls:
     def __init__(self) -> None:
         self._last_info = None
-        self._telemetry_last_visibility = True
-        self._telemetry_logged_fade_request = False
-        self._emitted = []
-        self.hide_called = False
-        self.complete_hide_called = False
-        self._fade_in_completed = False
         self._last_track_identity = None
-        self._last_metadata_identity = None
-        self._skipped_identity_updates = 0
-        self._max_identity_skip = 4
-        self._unchanged_refresh_diag_pending = False
         self._last_display_update_ts = 0.0
-        self.provider_display_name = "SPOTIFY"
-        self._font_size = 20
-        self._font_family = "Jost"
         self._has_seen_first_track = True
-        self._fixed_card_height = None
-        self._artwork_size = 200
-        self._artwork_pixmap = None
-        self._applied_artwork_key = (0, "")
-        self._pending_artwork = None
-        self._scaled_artwork_cache = None
-        self._scaled_artwork_cache_key = None
-        self.fade_in_calls = 0
+        self._telemetry_last_visibility = True
+        self._perf_media_display_total = 0
+        self._playback_progress_enabled = True
+        self._playback_progress_fill_color = QColor(255, 255, 255, 230)
+        self._playback_progress_shadow_enabled = False
+        self._playback_progress_glow_enabled = False
+        self._playback_progress_glow_color = QColor(255, 255, 255, 180)
+        self._playback_progress_paint_key = None
+        self._playback_progress_visible = False
+        self._playback_progress_fill_width = 0
+        self._custom_layout_shell_active = False
+        self.visible = True
+        self.emitted = []
+        self.updates = 0
+        self.fade_calls = 0
         self.notify_calls = 0
-        self._visible = True
-        self._width = 600
-        self._height = 290
-
-    def isVisible(self):
-        return self._visible
-
-    def _complete_hide_sequence(self):
-        self.complete_hide_called = True
-
-    def hide(self):
-        self.hide_called = True
-        self._visible = False
-
-    def show(self):
-        self._visible = True
-
-    def _compute_track_identity(self, info):
-        return (info.title, info.artist, info.album, info.state.value)
-
-    def _compute_metadata_identity(self, info):
-        return (info.title, info.artist, self._font_size, self.provider_display_name)
-
-    def _compute_artwork_key(self, _info):
-        return (0, "")
-
-    def _emit_media_update(self, info):
-        self._emitted.append(info)
-
-    def _start_widget_fade_in(self, duration_ms=None):
-        self.fade_in_calls += 1
-        self._visible = True
-
-    def _notify_spotify_widgets_visibility(self):
-        self.notify_calls += 1
-
-    def setTextFormat(self, _value):
-        return None
-
-    def setText(self, _value):
-        return None
-
-    def setContentsMargins(self, *_args):
-        return None
-
-    def width(self):
-        return self._width
-
-    def height(self):
-        return self._height
-
-    def _controls_row_margin(self):
-        return 12
-
-    def _controls_row_min_height(self):
-        return 24
-
-    def sizeHint(self):
-        return SimpleNamespace(height=lambda: 220)
-
-    def minimumHeight(self):
-        return 220
-
-    def setMinimumHeight(self, _value):
-        return None
-
-    def setMaximumHeight(self, _value):
-        return None
-
-    def _decode_artwork_pixmap(self, _artwork):
-        return None
+        self.hide_calls = 0
+        self.complete_hide_calls = 0
 
     def parent(self):
         return None
 
     def parentWidget(self):
-        return self.parent()
+        return None
+
+    def isVisible(self) -> bool:
+        return self.visible
+
+    def show(self) -> None:
+        self.visible = True
+
+    def hide(self) -> None:
+        self.hide_calls += 1
+        self.visible = False
+
+    def _complete_hide_sequence(self) -> None:
+        self.complete_hide_calls += 1
+        self.visible = False
+
+    def _start_widget_fade_in(self, *_args) -> None:
+        self.fade_calls += 1
+        self.visible = True
+
+    def _notify_spotify_widgets_visibility(self) -> None:
+        self.notify_calls += 1
+
+    def _emit_media_update(self, info) -> None:
+        self.emitted.append(info)
+
+    def _safe_update(self) -> None:
+        self.updates += 1
+
+    def _compute_track_identity(self, info):
+        return (
+            info.title,
+            info.artist,
+            info.album,
+            info.state.value,
+            info.can_play_pause,
+            info.can_previous,
+            info.can_next,
+        )
+
+    def _compute_controls_layout(self):
+        return {"progress_rect": QRect(10, 20, 100, 8)}
 
 
-def test_update_display_none_only_hides_presentation_without_runtime_mutation():
-    widget = _StubMediaWidget()
+def _info(**overrides) -> MediaTrackInfo:
+    values = {
+        "title": "Track",
+        "artist": "Artist",
+        "album": "Album",
+        "state": MediaPlaybackState.PLAYING,
+        "can_play_pause": True,
+        "can_previous": True,
+        "can_next": True,
+        "position_ms": 25_000,
+        "duration_ms": 100_000,
+    }
+    values.update(overrides)
+    return MediaTrackInfo(**values)
+
+
+def test_none_snapshot_hides_controls_without_runtime_mutation() -> None:
+    widget = _StubMediaControls()
     runtime_calls = []
-    widget._visible = False
     widget._runtime_service = SimpleNamespace(
         refresh=lambda **kwargs: runtime_calls.append(("refresh", kwargs)),
         set_provider_runtime=lambda *args, **kwargs: runtime_calls.append(
@@ -133,759 +114,100 @@ def test_update_display_none_only_hides_presentation_without_runtime_mutation():
 
     assert runtime_calls == []
     assert widget._last_info is None
-    assert widget.complete_hide_called is True
-    assert widget._telemetry_last_visibility is False
+    assert widget.complete_hide_calls == 1
+    assert widget._playback_progress_visible is False
 
 
-def test_update_display_refades_widget_when_metadata_returns(monkeypatch):
-    widget = _StubMediaWidget()
-    widget._visible = False
-    live_info = MediaTrackInfo(
-        title="Track",
-        artist="Artist",
-        album="Album",
-        state=MediaPlaybackState.PLAYING,
-    )
-
-    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
-
-    display_update.update_display(widget, live_info)
-
-    assert widget.fade_in_calls == 1
-    assert widget.notify_calls == 1
-    assert widget._telemetry_last_visibility is True
-    assert widget._emitted and widget._emitted[-1] is live_info
-
-
-def test_unchanged_visible_card_never_forces_metadata_or_layout_publication(
-    monkeypatch,
-):
-    widget = _StubMediaWidget()
-    info = MediaTrackInfo(
-        title="Stable Track",
-        artist="Stable Artist",
-        album="Stable Album",
-        state=MediaPlaybackState.PLAYING,
-    )
-    widget._last_info = info
-    widget._last_track_identity = widget._compute_track_identity(info)
-    widget._last_metadata_identity = widget._compute_metadata_identity(info)
-    widget._fade_in_completed = True
-    build_calls = []
-    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
-    monkeypatch.setattr(
-        display_update,
-        "_build_and_apply_metadata",
-        lambda *args, **kwargs: build_calls.append((args, kwargs)),
-    )
-
-    for _ in range(widget._max_identity_skip + 2):
-        display_update.update_display(widget, info)
-
-    assert build_calls == []
-    assert widget._emitted == []
-    assert widget._skipped_identity_updates == 1
-    assert widget._unchanged_refresh_diag_pending is False
-
-
-def test_unchanged_fixed_card_during_first_fade_skips_metadata_artwork_and_repaint(
-    monkeypatch,
-):
-    """The intentional hidden first-card fade is not missing presentation state."""
-
-    widget = _StubMediaWidget()
-    info = MediaTrackInfo(
-        title="Stable Track",
-        artist="Stable Artist",
-        album="Stable Album",
-        state=MediaPlaybackState.PLAYING,
-    )
-    widget._last_info = info
-    widget._last_track_identity = widget._compute_track_identity(info)
-    widget._last_metadata_identity = widget._compute_metadata_identity(info)
-    widget._has_seen_first_track = True
-    widget._fixed_card_height = 244
-    widget._metadata_paint = {"title": "Stable Track"}
-    widget._fade_in_completed = False
-    widget._visible = False
-    build_calls = []
-    artwork_accepts = []
-    repaint_requests = []
-
-    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
-    monkeypatch.setattr(
-        display_update,
-        "_build_and_apply_metadata",
-        lambda *args, **kwargs: build_calls.append((args, kwargs)),
-    )
-    monkeypatch.setattr(
-        display_update,
-        "_accept_prepared_artwork_for_info",
-        lambda *args, **kwargs: artwork_accepts.append((args, kwargs)) or False,
-    )
-    widget._safe_update = lambda: repaint_requests.append(True)
-
-    display_update.update_display(
-        widget,
-        info,
-        prepared_artwork=PreparedArtwork((0, ""), None, 0.0),
-        artwork_generation=2,
-    )
-
-    assert build_calls == []
-    assert artwork_accepts == []
-    assert widget._emitted == []
-    assert repaint_requests == []
-
-
-def test_unchanged_refresh_diagnostic_waits_until_transition_is_idle(
-    monkeypatch,
-    caplog,
-):
-    widget = _StubMediaWidget()
-    info = MediaTrackInfo(
-        title="Stable Track",
-        artist="Stable Artist",
-        album="Stable Album",
-        state=MediaPlaybackState.PLAYING,
-    )
-    widget._last_info = info
-    widget._last_track_identity = widget._compute_track_identity(info)
-    widget._last_metadata_identity = widget._compute_metadata_identity(info)
-    widget._fade_in_completed = True
-    widget._skipped_identity_updates = widget._max_identity_skip
-    transition = {"active": True}
-    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
-    monkeypatch.setattr(display_update, "is_perf_metrics_enabled", lambda: True)
-    monkeypatch.setattr(
-        _StubMediaWidget,
-        "_has_transition_work_on_any_display",
-        classmethod(lambda cls: transition["active"]),
-        raising=False,
-    )
-    build_calls = []
-    monkeypatch.setattr(
-        display_update,
-        "_build_and_apply_metadata",
-        lambda *args, **kwargs: build_calls.append((args, kwargs)),
-    )
-
-    with caplog.at_level(logging.DEBUG):
-        display_update.update_display(widget, info)
-        assert widget._unchanged_refresh_diag_pending is True
-        assert "unchanged_refresh_suppressed" not in caplog.text
-
-        transition["active"] = False
-        display_update.update_display(widget, info)
-
-    assert build_calls == []
-    assert widget._unchanged_refresh_diag_pending is False
-    assert "unchanged_refresh_suppressed" in caplog.text
-    assert "update_requested=False" in caplog.text
-    assert "layout_mutations=0" in caplog.text
-
-
-def test_track_metadata_during_transition_avoids_redundant_qt_layout_mutation(
-    qt_app,
-    monkeypatch,
-):
-    widget = MediaWidget()
-    first = MediaTrackInfo(
-        title="First Track",
-        artist="Artist",
-        album="Album",
-        state=MediaPlaybackState.PLAYING,
-    )
-    changed = MediaTrackInfo(
-        title="Second Track",
-        artist="Artist",
-        album="Album",
-        state=MediaPlaybackState.PLAYING,
-    )
-    monkeypatch.setattr(
-        MediaWidget,
-        "_has_transition_work_on_any_display",
-        classmethod(lambda cls: True),
-    )
-    widget._has_seen_first_track = True
-    widget._emit_media_update = lambda info: None
-    widget.isVisible = lambda: True
-
-    try:
-        display_update.update_display(widget, first)
-
-        layout_calls = []
-        updates = []
-        widget.setTextFormat = lambda value: layout_calls.append(("format", value))
-        widget.setText = lambda value: layout_calls.append(("text", value))
-        widget.setMinimumHeight = lambda value: layout_calls.append(("min", value))
-        widget.setMaximumHeight = lambda value: layout_calls.append(("max", value))
-        widget.setContentsMargins = lambda *value: layout_calls.append(("margins", value))
-        widget._safe_update = lambda: updates.append("update")
-
-        display_update.update_display(widget, changed)
-
-        assert layout_calls == []
-        assert updates == ["update"]
-        assert widget._metadata_paint["title"] == "Second Track"
-    finally:
-        widget.cleanup()
-        widget.close()
-
-
-def test_playback_state_change_repaints_controls_without_qt_layout_mutation(
-    qt_app,
-    monkeypatch,
-):
-    widget = MediaWidget()
-    playing = MediaTrackInfo(
-        title="Same Track",
-        artist="Same Artist",
-        album="Album",
-        state=MediaPlaybackState.PLAYING,
-    )
-    paused = MediaTrackInfo(
-        title="Same Track",
-        artist="Same Artist",
-        album="Album",
-        state=MediaPlaybackState.PAUSED,
-    )
-    widget._has_seen_first_track = True
-    widget._emit_media_update = lambda info: None
-    widget.isVisible = lambda: True
-
-    try:
-        display_update.update_display(widget, playing)
-
-        layout_calls = []
-        updates = []
-        widget.setTextFormat = lambda value: layout_calls.append(("format", value))
-        widget.setText = lambda value: layout_calls.append(("text", value))
-        widget.setMinimumHeight = lambda value: layout_calls.append(("min", value))
-        widget.setMaximumHeight = lambda value: layout_calls.append(("max", value))
-        widget.setContentsMargins = lambda *value: layout_calls.append(("margins", value))
-        widget._safe_update = lambda: updates.append("update")
-
-        display_update.update_display(widget, paused)
-
-        assert layout_calls == []
-        assert updates == ["update"]
-        assert widget._last_info is paused
-        assert widget._last_info.state == MediaPlaybackState.PAUSED
-    finally:
-        widget.cleanup()
-        widget.close()
-
-
-def test_media_presentation_telemetry_separates_layout_and_emit_cost(
-    qt_app,
-    monkeypatch,
-    caplog,
-):
-    widget = MediaWidget()
-    info = MediaTrackInfo(
-        title="Measured Track",
-        artist="Measured Artist",
-        album="Album",
-        state=MediaPlaybackState.PLAYING,
-    )
-    received = []
-    receiver = lambda payload: received.append(payload)
-    widget.media_updated.connect(receiver)
-    widget._has_seen_first_track = True
-    widget._artwork_update_generation = 7
-    widget.isVisible = lambda: True
-    widget._safe_update = lambda: None
-    monkeypatch.setattr(display_update, "is_perf_metrics_enabled", lambda: True)
-    monkeypatch.setattr(
-        MediaWidget,
-        "_has_transition_work_on_any_display",
-        classmethod(lambda cls: True),
-    )
-
-    try:
-        with caplog.at_level(logging.INFO):
-            display_update.update_display(widget, info)
-
-        assert len(received) == 1
-        messages = [
-            record.getMessage()
-            for record in caplog.records
-            if "[PERF][MEDIA_PRESENTATION]" in record.getMessage()
-        ]
-        assert len(messages) == 1
-        message = messages[0]
-        assert "metadata_changed=True" in message
-        assert "deferred_for_transition=False" in message
-        assert "transition_active=True" in message
-        assert "layout_ms=" in message
-        assert "emit_ms=" in message
-        assert "subscriber_count=1" in message
-        assert "generation=7" in message
-    finally:
-        widget.media_updated.disconnect(receiver)
-        widget.cleanup()
-        widget.close()
-
-
-def test_update_display_album_only_change_does_not_force_metadata_refit(monkeypatch):
-    widget = _StubMediaWidget()
-    first_info = MediaTrackInfo(
-        title="Track",
-        artist="Artist",
-        album="Album A",
-        state=MediaPlaybackState.PLAYING,
-    )
-    second_info = MediaTrackInfo(
-        title="Track",
-        artist="Artist",
-        album="Album B",
-        state=MediaPlaybackState.PLAYING,
-    )
-    widget._last_track_identity = None
-    widget._last_metadata_identity = widget._compute_metadata_identity(first_info)
-
-    captured = {}
-    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
-    monkeypatch.setattr(
-        display_update,
-        "_build_and_apply_metadata",
-        lambda _widget, info, prev_info, *, metadata_changed: captured.update(
-            {"info": info, "metadata_changed": metadata_changed}
-        ),
-    )
-
-    display_update.update_display(widget, second_info)
-
-    assert captured["info"] is second_info
-    assert captured["metadata_changed"] is False
-
-
-def test_build_and_apply_metadata_reuses_existing_layout_for_same_track_identity():
-    widget = _StubMediaWidget()
-    widget._metadata_paint = {
-        "provider": "SPOTIFY",
-        "title": "Track",
-        "artist": "Artist",
-        "base_font": 22,
-        "header_font": 27,
-        "title_font": 31,
-        "artist_font": 17,
-        "header_weight": 750,
-        "title_weight": 700,
-        "artist_weight": 600,
-        "line_spacing": 4,
-        "body_top_gap": 8,
-    }
-    widget._header_font_pt = 27
-    widget._header_logo_size = 35
-    widget._header_logo_margin = 35
-    widget._artwork_vertical_bias = 0.41
-
-    info = MediaTrackInfo(
-        title="Track",
-        artist="Artist",
-        album="Album",
-        state=MediaPlaybackState.PAUSED,
-    )
-
-    display_update._build_and_apply_metadata(
-        widget,
-        info,
-        prev_info=info,
-        metadata_changed=False,
-    )
-
-    assert widget._metadata_paint["title_font"] == 31
-    assert widget._metadata_paint["artist_font"] == 17
-    assert widget._header_font_pt == 27
-    assert widget._artwork_vertical_bias == 0.41
-
-
-def test_build_and_apply_metadata_shrinks_wrap_prone_metadata_more_aggressively():
-    widget = _StubMediaWidget()
-    info = MediaTrackInfo(
-        title="Ground Control (feat. Tegan And Sara)",
-        artist="All Time Low",
-        album="Last Young Renegade",
-        state=MediaPlaybackState.PLAYING,
-    )
-
-    display_update._build_and_apply_metadata(
-        widget,
-        info,
-        prev_info=None,
-        metadata_changed=True,
-    )
-
-    assert widget._metadata_paint["title_font"] < widget._font_size + 3
-    assert widget._metadata_paint["artist_font"] < widget._font_size - 2
-
-
-def test_build_and_apply_metadata_compacts_for_small_committed_card_geometry():
-    widget = _StubMediaWidget()
-    widget._width = 480
-    widget._height = 232
-    info = MediaTrackInfo(
-        title="The Longest Distance Between Two Places",
-        artist="The World Is A Beautiful Place And I Am No Longer Afraid To Die",
-        album="Whenever, If Ever",
-        state=MediaPlaybackState.PLAYING,
-    )
-
-    display_update._build_and_apply_metadata(
-        widget,
-        info,
-        prev_info=None,
-        metadata_changed=True,
-    )
-
-    assert widget._metadata_paint["title_font"] <= widget._font_size
-    assert widget._metadata_paint["artist_font"] < widget._font_size - 2
-    assert widget._metadata_paint["line_spacing"] <= 3
-    assert widget._metadata_paint["body_top_gap"] <= 7
-
-
-def test_build_and_apply_metadata_uses_text_column_budget_not_full_card_width():
-    widget = _StubMediaWidget()
-    widget._width = 390
-    widget._height = 187
-    widget._artwork_size = 130
-    info = MediaTrackInfo(
-        title="Modest Mountains",
-        artist="Field Division",
-        album="Reverie State",
-        state=MediaPlaybackState.PLAYING,
-    )
-
-    display_update._build_and_apply_metadata(
-        widget,
-        info,
-        prev_info=None,
-        metadata_changed=True,
-    )
-
-    layout_budget = display_update._compute_metadata_layout_budget(widget)
-
-    assert layout_budget["text_width"] < widget.width()
-    assert widget._metadata_paint["header_font"] < int(widget._font_size * 1.2)
-    assert widget._metadata_paint["title_font"] < widget._font_size + 3
-    assert widget._metadata_paint["artist_font"] < widget._font_size - 2
-
-
-def test_update_display_first_track_waits_for_parent_fade_starter(monkeypatch):
-    widget = _StubMediaWidget()
-    widget._has_seen_first_track = False
-
-    starters = []
-
-    class _FadeParent:
-        def request_overlay_fade_sync(self, overlay_name, starter):
-            starters.append((overlay_name, starter))
-
-    widget.parent = lambda: _FadeParent()
-    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
-
-    live_info = MediaTrackInfo(
-        title="Track",
-        artist="Artist",
-        album="Album",
-        state=MediaPlaybackState.PLAYING,
-    )
-
-    display_update.update_display(widget, live_info)
-
-    assert widget.hide_called is True
-    assert widget.fade_in_calls == 0
-    assert [name for name, _ in starters] == ["media"]
-
-    starters.pop(0)[1]()
-
-    assert widget.fade_in_calls == 1
-    assert widget.notify_calls == 1
-
-
-def test_prepared_artwork_pixmap_and_fade_are_key_change_owned(
-    qt_app,
-    monkeypatch,
-):
-    monkeypatch.setattr(
-        MediaWidget,
-        "_has_transition_work_on_any_display",
-        classmethod(lambda cls: False),
-    )
-    widget = MediaWidget()
-    pixmap_calls = []
-    artwork_fades = []
-    original_create = MediaWidget._create_artwork_pixmap
-    widget._create_artwork_pixmap = lambda image: (
-        pixmap_calls.append(image),
-        original_create(image),
-    )[1]
-    widget._start_artwork_fade_in = lambda: artwork_fades.append("fade")
-    widget._start_widget_fade_in = lambda *_args, **_kwargs: None
-    widget._notify_spotify_widgets_visibility = lambda: None
-
-    image_a = QImage(32, 32, QImage.Format.Format_ARGB32)
-    image_b = QImage(32, 32, QImage.Format.Format_ARGB32)
-    key_a = (10, "a")
-    key_b = (11, "b")
-    first = MediaTrackInfo(
-        title="First",
-        artist="Artist",
-        album="Album",
-        state=MediaPlaybackState.PLAYING,
-        artwork=b"first-art",
-    )
-    title_changed = MediaTrackInfo(
-        title="Second",
-        artist="Artist",
-        album="Album",
-        state=MediaPlaybackState.PLAYING,
-        artwork=b"first-art",
-    )
-    artist_changed = MediaTrackInfo(
-        title="Second",
-        artist="Other Artist",
-        album="Album",
-        state=MediaPlaybackState.PLAYING,
-        artwork=b"first-art",
-    )
-    changed_art = MediaTrackInfo(
-        title="Second",
-        artist="Other Artist",
-        album="Album",
-        state=MediaPlaybackState.PLAYING,
-        artwork=b"second-art!",
-    )
-
-    key_map = {
-        b"first-art": key_a,
-        b"second-art!": key_b,
-    }
-    widget._compute_artwork_key = lambda info: key_map.get(
-        info.artwork,
-        (0, ""),
-    )
-
-    try:
-        widget._artwork_update_generation = 1
-        display_update.update_display(
-            widget,
-            first,
-            prepared_artwork=PreparedArtwork(key_a, image_a, 1.25),
-            artwork_generation=1,
-        )
-        assert len(pixmap_calls) == 1
-        assert artwork_fades == []
-
-        widget._artwork_update_generation = 2
-        display_update.update_display(
-            widget,
-            title_changed,
-            prepared_artwork=PreparedArtwork(key_a, None, 0.0),
-            artwork_generation=2,
-        )
-        widget._artwork_update_generation = 3
-        display_update.update_display(
-            widget,
-            artist_changed,
-            prepared_artwork=PreparedArtwork(key_a, None, 0.0),
-            artwork_generation=3,
-        )
-        assert len(pixmap_calls) == 1
-        assert artwork_fades == []
-
-        # Exercise the production diff-gate state: metadata is unchanged, but
-        # the artwork key itself must still bypass the completed-fade skip.
-        widget._fade_in_completed = True
-        widget._artwork_update_generation = 4
-        display_update.update_display(
-            widget,
-            changed_art,
-            prepared_artwork=PreparedArtwork(key_b, image_b, 1.5),
-            artwork_generation=4,
-        )
-        assert len(pixmap_calls) == 2
-        assert artwork_fades == ["fade"]
-    finally:
-        widget.cleanup()
-        widget.close()
-
-
-def test_null_prepared_artwork_clears_existing_artwork_once(
-    qt_app,
-    monkeypatch,
-):
-    monkeypatch.setattr(
-        MediaWidget,
-        "_has_transition_work_on_any_display",
-        classmethod(lambda cls: False),
-    )
-    widget = MediaWidget()
-    image = QImage(24, 24, QImage.Format.Format_ARGB32)
-    original_create = MediaWidget._create_artwork_pixmap
-    widget._create_artwork_pixmap = original_create
-    widget._start_widget_fade_in = lambda *_args, **_kwargs: None
-    widget._notify_spotify_widgets_visibility = lambda: None
-    info_with_art = MediaTrackInfo(
-        title="Track",
-        artist="Artist",
-        state=MediaPlaybackState.PLAYING,
-        artwork=b"art",
-    )
-    info_without_art = MediaTrackInfo(
-        title="Track",
-        artist="Artist",
-        state=MediaPlaybackState.PLAYING,
-        artwork=None,
-    )
-    widget._compute_artwork_key = lambda info: (3, "art") if info.artwork else (0, "")
-
-    try:
-        widget._artwork_update_generation = 1
-        display_update.update_display(
-            widget,
-            info_with_art,
-            prepared_artwork=PreparedArtwork((3, "art"), image, 0.5),
-            artwork_generation=1,
-        )
-        assert widget._artwork_pixmap is not None
-
-        widget._artwork_update_generation = 2
-        display_update.update_display(
-            widget,
-            info_without_art,
-            prepared_artwork=PreparedArtwork((0, ""), None, 0.0),
-            artwork_generation=2,
-        )
-        assert widget._artwork_pixmap is None
-        assert widget._applied_artwork_key == (0, "")
-
-        cache_sentinel = object()
-        widget._scaled_artwork_cache = cache_sentinel
-        widget._artwork_update_generation = 3
-        display_update.update_display(
-            widget,
-            info_without_art,
-            prepared_artwork=PreparedArtwork((0, ""), None, 0.0),
-            artwork_generation=3,
-        )
-        assert widget._scaled_artwork_cache is cache_sentinel
-    finally:
-        widget.cleanup()
-        widget.close()
-
-
-def _progress_ready_stub(
-    position_ms: int = 20_000,
-    *,
-    state: MediaPlaybackState = MediaPlaybackState.PLAYING,
-) -> tuple[_StubMediaWidget, MediaTrackInfo]:
-    widget = _StubMediaWidget()
-    widget._playback_progress_enabled = True
-    widget._playback_progress_fill_color = QColor(255, 255, 255, 230)
-    widget._playback_progress_shadow_enabled = False
-    widget._playback_progress_glow_enabled = False
-    widget._playback_progress_glow_color = QColor(255, 255, 255, 180)
-    widget._playback_progress_paint_key = None
-    widget._compute_controls_layout = lambda: {
-        "progress_rect": QRect(50, 190, 500, 6),
-    }
-    info = MediaTrackInfo(
-        title="Stable Track",
-        artist="Stable Artist",
-        album="Stable Album",
-        state=state,
-        position_ms=position_ms,
-        duration_ms=100_000,
-    )
-    widget._last_info = info
-    widget._last_track_identity = widget._compute_track_identity(info)
-    widget._last_metadata_identity = widget._compute_metadata_identity(info)
-    widget._has_seen_first_track = True
-    widget._fixed_card_height = 260
-    widget._metadata_paint = {"title": info.title}
-    widget._fade_in_completed = True
-    display_update._update_progress_paint_state(widget, info)
-    return widget, info
-
-
-def test_same_track_progress_pixel_change_requests_one_repaint_without_publish(
+def test_first_snapshot_publishes_and_reveals_through_existing_fade_path(
     monkeypatch,
 ) -> None:
-    widget, _previous = _progress_ready_stub()
-    updates: list[bool] = []
-    widget._safe_update = lambda: updates.append(True)
+    widget = _StubMediaControls()
+    widget._has_seen_first_track = False
     monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
+    info = _info()
 
-    display_update.update_display(
-        widget,
-        MediaTrackInfo(
-            title="Stable Track",
-            artist="Stable Artist",
-            album="Stable Album",
-            state=MediaPlaybackState.PLAYING,
-            position_ms=25_000,
-            duration_ms=100_000,
-        ),
-    )
+    display_update.update_display(widget, info)
 
-    assert updates == [True]
-    assert widget._emitted == []
-    assert widget._playback_progress_fill_width == 125
+    assert widget.emitted == [info]
+    assert widget.hide_calls == 1
+    assert widget.fade_calls == 1
+    assert widget.notify_calls == 1
 
 
-def test_same_track_subpixel_progress_change_requests_no_repaint(monkeypatch) -> None:
-    widget, _previous = _progress_ready_stub()
-    updates: list[bool] = []
-    widget._safe_update = lambda: updates.append(True)
-    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
+def test_playback_state_change_repaints_and_publishes_for_f4_consumers() -> None:
+    widget = _StubMediaControls()
+    playing = _info()
+    paused = _info(state=MediaPlaybackState.PAUSED)
 
-    display_update.update_display(
-        widget,
-        MediaTrackInfo(
-            title="Stable Track",
-            artist="Stable Artist",
-            album="Stable Album",
-            state=MediaPlaybackState.PLAYING,
-            position_ms=20_050,
-            duration_ms=100_000,
-        ),
-    )
+    display_update.update_display(widget, playing)
+    widget.emitted.clear()
+    widget.updates = 0
+    display_update.update_display(widget, paused)
 
-    assert updates == []
-    assert widget._emitted == []
-    assert widget._playback_progress_fill_width == 100
+    assert widget._last_info is paused
+    assert widget.emitted == [paused]
+    assert widget.updates == 1
 
 
-def test_unknown_duration_clears_progress_once(monkeypatch) -> None:
-    widget, _previous = _progress_ready_stub()
-    updates: list[bool] = []
-    widget._safe_update = lambda: updates.append(True)
-    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
-    unknown = MediaTrackInfo(
-        title="Stable Track",
-        artist="Stable Artist",
-        album="Stable Album",
-        state=MediaPlaybackState.PLAYING,
-    )
+def test_custom_edit_mode_does_not_restore_hidden_controls() -> None:
+    widget = _StubMediaControls()
+    widget.visible = False
+    widget._custom_layout_shell_active = True
 
-    display_update.update_display(widget, unknown)
-    display_update.update_display(widget, unknown)
+    display_update.update_display(widget, _info())
 
-    assert updates == [True]
+    assert widget.fade_calls == 0
+    assert widget.visible is False
+
+
+def test_progress_pixel_change_requests_one_repaint_without_publication() -> None:
+    widget = _StubMediaControls()
+    first = _info(position_ms=25_000)
+    second = _info(position_ms=26_000)
+    display_update.update_display(widget, first)
+    widget.emitted.clear()
+    widget.updates = 0
+
+    display_update.update_display(widget, second)
+
+    assert widget._playback_progress_fill_width == 26
+    assert widget.emitted == []
+    assert widget.updates == 1
+
+
+def test_subpixel_progress_change_requests_no_repaint() -> None:
+    widget = _StubMediaControls()
+    display_update.update_display(widget, _info(position_ms=25_000))
+    widget.updates = 0
+
+    display_update.update_display(widget, _info(position_ms=25_400))
+
+    assert widget._playback_progress_fill_width == 25
+    assert widget.updates == 0
+
+
+def test_unknown_duration_clears_progress_once() -> None:
+    widget = _StubMediaControls()
+    display_update.update_display(widget, _info())
+    widget.updates = 0
+
+    display_update.update_display(widget, _info(duration_ms=0, position_ms=0))
+    first_updates = widget.updates
+    display_update.update_display(widget, _info(duration_ms=0, position_ms=0))
+
     assert widget._playback_progress_visible is False
-    assert widget._playback_progress_fill_width == 0
+    assert first_updates == 1
+    assert widget.updates == 1
 
 
-def test_paused_unchanged_progress_snapshot_is_static(monkeypatch) -> None:
-    widget, paused = _progress_ready_stub(state=MediaPlaybackState.PAUSED)
-    updates: list[bool] = []
-    widget._safe_update = lambda: updates.append(True)
-    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
+def test_paused_unchanged_progress_snapshot_is_static() -> None:
+    widget = _StubMediaControls()
+    paused = _info(state=MediaPlaybackState.PAUSED, position_ms=40_000)
+    display_update.update_display(widget, paused)
+    widget.updates = 0
+    widget.emitted.clear()
 
     display_update.update_display(widget, paused)
 
-    assert updates == []
-    assert widget._emitted == []
+    assert widget.updates == 0
+    assert widget.emitted == []

@@ -1,35 +1,15 @@
-"""Painting routines for the MediaWidget.
+"""Temporary QWidget painting retained only for Phase-F4 Media controls."""
 
-Extracted from media_widget.py (M-5 refactor) to reduce monolith size.
-Contains all QPainter-based rendering: artwork, controls row, header
-frame, header logo, and the top-level paint dispatcher.
-"""
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QRect, QRectF
-from PySide6.QtGui import (
-    QFont,
-    QColor,
-    QPen,
-    QPixmap,
-    QPainter,
-    QPainterPath,
-    QFontMetrics,
-    QLinearGradient,
-)
+from PySide6.QtCore import QRect, QRectF, Qt
+from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen
 
 from core.logging.logger import get_logger
-from widgets.media.artwork_layout import compute_artwork_frame_size
 from core.media.media_controller import MediaPlaybackState
-from widgets.shadow_utils import (
-    draw_rounded_rect_border,
-    draw_text_with_shadow,
-    draw_text_rect_with_shadow,
-    text_shadows_enabled,
-)
+from widgets.shadow_utils import draw_text_rect_with_shadow
 
 if TYPE_CHECKING:
     from widgets.media_widget import MediaWidget
@@ -37,431 +17,36 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _qt_font_weight(value: object, fallback: QFont.Weight) -> QFont.Weight:
-    try:
-        numeric = int(value)
-    except Exception:
-        return fallback
-    if numeric >= 700:
-        return QFont.Weight.Bold
-    if numeric >= 600:
-        return QFont.Weight.DemiBold
-    if numeric >= 500:
-        return QFont.Weight.Medium
-    return QFont.Weight.Normal
-
-
-def _header_layout(widget: "MediaWidget") -> dict[str, object]:
-    margins = widget.contentsMargins()
-    try:
-        header_font_pt = int(widget._header_font_pt) if widget._header_font_pt > 0 else widget._font_size
-    except Exception as e:
-        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        header_font_pt = widget._font_size
-
-    font = QFont(widget._font_family, header_font_pt, QFont.Weight.Bold)
-    fm = QFontMetrics(font)
-    provider_name = widget.provider_display_name
-    text_w = max(fm.horizontalAdvance(provider_name), fm.boundingRect(provider_name).width())
-    text_w += max(12, int(round(header_font_pt * 0.45)))
-    text_h = fm.height()
-    logo_size = max(1, int(widget._header_logo_size))
-    gap = max(6, int(widget._header_logo_margin) - logo_size)
-    pad_x = 17
-    pad_y = 6
-    left = int(margins.left()) - 5
-    top = int(margins.top()) + 3
-    row_h = max(text_h, logo_size)
-    width = int(logo_size + gap + text_w + pad_x * 2)
-    height = int(row_h + pad_y * 2)
-
-    effective_w = max(1, int(widget.width()))
-    max_width = max(0, effective_w - left - 10)
-    artwork_pm = getattr(widget, "_artwork_pixmap", None)
-    artwork_size = max(0, int(getattr(widget, "_artwork_size", 0)))
-    if artwork_pm is not None and not artwork_pm.isNull() and artwork_size > 0:
-        effective_h = max(1, int(widget.height()))
-        max_art_h = max(24, effective_h - 60)
-        art_target = max(48, min(artwork_size, max_art_h))
-        frame_size = compute_artwork_frame_size(artwork_pm, art_target)
-        art_width = max(1, int(frame_size.width()))
-        artwork_left = max(20, effective_w - 20 - art_width)
-        max_width = max(0, artwork_left - left - 18)
-    if max_width and width > max_width:
-        width = max_width
-
-    rect = QRect(left, top, max(1, width), max(1, height))
-    logo_x = rect.left() + pad_x
-    logo_y = rect.top() + int(round((rect.height() - logo_size) / 2.0))
-    text_x = logo_x + logo_size + gap
-    baseline_y = rect.top() + int(round((rect.height() - text_h) / 2.0)) + fm.ascent()
-    text_width = max(1, rect.right() - text_x - pad_x + 1)
-    return {
-        "rect": rect,
-        "font": font,
-        "metrics": fm,
-        "font_pt": header_font_pt,
-        "logo_x": logo_x,
-        "logo_y": logo_y,
-        "text_x": text_x,
-        "baseline_y": baseline_y,
-        "text_width": text_width,
-    }
-
-
-_SPOTIFY_BRAND_LOGO_CANDIDATES = [
-    "Spotify_Primary_Logo_RGB_Black.png",
-    "spotify_logo.png",
-    "SpotifyLogo.png",
-    "spotify.png",
-]
-
-_BRAND_LOGO_CANDIDATES: dict[str, list[str]] = {
-    "spotify": _SPOTIFY_BRAND_LOGO_CANDIDATES,
-    "spotify_browser": _SPOTIFY_BRAND_LOGO_CANDIDATES,
-    "musicbee": [
-        "icons8-musicbee-96.png",
-        "MusicBee_Logo.png",
-        "musicbee_logo.png",
-        "musicbee.png",
-    ],
-}
-
-
-def load_brand_pixmap(provider: str = "spotify") -> Optional[QPixmap]:
-    """Best-effort load of a brand logo from the shared images folder.
-
-    Args:
-        provider: Media provider name ('spotify' or 'musicbee').
-
-    We prefer the high-resolution primary logo asset when present so that
-    the glyph remains sharp even when scaled up on high-DPI displays.
-    """
-    try:
-        images_dir = Path(__file__).resolve().parent.parent.parent / "images"
-        candidates = _BRAND_LOGO_CANDIDATES.get(provider.lower())
-        if candidates is None:
-            logger.warning("[MEDIA] No registered logo policy for provider=%s", provider)
-            return None
-        for name in candidates:
-            candidate = images_dir / name
-            if candidate.exists() and candidate.is_file():
-                pm = QPixmap(str(candidate))
-                if not pm.isNull():
-                    return pm
-    except Exception:
-        logger.debug("[MEDIA] Failed to load %s logo", provider, exc_info=True)
-    return None
-
-
-def _scaled_header_logo(
-    widget: "MediaWidget",
-    pixmap: QPixmap,
-    target_px: int,
-    dpr: float,
-) -> QPixmap:
-    """Return the cached DPR-sized provider logo used by every media paint."""
-
-    try:
-        source_key = int(pixmap.cacheKey())
-    except Exception:
-        source_key = id(pixmap)
-    cache_key = (source_key, int(target_px), round(float(dpr), 4))
-    cached = getattr(widget, "_header_logo_scaled_cache", None)
-    if (
-        getattr(widget, "_header_logo_scaled_cache_key", None) == cache_key
-        and cached is not None
-        and not cached.isNull()
-    ):
-        return cached
-
-    scaled = pixmap.scaled(
-        target_px,
-        target_px,
-        Qt.AspectRatioMode.KeepAspectRatio,
-        Qt.TransformationMode.SmoothTransformation,
-    )
-    try:
-        scaled.setDevicePixelRatio(dpr)
-    except Exception as e:
-        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-    widget._header_logo_scaled_cache = scaled
-    widget._header_logo_scaled_cache_key = cache_key
-    return scaled
-
-
-def paint_header_frame(widget: "MediaWidget", painter: QPainter) -> None:
-    """Paint a rounded sub-frame around the logo + SPOTIFY header.
-
-    The frame inherits the media widget's background and border colours
-    and opacities so it feels like a lighter inner container instead of a
-    separate widget. It is confined to the left text column and never
-    overlaps the artwork on the right.
-    """
-    if not widget._show_header_frame:
-        return
-    if not widget._show_background:
-        return
-    if widget._bg_border_width <= 0 or widget._bg_border_color.alpha() <= 0:
-        return
-
-    layout = _header_layout(widget)
-    rect = layout["rect"]
-    if rect.width() <= 0 or rect.height() <= 0:
-        return
-    radius = min(widget._bg_corner_radius + 1, min(rect.width(), rect.height()) / 2)
-
-    outer_width = max(1, widget._bg_border_width)
-    inner_width = max(2, outer_width - 3)
-    draw_rounded_rect_border(
-        painter,
-        rect,
-        radius,
-        widget._bg_border_color,
-        inner_width,
-    )
-
-
-def paint_header_logo(widget: "MediaWidget", painter: QPainter) -> None:
-    """Paint the Spotify logo glyph next to the SPOTIFY header text.
-
-    This is drawn separately from the rich-text header so that we can
-    control DPI scaling and alignment precisely while text is painted
-    by the shared metadata painter.
-    """
-    pm = widget._brand_pixmap
-    size = widget._header_logo_size
-    if pm is None or pm.isNull() or size <= 0:
-        return
-
-    try:
-        dpr = float(widget.devicePixelRatioF())
-    except Exception as e:
-        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        dpr = 1.0
-
-    target_px = int(size * max(1.0, dpr))
-    if target_px <= 0:
-        return
-
-    scaled = _scaled_header_logo(widget, pm, target_px, max(1.0, dpr))
-
-    layout = _header_layout(widget)
-    x = int(layout["logo_x"])
-    y = int(layout["logo_y"])
-
-    painter.save()
-    try:
-        painter.drawPixmap(x, y, scaled)
-    finally:
-        painter.restore()
-
-
-def paint_metadata_text(widget: "MediaWidget", painter: QPainter) -> None:
-    """Paint provider/title/artist text with deterministic painter shadows."""
-    metadata = getattr(widget, "_metadata_paint", None)
-    if not isinstance(metadata, dict):
-        return
-
-    provider = str(metadata.get("provider") or widget.provider_display_name)
-    title = str(metadata.get("title") or "")
-    artist = str(metadata.get("artist") or "")
-    if not provider and not title and not artist:
-        return
-
-    header_layout = _header_layout(widget)
-    header_rect = header_layout["rect"]
-    margins = widget.contentsMargins()
-    left = int(margins.left())
-    right = int(widget.width() - margins.right() - 8)
-    max_width = max(40, right - left)
-
-    color = QColor(widget._text_color)
-    enabled = text_shadows_enabled(widget._shadow_config)
-
-    header_font_pt = int(metadata.get("header_font") or widget._header_font_pt or widget._font_size)
-    title_font_pt = int(metadata.get("title_font") or max(6, widget._font_size + 3))
-    artist_font_pt = int(metadata.get("artist_font") or max(6, widget._font_size - 2))
-    header_weight = int(metadata.get("header_weight") or 750)
-    title_weight = int(metadata.get("title_weight") or 700)
-    artist_weight = int(metadata.get("artist_weight") or 600)
-    line_spacing = int(metadata.get("line_spacing") or 4)
-    body_top_gap = int(metadata.get("body_top_gap") or 8)
-
-    painter.save()
-    try:
-        # Header text, aligned to the separately painted brand logo and frame.
-        header_font = header_layout["font"]
-        painter.setFont(header_font)
-        painter.setPen(color)
-        header_fm = header_layout["metrics"]
-        header_x = int(header_layout["text_x"])
-        header_y = int(header_layout["baseline_y"])
-        header_max_width = int(header_layout["text_width"])
-        header_text = header_fm.elidedText(provider, Qt.TextElideMode.ElideRight, header_max_width)
-        draw_text_with_shadow(
-            painter,
-            header_x,
-            header_y,
-            header_text,
-            font_size=header_font_pt,
-            enabled=enabled,
-        )
-
-        y = int(header_rect.bottom() + 1 + body_top_gap)
-        body_flags = (
-            Qt.AlignmentFlag.AlignLeft
-            | Qt.AlignmentFlag.AlignTop
-            | Qt.TextFlag.TextWordWrap
-        )
-
-        if title:
-            title_font = QFont(
-                widget._font_family,
-                title_font_pt,
-                _qt_font_weight(title_weight, QFont.Weight.Bold),
-            )
-            title_fm = QFontMetrics(title_font)
-            title_bounds = title_fm.boundingRect(
-                QRect(left, y, max_width, 1000),
-                int(body_flags),
-                title,
-            )
-            title_rect = QRect(left, y, max_width, max(title_fm.height(), title_bounds.height()))
-            painter.setFont(title_font)
-            painter.setPen(color)
-            draw_text_rect_with_shadow(
-                painter,
-                title_rect,
-                body_flags,
-                title,
-                font_size=title_font_pt,
-                enabled=enabled,
-            )
-            y = title_rect.bottom() + 1 + line_spacing
-
-        if artist:
-            artist_font = QFont(
-                widget._font_family,
-                artist_font_pt,
-                _qt_font_weight(artist_weight, QFont.Weight.DemiBold),
-            )
-            artist_color = QColor(color)
-            artist_color.setAlpha(int(artist_color.alpha() * 0.95))
-            artist_fm = QFontMetrics(artist_font)
-            artist_rect = QRect(left, y, max_width, artist_fm.height() + 2)
-            artist_text = artist_fm.elidedText(artist, Qt.TextElideMode.ElideRight, max_width)
-            painter.setFont(artist_font)
-            painter.setPen(artist_color)
-            draw_text_rect_with_shadow(
-                painter,
-                artist_rect,
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                artist_text,
-                font_size=artist_font_pt,
-                enabled=enabled,
-            )
-    finally:
-        painter.restore()
-
-
-def metadata_paint_bottom(widget: "MediaWidget") -> int:
-    """Return the inclusive bottom edge of the current painted metadata."""
-
-    metadata = getattr(widget, "_metadata_paint", None)
-    if not isinstance(metadata, dict):
-        return 0
-    title = str(metadata.get("title") or "")
-    artist = str(metadata.get("artist") or "")
-    header_rect = _header_layout(widget)["rect"]
-    margins = widget.contentsMargins()
-    left = int(margins.left())
-    right = int(widget.width() - margins.right() - 8)
-    max_width = max(40, right - left)
-    title_font_pt = int(metadata.get("title_font") or max(6, widget._font_size + 3))
-    artist_font_pt = int(metadata.get("artist_font") or max(6, widget._font_size - 2))
-    title_weight = int(metadata.get("title_weight") or 700)
-    artist_weight = int(metadata.get("artist_weight") or 600)
-    line_spacing = int(metadata.get("line_spacing") or 4)
-    body_top_gap = int(metadata.get("body_top_gap") or 8)
-    y = int(header_rect.bottom() + 1 + body_top_gap)
-    bottom = int(header_rect.bottom())
-    body_flags = (
-        Qt.AlignmentFlag.AlignLeft
-        | Qt.AlignmentFlag.AlignTop
-        | Qt.TextFlag.TextWordWrap
-    )
-
-    if title:
-        title_font = QFont(
-            widget._font_family,
-            title_font_pt,
-            _qt_font_weight(title_weight, QFont.Weight.Bold),
-        )
-        title_fm = QFontMetrics(title_font)
-        title_bounds = title_fm.boundingRect(
-            QRect(left, y, max_width, 1000),
-            int(body_flags),
-            title,
-        )
-        title_height = max(title_fm.height(), title_bounds.height())
-        bottom = y + title_height - 1
-        y = bottom + 1 + line_spacing
-
-    if artist:
-        artist_font = QFont(
-            widget._font_family,
-            artist_font_pt,
-            _qt_font_weight(artist_weight, QFont.Weight.DemiBold),
-        )
-        artist_height = QFontMetrics(artist_font).height() + 2
-        bottom = y + artist_height - 1
-
-    return int(bottom)
-
-
 def draw_control_icon(
     widget: "MediaWidget", painter: QPainter, rect: QRect, key: str
 ) -> None:
-    """Draw a single control icon (prev/play/next)."""
+    """Draw one temporary QWidget transport-control glyph."""
+
     state = MediaPlaybackState.UNKNOWN
     if widget._last_info:
         state = widget._last_info.state
 
-    prev_sym = "\u2190"  # LEFTWARDS ARROW
-    next_sym = "\u2192"  # RIGHTWARDS ARROW
-    if state == MediaPlaybackState.PLAYING:
-        centre_sym = "||"  # pause
-    else:
-        centre_sym = "\u25b6"  # play
-
+    prev_sym = "\u2190"
+    next_sym = "\u2192"
+    centre_sym = "||" if state == MediaPlaybackState.PLAYING else "\u25b6"
     inactive_color = QColor(200, 200, 200, 230)
     active_color = QColor(255, 255, 255, 255)
 
-    if key == "prev":
+    if key in {"prev", "next"}:
         painter.setPen(inactive_color)
         draw_text_rect_with_shadow(
             painter,
             rect,
             Qt.AlignmentFlag.AlignCenter,
-            prev_sym,
-            font_size=widget._font_size,
-            enabled=False,
-        )
-    elif key == "next":
-        painter.setPen(inactive_color)
-        draw_text_rect_with_shadow(
-            painter,
-            rect,
-            Qt.AlignmentFlag.AlignCenter,
-            next_sym,
+            prev_sym if key == "prev" else next_sym,
             font_size=widget._font_size,
             enabled=False,
         )
     elif key == "play":
-        pause_font_size = widget._font_size - 4 if centre_sym == "||" else widget._font_size - 2
-        font_centre = QFont("Segoe UI", pause_font_size, QFont.Weight.Bold)
-        painter.setFont(font_centre)
+        pause_font_size = (
+            widget._font_size - 4 if centre_sym == "||" else widget._font_size - 2
+        )
+        painter.setFont(QFont("Segoe UI", pause_font_size, QFont.Weight.Bold))
         painter.setPen(active_color)
         draw_text_rect_with_shadow(
             painter,
@@ -474,7 +59,8 @@ def draw_control_icon(
 
 
 def paint_controls_row(widget: "MediaWidget", painter: QPainter) -> None:
-    """Paint transport controls aligned with the click hit regions."""
+    """Paint transport controls aligned with their surviving hit regions."""
+
     layout = widget._compute_controls_layout()
     if layout is None:
         return
@@ -491,16 +77,15 @@ def paint_controls_row(widget: "MediaWidget", painter: QPainter) -> None:
         matte_top.setAlpha(min(255, int(base_color.alpha() * 0.95) + 30))
         matte_bottom.setAlpha(min(255, int(base_color.alpha() * 0.85)))
 
-        # Main gradient fill
         gradient = QLinearGradient(row_rect.topLeft(), row_rect.bottomLeft())
         gradient.setColorAt(0.0, matte_top)
         gradient.setColorAt(1.0, matte_bottom)
-
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(gradient)
-        painter.drawRoundedRect(row_rect, widget._controls_row_radius, widget._controls_row_radius)
+        painter.drawRoundedRect(
+            row_rect, widget._controls_row_radius, widget._controls_row_radius
+        )
 
-        # Inner matte outline (2px thicker outer border)
         outline = QColor(255, 255, 255, widget._controls_row_outline_alpha)
         painter.setPen(QColor(0, 0, 0, widget._controls_row_shadow_alpha))
         painter.drawRoundedRect(
@@ -508,21 +93,18 @@ def paint_controls_row(widget: "MediaWidget", painter: QPainter) -> None:
             widget._controls_row_radius - 1,
             widget._controls_row_radius - 1,
         )
-        outline_pen = QPen(outline, 1.75)
-        painter.setPen(outline_pen)
+        painter.setPen(QPen(outline, 1.75))
         painter.drawRoundedRect(
-            row_rect.adjusted(0, 0, 0, 0),
+            row_rect,
             widget._controls_row_radius,
             widget._controls_row_radius,
         )
 
-        # Divider lines (relative to row_rect)
-        divider_color = QColor(255, 255, 255, 55)
-        painter.setPen(divider_color)
+        painter.setPen(QColor(255, 255, 255, 55))
         top_divider = row_rect.top() + int(row_rect.height() * 0.15)
         bottom_divider = row_rect.bottom() - int(row_rect.height() * 0.15)
-        for i in range(1, 3):
-            x = row_rect.left() + int(row_rect.width() * i / 3.0)
+        for index in range(1, 3):
+            x = row_rect.left() + int(row_rect.width() * index / 3.0)
             painter.drawLine(x, top_divider, x, bottom_divider)
 
         painter.setFont(font)
@@ -530,159 +112,62 @@ def paint_controls_row(widget: "MediaWidget", painter: QPainter) -> None:
         for key, rect in button_rects.items():
             draw_control_icon(widget, painter, rect, key)
 
-        # Click feedback overlay
         if widget._controls_feedback:
             painter.setPen(Qt.PenStyle.NoPen)
             for key, rect in button_rects.items():
-                intensity = max(0.0, min(1.0, widget._controls_feedback_progress.get(key, 0.0)))
+                intensity = max(
+                    0.0,
+                    min(1.0, widget._controls_feedback_progress.get(key, 0.0)),
+                )
                 if intensity <= 0.0:
                     continue
-
                 base_rect = QRectF(rect)
                 scale = 1.0 + widget._controls_feedback_scale_boost * intensity
                 if scale > 1.0:
                     delta_w = base_rect.width() * (scale - 1.0) * 0.5
                     delta_h = base_rect.height() * (scale - 1.0) * 0.5
-                    highlight_rect = base_rect.adjusted(-delta_w, -delta_h, delta_w, delta_h)
+                    highlight_rect = base_rect.adjusted(
+                        -delta_w, -delta_h, delta_w, delta_h
+                    )
                 else:
                     highlight_rect = base_rect
-
-                radius = max(4.0, min(highlight_rect.width(), highlight_rect.height()) * 0.3)
-                glow_expand = max(2.0, min(highlight_rect.width(), highlight_rect.height()) * 0.12)
-
-                # Soft outer glow
-                glow_rect = highlight_rect.adjusted(-glow_expand, -glow_expand, glow_expand, glow_expand)
-                glow_color = QColor(255, 255, 255, int(90 * intensity))
-                painter.setBrush(glow_color)
-                painter.drawRoundedRect(glow_rect, radius + glow_expand, radius + glow_expand)
-
-                # Bright gradient core
-                fb_gradient = QLinearGradient(
+                radius = max(
+                    4.0,
+                    min(highlight_rect.width(), highlight_rect.height()) * 0.3,
+                )
+                glow_expand = max(
+                    2.0,
+                    min(highlight_rect.width(), highlight_rect.height()) * 0.12,
+                )
+                glow_rect = highlight_rect.adjusted(
+                    -glow_expand, -glow_expand, glow_expand, glow_expand
+                )
+                painter.setBrush(QColor(255, 255, 255, int(90 * intensity)))
+                painter.drawRoundedRect(
+                    glow_rect,
+                    radius + glow_expand,
+                    radius + glow_expand,
+                )
+                feedback_gradient = QLinearGradient(
                     highlight_rect.topLeft(), highlight_rect.bottomLeft()
                 )
-                fb_gradient.setColorAt(0.0, QColor(255, 255, 255, int(255 * intensity)))
-                fb_gradient.setColorAt(0.6, QColor(255, 255, 255, int(215 * intensity)))
-                fb_gradient.setColorAt(1.0, QColor(255, 255, 255, int(170 * intensity)))
-                painter.setBrush(fb_gradient)
+                feedback_gradient.setColorAt(
+                    0.0, QColor(255, 255, 255, int(255 * intensity))
+                )
+                feedback_gradient.setColorAt(
+                    0.6, QColor(255, 255, 255, int(215 * intensity))
+                )
+                feedback_gradient.setColorAt(
+                    1.0, QColor(255, 255, 255, int(170 * intensity))
+                )
+                painter.setBrush(feedback_gradient)
                 painter.drawRoundedRect(highlight_rect, radius, radius)
     finally:
         painter.restore()
 
 
-def paint_artwork(widget: "MediaWidget", painter: QPainter) -> None:
-    """Paint album artwork with clipping, shadow, and border."""
-    pm = widget._artwork_pixmap
-    if pm is None or pm.isNull():
-        return
-
-    effective_w = widget.width()
-    effective_h = widget.height()
-    max_by_height = max(24, effective_h - 60)
-    size = max(48, min(widget._artwork_size, max_by_height))
-    if size <= 0:
-        return
-
-    try:
-        dpr = float(widget.devicePixelRatioF())
-    except Exception as e:
-        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        dpr = 1.0
-    scale_dpr = max(1.0, dpr)
-
-    frame_size = compute_artwork_frame_size(pm, size)
-    frame_w = max(1, frame_size.width())
-    frame_h = max(1, frame_size.height())
-
-    # PERF: Cache scaled artwork to avoid expensive SmoothTransformation on every paint
-    cache_key = (id(pm), frame_w, frame_h, scale_dpr)
-    if widget._scaled_artwork_cache_key == cache_key and widget._scaled_artwork_cache is not None:
-        scaled = widget._scaled_artwork_cache
-    else:
-        target_w_px = int(frame_w * scale_dpr)
-        target_h_px = int(frame_h * scale_dpr)
-        scaled = pm.scaled(
-            target_w_px,
-            target_h_px,
-            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        try:
-            scaled.setDevicePixelRatio(scale_dpr)
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        widget._scaled_artwork_cache = scaled
-        widget._scaled_artwork_cache_key = cache_key
-
-    scaled_logical_w = max(1, int(round(scaled.width() / scale_dpr)))
-    scaled_logical_h = max(1, int(round(scaled.height() / scale_dpr)))
-
-    pad = 20
-    x = max(pad, effective_w - pad - frame_w)
-    bias = max(0.0, min(1.0, float(getattr(widget, "_artwork_vertical_bias", 0.4))))
-    y = pad + int(round((size - frame_h) * bias))
-    widget._last_artwork_rect = QRect(x, y, frame_w, frame_h)
-    painter.save()
-    try:
-        if widget._artwork_opacity != 1.0:
-            painter.setOpacity(max(0.0, min(1.0, float(widget._artwork_opacity))))
-
-        border_rect = QRect(x, y, frame_w, frame_h).adjusted(-1, -1, 1, 1)
-
-        # Multi-pass drop shadow for softer feathering
-        painter.save()
-        painter.setPen(Qt.PenStyle.NoPen)
-        shadow_passes = [
-            (2, 25),
-            (4, 35),
-            (6, 45),
-            (8, 30),
-        ]
-        for offset, alpha in shadow_passes:
-            shadow_rect = border_rect.adjusted(offset, offset, offset, offset)
-            shadow_path = QPainterPath()
-            if widget._rounded_artwork_border:
-                radius = min(shadow_rect.width(), shadow_rect.height()) / 8.0
-                shadow_path.addRoundedRect(shadow_rect, radius, radius)
-            else:
-                shadow_path.addRect(shadow_rect)
-            painter.setBrush(QColor(0, 0, 0, alpha))
-            painter.drawPath(shadow_path)
-        painter.restore()
-
-        # Clip artwork to rounded/square frame
-        path = QPainterPath()
-        if widget._rounded_artwork_border:
-            radius = min(border_rect.width(), border_rect.height()) / 8.0
-            path.addRoundedRect(border_rect, radius, radius)
-        else:
-            path.addRect(border_rect)
-        painter.setClipPath(path)
-
-        # Centre the scaled artwork inside the frame
-        cx = x + frame_w // 2
-        cy = y + frame_h // 2
-        offset_x = int(round(cx - scaled_logical_w / 2))
-        offset_y = int(round(cy - scaled_logical_h / 2))
-
-        painter.drawPixmap(offset_x, offset_y, scaled)
-
-        # Artwork border matching the widget frame colour/opacity
-        if widget._bg_border_width > 0 and widget._bg_border_color.alpha() > 0:
-            pen = painter.pen()
-            pen.setColor(widget._bg_border_color)
-            pen.setWidth(max(1, widget._bg_border_width + 2))
-            painter.setPen(pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            if widget._rounded_artwork_border:
-                painter.drawPath(path)
-            else:
-                painter.drawRect(border_rect)
-    finally:
-        painter.restore()
-
-
 def paint_playback_progress(widget: "MediaWidget", painter: QPainter) -> None:
-    """Paint the optional scalar-only playback progress pill."""
+    """Paint the temporary F4 scalar playback-progress pill."""
 
     if not bool(getattr(widget, "_playback_progress_visible", False)):
         return
@@ -695,28 +180,36 @@ def paint_playback_progress(widget: "MediaWidget", painter: QPainter) -> None:
 
     fill_width = max(
         0,
-        min(rect.width(), int(getattr(widget, "_playback_progress_fill_width", 0) or 0)),
+        min(
+            rect.width(),
+            int(getattr(widget, "_playback_progress_fill_width", 0) or 0),
+        ),
     )
     track_rect = QRectF(rect)
     track_radius = max(1.5, track_rect.height() * 0.5)
     fill_color = QColor(
-        getattr(widget, "_playback_progress_fill_color", QColor(255, 255, 255, 230))
+        getattr(
+            widget,
+            "_playback_progress_fill_color",
+            QColor(255, 255, 255, 230),
+        )
     )
 
     painter.save()
     try:
         painter.setPen(Qt.PenStyle.NoPen)
-
         if bool(getattr(widget, "_playback_progress_shadow_enabled", False)):
-            shadow_rect = track_rect.translated(0.0, 2.0)
             painter.setBrush(QColor(0, 0, 0, 90))
-            painter.drawRoundedRect(shadow_rect, track_radius, track_radius)
+            painter.drawRoundedRect(
+                track_rect.translated(0.0, 2.0),
+                track_radius,
+                track_radius,
+            )
 
         track_color = QColor(fill_color)
         track_color.setAlpha(max(32, min(90, int(fill_color.alpha() * 0.28))))
         painter.setBrush(track_color)
         painter.drawRoundedRect(track_rect, track_radius, track_radius)
-
         if fill_width <= 0:
             return
 
@@ -727,19 +220,30 @@ def paint_playback_progress(widget: "MediaWidget", painter: QPainter) -> None:
             track_rect.height(),
         )
         fill_radius = max(0.5, min(fill_rect.width(), fill_rect.height()) * 0.5)
-
         if bool(getattr(widget, "_playback_progress_glow_enabled", False)):
             glow_base = QColor(
-                getattr(widget, "_playback_progress_glow_color", QColor(255, 255, 255, 180))
+                getattr(
+                    widget,
+                    "_playback_progress_glow_color",
+                    QColor(255, 255, 255, 180),
+                )
             )
-            for expansion, alpha_scale in ((4.0, 0.18), (2.5, 0.28), (1.25, 0.42)):
+            for expansion, alpha_scale in (
+                (4.0, 0.18),
+                (2.5, 0.28),
+                (1.25, 0.42),
+            ):
                 glow_color = QColor(glow_base)
                 glow_color.setAlpha(max(1, int(glow_base.alpha() * alpha_scale)))
-                glow_rect = fill_rect.adjusted(-expansion, -expansion, expansion, expansion)
-                glow_radius = fill_radius + expansion
+                glow_rect = fill_rect.adjusted(
+                    -expansion, -expansion, expansion, expansion
+                )
                 painter.setBrush(glow_color)
-                painter.drawRoundedRect(glow_rect, glow_radius, glow_radius)
-
+                painter.drawRoundedRect(
+                    glow_rect,
+                    fill_radius + expansion,
+                    fill_radius + expansion,
+                )
         painter.setBrush(fill_color)
         painter.drawRoundedRect(fill_rect, fill_radius, fill_radius)
     finally:
@@ -747,17 +251,6 @@ def paint_playback_progress(widget: "MediaWidget", painter: QPainter) -> None:
 
 
 def _is_feedback_only_repaint(widget: "MediaWidget", event) -> bool:
-    """True when this paint event is a control-feedback repaint of the row band.
-
-    A feedback fade issues `update(controls_row_rect)` (Slice H), so its paint
-    event's region is confined to that band. The artwork, metadata, header, logo
-    and progress all sit above the row, so when the damage is inside the row band
-    only the cached background frame and the controls row are actually visible
-    there - the expensive subpainters can be skipped entirely, not merely clipped.
-    Any coalesced wider damage (a full or upper-card update) fails the containment
-    check and takes the ordinary full path.
-    """
-
     if not getattr(widget, "_controls_feedback", None):
         return False
     if not getattr(widget, "_show_controls", False):
@@ -766,50 +259,25 @@ def _is_feedback_only_repaint(widget: "MediaWidget", event) -> bool:
         from widgets.media.feedback import _feedback_dirty_rect
 
         dirty = _feedback_dirty_rect(widget)
-        if dirty is None or dirty.isNull():
-            return False
-        return dirty.contains(event.rect())
+        return bool(
+            dirty is not None and not dirty.isNull() and dirty.contains(event.rect())
+        )
     except Exception:
         return False
 
 
 def paint_contents(widget: "MediaWidget", event) -> None:
-    """Internal paint implementation — dispatches to sub-painters."""
-    # Call base class paintEvent for background frame
+    """Paint only the temporary F4 controls/progress compatibility surface."""
+
     from widgets.base_overlay_widget import BaseOverlayWidget
+
     BaseOverlayWidget.paintEvent(widget, event)
-
-    # A control-feedback repaint touches only the controls row; running the full
-    # artwork/text/logo/progress pipeline for it was the frame-count-scale cost
-    # the second installed run measured. Paint only the row band for it.
     feedback_only = _is_feedback_only_repaint(widget, event)
-
     try:
         painter = QPainter(widget)
-        try:
-            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         if not feedback_only:
-            # Optional header frame on the left side around logo + SPOTIFY.
-            paint_header_frame(widget, painter)
-
-            # Provider/title/artist text is painter-owned; QLabel rich text is not used.
-            paint_metadata_text(widget, painter)
-
-            # Album artwork
-            paint_artwork(widget, painter)
-
-            # Spotify logo
-            paint_header_logo(widget, painter)
-
-            # Optional playback position. This is driven only by accepted GSMTC
-            # snapshots and never owns a timer or animation.
             paint_playback_progress(widget, painter)
-
-        # Transport controls row (always: it carries the feedback glow).
         paint_controls_row(widget, painter)
     except Exception:
-        logger.debug("[MEDIA] Failed to paint artwork pixmap", exc_info=True)
+        logger.debug("[MEDIA] Failed to paint F4 compatibility controls", exc_info=True)
