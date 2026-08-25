@@ -270,6 +270,12 @@ emits semantic levels and Python routes them to the owner. The existing controll
 projection, read/write generations and debounce remain unchanged. No second Media model/item is added.
 System mute is the next F4 slice.
 
+The third retained F4 checkpoint projects the separate `SystemMuteRuntimeService` lease into the same
+Media model/item and places its bounded button inside the existing controls band. Accepted mute
+revisions drive the icon; QML emits a semantic toggle and owns only pressed/flash feedback. Endpoint
+acquisition, polling, toggle/global-volume actions and generation fencing remain Python-owned. Caller
+proof and retirement of the remaining QWidget F4 pixels/input are next.
+
 ---
 
 # F5 — Reddit / Reddit2

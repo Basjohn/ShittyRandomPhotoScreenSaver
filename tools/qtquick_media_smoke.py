@@ -1,4 +1,4 @@
-"""Render retained Media controls/progress/app-volume through a real Quick window."""
+"""Render retained Media controls/progress/volume/mute through a real Quick window."""
 
 from __future__ import annotations
 
@@ -37,6 +37,7 @@ from rendering.quick.widgets import (  # noqa: E402
 )
 from widgets.media_runtime import MediaRuntimeSnapshot, PreparedMediaArtwork  # noqa: E402
 from widgets.media_volume_runtime import MediaVolumeRuntimeSnapshot  # noqa: E402
+from widgets.system_mute_runtime import SystemMuteRuntimeSnapshot  # noqa: E402
 
 
 class _Runtime:
@@ -114,6 +115,44 @@ class _VolumeRuntime:
         return True
 
 
+class _SystemMuteRuntime:
+    def __init__(self, *, muted: bool) -> None:
+        self.consumer = None
+        self.running = False
+        self.snapshot = SystemMuteRuntimeSnapshot(
+            revision=1,
+            available=True,
+            muted=bool(muted),
+            source="smoke",
+        )
+
+    def set_thread_manager(self, _manager) -> None:
+        return
+
+    def attach_consumer(self, consumer) -> None:
+        self.consumer = consumer
+
+    def detach_consumer(self, consumer=None) -> None:
+        if consumer is None or consumer is self.consumer:
+            self.consumer = None
+
+    def start(self) -> bool:
+        self.running = True
+        return True
+
+    def stop(self) -> None:
+        self.running = False
+
+    def current_snapshot(self):
+        return self.snapshot
+
+    def toggle_mute(self) -> bool:
+        return True
+
+    def step_system_volume(self, _delta) -> float:
+        return 0.5
+
+
 def _config(**overrides) -> MediaPresentationConfig:
     values = {
         "provider": "spotify",
@@ -137,6 +176,7 @@ def _config(**overrides) -> MediaPresentationConfig:
         "playback_progress_glow_color": [50, 205, 255, 180],
         "spotify_volume_enabled": True,
         "spotify_volume_fill_color": [255, 255, 255, 190],
+        "mute_button_enabled": True,
     }
     values.update(overrides)
     return MediaPresentationConfig.from_mapping(values)
@@ -271,6 +311,9 @@ def run(output_dir: Path) -> dict[str, object]:
                 factory.media_artwork_provider,
                 runtime,
                 volume_runtime_service=_VolumeRuntime(),
+                system_mute_runtime_service=_SystemMuteRuntime(
+                    muted=index % 2 == 0
+                ),
                 parent=owner,
             )
             presentation = RetainedMediaPresentation(

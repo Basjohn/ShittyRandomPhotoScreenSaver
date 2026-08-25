@@ -11,7 +11,8 @@ Phase F active
 F0.5 closed
 F1 Clock closed
 F2 Weather closed
-F3 Media core active
+F3 Media core closed
+F4 Media controls active
 ```
 
 Closed A–E history is intentionally not repeated here.

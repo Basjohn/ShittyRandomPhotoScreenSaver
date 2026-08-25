@@ -1,4 +1,4 @@
-"""Stable retained Media presentation, artwork, transport and app-volume projection."""
+"""Stable retained Media presentation with transport, volume and mute projection."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from rendering.quick.media_artwork import MediaArtworkImageProvider
 if TYPE_CHECKING:
     from widgets.media_runtime import MediaRuntimeSnapshot
     from widgets.media_volume_runtime import MediaVolumeRuntimeSnapshot
+    from widgets.system_mute_runtime import SystemMuteRuntimeSnapshot
 
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
@@ -121,6 +122,7 @@ class MediaPresentationConfig:
     playback_progress_glow_color: tuple[int, int, int, int] = (255, 255, 255, 180)
     app_volume_enabled: bool = True
     app_volume_fill_color: tuple[int, int, int, int] = (66, 66, 66, 255)
+    system_mute_enabled: bool = False
 
     @classmethod
     def from_mapping(
@@ -170,6 +172,9 @@ class MediaPresentationConfig:
             app_volume_fill_color=_rgba(
                 values.get("spotify_volume_fill_color"),
                 (66, 66, 66, 255),
+            ),
+            system_mute_enabled=_as_bool(
+                values.get("mute_button_enabled"), False
             ),
         )
 
@@ -273,6 +278,9 @@ class MediaPresentationSnapshot:
     app_volume_supported: bool = False
     app_volume_runtime_available: bool = False
     app_volume_level: float = 1.0
+    system_mute_revision: int = 0
+    system_mute_runtime_available: bool = False
+    system_muted: bool = False
 
 
 class MediaPresentationModel(QObject):
@@ -288,6 +296,7 @@ class MediaPresentationModel(QObject):
         artwork_provider: MediaArtworkImageProvider,
         runtime_service: Any | None = None,
         volume_runtime_service: Any | None = None,
+        system_mute_runtime_service: Any | None = None,
         *,
         runtime_generation: int | None = None,
         parent: QObject | None = None,
@@ -298,6 +307,8 @@ class MediaPresentationModel(QObject):
         self._runtime_service = runtime_service
         self._volume_runtime_service = volume_runtime_service
         self._volume_runtime_attached = False
+        self._system_mute_runtime_service = system_mute_runtime_service
+        self._system_mute_runtime_attached = False
         self._artwork_provider = artwork_provider
         self._artwork_identity = ""
         self._snapshot = MediaPresentationSnapshot(
@@ -323,6 +334,15 @@ class MediaPresentationModel(QObject):
         if self._active and service is not self._volume_runtime_service:
             raise RuntimeError("cannot replace the active Media volume runtime service")
         self._volume_runtime_service = service
+
+    def set_system_mute_runtime_service(self, service: Any) -> None:
+        """Inject the existing presentation-neutral system-mute lease."""
+
+        if self._retired:
+            raise RuntimeError("cannot inject a retired Media presentation model")
+        if self._active and service is not self._system_mute_runtime_service:
+            raise RuntimeError("cannot replace the active system-mute runtime service")
+        self._system_mute_runtime_service = service
 
     @property
     def config(self) -> MediaPresentationConfig:
@@ -354,7 +374,10 @@ class MediaPresentationModel(QObject):
             raise RuntimeError("Media runtime service failed to start")
         try:
             self._start_volume_runtime_if_enabled()
+            self._start_system_mute_runtime_if_enabled()
         except Exception:
+            self._stop_and_detach_system_mute_runtime()
+            self._stop_and_detach_volume_runtime()
             self._active = False
             service.stop()
             service.detach_consumer(self)
@@ -366,11 +389,8 @@ class MediaPresentationModel(QObject):
         self._retired = True
         self._active = False
         service = self._runtime_service
-        volume_service = self._volume_runtime_service
-        if volume_service is not None and self._volume_runtime_attached:
-            volume_service.stop()
-            volume_service.detach_consumer(self)
-            self._volume_runtime_attached = False
+        self._stop_and_detach_system_mute_runtime()
+        self._stop_and_detach_volume_runtime()
         if service is not None:
             service.stop()
             service.detach_consumer(self)
@@ -409,6 +429,7 @@ class MediaPresentationModel(QObject):
         if provider_changed and self._volume_runtime_service is not None:
             self._volume_runtime_service.set_provider_runtime(config.provider)
         self._sync_volume_runtime_activation()
+        self._sync_system_mute_runtime_activation()
         return True
 
     def apply_style(self, style: MediaPresentationStyle) -> bool:
@@ -477,10 +498,39 @@ class MediaPresentationModel(QObject):
         delta = 0.05 if direction > 0 else -0.05
         return self.request_app_volume(self._snapshot.app_volume_level + delta)
 
+    def request_system_mute_toggle(self) -> bool:
+        """Route one semantic mute toggle to the existing endpoint owner."""
+
+        service = self._system_mute_runtime_service
+        if (
+            not self.is_active
+            or service is None
+            or not self.config.system_mute_enabled
+            or not self._snapshot.system_mute_runtime_available
+        ):
+            return False
+        return bool(service.toggle_mute())
+
+    def request_system_volume_step(self, delta: float) -> float | None:
+        """Route one admitted global-volume step through the mute owner."""
+
+        service = self._system_mute_runtime_service
+        if (
+            not self.is_active
+            or service is None
+            or not self.config.system_mute_enabled
+            or not self._snapshot.system_mute_runtime_available
+        ):
+            return None
+        return service.step_system_volume(float(delta))
+
     def is_media_consumer_alive(self) -> bool:
         return self.is_active
 
     def is_media_volume_consumer_alive(self) -> bool:
+        return self.is_active
+
+    def is_system_mute_consumer_alive(self) -> bool:
         return self.is_active
 
     def on_media_runtime_snapshot(self, snapshot: MediaRuntimeSnapshot) -> None:
@@ -597,6 +647,30 @@ class MediaPresentationModel(QObject):
             )
         )
 
+    def on_system_mute_runtime_snapshot(
+        self, snapshot: SystemMuteRuntimeSnapshot
+    ) -> None:
+        """Project one accepted system-mute revision without owning its poll."""
+
+        if not self.is_active:
+            return
+        try:
+            revision = int(snapshot.revision)
+            available = bool(snapshot.available)
+            muted = bool(snapshot.muted)
+        except (AttributeError, TypeError, ValueError):
+            return
+        if revision <= self._snapshot.system_mute_revision:
+            return
+        self._replace_snapshot(
+            replace(
+                self._snapshot,
+                system_mute_revision=revision,
+                system_mute_runtime_available=available,
+                system_muted=muted,
+            )
+        )
+
     def _start_volume_runtime_if_enabled(self) -> None:
         service = self._volume_runtime_service
         if service is None or not self.config.app_volume_enabled:
@@ -627,6 +701,48 @@ class MediaPresentationModel(QObject):
             return
         if service is not None and self._volume_runtime_attached:
             service.stop()
+
+    def _stop_and_detach_volume_runtime(self) -> None:
+        service = self._volume_runtime_service
+        if service is not None and self._volume_runtime_attached:
+            service.stop()
+            service.detach_consumer(self)
+            self._volume_runtime_attached = False
+
+    def _start_system_mute_runtime_if_enabled(self) -> None:
+        service = self._system_mute_runtime_service
+        if service is None or not self.config.system_mute_enabled:
+            return
+        try:
+            if not self._system_mute_runtime_attached:
+                service.set_thread_manager(self._thread_manager)
+                service.attach_consumer(self)
+                self._system_mute_runtime_attached = True
+            if not service.start():
+                raise RuntimeError("system-mute runtime service failed to start")
+            snapshot = service.current_snapshot()
+            if snapshot is not None:
+                self.on_system_mute_runtime_snapshot(snapshot)
+        except Exception:
+            self._stop_and_detach_system_mute_runtime()
+            raise
+
+    def _sync_system_mute_runtime_activation(self) -> None:
+        if not self.is_active:
+            return
+        service = self._system_mute_runtime_service
+        if self.config.system_mute_enabled:
+            self._start_system_mute_runtime_if_enabled()
+            return
+        if service is not None and self._system_mute_runtime_attached:
+            service.stop()
+
+    def _stop_and_detach_system_mute_runtime(self) -> None:
+        service = self._system_mute_runtime_service
+        if service is not None and self._system_mute_runtime_attached:
+            service.stop()
+            service.detach_consumer(self)
+            self._system_mute_runtime_attached = False
 
     def _project_artwork(self, snapshot: MediaRuntimeSnapshot) -> str:
         key = snapshot.artwork.key
@@ -775,6 +891,32 @@ class MediaPresentationModel(QObject):
             color.setAlpha(140)
         return color
 
+    @Property(bool, notify=stateChanged)
+    def systemMuteAvailable(self) -> bool:
+        return bool(
+            self.config.system_mute_enabled
+            and self._snapshot.has_track
+            and self._snapshot.system_mute_runtime_available
+        )
+
+    @Property(bool, notify=stateChanged)
+    def systemMuted(self) -> bool:
+        return self._snapshot.system_muted
+
+    @Property(bool, notify=stateChanged)
+    def controlsBandAvailable(self) -> bool:
+        return self.controlsAvailable or self.systemMuteAvailable
+
+    @Property(QColor, notify=stateChanged)
+    def systemMuteBackgroundColor(self) -> QColor:
+        return QColor(*self.config.background_color)
+
+    @Property(QColor, notify=stateChanged)
+    def systemMuteIconColor(self) -> QColor:
+        if self._snapshot.system_muted:
+            return QColor(200, 200, 200, 180)
+        return QColor(*self.config.text_color)
+
     @Property(str, notify=stateChanged)
     def fontFamily(self) -> str:
         return self.config.font_family
@@ -873,6 +1015,9 @@ class RetainedMediaPresentation:
         volume = getattr(self._retained.item, "appVolumeLevelRequested", None)
         if volume is not None and hasattr(volume, "connect"):
             volume.connect(self._handle_app_volume_requested)
+        mute = getattr(self._retained.item, "systemMuteToggleRequested", None)
+        if mute is not None and hasattr(mute, "connect"):
+            mute.connect(self._handle_system_mute_requested)
 
     @property
     def item(self):
@@ -939,6 +1084,16 @@ class RetainedMediaPresentation:
         """Route an already-admitted keyboard app-volume step."""
 
         return self._model.request_app_volume_step(direction)
+
+    def _handle_system_mute_requested(self) -> bool:
+        if not self._model.interactionEnabled:
+            return False
+        return self._model.request_system_mute_toggle()
+
+    def request_system_volume_step(self, delta: float) -> float | None:
+        """Route an already-admitted global-volume step."""
+
+        return self._model.request_system_volume_step(delta)
 
     def retire(self) -> bool:
         return self._host.retire_widget(self._retained)
