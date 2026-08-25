@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QAbstractListModel, QModelIndex, QObject, Property, Qt, Signal
@@ -23,8 +24,16 @@ from widgets.gmail_runtime import GmailRuntimeSnapshot
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
     ORDINARY_TEXT_SHADOW_BASE,
+    OrdinaryWidgetPresentationHost,
     OverlayCardStyle,
+    OverlayWidgetGeometry,
+    RetainedOverlayWidget,
 )
+
+
+_GMAIL_LOGO = Path(__file__).resolve().parents[3] / "images" / "google-gmail.png"
+_GMAIL_UNREAD_ENVELOPE = Path(__file__).resolve().parents[3] / "images" / "gmail-envelope.png"
+_GMAIL_READ_ENVELOPE = Path(__file__).resolve().parents[3] / "images" / "gmail-read.png"
 
 
 def _bounded_int(value: object, default: int, low: int, high: int) -> int:
@@ -99,6 +108,12 @@ class GmailPresentationConfig:
     show_timestamp: bool = True
     show_unread_count_in_header: bool = True
     show_separators: bool = True
+    show_header_border: bool = True
+    desaturate_when_no_unread: bool = False
+    separator_color: tuple[int, int, int, int] = (200, 200, 200, 40)
+    separator_thickness: int = 3
+    boundary_separator_color: tuple[int, int, int, int] = (180, 180, 180, 80)
+    boundary_separator_thickness: int = 3
     auto_title_case: bool = True
     clean_sender_names: bool = True
     max_sender_words: int = 3
@@ -128,6 +143,16 @@ class GmailPresentationConfig:
             show_timestamp=_as_bool(values.get("show_timestamp"), True),
             show_unread_count_in_header=_as_bool(values.get("show_unread_count_in_header"), True),
             show_separators=_as_bool(values.get("show_separators"), True),
+            show_header_border=_as_bool(values.get("show_header_border"), True),
+            desaturate_when_no_unread=_as_bool(values.get("desaturate_when_no_unread"), False),
+            separator_color=_rgba(values.get("separator_color"), (200, 200, 200, 40)),
+            separator_thickness=_bounded_int(values.get("separator_thickness"), 3, 0, 12),
+            boundary_separator_color=_rgba(
+                values.get("boundary_separator_color"), (180, 180, 180, 80)
+            ),
+            boundary_separator_thickness=_bounded_int(
+                values.get("boundary_separator_thickness"), 3, 0, 12
+            ),
             auto_title_case=_as_bool(values.get("auto_title_case"), True),
             clean_sender_names=_as_bool(values.get("clean_sender_names"), True),
             max_sender_words=_bounded_int(values.get("max_sender_words"), 3, 0, 20),
@@ -216,6 +241,7 @@ class GmailPresentationRow:
     unread: bool
     count: int
     archive_supported: bool
+    boundary_before: bool
 
 
 class GmailRowListModel(QAbstractListModel):
@@ -227,6 +253,7 @@ class GmailRowListModel(QAbstractListModel):
     UnreadRole = IdentityRole + 5
     CountRole = IdentityRole + 6
     ArchiveSupportedRole = IdentityRole + 7
+    BoundaryBeforeRole = IdentityRole + 8
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -248,6 +275,7 @@ class GmailRowListModel(QAbstractListModel):
             self.UnreadRole: row.unread,
             self.CountRole: row.count,
             self.ArchiveSupportedRole: row.archive_supported,
+            self.BoundaryBeforeRole: row.boundary_before,
             int(Qt.ItemDataRole.DisplayRole): row.subject,
         }.get(int(role))
 
@@ -261,6 +289,7 @@ class GmailRowListModel(QAbstractListModel):
             self.UnreadRole: b"messageUnread",
             self.CountRole: b"messageCount",
             self.ArchiveSupportedRole: b"archiveSupported",
+            self.BoundaryBeforeRole: b"boundaryBefore",
         }
 
     @property
@@ -446,6 +475,9 @@ class GmailPresentationModel(QObject):
                             and self._runtime_service.is_imap_backend()
                         )
                     ),
+                    boundary_before=bool(
+                        rows and rows[-1].unread != bool(email.is_unread)
+                    ),
                 )
             )
         self._row_model.replace_rows(rows)
@@ -523,7 +555,7 @@ class GmailPresentationModel(QObject):
         self._row_model.replace_rows(())
 
     @Property(QObject, constant=True)
-    def rows(self) -> QObject:
+    def rowModel(self) -> QObject:
         return self._row_model
 
     @Property(str, notify=stateChanged)
@@ -546,6 +578,231 @@ class GmailPresentationModel(QObject):
     def interactionEnabled(self) -> bool:
         return self._snapshot.interaction_enabled
 
+    @Property(str, notify=stateChanged)
+    def headerText(self) -> str:
+        if self.config.show_unread_count_in_header and self._snapshot.unread_count > 0:
+            return f"Gmail ( {self._snapshot.unread_count} )"
+        return "Gmail"
+
+    @Property(str, constant=True)
+    def logoSource(self) -> str:
+        return _GMAIL_LOGO.resolve().as_uri() if _GMAIL_LOGO.is_file() else ""
+
+    @Property(str, constant=True)
+    def unreadEnvelopeSource(self) -> str:
+        return (
+            _GMAIL_UNREAD_ENVELOPE.resolve().as_uri()
+            if _GMAIL_UNREAD_ENVELOPE.is_file()
+            else ""
+        )
+
+    @Property(str, constant=True)
+    def readEnvelopeSource(self) -> str:
+        return (
+            _GMAIL_READ_ENVELOPE.resolve().as_uri()
+            if _GMAIL_READ_ENVELOPE.is_file()
+            else ""
+        )
+
+    @Property(str, notify=stateChanged)
+    def fontFamily(self) -> str:
+        return self.config.font_family
+
+    @Property(float, notify=stateChanged)
+    def fontSize(self) -> float:
+        return float(self.config.font_size)
+
+    @Property(float, notify=stateChanged)
+    def timestampFontSize(self) -> float:
+        return float(max(8, self.config.font_size - 5))
+
+    @Property(float, notify=stateChanged)
+    def headerFontSize(self) -> float:
+        base = max(6, int(self.config.font_size * 1.2))
+        return float(max(6, base + round(self.config.header_logo_px_adjust / 1.3)))
+
+    @Property(float, notify=stateChanged)
+    def headerLogoSize(self) -> float:
+        return float(max(12, int(self.headerFontSize * 1.3)))
+
+    @Property(QColor, notify=stateChanged)
+    def textColor(self) -> QColor:
+        return QColor(*self.config.text_color)
+
+    @Property(QColor, notify=stateChanged)
+    def senderColor(self) -> QColor:
+        return QColor(200, 200, 200, 255)
+
+    @Property(QColor, notify=stateChanged)
+    def readSenderColor(self) -> QColor:
+        return QColor(180, 180, 180, 220)
+
+    @Property(QColor, notify=stateChanged)
+    def readSubjectColor(self) -> QColor:
+        return QColor(220, 220, 220, 230)
+
+    @Property(QColor, notify=stateChanged)
+    def timestampColor(self) -> QColor:
+        return QColor(180, 180, 180, 200)
+
+    @Property(QColor, notify=stateChanged)
+    def separatorColor(self) -> QColor:
+        return QColor(*self.config.separator_color)
+
+    @Property(QColor, notify=stateChanged)
+    def boundarySeparatorColor(self) -> QColor:
+        return QColor(*self.config.boundary_separator_color)
+
+    @Property(bool, notify=stateChanged)
+    def showEnvelopeIcon(self) -> bool:
+        return self.config.show_envelope_icon
+
+    @Property(bool, notify=stateChanged)
+    def showThreeDotMenu(self) -> bool:
+        return self.config.show_three_dot_menu
+
+    @Property(bool, notify=stateChanged)
+    def showRefreshSpiral(self) -> bool:
+        return self.config.show_refresh_spiral
+
+    @Property(bool, notify=stateChanged)
+    def showSeparators(self) -> bool:
+        return self.config.show_separators
+
+    @Property(bool, notify=stateChanged)
+    def showHeaderBorder(self) -> bool:
+        return self.config.show_header_border
+
+    @Property(bool, notify=stateChanged)
+    def desaturateLogo(self) -> bool:
+        return self.config.desaturate_when_no_unread and self._snapshot.unread_count == 0
+
+    @Property(int, notify=stateChanged)
+    def separatorThickness(self) -> int:
+        return self.config.separator_thickness
+
+    @Property(int, notify=stateChanged)
+    def boundarySeparatorThickness(self) -> int:
+        return self.config.boundary_separator_thickness
+
+    @Property(float, notify=stateChanged)
+    def senderSubjectRatio(self) -> float:
+        return float(self.config.sender_subject_ratio) / 100.0
+
+    @Property(bool, notify=stateChanged)
+    def textShadowEnabled(self) -> bool:
+        return self.style.text_shadow_enabled
+
+    @Property(QColor, notify=stateChanged)
+    def textShadowColor(self) -> QColor:
+        return QColor(self.style.text_shadow_color)
+
+    @Property(float, notify=stateChanged)
+    def textShadowOffsetX(self) -> float:
+        return self.style.text_shadow_offset_x
+
+    @Property(float, notify=stateChanged)
+    def textShadowOffsetY(self) -> float:
+        return self.style.text_shadow_offset_y
+
+
+class RetainedGmailPresentation:
+    """One retained Gmail item with semantic action routing."""
+
+    def __init__(
+        self,
+        *,
+        host: OrdinaryWidgetPresentationHost,
+        model: GmailPresentationModel,
+        geometry: OverlayWidgetGeometry,
+        fade_opacity: float = 1.0,
+        on_open_inbox_requested: Callable[[], Any] | None = None,
+    ) -> None:
+        self._host = host
+        self._model = model
+        self._on_open_inbox_requested = on_open_inbox_requested
+        self._retained: RetainedOverlayWidget = host.create_family_widget(
+            "gmail",
+            initial_properties={"gmailModel": model},
+            object_name="gmail",
+            geometry=geometry,
+            fade_opacity=fade_opacity,
+            card_style=model.style.card_style,
+        )
+        self._retained.add_retirement_callback(model.retire)
+        self._connect("openInboxRequested", self._handle_open_inbox_requested)
+        self._connect("openMessageRequested", model.request_open)
+        self._connect("refreshRequested", model.request_refresh)
+        self._connect("authRequested", model.request_auth)
+        self._connect("actionRequested", model.request_action)
+
+    def _connect(self, signal_name: str, callback: Callable[..., Any]) -> None:
+        signal = getattr(self._retained.item, signal_name, None)
+        if signal is not None and hasattr(signal, "connect"):
+            signal.connect(callback)
+
+    @property
+    def item(self):
+        return self._retained.item
+
+    @property
+    def model(self) -> GmailPresentationModel:
+        return self._model
+
+    def activate(self, thread_manager: Any | None = None) -> bool:
+        return self._model.activate(thread_manager)
+
+    def set_geometry(self, geometry: OverlayWidgetGeometry) -> None:
+        self._retained.set_geometry(geometry)
+
+    def set_fade_opacity(self, opacity: float) -> None:
+        self._retained.set_fade_opacity(opacity)
+
+    def set_interaction_enabled(self, enabled: bool) -> bool:
+        return self._model.set_interaction_enabled(enabled)
+
+    def apply_input_state(self, input_state: object) -> bool:
+        if isinstance(input_state, Mapping):
+            value = input_state.get
+        else:
+            def value(name, default):
+                return getattr(input_state, name, default)
+        enabled = (
+            bool(value("admission_open", True))
+            and not bool(value("exiting", False))
+            and (
+                bool(value("interaction_mode_enabled", False))
+                or bool(value("ctrl_held", False))
+            )
+        )
+        return self._model.set_interaction_enabled(enabled)
+
+    def apply_config(
+        self,
+        config: GmailPresentationConfig,
+        shadow_values: Mapping[str, object],
+        *,
+        border_width: float = 4.0,
+    ) -> None:
+        self._model.apply_config(config)
+        style = GmailPresentationStyle.project(
+            config, shadow_values, border_width=border_width
+        )
+        self._model.apply_style(style)
+        self._retained.set_card_style(style.card_style)
+
+    def _handle_open_inbox_requested(self) -> bool:
+        if (
+            not self._model.is_active
+            or not self._model.interactionEnabled
+            or self._on_open_inbox_requested is None
+        ):
+            return False
+        return bool(self._on_open_inbox_requested())
+
+    def retire(self) -> bool:
+        return self._host.retire_widget(self._retained)
+
 
 __all__ = [
     "GmailPresentationConfig",
@@ -554,4 +811,5 @@ __all__ = [
     "GmailPresentationSnapshot",
     "GmailPresentationStyle",
     "GmailRowListModel",
+    "RetainedGmailPresentation",
 ]
