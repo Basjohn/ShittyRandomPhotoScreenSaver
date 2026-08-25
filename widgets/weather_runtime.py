@@ -1,7 +1,7 @@
 """Presentation-neutral Weather runtime-data service (Phase E1 slice 3).
 
 ``WeatherRuntimeService`` owns the non-pixel behavior required to obtain and
-maintain Weather data, extracted out of ``WeatherWidget`` presentation ownership:
+maintain Weather data independently of Weather presentation ownership:
 
 - provider construction/use (``OpenMeteoProvider``);
 - detached network fetch + preparation on the shared I/O pool;
@@ -11,13 +11,13 @@ maintain Weather data, extracted out of ``WeatherWidget`` presentation ownership
   so retired or superseded work cannot commit;
 - clean retirement/cancellation of family-exclusive timer/poll/in-flight ownership.
 
-It holds no QWidget/pixel state. It drives a *consumer* (the ``WeatherWidget``)
+It holds no QWidget/pixel state. It drives a retained presentation model
 through a small callback protocol so prepared Weather state / refresh / error
 events reach presentation without this owner importing presentation logic:
 
     WeatherRuntimeService  ->  prepared state + refresh/error events  ->  consumer
 
-Consumer protocol (see ``WeatherWidget``):
+Consumer protocol (see ``WeatherPresentationModel``):
 
 - ``is_weather_consumer_alive() -> bool``
 - ``on_weather_state(data, *, from_cache: bool) -> None``
@@ -25,11 +25,8 @@ Consumer protocol (see ``WeatherWidget``):
 - ``on_weather_error(error: str) -> None``
 - ``weather_pending_first_show() -> bool``
 
-The production ``WeatherRuntimeService`` is built/owned through
-``WidgetRuntimeManager`` (via the neutral ``widget_runtime_services`` registry);
-the production ``WeatherWidget`` defers to it and does not construct its own
-provider/timer. A directly constructed ``WeatherWidget`` may build a convenience
-service for standalone use.
+The production ``WeatherRuntimeService`` is built/owned through the neutral
+runtime-service boundary and consumed by the retained Quick Weather model.
 """
 from __future__ import annotations
 
@@ -144,13 +141,6 @@ class WeatherRuntimeService:
         self._cache_time = None
         if not next_location and self._running:
             self.stop()
-
-    def set_running(self, running: bool) -> None:
-        if running:
-            if not self._retired:
-                self._running = True
-            return
-        self.stop()
 
     @property
     def location(self) -> str:
@@ -622,18 +612,6 @@ class WeatherRuntimeService:
         ):
             return
         self.on_fetch_error(error)
-
-    def on_weather_fetched(self, data: Dict[str, Any]) -> None:
-        """Compatibility seam for an already-fetched Weather dictionary."""
-        if self._retired:
-            return
-        sample = prepare_weather_sample(
-            data,
-            fallback_location=self._location,
-            observed_at=datetime.now(),
-        )
-        self._startup_cache_request_id += 1
-        self._install_weather_data(dict(data), sample)
 
     def _install_weather_data(
         self,

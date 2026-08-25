@@ -2880,8 +2880,8 @@ class WidgetManager:
     # =========================================================================
     # Widget Factory Methods (Phase 2 - Jan 2026)
     # Legacy create_*_widget methods removed - now using WidgetFactoryRegistry
-    # See rendering/widget_factories.py for WeatherWidgetFactory,
-    # MediaWidgetFactory and RedditWidgetFactory implementations.
+    # See rendering/widget_factories.py for the surviving MediaWidgetFactory
+    # and RedditWidgetFactory implementations.
     # =========================================================================
 
     # NOTE: old create_* methods have been removed. setup_all_widgets() uses

@@ -10,7 +10,8 @@ Current state:
 Phase F active
 F0.5 closed
 F1 Clock closed
-F2 Weather active
+F2 Weather closed
+F3 Media core active
 ```
 
 Closed A–E history is intentionally not repeated here.

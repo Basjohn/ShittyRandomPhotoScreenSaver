@@ -15,8 +15,8 @@ canonical settings, injects it into the widget for use, and retires it on runtim
 teardown independently of QWidget pixel ownership.
 
 E1 slice 3 adds the per-instance Weather runtime-data service. It owns provider
-fetch/cache/refresh/retry/request-generation lifetime while the legacy
-``WeatherWidget`` remains only a prepared-state presentation consumer.
+fetch/cache/refresh/retry/request-generation lifetime for the retained Weather
+presentation model.
 
 E1 slice 4 adds a separate per-card/display Abandonment runtime/model service.
 It owns that Steam card's cache/source/rotation cadence and prepared state while
@@ -162,7 +162,7 @@ _REDDIT_SERVICE_SPEC = RuntimeServiceSpec(
 def _build_weather_service(widget_id: str, widgets_config: Mapping[str, Any]) -> Any:
     # Lazy import preserves deactivated-family import dormancy. Construction is
     # provider/network/filesystem inert; the service starts work only after
-    # injection and the normal widget start boundary.
+    # injection and retained-model activation.
     from widgets.weather_runtime import WeatherRuntimeService
 
     return WeatherRuntimeService()
@@ -172,7 +172,7 @@ def _inject_weather_service(widget: Any, service: Any) -> None:
     setter = getattr(widget, "set_runtime_service", None)
     if not callable(setter):
         raise AttributeError(
-            "runtime widget cannot accept Weather service (missing set_runtime_service)"
+            "Weather consumer cannot accept runtime service (missing set_runtime_service)"
         )
     setter(service)
 
@@ -187,13 +187,15 @@ def _retire_weather_service(service: Any) -> None:
 def _weather_service_reuse_is_valid(widget: Any, service: Any) -> bool:
     if getattr(widget, "_runtime_service", None) is not service:
         return False
+    if bool(getattr(widget, "_retired", False)):
+        return False
     if _service_is_retired(service):
         return False
+    config = getattr(widget, "config", None)
+    has_location = bool(str(getattr(config, "location", "") or "").strip())
+    is_active = bool(getattr(widget, "is_active", False))
     # Missing-location Weather is intentionally active with a stopped service.
-    has_location = bool(str(getattr(widget, "_location", "") or "").strip())
-    return not (_widget_is_active(widget) and has_location) or _service_is_running(
-        service
-    )
+    return not (is_active and has_location) or _service_is_running(service)
 
 
 _WEATHER_SERVICE_SPEC = RuntimeServiceSpec(

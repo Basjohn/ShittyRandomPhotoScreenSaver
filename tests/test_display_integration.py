@@ -25,7 +25,6 @@ from core.settings import SettingsManager
 from ui.settings_dialog import SettingsDialog
 from ui.tabs.sources_tab import SourcesTab
 from ui.tabs.widgets_tab import WidgetsTab
-from widgets.weather_widget import WeatherWidget, WeatherPosition
 from widgets.media_widget import MediaWidget
 from core.media import media_controller as mc
 
@@ -1651,11 +1650,6 @@ class TestWidgetRouting:
         tab.weather_bg_opacity.setValue(80)
         tab._save_settings_now()
 
-        def fake_weather_start(self):
-            self._enabled = True
-
-        monkeypatch.setattr(WeatherWidget, "start", fake_weather_start, raising=False)
-
         widget = DisplayWidget(
             screen_index=0,
             display_mode=DisplayMode.FILL,
@@ -1666,18 +1660,15 @@ class TestWidgetRouting:
         widget.resize(800, 600)
         widget._setup_widgets()
         assert widget.clock_widget is None
-        assert widget.weather_widget is not None
-        assert widget.weather_widget._enabled is True
+        assert widget.weather_widget is None
+        weather_config = settings_manager.get("widgets", {}).get("weather", {})
+        assert weather_config["location"] == "Johannesburg"
+        assert weather_config["position"] == "Top Left"
 
     @pytest.mark.qt
     def test_display_widget_respects_widget_monitor_selection(
         self, qt_app, settings_manager, thread_manager, qtbot, monkeypatch
     ):
-        def fake_weather_start(self):
-            self._enabled = True
-
-        monkeypatch.setattr(WeatherWidget, "start", fake_weather_start, raising=False)
-
         settings_manager.set(
             "widgets",
             {
@@ -1724,10 +1715,7 @@ class TestWidgetRouting:
         w1._setup_widgets()
         assert w1.clock_widget is None
         assert w1.clock2_widget is None
-        assert w1.weather_widget is not None
-        assert getattr(w1.weather_widget._position, "value", None) == WeatherPosition.BOTTOM_LEFT.value
-        assert w1.weather_widget._location == "Johannesburg"
-        assert w1.weather_widget._enabled is True
+        assert w1.weather_widget is None
 
 # ---------------------------------------------------------------------------
 # Regression prevention utilities

@@ -4,7 +4,6 @@ These tests verify that widget paint operations stay within acceptable
 time budgets to maintain smooth UI performance.
 
 Expected performance targets (from WidgetRefactorPlan.md):
-- Weather paint time <0.5ms
 - Media paint time <2ms
 - Reddit paint time <1ms (cached)
 
@@ -53,30 +52,6 @@ def _measure_paint_time(widget, iterations: int = 10) -> tuple[float, float]:
         paint_times.append((time.perf_counter() - start) * 1000)
     
     return sum(paint_times) / len(paint_times), max(paint_times)
-
-
-class TestWeatherWidgetPerformance:
-    """Performance tests for weather widget paint times."""
-
-    def test_weather_paint_under_threshold(self, mock_parent, qtbot):
-        """Verify weather widget paint time is under threshold."""
-        from widgets.weather_widget import WeatherWidget, WeatherPosition
-        
-        widget = WeatherWidget(mock_parent, position=WeatherPosition.TOP_LEFT)
-        qtbot.addWidget(widget)
-        widget.resize(200, 150)
-        widget.show()
-        qtbot.waitExposed(widget)
-        
-        # Warm up
-        widget.repaint()
-        qtbot.wait(50)
-        
-        # Measure paint time directly
-        avg_time, _ = _measure_paint_time(widget, iterations=10)
-        
-        # Weather widget should be fast
-        assert avg_time < 5.0, f"Weather avg paint time {avg_time:.2f}ms exceeds 5ms threshold"
 
 
 class TestMediaWidgetPerformance:

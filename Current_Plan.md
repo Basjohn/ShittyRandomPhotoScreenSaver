@@ -7,8 +7,8 @@ Last updated: 2026-08-25
 Exact main inspected through:
 
 ```text
-e291a6ad
-5.0.0 - Phase F1 Green & Current Plan Updated
+a6f15a5e
+Phase F2 retained Weather implementation
 ```
 
 F1 implementation basis:
@@ -23,12 +23,8 @@ F1 visual acceptance matrix + retained multi-instance/toggle gates
 Independent source/architecture audit: GREEN
 ```
 
-The retained Clock implementation, caller proof and old pixel retirement are complete. F1 is CLOSED.
-
-F2 retained implementation is now present for audit: a stable Weather presentation model consumes the
-existing neutral runtime protocol, resolves packaged icon identities and canonical retained style in
-Python, and creates `WeatherPresentation.qml` through the current ordinary-widget host. Old Weather
-pixels remain until this checkpoint is pushed/self-audited GREEN and caller proof is complete.
+The retained Clock and Weather implementations, caller proofs and old pixel retirements are complete.
+F1 and F2 are CLOSED.
 
 Source outranks this plan if a later checkpoint has landed.
 
@@ -36,51 +32,64 @@ Source outranks this plan if a later checkpoint has landed.
 
 ## Immediate work
 
-### F2 Weather — ACTIVE
+### F3 Media core — ACTIVE
 
 Read only the focused current owners needed for the slice:
 
 - `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md`
 - `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
-- current `WeatherRuntimeService`, provider/cache/request-generation ownership and focused tests
-- current Weather presentation source/components as temporary visual and behavior reference
+- current shared `MediaRuntimeOwner`/per-display lease, controller/provider/artwork ownership and tests
+- current Media presentation/painting source as temporary visual and behavior reference
 
 Required implementation:
 
-- keep provider, cache, refresh cadence, request generation and recovery Python-owned;
-- build one stable detached Weather presentation model covering location, condition, temperature,
-  forecast, icon identity, loading, error, missing-location and style state;
+- keep shared controller/provider/polling/accepted-state ownership Python-owned;
+- build one stable detached Media presentation model covering provider, track metadata, artwork,
+  playback, progress, control availability and style state as one coherent revision;
 - instantiate the family through the existing process engine and per-display ordinary-widget host;
 - feed final Card/Text shadow values and Python-resolved direction to QML without exposing
-  `SettingsManager`, providers, QWidget or persistence objects;
-- use packaged/static icon identities where current behavior permits; do not build general dynamic
-  artwork infrastructure for Weather icons;
-- publish coherent state and mutate retained items/models in place without provider/runtime, engine or
-  window recreation;
-- use offline synthetic state coverage for normal, loading, error, missing-location and forecast modes;
-- preserve current settings and runtime behavior; do not redesign provider policy during the port;
-- after GREEN and caller proof, delete old Weather QWidget pixels/presentation-only tests while retaining
-  neutral runtime/provider/cache helpers still used.
+  `SettingsManager`, controllers, providers, QWidget or persistence objects;
+- use Media as the first serious dynamic-artwork consumer and introduce only the narrow shared
+  image-delivery seam needed for stable identity, legal threading, bounded lifetime/cache and no
+  unchanged upload;
+- preserve current Media core settings/runtime behavior and the Visualizer relationship;
+- do not pull F4 volume/mute/control-action implementation into this slice;
+- publish coherent state and mutate retained items/models in place without controller/runtime, engine
+  or window recreation;
+- after GREEN and caller proof, retire only caller-proven old Media-core pixels/tests; keep F4-owned
+  controls/progress/volume/mute paths until their phase.
 
 Validation:
 
-- focused Weather runtime/provider/cache + retained-Quick tests;
-- caller/runtime integration and stale-generation/recovery gates;
+- focused Media runtime/controller/provider/artwork + retained-Quick tests;
+- caller/runtime integration, shared-owner and stale-generation/recovery gates;
 - repeated state/settings/direction mutation without item/model/runtime/engine/window recreation;
-- practical DPR Weather smoke with eyes-on normal/loading/error/missing-location, card on/off, forecast,
-  icons, several directions/sizes and busy background;
+- practical DPR Media smoke with eyes-on populated/empty/paused/artwork/no-artwork, card on/off, several
+  directions/sizes and busy background;
 - compile/import/static checks as relevant;
 - caller scans, full diff/status and `git diff --check`.
 
-After a clean post-push self-audit of Weather implementation and retirement:
+If F3 introduces a new shared asset/resource ownership seam, stop for the independent audit required by
+the Phase-F policy after the implementation checkpoint. Otherwise continue under the normal self-audit
+policy.
+
+After F3 implementation is GREEN, complete caller proof and bounded old Media-core retirement before F4.
 
 ```text
-F2 -> CLOSED
-F3 Media core -> ACTIVE immediately
+F3 -> CLOSED
+F4 Media controls / volume / mute / progress -> ACTIVE
 ```
 
-Do not stop solely to wait for another external reviewer unless this work uncovers a real
-architecture/lifecycle issue or unresolved YELLOW evidence.
+Do not stop solely because the work is dynamic or artwork-bearing; stop only at the explicit audit
+boundary above or for a real unresolved lifecycle/resource issue.
+
+F2 closure evidence:
+
+```text
+retained Weather model/QML + real runtime-owner injection: GREEN
+old Weather QWidget factory/pixels/presentation-only tests: deleted
+neutral provider/cache/cadence/request-generation owner: retained
+```
 
 ---
 
@@ -90,8 +99,8 @@ architecture/lifecycle issue or unresolved YELLOW evidence.
 F0    Imgur removal                              CLOSED
 F0.5  shadow authority + General controls        CLOSED
 F1    Clock / Clock2 / Clock3                    CLOSED
-F2    Weather                                    ACTIVE
-F3    Media core
+F2    Weather                                    CLOSED
+F3    Media core                                 ACTIVE
 F4    Media controls / volume / mute / progress
 F5    Reddit / Reddit2
 F6    Gmail
@@ -237,6 +246,17 @@ Clock3 settings projection, canonical shadow direction/style input, independent 
 engine/ticker. The old `ClockWidgetFactory`, factory descriptors, QWidget presenter and its
 presentation-only tests are deleted. Neutral settings, `GlobalClockTicker` and current CUSTOM metadata
 remain for their destination owners. F1 is CLOSED.
+
+## F2 Weather audit result
+
+The retained Weather family now uses one stable `WeatherPresentationModel` injected with the existing
+`WidgetRuntimeManager`-owned `WeatherRuntimeService` and created through the current ordinary-widget
+host. Provider, startup cache, persistence, cadence, retry and request/location generation authority
+remain in the neutral runtime owner. Loading, ready, cached-error, missing-location, packaged icons,
+settings navigation and manual double-click refresh are destination-covered; canonical card/text style
+and Python-resolved direction mutate in place. The old `WeatherWidgetFactory`, factory descriptor,
+QWidget presenter/components and presentation-only tests are deleted. Runtime/cache/provider tests were
+rehomed under `tests/test_weather_runtime.py`. F2 is CLOSED.
 
 ---
 

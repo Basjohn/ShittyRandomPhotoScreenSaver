@@ -6,6 +6,13 @@ OverlayWidget {
 
     required property var weatherModel
     signal settingsRequested(string target)
+    signal refreshRequested()
+
+    TapHandler {
+        enabled: weatherRoot.weatherModel.viewState !== "missing"
+        acceptedButtons: Qt.LeftButton
+        onDoubleTapped: weatherRoot.refreshRequested()
+    }
 
     Item {
         id: weatherContent

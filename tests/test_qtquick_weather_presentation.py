@@ -25,6 +25,8 @@ from rendering.quick.widgets.registry import (
     ordinary_widget_family_component,
 )
 from rendering.quick.window import QuickDisplayWindow
+from rendering.widget_runtime_manager import WidgetRuntimeManager
+from widgets.weather_runtime import WeatherRuntimeService
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -96,6 +98,11 @@ class _FakeWeatherRuntime:
             if self.cached_data:
                 self.consumer.apply_weather_data(self.cached_data)
             self.consumer.on_weather_error(error)
+
+
+class _RuntimeRegistryHost:
+    def get_runtime_widget_registry(self):
+        return {}
 
 
 def _weather_values(**overrides):
@@ -265,6 +272,101 @@ def test_weather_model_rebinds_same_location_cached_state_without_discarding_it(
     assert model.conditionIconSource.endswith("fog-day.png")
 
 
+def test_weather_model_manual_refresh_uses_real_runtime_when_updates_are_disabled(
+    monkeypatch,
+) -> None:
+    cached = _sample()
+    runtime = WeatherRuntimeService(runtime_generation=41)
+    runtime._location = "Cape Town"
+    runtime._cached_data = cached
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "widgets.weather_runtime.automatic_service_updates_enabled",
+        lambda: False,
+    )
+    monkeypatch.setattr(runtime, "fetch_weather", lambda: calls.append("fetch"))
+    model, _ = _model(runtime)
+
+    model.activate(object())
+    assert runtime._consumer() is model
+    assert model.viewState == "ready"
+    assert model.request_refresh() is True
+    assert calls == ["fetch"]
+
+    model.retire()
+    assert runtime._consumer() is None
+
+
+@pytest.mark.qt
+def test_weather_real_runtime_owner_injects_model_through_current_scene_host(
+    qt_app,
+    monkeypatch,
+) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=42,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    owner = WidgetRuntimeManager(_RuntimeRegistryHost())
+    config = WeatherPresentationConfig.from_mapping(_weather_values())
+    style = WeatherPresentationStyle.project(config, _shadow_values())
+    model = WeatherPresentationModel(config, style)
+    service = owner.ensure_widget_service(
+        "weather",
+        model,
+        {"weather": {"location": config.location}},
+    )
+    assert isinstance(service, WeatherRuntimeService)
+    service._location = config.location
+    service._cached_data = _sample()
+    fetches: list[str] = []
+    monkeypatch.setattr(
+        "widgets.weather_runtime.automatic_service_updates_enabled",
+        lambda: False,
+    )
+    monkeypatch.setattr(service, "fetch_weather", lambda: fetches.append("fetch"))
+    try:
+        presentation = RetainedWeatherPresentation(
+            host=controller.ordinary_widget_host,
+            model=model,
+            geometry=OverlayWidgetGeometry(25.0, 30.0, 460.0, 300.0),
+        )
+        item = presentation.item
+        engine = QQmlEngine.contextForObject(item).engine()
+
+        presentation.activate(object())
+        item.refreshRequested.emit()
+        qt_app.processEvents()
+
+        assert owner.get_widget_service("weather") is service
+        assert service._consumer() is model
+        assert service.is_running() is True
+        assert model.viewState == "ready"
+        assert model.conditionText == "22°C - Partly Cloudy"
+        assert presentation.item is item
+        assert QQmlEngine.contextForObject(item).engine() is engine
+        assert fetches == ["fetch"]
+
+        controller.quiesce_for_retirement()
+        assert service._consumer() is None
+        assert service.is_running() is False
+        assert owner.get_reusable_widget_service("weather", model) is None
+        assert service.is_retired() is True
+    finally:
+        controller.quiesce_for_retirement()
+        owner.cleanup()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+    assert service.is_retired() is True
+
+
 def test_weather_model_covers_missing_location_error_and_location_recovery_in_place() -> None:
     runtime = _FakeWeatherRuntime()
     model, _ = _model(runtime, location="")
@@ -342,6 +444,7 @@ def test_weather_family_uses_current_scene_host_and_mutates_without_recreation(q
         )
         runtime.publish(_sample(temperature=18.0, condition="rain", weather_code=61))
         item.settingsRequested.emit("weather_location")
+        item.refreshRequested.emit()
         qt_app.processEvents()
 
         assert presentation.item is item
@@ -356,6 +459,7 @@ def test_weather_family_uses_current_scene_host_and_mutates_without_recreation(q
         assert model.textShadowOffsetY == pytest.approx(0.0)
         assert item.property("cardShellEnabled") is False
         assert settings_targets == ["weather_location"]
+        assert runtime.fetch_calls == 1
 
         controller.quiesce_for_retirement()
         assert runtime.consumer is None
