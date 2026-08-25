@@ -5,8 +5,8 @@ Last updated: 2026-08-25
 Reviewed source basis:
 
 ```text
-test-inventory basis = F5 Reddit caller-proof and legacy-presentation retirement
-Phase F0/F0.5/F1/F2/F3/F4/F5 CLOSED; 352 test modules; F6 Gmail active
+test-inventory basis = F6 retained Gmail presentation-model checkpoint
+Phase F0/F0.5/F1/F2/F3/F4/F5 CLOSED; 353 test modules; F6 Gmail active
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -107,9 +107,15 @@ cached-error and empty states at effective DPR 1.0, 1.5 and 2.25. F5 closure add
 fencing and retirement. It deletes the old QWidget paint/cache/progressive/presentation suites after the
 real manager-service-retained-host caller proof is green.
 
+The first F6 checkpoint adds `tests/test_qtquick_gmail_presentation.py`. It protects bounded retained
+configuration and canonical style projection, stable row-model and thread/message identities,
+grouping reprojection over accepted runtime state, stale-revision rejection, semantic
+refresh/auth/open/message-action admission, IMAP archive capability and runtime startup/retirement
+lifecycle. QML pixels, real host geometry and caller proof remain open and are not claimed here.
+
 At the reviewed checkpoint the repository contains:
 
-- **352 test-module files**: 351 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **353 test-module files**: 352 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -630,6 +636,7 @@ The inventory below accounts for every executable test file present at the revie
 | `tests/test_gmail_imap_actions.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_oauth.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_preparation.py` | **KEEP** | Retain; no migration-specific retirement identified. |
+| `tests/test_qtquick_gmail_presentation.py` | **KEEP — MIGRATION PERMANENT** | Retained Gmail config/style, stable accepted-state row projection, semantic action admission and lifecycle coverage; extend with QML/host proof during F6. |
 | `tests/test_gmail_retiring_runtime.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_settings_roundtrip.py` | **KEEP** | Retain; no migration-specific retirement identified. |
 | `tests/test_gmail_widget.py` | **MIGRATION-CRITICAL — F** | Rehome presentation assertions as family ports; preserve provider/model/behavior. |

@@ -7,8 +7,8 @@ Last updated: 2026-08-25
 Exact main inspected through:
 
 ```text
-1b605991a95d094be7d4f09ddde9fadbfbbb8dbd
-Phase F5 retained Reddit runtime-chain caller proof
+a7bfd8a5e26fb4a692945f8f06d3fe53bddf2b40
+Phase F5 Reddit / Reddit2 closure and legacy-presentation retirement
 ```
 
 F1 implementation basis:
@@ -74,15 +74,18 @@ Validation:
 Current F6 sequence:
 
 ```text
-neutral Gmail runtime/preparation/notification ownership audit     -> NEXT
-retained config + stable message model + static QML + actions      -> pending
+neutral Gmail runtime/preparation/notification ownership audit     -> GREEN
+retained config/style + stable message projection model            -> implementation GREEN
+static QML + semantic pointer/action presentation                  -> NEXT
 real owner injection + runtime-shaped state/action/geometry gates  -> pending
 caller proof + old Gmail QWidget pixel/cache/input retirement      -> pending
 ```
 
-Start by identifying the exact accepted Gmail runtime state and semantic action surface. Keep the
-existing backend/runtime owner intact where it is already presentation-neutral; do not invent a second
-service or move notification/sound authority into QML.
+The existing `GmailRuntimeService` and shared runtime owner remain the presentation-neutral owners for
+backend selection, startup cache, accepted immutable state, cadence, request generations, actions,
+notification detection and sound. The first retained checkpoint adds bounded config/style projection,
+stable message/thread identities and in-place row reprojection over that accepted state. QML and real
+host caller proof remain the next live work; no second runtime service was introduced.
 
 F5 closure evidence:
 
