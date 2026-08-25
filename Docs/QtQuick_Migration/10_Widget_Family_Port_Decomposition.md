@@ -264,6 +264,12 @@ existing `MediaRuntimeService`. Primitive Ctrl/Interaction state is resolved in 
 pointer actions. No second model/item/runtime is introduced. App-volume and system-mute presenters are
 the next F4 slices and remain under their already-separated neutral owners.
 
+The second retained F4 checkpoint projects the already-separated `MediaVolumeRuntimeService` lease into
+that same Media model/item. Accepted capability/level revisions drive one inline vertical slider; QML
+emits semantic levels and Python routes them to the owner. The existing controller target, optimistic
+projection, read/write generations and debounce remain unchanged. No second Media model/item is added.
+System mute is the next F4 slice.
+
 ---
 
 # F5 — Reddit / Reddit2

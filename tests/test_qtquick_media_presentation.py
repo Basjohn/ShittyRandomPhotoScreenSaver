@@ -33,6 +33,7 @@ from widgets.media_runtime import (
     PreparedMediaArtwork,
     reset_shared_media_runtime_for_tests,
 )
+from widgets.media_volume_runtime import MediaVolumeRuntimeSnapshot
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -97,6 +98,73 @@ class _FakeMediaRuntime:
     def publish(self, snapshot: MediaRuntimeSnapshot) -> None:
         if self.consumer is not None:
             self.consumer.on_media_runtime_snapshot(snapshot)
+
+
+class _FakeMediaVolumeRuntime:
+    def __init__(self) -> None:
+        self.consumer = None
+        self.thread_manager = None
+        self.running = False
+        self.snapshot = MediaVolumeRuntimeSnapshot(
+            revision=1,
+            provider="spotify",
+            browser_process=None,
+            supported=True,
+            available=True,
+            level=0.4,
+            source="initial",
+        )
+        self.provider_calls: list[str] = []
+        self.target_calls: list[tuple[str, str]] = []
+        self.level_calls: list[float] = []
+        self.start_result = True
+
+    def set_thread_manager(self, thread_manager) -> None:
+        self.thread_manager = thread_manager
+
+    def attach_consumer(self, consumer) -> None:
+        self.consumer = consumer
+
+    def detach_consumer(self, consumer=None) -> None:
+        if consumer is None or consumer is self.consumer:
+            self.consumer = None
+
+    def start(self) -> bool:
+        self.running = bool(self.start_result)
+        return self.start_result
+
+    def stop(self) -> None:
+        self.running = False
+
+    def current_snapshot(self):
+        return self.snapshot
+
+    def set_provider_runtime(self, provider) -> bool:
+        normalized = str(provider)
+        self.provider_calls.append(normalized)
+        return True
+
+    def set_runtime_volume_source(self, provider, source_id) -> bool:
+        self.target_calls.append((str(provider), str(source_id)))
+        return True
+
+    def set_volume_optimistic(self, level: float) -> bool:
+        clamped = max(0.0, min(1.0, float(level)))
+        self.level_calls.append(clamped)
+        self.publish(
+            replace(
+                self.snapshot,
+                revision=self.snapshot.revision + 1,
+                level=clamped,
+                source="optimistic",
+            )
+        )
+        return True
+
+    def publish(self, snapshot: MediaVolumeRuntimeSnapshot) -> None:
+        self.snapshot = snapshot
+        if self.consumer is not None and self.running:
+            self.consumer.on_media_volume_runtime_snapshot(snapshot)
 
 
 class _RuntimeHost:
@@ -173,6 +241,8 @@ def _values(**overrides):
         "playback_progress_shadow_enabled": True,
         "playback_progress_glow_enabled": True,
         "playback_progress_glow_color": [45, 190, 250, 180],
+        "spotify_volume_enabled": True,
+        "spotify_volume_fill_color": [255, 255, 255, 230],
     }
     values.update(overrides)
     return values
@@ -232,13 +302,19 @@ def _snapshot(
     )
 
 
-def _model(provider=None, runtime=None, **overrides):
+def _model(provider=None, runtime=None, volume_runtime=None, **overrides):
     artwork_provider = provider or MediaArtworkImageProvider()
     config = MediaPresentationConfig.from_mapping(_values(**overrides))
     style = MediaPresentationStyle.project(config, _shadows())
     service = runtime or _FakeMediaRuntime()
     return (
-        MediaPresentationModel(config, style, artwork_provider, service),
+        MediaPresentationModel(
+            config,
+            style,
+            artwork_provider,
+            service,
+            volume_runtime_service=volume_runtime,
+        ),
         service,
         artwork_provider,
     )
@@ -270,6 +346,8 @@ def test_media_config_and_style_project_canonical_settings_and_direction() -> No
     assert config.playback_progress_fill_color == (45, 190, 250, 230)
     assert config.playback_progress_shadow_enabled is True
     assert config.playback_progress_glow_enabled is True
+    assert config.app_volume_enabled is True
+    assert config.app_volume_fill_color == (79, 79, 79, 150)
     assert style.card_style.background_color.alpha() == 128
     assert style.card_style.shadow_offset_x == pytest.approx(-6.0)
     assert style.card_style.shadow_offset_y == pytest.approx(-6.0)
@@ -282,6 +360,60 @@ def test_media_config_and_style_project_canonical_settings_and_direction() -> No
     assert model.progressHeight == pytest.approx(9.0)
     assert model.progressFillColor == QColor(45, 190, 250, 230)
     assert model.progressGlowColor == QColor(45, 190, 250, 180)
+
+
+def test_media_model_projects_and_routes_existing_app_volume_owner() -> None:
+    volume_runtime = _FakeMediaVolumeRuntime()
+    model, runtime, _provider = _model(volume_runtime=volume_runtime)
+    model.activate(object())
+    runtime.publish(_snapshot(1, image=_image()))
+
+    assert model.appVolumeAvailable is True
+    assert model.appVolumeLevel == pytest.approx(0.4)
+    assert model.appVolumeTrackColor == QColor(25, 32, 42, 255)
+    assert model.appVolumeBorderColor == QColor(120, 195, 255, 255)
+    assert model.appVolumeFillColor == QColor(255, 255, 255, 140)
+    assert volume_runtime.consumer is model
+    assert volume_runtime.running is True
+
+    model.on_media_volume_runtime_snapshot(
+        replace(volume_runtime.snapshot, revision=0, level=0.1)
+    )
+    assert model.appVolumeLevel == pytest.approx(0.4)
+    assert model.request_app_volume(1.4) is True
+    assert model.request_app_volume_step(-1) is True
+    assert volume_runtime.level_calls == [pytest.approx(1.0), pytest.approx(0.95)]
+
+    model.on_media_runtime_volume_target("spotify_browser", "firefox.exe")
+    assert volume_runtime.target_calls == [("spotify_browser", "firefox.exe")]
+
+    disabled = replace(model.config, app_volume_enabled=False)
+    assert model.apply_config(disabled) is True
+    assert model.appVolumeAvailable is False
+    assert volume_runtime.running is False
+    assert model.request_app_volume(0.2) is False
+
+    assert model.apply_config(replace(disabled, app_volume_enabled=True)) is True
+    assert volume_runtime.running is True
+    assert volume_runtime.consumer is model
+    model.retire()
+    assert volume_runtime.running is False
+    assert volume_runtime.consumer is None
+
+
+def test_media_volume_start_failure_rolls_back_both_retained_leases() -> None:
+    volume_runtime = _FakeMediaVolumeRuntime()
+    volume_runtime.start_result = False
+    model, runtime, _provider = _model(volume_runtime=volume_runtime)
+
+    with pytest.raises(RuntimeError, match="volume runtime service failed"):
+        model.activate(object())
+
+    assert model.is_active is False
+    assert runtime.running is False
+    assert runtime.consumer is None
+    assert volume_runtime.running is False
+    assert volume_runtime.consumer is None
 
 
 def test_media_artwork_provider_is_stable_bounded_and_returns_detached_images() -> None:
@@ -455,6 +587,28 @@ def test_media_runtime_manager_injects_retained_model_without_starting_controlle
     assert service.is_retired() is True
 
 
+def test_media_runtime_manager_injects_separate_app_volume_lease_into_same_model() -> (
+    None
+):
+    provider = MediaArtworkImageProvider()
+    config = MediaPresentationConfig.from_mapping(_values())
+    style = MediaPresentationStyle.project(config, _shadows())
+    model = MediaPresentationModel(config, style, provider, runtime_generation=91)
+    owner = WidgetRuntimeManager(_RuntimeHost())
+
+    service = owner.ensure_widget_service(
+        "spotify_volume", model, {"media": {"provider": "spotify"}}
+    )
+
+    assert service is not None
+    assert model._volume_runtime_service is service
+    assert model._runtime_service is None
+    assert service.shared_owner is None
+    assert service.is_running() is False
+    owner.cleanup()
+    assert service.is_retired() is True
+
+
 @pytest.mark.qt
 def test_media_real_runtime_owner_activates_through_current_scene_host(qt_app) -> None:
     reset_shared_media_runtime_for_tests()
@@ -531,7 +685,12 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
     factory = QuickSceneFactory()
     controller = QuickSceneController(window=window, factory=factory)
     runtime = _FakeMediaRuntime()
-    model, _, provider = _model(factory.media_artwork_provider, runtime)
+    volume_runtime = _FakeMediaVolumeRuntime()
+    model, _, provider = _model(
+        factory.media_artwork_provider,
+        runtime,
+        volume_runtime,
+    )
     try:
         presentation = RetainedMediaPresentation(
             host=controller.ordinary_widget_host,
@@ -549,11 +708,16 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
         assert item.findChild(QQuickItem, "mediaArtworkFrame") is not None
         assert item.findChild(QQuickItem, "mediaControlsRow") is not None
         assert item.findChild(QQuickItem, "mediaProgressFill") is not None
+        assert item.findChild(QQuickItem, "mediaAppVolumeSlider") is not None
+        assert item.findChild(QQuickItem, "mediaAppVolumeFill") is not None
         assert model.hasArtwork is True
+        assert model.appVolumeAvailable is True
         assert provider.image_count == 1
 
         item.playPauseRequested.emit()
+        item.appVolumeLevelRequested.emit(0.7)
         assert runtime.transport_calls == []
+        assert volume_runtime.level_calls == []
         assert presentation.apply_input_state(
             QuickInputState(
                 screen_index=0,
@@ -564,7 +728,9 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
         item.playPauseRequested.emit()
         item.previousRequested.emit()
         item.nextRequested.emit()
+        item.appVolumeLevelRequested.emit(0.25)
         assert runtime.transport_calls == ["play", "previous", "next"]
+        assert volume_runtime.level_calls == [pytest.approx(0.25)]
 
         assert presentation.apply_input_state(
             {
@@ -574,7 +740,9 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
             }
         ) is True
         item.nextRequested.emit()
+        item.appVolumeLevelRequested.emit(0.8)
         assert runtime.transport_calls == ["play", "previous", "next"]
+        assert volume_runtime.level_calls == [pytest.approx(0.25)]
 
         next_config = replace(
             model.config,
@@ -624,8 +792,10 @@ def test_media_qml_and_registry_keep_actions_static_and_python_owned() -> None:
         "signal playPauseRequested()",
         "signal nextRequested()",
         "signal previousRequested()",
+        "signal appVolumeLevelRequested(real level)",
         "mediaModel.interactionEnabled",
         "mediaModel.progressFraction",
+        "mediaModel.appVolumeLevel",
     ):
         assert marker in qml
     assert "MediaPresentation 1.0 MediaPresentation.qml" in (

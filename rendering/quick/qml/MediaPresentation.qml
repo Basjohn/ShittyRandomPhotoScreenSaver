@@ -10,6 +10,13 @@ OverlayWidget {
     signal playPauseRequested()
     signal previousRequested()
     signal nextRequested()
+    signal appVolumeLevelRequested(real level)
+
+    function appVolumeLevelAt(y, height) {
+        if (height <= 0.0)
+            return 0.0
+        return Math.max(0.0, Math.min(1.0, 1.0 - y / height))
+    }
 
     readonly property int visibleSectionCount: 1
         + (mediaModel.showHeaderFrame ? 1 : 0)
@@ -24,7 +31,11 @@ OverlayWidget {
     Column {
         id: mediaColumn
         objectName: "mediaContent"
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        anchors.rightMargin: appVolumeSlider.visible ? 48.0 : 0.0
         spacing: 12.0
 
         Rectangle {
@@ -379,6 +390,74 @@ OverlayWidget {
                         acceptedButtons: Qt.LeftButton
                         onTapped: mediaRoot.nextRequested()
                     }
+                }
+            }
+        }
+    }
+
+    Item {
+        id: appVolumeSlider
+        objectName: "mediaAppVolumeSlider"
+        visible: mediaRoot.mediaModel.appVolumeAvailable
+        width: 32.0
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+
+        Rectangle {
+            id: appVolumeTrack
+            objectName: "mediaAppVolumeTrack"
+            width: 18.0
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.topMargin: 6.0
+            anchors.bottomMargin: 6.0
+            anchors.horizontalCenter: parent.horizontalCenter
+            radius: width / 2.0
+            color: mediaRoot.mediaModel.appVolumeTrackColor
+            border.width: 1.5
+            border.color: mediaRoot.mediaModel.appVolumeBorderColor
+
+            Rectangle {
+                objectName: "mediaAppVolumeFill"
+                width: parent.width
+                readonly property real normalizedLevel: Math.max(
+                    0.0, Math.min(1.0, mediaRoot.mediaModel.appVolumeLevel)
+                )
+                height: normalizedLevel <= 0.0
+                    ? 0.0
+                    : Math.min(parent.height, Math.max(2.0, parent.height * normalizedLevel))
+                y: (parent.height - height) / 2.0
+                radius: width / 2.0
+                color: mediaRoot.mediaModel.appVolumeFillColor
+                border.width: height > 0.0 ? 1.5 : 0.0
+                border.color: mediaRoot.mediaModel.appVolumeBorderColor
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                enabled: mediaRoot.mediaModel.interactionEnabled
+                acceptedButtons: Qt.LeftButton
+                onPressed: function(mouse) {
+                    mediaRoot.appVolumeLevelRequested(
+                        mediaRoot.appVolumeLevelAt(mouse.y, height)
+                    )
+                }
+                onPositionChanged: function(mouse) {
+                    if (pressed) {
+                        mediaRoot.appVolumeLevelRequested(
+                            mediaRoot.appVolumeLevelAt(mouse.y, height)
+                        )
+                    }
+                }
+                onWheel: function(wheel) {
+                    if (wheel.angleDelta.y === 0)
+                        return
+                    var direction = wheel.angleDelta.y > 0 ? 1.0 : -1.0
+                    mediaRoot.appVolumeLevelRequested(
+                        mediaRoot.mediaModel.appVolumeLevel + direction * 0.05
+                    )
+                    wheel.accepted = true
                 }
             }
         }
