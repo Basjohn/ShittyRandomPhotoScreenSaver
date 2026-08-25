@@ -6,7 +6,7 @@ Reviewed source basis:
 
 ```text
 test-inventory basis = F5 retained Reddit family presentation checkpoint
-Phase F0/F0.5/F1/F2/F3/F4 CLOSED; 354 test modules; F5 Reddit active
+Phase F0/F0.5/F1/F2/F3/F4 CLOSED; 355 test modules; F5 Reddit active
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -107,7 +107,7 @@ still pending, so old QWidget runtime/pixel suites remain migration-critical.
 
 At the reviewed checkpoint the repository contains:
 
-- **354 test-module files**: 353 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
+- **355 test-module files**: 354 top-level `tests/test_*.py` files plus `tests/unit/test_policy_compliance.py`;
 - shared test infrastructure (`conftest.py`, `_gl_test_utils.py`, `pytest.ini`, `pytest.py`, `run_chunked.py`);
 - authored visualizer/audio/Steam fixtures under `tests/fixtures/`;
 - visualizer replay/temporal goldens under `tests/goldens/`.
@@ -118,7 +118,7 @@ Inventory status is **not an execution result**. `KEEP` does not mean a test was
 
 This ledger was built from the complete Git tree at the reviewed checkpoint, then classified against the current migration contracts. Architecture-sensitive groups were checked with direct source reads and repository-wide searches for legacy owners such as `QRhiWidget`, `GLCompositorWidget`, software-render fallback and `QGraphicsEffect`.
 
-This is deliberately **not** a claim that every assertion in all 353 top-level modules was manually
+This is deliberately **not** a claim that every assertion in all 354 top-level modules was manually
 read line-by-line or executed during this review. The inventory is complete; semantic inspection was
 concentrated where migration status could change whether a test remains authority.
 

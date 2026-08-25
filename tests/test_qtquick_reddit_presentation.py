@@ -24,6 +24,7 @@ from rendering.quick.widgets.registry import (
     ORDINARY_WIDGET_FAMILY_COMPONENTS,
     ordinary_widget_family_component,
 )
+from rendering.widget_runtime_manager import WidgetRuntimeManager
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -180,6 +181,29 @@ def test_reddit_model_keeps_one_row_model_and_coherent_ready_cached_error_state(
     assert model.errorText == ""
     assert row_model.rowCount() == 0
     assert changes
+
+
+def test_runtime_manager_injects_complete_owner_into_retained_reddit_model() -> None:
+    class _Host:
+        @staticmethod
+        def get_runtime_widget_registry():
+            return {}
+
+    owner = WidgetRuntimeManager(_Host())
+    model = _model()
+    service = owner.ensure_widget_service(
+        "reddit",
+        model,
+        {"reddit": {"provider": "public_json", "subreddit": "wallpapers"}},
+    )
+
+    assert service is not None
+    assert model._runtime_service is service
+    assert service.config.subreddit == "wallpapers"
+    assert getattr(service.provider, "provider_id", None) == "public_json"
+    assert service.is_running() is False
+    assert owner.retire_widget_service("reddit") is True
+    assert service.is_retired() is True
 
 
 @pytest.mark.qt

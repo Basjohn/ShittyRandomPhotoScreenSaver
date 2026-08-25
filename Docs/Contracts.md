@@ -57,6 +57,12 @@ Presentation destruction does not become provider destruction.
 
 Capability activation remains distinct from instance enabled state.
 
+Reddit and Reddit2 each own one independent `RedditRuntimeService` lease through
+`WidgetRuntimeManager`. That service owns the configured provider, startup cache, accepted candidate
+window, fetch generations, rate-limit/block persistence, periodic/manual cadence and retirement.
+`RedditPresentationModel` owns only retained projection and semantic action admission; QML never owns
+URLs, provider calls, cache policy or refresh timing.
+
 F1 Clock's candidate destination owner is `ClockPresentationModel` plus the retained
 `ClockPresentation.qml` family component under the per-display `OrdinaryWidgetPresentationHost`.
 `GlobalClockTicker` remains the cadence owner. The old Clock QWidget pixels remain reference-only until

@@ -8,11 +8,9 @@ a small :class:`RuntimeServiceSpec` here describing how to build, inject and
 retire that service. The owner drives those specs generically.
 
 E1 slice 2 introduced the first entry: the branded Reddit widget's post
-*provider* (``core.reddit_post_provider``), which was previously constructed and
-owned by the ``RedditWidget``/factory (i.e. owned merely because a QWidget
-existed). Its lifetime now belongs to the neutral owner, which creates it from
-canonical settings, injects it into the widget for use, and retires it on runtime
-teardown independently of QWidget pixel ownership.
+provider. Phase F5 completes that ownership as one per-member Reddit runtime
+service owning provider/cache/cadence/fetch/generation state independently of
+either the temporary QWidget presenter or retained Quick presentation.
 
 E1 slice 3 adds the per-instance Weather runtime-data service. It owns provider
 fetch/cache/refresh/retry/request-generation lifetime for the retained Weather
@@ -130,31 +128,58 @@ def _resolve_reddit_provider_id(
 
 def _build_reddit_service(widget_id: str, widgets_config: Mapping[str, Any]) -> Any:
     from core.reddit_post_provider import build_reddit_post_provider
+    from widgets.reddit_runtime import RedditRuntimeConfig, RedditRuntimeService
 
     provider_id = _resolve_reddit_provider_id(widget_id, widgets_config)
-    return build_reddit_post_provider(provider_id)
+    config = (
+        widgets_config.get(widget_id, {})
+        if isinstance(widgets_config, Mapping)
+        else {}
+    )
+    runtime_config = RedditRuntimeConfig.from_mapping(
+        config if isinstance(config, Mapping) else {},
+        widget_id=widget_id,
+    )
+    return RedditRuntimeService(
+        config=runtime_config,
+        provider=build_reddit_post_provider(provider_id),
+    )
 
 
 def _inject_reddit_service(widget: Any, service: Any) -> None:
-    setter = getattr(widget, "set_post_provider", None)
+    setter = getattr(widget, "set_runtime_service", None)
     if not callable(setter):
-        # A required service could not be handed to the widget. Raise so the owner
-        # fails closed rather than leaving a runtime-managed widget with no
-        # neutral provider (or on a QWidget-owned default).
         raise AttributeError(
-            "runtime widget cannot accept post provider (missing set_post_provider)"
+            "Reddit consumer cannot accept runtime service (missing set_runtime_service)"
         )
     setter(service)
 
 
 def _reddit_service_reuse_is_valid(widget: Any, service: Any) -> bool:
-    return getattr(widget, "_post_provider", None) is service
+    if getattr(widget, "_runtime_service", None) is not service:
+        return False
+    if _service_is_retired(service):
+        return False
+    retained_active = getattr(widget, "is_active", None)
+    is_active = (
+        bool(retained_active)
+        if isinstance(retained_active, bool)
+        else _widget_is_active(widget)
+    )
+    return not is_active or _service_is_running(service)
+
+
+def _retire_reddit_service(service: Any) -> None:
+    retire = getattr(service, "retire", None)
+    if not callable(retire):
+        raise AttributeError("Reddit runtime service has no retire method")
+    retire()
 
 
 _REDDIT_SERVICE_SPEC = RuntimeServiceSpec(
     build=_build_reddit_service,
     inject=_inject_reddit_service,
-    retire=None,  # RedditPostProvider holds no releasable resources.
+    retire=_retire_reddit_service,
     reuse_is_valid=_reddit_service_reuse_is_valid,
 )
 

@@ -26,6 +26,13 @@ Real product resilience is not migration debris.
   whose `maxBytes` is not the test's blanket 1 MiB expectation. The failure reproduces alone and is
   unrelated to F1 Clock ownership; determine whether the handler profile or the assertion is stale in
   a dedicated logging checkpoint.
+- Reddit helper recovery/installer/watcher tests have stale source contracts on exact main and fail
+  independently of the F5 Reddit feed runtime: `test_reddit_helper_recovery.py` expects removed
+  `_SPOOL_LAST_PROBE` state (2 failed/4 passed), `test_reddit_helper_task_harness.py` expects that state
+  plus installer ACL/comment markers absent from `SRPSS_Installer.iss` (3 failed/2 passed/1 skipped),
+  and three `test_reddit_helper_watcher.py` cases see the singleton as already active (3 failed/22
+  passed). Reconcile the helper tests/harness with the live helper and installer contract in a separate
+  helper checkpoint; do not couple it to the Reddit feed presenter/runtime migration.
 
 ## Phase-F family retirement
 

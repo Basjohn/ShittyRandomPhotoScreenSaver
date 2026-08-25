@@ -20,13 +20,11 @@ provider/presenter switchboard.
 E1 slice 1 established this owner by extracting admission + lifecycle routing out
 of the ``WidgetManager`` god-object (a net reduction there); the host keeps thin
 delegating wrappers so its public API and the E2.7 confirmed-retirement contract
-(``cleanup_widget`` returning an explicit bool) are preserved. E1 slice 2 moves
-the first real provider lifetime (the Reddit post provider) here: the owner
-builds it from canonical settings via the neutral
-``rendering.widget_runtime_services`` registry, injects it into the widget for
-use, and retires it on teardown — so the provider is no longer owned merely
-because a QWidget exists. Later E1 slices migrate further provider/model lifetimes
-and hoist ownership above the host.
+(``cleanup_widget`` returning an explicit bool) are preserved. E1 slice 2 moved
+the first Reddit provider lifetime here; Phase F5 completes that lease as the
+full per-member provider/cache/cadence/fetch/generation runtime. Family-specific
+construction and injection remain in the neutral
+``rendering.widget_runtime_services`` registry.
 """
 from __future__ import annotations
 
