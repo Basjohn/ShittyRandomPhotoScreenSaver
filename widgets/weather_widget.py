@@ -356,7 +356,6 @@ class WeatherWidget(BaseOverlayWidget):
                 size_px=self._icon_size,
                 parent=self._primary_row
             )
-            self._condition_icon_widget.set_shadow_config(self._shadow_config)
             self._condition_icon_widget.setVisible(False)
             primary_layout.addWidget(
                 self._condition_icon_widget, 0,
@@ -370,7 +369,6 @@ class WeatherWidget(BaseOverlayWidget):
                 size_px=self._icon_size,
                 parent=self._primary_row
             )
-            self._condition_icon_widget.set_shadow_config(self._shadow_config)
             self._condition_icon_widget.setVisible(False)
             primary_layout.addWidget(
                 self._condition_icon_widget, 0,
@@ -1255,25 +1253,6 @@ class WeatherWidget(BaseOverlayWidget):
             self._conditions_label.setAlignment(
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
             )
-
-    def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:
-        super().set_shadow_config(config)
-        for label in (self._city_label, self._conditions_label, self._forecast_label):
-            if hasattr(label, "set_shadow_config"):
-                try:
-                    label.set_shadow_config(config)  # type: ignore[attr-defined]
-                except Exception as e:
-                    logger.debug("[WEATHER] Exception suppressed: %s", e)
-        if self._detail_row_widget is not None and hasattr(self._detail_row_widget, "set_shadow_config"):
-            try:
-                self._detail_row_widget.set_shadow_config(config)
-            except Exception as e:
-                logger.debug("[WEATHER] Exception suppressed: %s", e)
-        if self._condition_icon_widget is not None and hasattr(self._condition_icon_widget, "set_shadow_config"):
-            try:
-                self._condition_icon_widget.set_shadow_config(config)
-            except Exception as e:
-                logger.debug("[WEATHER] Exception suppressed: %s", e)
 
     def _rebuild_primary_layout(self) -> None:
         """Rebuild the primary row layout based on current icon alignment.

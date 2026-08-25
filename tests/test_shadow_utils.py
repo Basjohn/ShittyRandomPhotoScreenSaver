@@ -6,7 +6,7 @@ from PySide6.QtCore import QEasingCurve, QRect, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QWidget
 
-from widgets.shadow_utils import ShadowFadeProfile, draw_rich_text_shadow_only, draw_text_rect_shadow_only
+from widgets.shadow_utils import ShadowFadeProfile, draw_text_rect_with_shadow
 
 
 @pytest.mark.qt
@@ -62,38 +62,32 @@ def test_shared_fade_honors_explicit_duration_override(qt_app, qtbot):
 
 
 @pytest.mark.qt
-def test_text_shadow_helpers_render_inlined_offset_pass(qt_app):
-    pixmap = QPixmap(180, 80)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    try:
-        painter.setFont(QFont("Segoe UI", 24))
-        draw_text_rect_shadow_only(
-            painter,
-            QRect(10, 10, 160, 40),
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            "Weather",
-            font_size=24,
-        )
-        draw_rich_text_shadow_only(
-            painter,
-            QRect(10, 35, 160, 40),
-            "<div style='font-size:20pt; color:rgba(255,255,255,255);'>Media</div>",
-            default_font=QFont("Segoe UI", 20),
-            font_size=20,
-            enabled=True,
-        )
-    finally:
-        painter.end()
+def test_retired_text_shadow_gate_does_not_change_visible_text_pixels(qt_app):
+    def render(enabled: bool):
+        pixmap = QPixmap(180, 80)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        try:
+            painter.setFont(QFont("Segoe UI", 24))
+            painter.setPen(QColor(255, 255, 255, 255))
+            draw_text_rect_with_shadow(
+                painter,
+                QRect(10, 10, 160, 40),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                "Weather",
+                font_size=24,
+                enabled=enabled,
+            )
+        finally:
+            painter.end()
+        return pixmap.toImage()
 
-    image = pixmap.toImage()
-    found_shadow_pixel = False
-    for y in range(image.height()):
-        for x in range(image.width()):
-            color = QColor(image.pixelColor(x, y))
-            if color.alpha() > 0:
-                found_shadow_pixel = True
-                break
-        if found_shadow_pixel:
-            break
-    assert found_shadow_pixel is True
+    enabled_image = render(True)
+    disabled_image = render(False)
+
+    assert enabled_image == disabled_image
+    assert any(
+        enabled_image.pixelColor(x, y).alpha() > 0
+        for y in range(enabled_image.height())
+        for x in range(enabled_image.width())
+    )

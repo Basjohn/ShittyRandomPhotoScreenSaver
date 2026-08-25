@@ -34,9 +34,7 @@ from core.resources.types import ResourceType
 from core.threading.manager import ThreadManager
 from widgets.shadow_utils import (
     configure_overlay_widget_attributes,
-    draw_text_rect_shadow_only,
     shadow_config_enabled,
-    text_shadows_enabled,
 )
 
 if TYPE_CHECKING:
@@ -220,7 +218,6 @@ class BaseOverlayWidget(QLabel):
         self._shadow_config: Optional[Dict[str, Any]] = None
         self._has_faded_in = False
         self._painted_frame_shadow_enabled = True
-        self._text_shadow_enabled = True
         self._painted_frame_shadow_pixmap: Optional[QPixmap] = None
         self._painted_frame_shadow_cache_key: Optional[Tuple[Any, ...]] = None
         self._painted_frame_shadow_revision = 0
@@ -783,7 +780,6 @@ class BaseOverlayWidget(QLabel):
         """Set shadow configuration."""
         self._shadow_config = config
         self._painted_frame_shadow_enabled = shadow_config_enabled(config, "enabled", True)
-        self._text_shadow_enabled = text_shadows_enabled(config)
         self._invalidate_painted_frame_shadow_cache()
         self._update_stylesheet()
         self._commit_painted_frame_shadow_cache()
@@ -931,35 +927,6 @@ class BaseOverlayWidget(QLabel):
 
         return self._prepare_painted_frame_shadow_pixmap()
 
-    def _should_paint_label_text_shadow(self) -> bool:
-        if not self._text_shadow_enabled:
-            return False
-        text = self.text()
-        if not text:
-            return False
-        text_format = self.textFormat()
-        if text_format == Qt.TextFormat.RichText:
-            return False
-        if text_format == Qt.TextFormat.AutoText and ("<" in text and ">" in text):
-            return False
-        return True
-
-    def _paint_label_text_shadow(self) -> None:
-        if not self._should_paint_label_text_shadow():
-            return
-        painter = QPainter(self)
-        try:
-            painter.setFont(self.font())
-            draw_text_rect_shadow_only(
-                painter,
-                self.contentsRect(),
-                self.alignment(),
-                self.text(),
-                font_size=int(self.font().pointSize() or self._font_size),
-            )
-        finally:
-            painter.end()
-
     def _paint_before_native_text(self) -> None:
         """Subclass hook for painter shadow passes before QLabel text."""
         return
@@ -983,7 +950,6 @@ class BaseOverlayWidget(QLabel):
             self._paint_before_native_text()
         except Exception:
             logger.debug("[OVERLAY] pre-native text paint failed", exc_info=True)
-        self._paint_label_text_shadow()
         super().paintEvent(event)
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]

@@ -20,7 +20,7 @@ from PySide6.QtGui import QFont, QPainter, QColor, QFontMetrics, QPixmap
 
 from core.logging.logger import get_logger
 from weather.open_meteo_provider import OpenMeteoProvider
-from widgets.shadow_utils import PaintedShadowLabel, make_alpha_shadow_pixmap, shadow_config_enabled
+from widgets.shadow_utils import PaintedShadowLabel
 
 logger = get_logger(__name__)
 
@@ -41,9 +41,6 @@ class WeatherConditionIcon(QWidget):
         self._size_px = max(48, int(size_px))
         self._padding = 4
         self._monochrome = False  # Feature #6: Monochrome mode
-        self._shadow_config = None
-        self._shadow_pixmap: Optional[QPixmap] = None
-        self._shadow_cache_key: Optional[tuple] = None
         self._set_fixed_box()
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
@@ -60,7 +57,6 @@ class WeatherConditionIcon(QWidget):
         self._size_px = size_px
         self._set_fixed_box()
         self._pixmap = None  # Force reload at new size
-        self._invalidate_shadow_cache()
         self.update()
 
     def set_monochrome(self, enabled: bool) -> None:
@@ -72,7 +68,6 @@ class WeatherConditionIcon(QWidget):
             return
         self._monochrome = enabled
         self._pixmap = None  # Force reload with new mode
-        self._invalidate_shadow_cache()
         if self._icon_path:
             self._load_pixmap()
         self.update()
@@ -84,7 +79,6 @@ class WeatherConditionIcon(QWidget):
     def clear_icon(self) -> None:
         self._pixmap = None
         self._icon_path = None
-        self._invalidate_shadow_cache()
         self.update()
 
     def set_icon_path(self, icon_path: Optional[Path]) -> None:
@@ -96,7 +90,6 @@ class WeatherConditionIcon(QWidget):
 
         self._icon_path = icon_path
         self._load_pixmap()
-        self._invalidate_shadow_cache()
         self.update()
 
     def _load_pixmap(self) -> None:
@@ -120,72 +113,6 @@ class WeatherConditionIcon(QWidget):
             source = self._convert_to_grayscale(source)
 
         self._pixmap = source
-        self._invalidate_shadow_cache()
-
-    def set_shadow_config(self, config) -> None:
-        self._shadow_config = config
-        self._invalidate_shadow_cache()
-        self.update()
-
-    def _invalidate_shadow_cache(self) -> None:
-        self._shadow_pixmap = None
-        self._shadow_cache_key = None
-
-    def _ensure_shadow_pixmap(self, target: QRect) -> Optional[QPixmap]:
-        if not shadow_config_enabled(self._shadow_config, "enabled", True):
-            return None
-        if self._pixmap is None or self._pixmap.isNull() or target.width() <= 0 or target.height() <= 0:
-            return None
-        try:
-            dpr = max(1.0, float(self.devicePixelRatioF()))
-        except Exception:
-            dpr = 1.0
-        # Authored weather icon-shadow alpha (formerly shadowtuning.json ``icon``;
-        # inlined when that sidecar authority was retired in F0.5).
-        alpha = 95
-        key = (
-            int(self._pixmap.cacheKey()),
-            target.width(),
-            target.height(),
-            round(dpr, 3),
-            alpha,
-        )
-        if (
-            self._shadow_pixmap is not None
-            and not self._shadow_pixmap.isNull()
-            and self._shadow_cache_key == key
-        ):
-            return self._shadow_pixmap
-
-        scaled = self._pixmap.scaled(
-            int(target.width() * dpr),
-            int(target.height() * dpr),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        try:
-            scaled.setDevicePixelRatio(dpr)
-        except Exception as e:
-            logger.debug("[WEATHER] Exception suppressed: %s", e)
-        self._shadow_pixmap = make_alpha_shadow_pixmap(
-            scaled,
-            dpr=dpr,
-            shadow_color=QColor(0, 0, 0, alpha),
-        )
-        self._shadow_cache_key = key
-        return self._shadow_pixmap
-
-    def _scaled_shadow_offsets(self, target: QRect) -> tuple[int, int]:
-        # Authored weather icon-shadow base offsets (formerly shadowtuning.json
-        # ``icon``; inlined when that sidecar authority was retired in F0.5).
-        base_x = 3
-        base_y = 4
-        shortest_edge = max(1, min(int(target.width()), int(target.height())))
-        scale = max(0.4, min(1.0, shortest_edge / 96.0))
-        return (
-            max(1, int(round(base_x * scale))),
-            max(1, int(round(base_y * scale))),
-        )
 
     def _convert_to_grayscale(self, pixmap: QPixmap) -> QPixmap:
         """Convert pixmap to grayscale while preserving alpha channel.
@@ -237,14 +164,6 @@ class WeatherConditionIcon(QWidget):
         # Draw pixmap scaled to target with smooth transformation
         # Monochrome conversion already applied in _load_pixmap (zero overhead here)
         target = self.rect().adjusted(self._padding, self._padding, -self._padding, -self._padding)
-        shadow_offset_x, shadow_offset_y = self._scaled_shadow_offsets(target)
-        shadow = self._ensure_shadow_pixmap(target)
-        if shadow is not None and not shadow.isNull():
-            painter.drawPixmap(
-                target.x() + shadow_offset_x,
-                target.y() + shadow_offset_y,
-                shadow,
-            )
         painter.drawPixmap(target, self._pixmap)
         painter.end()
 
@@ -266,24 +185,11 @@ class WeatherDetailIcon(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._vertical_inset = 3
         self._baseline_offset = 0
-        self._shadow_config = None
-        self._shadow_pixmap: Optional[QPixmap] = None
-        self._shadow_cache_key: Optional[tuple] = None
 
     def set_pixmap(self, pixmap: Optional[QPixmap]) -> None:
         """Set pixmap - expects pre-scaled pixmap at target size."""
         self._pixmap = pixmap
-        self._invalidate_shadow_cache()
         self.update()
-
-    def set_shadow_config(self, config) -> None:
-        self._shadow_config = config
-        self._invalidate_shadow_cache()
-        self.update()
-
-    def _invalidate_shadow_cache(self) -> None:
-        self._shadow_pixmap = None
-        self._shadow_cache_key = None
 
     def set_baseline_offset(self, pixels: int) -> None:
         max_drop = max(0, (self._box.height() // 2) - 2)
@@ -315,30 +221,6 @@ class WeatherDetailIcon(QWidget):
         x = (self._box.width() - pm_w) // 2
         y = self._vertical_inset + (self._box.height() - self._vertical_inset * 2 - pm_h) // 2
 
-        if shadow_config_enabled(self._shadow_config, "enabled", True):
-            try:
-                dpr = max(1.0, float(self.devicePixelRatioF()))
-            except Exception:
-                dpr = 1.0
-            alpha = 95
-            key = (int(self._pixmap.cacheKey()), round(dpr, 3), alpha)
-            if (
-                self._shadow_pixmap is None
-                or self._shadow_pixmap.isNull()
-                or self._shadow_cache_key != key
-            ):
-                self._shadow_pixmap = make_alpha_shadow_pixmap(
-                    self._pixmap,
-                    dpr=dpr,
-                    shadow_color=QColor(0, 0, 0, alpha),
-                )
-                self._shadow_cache_key = key
-            if self._shadow_pixmap is not None and not self._shadow_pixmap.isNull():
-                painter.drawPixmap(
-                    x + 3,
-                    y + 4,
-                    self._shadow_pixmap,
-                )
         painter.drawPixmap(x, y, self._pixmap)
         painter.end()
 
@@ -358,7 +240,6 @@ class WeatherDetailRow(QWidget):
         self._segment_pool: Dict[str, QWidget] = {}
         self._segment_icon_labels: Dict[str, WeatherDetailIcon] = {}
         self._segment_text_labels: Dict[str, QLabel] = {}
-        self._shadow_config = None
 
         # Outer layout
         outer = QHBoxLayout(self)
@@ -393,15 +274,6 @@ class WeatherDetailRow(QWidget):
 
         self._rebuild_segments()
         self.setVisible(bool(metrics))
-
-    def set_shadow_config(self, config) -> None:
-        self._shadow_config = config
-        for label in self._segment_text_labels.values():
-            if hasattr(label, "set_shadow_config"):
-                label.set_shadow_config(config)
-        for icon in self._segment_icon_labels.values():
-            if hasattr(icon, "set_shadow_config"):
-                icon.set_shadow_config(config)
 
     def _rebuild_segments(self) -> None:
         """Rebuild segments with pooling like old code."""
@@ -443,9 +315,7 @@ class WeatherDetailRow(QWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
 
         icon_label = WeatherDetailIcon(self._icon_size, segment)
-        icon_label.set_shadow_config(self._shadow_config)
         text_label = PaintedShadowLabel(segment)
-        text_label.set_shadow_config(self._shadow_config)
         text_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         text_label.setWordWrap(False)
         text_label.setAlignment(

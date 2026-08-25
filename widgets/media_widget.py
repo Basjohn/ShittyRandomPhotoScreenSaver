@@ -246,8 +246,6 @@ class MediaWidget(BaseOverlayWidget):
         self._controls_row_shadow_alpha: int = 60
         self._controls_row_outline_alpha: int = 65
         self._controls_layout_cache: Optional[dict[str, object]] = None
-        self._controls_shadow_cache: Optional[object] = None
-        self._controls_shadow_cache_key: Optional[tuple] = None
         self._last_display_update_ts: float = 0.0
         self._skipped_identity_updates: int = 0
         self._max_identity_skip: int = 4
@@ -950,8 +948,6 @@ class MediaWidget(BaseOverlayWidget):
     def _invalidate_controls_layout(self) -> None:
         """Clear cached transport controls geometry."""
         self._controls_layout_cache = None
-        self._controls_shadow_cache = None
-        self._controls_shadow_cache_key = None
 
     # ------------------------------------------------------------------
     # Transport controls (delegated to the neutral shared owner)

@@ -24,7 +24,7 @@ from PySide6.QtGui import (
     QPixmap,
 )
 
-from widgets.shadow_utils import draw_rounded_rect_with_shadow, draw_text_rect_with_shadow
+from widgets.shadow_utils import draw_rounded_rect_border, draw_text_rect_with_shadow
 from widgets.steam_card_models import (
     SteamCardField,
     SteamCardViewModel,
@@ -666,13 +666,12 @@ def _draw_header_badge(
     badge_fill.setColorAt(0.0, fill_a)
     badge_fill.setColorAt(1.0, fill_b)
     painter.fillPath(badge_path, badge_fill)
-    draw_rounded_rect_with_shadow(
+    draw_rounded_rect_border(
         painter,
         layout.header_rect.toAlignedRect(),
         max(6.0, 8.0 * layout.scale),
         border,
         max(2, int(round(2.0 * layout.scale))),
-        shadow_enabled=True,
     )
 
     if logo_pixmap is not None and not logo_pixmap.isNull():

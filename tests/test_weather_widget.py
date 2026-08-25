@@ -1440,16 +1440,6 @@ def test_weather_condition_icon_stays_centered_with_primary_text_when_shrunk(qap
     assert abs(icon_center_y - text_center_y) <= 3.0
 
 
-def test_weather_condition_icon_shadow_drop_scales_down_with_small_icons(qapp):
-    icon = WeatherConditionIcon(size_px=96)
-
-    large_dx, large_dy = icon._scaled_shadow_offsets(QRect(0, 0, 96, 96))
-    small_dx, small_dy = icon._scaled_shadow_offsets(QRect(0, 0, 40, 40))
-
-    assert large_dx >= small_dx >= 1
-    assert large_dy > small_dy >= 1
-
-
 def test_weather_start_error_path_respects_active_custom_rect(qapp, parent_widget):
     weather = WeatherWidget(parent=parent_widget)
     weather.set_thread_manager(Mock())

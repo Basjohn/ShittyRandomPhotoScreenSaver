@@ -79,7 +79,7 @@ def test_digital_clock_calendar_rows_are_centered_and_preserve_custom_rect(qtbot
     assert " - " in clock._calendar_label.text()
 
 
-def test_digital_clock_secondary_rows_share_painted_text_shadow_authority(qtbot) -> None:
+def test_digital_clock_secondary_rows_keep_content_without_generic_shadow_state(qtbot) -> None:
     parent = QWidget()
     qtbot.addWidget(parent)
     parent.show()
@@ -91,13 +91,17 @@ def test_digital_clock_secondary_rows_share_painted_text_shadow_authority(qtbot)
     )
     qtbot.addWidget(clock)
     shadow_config = {"text_enabled": False}
+    calendar_text = clock._calendar_label.text()
+    timezone_text = clock._tz_label.text()
 
     clock.set_shadow_config(shadow_config)
 
     assert isinstance(clock._calendar_label, PaintedShadowLabel)
     assert isinstance(clock._tz_label, PaintedShadowLabel)
-    assert clock._calendar_label._shadow_config is shadow_config
-    assert clock._tz_label._shadow_config is shadow_config
+    assert not hasattr(clock._calendar_label, "_shadow_config")
+    assert not hasattr(clock._tz_label, "_shadow_config")
+    assert clock._calendar_label.text() == calendar_text
+    assert clock._tz_label.text() == timezone_text
 
 
 def test_digital_clock_footer_is_compact_and_separator_reserves_only_its_lane(qtbot) -> None:

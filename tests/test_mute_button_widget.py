@@ -238,7 +238,8 @@ def test_mute_button_scales_down_with_small_media_controls_lane(qt_app):
 
         assert mute._btn_width < 40
         assert mute._btn_height < 36
-        assert mute.width() <= 32 + mute._shadow_margin * 2
+        assert mute.width() == mute._btn_width <= 32
+        assert mute.height() == mute._btn_height <= 30
         assert mute.y() >= anchor.geometry().top()
         assert mute.y() + mute.height() <= parent.height()
     finally:

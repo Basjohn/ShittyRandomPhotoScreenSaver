@@ -217,11 +217,12 @@ def test_spotify_volume_waits_for_secondary_stage_before_reveal(qt_app, monkeypa
         parent.deleteLater()
 
 
-def test_spotify_volume_uses_track_shadow_without_outer_frame_box(qt_app):
+def test_spotify_volume_has_no_retired_profile_shadow_owner(qt_app):
     widget = SpotifyVolumeWidget()
     try:
-        assert widget.uses_outer_frame_shadow() is False
-        assert widget.uses_painted_frame_shadow() is True
+        assert not hasattr(widget, "uses_outer_frame_shadow")
+        assert not hasattr(widget, "uses_painted_frame_shadow")
+        assert not hasattr(widget, "_ensure_track_shadow_pixmap")
     finally:
         widget.deleteLater()
 
