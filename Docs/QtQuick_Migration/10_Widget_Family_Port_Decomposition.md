@@ -1,7 +1,7 @@
 # 10 — Ordinary Widget Family Port Decomposition
 
-Status: **Phase F ACTIVE — F0.5 narrow correction, then F1**  
-Last updated: 2026-08-24
+Status: **Phase F ACTIVE — F0.5 independent audit, then F1 after GREEN**
+Last updated: 2026-08-25
 
 This file begins at current/future Phase-F work. Completed F0/F0.5 implementation history does not live
 here.
@@ -22,7 +22,7 @@ neutral runtime/model
 ## Sequence
 
 ```text
-F0.5 correction   remove remaining relocated sidecar-only shadow tuning
+F0.5 audit        validate pushed sidecar-only shadow correction
 F1                Clock / Clock2 / Clock3
 F2                Weather
 F3                Media core
