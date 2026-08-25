@@ -5,7 +5,8 @@ import weakref
 from pathlib import Path
 from typing import TYPE_CHECKING, Mapping
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
     QGridLayout,
@@ -33,6 +34,7 @@ from core.cache_maintenance import (
 from core.logging.logger import get_logger
 from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
+from ui.flow_layout import FlowContainer
 from ui.styled_popup import StyledPopup
 from ui.tabs.shared_styles import (
     FORM_ROW_LABEL_STYLE,
@@ -68,6 +70,28 @@ QPushButton:disabled {
     color: rgba(255, 255, 255, 90);
     background-color: rgba(255, 255, 255, 8);
     border-color: rgba(255, 255, 255, 35);
+}
+"""
+
+_SHADOW_SPIN_CONTROL_WIDTH = 220
+_SHADOW_SPIN_SHADOW_PAD = 10
+_SHADOW_DIRECTION_CELL_STYLE = """
+QPushButton {
+    background-color: rgba(32, 32, 32, 235);
+    border: 1px solid rgba(255, 255, 255, 210);
+    border-radius: 6px;
+    padding: 0px;
+}
+QPushButton:hover {
+    background-color: rgba(56, 56, 56, 240);
+    border-color: #ffffff;
+}
+QPushButton:pressed {
+    background-color: rgba(18, 18, 18, 245);
+}
+QPushButton:checked {
+    background-color: rgba(255, 255, 255, 58);
+    border: 2px solid #ffffff;
 }
 """
 
@@ -237,9 +261,50 @@ _SHADOW_DIRECTION_GRID: tuple[tuple[ShadowDirection, str] | None, ...] = (
 )
 
 
-def _add_shadow_spin(
+class _ShadowDirectionButton(QPushButton):
+    """Compass cell that paints a crisp vector arrow at the widget's real resolution."""
+
+    def __init__(self, grid_row: int, grid_col: int, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._grid_row = int(grid_row)
+        self._grid_col = int(grid_col)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        super().paintEvent(event)
+
+        dx = float(self._grid_col - 1)
+        dy = float(self._grid_row - 1)
+        magnitude = (dx * dx + dy * dy) ** 0.5
+        if magnitude <= 0.0:
+            return
+
+        vx = dx / magnitude
+        vy = dy / magnitude
+        cx = (self.width() - 1) * 0.5
+        cy = (self.height() - 1) * 0.5
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(QColor(255, 255, 255, 245))
+        pen.setWidthF(1.8)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+
+        shaft_start = QPointF(cx - vx * 5.2, cy - vy * 5.2)
+        tip = QPointF(cx + vx * 5.8, cy + vy * 5.8)
+        painter.drawLine(shaft_start, tip)
+
+        base_x = tip.x() - vx * 4.0
+        base_y = tip.y() - vy * 4.0
+        px = -vy
+        py = vx
+        painter.drawLine(tip, QPointF(base_x + px * 2.7, base_y + py * 2.7))
+        painter.drawLine(tip, QPointF(base_x - px * 2.7, base_y - py * 2.7))
+        painter.end()
+
+def _build_shadow_spin_control(
     tab: "WidgetsTab",
-    layout: QVBoxLayout,
     label_text: str,
     attr: str,
     *,
@@ -248,11 +313,24 @@ def _add_shadow_spin(
     value: int,
     suffix: str = "",
     tooltip: str = "",
-) -> QSpinBox:
-    """Add one aligned integer spin control bound to the tab's debounced save."""
+) -> QWidget:
+    """Build one compact label-over-spin control for a wrapping shadow row."""
 
-    row, _ = add_aligned_row(layout, label_text, label_width=150, wrap=False)
+    control = QWidget()
+    control.setFixedWidth(_SHADOW_SPIN_CONTROL_WIDTH + _SHADOW_SPIN_SHADOW_PAD)
+    control_layout = QVBoxLayout(control)
+    # Reserve enough right/bottom room for the deliberate hard SE shadow so
+    # the wrapping host never clips its antialiased rounded outline.
+    control_layout.setContentsMargins(0, 0, _SHADOW_SPIN_SHADOW_PAD, _SHADOW_SPIN_SHADOW_PAD)
+    control_layout.setSpacing(2)
+
+    label = QLabel(label_text)
+    label.setStyleSheet(f"{FORM_ROW_LABEL_STYLE} qproperty-alignment: AlignCenter;")
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    control_layout.addWidget(label)
+
     spin = QSpinBox()
+    spin.setFixedWidth(_SHADOW_SPIN_CONTROL_WIDTH)
     spin.setRange(minimum, maximum)
     if suffix:
         spin.setSuffix(suffix)
@@ -261,9 +339,8 @@ def _add_shadow_spin(
     spin.setValue(max(minimum, min(maximum, int(value))))
     spin.valueChanged.connect(tab._save_settings)
     setattr(tab, attr, spin)
-    row.addWidget(spin)
-    row.addStretch()
-    return spin
+    control_layout.addWidget(spin, alignment=Qt.AlignmentFlag.AlignHCenter)
+    return control
 
 
 def _apply_shadow_direction(tab: "WidgetsTab", direction: ShadowDirection) -> None:
@@ -307,12 +384,14 @@ def _build_shadow_direction_picker(
             center.setEnabled(False)
             grid.addWidget(center, grid_row, grid_col)
             continue
-        direction, glyph = cell
-        button = QPushButton(glyph)
+        direction, _glyph = cell
+        button = _ShadowDirectionButton(grid_row, grid_col)
         button.setCheckable(True)
         button.setFixedSize(28, 28)
         button.setProperty("shadowDirectionCell", True)
+        button.setStyleSheet(_SHADOW_DIRECTION_CELL_STYLE)
         button.setToolTip(f"Shadow direction {direction.value}")
+        button.setAccessibleName(f"Shadow direction {direction.value}")
         button.setChecked(direction is current)
         button.clicked.connect(
             lambda _checked=False, picked=direction: _on_shadow_direction_selected(tab, picked)
@@ -379,42 +458,47 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     row.addStretch()
     appearance_layout.addLayout(row)
 
-    _add_shadow_spin(
-        tab,
-        appearance_layout,
-        "Shadow Darkness:",
-        "widget_shadow_darkness_spin",
-        minimum=0,
-        maximum=100,
-        value=int(round(tab._default_float("shadows", "frame_opacity", 0.77) * 100)),
-        suffix="%",
-        tooltip="Card/frame drop-shadow darkness (opacity).",
+    card_shadow_flow = FlowContainer(margin=0, h_spacing=18, v_spacing=10)
+    card_shadow_flow.addWidget(
+        _build_shadow_spin_control(
+            tab,
+            "Shadow Darkness:",
+            "widget_shadow_darkness_spin",
+            minimum=0,
+            maximum=100,
+            value=int(round(tab._default_float("shadows", "frame_opacity", 0.77) * 100)),
+            suffix="%",
+            tooltip="Card/frame drop-shadow darkness (opacity).",
+        )
     )
-    _add_shadow_spin(
-        tab,
-        appearance_layout,
-        "Shadow Blur:",
-        "widget_shadow_blur_spin",
-        minimum=0,
-        maximum=40,
-        value=tab._default_int("shadows", "blur_radius", 18),
-        suffix=" px",
-        tooltip="Card/frame drop-shadow blur radius.",
+    card_shadow_flow.addWidget(
+        _build_shadow_spin_control(
+            tab,
+            "Shadow Blur:",
+            "widget_shadow_blur_spin",
+            minimum=0,
+            maximum=40,
+            value=tab._default_int("shadows", "blur_radius", 18),
+            suffix=" px",
+            tooltip="Card/frame drop-shadow blur radius.",
+        )
     )
-    _add_shadow_spin(
-        tab,
-        appearance_layout,
-        "Shadow Extra Offset:",
-        "widget_shadow_extra_offset_spin",
-        minimum=0,
-        maximum=40,
-        value=tab._default_int("shadows", "frame_extra_offset", 0),
-        suffix=" px",
-        tooltip=(
-            "Additional card/frame shadow distance added before the global "
-            "direction applies signs. 0 keeps the authored distance."
-        ),
+    card_shadow_flow.addWidget(
+        _build_shadow_spin_control(
+            tab,
+            "Shadow Extra Offset:",
+            "widget_shadow_extra_offset_spin",
+            minimum=0,
+            maximum=40,
+            value=tab._default_int("shadows", "frame_extra_offset", 0),
+            suffix=" px",
+            tooltip=(
+                "Additional card/frame shadow distance added before the global "
+                "direction applies signs. 0 keeps the authored distance."
+            ),
+        )
     )
+    appearance_layout.addWidget(card_shadow_flow)
 
     row = QHBoxLayout()
     row.setContentsMargins(0, 8, 0, 8)
@@ -430,31 +514,35 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     row.addStretch()
     appearance_layout.addLayout(row)
 
-    _add_shadow_spin(
-        tab,
-        appearance_layout,
-        "Text Shadow Darkness:",
-        "widget_text_shadow_darkness_spin",
-        minimum=0,
-        maximum=100,
-        value=int(round(tab._default_float("shadows", "text_opacity", 0.33) * 100)),
-        suffix="%",
-        tooltip="Text drop-shadow darkness (opacity). There is no text blur.",
+    text_shadow_flow = FlowContainer(margin=0, h_spacing=18, v_spacing=10)
+    text_shadow_flow.addWidget(
+        _build_shadow_spin_control(
+            tab,
+            "Text Shadow Darkness:",
+            "widget_text_shadow_darkness_spin",
+            minimum=0,
+            maximum=100,
+            value=int(round(tab._default_float("shadows", "text_opacity", 0.33) * 100)),
+            suffix="%",
+            tooltip="Text drop-shadow darkness (opacity). There is no text blur.",
+        )
     )
-    _add_shadow_spin(
-        tab,
-        appearance_layout,
-        "Text Shadow Extra Offset:",
-        "widget_text_shadow_extra_offset_spin",
-        minimum=0,
-        maximum=40,
-        value=tab._default_int("shadows", "text_extra_offset", 0),
-        suffix=" px",
-        tooltip=(
-            "Additional text shadow distance added before the global direction "
-            "applies signs. 0 keeps the authored distance."
-        ),
+    text_shadow_flow.addWidget(
+        _build_shadow_spin_control(
+            tab,
+            "Text Shadow Extra Offset:",
+            "widget_text_shadow_extra_offset_spin",
+            minimum=0,
+            maximum=40,
+            value=tab._default_int("shadows", "text_extra_offset", 0),
+            suffix=" px",
+            tooltip=(
+                "Additional text shadow distance added before the global direction "
+                "applies signs. 0 keeps the authored distance."
+            ),
+        )
     )
+    appearance_layout.addWidget(text_shadow_flow)
 
     row = QHBoxLayout()
     row.setContentsMargins(0, 8, 0, 8)
