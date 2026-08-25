@@ -299,6 +299,20 @@ Differences belong in configuration/model resolution, not duplicate providers/de
 
 Reuse shared image seam if compatible.
 
+The first retained F5 checkpoint adds one static `RedditPresentation.qml` family component and one
+stable `RedditPresentationModel` plus `RedditRowListModel` per configured member. Reddit2 style
+inheritance is resolved in Python while subreddit/limit/feed identity remain independent. Coherent
+loading/ready/cached-error/empty state, stable URL-first row identities, canonical card/text-shadow
+projection, single-line title elision and interaction-gated semantic open/refresh signals mutate in
+place without item/model/list-model/engine recreation. QML owns no provider, cache, cadence, URL side
+effect, persistence, rate limiter or Timer. Real threaded-OpenGL evidence covers effective DPR 1.0,
+1.5 and 2.25.
+
+The current `WidgetRuntimeManager` Reddit lease owns only provider construction/inheritance; startup
+cache, fetch cadence, progressive state and generation fencing still live in `RedditWidget`. The next
+F5 slice must extract that logical runtime into a presentation-neutral owner and inject the retained
+model before any old QWidget pixels or paint-cache tests retire.
+
 ---
 
 # F6 — Gmail

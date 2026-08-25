@@ -18,6 +18,7 @@ Item {
     property int horizontalAlignment: Text.AlignLeft
     property int verticalAlignment: Text.AlignTop
     property bool wrap: false
+    property int elide: Text.ElideNone
 
     property bool shadowEnabled: true
     property color shadowColor: "#96000000"
@@ -43,6 +44,7 @@ Item {
         horizontalAlignment: shadowedText.horizontalAlignment
         verticalAlignment: shadowedText.verticalAlignment
         wrapMode: shadowedText.wrap ? Text.WordWrap : Text.NoWrap
+        elide: shadowedText.elide
         z: 0
     }
 
@@ -57,6 +59,7 @@ Item {
         horizontalAlignment: shadowedText.horizontalAlignment
         verticalAlignment: shadowedText.verticalAlignment
         wrapMode: shadowedText.wrap ? Text.WordWrap : Text.NoWrap
+        elide: shadowedText.elide
         z: 1
     }
 }

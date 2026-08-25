@@ -7,8 +7,8 @@ Last updated: 2026-08-25
 Exact main inspected through:
 
 ```text
-5c9cf4dd
-Phase F4 retained Media seek and soft glow
+7dd064b2b8172094e2e1ffc8ac24519528e3fd94
+Phase F4 caller proof and legacy Media pixel retirement
 ```
 
 F1 implementation basis:
@@ -74,6 +74,21 @@ Validation:
   configured row capacities;
 - compile/import/static checks as relevant;
 - caller scans, full diff/status and `git diff --check`.
+
+Current F5 sequence:
+
+```text
+retained Reddit/Reddit2 config + stable row model + static QML + semantic signals -> implementation GREEN
+neutral cache/cadence/fetch runtime extraction + real owner injection             -> NEXT
+runtime-shaped state/action/geometry gates + caller proof                         -> pending
+old Reddit QWidget pixel/cache/input retirement                                   -> pending
+```
+
+The first checkpoint uses one `RedditPresentationModel`/`RedditPresentation.qml` component for both
+members, keeps one stable `QAbstractListModel` per feed, and mutates existing retained delegates for
+same-cardinality updates. It deliberately does not treat the current stateless post-provider lease as a
+complete runtime service. The next slice extracts the genuinely shared cache/cadence/fetch ownership
+from `RedditWidget` before wiring the retained model to the real owner.
 
 F4 closure evidence:
 
@@ -408,5 +423,5 @@ The unrelated Bubble cadence harness debt from the visualizer card-surface clean
 Settings-GUI shadow polish is separate from runtime widget shadow authority and is not a migration
 sequencing blocker.
 
-`Docs/TestSuite.md` remains the canonical 353-module inventory. Its phase-status prose does not override
+`Docs/TestSuite.md` remains the canonical 354-module inventory. Its phase-status prose does not override
 this plan's sequencing.
