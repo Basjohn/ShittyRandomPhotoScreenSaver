@@ -57,6 +57,53 @@ def test_no_current_source_reads_the_retired_sidecar() -> None:
             assert banned not in source, f"{rel}: {banned}"
 
 
+def test_no_production_copy_of_retired_profile_behavior_remains() -> None:
+    root = Path(__file__).resolve().parents[1]
+    retired_markers = {
+        "widgets/shadow_utils.py": (
+            "shadowtuning.json",
+            "TEXT_SHADOW_",
+            "TEXT_LARGE_SHADOW_",
+            "HEADER_SHADOW_",
+            "_resolve_text_shadow_params",
+            "draw_text_rect_shadow_only",
+            "draw_rich_text_shadow_only",
+            "make_alpha_shadow_pixmap",
+            "draw_pixmap_drop_shadow",
+            "draw_rounded_rect_with_shadow",
+        ),
+        "widgets/weather_components.py": (
+            "shadowtuning.json",
+            "_scaled_shadow_offsets",
+            "_shadow_pixmap",
+            "make_alpha_shadow_pixmap",
+        ),
+        "widgets/media/painting.py": (
+            "shadowtuning.json",
+            "_ensure_controls_shadow_pixmap",
+            "_controls_shadow_cache",
+        ),
+        "widgets/mute_button_widget.py": (
+            "shadowtuning.json",
+            "_ensure_button_shadow_pixmap",
+            "_shadow_margin",
+            "_shadow_cache",
+        ),
+        "widgets/spotify_volume_widget.py": (
+            "shadowtuning.json",
+            "_VOL_SHADOW_",
+            "_ensure_track_shadow_pixmap",
+            "_track_shadow",
+            "_painted_frame_shadow",
+        ),
+    }
+
+    for rel, markers in retired_markers.items():
+        source = (root / rel).read_text(encoding="utf-8")
+        for marker in markers:
+            assert marker not in source, f"{rel}: {marker}"
+
+
 # --------------------------------------------------------------------------- #
 # ShadowSettings model + canonical defaults                                   #
 # --------------------------------------------------------------------------- #

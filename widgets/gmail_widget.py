@@ -63,10 +63,8 @@ from widgets.gmail_runtime import (
 )
 from widgets.shadow_utils import (
     ShadowFadeProfile,
-    draw_pixmap_drop_shadow,
-    draw_rounded_rect_with_shadow,
+    draw_rounded_rect_border,
     draw_text_with_shadow,
-    header_shadows_enabled,
     text_shadows_enabled,
 )
 
@@ -1159,14 +1157,6 @@ class GmailWidget(BaseOverlayWidget):
         layout = self._calculate_header_layout(font, header_text, pixmap)
         self._paint_header_frame(painter, layout["frame_rect"])
         if pixmap is not None:
-            draw_pixmap_drop_shadow(
-                painter,
-                layout["logo_rect"],
-                pixmap,
-                owner=self,
-                cache_attr="_header_logo_shadow_cache",
-                shadow_config=self._shadow_config,
-            )
             painter.drawPixmap(layout["logo_rect"], pixmap)
         painter.setPen(self._text_color)
         draw_text_with_shadow(
@@ -1264,13 +1254,12 @@ class GmailWidget(BaseOverlayWidget):
             return
         radius = min(self._bg_corner_radius + 1, min(frame_rect.width(), frame_rect.height()) / 2)
         border_width = max(2, max(1, self._bg_border_width) - 3)
-        draw_rounded_rect_with_shadow(
+        draw_rounded_rect_border(
             painter,
             frame_rect,
             radius,
             self._bg_border_color,
             border_width,
-            shadow_enabled=header_shadows_enabled(self._shadow_config),
         )
 
     def _header_bottom_y(self) -> int:

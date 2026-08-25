@@ -13,7 +13,7 @@ import time
 from typing import Optional
 
 from PySide6.QtCore import Qt, QRectF, QPointF
-from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen, QPainterPath, QPixmap
+from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen, QPainterPath
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
@@ -65,13 +65,10 @@ class MuteButtonWidget(QWidget):
 
         self._btn_width: int = 40
         self._btn_height: int = 36
-        self._shadow_margin: int = 8
-        self._shadow_cache: Optional[QPixmap] = None
-        self._shadow_cache_key: Optional[tuple] = None
 
         configure_overlay_widget_attributes(self)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self.setFixedSize(self._btn_width + self._shadow_margin * 2, self._btn_height + self._shadow_margin * 2)
+        self.setFixedSize(self._btn_width, self._btn_height)
         self.hide()
 
         if build_default_runtime:
@@ -79,7 +76,7 @@ class MuteButtonWidget(QWidget):
             self._install_runtime_service(service, owns_service=True)
 
     def _resize_to_button_footprint(self, btn_width: int, btn_height: int) -> None:
-        """Apply a new button footprint and invalidate cached shadow geometry."""
+        """Apply a new button footprint."""
         btn_width = max(24, int(btn_width))
         btn_height = max(22, int(btn_height))
         if btn_width == self._btn_width and btn_height == self._btn_height:
@@ -87,9 +84,7 @@ class MuteButtonWidget(QWidget):
         self._btn_width = btn_width
         self._btn_height = btn_height
         self._border_radius = max(8.0, min(12.0, btn_height * 0.32))
-        self._shadow_cache = None
-        self._shadow_cache_key = None
-        self.setFixedSize(self._btn_width + self._shadow_margin * 2, self._btn_height + self._shadow_margin * 2)
+        self.setFixedSize(self._btn_width, self._btn_height)
 
     def _sync_button_size_from_anchor_layout(self, controls_layout, artwork_rect) -> None:
         """Scale the mute button to the current media-card controls footprint."""
@@ -364,7 +359,7 @@ class MuteButtonWidget(QWidget):
             if row_rect is not None:
                 self._sync_button_size_from_anchor_layout(controls_layout, artwork_rect)
                 # Y: same as control bar top, in parent coordinates
-                y = anchor_geo.top() + row_rect.top() + (row_rect.height() - self._btn_height) // 2 - self._shadow_margin
+                y = anchor_geo.top() + row_rect.top() + (row_rect.height() - self._btn_height) // 2
                 # X: centered under artwork panel, in parent coordinates
                 art_center_x = anchor_geo.left() + artwork_rect.left() + artwork_rect.width() // 2
                 x = art_center_x - self.width() // 2
@@ -516,16 +511,12 @@ class MuteButtonWidget(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
         rect = QRectF(
-            self._shadow_margin + 1,
-            self._shadow_margin + 1,
+            1,
+            1,
             self._btn_width - 2,
             self._btn_height - 2,
         )
         radius = self._border_radius
-
-        shadow = self._ensure_button_shadow_pixmap(rect, radius)
-        if shadow is not None and not shadow.isNull():
-            p.drawPixmap(0, 0, shadow)
 
         # Background with gradient matching control bar
         from PySide6.QtGui import QLinearGradient
@@ -562,61 +553,6 @@ class MuteButtonWidget(QWidget):
             p.drawRoundedRect(rect, radius, radius)
 
         p.end()
-
-    def _ensure_button_shadow_pixmap(self, rect: QRectF, radius: float) -> Optional[QPixmap]:
-        try:
-            dpr = max(1.0, float(self.devicePixelRatioF()))
-        except Exception:
-            dpr = 1.0
-        # Authored mute-button control shadow reference magnitudes (formerly
-        # shadowtuning.json ``control``; inlined when that sidecar was retired in F0.5).
-        offset_x = 3
-        offset_y = 4
-        spread = 8
-        alpha = 80
-        passes = 5
-        key = (
-            self.width(),
-            self.height(),
-            round(dpr, 3),
-            rect.width(),
-            rect.height(),
-            radius,
-            offset_x,
-            offset_y,
-            spread,
-            alpha,
-            passes,
-        )
-        if self._shadow_cache is not None and not self._shadow_cache.isNull() and self._shadow_cache_key == key:
-            return self._shadow_cache
-
-        pixmap = QPixmap(max(1, int(self.width() * dpr)), max(1, int(self.height() * dpr)))
-        pixmap.setDevicePixelRatio(dpr)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        try:
-            base_rect = rect.translated(offset_x, offset_y)
-            for layer in range(passes, 0, -1):
-                frac = layer / float(passes)
-                grow = spread * frac
-                layer_alpha = int(alpha * (1.0 - frac * 0.78))
-                if layer_alpha <= 0:
-                    continue
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QColor(0, 0, 0, layer_alpha))
-                painter.drawRoundedRect(
-                    base_rect.adjusted(-grow, -grow, grow, grow),
-                    radius + grow,
-                    radius + grow,
-                )
-        finally:
-            painter.end()
-
-        self._shadow_cache = pixmap
-        self._shadow_cache_key = key
-        return pixmap
 
     def _paint_speaker_icon(self, p: QPainter, rect: QRectF) -> None:
         """Draw a monochrome speaker icon with sound waves (or crossed out if muted)."""

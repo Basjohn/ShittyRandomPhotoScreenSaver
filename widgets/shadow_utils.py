@@ -1,25 +1,16 @@
-"""Shared helpers for runtime widget shadows and overlay widget attributes.
+"""Current QWidget overlay helpers used during the Qt Quick migration.
 
-Centralizes configuration for overlay widget shadows (clocks, weather,
-media, and future widgets) so behaviour can be tuned in one place.
-
-Runtime card, text, and header shadows are painter-drawn to avoid Qt
-QGraphicsDropShadowEffect cache corruption on translucent overlay widgets.
-
-Also provides `configure_overlay_widget_attributes()` to set Qt widget
-attributes that prevent flickering when sibling QOpenGLWidgets repaint.
-
-Text shadow helpers are provided for QPainter-based text rendering with
-subtle drop shadows that improve readability on varied backgrounds.
+The retained helpers cover overlay attributes, old-presenter fade lifecycle,
+and content painting still shared by unported families. Generic text, header,
+and icon shadows from the retired global sidecar are intentionally absent.
 """
 from __future__ import annotations
 
-import re
 from typing import Any, Mapping, Callable, Optional
 
 from PySide6.QtWidgets import QLabel, QWidget, QGraphicsOpacityEffect
-from PySide6.QtCore import QVariantAnimation, QEasingCurve, Qt, QRect, QRectF, QPointF
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap, QTextDocument
+from PySide6.QtCore import QVariantAnimation, QEasingCurve, Qt, QRect
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging
@@ -97,10 +88,6 @@ def shadow_config_enabled(config: Mapping[str, Any] | None, key: str = "enabled"
 
 def text_shadows_enabled(config: Mapping[str, Any] | None) -> bool:
     return shadow_config_enabled(config, "text_enabled", True)
-
-
-def header_shadows_enabled(config: Mapping[str, Any] | None) -> bool:
-    return shadow_config_enabled(config, "header_enabled", True)
 
 
 class ShadowFadeProfile:
@@ -379,65 +366,8 @@ class ShadowFadeProfile:
 
 
 # ---------------------------------------------------------------------------
-# Text Shadow Helpers for QPainter-based rendering
+# Plain content painting for current QWidget families
 # ---------------------------------------------------------------------------
-#
-# These are the authored ordinary/large/header text-shadow reference magnitudes
-# for not-yet-ported QWidget families. They were formerly sourced from the shared
-# shadowtuning.json ``text``/``text_large``/``header`` sidecar; that hidden tuning
-# authority was retired in F0.5, so the values are inlined here as this helper's
-# own constants. There is no text blur. The canonical destination text shadow is
-# the retained duplicate-glyph ShadowedText primitive under the global direction.
-
-TEXT_SHADOW_OFFSET_X: float = 3.0
-TEXT_SHADOW_OFFSET_Y: float = 3.0
-TEXT_SHADOW_COLOR: QColor = QColor(0, 0, 0, 180)
-TEXT_SHADOW_MIN_FONT_SIZE: int = 10
-TEXT_SHADOW_SMALL_FONT_MIN_SCALE: float = 0.3
-TEXT_LARGE_SHADOW_OFFSET_X: float = 4.0
-TEXT_LARGE_SHADOW_OFFSET_Y: float = 4.0
-TEXT_LARGE_SHADOW_COLOR: QColor = QColor(0, 0, 0, 100)
-TEXT_LARGE_SHADOW_MIN_FONT_SIZE: int = 20
-TEXT_LARGE_SHADOW_SMALL_FONT_MIN_SCALE: float = 0.3
-HEADER_SHADOW_OFFSET_X: float = 2.0
-HEADER_SHADOW_OFFSET_Y: float = 2.0
-HEADER_SHADOW_COLOR: QColor = QColor(0, 0, 0, 220)
-
-
-def _resolve_text_shadow_params(
-    *,
-    font_size: int,
-    shadow_color: QColor | None,
-    shadow_offset_x: float | None,
-    shadow_offset_y: float | None,
-) -> tuple[QColor, float, float, int, float]:
-    """Resolve text or large-text shadow tuning for a font size."""
-
-    use_large_tuning = font_size >= TEXT_LARGE_SHADOW_MIN_FONT_SIZE
-    if use_large_tuning:
-        color = shadow_color or QColor(TEXT_LARGE_SHADOW_COLOR)
-        offset_x = TEXT_LARGE_SHADOW_OFFSET_X if shadow_offset_x is None else float(shadow_offset_x)
-        offset_y = TEXT_LARGE_SHADOW_OFFSET_Y if shadow_offset_y is None else float(shadow_offset_y)
-        min_font_size = TEXT_LARGE_SHADOW_MIN_FONT_SIZE
-        small_font_min_scale = TEXT_LARGE_SHADOW_SMALL_FONT_MIN_SCALE
-    else:
-        color = shadow_color or QColor(TEXT_SHADOW_COLOR)
-        offset_x = TEXT_SHADOW_OFFSET_X if shadow_offset_x is None else float(shadow_offset_x)
-        offset_y = TEXT_SHADOW_OFFSET_Y if shadow_offset_y is None else float(shadow_offset_y)
-        min_font_size = TEXT_SHADOW_MIN_FONT_SIZE
-        small_font_min_scale = TEXT_SHADOW_SMALL_FONT_MIN_SCALE
-    return color, offset_x, offset_y, min_font_size, small_font_min_scale
-
-
-def resolve_text_shadow_params(font_size: int) -> tuple[QColor, float, float, int, float]:
-    """Public resolver for cached native-label shadow paths."""
-    return _resolve_text_shadow_params(
-        font_size=font_size,
-        shadow_color=None,
-        shadow_offset_x=None,
-        shadow_offset_y=None,
-    )
-
 
 def draw_text_with_shadow(
     painter: QPainter,
@@ -445,58 +375,14 @@ def draw_text_with_shadow(
     y: int,
     text: str,
     *,
-    shadow_color: QColor = None,
-    shadow_offset_x: float = None,
-    shadow_offset_y: float = None,
     font_size: int = 12,
     enabled: bool = True,
 ) -> None:
-    """Draw text with a subtle drop shadow for better readability.
-    
-    The shadow is drawn first (offset bottom-right), then the main text
-    is drawn on top. Shadow opacity is scaled based on font size - smaller
-    text gets less shadow to avoid overwhelming it.
-    
-    Args:
-        painter: QPainter to draw with (must have font/pen already set)
-        x: X coordinate for text baseline
-        y: Y coordinate for text baseline
-        text: Text string to draw
-        shadow_color: Shadow color (default: semi-transparent black)
-        shadow_offset_x: Horizontal shadow offset (default: 1px right)
-        shadow_offset_y: Vertical shadow offset (default: 1px down)
-        font_size: Font size in points (used to scale shadow intensity)
-    """
+    """Draw visible text after retirement of the generic QWidget shadow pass."""
+
+    del font_size, enabled
     if not text:
         return
-    if not enabled:
-        painter.drawText(x, y, text)
-        return
-    
-    shadow_color, shadow_offset_x, shadow_offset_y, min_font_size, small_font_min_scale = (
-        _resolve_text_shadow_params(
-            font_size=font_size,
-            shadow_color=shadow_color,
-            shadow_offset_x=shadow_offset_x,
-            shadow_offset_y=shadow_offset_y,
-        )
-    )
-    
-    # Scale shadow opacity based on font size (smaller text = less shadow)
-    if font_size < min_font_size:
-        scale = max(small_font_min_scale, font_size / min_font_size)
-        alpha = int(shadow_color.alpha() * scale)
-        shadow_color = QColor(shadow_color.red(), shadow_color.green(), shadow_color.blue(), alpha)
-    
-    # Save current pen
-    original_pen = painter.pen()
-    
-    # Draw shadow
-    painter.setPen(shadow_color)
-    painter.drawText(QPointF(float(x) + shadow_offset_x, float(y) + shadow_offset_y), text)
-    
-    # Draw main text
-    painter.setPen(original_pen)
     painter.drawText(x, y, text)
 
 
@@ -506,366 +392,43 @@ def draw_text_rect_with_shadow(
     flags: int,
     text: str,
     *,
-    shadow_color: QColor = None,
-    shadow_offset_x: float = None,
-    shadow_offset_y: float = None,
     font_size: int = 12,
     enabled: bool = True,
 ) -> None:
-    """Draw text in a rect with a subtle drop shadow.
-    
-    Similar to draw_text_with_shadow but uses drawText(rect, flags, text).
-    
-    Args:
-        painter: QPainter to draw with
-        rect: Bounding rectangle for text
-        flags: Qt alignment flags
-        text: Text string to draw
-        shadow_color: Shadow color (default: semi-transparent black)
-        shadow_offset_x: Horizontal shadow offset (default: 1px right)
-        shadow_offset_y: Vertical shadow offset (default: 1px down)
-        font_size: Font size in points (used to scale shadow intensity)
-    """
+    """Draw visible bounded text without the retired generic shadow pass."""
+
+    del font_size, enabled
     if not text:
         return
-    if not enabled:
-        painter.drawText(rect, flags, text)
-        return
-    
-    shadow_color, shadow_offset_x, shadow_offset_y, min_font_size, small_font_min_scale = (
-        _resolve_text_shadow_params(
-            font_size=font_size,
-            shadow_color=shadow_color,
-            shadow_offset_x=shadow_offset_x,
-            shadow_offset_y=shadow_offset_y,
-        )
-    )
-    
-    # Scale shadow opacity based on font size
-    if font_size < min_font_size:
-        scale = max(small_font_min_scale, font_size / min_font_size)
-        alpha = int(shadow_color.alpha() * scale)
-        shadow_color = QColor(shadow_color.red(), shadow_color.green(), shadow_color.blue(), alpha)
-    
-    # Save current pen
-    original_pen = painter.pen()
-    
-    # Draw shadow (offset rect)
-    shadow_rect = QRectF(
-        rect.x() + shadow_offset_x,
-        rect.y() + shadow_offset_y,
-        rect.width(),
-        rect.height(),
-    )
-    painter.setPen(shadow_color)
-    painter.drawText(shadow_rect, flags, text)
-    
-    # Draw main text
-    painter.setPen(original_pen)
     painter.drawText(rect, flags, text)
 
 
-def draw_text_rect_shadow_only(
-    painter: QPainter,
-    rect: QRect,
-    flags: int,
-    text: str,
-    *,
-    shadow_color: QColor = None,
-    shadow_offset_x: float = None,
-    shadow_offset_y: float = None,
-    font_size: int = 12,
-) -> None:
-    """Draw only the shadow pass for QLabel/native text paint paths."""
-    if not text:
-        return
-
-    shadow_color, shadow_offset_x, shadow_offset_y, min_font_size, small_font_min_scale = (
-        _resolve_text_shadow_params(
-            font_size=font_size,
-            shadow_color=shadow_color,
-            shadow_offset_x=shadow_offset_x,
-            shadow_offset_y=shadow_offset_y,
-        )
-    )
-
-    if font_size < min_font_size:
-        scale = max(small_font_min_scale, font_size / min_font_size)
-        alpha = int(shadow_color.alpha() * scale)
-        shadow_color = QColor(shadow_color.red(), shadow_color.green(), shadow_color.blue(), alpha)
-
-    original_pen = painter.pen()
-    shadow_rect = QRectF(
-        rect.x() + shadow_offset_x,
-        rect.y() + shadow_offset_y,
-        rect.width(),
-        rect.height(),
-    )
-    painter.setPen(shadow_color)
-    painter.drawText(shadow_rect, flags, text)
-    painter.setPen(original_pen)
-
-
 class PaintedShadowLabel(QLabel):
-    """QLabel variant that paints a safe text-shadow pass before native text."""
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._shadow_config: Mapping[str, Any] | None = None
+    """Plain label retained by unported families after generic shadow retirement."""
 
     def set_shadow_config(self, config: Mapping[str, Any] | None) -> None:
-        self._shadow_config = config
+        del config
         self.update()
 
-    def _should_paint_text_shadow(self) -> bool:
-        if not text_shadows_enabled(self._shadow_config):
-            return False
-        text = self.text()
-        if not text:
-            return False
-        text_format = self.textFormat()
-        if text_format == Qt.TextFormat.RichText:
-            return False
-        if text_format == Qt.TextFormat.AutoText and ("<" in text and ">" in text):
-            return False
-        return True
 
-    def paintEvent(self, event) -> None:  # type: ignore[override]
-        if self._should_paint_text_shadow():
-            painter = QPainter(self)
-            try:
-                painter.setFont(self.font())
-                font_size = int(self.font().pointSize() or 12)
-                draw_text_rect_shadow_only(
-                    painter,
-                    self.contentsRect(),
-                    self.alignment(),
-                    self.text(),
-                    font_size=font_size,
-                )
-            finally:
-                painter.end()
-        super().paintEvent(event)
-
-
-def draw_rich_text_shadow_only(
-    painter: QPainter,
-    rect: QRect,
-    html: str,
-    *,
-    default_font,
-    font_size: int,
-    enabled: bool = True,
-) -> None:
-    """Draw a shadow-only pass for QLabel rich text."""
-    if not html or not enabled:
-        return
-
-    shadow_color, shadow_offset_x, shadow_offset_y, min_font_size, small_font_min_scale = (
-        _resolve_text_shadow_params(
-            font_size=font_size,
-            shadow_color=None,
-            shadow_offset_x=None,
-            shadow_offset_y=None,
-        )
-    )
-    if font_size < min_font_size:
-        scale = max(small_font_min_scale, font_size / min_font_size)
-        shadow_color = QColor(
-            shadow_color.red(),
-            shadow_color.green(),
-            shadow_color.blue(),
-            int(shadow_color.alpha() * scale),
-        )
-
-    css_color = (
-        f"rgba({shadow_color.red()},{shadow_color.green()},"
-        f"{shadow_color.blue()},{shadow_color.alpha()})"
-    )
-    shadow_html = re.sub(r"color\s*:\s*[^;'\"]+;?", f"color:{css_color};", html)
-    shadow_html = f"<div style='color:{css_color};'>{shadow_html}</div>"
-
-    doc = QTextDocument()
-    doc.setDefaultFont(default_font)
-    doc.setDocumentMargin(0.0)
-    doc.setDefaultStyleSheet(f"* {{ color: {css_color}; }}")
-    doc.setHtml(shadow_html)
-    doc.setTextWidth(float(rect.width()))
-
-    painter.save()
-    try:
-        painter.translate(float(rect.x()) + shadow_offset_x, float(rect.y()) + shadow_offset_y)
-        doc.drawContents(painter, QRectF(0.0, 0.0, float(rect.width()), float(rect.height())))
-    finally:
-        painter.restore()
-
-
-def make_alpha_shadow_pixmap(
-    source: QPixmap,
-    *,
-    dpr: float,
-    shadow_color: QColor,
-) -> QPixmap:
-    """Return a tinted alpha-mask shadow for *source*.
-
-    The transparent pixels remain transparent; only the source alpha silhouette
-    contributes to the shadow.
-    """
-    if source.isNull():
-        return QPixmap()
-
-    scale_dpr = max(1.0, float(dpr))
-    try:
-        source_dpr = max(1.0, float(source.devicePixelRatio()))
-    except Exception:
-        source_dpr = 1.0
-    logical_w = max(1, int(round(source.width() / source_dpr)))
-    logical_h = max(1, int(round(source.height() / source_dpr)))
-    pixmap = QPixmap(max(1, int(logical_w * scale_dpr)), max(1, int(logical_h * scale_dpr)))
-    pixmap.setDevicePixelRatio(scale_dpr)
-    pixmap.fill(Qt.GlobalColor.transparent)
-
-    painter = QPainter(pixmap)
-    try:
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        painter.drawPixmap(QRect(0, 0, logical_w, logical_h), source)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-        painter.fillRect(QRect(0, 0, logical_w, logical_h), shadow_color)
-    finally:
-        painter.end()
-
-    return pixmap
-
-
-def draw_pixmap_drop_shadow(
-    painter: QPainter,
-    target: QRect,
-    source: QPixmap,
-    *,
-    owner: object,
-    cache_attr: str,
-    shadow_config: Mapping[str, Any] | None,
-    enabled_key: str = "header_enabled",
-) -> None:
-    """Draw a cached alpha-mask drop shadow for a logo/icon pixmap.
-
-    The helper uses the same silhouette-shadow mechanism as weather icons:
-    transparent pixels stay transparent, the shadow is offset down/right, and
-    the tinted mask is cached per source pixmap/target/DPR/tuning tuple.
-    """
-
-    if source is None or source.isNull():
-        return
-    if target.width() <= 0 or target.height() <= 0:
-        return
-    if not shadow_config_enabled(shadow_config, enabled_key, True):
-        return
-
-    try:
-        device = painter.device()
-        dpr = float(device.devicePixelRatioF()) if device is not None else 1.0
-    except Exception:
-        dpr = 1.0
-    dpr = max(1.0, dpr)
-
-    # Authored icon-shadow reference magnitudes (formerly shadowtuning.json
-    # ``icon``; inlined when that sidecar authority was retired in F0.5).
-    offset_x = 3
-    offset_y = 4
-    alpha = 95
-    target_w = int(target.width())
-    target_h = int(target.height())
-    cache_key = (
-        int(source.cacheKey()),
-        target_w,
-        target_h,
-        round(dpr, 3),
-        alpha,
-    )
-
-    cached_key = getattr(owner, f"{cache_attr}_key", None)
-    shadow = getattr(owner, cache_attr, None)
-    if cached_key != cache_key or not isinstance(shadow, QPixmap) or shadow.isNull():
-        scaled = source.scaled(
-            max(1, int(round(target_w * dpr))),
-            max(1, int(round(target_h * dpr))),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        try:
-            scaled.setDevicePixelRatio(dpr)
-        except Exception:
-            pass
-        shadow = make_alpha_shadow_pixmap(
-            scaled,
-            dpr=dpr,
-            shadow_color=QColor(0, 0, 0, alpha),
-        )
-        setattr(owner, cache_attr, shadow)
-        setattr(owner, f"{cache_attr}_key", cache_key)
-
-    painter.drawPixmap(int(target.x() + offset_x), int(target.y() + offset_y), shadow)
-
-
-def draw_rounded_rect_with_shadow(
+def draw_rounded_rect_border(
     painter: QPainter,
     rect: QRect,
     radius: float,
     border_color: QColor,
     border_width: int = 1,
-    *,
-    shadow_color: QColor = None,
-    shadow_offset_x: int = None,
-    shadow_offset_y: int = None,
-    shadow_enabled: bool = True,
 ) -> None:
-    """Draw a rounded rectangle border with a drop shadow.
-    
-    Used for header frames on Reddit/Spotify widgets. Shadow is drawn
-    first (offset bottom-right), then the main border on top.
-    
-    Args:
-        painter: QPainter to draw with
-        rect: Bounding rectangle
-        radius: Corner radius
-        border_color: Border color
-        border_width: Border width in pixels
-        shadow_color: Shadow color (default: semi-transparent black)
-        shadow_offset_x: Horizontal shadow offset
-        shadow_offset_y: Vertical shadow offset
-    """
-    if shadow_color is None:
-        shadow_color = HEADER_SHADOW_COLOR
-    if shadow_offset_x is None:
-        shadow_offset_x = HEADER_SHADOW_OFFSET_X
-    if shadow_offset_y is None:
-        shadow_offset_y = HEADER_SHADOW_OFFSET_Y
-    
+    """Draw the visible rounded border without a generic header shadow."""
+
     painter.save()
     try:
-        if shadow_enabled:
-            shadow_rect = QRect(
-                rect.x() + shadow_offset_x,
-                rect.y() + shadow_offset_y,
-                rect.width(),
-                rect.height(),
-            )
-            shadow_path = QPainterPath()
-            shadow_path.addRoundedRect(shadow_rect, radius, radius)
-
-            pen = QPen(shadow_color)
-            pen.setWidth(border_width)
-            painter.setPen(pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawPath(shadow_path)
-        
-        # Draw main border
         main_path = QPainterPath()
         main_path.addRoundedRect(rect, radius, radius)
-        
+
         pen = QPen(border_color)
         pen.setWidth(border_width)
         painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(main_path)
     finally:
         painter.restore()

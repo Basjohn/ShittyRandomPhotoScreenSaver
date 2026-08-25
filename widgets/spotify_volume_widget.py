@@ -15,8 +15,8 @@ from typing import Optional
 
 import time
 
-from PySide6.QtCore import Qt, QPoint, QRect, QRectF
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen, QPixmap
+from PySide6.QtCore import Qt, QPoint, QRect
+from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QWidget
 from shiboken6 import Shiboken
 
@@ -31,22 +31,9 @@ from widgets.media_volume_runtime import (
     MediaVolumeRuntimeService,
     MediaVolumeRuntimeSnapshot,
 )
-from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes, shadow_config_enabled
+from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes
 
 logger = get_logger(__name__)
-
-# Authored volume-slider shadow reference magnitudes (formerly the shared
-# shadowtuning.json ``volume_slider`` sidecar; inlined as this widget's own
-# constants when that hidden tuning authority was retired in F0.5).
-_VOL_SHADOW_CARD_SHRINK_RIGHT = 7
-_VOL_SHADOW_CARD_SHRINK_BOTTOM = 7
-_VOL_SHADOW_OFFSET_X = 4
-_VOL_SHADOW_OFFSET_Y = 4
-_VOL_SHADOW_BLUR_STEPS = 60
-_VOL_SHADOW_SPREAD = 3
-_VOL_SHADOW_MAX_ALPHA = 4
-_VOL_SHADOW_RADIUS_EXTRA = 0
-
 
 class SpotifyVolumeWidget(QWidget):
     """Slim vertical Spotify volume slider.
@@ -83,11 +70,6 @@ class SpotifyVolumeWidget(QWidget):
         self._anchor_media: Optional[QWidget] = None
         self._spotify_secondary_stage_started: bool = False
         self._custom_layout_geometry_reapply_pending: bool = False
-        self._painted_frame_shadow_enabled: bool = True
-        self._painted_frame_shadow_pixmap: Optional[QPixmap] = None
-        self._painted_frame_shadow_cache_key: Optional[tuple] = None
-        self._track_shadow_pixmap: Optional[QPixmap] = None
-        self._track_shadow_cache_key: Optional[tuple] = None
 
         # Geometry constants (logical pixels)
         self._track_margin: int = 6
@@ -230,8 +212,6 @@ class SpotifyVolumeWidget(QWidget):
 
     def set_shadow_config(self, config) -> None:
         self._shadow_config = config
-        self._painted_frame_shadow_enabled = shadow_config_enabled(config, "enabled", True)
-        self._invalidate_painted_frame_shadow_cache()
         self.update()
 
     def set_colors(self, *, track_bg: QColor, track_border: QColor, fill: QColor) -> None:
@@ -280,7 +260,6 @@ class SpotifyVolumeWidget(QWidget):
         self._track_margin = next_track_margin
         self.setMinimumWidth(next_width)
         self.setMinimumHeight(next_height)
-        self._invalidate_painted_frame_shadow_cache()
         try:
             self.updateGeometry()
         except Exception as e:
@@ -644,184 +623,11 @@ class SpotifyVolumeWidget(QWidget):
         return True
 
     # ------------------------------------------------------------------
-    # Painted frame shadow
-    # ------------------------------------------------------------------
-
-    def uses_outer_frame_shadow(self) -> bool:
-        """Return whether the slider should paint a full outer-card shadow.
-
-        The volume widget is visually a single slider track, not a framed card.
-        Its track shadow provides the intended depth cue; a second outer-card
-        shadow becomes a wide dark box once CUSTOM resize increases the widget
-        width. Keep the outer-card path disabled so the resize contract stays
-        clean and proportional.
-        """
-
-        return False
-
-    def uses_painted_frame_shadow(self) -> bool:
-        return bool(self._painted_frame_shadow_enabled)
-
-    def _invalidate_painted_frame_shadow_cache(self) -> None:
-        self._painted_frame_shadow_pixmap = None
-        self._painted_frame_shadow_cache_key = None
-        self._track_shadow_pixmap = None
-        self._track_shadow_cache_key = None
-
-    def _painted_frame_shadow_card_rect(self) -> QRectF:
-        return QRectF(
-            0.0,
-            0.0,
-            max(1.0, float(self.width() - _VOL_SHADOW_CARD_SHRINK_RIGHT)),
-            max(1.0, float(self.height() - _VOL_SHADOW_CARD_SHRINK_BOTTOM)),
-        )
-
-    def _ensure_painted_frame_shadow_pixmap(self) -> Optional[QPixmap]:
-        if not self.uses_outer_frame_shadow() or self.width() <= 0 or self.height() <= 0:
-            return None
-        try:
-            dpr = max(1.0, float(self.devicePixelRatioF()))
-        except Exception:
-            dpr = 1.0
-        key = (
-            self.width(),
-            self.height(),
-            round(dpr, 3),
-        )
-        if (
-            self._painted_frame_shadow_pixmap is not None
-            and not self._painted_frame_shadow_pixmap.isNull()
-            and self._painted_frame_shadow_cache_key == key
-        ):
-            return self._painted_frame_shadow_pixmap
-
-        pixmap = QPixmap(max(1, int(self.width() * dpr)), max(1, int(self.height() * dpr)))
-        pixmap.setDevicePixelRatio(dpr)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        try:
-            card_rect = self._painted_frame_shadow_card_rect().adjusted(1.0, 1.0, -1.0, -1.0)
-            radius = max(0.0, float(10 + _VOL_SHADOW_RADIUS_EXTRA))
-            offset_x = float(_VOL_SHADOW_OFFSET_X)
-            offset_y = float(_VOL_SHADOW_OFFSET_Y)
-            steps = max(1, _VOL_SHADOW_BLUR_STEPS)
-            spread = max(0.0, float(_VOL_SHADOW_SPREAD))
-            max_alpha = max(0, min(255, _VOL_SHADOW_MAX_ALPHA))
-
-            for layer in range(steps, 0, -1):
-                frac = layer / float(steps)
-                grow = spread * frac
-                alpha = int(max_alpha * (1.0 - (frac * 0.86)))
-                if alpha <= 0:
-                    continue
-                shadow_rect = card_rect.translated(offset_x, offset_y).adjusted(-grow, -grow, grow, grow)
-                shadow_path = QPainterPath()
-                shadow_path.addRoundedRect(shadow_rect, radius + grow, radius + grow)
-                painter.fillPath(shadow_path, QColor(0, 0, 0, alpha))
-        finally:
-            painter.end()
-
-        self._painted_frame_shadow_pixmap = pixmap
-        self._painted_frame_shadow_cache_key = key
-        return pixmap
-
-    def _paint_painted_frame_shadow(self) -> None:
-        if not self.uses_outer_frame_shadow():
-            return
-        painter = QPainter(self)
-        try:
-            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-            painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
-        finally:
-            painter.end()
-        pixmap = self._ensure_painted_frame_shadow_pixmap()
-        if pixmap is not None and not pixmap.isNull():
-            painter = QPainter(self)
-            try:
-                painter.drawPixmap(0, 0, pixmap)
-            finally:
-                painter.end()
-
-    def resizeEvent(self, event) -> None:  # type: ignore[override]
-        self._invalidate_painted_frame_shadow_cache()
-        super().resizeEvent(event)
-
-    def _ensure_track_shadow_pixmap(self, track_rect: QRect, radius: float) -> tuple[Optional[QPixmap], int, int]:
-        if not self.uses_painted_frame_shadow():
-            return None, 0, 0
-        if track_rect.width() <= 0 or track_rect.height() <= 0:
-            return None, 0, 0
-        try:
-            dpr = max(1.0, float(self.devicePixelRatioF()))
-        except Exception:
-            dpr = 1.0
-        offset_x = _VOL_SHADOW_OFFSET_X
-        offset_y = _VOL_SHADOW_OFFSET_Y
-        spread = max(3, _VOL_SHADOW_SPREAD)
-        alpha = max(0, min(255, _VOL_SHADOW_MAX_ALPHA * 8))
-        origin_x = spread + max(0, -offset_x)
-        origin_y = spread + max(0, -offset_y)
-        shadow_w = track_rect.width() + spread * 2 + abs(offset_x)
-        shadow_h = track_rect.height() + spread * 2 + abs(offset_y)
-        key = (
-            track_rect.width(),
-            track_rect.height(),
-            round(dpr, 3),
-            round(float(radius), 2),
-            spread,
-            offset_x,
-            offset_y,
-            alpha,
-        )
-        if (
-            self._track_shadow_pixmap is not None
-            and not self._track_shadow_pixmap.isNull()
-            and self._track_shadow_cache_key == key
-        ):
-            return self._track_shadow_pixmap, origin_x, origin_y
-
-        pixmap = QPixmap(max(1, int(shadow_w * dpr)), max(1, int(shadow_h * dpr)))
-        pixmap.setDevicePixelRatio(dpr)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        try:
-            base_rect = QRectF(
-                origin_x + offset_x,
-                origin_y + offset_y,
-                track_rect.width(),
-                track_rect.height(),
-            )
-            for layer in range(5, 0, -1):
-                frac = layer / 5.0
-                grow = spread * frac
-                layer_alpha = int(alpha * (1.0 - frac * 0.8))
-                if layer_alpha <= 0:
-                    continue
-                path = QPainterPath()
-                path.addRoundedRect(
-                    base_rect.adjusted(-grow, -grow, grow, grow),
-                    radius + grow,
-                    radius + grow,
-                )
-                painter.fillPath(path, QColor(0, 0, 0, layer_alpha))
-        finally:
-            painter.end()
-
-        self._track_shadow_pixmap = pixmap
-        self._track_shadow_cache_key = key
-        return pixmap, origin_x, origin_y
-
-    # ------------------------------------------------------------------
     # Painting
     # ------------------------------------------------------------------
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
-        if self.uses_outer_frame_shadow():
-            self._paint_painted_frame_shadow()
-        else:
-            super().paintEvent(event)
+        super().paintEvent(event)
 
         painter = QPainter(self)
         try:
@@ -842,10 +648,6 @@ class SpotifyVolumeWidget(QWidget):
         track_half = max(4, int(self._track_width / 2))
         track_rect = QRect(cx - track_half, rect.top(), track_half * 2, rect.height())
         radius = float(track_half)
-
-        shadow, origin_x, origin_y = self._ensure_track_shadow_pixmap(track_rect, radius)
-        if shadow is not None and not shadow.isNull():
-            painter.drawPixmap(track_rect.left() - origin_x, track_rect.top() - origin_y, shadow)
 
         # Track background and border
         pen = QPen(self._track_border_color)

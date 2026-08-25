@@ -56,11 +56,9 @@ from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import (
     ShadowFadeProfile,
-    draw_pixmap_drop_shadow,
     draw_text_with_shadow,
     draw_text_rect_with_shadow,
-    draw_rounded_rect_with_shadow,
-    header_shadows_enabled,
+    draw_rounded_rect_border,
     text_shadows_enabled,
 )
 from widgets.overlay_timers import OverlayTimerHandle
@@ -1663,14 +1661,6 @@ class RedditWidget(BaseOverlayWidget):
                 y_logo = int(line_centre - icon_half + self._header_content_y_offset)
                 if y_logo < header_top:
                     y_logo = header_top
-                draw_pixmap_drop_shadow(
-                    painter,
-                    QRect(int(x), int(y_logo), logo_size, logo_size),
-                    self._brand_pixmap,
-                    owner=self,
-                    cache_attr="_header_logo_shadow_cache",
-                    shadow_config=self._shadow_config,
-                )
                 painter.drawPixmap(int(x), int(y_logo), pm)
 
             x += logo_size + 8
@@ -2203,16 +2193,14 @@ class RedditWidget(BaseOverlayWidget):
         # Match widget border radius + 1px for subtle visual hierarchy
         radius = min(self._bg_corner_radius + 1, min(rect.width(), rect.height()) / 2)
 
-        # Use shadow helper for border with drop shadow
         outer_width = max(1, self._bg_border_width)
         inner_width = max(2, outer_width - 3)
-        draw_rounded_rect_with_shadow(
+        draw_rounded_rect_border(
             painter,
             rect,
             radius,
             self._bg_border_color,
             inner_width,
-            shadow_enabled=header_shadows_enabled(self._shadow_config),
         )
 
     def _update_stylesheet(self) -> None:
@@ -2478,4 +2466,3 @@ class RedditWidget(BaseOverlayWidget):
         # Final cleanup
         slug = slug.strip("/ ")
         return slug
-

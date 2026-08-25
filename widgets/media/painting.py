@@ -25,12 +25,9 @@ from core.logging.logger import get_logger
 from widgets.media.artwork_layout import compute_artwork_frame_size
 from core.media.media_controller import MediaPlaybackState
 from widgets.shadow_utils import (
-    draw_pixmap_drop_shadow,
-    draw_rounded_rect_with_shadow,
+    draw_rounded_rect_border,
     draw_text_with_shadow,
     draw_text_rect_with_shadow,
-    header_shadows_enabled,
-    shadow_config_enabled,
     text_shadows_enabled,
 )
 
@@ -52,76 +49,6 @@ def _qt_font_weight(value: object, fallback: QFont.Weight) -> QFont.Weight:
     if numeric >= 500:
         return QFont.Weight.Medium
     return QFont.Weight.Normal
-
-
-def _ensure_controls_shadow_pixmap(widget: "MediaWidget", row_rect: QRect) -> tuple[Optional[QPixmap], int, int]:
-    if not shadow_config_enabled(widget._shadow_config, "enabled", True):
-        return None, 0, 0
-    if row_rect.width() <= 0 or row_rect.height() <= 0:
-        return None, 0, 0
-    try:
-        dpr = max(1.0, float(widget.devicePixelRatioF()))
-    except Exception:
-        dpr = 1.0
-
-    # Authored media control-row shadow reference magnitudes (formerly
-    # shadowtuning.json ``control``; inlined when that sidecar was retired in F0.5).
-    offset_x = 3
-    offset_y = 4
-    alpha = 80
-    spread = 8
-    passes = 5
-    radius = max(1.0, float(widget._controls_row_radius))
-    shadow_w = row_rect.width() + spread * 2 + abs(offset_x)
-    shadow_h = row_rect.height() + spread * 2 + abs(offset_y)
-    key = (
-        row_rect.width(),
-        row_rect.height(),
-        round(dpr, 3),
-        radius,
-        spread,
-        passes,
-        offset_x,
-        offset_y,
-        alpha,
-    )
-    cached = getattr(widget, "_controls_shadow_cache", None)
-    origin_x = spread + max(0, -offset_x)
-    origin_y = spread + max(0, -offset_y)
-    if cached is not None and not cached.isNull() and getattr(widget, "_controls_shadow_cache_key", None) == key:
-        return cached, origin_x, origin_y
-
-    pixmap = QPixmap(max(1, int(shadow_w * dpr)), max(1, int(shadow_h * dpr)))
-    pixmap.setDevicePixelRatio(dpr)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    shadow_painter = QPainter(pixmap)
-    shadow_painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-    try:
-        base_rect = QRectF(
-            origin_x + offset_x,
-            origin_y + offset_y,
-            row_rect.width(),
-            row_rect.height(),
-        )
-        for layer in range(passes, 0, -1):
-            frac = layer / float(passes)
-            grow = spread * frac
-            layer_alpha = int(alpha * (1.0 - frac * 0.78))
-            if layer_alpha <= 0:
-                continue
-            shadow_painter.setPen(Qt.PenStyle.NoPen)
-            shadow_painter.setBrush(QColor(0, 0, 0, layer_alpha))
-            shadow_painter.drawRoundedRect(
-                base_rect.adjusted(-grow, -grow, grow, grow),
-                radius + grow,
-                radius + grow,
-            )
-    finally:
-        shadow_painter.end()
-
-    widget._controls_shadow_cache = pixmap
-    widget._controls_shadow_cache_key = key
-    return pixmap, spread + max(0, -offset_x), spread + max(0, -offset_y)
 
 
 def _header_layout(widget: "MediaWidget") -> dict[str, object]:
@@ -288,13 +215,12 @@ def paint_header_frame(widget: "MediaWidget", painter: QPainter) -> None:
 
     outer_width = max(1, widget._bg_border_width)
     inner_width = max(2, outer_width - 3)
-    draw_rounded_rect_with_shadow(
+    draw_rounded_rect_border(
         painter,
         rect,
         radius,
         widget._bg_border_color,
         inner_width,
-        shadow_enabled=header_shadows_enabled(widget._shadow_config),
     )
 
 
@@ -328,14 +254,6 @@ def paint_header_logo(widget: "MediaWidget", painter: QPainter) -> None:
 
     painter.save()
     try:
-        draw_pixmap_drop_shadow(
-            painter,
-            QRect(x, y, int(size), int(size)),
-            pm,
-            owner=widget,
-            cache_attr="_header_logo_shadow_cache",
-            shadow_config=widget._shadow_config,
-        )
         painter.drawPixmap(x, y, scaled)
     finally:
         painter.restore()
@@ -581,10 +499,6 @@ def paint_controls_row(widget: "MediaWidget", painter: QPainter) -> None:
         gradient = QLinearGradient(row_rect.topLeft(), row_rect.bottomLeft())
         gradient.setColorAt(0.0, matte_top)
         gradient.setColorAt(1.0, matte_bottom)
-
-        shadow, origin_dx, origin_dy = _ensure_controls_shadow_pixmap(widget, row_rect)
-        if shadow is not None and not shadow.isNull():
-            painter.drawPixmap(row_rect.left() - origin_dx, row_rect.top() - origin_dy, shadow)
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(gradient)
