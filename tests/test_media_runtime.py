@@ -794,16 +794,6 @@ def test_production_setup_activates_reuses_and_retires_real_media_owner(
     )
     monkeypatch.setattr(
         WidgetManager,
-        "create_spotify_volume_widget",
-        lambda self, *args, **kwargs: None,
-    )
-    monkeypatch.setattr(
-        WidgetManager,
-        "create_mute_button_widget",
-        lambda self, *args, **kwargs: None,
-    )
-    monkeypatch.setattr(
-        WidgetManager,
         "create_spotify_visualizer_widget",
         lambda self, *args, **kwargs: None,
     )
@@ -825,6 +815,8 @@ def test_production_setup_activates_reuses_and_retires_real_media_owner(
                     "monitor": "ALL",
                     "position": "WidgetPosition.TOP_CENTER",
                     "provider": "spotify",
+                    "spotify_volume_enabled": False,
+                    "mute_button_enabled": False,
                 },
                 "family_activation": {"media": True, "visualizers": False},
             }

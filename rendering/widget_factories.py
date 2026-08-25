@@ -77,7 +77,7 @@ class WidgetFactory(ABC):
 
 
 class MediaWidgetFactory(WidgetFactory):
-    """Factory for creating MediaWidget instances with full settings support."""
+    """Factory for the temporary non-painting Media/Visualizer anchor."""
     
     def get_widget_name(self) -> str:
         return "media"
@@ -89,7 +89,7 @@ class MediaWidgetFactory(WidgetFactory):
         *,
         shadows_config: Optional[Dict[str, Any]] = None,
     ) -> Optional[QWidget]:
-        """Create and configure a MediaWidget with full settings."""
+        """Create the runtime/geometry anchor; retained Quick owns styling."""
         from widgets.media_widget import MediaWidget, MediaPosition
         from core.settings.models import MediaWidgetSettings, WidgetPosition, coerce_widget_position
         
@@ -97,7 +97,7 @@ class MediaWidgetFactory(WidgetFactory):
         if not SettingsManager.to_bool(model.enabled, False):
             return None
         
-        border_width = BaseOverlayWidget.get_global_border_width()
+        del shadows_config
 
         try:
             # Position mapping
@@ -128,66 +128,8 @@ class MediaWidgetFactory(WidgetFactory):
             if self._thread_manager and hasattr(widget, "set_thread_manager"):
                 widget.set_thread_manager(self._thread_manager)
             
-            # Font
-            if hasattr(widget, 'set_font_family'):
-                widget.set_font_family(model.font_family)
-            widget.set_font_size(model.font_size)
-            
-            # Margin
             widget.set_margin(model.margin)
-            
-            # Color
-            qcolor = parse_color_to_qcolor(model.color)
-            if qcolor:
-                widget.set_text_color(qcolor)
-            
-            # Background
-            show_background = SettingsManager.to_bool(model.show_background, True)
-            widget.set_show_background(show_background)
-            
-            bg_qcolor = parse_color_to_qcolor(model.bg_color)
-            if bg_qcolor:
-                widget.set_background_color(bg_qcolor)
-            widget.set_background_opacity(model.background_opacity)
-            
-            # Border
-            try:
-                bo = float(model.border_opacity)
-            except Exception as e:
-                logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
-                bo = 0.8
-            border_qcolor = parse_color_to_qcolor(model.border_color, opacity_override=bo)
-            if border_qcolor:
-                widget.set_background_border(border_width, border_qcolor)
-            
-            # Controls and header
-            show_controls = SettingsManager.to_bool(model.show_controls, True)
-            if hasattr(widget, 'set_show_controls'):
-                widget.set_show_controls(show_controls)
-
-            if hasattr(widget, 'set_playback_progress_config'):
-                progress_fill = parse_color_to_qcolor(model.playback_progress_fill_color)
-                progress_glow = parse_color_to_qcolor(model.playback_progress_glow_color)
-                widget.set_playback_progress_config(
-                    enabled=SettingsManager.to_bool(model.playback_progress_enabled, False),
-                    height=int(model.playback_progress_height),
-                    fill_color=progress_fill or parse_color_to_qcolor([255, 255, 255, 230]),
-                    shadow_enabled=SettingsManager.to_bool(model.playback_progress_shadow_enabled, False),
-                    glow_enabled=SettingsManager.to_bool(model.playback_progress_glow_enabled, False),
-                    glow_color=progress_glow or parse_color_to_qcolor([255, 255, 255, 180]),
-                )
-            
-            show_header = SettingsManager.to_bool(model.show_header_frame, True)
-            if hasattr(widget, 'set_show_header_frame'):
-                widget.set_show_header_frame(show_header)
-            
-            # Shadow config
-            if shadows_config:
-                try:
-                    if hasattr(widget, "set_shadow_config"):
-                        widget.set_shadow_config(shadows_config)
-                except Exception as e:
-                    logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
+            widget.set_artwork_size(int(model.artwork_size))
             
             logger.debug("[MEDIA_FACTORY] Created MediaWidget")
             return widget
@@ -411,43 +353,6 @@ class SpotifyVisualizerFactory(WidgetFactory):
             
         except Exception as e:
             logger.error(f"[SPOTIFY_VIS_FACTORY] Failed to create SpotifyVisualizerWidget: {e}", exc_info=True)
-            return None
-
-
-class SpotifyVolumeFactory(WidgetFactory):
-    """Factory for creating SpotifyVolumeWidget instances."""
-    
-    def get_widget_name(self) -> str:
-        return "spotify_volume"
-    
-    def create(self, parent: QWidget, config: Dict[str, Any]) -> Optional[QWidget]:
-        """Create and configure a SpotifyVolumeWidget."""
-        from widgets.spotify_volume_widget import SpotifyVolumeWidget
-        
-        # Volume widget is typically created alongside media widget
-        # and doesn't have its own enabled flag
-        
-        try:
-            # Create widget
-            # Generic production factory callers must not create a second
-            # QWidget-owned controller; WidgetRuntimeManager injects the owner.
-            widget = SpotifyVolumeWidget(parent=parent, build_default_runtime=False)
-            
-            # Configure colors
-            fill_color = config.get("fill_color", "#1DB954")
-            border_color = config.get("border_color", "#FFFFFF")
-            bg_color = config.get("bg_color", "#333333")
-            fill_qcolor = parse_color_to_qcolor(fill_color)
-            border_qcolor = parse_color_to_qcolor(border_color)
-            bg_qcolor = parse_color_to_qcolor(bg_color)
-            if fill_qcolor and border_qcolor and bg_qcolor:
-                widget.set_colors(fill_qcolor, border_qcolor, bg_qcolor)
-            
-            logger.debug("[SPOTIFY_VOL_FACTORY] Created SpotifyVolumeWidget")
-            return widget
-            
-        except Exception as e:
-            logger.error(f"[SPOTIFY_VOL_FACTORY] Failed to create SpotifyVolumeWidget: {e}", exc_info=True)
             return None
 
 
@@ -887,7 +792,6 @@ class WidgetFactoryRegistry:
         self.register(RedditWidgetFactory(self._settings, self._thread_manager))
         self.register(GmailWidgetFactory(self._settings, self._thread_manager))
         self.register(SpotifyVisualizerFactory(self._settings, self._thread_manager))
-        self.register(SpotifyVolumeFactory(self._settings, self._thread_manager))
         try:
             from core.dev_gates import is_steam_enabled
 

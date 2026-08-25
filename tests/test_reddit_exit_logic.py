@@ -100,8 +100,6 @@ class TestRedditClickRouting:
         with patch('widgets.reddit_widget.QDesktopServices.openUrl', return_value=True):
             handled, reddit_handled, _ = handler.route_widget_click(
                 event,
-                None,  # spotify_volume_widget
-                None,  # media_widget
                 widget,  # reddit_widget
                 None,  # reddit2_widget
             )
@@ -133,8 +131,6 @@ class TestRedditClickRouting:
 
         handled, reddit_handled, reddit_url = handler.route_widget_click(
             event,
-            None,
-            None,
             widget,
             None,
         )
@@ -165,8 +161,6 @@ class TestRedditClickRouting:
 
         handled, reddit_handled, reddit_url = handler.route_widget_click(
             event,
-            None,
-            None,
             widget,
             None,
         )

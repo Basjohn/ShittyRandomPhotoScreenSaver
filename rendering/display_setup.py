@@ -448,21 +448,6 @@ def setup_spotify_widgets(widget) -> None:
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
     
-    # Position Spotify volume if created
-    if widget.spotify_volume_widget is not None:
-        try:
-            widget._position_spotify_volume()
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-    # Position mute button if created
-    if getattr(widget, 'mute_button_widget', None) is not None:
-        try:
-            widget._position_mute_button()
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-
 def setup_pixel_shift(widget) -> None:
     """Setup pixel shift manager for burn-in prevention.
     

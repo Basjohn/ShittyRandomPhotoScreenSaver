@@ -342,13 +342,16 @@ def _dispatch_media_vk_feedback(widget, vk_code: int) -> None:
     }
     command = _VK_TO_COMMAND.get(vk_code)
     if command is None:
-        # Volume keys — refresh mute button state after a short delay
-        # (OS processes the volume change; we just update the UI)
+        # Volume keys — refresh accepted endpoint state after the OS action.
         if vk_code in (0xAD, 0xAE, 0xAF):
             try:
-                mute_btn = getattr(widget, "mute_button_widget", None)
-                if mute_btn is not None and hasattr(mute_btn, "poll_mute_state"):
-                    ThreadManager.single_shot(80, mute_btn.poll_mute_state)
+                owner = widget._resolve_system_audio_owner()
+                refresh = getattr(owner, "request_system_mute_refresh", None)
+                if callable(refresh):
+                    ThreadManager.single_shot(
+                        80,
+                        lambda: refresh(force=False, source="native_volume_key"),
+                    )
             except Exception:
                 pass
         return

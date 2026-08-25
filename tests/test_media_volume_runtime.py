@@ -26,7 +26,6 @@ import rendering.widget_runtime_services  # noqa: F401
 
 forbidden = {
     "widgets.media_volume_runtime",
-    "widgets.spotify_volume_widget",
     "core.media.spotify_volume",
 }
 print(json.dumps(sorted(forbidden & set(sys.modules))))
@@ -334,12 +333,13 @@ def test_shared_lease_requires_generation_or_thread_manager() -> None:
     assert shared_media_volume_owner_count() == 0
 
 
-def test_real_secondary_setup_injects_before_start_and_reuses_active_owner(
+def test_real_media_anchor_setup_injects_and_reuses_volume_owner(
     qt_app, monkeypatch
 ) -> None:
     from core.resources.manager import ResourceManager
     from rendering import widget_runtime_services, widget_setup_all
     from rendering.widget_manager import WidgetManager
+    from widgets.media_widget import MediaWidget
 
     manager_thread = _ThreadManager()
     factory = _ControllerFactory()
@@ -349,72 +349,51 @@ def test_real_secondary_setup_injects_before_start_and_reuses_active_owner(
         "spotify_volume",
         widget_runtime_services.RuntimeServiceSpec(
             build=lambda _widget_id, _config: MediaVolumeRuntimeService(
-                provider="spotify", shared=True, controller_factory=factory
+                provider="spotify",
+                shared=True,
+                controller_factory=factory,
             ),
             inject=original_spec.inject,
             retire=original_spec.retire,
             reuse_is_valid=original_spec.reuse_is_valid,
         ),
     )
-
     parent = QWidget()
     parent._thread_manager = manager_thread
     parent._runtime_generation = 91
-    parent.spotify_volume_widget = None
-    parent.mute_button_widget = None
-    anchor = QWidget(parent)
-    parent.show()
-    anchor.show()
+    anchor = MediaWidget(parent, build_default_runtime=False)
+    anchor.set_thread_manager(manager_thread)
     manager = WidgetManager(parent, ResourceManager())
-    monkeypatch.setattr(
-        manager, "create_mute_button_widget", lambda *args, **kwargs: None
-    )
     config = {
         "media": {
             "enabled": True,
-            "monitor": "ALL",
             "provider": "spotify",
             "spotify_volume_enabled": True,
+            "mute_button_enabled": False,
         }
     }
-    created = {"media_widget": anchor}
     try:
         widget_setup_all._setup_media_owned_spotify_dependents(
-            manager,
-            created,
-            config,
-            {},
-            0,
-            manager_thread,
-            anchor,
+            manager, {"media_widget": anchor}, config, {}, 0, manager_thread, anchor
         )
-        volume = created["spotify_volume_widget"]
-        service = manager._runtime_manager.get_widget_service("spotify_volume")
+        service = manager.runtime_manager.get_widget_service("spotify_volume")
 
-        assert volume._runtime_service is service
-        assert service is not None and service.is_running() is False
-        assert len(factory.controllers) == 1
-        volume._start_widget_fade_in = lambda *args, **kwargs: None
-        assert volume.start() is True
+        assert service is anchor._volume_runtime_service
+        assert service is not None
+        anchor._enabled = True
+        anchor._start_auxiliary_runtimes()
         assert service.is_running() is True
-        assert len(manager_thread.jobs) == 1
-
-        recreated = {"media_widget": anchor}
-        widget_setup_all._setup_media_owned_spotify_dependents(
-            manager,
-            recreated,
-            config,
-            {},
-            0,
-            manager_thread,
-            anchor,
-        )
-
-        assert recreated["spotify_volume_widget"] is volume
-        assert manager._runtime_manager.get_widget_service("spotify_volume") is service
         assert len(factory.controllers) == 1
-        assert len(manager_thread.jobs) == 1
+
+        widget_setup_all._setup_media_owned_spotify_dependents(
+            manager, {"media_widget": anchor}, config, {}, 0, manager_thread, anchor
+        )
+        assert manager.runtime_manager.get_widget_service("spotify_volume") is service
+        assert anchor._volume_runtime_service is service
+        assert len(factory.controllers) == 1
     finally:
+        anchor._enabled = False
+        anchor._stop_auxiliary_runtimes()
         manager.cleanup()
         anchor.deleteLater()
         parent.deleteLater()
@@ -422,88 +401,32 @@ def test_real_secondary_setup_injects_before_start_and_reuses_active_owner(
     assert shared_media_volume_owner_count() == 0
 
 
-def test_secondary_setup_fails_closed_when_volume_service_build_is_lost(
-    qt_app, monkeypatch
-) -> None:
+def test_disabled_app_volume_builds_no_owner(qt_app, monkeypatch) -> None:
     from core.resources.manager import ResourceManager
-    from rendering import widget_runtime_services, widget_setup_all
+    from rendering import widget_setup_all
     from rendering.widget_manager import WidgetManager
+    from widgets.media_widget import MediaWidget
 
-    original_spec = widget_runtime_services._RUNTIME_SERVICE_SPECS["spotify_volume"]
-
-    def _boom(_widget_id, _config):
-        raise RuntimeError("volume service build lost")
-
-    monkeypatch.setitem(
-        widget_runtime_services._RUNTIME_SERVICE_SPECS,
-        "spotify_volume",
-        widget_runtime_services.RuntimeServiceSpec(
-            build=_boom,
-            inject=original_spec.inject,
-            retire=original_spec.retire,
-            reuse_is_valid=original_spec.reuse_is_valid,
-        ),
-    )
-    manager_thread = _ThreadManager()
     parent = QWidget()
-    parent._thread_manager = manager_thread
+    parent._thread_manager = object()
     parent._runtime_generation = 92
-    parent.spotify_volume_widget = None
-    parent.mute_button_widget = None
-    anchor = QWidget(parent)
+    anchor = MediaWidget(parent, build_default_runtime=False)
+    anchor.set_thread_manager(parent._thread_manager)
     manager = WidgetManager(parent, ResourceManager())
-    monkeypatch.setattr(
-        manager, "create_mute_button_widget", lambda *args, **kwargs: None
-    )
-    created = {"media_widget": anchor}
     try:
         widget_setup_all._setup_media_owned_spotify_dependents(
             manager,
-            created,
-            {
-                "media": {
-                    "enabled": True,
-                    "monitor": "ALL",
-                    "provider": "spotify",
-                    "spotify_volume_enabled": True,
-                }
-            },
+            {"media_widget": anchor},
+            {"media": {"spotify_volume_enabled": "false", "mute_button_enabled": False}},
             {},
             0,
-            manager_thread,
+            parent._thread_manager,
             anchor,
         )
-
-        assert "spotify_volume_widget" not in created
-        assert manager.get_widget("spotify_volume") is None
-        assert parent.spotify_volume_widget is None
-        assert manager._runtime_manager.get_widget_service("spotify_volume") is None
+        assert manager.runtime_manager.get_widget_service("spotify_volume") is None
+        assert anchor._volume_runtime_service is None
         assert shared_media_volume_owner_count() == 0
     finally:
         manager.cleanup()
         anchor.deleteLater()
-        parent.deleteLater()
-
-
-def test_dormant_generic_factory_is_explicitly_inert_without_manager_injection(
-    qt_app,
-) -> None:
-    from rendering.widget_factories import SpotifyVolumeFactory
-
-    parent = QWidget()
-    widget = SpotifyVolumeFactory(object()).create(
-        parent,
-        {
-            "fill_color": "#ffffff",
-            "border_color": "#ffffff",
-            "bg_color": "#222222",
-        },
-    )
-    try:
-        assert widget is not None
-        assert widget._runtime_service is None
-        assert widget.start() is False
-    finally:
-        if widget is not None:
-            widget.deleteLater()
         parent.deleteLater()

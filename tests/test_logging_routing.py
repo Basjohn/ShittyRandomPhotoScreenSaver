@@ -410,7 +410,7 @@ def test_spotify_vol_log_filter_by_module_name():
     filter_obj = SpotifyVolLogFilter()
     
     vol_module_record = logging.LogRecord(
-        name="screensaver.widgets.spotify_volume_widget",
+        name="screensaver.widgets.media_volume_runtime",
         level=logging.INFO,
         pathname="",
         lineno=0,

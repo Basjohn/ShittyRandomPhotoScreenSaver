@@ -401,8 +401,6 @@ class InputHandler(RuntimeInputOwner):
     def route_widget_click(
         self,
         event: QMouseEvent,
-        spotify_volume_widget,
-        media_widget,
         reddit_widget,
         reddit2_widget,
         gmail_widget=None,
@@ -423,52 +421,6 @@ class InputHandler(RuntimeInputOwner):
         pos = event.pos()
         button = event.button()
         
-        # Spotify volume widget
-        if spotify_volume_widget is not None:
-            try:
-                vw = spotify_volume_widget
-                if vw.isVisible() and vw.geometry().contains(pos):
-                    geom = vw.geometry()
-                    local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
-                    if hasattr(vw, 'handle_press') and vw.handle_press(local_pos, button):
-                        handled = True
-            except Exception as e:
-                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
-        
-        # Mute button widget
-        if not handled:
-            try:
-                mute_btn = getattr(self._parent, "mute_button_widget", None) if self._parent else None
-                if mute_btn is not None and mute_btn.isVisible() and mute_btn.geometry().contains(pos):
-                    if hasattr(mute_btn, 'handle_click'):
-                        handled = mute_btn.handle_click()
-                        logger.debug("[MUTE_BTN] handle_click returned: %s", handled)
-            except Exception as e:
-                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
-
-        # Media widget transport controls
-        if not handled and media_widget is not None:
-            try:
-                mw = media_widget
-                if mw.isVisible() and mw.geometry().contains(pos):
-                    from PySide6.QtCore import Qt as _Qt
-                    if button == _Qt.MouseButton.LeftButton:
-                        handled = self._route_media_left_click(mw, pos)
-                    elif button == _Qt.MouseButton.RightButton:
-                        handled = self._invoke_media_command(
-                            mw,
-                            "next",
-                            source="mouse:right",
-                        )
-                    elif button == _Qt.MouseButton.MiddleButton:
-                        handled = self._invoke_media_command(
-                            mw,
-                            "prev",
-                            source="mouse:middle",
-                        )
-            except Exception as e:
-                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
-
         # Spotify visualizer preset shortcuts (middle=next, XButton1/back=previous)
         if not handled and spotify_visualizer_widget is not None:
             try:
@@ -627,26 +579,6 @@ class InputHandler(RuntimeInputOwner):
         except Exception:
             logger.debug("[INPUT] Failed to prime Settings section %s", section_id, exc_info=True)
 
-    def _route_media_left_click(self, mw, pos: QPoint) -> bool:
-        """Route left click to media widget transport controls."""
-        try:
-            geom = mw.geometry()
-            local_point = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
-            resolver = getattr(mw, "resolve_control_hit", None)
-            if resolver is None:
-                return False
-            key = resolver(local_point)
-            if key is None:
-                return False
-            return self._invoke_media_command(
-                mw,
-                key,
-                source="mouse:left",
-            )
-        except Exception as e:
-            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
-        return False
-
     def _invoke_media_command(
         self,
         media_widget,
@@ -713,13 +645,13 @@ class InputHandler(RuntimeInputOwner):
             source = f"media_key:{int(key)}"
 
         # Volume mute/up/down: OS already handled the actual audio change.
-        # We just need to refresh the mute button UI to reflect the new state.
+        # Refresh the accepted neutral endpoint state.
         is_volume_key = (
             key in (Qt.Key.Key_VolumeMute, Qt.Key.Key_VolumeUp, Qt.Key.Key_VolumeDown)
             or (command is None and native_vk in (0xAD, 0xAE, 0xAF))
         )
         if is_volume_key:
-            self._refresh_mute_button_state()
+            self._refresh_system_audio_state()
             if command is None:
                 return  # pure volume key, no media command to route
 
@@ -750,9 +682,9 @@ class InputHandler(RuntimeInputOwner):
         logger.debug("[INPUT_HANDLER] Media key %s detected, routing to widget", command)
         
         # For media keys, the OS already executed the command.
-        # We just need to trigger optimistic UI updates and feedback.
+        # Refresh accepted/optimistic retained state without a second OS action.
         # Use handle_transport_command with execute=False to avoid double-execution
-        # but still get the optimistic UI updates and feedback animation.
+        # while retaining the current optimistic state projection.
         handled = self._invoke_media_command(
             media_widget,
             command,
@@ -765,81 +697,12 @@ class InputHandler(RuntimeInputOwner):
         else:
             logger.debug("[INPUT_HANDLER] Media key %s not handled by media widget", command)
 
-    def _refresh_mute_button_state(self) -> None:
-        """Poll the mute button to refresh its UI after the OS handles a volume key."""
-        mute_btn = None
-        # Try parent (DisplayWidget) first
-        if self._parent is not None:
-            mute_btn = getattr(self._parent, "mute_button_widget", None)
-        # Fall back to widget_manager
-        if mute_btn is None and self._widget_manager is not None:
-            mute_btn = self._widget_manager.get_widget("mute_button")
-        if mute_btn is not None and hasattr(mute_btn, 'poll_mute_state'):
+    def _refresh_system_audio_state(self) -> None:
+        """Refresh accepted endpoint state after an OS-owned volume key."""
+        media_widget = self._resolve_media_widget()
+        refresh = getattr(media_widget, "request_system_mute_refresh", None)
+        if callable(refresh):
             try:
-                mute_btn.poll_mute_state()
-                logger.debug("[INPUT_HANDLER] Refreshed mute button state after volume key")
+                refresh(force=False, source="os_volume_key")
             except Exception as exc:
-                logger.debug("[INPUT_HANDLER] Mute button refresh failed: %s", exc)
-
-    def route_volume_drag(self, pos: QPoint, spotify_volume_widget) -> bool:
-        """Route drag events to Spotify volume widget."""
-        if spotify_volume_widget is None or not spotify_volume_widget.isVisible():
-            return False
-        try:
-            geom = spotify_volume_widget.geometry()
-            local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
-            if hasattr(spotify_volume_widget, 'handle_drag'):
-                spotify_volume_widget.handle_drag(local_pos)
-                return True
-        except Exception as e:
-            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
-        return False
-
-    def route_volume_release(self, spotify_volume_widget) -> bool:
-        """Route release events to Spotify volume widget."""
-        if spotify_volume_widget is None:
-            return False
-        try:
-            if hasattr(spotify_volume_widget, 'handle_release'):
-                spotify_volume_widget.handle_release()
-                return True
-        except Exception as e:
-            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
-        return False
-
-    def route_wheel_event(
-        self,
-        pos: QPoint,
-        delta_y: int,
-        spotify_volume_widget,
-        media_widget,
-        spotify_visualizer_widget,
-    ) -> bool:
-        """
-        Route wheel events to Spotify volume widget in interaction mode.
-        
-        Returns:
-            True if wheel was handled
-        """
-        vw = spotify_volume_widget
-        if vw is None or not vw.isVisible():
-            logger.debug("[WHEEL] Volume widget not available or hidden; skipping wheel routing")
-            return False
-        
-        try:
-            geom_vol = vw.geometry()
-            local_pos = QPoint(pos.x() - geom_vol.x(), pos.y() - geom_vol.y())
-            logger.debug(
-                "[WHEEL] Routing wheel to volume widget: global=%s local=%s delta=%d",
-                pos,
-                local_pos,
-                delta_y,
-            )
-            if hasattr(vw, "handle_wheel") and vw.handle_wheel(local_pos, delta_y):
-                logger.debug("[WHEEL] Volume widget handled wheel event")
-                return True
-        except Exception as e:
-            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
-        
-        logger.debug("[WHEEL] Volume widget ignored wheel event")
-        return False
+                logger.debug("[INPUT_HANDLER] System-audio refresh failed: %s", exc)

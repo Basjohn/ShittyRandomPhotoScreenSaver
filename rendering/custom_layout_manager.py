@@ -866,9 +866,7 @@ class CustomLayoutManager:
             "reddit_widget",
             "reddit2_widget",
             "gmail_widget",
-            "spotify_volume_widget",
             "spotify_visualizer_widget",
-            "mute_button_widget",
         ):
             child = getattr(instance, attr_name, None)
             if child is None:
@@ -1259,18 +1257,6 @@ class CustomLayoutManager:
         return targets
 
     def _hide_special_widgets(self, target_widget_ids: set[str]) -> None:
-        for attr_name in ("mute_button_widget",):
-            widget = getattr(self._display, attr_name, None)
-            if widget is None:
-                continue
-            was_visible = bool(getattr(widget, "isVisible", lambda: False)())
-            self._special_hidden.append((widget, was_visible))
-            if was_visible:
-                try:
-                    widget.hide()
-                except Exception:
-                    logger.debug("[CUSTOM_LAYOUT] Failed to hide %s", attr_name, exc_info=True)
-
         if "spotify_visualizer" not in target_widget_ids:
             vis = getattr(self._display, "spotify_visualizer_widget", None)
             if vis is not None:

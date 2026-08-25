@@ -1,13 +1,12 @@
 """Spotify widget creation routines for WidgetManager.
 
 Extracted from widget_manager.py (M-7 refactor) to reduce monolith size.
-Contains create_spotify_volume_widget and create_spotify_visualizer_widget.
+Contains create_spotify_visualizer_widget.
 """
 from __future__ import annotations
 
 from typing import Optional, TYPE_CHECKING, Mapping
 
-from PySide6.QtGui import QColor
 from PySide6.QtCore import QRect
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
@@ -35,8 +34,6 @@ from rendering.custom_layout_contract import (
 from rendering.spotify_display_participation import resolve_visualizer_spawn_display
 from widgets.media_widget import MediaWidget
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-from widgets.spotify_volume_widget import SpotifyVolumeWidget
-from widgets.mute_button_widget import MuteButtonWidget
 
 if TYPE_CHECKING:
     from rendering.widget_manager import WidgetManager
@@ -767,108 +764,6 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings, *, app
         pass
 
 
-def create_spotify_volume_widget(
-    mgr: "WidgetManager",
-    widgets_config: dict,
-    shadows_config: dict,
-    screen_index: int,
-    thread_manager: Optional["ThreadManager"] = None,
-    media_widget: Optional[MediaWidget] = None,
-) -> Optional[SpotifyVolumeWidget]:
-    """Create and configure a Spotify volume widget."""
-    if media_widget is None:
-        return None
-
-    media_settings = widgets_config.get('media', {}) if isinstance(widgets_config, dict) else {}
-    media_model = MediaWidgetSettings.from_mapping(media_settings if isinstance(media_settings, Mapping) else {})
-    spotify_volume_enabled = SettingsManager.to_bool(media_model.spotify_volume_enabled, True)
-
-    media_monitor_sel = media_model.monitor
-    try:
-        show_on_this = (media_monitor_sel == 'ALL') or (int(media_monitor_sel) == (screen_index + 1))
-    except Exception as e:
-        logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-        show_on_this = False
-
-    if not (spotify_volume_enabled and show_on_this):
-        return None
-
-    try:
-        provider = str(getattr(media_model, 'provider', 'spotify') or 'spotify')
-        # Production ownership is injected by WidgetRuntimeManager in the
-        # explicit Media-dependent setup phase.
-        vol = SpotifyVolumeWidget(
-            mgr._parent,
-            provider=provider,
-            build_default_runtime=False,
-        )
-
-        if thread_manager is not None and hasattr(vol, "set_thread_manager"):
-            try:
-                vol.set_thread_manager(thread_manager)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-        try:
-            vol.set_shadow_config(shadows_config)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-        # Set anchor to media widget for visibility gating
-        try:
-            if hasattr(vol, "set_anchor_media_widget"):
-                vol.set_anchor_media_widget(media_widget)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-        # Inherit media card background and border colours
-        bg_color_data = media_model.bg_color
-        bg_qcolor = parse_color_to_qcolor(bg_color_data)
-        border_color_data = media_model.border_color
-        border_opacity = media_model.border_opacity
-        try:
-            bo = float(border_opacity)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            bo = 0.8
-        border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
-
-        try:
-            fill_color_data = media_model.spotify_volume_fill_color or [255, 255, 255, 140]
-            try:
-                fr, fg, fb = fill_color_data[0], fill_color_data[1], fill_color_data[2]
-                fa = fill_color_data[3] if len(fill_color_data) > 3 else 140
-                # Migrate old default: set_colors() used to force alpha=140,
-                # so saved alpha=230 was never visible — convert to 140.
-                if fa == 230 and fr == 255 and fg == 255 and fb == 255:
-                    fa = 140
-                fill_color = QColor(fr, fg, fb, fa)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                fill_color = QColor(255, 255, 255, 140)
-
-            if hasattr(vol, "set_colors"):
-                vol.set_colors(track_bg=bg_qcolor, track_border=border_qcolor, fill=fill_color)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-        mgr.register_widget("spotify_volume", vol)
-        # Spotify volume is a media-anchored secondary-stage overlay. It must
-        # not block the primary compositor-ready fade gate.
-        mgr._bind_parent_attribute("spotify_volume_widget", vol)
-        if is_perf_metrics_enabled():
-            logger.info(
-                "[SPOTIFY_VOL] Created volume widget (screen=%s, monitor=%s)",
-                screen_index,
-                media_monitor_sel,
-            )
-        logger.debug("Spotify volume widget created, will start with Spotify secondary fade")
-        return vol
-    except Exception as e:
-        logger.error("Failed to create Spotify volume widget: %s", e, exc_info=True)
-        return None
-
-
 def create_spotify_visualizer_widget(
     mgr: "WidgetManager",
     widgets_config: dict,
@@ -1185,68 +1080,5 @@ def create_spotify_visualizer_widget(
         return vis
     except Exception as e:
         logger.error("Failed to create Spotify visualizer widget: %s", e, exc_info=True)
-        return None
-
-
-def create_mute_button_widget(
-    mgr: "WidgetManager",
-    widgets_config: dict,
-    screen_index: int,
-    thread_manager: Optional["ThreadManager"] = None,
-    media_widget: Optional[MediaWidget] = None,
-) -> Optional[MuteButtonWidget]:
-    """Create and configure a system mute button widget."""
-    if media_widget is None:
-        return None
-
-    media_settings = widgets_config.get('media', {}) if isinstance(widgets_config, dict) else {}
-    media_model = MediaWidgetSettings.from_mapping(media_settings if isinstance(media_settings, Mapping) else {})
-    mute_enabled = SettingsManager.to_bool(media_settings.get('mute_button_enabled', False), False)
-    if not mute_enabled:
-        return None
-
-    media_monitor_sel = media_model.monitor
-    try:
-        show_on_this = (media_monitor_sel == 'ALL') or (int(media_monitor_sel) == (screen_index + 1))
-    except Exception as e:
-        logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-        show_on_this = False
-
-    if not show_on_this:
-        return None
-
-    try:
-        # Production ownership is injected by WidgetRuntimeManager before the
-        # button is enabled and allowed to schedule the shared poll cadence.
-        btn = MuteButtonWidget(mgr._parent, build_default_runtime=False)
-
-        if thread_manager is not None:
-            btn.set_thread_manager(thread_manager)
-
-        btn.set_anchor(media_widget)
-
-        # Inherit media card background and border colours from model
-        bg_color_data = media_model.bg_color
-        bg_qcolor = parse_color_to_qcolor(bg_color_data)
-        border_color_data = media_model.border_color
-        try:
-            bo = float(media_model.border_opacity)
-        except Exception:
-            bo = 0.8
-        border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
-        text_color_data = media_model.color
-        icon_qcolor = parse_color_to_qcolor(text_color_data)
-
-        if bg_qcolor and border_qcolor and icon_qcolor:
-            btn.set_colors(bg_qcolor, border_qcolor, icon_qcolor)
-
-        mgr.register_widget("mute_button", btn)
-        # Mute button is media-anchored secondary-stage UI and must not block
-        # the primary compositor-ready fade gate.
-        mgr._bind_parent_attribute("mute_button_widget", btn)
-        logger.debug("[MUTE_BTN] Created mute button widget (screen=%s)", screen_index)
-        return btn
-    except Exception as e:
-        logger.error("Failed to create mute button widget: %s", e, exc_info=True)
         return None
 

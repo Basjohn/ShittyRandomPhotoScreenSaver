@@ -148,26 +148,6 @@ class TestCtrlHaloAttributes:
         assert 'target_handler.set_ctrl_held(True)' in source
 
 
-class TestMediaWidgetClickDetection:
-    """Test media widget click detection respects Y coordinates."""
-
-    def test_click_detection_uses_widget_resolver(self, qt_app):
-        """Verify click routing defers to MediaWidget.resolve_control_hit."""
-        from rendering.input_handler import InputHandler
-        
-        source = inspect.getsource(InputHandler._route_media_left_click)
-        assert 'resolve_control_hit' in source
-        assert 'local_point' in source
-
-    def test_click_routing_invokes_media_command(self, qt_app):
-        """Verify resolver output flows into media command invocation."""
-        from rendering.input_handler import InputHandler
-
-        source = inspect.getsource(InputHandler._route_media_left_click)
-        assert '_invoke_media_command' in source
-        assert 'key' in source and 'mouse:left' in source
-
-
 class TestCrumbleShaderPerformance:
     """Test Crumble shader has reasonable search range for performance."""
 

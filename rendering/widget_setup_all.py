@@ -21,7 +21,6 @@ from rendering.multi_monitor_coordinator import get_coordinator
 from rendering.widget_descriptors import (
     get_effective_monitor_value_for_widget,
     get_factory_widget_descriptors,
-    get_widget_runtime_descriptor,
     is_custom_position_selected_for_widget,
 )
 from core.settings.capability_activation import (
@@ -500,52 +499,6 @@ def _fail_closed_runtime_service_widget(
         logger.debug("[WIDGET_MANAGER] fail-closed: deleteLater failed", exc_info=True)
 
 
-def _ensure_secondary_runtime_service(
-    mgr: "WidgetManager",
-    created: Dict[str, QWidget],
-    widget_id: str,
-    widget: QWidget,
-    widgets_config: dict,
-    *,
-    reused: bool,
-) -> bool:
-    """Attach/reuse one required service for an explicit Media secondary."""
-
-    descriptor = get_widget_runtime_descriptor(widget_id)
-    runtime_owner = mgr.runtime_manager
-    if descriptor is None or runtime_owner is None:
-        logger.error(
-            "[WIDGET_MANAGER] Missing runtime owner/descriptor for %s; failing closed",
-            widget_id,
-        )
-        if descriptor is not None:
-            _fail_closed_runtime_service_widget(mgr, created, descriptor, widget)
-        return False
-
-    service = None
-    if reused:
-        service = runtime_owner.get_reusable_widget_service(widget_id, widget)
-        if service is None and _reused_widget_is_active(widget):
-            logger.error(
-                "[WIDGET_MANAGER] Active reused %s has no valid runtime service; "
-                "failing closed",
-                widget_id,
-            )
-            _fail_closed_runtime_service_widget(mgr, created, descriptor, widget)
-            return False
-    if service is None:
-        service = runtime_owner.ensure_widget_service(widget_id, widget, widgets_config)
-    if service is None:
-        logger.error(
-            "[WIDGET_MANAGER] Required runtime service for %s could not be "
-            "built/injected; failing closed",
-            widget_id,
-        )
-        _fail_closed_runtime_service_widget(mgr, created, descriptor, widget)
-        return False
-    return True
-
-
 def _create_factory_widgets(
     mgr: "WidgetManager",
     created: Dict[str, QWidget],
@@ -688,43 +641,51 @@ def _setup_media_owned_spotify_dependents(
     thread_manager: Optional["ThreadManager"],
     media_widget: Optional[QWidget],
 ) -> None:
+    """Inject optional F4 action leases into the surviving Media anchor."""
+
+    del created, shadows_config, screen_index, thread_manager
     if media_widget is None:
         return
 
-    vol_widget = _reuse_existing_secondary(mgr, created, "spotify_volume_widget", "spotify_volume")
-    volume_reused = vol_widget is not None
-    if vol_widget is None:
-        vol_widget = mgr.create_spotify_volume_widget(
-            widgets_config, shadows_config, screen_index, thread_manager, media_widget,
-        )
-    if vol_widget and _ensure_secondary_runtime_service(
-        mgr,
-        created,
-        "spotify_volume",
-        vol_widget,
-        widgets_config,
-        reused=volume_reused,
-    ):
-        created['spotify_volume_widget'] = vol_widget
-        mgr._register_spotify_secondary_fade(vol_widget)
+    from core.settings.models import MediaWidgetSettings
 
-    mute_btn = _reuse_existing_secondary(mgr, created, "mute_button_widget", "mute_button")
-    mute_reused = mute_btn is not None
-    if mute_btn is None:
-        mute_btn = mgr.create_mute_button_widget(
-            widgets_config, screen_index, thread_manager, media_widget,
-        )
-    if mute_btn and _ensure_secondary_runtime_service(
-        mgr,
-        created,
-        "mute_button",
-        mute_btn,
-        widgets_config,
-        reused=mute_reused,
+    raw_media = widgets_config.get("media", {})
+    model = MediaWidgetSettings.from_mapping(
+        raw_media if isinstance(raw_media, dict) else {}
+    )
+    runtime_owner = mgr.runtime_manager
+    if runtime_owner is None:
+        logger.error("[WIDGET_MANAGER] Missing runtime owner for Media F4 leases")
+        return
+
+    for widget_id, enabled, clear_name in (
+        (
+            "spotify_volume",
+            SettingsManager.to_bool(model.spotify_volume_enabled, True),
+            "clear_volume_runtime_service",
+        ),
+        (
+            "mute_button",
+            SettingsManager.to_bool(raw_media.get("mute_button_enabled", False), False),
+            "clear_system_mute_runtime_service",
+        ),
     ):
-        mute_btn.set_enabled(True)
-        created['mute_button_widget'] = mute_btn
-        mgr._register_spotify_secondary_fade(mute_btn)
+        if not enabled:
+            clear = getattr(media_widget, clear_name, None)
+            if callable(clear):
+                clear()
+            runtime_owner.retire_widget_service(widget_id)
+            continue
+        service = runtime_owner.get_reusable_widget_service(widget_id, media_widget)
+        if service is None:
+            service = runtime_owner.ensure_widget_service(
+                widget_id, media_widget, widgets_config
+            )
+        if service is None:
+            logger.error(
+                "[WIDGET_MANAGER] Could not inject required %s action lease",
+                widget_id,
+            )
 
     mgr._queue_spotify_visibility_sync(media_widget)
 

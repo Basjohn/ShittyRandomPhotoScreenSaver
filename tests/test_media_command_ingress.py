@@ -128,3 +128,23 @@ def test_duplicate_appcommand_still_passes_through_to_windows(monkeypatch):
 
     assert user32.DefWindowProcW.call_count == 2
     media_widget.handle_transport_command.assert_called_once()
+
+
+def test_native_volume_key_refreshes_neutral_system_audio_owner(monkeypatch):
+    owner = MagicMock()
+    display = SimpleNamespace(_resolve_system_audio_owner=lambda: owner)
+    callbacks = []
+    monkeypatch.setattr(
+        display_native_events.ThreadManager,
+        "single_shot",
+        staticmethod(lambda delay, callback: callbacks.append((delay, callback))),
+    )
+
+    _dispatch_media_vk_feedback(display, 0xAF)
+
+    assert callbacks[0][0] == 80
+    callbacks[0][1]()
+    owner.request_system_mute_refresh.assert_called_once_with(
+        force=False,
+        source="native_volume_key",
+    )

@@ -360,8 +360,6 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
             try:
                 handled, reddit_handled, reddit_url = widget._input_handler.route_widget_click(
                     event,
-                    getattr(widget, "spotify_volume_widget", None),
-                    getattr(widget, "media_widget", None),
                     getattr(widget, "reddit_widget", None),
                     getattr(widget, "reddit2_widget", None),
                     getattr(widget, "gmail_widget", None),
@@ -553,14 +551,6 @@ def handle_mouseMoveEvent(widget, event: QMouseEvent) -> None:
             else:
                 show_ctrl_cursor_hint(widget, local_pos, mode="none")
         
-        # Delegate volume drag to InputHandler
-        if widget._input_handler is not None:
-            try:
-                widget._input_handler.route_volume_drag(
-                    event.pos(), getattr(widget, "spotify_volume_widget", None)
-                )
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         event.accept()
         return
 

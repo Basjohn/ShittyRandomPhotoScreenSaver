@@ -7,8 +7,8 @@ Last updated: 2026-08-25
 Exact main inspected through:
 
 ```text
-492f14f084e4cb802b1e5b73b889f3305a068caa
-Phase F4 retained Media system mute
+5c9cf4dd
+Phase F4 retained Media seek and soft glow
 ```
 
 F1 implementation basis:
@@ -23,8 +23,8 @@ F1 visual acceptance matrix + retained multi-instance/toggle gates
 Independent source/architecture audit: GREEN
 ```
 
-The retained Clock, Weather and Media-core implementations, caller proofs and bounded old pixel
-retirements are complete. F1, F2 and F3 are CLOSED.
+The retained Clock, Weather and complete Media family implementations, caller proofs and bounded old
+pixel retirements are complete. F1, F2, F3 and F4 are CLOSED.
 
 Source outranks this plan if a later checkpoint has landed.
 
@@ -32,69 +32,61 @@ Source outranks this plan if a later checkpoint has landed.
 
 ## Immediate work
 
-### F4 Media controls / volume / mute / progress — ACTIVE
+### F5 Reddit / Reddit2 — ACTIVE
 
 Read only the focused current owners needed for the slice:
 
 - `Docs/QtQuick_Migration/10_Widget_Family_Port_Decomposition.md`
 - `Docs/QtQuick_Migration/09_Widget_Quick_Presentation_Bridge.md`
-- retained `MediaPresentationModel` / `MediaPresentation.qml` and current F4-preservation tests
-- current shared Media, app-volume and system-mute runtime owners/leases
-- temporary QWidget transport/progress painter and existing interaction/input routing as behavioral reference
+- `core/reddit_preparation.py`, `core/reddit_post_provider.py`, `core/reddit_rate_limiter.py` and current
+  runtime-service injection
+- `widgets/reddit_widget.py` / `widgets/reddit_components.py` as temporary behavior and visual reference
+- current Reddit/Reddit2 factory, refresh, input and CUSTOM-height callers
+- focused provider, preparation, progressive-loading, click/action, cache and paint tests
 
 Required implementation:
 
-- extend the existing stable retained Media model/QML; do not create a second Media presenter/model;
-- keep shared controller, app-volume and system-mute polling/state/action ownership Python-owned;
-- project playback progress and control availability from coherent accepted state;
-- capability-gate semantic seek through the shared Media owner; the invisible retained track maps
-  click/release position to a fraction while accepted runtime snapshots remain playback truth;
-- render configured progress glow as one cached, bounded retained Quick shadow rather than a solid
-  enlarged halo rectangle;
-- emit semantic transport/volume/mute actions from QML and route them to the existing owners;
-- preserve current interaction gating, keyboard/media-key ingress, Visualizer/dependent visibility and
-  optimistic playback-state behavior;
-- keep visual-only progress interpolation subordinate to accepted playback truth;
-- mutate retained items/model state in place without runtime, engine, window or provider recreation;
-- after GREEN and caller proof, retire the remaining temporary Media QWidget controls/progress pixels,
-  input-hit plumbing and presentation-only tests; retain neutral runtime/action contracts.
+- inspect and separate the current neutral provider/preparation/cache/cadence ownership from QWidget
+  presentation state before moving pixels;
+- introduce one retained Reddit family component and stable presentation model contract; Reddit2 is a
+  configured family instance, not a duplicate provider or QML implementation;
+- project bounded posts with stable identities and coherent loading/ready/cached/error state;
+- preserve provider selection/inheritance, helper recovery, request/rate-limit policy, startup cache,
+  progressive loading and stale-generation safety under Python ownership;
+- emit semantic open-post/manual-refresh actions from QML; QML must not own URLs, fetch cadence,
+  provider selection, persistence or rate limiting;
+- preserve current configured capacity, dynamic content height, card/header/row styling and ordinary
+  interaction gating without porting QWidget pixmap caches or effect choreography;
+- reuse the process Quick image-delivery seam only if current Reddit content needs it and the existing
+  ownership/lifetime contract is compatible;
+- mutate retained rows/model/style in place without item/runtime/engine/window/provider recreation;
+- after GREEN and caller proof, delete the old Reddit/Reddit2 QWidget pixels and presentation-only tests
+  while preserving neutral provider/runtime contracts.
 
 Validation:
 
-- focused retained Media semantic-action/progress/control tests;
-- shared Media/app-volume/system-mute owner and stale-generation/recovery gates;
-- interaction gating, keyboard/media-key ingress, dependent visibility and Visualizer relationship;
-- repeated state/settings/action mutation without item/model/runtime/engine/window recreation;
-- effective DPR 1.0, 1.5 and 2.25 eyes-on controls/progress/glow-on/glow-off/volume/mute states and
-  interaction feedback;
+- focused retained Reddit family model/state/action/identity tests;
+- provider/preparation/cache/rate-limit/helper recovery and stale-generation gates;
+- Reddit/Reddit2 provider/style inheritance and independent feed identity;
+- interaction gating, open-link/manual-refresh routing and CUSTOM-height behavior;
+- repeated feed/settings mutation without item/model/runtime/engine/window/provider recreation;
+- practical multi-DPR eyes-on matrix for Reddit and Reddit2, loading/ready/cached/error, long text and
+  configured row capacities;
 - compile/import/static checks as relevant;
 - caller scans, full diff/status and `git diff --check`.
 
-Current F4 sequence:
+F4 closure evidence:
 
 ```text
-retained transport controls + accepted-state progress + pointer admission  -> implementation GREEN
-app-volume presenter under existing MediaVolumeRuntimeService              -> implementation GREEN
-system-mute presenter under existing SystemMuteRuntimeService              -> implementation GREEN
-capability-gated seek + retained soft progress glow correction              -> implementation GREEN
-caller proof + remaining QWidget F4 pixel/input retirement                 -> NEXT
+one retained Media model/item for core + controls + progress + app volume + system mute: GREEN
+capability-gated semantic seek with accepted playback state remaining truth: GREEN
+cached bounded soft progress glow; no visible seek handle: GREEN
+neutral Media/app-volume/system-mute owners and Visualizer relationship preserved: GREEN
+effective DPR 1.0, 1.5 and 2.25 threaded-OpenGL eyes-on matrix: GREEN
+old Media controls/progress/volume/mute QWidget pixels, hit routing and presentation tests: deleted
+temporary MediaWidget narrowed to a transparent runtime/Visualizer anchor until H: GREEN
+post-implementation ownership/lifecycle self-audit: GREEN
 ```
-
-The first checkpoint extends the existing Media model/item only. It does not create a second Media
-presenter or change app-volume/system-mute runtime ownership.
-
-The second checkpoint projects the existing app-volume lease into that same model/item. Its retained
-slider emits semantic levels only; controller targeting, accepted revisions, optimistic state, reads,
-writes and debounce remain owned by `MediaVolumeRuntimeService`.
-
-The third checkpoint projects the existing system-mute lease into the same retained Media item. The
-fixed-footprint button emits a semantic toggle only; endpoint acquisition, accepted revisions, polling,
-toggle/global-volume actions and generation fencing remain owned by `SystemMuteRuntimeService`.
-
-The correction checkpoint adds `can_seek` to the accepted neutral Media snapshot, routes one clamped
-fraction through the existing shared controller to GSMTC timeline ticks, and never mutates displayed
-progress optimistically. The retained track has no visible handle. Its configured glow is a cached
-`RectangularShadow`; the smoke matrix includes a glow-off reference at effective DPR 1.0, 1.5 and 2.25.
 
 F3 closure evidence:
 
@@ -104,7 +96,7 @@ one process-engine MediaArtworkImageProvider with stable identity/bounded cache:
 real WidgetRuntimeManager lease -> ordinary-widget host activation/retirement: GREEN
 focused Media/runtime/host gate + two-DPR threaded-OpenGL eyes-on matrix: GREEN
 old QWidget header/metadata/artwork painters, caches, lifecycle and presentation-only tests: deleted
-temporary QWidget anchor narrowed to F4 controls/progress/input/geometry only: GREEN
+at F3, temporary QWidget anchor narrowed to F4-only pixels (subsequently retired): GREEN
 post-implementation ownership/lifecycle self-audit: GREEN
 ```
 
@@ -126,8 +118,8 @@ F0.5  shadow authority + General controls        CLOSED
 F1    Clock / Clock2 / Clock3                    CLOSED
 F2    Weather                                    CLOSED
 F3    Media core                                 CLOSED
-F4    Media controls / volume / mute / progress  ACTIVE
-F5    Reddit / Reddit2
+F4    Media controls / volume / mute / progress  CLOSED
+F5    Reddit / Reddit2                           ACTIVE
 F6    Gmail
 F7    Achievement Pulse
 F8    Abandonment Issues
@@ -416,5 +408,5 @@ The unrelated Bubble cadence harness debt from the visualizer card-surface clean
 Settings-GUI shadow polish is separate from runtime widget shadow authority and is not a migration
 sequencing blocker.
 
-`Docs/TestSuite.md` remains the canonical 360-module inventory. Its phase-status prose does not override
+`Docs/TestSuite.md` remains the canonical 353-module inventory. Its phase-status prose does not override
 this plan's sequencing.

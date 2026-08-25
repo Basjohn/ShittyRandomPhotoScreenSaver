@@ -1111,8 +1111,6 @@ def test_gmail_action_menu_click_defers_mc_focus_restore(qt_app):
         event,
         None,
         None,
-        None,
-        None,
         gmail,
         None,
         None,

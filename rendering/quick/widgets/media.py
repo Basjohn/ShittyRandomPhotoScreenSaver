@@ -547,6 +547,24 @@ class MediaPresentationModel(QObject):
             return None
         return service.step_system_volume(float(delta))
 
+    def has_live_system_mute_runtime(self) -> bool:
+        service = self._system_mute_runtime_service
+        return bool(
+            self.is_active
+            and service is not None
+            and self.config.system_mute_enabled
+            and self._snapshot.system_mute_runtime_available
+            and service.is_running()
+        )
+
+    def request_system_mute_refresh(
+        self, *, force: bool = False, source: str = "refresh"
+    ) -> bool:
+        service = self._system_mute_runtime_service
+        if not self.is_active or service is None or not service.is_running():
+            return False
+        return bool(service.request_refresh(force=force, source=source))
+
     def is_media_consumer_alive(self) -> bool:
         return self.is_active
 
@@ -1123,6 +1141,11 @@ class RetainedMediaPresentation:
 
         return self._model.request_app_volume_step(direction)
 
+    def request_system_mute_toggle(self) -> bool:
+        """Route an already-admitted keyboard system-mute action."""
+
+        return self._model.request_system_mute_toggle()
+
     def _handle_system_mute_requested(self) -> bool:
         if not self._model.interactionEnabled:
             return False
@@ -1132,6 +1155,14 @@ class RetainedMediaPresentation:
         """Route an already-admitted global-volume step."""
 
         return self._model.request_system_volume_step(delta)
+
+    def has_live_system_mute_runtime(self) -> bool:
+        return self._model.has_live_system_mute_runtime()
+
+    def request_system_mute_refresh(
+        self, *, force: bool = False, source: str = "refresh"
+    ) -> bool:
+        return self._model.request_system_mute_refresh(force=force, source=source)
 
     def retire(self) -> bool:
         return self._host.retire_widget(self._retained)

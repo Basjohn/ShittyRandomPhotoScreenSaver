@@ -12,7 +12,8 @@ F0.5 closed
 F1 Clock closed
 F2 Weather closed
 F3 Media core closed
-F4 Media controls active
+F4 Media controls closed
+F5 Reddit active
 ```
 
 Closed A–E history is intentionally not repeated here.

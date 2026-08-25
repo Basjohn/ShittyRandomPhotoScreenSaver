@@ -313,7 +313,6 @@ def perform_activation_refresh(widget, reason: str) -> None:
         "weather_widget",
         "media_widget",
         "spotify_visualizer_widget",
-        "spotify_volume_widget",
         "reddit_widget",
         "reddit2_widget",
     ):

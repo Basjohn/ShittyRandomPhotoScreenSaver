@@ -17,7 +17,6 @@ from rendering.widget_factories import (
     MediaWidgetFactory,
     RedditWidgetFactory,
     SpotifyVisualizerFactory,
-    SpotifyVolumeFactory,
     WidgetFactoryRegistry,
 )
 
@@ -116,7 +115,7 @@ class TestMediaWidgetFactory:
         
         assert widget is None
 
-    def test_create_applies_timer_free_playback_progress_style(
+    def test_create_builds_non_painting_runtime_anchor(
         self,
         mock_settings,
         parent_widget,
@@ -137,13 +136,10 @@ class TestMediaWidgetFactory:
         )
 
         assert widget is not None
-        assert widget._playback_progress_enabled is True
-        assert widget._playback_progress_height == 9
-        assert widget._playback_progress_fill_color.getRgb() == (12, 130, 240, 220)
-        assert widget._playback_progress_shadow_enabled is True
-        assert widget._playback_progress_glow_enabled is True
-        assert widget._playback_progress_glow_color.getRgb() == (40, 180, 255, 170)
-        assert not hasattr(widget, "_playback_progress_timer")
+        assert widget._artwork_size == 200
+        assert "background: transparent" in widget.styleSheet()
+        assert not hasattr(widget, "resolve_control_hit")
+        assert not hasattr(widget, "_paint_contents")
         assert widget._runtime_service is None
         widget.deleteLater()
 
@@ -193,19 +189,6 @@ class TestSpotifyVisualizerFactory:
 
 
 # ---------------------------------------------------------------------------
-# Spotify Volume Factory Tests
-# ---------------------------------------------------------------------------
-
-class TestSpotifyVolumeFactory:
-    """Test SpotifyVolumeFactory."""
-    
-    def test_get_widget_name(self, mock_settings):
-        """Test factory returns correct widget name."""
-        factory = SpotifyVolumeFactory(mock_settings)
-        assert factory.get_widget_name() == "spotify_volume"
-
-
-# ---------------------------------------------------------------------------
 # Widget Factory Registry Tests
 # ---------------------------------------------------------------------------
 
@@ -221,7 +204,7 @@ class TestWidgetFactoryRegistry:
         assert registry.get_factory("media") is not None
         assert registry.get_factory("reddit") is not None
         assert registry.get_factory("spotify_visualizer") is not None
-        assert registry.get_factory("spotify_volume") is not None
+        assert registry.get_factory("spotify_volume") is None
     
     def test_get_all_factory_names(self, mock_settings):
         """Test getting all factory names."""
@@ -234,7 +217,7 @@ class TestWidgetFactoryRegistry:
         assert "media" in names
         assert "reddit" in names
         assert "spotify_visualizer" in names
-        assert "spotify_volume" in names
+        assert "spotify_volume" not in names
     
     def test_get_unknown_factory_returns_none(self, mock_settings):
         """Test getting unknown factory returns None."""

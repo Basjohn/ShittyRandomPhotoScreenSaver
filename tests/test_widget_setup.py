@@ -31,15 +31,11 @@ def test_compute_expected_overlays_excludes_spotify_dependents_from_primary_wave
     assert "spotify_visualizer" not in expected
 
 
-def test_spotify_secondary_creators_do_not_join_primary_expected_overlays():
-    from rendering.spotify_widget_creators import (
-        create_mute_button_widget,
-        create_spotify_volume_widget,
-    )
+def test_retired_media_secondary_creators_are_absent():
+    from rendering import spotify_widget_creators
 
-    for creator in (create_spotify_volume_widget, create_mute_button_widget):
-        source = inspect.getsource(creator)
-        assert "add_expected_overlay" not in source
+    assert not hasattr(spotify_widget_creators, "create_spotify_volume_widget")
+    assert not hasattr(spotify_widget_creators, "create_mute_button_widget")
 
 
 def test_compute_expected_overlays_treats_reddit_master_toggle_as_family_gate():

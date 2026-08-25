@@ -13,8 +13,8 @@ exact current source
 -> tests/evidence for the claim
 ```
 
-Current migration state: **Phase F active; F1 Clock, F2 Weather and F3 Media core are caller-proven and
-CLOSED. F4 Media controls / volume / mute / progress is ACTIVE.**
+Current migration state: **Phase F active; F1 Clock, F2 Weather, F3 Media core and F4 Media controls are
+caller-proven and CLOSED. F5 Reddit / Reddit2 is ACTIVE.**
 
 Do not read the whole history tree by default.
 

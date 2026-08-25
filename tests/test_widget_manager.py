@@ -1529,14 +1529,10 @@ class TestStartupCoordination:
         media_anchor = object()
         local_display = SimpleNamespace(
             spotify_visualizer_widget=None,
-            spotify_volume_widget=None,
-            mute_button_widget=None,
         )
         remote_visualizer = _Dependent(media_anchor)
         remote_display = SimpleNamespace(
             spotify_visualizer_widget=remote_visualizer,
-            spotify_volume_widget=None,
-            mute_button_widget=None,
         )
 
         class _CoordinatorStub:
@@ -1882,83 +1878,6 @@ class TestSettingsRouting:
         manager._refresh_spotify_visualizer_config.assert_not_called()
         parent._apply_saved_custom_layouts.assert_not_called()
 
-    def test_refresh_media_config_reapplies_artwork_font_and_rounding(self):
-        from rendering.widget_manager import WidgetManager
-
-        class _FakeMediaWidget:
-            def __init__(self):
-                self.font_family = None
-                self.font_size = None
-                self.artwork_size = None
-                self.rounded_artwork = None
-                self.text_color = None
-                self.show_controls = None
-                self.show_header_frame = None
-                self.playback_progress = None
-
-            def set_font_family(self, value):
-                self.font_family = value
-
-            def set_font_size(self, value):
-                self.font_size = value
-
-            def set_artwork_size(self, value):
-                self.artwork_size = value
-
-            def set_rounded_artwork_border(self, value):
-                self.rounded_artwork = value
-
-            def set_text_color(self, value):
-                self.text_color = value
-
-            def set_show_controls(self, value):
-                self.show_controls = value
-
-            def set_show_header_frame(self, value):
-                self.show_header_frame = value
-
-            def set_playback_progress_config(self, **kwargs):
-                self.playback_progress = kwargs
-
-        parent = MagicMock()
-        manager = WidgetManager(parent)
-        fake_media = _FakeMediaWidget()
-        fake_media._custom_layout_local_rect = object()
-        manager._widgets["media"] = fake_media
-
-        payload = {
-            "media": {
-                "font_family": "Inter",
-                "font_size": 31,
-                "artwork_size": 188,
-                "rounded_artwork_border": False,
-                "show_controls": False,
-                "show_header_frame": False,
-                "playback_progress_enabled": True,
-                "playback_progress_height": 10,
-                "playback_progress_fill_color": [12, 130, 240, 220],
-                "playback_progress_shadow_enabled": True,
-                "playback_progress_glow_enabled": True,
-                "playback_progress_glow_color": [40, 180, 255, 170],
-                "color": [1, 2, 3, 255],
-            }
-        }
-
-        manager._refresh_media_config(payload)
-
-        assert fake_media.font_family == "Inter"
-        assert fake_media.font_size == 31
-        assert fake_media.artwork_size == 188
-        assert fake_media.rounded_artwork is False
-        assert fake_media.show_controls is False
-        assert fake_media.show_header_frame is False
-        assert fake_media.playback_progress["enabled"] is True
-        assert fake_media.playback_progress["height"] == 10
-        assert fake_media.playback_progress["fill_color"].getRgb() == (12, 130, 240, 220)
-        assert fake_media.playback_progress["shadow_enabled"] is True
-        assert fake_media.playback_progress["glow_enabled"] is True
-        assert fake_media.playback_progress["glow_color"].getRgb() == (40, 180, 255, 170)
-
     def test_refresh_spotify_visualizer_config_repositions_using_live_growth_contract(self):
         from PySide6.QtCore import QRect
         from core.settings.visualizer_presets import get_custom_preset_index
@@ -2283,52 +2202,6 @@ class TestSettingsRouting:
 
         assert vis.geometry() == QRect(333, 222, 420, 280)
         assert parent._spotify_bars_overlay.geometry() == QRect(333, 222, 420, 280)
-
-    def test_position_spotify_volume_honors_custom_rect_even_if_settings_snapshot_is_stale(self):
-        from PySide6.QtCore import QRect
-        from rendering.widget_manager import WidgetManager
-
-        class _FakeVolume:
-            def __init__(self):
-                self._custom_layout_local_rect = QRect(111, 222, 144, 320)
-                self._geometry = None
-                self.raised = False
-
-            def setGeometry(self, *args):
-                if len(args) == 1 and isinstance(args[0], QRect):
-                    rect = args[0]
-                    self._geometry = (rect.x(), rect.y(), rect.width(), rect.height())
-                else:
-                    x, y, w, h = args
-                    self._geometry = (x, y, w, h)
-
-            def isVisible(self):
-                return True
-
-            def raise_(self):
-                self.raised = True
-
-            def minimumWidth(self):
-                return 32
-
-            def minimumHeight(self):
-                return 180
-
-            def height(self):
-                return 180
-
-        settings = MagicMock()
-        settings.get_widgets_map.return_value = {}
-        manager = WidgetManager(MagicMock())
-        manager._settings_manager = settings
-
-        volume = _FakeVolume()
-
-        manager.position_spotify_volume(volume, None, 1920, 1080)
-
-        assert volume._geometry == (111, 222, 144, 320)
-        assert volume.raised is True
-
 
 class TestPositioning:
     """Tests for widget positioning."""
