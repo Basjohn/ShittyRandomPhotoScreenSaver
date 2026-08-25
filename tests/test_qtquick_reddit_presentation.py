@@ -10,8 +10,10 @@ from PySide6.QtCore import QObject
 from PySide6.QtQml import QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
+from core.reddit_post_provider import RedditProviderResult
 from core.reddit_preparation import RedditPost
-from rendering.quick.scene_controller import QuickSceneFactory
+from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
+from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.widgets import (
     OrdinaryWidgetPresentationHost,
     OverlayWidgetGeometry,
@@ -25,6 +27,7 @@ from rendering.quick.widgets.registry import (
     ordinary_widget_family_component,
 )
 from rendering.widget_runtime_manager import WidgetRuntimeManager
+from rendering.quick.window import QuickDisplayWindow
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -203,6 +206,165 @@ def test_runtime_manager_injects_complete_owner_into_retained_reddit_model() -> 
     assert getattr(service.provider, "provider_id", None) == "public_json"
     assert service.is_running() is False
     assert owner.retire_widget_service("reddit") is True
+    assert service.is_retired() is True
+
+
+@pytest.mark.qt
+def test_real_reddit_runtime_drives_current_scene_host_actions_and_geometry_in_place(
+    qt_app, monkeypatch, tmp_path
+) -> None:
+    import core.reddit_post_provider as provider_module
+    import widgets.reddit_runtime as runtime_module
+
+    class _Provider:
+        provider_id = "public_json"
+
+        def __init__(self) -> None:
+            self.requests = []
+
+        def fetch_posts(self, request):
+            self.requests.append(request)
+            return RedditProviderResult.with_posts(
+                [
+                    {
+                        "title": "runtime refreshed post",
+                        "url": "https://reddit.com/r/wallpapers/comments/runtime",
+                        "score": 4,
+                        "created_utc": 19_900.0,
+                    }
+                ],
+                source_id="public_json",
+                attempted_sources=("public_json",),
+            )
+
+    class _ImmediateThreadManager:
+        def submit_io_task(self, callback_fn, *args, callback=None, **_kwargs):
+            try:
+                result = callback_fn(*args)
+            except Exception as exc:
+                outcome = type(
+                    "Outcome",
+                    (),
+                    {"success": False, "result": None, "error": str(exc)},
+                )()
+            else:
+                outcome = type(
+                    "Outcome",
+                    (),
+                    {"success": True, "result": result, "error": None},
+                )()
+            if callback is not None:
+                callback(outcome)
+            return "task"
+
+    class _Host:
+        @staticmethod
+        def get_runtime_widget_registry():
+            return {}
+
+    provider = _Provider()
+    monkeypatch.setattr(
+        provider_module, "build_reddit_post_provider", lambda _provider_id: provider
+    )
+    monkeypatch.setattr(runtime_module, "_REDDIT_CACHE_DIR", tmp_path)
+    monkeypatch.setattr(runtime_module, "automatic_service_updates_enabled", lambda: False)
+    runtime_module.RedditRuntimeService.periodic_due_by_cache_key.clear()
+    runtime_module.RedditRuntimeService.periodic_due_reason_by_cache_key.clear()
+    runtime_module.RedditRuntimeService.manual_due_by_cache_key.clear()
+    monkeypatch.setattr(
+        runtime_module.ThreadManager,
+        "run_on_ui_thread",
+        staticmethod(lambda callback, *args: callback(*args)),
+    )
+
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=58,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    owner = WidgetRuntimeManager(_Host())
+    model = _model(limit=3)
+    service = owner.ensure_widget_service(
+        "reddit",
+        model,
+        {"reddit": {"provider": "public_json", "subreddit": "wallpapers"}},
+    )
+    assert service is not None
+    service._candidates = (_post(1), _post(2))
+    opened = []
+    presentation = None
+    try:
+        presentation = RetainedRedditPresentation(
+            host=controller.ordinary_widget_host,
+            model=model,
+            geometry=OverlayWidgetGeometry(25.0, 30.0, 620.0, 300.0),
+            on_open_requested=lambda url: opened.append(url) or True,
+        )
+        item = presentation.item
+        engine = QQmlEngine.contextForObject(item).engine()
+        presentation.activate(_ImmediateThreadManager())
+        presentation.apply_input_state(
+            {
+                "admission_open": True,
+                "exiting": False,
+                "interaction_mode_enabled": True,
+                "ctrl_held": False,
+            }
+        )
+        qt_app.processEvents()
+
+        assert owner.get_widget_service("reddit") is service
+        assert service._consumer() is model
+        assert service.is_running() is True
+        assert model.viewState == "ready"
+        assert model.row_model.rowCount() == 2
+
+        item.refreshRequested.emit()
+        qt_app.processEvents()
+        assert len(provider.requests) == 1
+        assert provider.requests[0].subreddit == "wallpapers"
+        assert service.accepted_revision == 1
+        assert model.row_model.rowCount() == 1
+        assert model.row_model.rows[0].title == "Runtime Refreshed Post"
+        assert model.refreshing is False
+
+        item.openPostRequested.emit(model.row_model.rows[0].url)
+        assert opened == [model.row_model.rows[0].url]
+
+        presentation.set_geometry(
+            OverlayWidgetGeometry(80.0, 95.0, 540.0, 260.0)
+        )
+        presentation.apply_config(
+            replace(model.config, limit=1, font_size=24),
+            _shadows(direction="W", text_extra_offset=2),
+        )
+        qt_app.processEvents()
+        assert presentation.item is item
+        assert QQmlEngine.contextForObject(item).engine() is engine
+        assert item.x() == pytest.approx(80.0)
+        assert item.y() == pytest.approx(95.0)
+        assert item.width() == pytest.approx(540.0)
+        assert item.height() == pytest.approx(260.0)
+        assert model.fontSize == 24.0
+
+        controller.quiesce_for_retirement()
+        assert service._consumer() is None
+        assert service.is_running() is False
+        assert owner.get_reusable_widget_service("reddit", model) is None
+        assert service.is_retired() is True
+    finally:
+        controller.quiesce_for_retirement()
+        owner.cleanup()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+    assert presentation is not None
     assert service.is_retired() is True
 
 

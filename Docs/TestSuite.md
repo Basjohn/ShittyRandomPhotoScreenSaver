@@ -5,7 +5,7 @@ Last updated: 2026-08-25
 Reviewed source basis:
 
 ```text
-test-inventory basis = F5 retained Reddit family presentation checkpoint
+test-inventory basis = F5 retained Reddit runtime-shaped caller-proof checkpoint
 Phase F0/F0.5/F1/F2/F3/F4 CLOSED; 355 test modules; F5 Reddit active
 ```
 

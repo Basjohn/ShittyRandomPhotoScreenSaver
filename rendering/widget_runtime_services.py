@@ -158,6 +158,8 @@ def _inject_reddit_service(widget: Any, service: Any) -> None:
 def _reddit_service_reuse_is_valid(widget: Any, service: Any) -> bool:
     if getattr(widget, "_runtime_service", None) is not service:
         return False
+    if bool(getattr(widget, "_retired", False)):
+        return False
     if _service_is_retired(service):
         return False
     retained_active = getattr(widget, "is_active", None)

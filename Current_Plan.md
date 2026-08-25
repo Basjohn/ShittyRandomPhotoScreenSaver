@@ -80,8 +80,8 @@ Current F5 sequence:
 ```text
 retained Reddit/Reddit2 config + stable row model + static QML + semantic signals -> implementation GREEN
 neutral cache/cadence/fetch runtime extraction + real owner injection             -> implementation GREEN
-runtime-shaped state/action/geometry gates + caller proof                         -> NEXT
-old Reddit QWidget pixel/cache/input retirement                                   -> pending
+runtime-shaped state/action/geometry gates + caller proof                         -> GREEN
+old Reddit QWidget pixel/cache/input retirement                                   -> NEXT
 ```
 
 The retained checkpoint uses one `RedditPresentationModel`/`RedditPresentation.qml` component for both
@@ -90,8 +90,10 @@ same-cardinality updates. `RedditRuntimeService` now owns each member's configur
 snapshot, accepted candidate window, periodic/manual cadence, blocked-gate persistence, request
 generation and retirement. `WidgetRuntimeManager` injects that same neutral contract into either the
 temporary QWidget consumer or retained model; the service is inert until activation. The next slice
-must prove real runtime-shaped retained state/action/geometry behavior and all callers before deleting
-the old QWidget pixels, paint caches, hit regions and production-dormant standalone runtime path.
+proves the real `WidgetRuntimeManager -> RedditRuntimeService -> RedditPresentationModel -> current
+Quick scene host` chain, semantic refresh/open admission, accepted-state publication, in-place geometry
+and settings mutation, and retirement without item/engine/service recreation. Caller proof now permits
+deleting the old QWidget pixels, paint caches, hit regions and standalone runtime path.
 
 F4 closure evidence:
 
