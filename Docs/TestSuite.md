@@ -6,7 +6,7 @@ Reviewed source basis:
 
 ```text
 test-inventory basis = F1 retained Clock family seam
-Phase F0 CLOSED; 359 test modules; F1 Clock implementation active
+Phase F0/F0.5 CLOSED; 359 test modules; F1 Clock implementation awaiting independent audit
 ```
 
 This document is both the SRPSS testing strategy and the **current test-file inventory/retirement ledger** for the Qt Quick migration.
@@ -34,10 +34,13 @@ old `widgets.shadows.offset` pair, and completes the Widgets → General canonic
 It deletes `test_shadow_tuning_paths.py` and `test_base_overlay_shadow_cache.py`, trims the tuning-payload
 assertion from `test_shadow_utils.py`, and adds `tests/test_f0_5_shadow_controls.py`.
 
-The first F1 Clock checkpoint adds `tests/test_qtquick_clock_presentation.py`. It crosses the real
+The F1 Clock checkpoints add `tests/test_qtquick_clock_presentation.py`. It crosses the real
 process-engine/per-display-host seam and protects the stable model/global-ticker lifecycle, retained
 digital/analogue component identity, in-place style/direction mutation, exact geometry-variant
-round-trip, separator contract and analogue two-pass shadow structure.
+round-trip, separator contract, analogue two-pass shadow structure, in-place feature suppression and
+three differently configured Clock instances sharing one engine/ticker owner. The real-OpenGL threaded
+eyes-on harness is `tools/qtquick_clock_smoke.py`; run it with `--output-dir <path>` and repeat under a
+second practical Qt scale factor when validating DPR behavior.
 
 At the reviewed checkpoint the repository contains:
 
@@ -235,7 +238,7 @@ Permanent E4 coverage protects: one canonical eight-direction authority; all eig
 
 The E4 host test necessarily injects already-resolved signed offsets because no real family is Quick-presented yet. F1 Clock is the first required end-to-end proof that an actual family projection reads the canonical direction plus the two canonical user buckets, applies the deliberate destination card/text base-distance policy in Python, and updates retained properties without presentation or runtime-owner recreation. Do not resurrect sidecar-era `text_large`/header tuning profiles to satisfy this gate.
 
-### F — widget family ports — ACTIVE; F1 Clock
+### F — widget family ports — ACTIVE; F1 Clock audit pending
 
 F0 deleted deprecated Imgur instead of porting it. F0.5 is the bounded QWidget Settings slice that completes the canonical global shadow controls before F1 Clock. For each later family, preserve provider/model/behavior/settings tests and rehome direct QWidget presentation assertions to retained Quick items.
 

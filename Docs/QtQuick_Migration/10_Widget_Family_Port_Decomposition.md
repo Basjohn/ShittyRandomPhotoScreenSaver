@@ -1,6 +1,6 @@
 # 10 — Ordinary Widget Family Port Decomposition
 
-Status: **Phase F ACTIVE — F0.5 independent audit, then F1 after GREEN**
+Status: **Phase F ACTIVE — F1 implementation pushed; independent audit pending**
 Last updated: 2026-08-25
 
 This file begins at current/future Phase-F work. Completed F0/F0.5 implementation history does not live
@@ -22,8 +22,8 @@ neutral runtime/model
 ## Sequence
 
 ```text
-F0.5 audit        validate pushed sidecar-only shadow correction
-F1                Clock / Clock2 / Clock3
+F0.5              closed
+F1                Clock / Clock2 / Clock3 — implementation pushed, audit pending
 F2                Weather
 F3                Media core
 F4                Media controls / volume / mute / progress

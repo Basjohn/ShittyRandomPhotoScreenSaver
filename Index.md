@@ -1,6 +1,6 @@
 # SRPSS Documentation Index
 
-Last updated: 2026-08-24
+Last updated: 2026-08-25
 
 ## Start here
 
@@ -13,8 +13,8 @@ exact current source
 -> tests/evidence for the claim
 ```
 
-Current migration state: **Phase F active; the F0.5 correction is pushed and YELLOW pending independent
-audit; F1 Clock follows only after GREEN.**
+Current migration state: **Phase F active; F0.5 is closed and the retained F1 Clock implementation is
+pushed/YELLOW pending independent audit. F2 waits for F1 GREEN and old Clock pixel retirement.**
 
 Do not read the whole history tree by default.
 

@@ -57,6 +57,11 @@ Presentation destruction does not become provider destruction.
 
 Capability activation remains distinct from instance enabled state.
 
+F1 Clock's candidate destination owner is `ClockPresentationModel` plus the retained
+`ClockPresentation.qml` family component under the per-display `OrdinaryWidgetPresentationHost`.
+`GlobalClockTicker` remains the cadence owner. The old Clock QWidget pixels remain reference-only until
+F1 independent GREEN and caller-proofed retirement.
+
 ## Widget shadow authority
 
 Canonical:
